@@ -61,7 +61,7 @@ export default function AdminPage() {
     const pro = pros.find(p => p.id === selectedPro)
     if (!pro) return
     const badges = [...(pro.badges || []), { id: crypto.randomUUID(), label: badgeLabel, image_url: badgeUrl }]
-    await supabase.from('professionals').update({ badges }).eq('id', selectedPro)
+    await (supabase.from('professionals') as any).update({ badges }).eq('id', selectedPro)
     alert('バッジを追加しました')
     window.location.reload()
   }
