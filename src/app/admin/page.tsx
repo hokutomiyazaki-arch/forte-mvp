@@ -6,7 +6,7 @@ import { Professional, Vote } from '@/lib/types'
 const ADMIN_EMAILS = ['info@functionalneurotraining.com']
 
 export default function AdminPage() {
-  const supabase = createClient()
+  const supabase = createClient() as any
   const [authorized, setAuthorized] = useState(false)
   const [pros, setPros] = useState<(Professional & { total_votes: number })[]>([])
   const [recentVotes, setRecentVotes] = useState<(Vote & { professionals: { name: string } })[]>([])
