@@ -3,20 +3,46 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 
 export default function Navbar() {
-  const supabase = createClient()
+  const supabase = createClient() as any
   const [user, setUser] = useState<any>(null)
+  const [isPro, setIsPro] = useState(false)
+  const [isClient, setIsClient] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function check() {
       const { data: { session } } = await supabase.auth.getSession()
-      setUser(session?.user || null)
+      const u = session?.user || null
+      setUser(u)
+
+      if (u) {
+        const { data: proData } = await supabase
+          .from('professionals').select('id').eq('user_id', u.id).single()
+        setIsPro(!!proData)
+
+        const { data: clientData } = await supabase
+          .from('clients').select('id').eq('user_id', u.id).single()
+        setIsClient(!!clientData)
+      }
+
       setLoading(false)
     }
     check()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user || null)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const u = session?.user || null
+      setUser(u)
+      if (u) {
+        const { data: proData } = await supabase
+          .from('professionals').select('id').eq('user_id', u.id).single()
+        setIsPro(!!proData)
+        const { data: clientData } = await supabase
+          .from('clients').select('id').eq('user_id', u.id).single()
+        setIsClient(!!clientData)
+      } else {
+        setIsPro(false)
+        setIsClient(false)
+      }
     })
     return () => subscription.unsubscribe()
   }, [])
@@ -33,7 +59,15 @@ export default function Navbar() {
         <a href="/explore" className="hover:text-[#C4A35A] transition">プロを探す</a>
         {loading ? null : user ? (
           <>
-            <a href="/dashboard" className="hover:text-[#C4A35A] transition">ダッシュボード</a>
+            {isPro && (
+              <a href="/dashboard" className="hover:text-[#C4A35A] transition">プロ管理</a>
+            )}
+            {isClient && (
+              <a href="/mycard" className="hover:text-[#C4A35A] transition">マイカード</a>
+            )}
+            {!isPro && !isClient && (
+              <a href="/dashboard" className="hover:text-[#C4A35A] transition">ダッシュボード</a>
+            )}
             <button onClick={handleLogout} className="hover:text-[#C4A35A] transition">ログアウト</button>
           </>
         ) : (
