@@ -180,9 +180,9 @@ export default function DashboardPage() {
               placeholder="腰痛, 肩こり, パフォーマンス向上" />
           </div>
 
-          {/* カスタム実力フォルテ */}
+          {/* カスタム実力プルーフ */}
           <div className="border-t pt-4">
-            <label className="block text-sm font-bold text-[#1A1A2E] mb-2">💪 オリジナル実力フォルテ（最大3つ）</label>
+            <label className="block text-sm font-bold text-[#1A1A2E] mb-2">💪 オリジナル実力プルーフ（最大3つ）</label>
             <p className="text-xs text-gray-500 mb-3">デフォルト7項目に加えて、あなた独自の強みカテゴリを追加できます</p>
             {customResultFortes.map((f, i) => (
               <div key={f.id} className="flex gap-2 mb-2">
@@ -195,13 +195,13 @@ export default function DashboardPage() {
             ))}
             {customResultFortes.length < 3 && (
               <button type="button" onClick={() => addCustomForte('result')}
-                className="text-sm text-[#C4A35A] hover:underline">+ 実力フォルテを追加</button>
+                className="text-sm text-[#C4A35A] hover:underline">+ 実力プルーフを追加</button>
             )}
           </div>
 
-          {/* カスタム人柄フォルテ */}
+          {/* カスタム人柄プルーフ */}
           <div className="border-t pt-4">
-            <label className="block text-sm font-bold text-[#C4A35A] mb-2">🤝 オリジナル人柄フォルテ（最大3つ）</label>
+            <label className="block text-sm font-bold text-[#C4A35A] mb-2">🤝 オリジナル人柄プルーフ（最大3つ）</label>
             <p className="text-xs text-gray-500 mb-3">デフォルト7項目に加えて、あなた独自の人柄カテゴリを追加できます</p>
             {customPersonalityFortes.map((f, i) => (
               <div key={f.id} className="flex gap-2 mb-2">
@@ -214,7 +214,7 @@ export default function DashboardPage() {
             ))}
             {customPersonalityFortes.length < 3 && (
               <button type="button" onClick={() => addCustomForte('personality')}
-                className="text-sm text-[#C4A35A] hover:underline">+ 人柄フォルテを追加</button>
+                className="text-sm text-[#C4A35A] hover:underline">+ 人柄プルーフを追加</button>
             )}
           </div>
 
@@ -251,17 +251,17 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 gap-4 mb-8">
         <div className="bg-white rounded-xl p-4 shadow-sm text-center">
           <div className="text-3xl font-bold text-[#C4A35A]">{totalVotes}</div>
-          <div className="text-sm text-gray-500">総フォルテ数</div>
+          <div className="text-sm text-gray-500">総プルーフ数</div>
         </div>
         <div className="bg-white rounded-xl p-4 shadow-sm text-center">
           <div className="text-lg font-bold text-[#1A1A2E] truncate">{topForte}</div>
-          <div className="text-sm text-gray-500">トップフォルテ</div>
+          <div className="text-sm text-gray-500">トッププルーフ</div>
         </div>
       </div>
 
       {/* Forte Chart */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
-        <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">フォルテチャート</h2>
+        <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">プルーフチャート</h2>
         <ForteChart votes={votes} personalityVotes={personalityVotes} professional={pro} />
       </div>
 
