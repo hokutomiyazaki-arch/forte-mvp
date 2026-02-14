@@ -62,7 +62,7 @@ export default function Navbar() {
 
   return (
     <nav className="bg-[#1A1A2E] text-white px-6 py-3 flex items-center justify-between">
-      <a href="/" className="text-xl font-bold tracking-wider">FORTE</a>
+      <a href="/" className="text-xl font-bold tracking-wider">PROOF</a>
       <div className="flex gap-4 text-sm items-center">
         <a href="/explore" className="hover:text-[#C4A35A] transition">プロを探す</a>
         {loading ? null : user ? (
