@@ -162,7 +162,7 @@ export default function ExplorePage() {
   return (
     <div className="max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2">プロを探す</h1>
-      <p className="text-sm text-gray-500 mb-6">フォルテや人柄で、あなたに合うプロを見つけよう</p>
+      <p className="text-sm text-gray-500 mb-6">プルーフや人柄で、あなたに合うプロを見つけよう</p>
 
       {/* 実力 / 人柄 タブ */}
       <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
@@ -174,7 +174,7 @@ export default function ExplorePage() {
               : 'text-gray-600 hover:text-gray-800'
           }`}
         >
-          フォルテで探す
+          プルーフで探す
         </button>
         <button
           onClick={() => setTab('personality')}
@@ -220,7 +220,7 @@ export default function ExplorePage() {
             <div className="space-y-3 mb-10">
               <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wide">
                 {selectedCategory === 'all'
-                  ? (tab === 'result' ? 'フォルテ総合ランキング' : '人柄フォルテ総合ランキング')
+                  ? (tab === 'result' ? 'プルーフ総合ランキング' : '人柄プルーフ総合ランキング')
                   : `${currentCategories.find(c => c.key === selectedCategory)?.label} ランキング`
                 }
               </h2>
@@ -255,7 +255,7 @@ export default function ExplorePage() {
                         {r.vote_count}
                       </div>
                       <div className="text-xs text-gray-400">
-                        {selectedCategory === 'all' ? 'フォルテ' : `/ ${r.total_votes}`}
+                        {selectedCategory === 'all' ? 'プルーフ' : `/ ${r.total_votes}`}
                       </div>
                     </div>
                   </a>
@@ -273,7 +273,7 @@ export default function ExplorePage() {
                 </h2>
               </div>
               <p className="text-xs text-gray-400 mb-4">
-                プロが独自に設定した専門分野でフォルテを獲得しています
+                プロが独自に設定した専門分野でプルーフを獲得しています
               </p>
 
               {/* Group by forte_key */}
@@ -313,7 +313,7 @@ export default function ExplorePage() {
                             </div>
                             <div className="text-right flex-shrink-0">
                               <div className="text-lg font-bold text-[#C4A35A]">{s.vote_count}</div>
-                              <div className="text-xs text-gray-400">フォルテ</div>
+                              <div className="text-xs text-gray-400">プルーフ</div>
                             </div>
                           </a>
                         )
