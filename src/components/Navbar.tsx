@@ -11,18 +11,22 @@ export default function Navbar() {
 
   useEffect(() => {
     async function check() {
-      const { data: { session } } = await supabase.auth.getSession()
-      const u = session?.user || null
-      setUser(u)
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        const u = session?.user || null
+        setUser(u)
 
-      if (u) {
-        const { data: proData } = await supabase
-          .from('professionals').select('id').eq('user_id', u.id).single()
-        setIsPro(!!proData)
+        if (u) {
+          const { data: proData } = await supabase
+            .from('professionals').select('id').eq('user_id', u.id).single()
+          setIsPro(!!proData)
 
-        const { data: clientData } = await supabase
-          .from('clients').select('id').eq('user_id', u.id).single()
-        setIsClient(!!clientData)
+          const { data: clientData } = await supabase
+            .from('clients').select('id').eq('user_id', u.id).single()
+          setIsClient(!!clientData)
+        }
+      } catch (e) {
+        console.error('Navbar check error:', e)
       }
 
       setLoading(false)
@@ -30,18 +34,22 @@ export default function Navbar() {
     check()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      const u = session?.user || null
-      setUser(u)
-      if (u) {
-        const { data: proData } = await supabase
-          .from('professionals').select('id').eq('user_id', u.id).single()
-        setIsPro(!!proData)
-        const { data: clientData } = await supabase
-          .from('clients').select('id').eq('user_id', u.id).single()
-        setIsClient(!!clientData)
-      } else {
-        setIsPro(false)
-        setIsClient(false)
+      try {
+        const u = session?.user || null
+        setUser(u)
+        if (u) {
+          const { data: proData } = await supabase
+            .from('professionals').select('id').eq('user_id', u.id).single()
+          setIsPro(!!proData)
+          const { data: clientData } = await supabase
+            .from('clients').select('id').eq('user_id', u.id).single()
+          setIsClient(!!clientData)
+        } else {
+          setIsPro(false)
+          setIsClient(false)
+        }
+      } catch (e) {
+        console.error('Navbar auth change error:', e)
       }
     })
     return () => subscription.unsubscribe()
