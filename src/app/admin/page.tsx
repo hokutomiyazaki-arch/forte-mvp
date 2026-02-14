@@ -30,7 +30,7 @@ export default function AdminPage() {
       // Pros with vote count
       const { data: proData } = await supabase.from('professionals').select('*').order('created_at')
       if (proData) {
-        const prosWithVotes = []
+        const prosWithVotes: any[] = []
         for (const p of proData) {
           const { count } = await supabase.from('votes').select('*', { count: 'exact', head: true }).eq('professional_id', p.id)
           prosWithVotes.push({ ...p, total_votes: count || 0 })
