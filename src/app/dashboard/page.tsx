@@ -31,6 +31,16 @@ export default function DashboardPage() {
       const { data: proData } = await supabase
         .from('professionals').select('*').eq('user_id', u.id).single()
 
+      if (!proData) {
+        // Check if user is a client - redirect to mycard
+        const { data: clientData } = await supabase
+          .from('clients').select('id').eq('user_id', u.id).single()
+        if (clientData) {
+          window.location.href = '/mycard'
+          return
+        }
+      }
+
       if (proData) {
         setPro(proData)
         setForm({
