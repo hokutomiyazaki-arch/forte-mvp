@@ -28,10 +28,14 @@ function LoginForm() {
 
   useEffect(() => {
     async function checkSession() {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user) {
-        await handlePostLogin(session.user)
-        return
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session?.user) {
+          await handlePostLogin(session.user)
+          return
+        }
+      } catch (e) {
+        console.error('Session check error:', e)
       }
       setCheckingSession(false)
     }
@@ -39,7 +43,12 @@ function LoginForm() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
-        await handlePostLogin(session.user)
+        try {
+          await handlePostLogin(session.user)
+        } catch (e) {
+          console.error('Post login error:', e)
+          setCheckingSession(false)
+        }
       }
     })
 
@@ -50,15 +59,33 @@ function LoginForm() {
     const nickParam = searchParams.get('nickname')
     const roleParam = searchParams.get('role') || 'pro'
 
-    if (roleParam === 'client') {
-      const nn = nickParam || user.user_metadata?.full_name || user.email?.split('@')[0] || 'ユーザー'
-      await supabase.from('clients').upsert({
-        user_id: user.id,
-        nickname: nn,
-      }, { onConflict: 'user_id' })
-      window.location.href = '/mycard'
-    } else {
-      window.location.href = '/dashboard'
+    try {
+      if (roleParam === 'client') {
+        const nn = nickParam || user.user_metadata?.full_name || user.email?.split('@')[0] || 'ユーザー'
+        await supabase.from('clients').upsert({
+          user_id: user.id,
+          nickname: nn,
+        }, { onConflict: 'user_id' })
+        window.location.href = '/mycard'
+      } else {
+        // Check if user has pro profile, if not check client
+        const { data: proData } = await supabase
+          .from('professionals').select('id').eq('user_id', user.id).single()
+        if (proData) {
+          window.location.href = '/dashboard'
+        } else {
+          const { data: clientData } = await supabase
+            .from('clients').select('id').eq('user_id', user.id).single()
+          if (clientData) {
+            window.location.href = '/mycard'
+          } else {
+            window.location.href = '/dashboard'
+          }
+        }
+      }
+    } catch (e) {
+      console.error('handlePostLogin error:', e)
+      setCheckingSession(false)
     }
   }
 
