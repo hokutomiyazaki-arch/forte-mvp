@@ -83,7 +83,7 @@ export default function ForteChart({ votes, personalityVotes = [], professional,
       )}
 
       {sortedResults.length === 0 && sortedPersonality.length === 0 && (
-        <p className="text-gray-400 text-sm text-center py-4">まだフォルテがありません</p>
+        <p className="text-gray-400 text-sm text-center py-4">まだプルーフがありません</p>
       )}
     </div>
   )
