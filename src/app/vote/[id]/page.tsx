@@ -77,7 +77,7 @@ function VoteForm() {
       return
     }
     if (!selectedResult) {
-      setError('実力フォルテを1つ選んでください')
+      setError('実力プルーフを1つ選んでください')
       return
     }
 
@@ -135,7 +135,7 @@ function VoteForm() {
     return (
       <div className="max-w-md mx-auto text-center py-16">
         <h1 className="text-2xl font-bold text-[#1A1A2E] mb-4">ログインが必要です</h1>
-        <p className="text-gray-600 mb-6">フォルテを贈るにはクライアント登録が必要です。</p>
+        <p className="text-gray-600 mb-6">プルーフを贈るにはクライアント登録が必要です。</p>
         <a href="/login?role=client" className="px-8 py-3 bg-[#1A1A2E] text-white rounded-lg hover:bg-[#2a2a4e] transition inline-block">
           クライアントとして登録
         </a>
@@ -147,7 +147,7 @@ function VoteForm() {
     return (
       <div className="max-w-md mx-auto text-center py-16">
         <h1 className="text-2xl font-bold text-[#1A1A2E] mb-4">投票済みです</h1>
-        <p className="text-gray-600 mb-6">{pro.name} さんにはすでにフォルテを贈っています。</p>
+        <p className="text-gray-600 mb-6">{pro.name} さんにはすでにプルーフを贈っています。</p>
         <a href={`/card/${pro.id}`} className="text-[#C4A35A] hover:underline">カードを見る</a>
       </div>
     )
@@ -157,7 +157,7 @@ function VoteForm() {
     return (
       <div className="max-w-md mx-auto text-center py-16">
         <h1 className="text-2xl font-bold text-[#1A1A2E] mb-4">自分には投票できません</h1>
-        <p className="text-gray-600 mb-6">フォルテはクライアントから贈ってもらうものです。</p>
+        <p className="text-gray-600 mb-6">プルーフはクライアントから贈ってもらうものです。</p>
         <a href="/dashboard" className="px-6 py-3 bg-[#1A1A2E] text-white rounded-lg hover:bg-[#2a2a4e] transition inline-block">
           ダッシュボードに戻る
         </a>
@@ -169,8 +169,8 @@ function VoteForm() {
     return (
       <div className="max-w-md mx-auto text-center py-16">
         <div className="text-4xl mb-4">🎉</div>
-        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-4">フォルテを贈りました！</h1>
-        <p className="text-gray-600 mb-6">{pro.name} さんにフォルテが届きました。</p>
+        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-4">プルーフを贈りました！</h1>
+        <p className="text-gray-600 mb-6">{pro.name} さんにプルーフが届きました。</p>
         {pro.coupon_text && (
           <div className="bg-[#C4A35A]/10 border border-[#C4A35A] rounded-lg p-4 mb-6">
             <p className="text-sm font-medium text-[#C4A35A]">お礼の特典</p>
@@ -195,12 +195,12 @@ function VoteForm() {
   return (
     <div className="max-w-lg mx-auto">
       <div className="text-center mb-8">
-        <h1 className="text-2xl font-bold text-[#1A1A2E]">{pro.name} さんにフォルテを贈る</h1>
+        <h1 className="text-2xl font-bold text-[#1A1A2E]">{pro.name} さんにプルーフを贈る</h1>
         <p className="text-gray-500 text-sm mt-1">あなたの体験を投票してください</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-8">
-        {/* 実力フォルテ（1つ選択） */}
+        {/* 実力プルーフ（1つ選択） */}
         <div>
           <h2 className="text-lg font-bold text-[#1A1A2E] mb-1">💪 何が変わりましたか？</h2>
           <p className="text-sm text-gray-500 mb-4">1つ選んでください</p>
@@ -231,7 +231,7 @@ function VoteForm() {
           </div>
         </div>
 
-        {/* 人柄フォルテ（最大3つ選択） */}
+        {/* 人柄プルーフ（最大3つ選択） */}
         <div>
           <h2 className="text-lg font-bold text-[#C4A35A] mb-1">🤝 この人の人柄は？</h2>
           <p className="text-sm text-gray-500 mb-4">最大3つまで選べます（任意）</p>
@@ -290,7 +290,7 @@ function VoteForm() {
           type="submit"
           className="w-full py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition"
         >
-          フォルテを贈る
+          プルーフを贈る
         </button>
       </form>
     </div>
