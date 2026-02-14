@@ -1,150 +1,265 @@
 'use client'
+import { useEffect, useState } from 'react'
+import { useParams, useSearchParams } from 'next/navigation'
+import { createClient } from '@/lib/supabase'
+import { Professional, RESULT_FORTES, PERSONALITY_FORTE, getAllForteOptions } from '@/lib/types'
+import { Suspense } from 'react'
 
-import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
-import { getForteLabel, getForteEmoji, getForteDesc } from '@/lib/types'
-import type { Professional } from '@/lib/types'
-import Link from 'next/link'
+function VoteForm() {
+  const params = useParams()
+  const searchParams = useSearchParams()
+  const proId = params.id as string
+  const qrToken = searchParams.get('token')
+  const supabase = createClient()
 
-export default function VotePage({ params }: { params: { id: string } }) {
   const [pro, setPro] = useState<Professional | null>(null)
-  const [selected, setSelected] = useState<string | null>(null)
+  const [user, setUser] = useState<any>(null)
+  const [selectedResult, setSelectedResult] = useState('')
+  const [personalityVote, setPersonalityVote] = useState(false)
   const [comment, setComment] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  const [error, setError] = useState('')
+  const [alreadyVoted, setAlreadyVoted] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase
+      const { data: { user: u } } = await supabase.auth.getUser()
+      setUser(u)
+
+      const { data: proData } = await supabase
         .from('professionals')
         .select('*')
-        .eq('id', params.id)
+        .eq('id', proId)
         .single()
-      setPro(data)
+      if (proData) setPro(proData)
+
+      // Check if already voted
+      if (u) {
+        const { data: existing } = await supabase
+          .from('votes')
+          .select('id')
+          .eq('professional_id', proId)
+          .eq('client_user_id', u.id)
+          .single()
+        if (existing) setAlreadyVoted(true)
+
+        // Check self-vote
+        if (proData && proData.user_id === u.id) {
+          setError('自分自身には投票できません')
+        }
+      }
+
       setLoading(false)
     }
     load()
-  }, [params.id])
+  }, [proId])
 
-  const handleVote = async () => {
-    if (!selected || !pro) return
-    setSubmitting(true)
-    await supabase.from('votes').insert({
-      professional_id: pro.id,
-      category: selected,
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!user) {
+      window.location.href = `/login?role=client`
+      return
+    }
+    if (!selectedResult) {
+      setError('結果フォルテを1つ選んでください')
+      return
+    }
+
+    // Verify QR token if provided
+    if (qrToken) {
+      const { data: tokenData } = await supabase
+        .from('qr_tokens')
+        .select('*')
+        .eq('token', qrToken)
+        .eq('professional_id', proId)
+        .gt('expires_at', new Date().toISOString())
+        .single()
+      
+      if (!tokenData) {
+        setError('QRコードの有効期限が切れています。プロに新しいQRコードを発行してもらってください。')
+        return
+      }
+    }
+
+    const { error: voteError } = await supabase.from('votes').insert({
+      professional_id: proId,
+      client_user_id: user.id,
+      result_category: selectedResult,
+      personality_vote: personalityVote,
       comment: comment.trim() || null,
-      voter_fingerprint: Math.random().toString(36).slice(2),
+      qr_token: qrToken,
     })
-    setSubmitted(true)
-    setSubmitting(false)
+
+    if (voteError) {
+      if (voteError.code === '23505') {
+        setError('このプロにはすでに投票済みです')
+      } else {
+        setError(voteError.message)
+      }
+    } else {
+      // Ensure client record exists
+      const { data: clientCheck } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('user_id', user.id)
+        .single()
+      
+      if (!clientCheck) {
+        await supabase.from('clients').insert({
+          user_id: user.id,
+          nickname: user.email?.split('@')[0] || 'ユーザー',
+        })
+      }
+      setSubmitted(true)
+    }
   }
 
-  if (loading) {
-    return <main className="min-h-screen flex items-center justify-center"><div className="animate-pulse text-gray-400">読み込み中...</div></main>
+  if (loading) return <div className="text-center py-16 text-gray-400">読み込み中...</div>
+  if (!pro) return <div className="text-center py-16 text-gray-400">プロが見つかりません</div>
+
+  if (!user) {
+    return (
+      <div className="max-w-md mx-auto text-center py-16">
+        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-4">ログインが必要です</h1>
+        <p className="text-gray-600 mb-6">フォルテを贈るにはクライアント登録が必要です。</p>
+        <a href="/login?role=client" className="px-8 py-3 bg-[#1A1A2E] text-white rounded-lg hover:bg-[#2a2a4e] transition inline-block">
+          クライアントとして登録
+        </a>
+      </div>
+    )
   }
-  if (!pro) {
-    return <main className="min-h-screen flex items-center justify-center"><p className="text-gray-500">プロフェッショナルが見つかりません</p></main>
+
+  if (alreadyVoted) {
+    return (
+      <div className="max-w-md mx-auto text-center py-16">
+        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-4">投票済みです</h1>
+        <p className="text-gray-600 mb-6">{pro.name} さんにはすでにフォルテを贈っています。</p>
+        <a href={`/card/${pro.id}`} className="text-[#C4A35A] hover:underline">カードを見る</a>
+      </div>
+    )
   }
 
   if (submitted) {
     return (
-      <main className="min-h-screen bg-forte-cream flex items-center justify-center px-4">
-        <div className="max-w-md w-full text-center">
-          <div className="bg-white rounded-3xl shadow-lg p-8">
-            <div className="text-5xl mb-4">🎉</div>
-            <h1 className="text-2xl font-bold text-forte-dark mb-2">投票ありがとうございます！</h1>
-            <p className="text-gray-500 mb-6">{pro.name}さんのフォルテに反映されました</p>
-            {pro.coupon_text && (
-              <div className="bg-gradient-to-r from-forte-gold/10 to-amber-50 border-2 border-dashed border-forte-gold rounded-2xl p-6 mb-6">
-                <p className="text-xs text-forte-gold font-bold mb-2 tracking-wider">🎁 お礼クーポン</p>
-                <p className="text-xl font-bold text-forte-dark">{pro.coupon_text}</p>
-                <p className="text-xs text-gray-400 mt-3">次回ご来店時にこの画面をお見せください</p>
-              </div>
-            )}
-            <Link href={`/card/${pro.id}`} className="inline-block px-6 py-3 bg-forte-dark text-white rounded-xl font-medium hover:bg-opacity-90 transition">
-              {pro.name}さんのFORTEカードを見る
-            </Link>
+      <div className="max-w-md mx-auto text-center py-16">
+        <div className="text-4xl mb-4">🎉</div>
+        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-4">フォルテを贈りました！</h1>
+        <p className="text-gray-600 mb-6">{pro.name} さんにフォルテが届きました。</p>
+        {pro.coupon_text && (
+          <div className="bg-[#C4A35A]/10 border border-[#C4A35A] rounded-lg p-4 mb-6">
+            <p className="text-sm font-medium text-[#C4A35A]">お礼の特典</p>
+            <p className="text-[#1A1A2E] mt-1">{pro.coupon_text}</p>
           </div>
-          <p className="text-xs text-gray-400 mt-6">FORTE — 強みに人が集まるデジタル名刺</p>
+        )}
+        <div className="flex flex-col gap-3">
+          <a href="/mycard" className="px-6 py-3 bg-[#1A1A2E] text-white rounded-lg hover:bg-[#2a2a4e] transition inline-block">
+            マイカードを見る
+          </a>
+          <a href={`/card/${pro.id}`} className="text-[#C4A35A] hover:underline text-sm">
+            {pro.name} さんのカードを見る
+          </a>
         </div>
-      </main>
+      </div>
     )
   }
 
-  // Build categories from pro's settings
-  const categories: { key: string; label: string; emoji: string; desc: string }[] = [
-    ...(pro.selected_fortes || []).map(key => ({
-      key,
-      label: getForteLabel(key, pro),
-      emoji: getForteEmoji(key),
-      desc: getForteDesc(key),
-    })),
-    ...(pro.custom_forte_1 ? [{ key: 'custom1', label: pro.custom_forte_1, emoji: '⭐', desc: '' }] : []),
-    ...(pro.custom_forte_2 ? [{ key: 'custom2', label: pro.custom_forte_2, emoji: '🌟', desc: '' }] : []),
-  ]
+  const forteOptions = getAllForteOptions(pro)
 
   return (
-    <main className="min-h-screen bg-forte-cream flex items-center justify-center px-4 py-8">
-      <div className="max-w-md w-full">
-        <div className="text-center mb-6">
-          <span className="text-lg font-bold tracking-wider text-forte-dark">FORTE</span>
-        </div>
-        <div className="bg-white rounded-3xl shadow-lg p-8">
-          <div className="text-center mb-6">
-            <div className="w-16 h-16 rounded-2xl bg-forte-dark flex items-center justify-center text-2xl text-white mx-auto mb-3 overflow-hidden">
-              {pro.photo_url ? <img src={pro.photo_url} alt={pro.name} className="w-full h-full object-cover" /> : pro.name.charAt(0)}
-            </div>
-            <h2 className="text-lg font-bold text-forte-dark">{pro.name}</h2>
-            <p className="text-sm text-gray-400">{pro.title}</p>
-          </div>
+    <div className="max-w-lg mx-auto">
+      <div className="text-center mb-8">
+        <h1 className="text-2xl font-bold text-[#1A1A2E]">{pro.name} さんにフォルテを贈る</h1>
+        <p className="text-gray-500 text-sm mt-1">あなたの体験を投票してください</p>
+      </div>
 
-          <h3 className="text-center text-base font-medium text-forte-dark mb-1">
-            {pro.name}さんの一番のフォルテは？
-          </h3>
-          <p className="text-center text-xs text-gray-400 mb-6">1つ選んでください</p>
-
-          <div className="space-y-2 mb-6">
-            {categories.map(cat => (
-              <button
-                key={cat.key}
-                onClick={() => setSelected(cat.key)}
-                className={`w-full flex items-center gap-3 px-5 py-4 rounded-xl border-2 transition-all text-left ${
-                  selected === cat.key ? 'border-forte-gold bg-forte-gold/5 shadow-sm' : 'border-gray-100 hover:border-gray-200'
+      <form onSubmit={handleSubmit} className="space-y-8">
+        {/* Result Forte */}
+        <div>
+          <h2 className="text-lg font-bold text-[#1A1A2E] mb-1">何が変わりましたか？</h2>
+          <p className="text-sm text-gray-500 mb-4">1つ選んでください</p>
+          <div className="space-y-2">
+            {forteOptions.map(opt => (
+              <label
+                key={opt.key}
+                className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition ${
+                  selectedResult === opt.key
+                    ? 'border-[#1A1A2E] bg-[#1A1A2E]/5'
+                    : 'border-gray-200 hover:border-gray-300'
                 }`}
               >
-                <span className="text-xl">{cat.emoji}</span>
-                <div className="flex-1 min-w-0">
-                  <span className={`font-medium ${selected === cat.key ? 'text-forte-dark' : 'text-gray-600'}`}>{cat.label}</span>
-                  {cat.desc && <p className="text-xs text-gray-400">{cat.desc}</p>}
+                <input
+                  type="radio"
+                  name="result"
+                  value={opt.key}
+                  checked={selectedResult === opt.key}
+                  onChange={() => setSelectedResult(opt.key)}
+                  className="mt-1 accent-[#1A1A2E]"
+                />
+                <div>
+                  <div className="font-medium text-[#1A1A2E]">{opt.label}</div>
+                  <div className="text-xs text-gray-500">{opt.desc}</div>
                 </div>
-                {selected === cat.key && <span className="ml-auto text-forte-gold font-bold">✓</span>}
-              </button>
+              </label>
             ))}
           </div>
-
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-500 mb-2">ひとことコメント（任意）</label>
-            <textarea
-              value={comment}
-              onChange={e => setComment(e.target.value.slice(0, 100))}
-              rows={2}
-              placeholder="例: いつも丁寧に向き合ってくれて感謝しています"
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-forte-gold focus:border-transparent resize-none text-sm"
-            />
-            <p className="text-right text-xs text-gray-300 mt-1">{comment.length}/100</p>
-          </div>
-
-          <button
-            onClick={handleVote}
-            disabled={!selected || submitting}
-            className="w-full py-4 bg-forte-gold text-forte-dark rounded-xl font-bold text-lg hover:bg-opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {submitting ? '送信中...' : '投票する 🗳'}
-          </button>
-          {pro.coupon_text && <p className="text-center text-xs text-gray-400 mt-3">🎁 投票後にお礼クーポンがもらえます</p>}
         </div>
-      </div>
-    </main>
+
+        {/* Personality Forte */}
+        <div>
+          <h2 className="text-lg font-bold text-[#1A1A2E] mb-1">この人の人柄は？</h2>
+          <p className="text-sm text-gray-500 mb-4">任意</p>
+          <label
+            className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition ${
+              personalityVote
+                ? 'border-[#C4A35A] bg-[#C4A35A]/5'
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={personalityVote}
+              onChange={() => setPersonalityVote(!personalityVote)}
+              className="accent-[#C4A35A] w-5 h-5"
+            />
+            <div>
+              <div className="font-medium text-[#C4A35A]">{PERSONALITY_FORTE.label}</div>
+              <div className="text-xs text-gray-500">{PERSONALITY_FORTE.desc}</div>
+            </div>
+          </label>
+        </div>
+
+        {/* Comment */}
+        <div>
+          <h2 className="text-lg font-bold text-[#1A1A2E] mb-1">ひとこと（任意）</h2>
+          <textarea
+            value={comment}
+            onChange={e => setComment(e.target.value)}
+            maxLength={100}
+            rows={2}
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] focus:border-transparent outline-none resize-none"
+            placeholder="このプロへのメッセージ（100文字以内）"
+          />
+          <p className="text-xs text-gray-400 text-right">{comment.length}/100</p>
+        </div>
+
+        {error && <p className="text-red-500 text-sm">{error}</p>}
+
+        <button
+          type="submit"
+          className="w-full py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition"
+        >
+          フォルテを贈る
+        </button>
+      </form>
+    </div>
+  )
+}
+
+export default function VotePage() {
+  return (
+    <Suspense fallback={<div className="text-center py-16">読み込み中...</div>}>
+      <VoteForm />
+    </Suspense>
   )
 }

@@ -1,137 +1,172 @@
-import { createClient } from '@supabase/supabase-js'
-import { notFound } from 'next/navigation'
-import Link from 'next/link'
+'use client'
+import { useEffect, useState } from 'react'
+import { useParams } from 'next/navigation'
+import { createClient } from '@/lib/supabase'
+import { Professional, VoteSummary, Vote } from '@/lib/types'
 import ForteChart from '@/components/ForteChart'
-import { getForteLabel } from '@/lib/types'
-import type { Professional, VoteSummary, Vote } from '@/lib/types'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+export default function CardPage() {
+  const params = useParams()
+  const id = params.id as string
+  const supabase = createClient()
+  const [pro, setPro] = useState<Professional | null>(null)
+  const [votes, setVotes] = useState<VoteSummary[]>([])
+  const [trustCount, setTrustCount] = useState(0)
+  const [comments, setComments] = useState<Vote[]>([])
+  const [totalVotes, setTotalVotes] = useState(0)
+  const [loading, setLoading] = useState(true)
 
-async function getProfessional(id: string) {
-  const { data } = await supabase.from('professionals').select('*').eq('id', id).single()
-  return data as Professional | null
-}
+  useEffect(() => {
+    async function load() {
+      const { data: proData } = await supabase
+        .from('professionals')
+        .select('*')
+        .eq('id', id)
+        .single()
+      
+      if (proData) setPro(proData)
 
-async function getVotes(id: string) {
-  const { data } = await supabase.from('vote_summary').select('*').eq('professional_id', id)
-  return (data || []) as VoteSummary[]
-}
+      const { data: voteData } = await supabase
+        .from('vote_summary')
+        .select('*')
+        .eq('professional_id', id)
+      
+      if (voteData) setVotes(voteData)
 
-async function getRecentComments(id: string) {
-  const { data } = await supabase
-    .from('votes')
-    .select('category, comment, created_at')
-    .eq('professional_id', id)
-    .not('comment', 'is', null)
-    .order('created_at', { ascending: false })
-    .limit(5)
-  return (data || []) as Pick<Vote, 'category' | 'comment' | 'created_at'>[]
-}
+      const { data: trustData } = await supabase
+        .from('personality_summary')
+        .select('*')
+        .eq('professional_id', id)
+        .single()
+      
+      if (trustData) setTrustCount(trustData.trust_count)
 
-function timeAgo(dateStr: string): string {
-  const diffMs = Date.now() - new Date(dateStr).getTime()
-  const mins = Math.floor(diffMs / 60000)
-  const hours = Math.floor(diffMs / 3600000)
-  const days = Math.floor(diffMs / 86400000)
-  if (mins < 60) return `${mins}分前`
-  if (hours < 24) return `${hours}時間前`
-  if (days < 30) return `${days}日前`
-  return `${Math.floor(days / 30)}ヶ月前`
-}
+      const { data: commentData } = await supabase
+        .from('votes')
+        .select('*')
+        .eq('professional_id', id)
+        .not('comment', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(20)
+      
+      if (commentData) setComments(commentData)
 
-export default async function CardPage({ params }: { params: { id: string } }) {
-  const pro = await getProfessional(params.id)
-  if (!pro) notFound()
+      // Total unique votes
+      const { count } = await supabase
+        .from('votes')
+        .select('*', { count: 'exact', head: true })
+        .eq('professional_id', id)
+      
+      setTotalVotes(count || 0)
+      setLoading(false)
+    }
+    load()
+  }, [id])
 
-  const votes = await getVotes(params.id)
-  const comments = await getRecentComments(params.id)
+  if (loading) return <div className="text-center py-16 text-gray-400">読み込み中...</div>
+  if (!pro) return <div className="text-center py-16 text-gray-400">プロフィールが見つかりません</div>
 
   return (
-    <main className="min-h-screen bg-forte-cream py-8 px-4">
-      <div className="max-w-md mx-auto">
-        <div className="text-center mb-6">
-          <Link href="/" className="inline-block">
-            <span className="text-lg font-bold tracking-wider text-forte-dark">FORTE</span>
-          </Link>
+    <div className="max-w-2xl mx-auto">
+      {/* Header */}
+      <div className="text-center mb-8">
+        {pro.photo_url ? (
+          <img src={pro.photo_url} alt={pro.name} className="w-24 h-24 rounded-full mx-auto mb-4 object-cover" />
+        ) : (
+          <div className="w-24 h-24 rounded-full mx-auto mb-4 bg-[#1A1A2E] flex items-center justify-center text-white text-3xl font-bold">
+            {pro.name.charAt(0)}
+          </div>
+        )}
+        <h1 className="text-2xl font-bold text-[#1A1A2E]">{pro.name}</h1>
+        <p className="text-gray-500">{pro.title}</p>
+        
+        {/* Badges */}
+        <div className="flex justify-center gap-2 mt-3">
+          {pro.is_founding_member && (
+            <span className="px-3 py-1 bg-[#C4A35A] text-white text-xs rounded-full font-medium">
+              Founding Member
+            </span>
+          )}
+          {pro.badges?.map((badge, i) => (
+            <span key={i} className="px-3 py-1 bg-[#1A1A2E] text-white text-xs rounded-full font-medium flex items-center gap-1">
+              {badge.image_url && <img src={badge.image_url} alt="" className="w-4 h-4" />}
+              {badge.label}
+            </span>
+          ))}
         </div>
 
-        <div className="bg-white rounded-3xl shadow-lg overflow-hidden">
-          <div className="bg-forte-dark px-6 py-5">
-            <div className="flex items-start gap-4">
-              <div className="w-20 h-20 rounded-2xl bg-gray-700 flex items-center justify-center text-3xl text-white shrink-0 overflow-hidden">
-                {pro.photo_url ? <img src={pro.photo_url} alt={pro.name} className="w-full h-full object-cover" /> : pro.name.charAt(0)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h1 className="text-xl font-bold text-white truncate">{pro.name}</h1>
-                  {pro.is_founding_member && (
-                    <span className="text-xs bg-forte-gold text-forte-dark px-2 py-0.5 rounded-full font-bold shrink-0">Founder</span>
-                  )}
-                </div>
-                <p className="text-gray-300 text-sm mt-1">{pro.title}</p>
-                <div className="flex items-center gap-3 mt-2 text-gray-400 text-xs">
-                  {pro.location && <span>📍 {pro.location}</span>}
-                  {pro.years_experience && <span>🕐 経験{pro.years_experience}年</span>}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="px-6 py-5">
-            <ForteChart votes={votes} pro={pro} />
-          </div>
-
-          {comments.length > 0 && (
-            <div className="px-6 pb-4">
-              <h3 className="text-sm font-bold text-forte-dark mb-3">クライアントの声</h3>
-              <div className="space-y-2">
-                {comments.map((c, i) => (
-                  <div key={i} className="bg-forte-light rounded-xl px-4 py-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-medium text-forte-gold">{getForteLabel(c.category, pro)}</span>
-                      <span className="text-xs text-gray-300">•</span>
-                      <span className="text-xs text-gray-400">{timeAgo(c.created_at)}</span>
-                    </div>
-                    <p className="text-sm text-gray-600 leading-relaxed">{c.comment}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {pro.specialties && pro.specialties.length > 0 && (
-            <div className="px-6 pb-4">
-              <h3 className="text-sm font-bold text-forte-dark mb-2">対応できる悩み</h3>
-              <div className="flex flex-wrap gap-2">
-                {pro.specialties.map((s, i) => (
-                  <span key={i} className="px-3 py-1 bg-forte-light rounded-full text-sm text-forte-dark">{s}</span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {pro.bio && (
-            <div className="px-6 pb-4">
-              <h3 className="text-sm font-bold text-forte-dark mb-2">プロフィール</h3>
-              <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">{pro.bio}</p>
-            </div>
-          )}
-
-          <div className="px-6 pb-6 space-y-3">
-            {pro.booking_url && (
-              <a href={pro.booking_url} target="_blank" rel="noopener noreferrer" className="block w-full py-3 bg-forte-dark text-white text-center rounded-xl font-medium hover:bg-opacity-90 transition">予約する →</a>
-            )}
-            <Link href={`/vote/${pro.id}`} className="block w-full py-3 bg-forte-gold text-forte-dark text-center rounded-xl font-bold hover:bg-opacity-90 transition">
-              このプロのフォルテに投票する 🗳
-            </Link>
-          </div>
-        </div>
-
-        <p className="text-center text-xs text-gray-400 mt-6">FORTE — 強みに人が集まるデジタル名刺</p>
+        {pro.location && <p className="text-sm text-gray-400 mt-2">{pro.location}</p>}
+        {pro.years_experience && <p className="text-sm text-gray-400">経験 {pro.years_experience} 年</p>}
       </div>
-    </main>
+
+      {/* Total votes */}
+      <div className="text-center mb-6">
+        <span className="text-4xl font-bold text-[#C4A35A]">{totalVotes}</span>
+        <span className="text-gray-500 ml-2">フォルテ</span>
+      </div>
+
+      {/* Forte Chart */}
+      <div className="bg-white rounded-xl p-6 shadow-sm mb-6">
+        <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">フォルテチャート</h2>
+        <ForteChart votes={votes} trustCount={trustCount} professional={pro} />
+      </div>
+
+      {/* Bio */}
+      {pro.bio && (
+        <div className="bg-white rounded-xl p-6 shadow-sm mb-6">
+          <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">自己紹介</h2>
+          <p className="text-gray-600 text-sm whitespace-pre-wrap">{pro.bio}</p>
+        </div>
+      )}
+
+      {/* Specialties */}
+      {pro.specialties && pro.specialties.length > 0 && (
+        <div className="bg-white rounded-xl p-6 shadow-sm mb-6">
+          <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">対応できる悩み</h2>
+          <div className="flex flex-wrap gap-2">
+            {pro.specialties.map(s => (
+              <span key={s} className="px-3 py-1 bg-gray-100 text-gray-700 text-sm rounded-full">{s}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Comments */}
+      {comments.length > 0 && (
+        <div className="bg-white rounded-xl p-6 shadow-sm mb-6">
+          <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">クライアントの声</h2>
+          <div className="space-y-3">
+            {comments.map(c => (
+              <div key={c.id} className="border-l-2 border-[#C4A35A] pl-4">
+                <p className="text-sm text-gray-700">{c.comment}</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {new Date(c.created_at).toLocaleDateString('ja-JP')}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* CTA */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-8">
+        <a
+          href={`/vote/${pro.id}`}
+          className="flex-1 text-center py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition"
+        >
+          このプロにフォルテを贈る
+        </a>
+        {pro.booking_url && (
+          <a
+            href={pro.booking_url}
+            target="_blank"
+            rel="noopener"
+            className="flex-1 text-center py-3 border-2 border-[#1A1A2E] text-[#1A1A2E] font-medium rounded-lg hover:bg-[#1A1A2E] hover:text-white transition"
+          >
+            予約する
+          </a>
+        )}
+      </div>
+    </div>
   )
 }

@@ -2,10 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap');
+:root {
+  --forte-dark: #1A1A2E;
+  --forte-gold: #C4A35A;
+  --forte-cream: #FAFAF7;
+  --forte-gray: #666666;
+}
 
 body {
-  font-family: 'Inter', 'Noto Sans JP', sans-serif;
-  background-color: #FAFAF7;
-  color: #1A1A2E;
+  background-color: var(--forte-cream);
+  color: var(--forte-dark);
 }

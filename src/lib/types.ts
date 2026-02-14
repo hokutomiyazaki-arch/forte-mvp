@@ -1,3 +1,7 @@
+// ============================================
+// FORTE MVP v6 - Type Definitions
+// ============================================
+
 export interface Professional {
   id: string
   user_id: string
@@ -10,19 +14,40 @@ export interface Professional {
   specialties: string[] | null
   booking_url: string | null
   coupon_text: string | null
-  selected_fortes: string[] | null
-  custom_forte_1: string | null
-  custom_forte_2: string | null
+  custom_fortes: CustomForte[]
   is_founding_member: boolean
+  badges: Badge[]
   created_at: string
   updated_at: string
+}
+
+export interface CustomForte {
+  id: string
+  label: string
+  description?: string
+}
+
+export interface Badge {
+  id: string
+  label: string
+  image_url: string
+}
+
+export interface Client {
+  id: string
+  user_id: string
+  nickname: string
+  created_at: string
 }
 
 export interface Vote {
   id: string
   professional_id: string
-  category: string
+  client_user_id: string
+  result_category: string
+  personality_vote: boolean
   comment: string | null
+  qr_token: string | null
   created_at: string
 }
 
@@ -32,31 +57,65 @@ export interface VoteSummary {
   vote_count: number
 }
 
-export const FORTE_OPTIONS: { key: string; label: string; emoji: string; desc: string }[] = [
-  { key: 'skill',       label: '技術力',       emoji: '💪', desc: '施術・指導が的確で上手い' },
-  { key: 'knowledge',   label: '知識',         emoji: '📚', desc: '専門的な説明や提案が深い' },
-  { key: 'trust',       label: '信頼感',       emoji: '🤝', desc: '安心して身体を預けられる' },
-  { key: 'passion',     label: '情熱',         emoji: '🔥', desc: '真剣に向き合ってくれる' },
-  { key: 'empathy',     label: '寄り添い',     emoji: '💛', desc: '話をよく聴いてくれる・優しい' },
-  { key: 'result',      label: '結果力',       emoji: '🎯', desc: '実際に身体が変わった' },
-  { key: 'explanation', label: '説明力',       emoji: '💬', desc: '分かりやすく納得できる' },
-  { key: 'atmosphere',  label: '雰囲気',       emoji: '✨', desc: 'リラックスできる空間や人柄' },
-  { key: 'followup',    label: '継続サポート', emoji: '📋', desc: 'セルフケアや計画を一緒に考えてくれる' },
-  { key: 'flexibility', label: '対応力',       emoji: '⚡', desc: '柔軟で要望に素早く応えてくれる' },
+export interface QrToken {
+  id: string
+  professional_id: string
+  token: string
+  expires_at: string
+  created_at: string
+}
+
+export interface ForteCategory {
+  id: string
+  parent_id: string | null
+  category_type: 'result' | 'personality'
+  label: string
+  description: string | null
+  sort_order: number
+}
+
+// ============================================
+// 結果フォルテ（8項目）
+// ============================================
+export const RESULT_FORTES: { key: string; label: string; desc: string }[] = [
+  { key: 'pain',          label: '痛みが改善した',             desc: '腰痛、肩こり、膝痛などが減った・なくなった' },
+  { key: 'movement',      label: '動きが変わった',             desc: '可動域が広がった、身体の使い方が変わった' },
+  { key: 'posture',       label: '姿勢が変わった',             desc: '姿勢や見た目が改善した' },
+  { key: 'performance',   label: 'パフォーマンスが上がった',   desc: '競技成績や日常動作が向上した' },
+  { key: 'chronic',       label: '長年の悩みが解決した',       desc: '他では解決しなかったことが変わった' },
+  { key: 'maintenance',   label: '予防・メンテナンスに役立つ', desc: '不調が出にくくなった、維持できている' },
+  { key: 'understanding', label: '身体への理解が深まった',     desc: '自分の身体の仕組みや原因が分かった' },
+  { key: 'mental',        label: 'メンタルの不調が改善した',   desc: '睡眠・自律神経・ストレス・気分の改善' },
 ]
 
-export function getForteLabel(key: string, pro?: Professional | null): string {
-  if (key === 'custom1' && pro?.custom_forte_1) return pro.custom_forte_1
-  if (key === 'custom2' && pro?.custom_forte_2) return pro.custom_forte_2
-  return FORTE_OPTIONS.find(o => o.key === key)?.label || key
+export const PERSONALITY_FORTE = {
+  key: 'trust',
+  label: '信頼できる人柄',
+  desc: '誠実で、安心して身体を預けられると感じた',
 }
 
-export function getForteEmoji(key: string): string {
-  if (key === 'custom1') return '⭐'
-  if (key === 'custom2') return '🌟'
-  return FORTE_OPTIONS.find(o => o.key === key)?.emoji || '🔷'
+export function getResultForteLabel(key: string, pro?: Professional | null): string {
+  if (key.startsWith('custom_') && pro?.custom_fortes) {
+    const custom = pro.custom_fortes.find(c => c.id === key)
+    if (custom) return custom.label
+  }
+  return RESULT_FORTES.find(o => o.key === key)?.label || key
 }
 
-export function getForteDesc(key: string): string {
-  return FORTE_OPTIONS.find(o => o.key === key)?.desc || ''
+export function getResultForteDesc(key: string, pro?: Professional | null): string {
+  if (key.startsWith('custom_') && pro?.custom_fortes) {
+    const custom = pro.custom_fortes.find(c => c.id === key)
+    if (custom?.description) return custom.description
+  }
+  return RESULT_FORTES.find(o => o.key === key)?.desc || ''
+}
+
+export function getAllForteOptions(pro?: Professional | null): { key: string; label: string; desc: string }[] {
+  const options = [...RESULT_FORTES]
+  if (pro?.custom_fortes) {
+    pro.custom_fortes.forEach(c => {
+      options.push({ key: c.id, label: c.label, desc: c.description || '' })
+    })
+  }
+  return options
 }
