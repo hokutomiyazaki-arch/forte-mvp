@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { Vote, Professional, getResultForteLabel, PERSONALITY_FORTE } from '@/lib/types'
+import { Vote, Professional, getResultForteLabel, getPersonalityForteLabel } from '@/lib/types'
 
 interface VoteWithPro extends Vote {
   professionals: Professional
@@ -41,13 +41,12 @@ export default function MyCardPage() {
       <div className="text-center mb-8">
         <h1 className="text-2xl font-bold text-[#1A1A2E]">{nickname || 'My'} のカード</h1>
         <p className="text-gray-500 text-sm mt-1">あなたがフォルテを贈ったプロのコレクション</p>
-        <p className="text-xs text-gray-400 mt-2">このページのURLを友人にシェアできます</p>
       </div>
 
       {votes.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-gray-400 mb-4">まだフォルテを贈ったプロがいません</p>
-          <a href="/explore" className="text-[#C4A35A] hover:underline">プロ一覧を見る</a>
+          <a href="/explore" className="text-[#C4A35A] hover:underline">プロを探す</a>
         </div>
       ) : (
         <div className="space-y-4">
@@ -65,15 +64,15 @@ export default function MyCardPage() {
                 <div className="flex-1">
                   <div className="font-bold text-[#1A1A2E]">{v.professionals.name}</div>
                   <div className="text-sm text-gray-500">{v.professionals.title}</div>
-                  <div className="flex gap-2 mt-1">
+                  <div className="flex gap-2 mt-2 flex-wrap">
                     <span className="text-xs px-2 py-0.5 bg-[#1A1A2E]/10 text-[#1A1A2E] rounded-full">
                       {getResultForteLabel(v.result_category, v.professionals)}
                     </span>
-                    {v.personality_vote && (
-                      <span className="text-xs px-2 py-0.5 bg-[#C4A35A]/10 text-[#C4A35A] rounded-full">
-                        {PERSONALITY_FORTE.label}
+                    {v.personality_categories?.map(pc => (
+                      <span key={pc} className="text-xs px-2 py-0.5 bg-[#C4A35A]/10 text-[#C4A35A] rounded-full">
+                        {getPersonalityForteLabel(pc, v.professionals)}
                       </span>
-                    )}
+                    ))}
                   </div>
                 </div>
               </div>

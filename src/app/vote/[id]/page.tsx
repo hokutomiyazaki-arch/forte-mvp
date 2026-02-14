@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { Professional, RESULT_FORTES, PERSONALITY_FORTE, getAllForteOptions } from '@/lib/types'
+import { Professional, getAllResultOptions, getAllPersonalityOptions } from '@/lib/types'
 import { Suspense } from 'react'
 
 function VoteForm() {
@@ -15,12 +15,15 @@ function VoteForm() {
   const [pro, setPro] = useState<Professional | null>(null)
   const [user, setUser] = useState<any>(null)
   const [selectedResult, setSelectedResult] = useState('')
-  const [personalityVote, setPersonalityVote] = useState(false)
+  const [selectedPersonalities, setSelectedPersonalities] = useState<string[]>([])
   const [comment, setComment] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
   const [alreadyVoted, setAlreadyVoted] = useState(false)
+  const [isSelfVote, setIsSelfVote] = useState(false)
   const [loading, setLoading] = useState(true)
+
+  const MAX_PERSONALITY = 3
 
   useEffect(() => {
     async function load() {
@@ -34,7 +37,6 @@ function VoteForm() {
         .single()
       if (proData) setPro(proData)
 
-      // Check if already voted
       if (u) {
         const { data: existing } = await supabase
           .from('votes')
@@ -44,9 +46,8 @@ function VoteForm() {
           .single()
         if (existing) setAlreadyVoted(true)
 
-        // Check self-vote
         if (proData && proData.user_id === u.id) {
-          setError('自分自身には投票できません')
+          setIsSelfVote(true)
         }
       }
 
@@ -55,18 +56,31 @@ function VoteForm() {
     load()
   }, [proId])
 
+  function togglePersonality(key: string) {
+    setSelectedPersonalities(prev => {
+      if (prev.includes(key)) {
+        return prev.filter(k => k !== key)
+      }
+      if (prev.length >= MAX_PERSONALITY) return prev
+      return [...prev, key]
+    })
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!user) {
       window.location.href = `/login?role=client`
       return
     }
+    if (isSelfVote) {
+      setError('自分自身には投票できません')
+      return
+    }
     if (!selectedResult) {
-      setError('結果フォルテを1つ選んでください')
+      setError('実力フォルテを1つ選んでください')
       return
     }
 
-    // Verify QR token if provided
     if (qrToken) {
       const { data: tokenData } = await supabase
         .from('qr_tokens')
@@ -86,7 +100,7 @@ function VoteForm() {
       professional_id: proId,
       client_user_id: user.id,
       result_category: selectedResult,
-      personality_vote: personalityVote,
+      personality_categories: selectedPersonalities,
       comment: comment.trim() || null,
       qr_token: qrToken,
     })
@@ -98,7 +112,6 @@ function VoteForm() {
         setError(voteError.message)
       }
     } else {
-      // Ensure client record exists
       const { data: clientCheck } = await supabase
         .from('clients')
         .select('id')
@@ -140,6 +153,18 @@ function VoteForm() {
     )
   }
 
+  if (isSelfVote) {
+    return (
+      <div className="max-w-md mx-auto text-center py-16">
+        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-4">自分には投票できません</h1>
+        <p className="text-gray-600 mb-6">フォルテはクライアントから贈ってもらうものです。</p>
+        <a href="/dashboard" className="px-6 py-3 bg-[#1A1A2E] text-white rounded-lg hover:bg-[#2a2a4e] transition inline-block">
+          ダッシュボードに戻る
+        </a>
+      </div>
+    )
+  }
+
   if (submitted) {
     return (
       <div className="max-w-md mx-auto text-center py-16">
@@ -164,7 +189,8 @@ function VoteForm() {
     )
   }
 
-  const forteOptions = getAllForteOptions(pro)
+  const resultOptions = getAllResultOptions(pro)
+  const personalityOptions = getAllPersonalityOptions(pro)
 
   return (
     <div className="max-w-lg mx-auto">
@@ -174,12 +200,12 @@ function VoteForm() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-8">
-        {/* Result Forte */}
+        {/* 実力フォルテ（1つ選択） */}
         <div>
-          <h2 className="text-lg font-bold text-[#1A1A2E] mb-1">何が変わりましたか？</h2>
+          <h2 className="text-lg font-bold text-[#1A1A2E] mb-1">💪 何が変わりましたか？</h2>
           <p className="text-sm text-gray-500 mb-4">1つ選んでください</p>
           <div className="space-y-2">
-            {forteOptions.map(opt => (
+            {resultOptions.map(opt => (
               <label
                 key={opt.key}
                 className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition ${
@@ -205,28 +231,43 @@ function VoteForm() {
           </div>
         </div>
 
-        {/* Personality Forte */}
+        {/* 人柄フォルテ（最大3つ選択） */}
         <div>
-          <h2 className="text-lg font-bold text-[#1A1A2E] mb-1">この人の人柄は？</h2>
-          <p className="text-sm text-gray-500 mb-4">任意</p>
-          <label
-            className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition ${
-              personalityVote
-                ? 'border-[#C4A35A] bg-[#C4A35A]/5'
-                : 'border-gray-200 hover:border-gray-300'
-            }`}
-          >
-            <input
-              type="checkbox"
-              checked={personalityVote}
-              onChange={() => setPersonalityVote(!personalityVote)}
-              className="accent-[#C4A35A] w-5 h-5"
-            />
-            <div>
-              <div className="font-medium text-[#C4A35A]">{PERSONALITY_FORTE.label}</div>
-              <div className="text-xs text-gray-500">{PERSONALITY_FORTE.desc}</div>
-            </div>
-          </label>
+          <h2 className="text-lg font-bold text-[#C4A35A] mb-1">🤝 この人の人柄は？</h2>
+          <p className="text-sm text-gray-500 mb-4">最大3つまで選べます（任意）</p>
+          <div className="space-y-2">
+            {personalityOptions.map(opt => {
+              const isSelected = selectedPersonalities.includes(opt.key)
+              const isDisabled = !isSelected && selectedPersonalities.length >= MAX_PERSONALITY
+              return (
+                <label
+                  key={opt.key}
+                  className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition ${
+                    isSelected
+                      ? 'border-[#C4A35A] bg-[#C4A35A]/5'
+                      : isDisabled
+                        ? 'border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed'
+                        : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => !isDisabled && togglePersonality(opt.key)}
+                    disabled={isDisabled}
+                    className="mt-1 accent-[#C4A35A] w-4 h-4"
+                  />
+                  <div>
+                    <div className={`font-medium ${isSelected ? 'text-[#C4A35A]' : 'text-[#1A1A2E]'}`}>{opt.label}</div>
+                    <div className="text-xs text-gray-500">{opt.desc}</div>
+                  </div>
+                </label>
+              )
+            })}
+          </div>
+          {selectedPersonalities.length > 0 && (
+            <p className="text-xs text-[#C4A35A] mt-2">{selectedPersonalities.length}/{MAX_PERSONALITY} 選択中</p>
+          )}
         </div>
 
         {/* Comment */}

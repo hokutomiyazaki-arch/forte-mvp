@@ -11,7 +11,7 @@ export default function CardPage() {
   const supabase = createClient()
   const [pro, setPro] = useState<Professional | null>(null)
   const [votes, setVotes] = useState<VoteSummary[]>([])
-  const [trustCount, setTrustCount] = useState(0)
+  const [personalityVotes, setPersonalityVotes] = useState<{category: string, vote_count: number}[]>([])
   const [comments, setComments] = useState<Vote[]>([])
   const [totalVotes, setTotalVotes] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -19,44 +19,25 @@ export default function CardPage() {
   useEffect(() => {
     async function load() {
       const { data: proData } = await supabase
-        .from('professionals')
-        .select('*')
-        .eq('id', id)
-        .single()
-      
+        .from('professionals').select('*').eq('id', id).single()
       if (proData) setPro(proData)
 
       const { data: voteData } = await supabase
-        .from('vote_summary')
-        .select('*')
-        .eq('professional_id', id)
-      
+        .from('vote_summary').select('*').eq('professional_id', id)
       if (voteData) setVotes(voteData)
 
-      const { data: trustData } = await supabase
-        .from('personality_summary')
-        .select('*')
-        .eq('professional_id', id)
-        .single()
-      
-      if (trustData) setTrustCount(trustData.trust_count)
+      const { data: personalityData } = await supabase
+        .from('personality_summary').select('*').eq('professional_id', id)
+      if (personalityData) setPersonalityVotes(personalityData)
 
       const { data: commentData } = await supabase
-        .from('votes')
-        .select('*')
-        .eq('professional_id', id)
+        .from('votes').select('*').eq('professional_id', id)
         .not('comment', 'is', null)
-        .order('created_at', { ascending: false })
-        .limit(20)
-      
+        .order('created_at', { ascending: false }).limit(20)
       if (commentData) setComments(commentData)
 
-      // Total unique votes
       const { count } = await supabase
-        .from('votes')
-        .select('*', { count: 'exact', head: true })
-        .eq('professional_id', id)
-      
+        .from('votes').select('*', { count: 'exact', head: true }).eq('professional_id', id)
       setTotalVotes(count || 0)
       setLoading(false)
     }
@@ -80,7 +61,6 @@ export default function CardPage() {
         <h1 className="text-2xl font-bold text-[#1A1A2E]">{pro.name}</h1>
         <p className="text-gray-500">{pro.title}</p>
         
-        {/* Badges */}
         <div className="flex justify-center gap-2 mt-3">
           {pro.is_founding_member && (
             <span className="px-3 py-1 bg-[#C4A35A] text-white text-xs rounded-full font-medium">
@@ -108,7 +88,7 @@ export default function CardPage() {
       {/* Forte Chart */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-6">
         <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">フォルテチャート</h2>
-        <ForteChart votes={votes} trustCount={trustCount} professional={pro} />
+        <ForteChart votes={votes} personalityVotes={personalityVotes} professional={pro} />
       </div>
 
       {/* Bio */}
@@ -150,19 +130,13 @@ export default function CardPage() {
 
       {/* CTA */}
       <div className="flex flex-col sm:flex-row gap-3 mb-8">
-        <a
-          href={`/vote/${pro.id}`}
-          className="flex-1 text-center py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition"
-        >
+        <a href={`/vote/${pro.id}`}
+          className="flex-1 text-center py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition">
           このプロにフォルテを贈る
         </a>
         {pro.booking_url && (
-          <a
-            href={pro.booking_url}
-            target="_blank"
-            rel="noopener"
-            className="flex-1 text-center py-3 border-2 border-[#1A1A2E] text-[#1A1A2E] font-medium rounded-lg hover:bg-[#1A1A2E] hover:text-white transition"
-          >
+          <a href={pro.booking_url} target="_blank" rel="noopener"
+            className="flex-1 text-center py-3 border-2 border-[#1A1A2E] text-[#1A1A2E] font-medium rounded-lg hover:bg-[#1A1A2E] hover:text-white transition">
             予約する
           </a>
         )}

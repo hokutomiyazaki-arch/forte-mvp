@@ -13,7 +13,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <nav className="bg-[#1A1A2E] text-white px-6 py-3 flex items-center justify-between">
           <a href="/" className="text-xl font-bold tracking-wider">FORTE</a>
           <div className="flex gap-4 text-sm">
-            <a href="/explore" className="hover:text-[#C4A35A] transition">プロ一覧</a>
+            <a href="/explore" className="hover:text-[#C4A35A] transition">プロを探す</a>
             <a href="/login" className="hover:text-[#C4A35A] transition">ログイン</a>
           </div>
         </nav>

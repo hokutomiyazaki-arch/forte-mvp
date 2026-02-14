@@ -1,5 +1,5 @@
 // ============================================
-// FORTE MVP v6 - Type Definitions
+// FORTE MVP v7 - Type Definitions
 // ============================================
 
 export interface Professional {
@@ -14,7 +14,8 @@ export interface Professional {
   specialties: string[] | null
   booking_url: string | null
   coupon_text: string | null
-  custom_fortes: CustomForte[]
+  custom_result_fortes: CustomForte[]
+  custom_personality_fortes: CustomForte[]
   is_founding_member: boolean
   badges: Badge[]
   created_at: string
@@ -45,7 +46,7 @@ export interface Vote {
   professional_id: string
   client_user_id: string
   result_category: string
-  personality_vote: boolean
+  personality_categories: string[]
   comment: string | null
   qr_token: string | null
   created_at: string
@@ -65,17 +66,8 @@ export interface QrToken {
   created_at: string
 }
 
-export interface ForteCategory {
-  id: string
-  parent_id: string | null
-  category_type: 'result' | 'personality'
-  label: string
-  description: string | null
-  sort_order: number
-}
-
 // ============================================
-// 結果フォルテ（8項目）
+// 結果フォルテ（デフォルト7項目 + プロ独自最大3 = 最大10）
 // ============================================
 export const RESULT_FORTES: { key: string; label: string; desc: string }[] = [
   { key: 'pain',          label: '痛みが改善した',             desc: '腰痛、肩こり、膝痛などが減った・なくなった' },
@@ -85,35 +77,55 @@ export const RESULT_FORTES: { key: string; label: string; desc: string }[] = [
   { key: 'chronic',       label: '長年の悩みが解決した',       desc: '他では解決しなかったことが変わった' },
   { key: 'maintenance',   label: '予防・メンテナンスに役立つ', desc: '不調が出にくくなった、維持できている' },
   { key: 'understanding', label: '身体への理解が深まった',     desc: '自分の身体の仕組みや原因が分かった' },
-  { key: 'mental',        label: 'メンタルの不調が改善した',   desc: '睡眠・自律神経・ストレス・気分の改善' },
 ]
 
-export const PERSONALITY_FORTE = {
-  key: 'trust',
-  label: '信頼できる人柄',
-  desc: '誠実で、安心して身体を預けられると感じた',
-}
+// ============================================
+// 人柄フォルテ（デフォルト7項目 + プロ独自最大3 = 最大10）
+// ============================================
+export const PERSONALITY_FORTES: { key: string; label: string; desc: string }[] = [
+  { key: 'trustworthy',    label: '安心して任せられる',         desc: '誠実で、身体を預けても大丈夫だと感じた' },
+  { key: 'approachable',   label: '話しやすい',                 desc: '気軽に相談でき、距離感がちょうどいい' },
+  { key: 'passionate',     label: '情熱がある',                 desc: '仕事への熱量や向上心を感じた' },
+  { key: 'attentive',      label: 'よく見てくれる',             desc: '細かい変化に気づき、一人ひとりに合わせてくれる' },
+  { key: 'clear_explainer',label: '説明がわかりやすい',         desc: '専門的なことも噛み砕いて教えてくれる' },
+  { key: 'good_listener',  label: '話をしっかり聴いてくれる',   desc: '悩みや要望を丁寧に受け止めてくれる' },
+  { key: 'encouraging',    label: '前向きにしてくれる',         desc: '励ましやポジティブなエネルギーをもらえた' },
+]
+
+// ============================================
+// ヘルパー関数
+// ============================================
 
 export function getResultForteLabel(key: string, pro?: Professional | null): string {
-  if (key.startsWith('custom_') && pro?.custom_fortes) {
-    const custom = pro.custom_fortes.find(c => c.id === key)
+  if (key.startsWith('cr_') && pro?.custom_result_fortes) {
+    const custom = pro.custom_result_fortes.find(c => c.id === key)
     if (custom) return custom.label
   }
   return RESULT_FORTES.find(o => o.key === key)?.label || key
 }
 
-export function getResultForteDesc(key: string, pro?: Professional | null): string {
-  if (key.startsWith('custom_') && pro?.custom_fortes) {
-    const custom = pro.custom_fortes.find(c => c.id === key)
-    if (custom?.description) return custom.description
+export function getPersonalityForteLabel(key: string, pro?: Professional | null): string {
+  if (key.startsWith('cp_') && pro?.custom_personality_fortes) {
+    const custom = pro.custom_personality_fortes.find(c => c.id === key)
+    if (custom) return custom.label
   }
-  return RESULT_FORTES.find(o => o.key === key)?.desc || ''
+  return PERSONALITY_FORTES.find(o => o.key === key)?.label || key
 }
 
-export function getAllForteOptions(pro?: Professional | null): { key: string; label: string; desc: string }[] {
+export function getAllResultOptions(pro?: Professional | null): { key: string; label: string; desc: string }[] {
   const options = [...RESULT_FORTES]
-  if (pro?.custom_fortes) {
-    pro.custom_fortes.forEach(c => {
+  if (pro?.custom_result_fortes) {
+    pro.custom_result_fortes.forEach(c => {
+      options.push({ key: c.id, label: c.label, desc: c.description || '' })
+    })
+  }
+  return options
+}
+
+export function getAllPersonalityOptions(pro?: Professional | null): { key: string; label: string; desc: string }[] {
+  const options = [...PERSONALITY_FORTES]
+  if (pro?.custom_personality_fortes) {
+    pro.custom_personality_fortes.forEach(c => {
       options.push({ key: c.id, label: c.label, desc: c.description || '' })
     })
   }
