@@ -28,7 +28,7 @@ export default function AdminPage() {
       setAuthorized(true)
 
       // Pros with vote count
-      const { data: proData } = await supabase.from('professionals').select('*').order('created_at')
+      const { data: proData } = await supabase.from('professionals').select('*').order('created_at') as { data: any[] | null } as { data: any[] | null }
       if (proData) {
         const prosWithVotes: any[] = []
         for (const p of proData) {
