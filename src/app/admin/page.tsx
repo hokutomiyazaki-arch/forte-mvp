@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { Professional, Vote, getResultForteLabel } from '@/lib/types'
+import { Professional, Vote } from '@/lib/types'
 
 const ADMIN_EMAILS = ['info@functionalneurotraining.com']
 
@@ -171,9 +171,9 @@ export default function AdminPage() {
               <span className="text-gray-400 text-xs w-20">{new Date(v.created_at).toLocaleDateString('ja-JP')}</span>
               <span className="font-medium text-[#1A1A2E]">{v.professionals.name}</span>
               <span className="px-2 py-0.5 bg-[#1A1A2E]/10 text-[#1A1A2E] rounded-full text-xs">
-                {getResultForteLabel(v.result_category)}
+                {v.result_category}
               </span>
-              {v.personality_vote && <span className="px-2 py-0.5 bg-[#C4A35A]/10 text-[#C4A35A] rounded-full text-xs">信頼</span>}
+              {v.personality_categories && v.personality_categories.length > 0 && (<span className="px-2 py-0.5 bg-[#C4A35A]/10 text-[#C4A35A] rounded-full text-xs">人柄×{v.personality_categories.length}</span>)}
               {v.comment && <span className="text-gray-400 text-xs truncate max-w-[200px]">{v.comment}</span>}
             </div>
           ))}
