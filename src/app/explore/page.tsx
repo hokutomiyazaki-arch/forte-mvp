@@ -17,7 +17,7 @@ interface SpecialistEntry {
 }
 
 export default function ExplorePage() {
-  const supabase = createClient()
+  const supabase = createClient() as any
   const [tab, setTab] = useState<'result' | 'personality'>('result')
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [rankings, setRankings] = useState<ProRanking[]>([])

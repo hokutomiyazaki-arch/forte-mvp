@@ -5,7 +5,7 @@ import { Professional, VoteSummary, CustomForte, getResultForteLabel } from '@/l
 import ForteChart from '@/components/ForteChart'
 
 export default function DashboardPage() {
-  const supabase = createClient()
+  const supabase = createClient() as any
   const [user, setUser] = useState<any>(null)
   const [pro, setPro] = useState<Professional | null>(null)
   const [votes, setVotes] = useState<VoteSummary[]>([])

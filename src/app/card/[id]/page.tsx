@@ -8,7 +8,7 @@ import ForteChart from '@/components/ForteChart'
 export default function CardPage() {
   const params = useParams()
   const id = params.id as string
-  const supabase = createClient()
+  const supabase = createClient() as any as any
   const [pro, setPro] = useState<Professional | null>(null)
   const [votes, setVotes] = useState<VoteSummary[]>([])
   const [personalityVotes, setPersonalityVotes] = useState<{category: string, vote_count: number}[]>([])

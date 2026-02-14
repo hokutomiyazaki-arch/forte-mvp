@@ -16,7 +16,7 @@ function LoginForm() {
   const [verifying, setVerifying] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   const [checkingSession, setCheckingSession] = useState(true)
-  const supabase = createClient()
+  const supabase = createClient() as any
 
   const isClient = role === 'client'
 

@@ -8,7 +8,7 @@ interface VoteWithPro extends Vote {
 }
 
 export default function MyCardPage() {
-  const supabase = createClient()
+  const supabase = createClient() as any
   const [votes, setVotes] = useState<VoteWithPro[]>([])
   const [nickname, setNickname] = useState('')
   const [loading, setLoading] = useState(true)

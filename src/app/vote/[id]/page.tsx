@@ -10,7 +10,7 @@ function VoteForm() {
   const searchParams = useSearchParams()
   const proId = params.id as string
   const qrToken = searchParams.get('token')
-  const supabase = createClient()
+  const supabase = createClient() as any
 
   const [pro, setPro] = useState<Professional | null>(null)
   const [user, setUser] = useState<any>(null)
