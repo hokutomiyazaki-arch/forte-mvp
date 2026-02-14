@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import Navbar from '@/components/Navbar'
 
 export const metadata: Metadata = {
   title: 'FORTE — 本物が輝く社会へ',
@@ -10,13 +11,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ja">
       <body className="min-h-screen" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans JP", sans-serif' }}>
-        <nav className="bg-[#1A1A2E] text-white px-6 py-3 flex items-center justify-between">
-          <a href="/" className="text-xl font-bold tracking-wider">FORTE</a>
-          <div className="flex gap-4 text-sm">
-            <a href="/explore" className="hover:text-[#C4A35A] transition">プロを探す</a>
-            <a href="/login" className="hover:text-[#C4A35A] transition">ログイン</a>
-          </div>
-        </nav>
+        <Navbar />
         <main className="max-w-5xl mx-auto px-4 py-8">
           {children}
         </main>

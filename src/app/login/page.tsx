@@ -15,45 +15,57 @@ function LoginForm() {
   const [error, setError] = useState('')
   const [verifying, setVerifying] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
+  const [checkingSession, setCheckingSession] = useState(true)
   const supabase = createClient()
 
   const isClient = role === 'client'
 
-  // Detect in-app browser
   const [isInAppBrowser, setIsInAppBrowser] = useState(false)
   useEffect(() => {
     const ua = navigator.userAgent.toLowerCase()
     setIsInAppBrowser(/line|instagram|fbav|fban/.test(ua))
   }, [])
 
-  // Handle auth callback (magic link or Google redirect)
   useEffect(() => {
-    supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        const nickParam = searchParams.get('nickname')
-        const roleParam = searchParams.get('role') || 'pro'
+    async function checkSession() {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user) {
+        await handlePostLogin(session.user)
+        return
+      }
+      setCheckingSession(false)
+    }
+    checkSession()
 
-        if (roleParam === 'client') {
-          const nn = nickParam || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'ユーザー'
-          await supabase.from('clients').upsert({
-            user_id: session.user.id,
-            nickname: nn,
-          }, { onConflict: 'user_id' })
-          window.location.href = '/mycard'
-        } else {
-          // Check if already has pro profile
-          const { data: existing } = await supabase
-            .from('professionals').select('id').eq('user_id', session.user.id).single()
-          window.location.href = existing ? '/dashboard' : '/dashboard'
-        }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        await handlePostLogin(session.user)
       }
     })
+
+    return () => subscription.unsubscribe()
   }, [])
+
+  async function handlePostLogin(user: any) {
+    const nickParam = searchParams.get('nickname')
+    const roleParam = searchParams.get('role') || 'pro'
+
+    if (roleParam === 'client') {
+      const nn = nickParam || user.user_metadata?.full_name || user.email?.split('@')[0] || 'ユーザー'
+      await supabase.from('clients').upsert({
+        user_id: user.id,
+        nickname: nn,
+      }, { onConflict: 'user_id' })
+      window.location.href = '/mycard'
+    } else {
+      window.location.href = '/dashboard'
+    }
+  }
 
   async function handleGoogleLogin() {
     setError('')
     setGoogleLoading(true)
-    const redirectUrl = `${window.location.origin}/login?role=${role}${isClient && nickname ? `&nickname=${encodeURIComponent(nickname)}` : ''}`
+    const redirectUrl = window.location.origin + '/login?role=' + role + (isClient && nickname ? '&nickname=' + encodeURIComponent(nickname) : '')
 
     const { error: authError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -75,7 +87,7 @@ function LoginForm() {
       return
     }
 
-    const redirectUrl = `${window.location.origin}/login?role=${role}${isClient && nickname ? `&nickname=${encodeURIComponent(nickname)}` : ''}`
+    const redirectUrl = window.location.origin + '/login?role=' + role + (isClient && nickname ? '&nickname=' + encodeURIComponent(nickname) : '')
 
     const { error: authError } = await supabase.auth.signInWithOtp({
       email,
@@ -107,21 +119,15 @@ function LoginForm() {
     }
 
     if (data.session?.user) {
-      if (isClient) {
-        const nn = nickname || data.session.user.email?.split('@')[0] || 'ユーザー'
-        await supabase.from('clients').upsert({
-          user_id: data.session.user.id,
-          nickname: nn,
-        }, { onConflict: 'user_id' })
-        window.location.href = '/mycard'
-      } else {
-        window.location.href = '/dashboard'
-      }
+      await handlePostLogin(data.session.user)
     }
     setVerifying(false)
   }
 
-  // OTP入力画面
+  if (checkingSession) {
+    return <div className="text-center py-16 text-gray-400">確認中...</div>
+  }
+
   if (sent) {
     return (
       <div className="max-w-md mx-auto text-center py-16">
@@ -134,23 +140,23 @@ function LoginForm() {
         <div className="bg-gray-50 rounded-lg p-6 text-left">
           <p className="text-sm font-medium text-[#1A1A2E] mb-3">
             {isInAppBrowser
-              ? '⚠️ LINEなどのアプリ内ブラウザをお使いの場合、メール内のボタンが動作しないことがあります。下の欄にメールに記載された6桁のコードを入力してください。'
-              : 'メール内のリンクをクリックするか、6桁のコードを入力してください。'}
+              ? '⚠️ LINEなどのアプリ内ブラウザをお使いの場合、メール内のボタンが動作しないことがあります。下の欄にメールに記載されたコードを入力してください。'
+              : 'メール内のリンクをクリックするか、メールに記載されたコードを入力してください。'}
           </p>
           <form onSubmit={handleOtpVerify} className="flex gap-2">
             <input
               type="text"
               inputMode="numeric"
               pattern="[0-9]*"
-              maxLength={6}
+              maxLength={8}
               value={otp}
               onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
               className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] focus:border-transparent outline-none text-center text-lg tracking-widest"
-              placeholder="000000"
+              placeholder="コードを入力"
             />
             <button
               type="submit"
-              disabled={otp.length !== 6 || verifying}
+              disabled={otp.length < 6 || verifying}
               className="px-6 py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition disabled:opacity-50"
             >
               {verifying ? '...' : '確認'}
@@ -158,6 +164,13 @@ function LoginForm() {
           </form>
           {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
         </div>
+
+        <button
+          onClick={() => { setSent(false); setOtp(''); setError('') }}
+          className="mt-4 text-sm text-gray-400 hover:text-gray-600"
+        >
+          ← メールアドレスを変更する
+        </button>
       </div>
     )
   }
@@ -166,25 +179,24 @@ function LoginForm() {
     <div className="max-w-md mx-auto py-12">
       <h1 className="text-2xl font-bold text-[#1A1A2E] mb-6 text-center">ログイン / 新規登録</h1>
 
-      {/* プロ / クライアント切替タブ */}
       <div className="flex mb-8 bg-gray-100 rounded-lg p-1">
         <button
           onClick={() => setRole('pro')}
-          className={`flex-1 py-3 rounded-md text-sm font-medium transition ${
+          className={'flex-1 py-3 rounded-md text-sm font-medium transition ' + (
             role === 'pro'
               ? 'bg-[#1A1A2E] text-white shadow'
               : 'text-gray-600 hover:text-gray-800'
-          }`}
+          )}
         >
           プロとして
         </button>
         <button
           onClick={() => setRole('client')}
-          className={`flex-1 py-3 rounded-md text-sm font-medium transition ${
+          className={'flex-1 py-3 rounded-md text-sm font-medium transition ' + (
             role === 'client'
               ? 'bg-[#1A1A2E] text-white shadow'
               : 'text-gray-600 hover:text-gray-800'
-          }`}
+          )}
         >
           クライアントとして
         </button>
@@ -196,7 +208,6 @@ function LoginForm() {
           : 'クライアントの声で、あなたの「選ばれる理由」を可視化'}
       </p>
 
-      {/* Google login */}
       <button
         onClick={handleGoogleLogin}
         disabled={googleLoading || (isClient && !nickname.trim())}
@@ -217,14 +228,12 @@ function LoginForm() {
         </p>
       )}
 
-      {/* 区切り線 */}
       <div className="flex items-center gap-4 my-6">
         <div className="flex-1 h-px bg-gray-200" />
         <span className="text-xs text-gray-400">または</span>
         <div className="flex-1 h-px bg-gray-200" />
       </div>
 
-      {/* Email login */}
       <form onSubmit={handleEmailSubmit} className="space-y-4">
         {isClient && (
           <div>
