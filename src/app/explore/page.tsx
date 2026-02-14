@@ -162,7 +162,7 @@ export default function ExplorePage() {
   return (
     <div className="max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2">プロを探す</h1>
-      <p className="text-sm text-gray-500 mb-6">実力や人柄で、あなたに合うプロを見つけよう</p>
+      <p className="text-sm text-gray-500 mb-6">フォルテや人柄で、あなたに合うプロを見つけよう</p>
 
       {/* 実力 / 人柄 タブ */}
       <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
@@ -174,7 +174,7 @@ export default function ExplorePage() {
               : 'text-gray-600 hover:text-gray-800'
           }`}
         >
-          💪 実力で探す
+          フォルテで探す
         </button>
         <button
           onClick={() => setTab('personality')}
@@ -184,7 +184,7 @@ export default function ExplorePage() {
               : 'text-gray-600 hover:text-gray-800'
           }`}
         >
-          🤝 人柄で探す
+          人柄で探す
         </button>
       </div>
 
@@ -220,7 +220,7 @@ export default function ExplorePage() {
             <div className="space-y-3 mb-10">
               <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wide">
                 {selectedCategory === 'all'
-                  ? (tab === 'result' ? '💪 実力フォルテ総合ランキング' : '🤝 人柄フォルテ総合ランキング')
+                  ? (tab === 'result' ? 'フォルテ総合ランキング' : '人柄フォルテ総合ランキング')
                   : `${currentCategories.find(c => c.key === selectedCategory)?.label} ランキング`
                 }
               </h2>
@@ -268,7 +268,6 @@ export default function ExplorePage() {
           {specialists.length > 0 && (
             <div className="mb-10">
               <div className="flex items-center gap-2 mb-4">
-                <span className="text-lg">⭐</span>
                 <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wide">
                   スペシャリスト
                 </h2>
