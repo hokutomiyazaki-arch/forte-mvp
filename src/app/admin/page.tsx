@@ -72,14 +72,14 @@ export default function AdminPage() {
   }
 
   function exportCSV() {
-    const rows = [['名前', '肩書き', 'エリア', '総フォルテ', 'Founding', '登録日']]
+    const rows = [['名前', '肩書き', 'エリア', '総プルーフ', 'Founding', '登録日']]
     pros.forEach(p => {
       rows.push([p.name, p.title, p.location || '', String(p.total_votes), p.is_founding_member ? 'Y' : 'N', p.created_at.slice(0, 10)])
     })
     const csv = rows.map(r => r.join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url; a.download = 'forte_pros.csv'; a.click()
+    const a = document.createElement('a'); a.href = url; a.download = 'proof_pros.csv'; a.click()
   }
 
   if (loading) return <div className="text-center py-16 text-gray-400">読み込み中...</div>
@@ -133,7 +133,7 @@ export default function AdminPage() {
             <thead>
               <tr className="border-b text-left">
                 <th className="py-2 px-2">名前</th><th className="py-2 px-2">肩書き</th>
-                <th className="py-2 px-2">エリア</th><th className="py-2 px-2 text-right">フォルテ</th>
+                <th className="py-2 px-2">エリア</th><th className="py-2 px-2 text-right">プルーフ</th>
                 <th className="py-2 px-2">FM</th><th className="py-2 px-2">バッジ</th>
               </tr>
             </thead>
