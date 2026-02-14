@@ -6,7 +6,7 @@ export default function Home() {
     <div className="max-w-3xl mx-auto">
       {/* Hero */}
       <section className="text-center py-16">
-        <h1 className="text-5xl font-bold text-[#1A1A2E] tracking-wider mb-4">FORTE</h1>
+        <h1 className="text-5xl font-bold text-[#1A1A2E] tracking-wider mb-4">PROOF</h1>
         <p className="text-lg text-[#C4A35A] italic mb-8">本物が輝く社会へ。</p>
         <p className="text-xl text-[#1A1A2E] font-medium mb-4">
           あなたの実力を、クライアントの声で証明する。
@@ -14,7 +14,7 @@ export default function Home() {
         <p className="text-gray-600 mb-12 leading-relaxed">
           SNSのフォロワー数でも、口コミの星の数でもない。<br />
           実際にあなたの施術を受けた人が、あなたの「選ばれる理由」を投票する。<br />
-          実力が正当に評価され、蓄積され、検索される — それがFORTE。
+          実力が正当に評価され、蓄積され、検索される — それがPROOF。
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Link
@@ -66,7 +66,7 @@ export default function Home() {
                 <th className="py-3 px-4 text-left"></th>
                 <th className="py-3 px-4 text-left">ホットペッパー</th>
                 <th className="py-3 px-4 text-left">Google</th>
-                <th className="py-3 px-4 text-left font-bold text-[#C4A35A]">FORTE</th>
+                <th className="py-3 px-4 text-left font-bold text-[#C4A35A]">PROOF</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -85,7 +85,7 @@ export default function Home() {
         <h2 className="text-2xl font-bold text-[#1A1A2E] mb-4">最初の50名だけの特権</h2>
         <p className="text-gray-600 mb-8">
           永久のFounding Memberバッジ。先行する実績の蓄積。<br />
-          FORTEが10万人のプラットフォームになったとき、あなたは「最初からいた人」。
+          PROOFが10万人のプラットフォームになったとき、あなたは「最初からいた人」。
         </p>
         <Link
           href="/login?role=pro"
