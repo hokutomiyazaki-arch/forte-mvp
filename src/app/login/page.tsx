@@ -16,11 +16,11 @@ function LoginForm() {
   const [submitting, setSubmitting] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   const [ready, setReady] = useState(false)
+  const [emailSent, setEmailSent] = useState(false)
   const supabase = createClient() as any
 
   const isClient = role === 'client'
 
-  // On mount: check if already logged in, redirect if so
   useEffect(() => {
     let cancelled = false
     async function init() {
@@ -115,7 +115,13 @@ function LoginForm() {
 
     try {
       if (mode === 'signup') {
-        const { data, error: signUpError } = await supabase.auth.signUp({ email, password })
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: window.location.origin + '/login?role=' + role + (isClient && nickname ? '&nickname=' + encodeURIComponent(nickname) : ''),
+          }
+        })
         if (signUpError) {
           if (signUpError.message.includes('already') || signUpError.message.includes('exist')) {
             setError('このメールアドレスは既に登録されています。ログインしてください。')
@@ -126,7 +132,16 @@ function LoginForm() {
           setSubmitting(false)
           return
         }
-        if (data.user) {
+
+        // Supabase returns user but no session when email confirm is ON
+        if (data.user && !data.session) {
+          setEmailSent(true)
+          setSubmitting(false)
+          return
+        }
+
+        // If email confirm is OFF (session exists immediately)
+        if (data.user && data.session) {
           if (isClient) {
             const nn = nickname || data.user.email?.split('@')[0] || 'ユーザー'
             await supabase.from('clients').upsert({ user_id: data.user.id, nickname: nn }, { onConflict: 'user_id' })
@@ -136,10 +151,13 @@ function LoginForm() {
           }
         }
       } else {
+        // Login
         const { data, error: loginError } = await supabase.auth.signInWithPassword({ email, password })
         if (loginError) {
           if (loginError.message.includes('Invalid login')) {
             setError('メールアドレスまたはパスワードが正しくありません')
+          } else if (loginError.message.includes('Email not confirmed')) {
+            setError('メールアドレスが未確認です。受信トレイの確認メールをクリックしてください。')
           } else {
             setError(loginError.message)
           }
@@ -166,6 +184,31 @@ function LoginForm() {
     return <div className="text-center py-16 text-gray-400">確認中...</div>
   }
 
+  // Email confirmation sent screen
+  if (emailSent) {
+    return (
+      <div className="max-w-md mx-auto text-center py-16">
+        <div className="text-5xl mb-4">📧</div>
+        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-4">確認メールを送信しました</h1>
+        <p className="text-gray-600 mb-2">
+          <strong>{email}</strong> に確認メールを送信しました。
+        </p>
+        <p className="text-gray-500 text-sm mb-8">
+          メール内のリンクをクリックして登録を完了してください。
+        </p>
+        <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-500 mb-6">
+          メールが届かない場合は、迷惑メールフォルダをご確認ください。
+        </div>
+        <button
+          onClick={() => { setEmailSent(false); setMode('login'); setError('') }}
+          className="text-sm text-[#C4A35A] hover:underline"
+        >
+          確認済みの方はこちらからログイン →
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="max-w-md mx-auto py-12">
       <h1 className="text-2xl font-bold text-[#1A1A2E] mb-6 text-center">
@@ -184,7 +227,7 @@ function LoginForm() {
       </div>
 
       <p className="text-gray-500 text-sm text-center mb-6">
-        {isClient ? 'あなたが信頼するプロにフォルテを贈りましょう' : 'クライアントの声で、あなたの「選ばれる理由」を可視化'}
+        {isClient ? 'あなたが信頼するプロにプルーフを贈りましょう' : 'クライアントの声で、あなたの「選ばれる理由」を可視化'}
       </p>
 
       <button onClick={handleGoogleLogin}
