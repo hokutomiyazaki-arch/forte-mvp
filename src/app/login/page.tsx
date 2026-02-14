@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { Suspense } from 'react'
@@ -17,67 +17,65 @@ function LoginForm() {
   const [googleLoading, setGoogleLoading] = useState(false)
   const [ready, setReady] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
+  const redirecting = useRef(false)
   const supabase = createClient() as any
 
   const isClient = role === 'client'
 
   useEffect(() => {
-    let cancelled = false
-    async function init() {
-      try {
-        const { data: { session } } = await supabase.auth.getSession()
-        if (session?.user && !cancelled) {
-          await redirectUser(session.user)
-          return
-        }
-      } catch (e) {
-        console.error('Session check error:', e)
-      }
-      if (!cancelled) setReady(true)
-    }
-    init()
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string, session: any) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        try {
-          const urlRole = searchParams.get('role') || 'pro'
-          if (urlRole === 'client') {
-            const nn = searchParams.get('nickname') || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'ユーザー'
-            await supabase.from('clients').upsert({
-              user_id: session.user.id,
-              nickname: nn,
-            }, { onConflict: 'user_id' })
-            window.location.href = '/mycard'
-          } else {
-            await redirectUser(session.user)
-          }
-        } catch (e) {
-          console.error('Auth callback error:', e)
-          if (!cancelled) setReady(true)
-        }
-      }
-    })
-
-    return () => { cancelled = true; subscription.unsubscribe() }
+    checkAndRedirect()
   }, [])
 
-  async function redirectUser(user: any) {
+  async function checkAndRedirect() {
     try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user) {
+        await handleLoggedInUser(session.user)
+        return
+      }
+    } catch (e) {
+      console.error('Session check error:', e)
+    }
+    setReady(true)
+  }
+
+  async function handleLoggedInUser(user: any) {
+    if (redirecting.current) return
+    redirecting.current = true
+
+    const urlRole = searchParams.get('role') || 'pro'
+
+    try {
+      // If coming back from OAuth as client, ensure client record
+      if (urlRole === 'client') {
+        const nn = searchParams.get('nickname') || user.user_metadata?.full_name || user.email?.split('@')[0] || 'ユーザー'
+        await supabase.from('clients').upsert({
+          user_id: user.id, nickname: nn
+        }, { onConflict: 'user_id' })
+        window.location.href = '/mycard'
+        return
+      }
+
+      // Check existing roles
       const { data: proData } = await supabase
         .from('professionals').select('id').eq('user_id', user.id).single()
       if (proData) {
         window.location.href = '/dashboard'
         return
       }
+
       const { data: clientData } = await supabase
         .from('clients').select('id').eq('user_id', user.id).single()
       if (clientData) {
         window.location.href = '/mycard'
         return
       }
-      setReady(true)
+
+      // New user, no role — go to dashboard to create pro profile
+      window.location.href = '/dashboard'
     } catch (e) {
       console.error('Redirect error:', e)
+      redirecting.current = false
       setReady(true)
     }
   }
@@ -116,8 +114,7 @@ function LoginForm() {
     try {
       if (mode === 'signup') {
         const { data, error: signUpError } = await supabase.auth.signUp({
-          email,
-          password,
+          email, password,
           options: {
             emailRedirectTo: window.location.origin + '/login?role=' + role + (isClient && nickname ? '&nickname=' + encodeURIComponent(nickname) : ''),
           }
@@ -132,26 +129,15 @@ function LoginForm() {
           setSubmitting(false)
           return
         }
-
-        // Supabase returns user but no session when email confirm is ON
         if (data.user && !data.session) {
           setEmailSent(true)
           setSubmitting(false)
           return
         }
-
-        // If email confirm is OFF (session exists immediately)
         if (data.user && data.session) {
-          if (isClient) {
-            const nn = nickname || data.user.email?.split('@')[0] || 'ユーザー'
-            await supabase.from('clients').upsert({ user_id: data.user.id, nickname: nn }, { onConflict: 'user_id' })
-            window.location.href = '/mycard'
-          } else {
-            window.location.href = '/dashboard'
-          }
+          await handleLoggedInUser(data.user)
         }
       } else {
-        // Login
         const { data, error: loginError } = await supabase.auth.signInWithPassword({ email, password })
         if (loginError) {
           if (loginError.message.includes('Invalid login')) {
@@ -170,7 +156,7 @@ function LoginForm() {
             await supabase.from('clients').upsert({ user_id: data.user.id, nickname: nn }, { onConflict: 'user_id' })
             window.location.href = '/mycard'
           } else {
-            await redirectUser(data.user)
+            await handleLoggedInUser(data.user)
           }
         }
       }
@@ -184,7 +170,6 @@ function LoginForm() {
     return <div className="text-center py-16 text-gray-400">確認中...</div>
   }
 
-  // Email confirmation sent screen
   if (emailSent) {
     return (
       <div className="max-w-md mx-auto text-center py-16">
@@ -201,8 +186,7 @@ function LoginForm() {
         </div>
         <button
           onClick={() => { setEmailSent(false); setMode('login'); setError('') }}
-          className="text-sm text-[#C4A35A] hover:underline"
-        >
+          className="text-sm text-[#C4A35A] hover:underline">
           確認済みの方はこちらからログイン →
         </button>
       </div>
