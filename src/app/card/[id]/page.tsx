@@ -82,7 +82,11 @@ export default function CardPage() {
         )}
 
         {pro.location && <p className="text-sm text-gray-400 mt-2">{pro.location}</p>}
-        {pro.years_experience && <p className="text-sm text-gray-400">経験 {pro.years_experience} 年</p>}
+        {pro.created_at && (
+          <p className="text-sm text-gray-400">
+            PROOF登録 {Math.floor((new Date().getTime() - new Date(pro.created_at).getTime()) / (1000 * 60 * 60 * 24))} 日目
+          </p>
+        )}
       </div>
 
       {/* Total votes */}
@@ -102,18 +106,6 @@ export default function CardPage() {
         <div className="bg-white rounded-xl p-6 shadow-sm mb-6">
           <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">自己紹介</h2>
           <p className="text-gray-600 text-sm whitespace-pre-wrap">{pro.bio}</p>
-        </div>
-      )}
-
-      {/* Specialties */}
-      {pro.specialties && pro.specialties.length > 0 && (
-        <div className="bg-white rounded-xl p-6 shadow-sm mb-6">
-          <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">対応できる悩み</h2>
-          <div className="flex flex-wrap gap-2">
-            {pro.specialties.map((s: string) => (
-              <span key={s} className="px-3 py-1 bg-gray-100 text-gray-700 text-sm rounded-full">{s}</span>
-            ))}
-          </div>
         </div>
       )}
 
