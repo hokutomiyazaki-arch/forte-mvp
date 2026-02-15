@@ -50,25 +50,25 @@ export default function CardPage() {
   useEffect(() => {
     async function load() {
       const { data: proData } = await supabase
-        .from('professionals').select('*').eq('id', id).single()
+        .from('professionals').select('*').eq('id', id).single() as any
       if (proData) setPro(proData)
 
       const { data: voteData } = await supabase
-        .from('vote_summary').select('*').eq('professional_id', id)
+        .from('vote_summary').select('*').eq('professional_id', id) as any
       if (voteData) setVotes(voteData)
 
       const { data: personalityData } = await supabase
-        .from('personality_summary').select('*').eq('professional_id', id)
+        .from('personality_summary').select('*').eq('professional_id', id) as any
       if (personalityData) setPersonalityVotes(personalityData)
 
       const { data: commentData } = await supabase
         .from('votes').select('*').eq('professional_id', id)
         .not('comment', 'is', null)
-        .order('created_at', { ascending: false }).limit(20)
+        .order('created_at', { ascending: false }).limit(20) as any
       if (commentData) setComments(commentData)
 
       const { count } = await supabase
-        .from('votes').select('*', { count: 'exact', head: true }).eq('professional_id', id)
+        .from('votes').select('*', { count: 'exact', head: true }).eq('professional_id', id) as any
       setTotalVotes(count || 0)
       setLoading(false)
     }
