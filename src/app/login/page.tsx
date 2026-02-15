@@ -17,65 +17,88 @@ function LoginForm() {
   const [googleLoading, setGoogleLoading] = useState(false)
   const [ready, setReady] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
-  const [redirecting, setRedirecting] = useState(false)
+  const [status, setStatus] = useState('読み込み中...')
   const supabase = createClient() as any
 
   const isClient = role === 'client'
 
   useEffect(() => {
-    checkAndRedirect()
+    let done = false
+
+    async function init() {
+      // Step 1: Wait a moment for supabase to detect tokens from URL hash
+      setStatus('セッション確認中...')
+      await new Promise(r => setTimeout(r, 500))
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        console.log('Session check:', session ? 'found' : 'none')
+
+        if (session?.user && !done) {
+          done = true
+          setStatus('ログイン済み、リダイレクト中...')
+          await doRedirect(session.user)
+          return
+        }
+      } catch (e) {
+        console.error('Session check error:', e)
+      }
+
+      if (!done) {
+        done = true
+        setReady(true)
+      }
+    }
+
+    init()
+
+    // Listen for auth changes (handles OAuth hash detection)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event: string, session: any) => {
+        console.log('Auth event:', event)
+        if (event === 'SIGNED_IN' && session?.user && !done) {
+          done = true
+          setStatus('ログイン成功、リダイレクト中...')
+          await doRedirect(session.user)
+        }
+      }
+    )
+
+    return () => subscription.unsubscribe()
   }, [])
 
-  async function checkAndRedirect() {
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user) {
-        await handleLoggedInUser(session.user)
-        return
-      }
-    } catch (e) {
-      console.error('Session check error:', e)
-    }
-    setReady(true)
-  }
-
-  async function handleLoggedInUser(user: any) {
-    if (redirecting) return
-    setRedirecting(true)
-
+  async function doRedirect(user: any) {
     const urlRole = searchParams.get('role') || 'pro'
 
     try {
-      // If coming back from OAuth as client, ensure client record
       if (urlRole === 'client') {
         const nn = searchParams.get('nickname') || user.user_metadata?.full_name || user.email?.split('@')[0] || 'ユーザー'
-        await supabase.from('clients').upsert({
-          user_id: user.id, nickname: nn
-        }, { onConflict: 'user_id' })
-        window.location.href = '/mycard'
+        await supabase.from('clients').upsert(
+          { user_id: user.id, nickname: nn },
+          { onConflict: 'user_id' }
+        )
+        window.location.replace('/mycard')
         return
       }
 
-      // Check existing roles
       const { data: proData } = await supabase
         .from('professionals').select('id').eq('user_id', user.id).single()
       if (proData) {
-        window.location.href = '/dashboard'
+        window.location.replace('/dashboard')
         return
       }
 
       const { data: clientData } = await supabase
         .from('clients').select('id').eq('user_id', user.id).single()
       if (clientData) {
-        window.location.href = '/mycard'
+        window.location.replace('/mycard')
         return
       }
 
-      // New user, no role — go to dashboard to create pro profile
-      window.location.href = '/dashboard'
+      // New user — dashboard
+      window.location.replace('/dashboard')
     } catch (e) {
       console.error('Redirect error:', e)
-      setRedirecting(false)
       setReady(true)
     }
   }
@@ -83,9 +106,10 @@ function LoginForm() {
   async function handleGoogleLogin() {
     setError('')
     setGoogleLoading(true)
-    const callbackParams = new URLSearchParams({ role })
-    if (isClient && nickname) callbackParams.set('nickname', encodeURIComponent(nickname))
-    const redirectUrl = window.location.origin + '/auth/callback?' + callbackParams.toString()
+    // Redirect back to THIS page after OAuth — supabase will add tokens to hash
+    const redirectUrl = window.location.origin + '/login?role=' + role
+      + (isClient && nickname ? '&nickname=' + encodeURIComponent(nickname) : '')
+    console.log('OAuth redirectTo:', redirectUrl)
     const { error: authError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: redirectUrl }
@@ -118,7 +142,8 @@ function LoginForm() {
         const { data, error: signUpError } = await supabase.auth.signUp({
           email, password,
           options: {
-            emailRedirectTo: window.location.origin + '/auth/callback?role=' + role + (isClient && nickname ? '&nickname=' + encodeURIComponent(nickname) : ''),
+            emailRedirectTo: window.location.origin + '/login?role=' + role
+              + (isClient && nickname ? '&nickname=' + encodeURIComponent(nickname) : ''),
           }
         })
         if (signUpError) {
@@ -137,7 +162,7 @@ function LoginForm() {
           return
         }
         if (data.user && data.session) {
-          await handleLoggedInUser(data.user)
+          await doRedirect(data.user)
         }
       } else {
         const { data, error: loginError } = await supabase.auth.signInWithPassword({ email, password })
@@ -153,13 +178,7 @@ function LoginForm() {
           return
         }
         if (data.user) {
-          if (isClient) {
-            const nn = nickname || data.user.user_metadata?.full_name || data.user.email?.split('@')[0] || 'ユーザー'
-            await supabase.from('clients').upsert({ user_id: data.user.id, nickname: nn }, { onConflict: 'user_id' })
-            window.location.href = '/mycard'
-          } else {
-            await handleLoggedInUser(data.user)
-          }
+          await doRedirect(data.user)
         }
       }
     } catch (e: any) {
@@ -169,7 +188,7 @@ function LoginForm() {
   }
 
   if (!ready) {
-    return <div className="text-center py-16 text-gray-400">確認中...</div>
+    return <div className="text-center py-16 text-gray-400">{status}</div>
   }
 
   if (emailSent) {
@@ -186,8 +205,7 @@ function LoginForm() {
         <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-500 mb-6">
           メールが届かない場合は、迷惑メールフォルダをご確認ください。
         </div>
-        <button
-          onClick={() => { setEmailSent(false); setMode('login'); setError('') }}
+        <button onClick={() => { setEmailSent(false); setMode('login'); setError('') }}
           className="text-sm text-[#C4A35A] hover:underline">
           確認済みの方はこちらからログイン →
         </button>
