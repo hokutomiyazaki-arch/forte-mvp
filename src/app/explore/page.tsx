@@ -162,9 +162,9 @@ export default function ExplorePage() {
   return (
     <div className="max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2">プロを探す</h1>
-      <p className="text-sm text-gray-500 mb-6">プルーフや人柄で、あなたに合うプロを見つけよう</p>
+      <p className="text-sm text-gray-500 mb-6">プルーフやパーソナリティで、あなたに合うプロを見つけよう</p>
 
-      {/* 実力 / 人柄 タブ */}
+      {/* 強み / パーソナリティ タブ */}
       <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
         <button
           onClick={() => setTab('result')}
@@ -174,7 +174,7 @@ export default function ExplorePage() {
               : 'text-gray-600 hover:text-gray-800'
           }`}
         >
-          プルーフで探す
+          強みで探す
         </button>
         <button
           onClick={() => setTab('personality')}
@@ -184,7 +184,7 @@ export default function ExplorePage() {
               : 'text-gray-600 hover:text-gray-800'
           }`}
         >
-          人柄で探す
+          パーソナリティで探す
         </button>
       </div>
 
@@ -220,7 +220,7 @@ export default function ExplorePage() {
             <div className="space-y-3 mb-10">
               <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wide">
                 {selectedCategory === 'all'
-                  ? (tab === 'result' ? 'プルーフ総合ランキング' : '人柄プルーフ総合ランキング')
+                  ? (tab === 'result' ? 'プルーフ総合ランキング' : 'パーソナリティプルーフ総合ランキング')
                   : `${currentCategories.find(c => c.key === selectedCategory)?.label} ランキング`
                 }
               </h2>
