@@ -33,13 +33,10 @@ export default function DashboardPage() {
         .from('professionals').select('*').eq('user_id', u.id).single()
 
       if (!proData) {
-        // Check if user is a client - redirect to mycard
-        const { data: clientData } = await supabase
-          .from('clients').select('id').eq('user_id', u.id).single()
-        if (clientData) {
-          window.location.href = '/mycard'
-          return
-        }
+        // No pro profile yet — show creation form (don't redirect even if client exists)
+        setEditing(true)
+        setLoading(false)
+        return
       }
 
       if (proData) {
