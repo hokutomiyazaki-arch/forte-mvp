@@ -24,7 +24,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function load() {
-      const { data: { user: u } } = await supabase.auth.getUser()
+      const { data: { session } } = await supabase.auth.getSession()
+      const u = session?.user
       if (!u) { window.location.href = '/login?role=pro'; return }
       setUser(u)
 
