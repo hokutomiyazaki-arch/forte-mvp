@@ -73,7 +73,7 @@ function LoginForm() {
     try {
       if (urlRole === 'client') {
         const nn = searchParams.get('nickname') || user.user_metadata?.full_name || user.email?.split('@')[0] || 'ユーザー'
-        await supabase.from('clients').upsert(
+        await (supabase.from('clients') as any).upsert(
           { user_id: user.id, nickname: nn },
           { onConflict: 'user_id' }
         )
@@ -81,15 +81,16 @@ function LoginForm() {
         return
       }
 
-      const { data: proData } = await supabase
-        .from('professionals').select('id').eq('user_id', user.id).single()
+      // maybeSingle returns null instead of throwing when no row found
+      const { data: proData } = await (supabase
+        .from('professionals').select('id').eq('user_id', user.id).maybeSingle()) as any
       if (proData) {
         window.location.replace('/dashboard')
         return
       }
 
-      const { data: clientData } = await supabase
-        .from('clients').select('id').eq('user_id', user.id).single()
+      const { data: clientData } = await (supabase
+        .from('clients').select('id').eq('user_id', user.id).maybeSingle()) as any
       if (clientData) {
         window.location.replace('/mycard')
         return
