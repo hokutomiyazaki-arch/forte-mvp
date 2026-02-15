@@ -181,9 +181,9 @@ export default function DashboardPage() {
               placeholder="腰痛, 肩こり, パフォーマンス向上" />
           </div>
 
-          {/* カスタム実力プルーフ */}
+          {/* カスタム強みプルーフ */}
           <div className="border-t pt-4">
-            <label className="block text-sm font-bold text-[#1A1A2E] mb-2">💪 オリジナル実力プルーフ（最大3つ）</label>
+            <label className="block text-sm font-bold text-[#1A1A2E] mb-2">💪 オリジナル強みプルーフ（最大3つ）</label>
             <p className="text-xs text-gray-500 mb-3">デフォルト7項目に加えて、あなた独自の強みカテゴリを追加できます</p>
             {customResultFortes.map((f, i) => (
               <div key={f.id} className="flex gap-2 mb-2">
@@ -196,14 +196,14 @@ export default function DashboardPage() {
             ))}
             {customResultFortes.length < 3 && (
               <button type="button" onClick={() => addCustomForte('result')}
-                className="text-sm text-[#C4A35A] hover:underline">+ 実力プルーフを追加</button>
+                className="text-sm text-[#C4A35A] hover:underline">+ 強みプルーフを追加</button>
             )}
           </div>
 
-          {/* カスタム人柄プルーフ */}
+          {/* カスタムパーソナリティプルーフ */}
           <div className="border-t pt-4">
-            <label className="block text-sm font-bold text-[#C4A35A] mb-2">🤝 オリジナル人柄プルーフ（最大3つ）</label>
-            <p className="text-xs text-gray-500 mb-3">デフォルト7項目に加えて、あなた独自の人柄カテゴリを追加できます</p>
+            <label className="block text-sm font-bold text-[#C4A35A] mb-2">🤝 オリジナルパーソナリティプルーフ（最大3つ）</label>
+            <p className="text-xs text-gray-500 mb-3">デフォルト7項目に加えて、あなた独自のパーソナリティカテゴリを追加できます</p>
             {customPersonalityFortes.map((f, i) => (
               <div key={f.id} className="flex gap-2 mb-2">
                 <input value={f.label} onChange={e => updateCustomForte('personality', i, 'label', e.target.value)}
@@ -215,7 +215,7 @@ export default function DashboardPage() {
             ))}
             {customPersonalityFortes.length < 3 && (
               <button type="button" onClick={() => addCustomForte('personality')}
-                className="text-sm text-[#C4A35A] hover:underline">+ 人柄プルーフを追加</button>
+                className="text-sm text-[#C4A35A] hover:underline">+ パーソナリティプルーフを追加</button>
             )}
           </div>
 
