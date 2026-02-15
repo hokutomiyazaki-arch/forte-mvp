@@ -7,6 +7,8 @@ interface ProRanking {
   professional: Professional
   vote_count: number
   total_votes: number
+  days_active: number
+  rate: number // vote_count / days_active
 }
 
 interface SpecialistEntry {
@@ -16,9 +18,17 @@ interface SpecialistEntry {
   vote_count: number
 }
 
+function getDaysActive(created_at: string): number {
+  const created = new Date(created_at)
+  const now = new Date()
+  const days = Math.floor((now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24))
+  return Math.max(days, 1) // 最低1日
+}
+
 export default function ExplorePage() {
-  const supabase = createClient() as any
+  const supabase = createClient()
   const [tab, setTab] = useState<'result' | 'personality'>('result')
+  const [rankMode, setRankMode] = useState<'total' | 'active'>('total')
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [rankings, setRankings] = useState<ProRanking[]>([])
   const [specialists, setSpecialists] = useState<SpecialistEntry[]>([])
@@ -36,19 +46,18 @@ export default function ExplorePage() {
 
   const currentCategories = tab === 'result' ? resultCategories : personalityCategories
 
-  // Reset category when switching tabs
   useEffect(() => {
     setSelectedCategory('all')
   }, [tab])
 
   useEffect(() => {
     load()
-  }, [tab, selectedCategory])
+  }, [tab, selectedCategory, rankMode])
 
   async function load() {
     setLoading(true)
 
-    const { data: proData } = await supabase
+    const { data: proData } = await (supabase
       .from('professionals').select('*').order('created_at')
     if (!proData) { setLoading(false); return }
 
@@ -56,42 +65,42 @@ export default function ExplorePage() {
     const specialistMap: Map<string, SpecialistEntry[]> = new Map()
 
     for (const p of proData) {
+      const daysActive = getDaysActive(p.created_at)
+
       if (tab === 'result') {
         if (selectedCategory === 'all') {
-          const { count } = await supabase
+          const { count } = await (supabase
             .from('votes').select('*', { count: 'exact', head: true })
-            .eq('professional_id', p.id)
-          results.push({ professional: p, vote_count: count || 0, total_votes: count || 0 })
+            .eq('professional_id', p.id) as any
+          const vc = count || 0
+          results.push({ professional: p, vote_count: vc, total_votes: vc, days_active: daysActive, rate: vc / daysActive })
         } else {
-          const { data: summaryData } = await supabase
+          const { data: summaryData } = await (supabase
             .from('vote_summary').select('*')
-            .eq('professional_id', p.id)
-            .eq('category', selectedCategory)
-            .single()
-          const { count: totalCount } = await supabase
+            .eq('professional_id', p.id) as any
+            .eq('category', selectedCategory) as any
+            .single() as any)
+          const { count: totalCount } = await (supabase
             .from('votes').select('*', { count: 'exact', head: true })
-            .eq('professional_id', p.id)
-          if (summaryData && summaryData.vote_count > 0) {
-            results.push({ professional: p, vote_count: summaryData.vote_count, total_votes: totalCount || 0 })
+            .eq('professional_id', p.id) as any
+          const vc = summaryData?.vote_count || 0
+          if (vc > 0) {
+            results.push({ professional: p, vote_count: vc, total_votes: totalCount || 0, days_active: daysActive, rate: vc / daysActive })
           }
         }
 
-        // Collect specialist entries (custom result fortes with votes)
+        // Specialist entries (custom result fortes)
         if (p.custom_result_fortes && p.custom_result_fortes.length > 0) {
           for (const cf of p.custom_result_fortes) {
-            const { data: customVoteData } = await supabase
+            const { data: customVoteData } = await (supabase
               .from('vote_summary').select('*')
-              .eq('professional_id', p.id)
-              .eq('category', cf.id)
-              .single()
+              .eq('professional_id', p.id) as any
+              .eq('category', cf.id) as any
+              .single() as any)
             if (customVoteData && customVoteData.vote_count > 0) {
-              const key = cf.id
-              if (!specialistMap.has(key)) specialistMap.set(key, [])
-              specialistMap.get(key)!.push({
-                professional: p,
-                forte_label: cf.label,
-                forte_key: cf.id,
-                vote_count: customVoteData.vote_count,
+              if (!specialistMap.has(cf.id)) specialistMap.set(cf.id, [])
+              specialistMap.get(cf.id)!.push({
+                professional: p, forte_label: cf.label, forte_key: cf.id, vote_count: customVoteData.vote_count,
               })
             }
           }
@@ -99,43 +108,39 @@ export default function ExplorePage() {
       } else {
         // personality tab
         if (selectedCategory === 'all') {
-          // Sum all personality votes
-          const { data: persData } = await supabase
+          const { data: persData } = await (supabase
             .from('personality_summary').select('*')
-            .eq('professional_id', p.id)
+            .eq('professional_id', p.id) as any
           const total = persData?.reduce((sum, d) => sum + (d.vote_count || 0), 0) || 0
-          results.push({ professional: p, vote_count: total, total_votes: total })
+          results.push({ professional: p, vote_count: total, total_votes: total, days_active: daysActive, rate: total / daysActive })
         } else {
-          const { data: persData } = await supabase
+          const { data: persData } = await (supabase
             .from('personality_summary').select('*')
-            .eq('professional_id', p.id)
-            .eq('category', selectedCategory)
-            .single()
-          const { data: allPersData } = await supabase
+            .eq('professional_id', p.id) as any
+            .eq('category', selectedCategory) as any
+            .single() as any)
+          const { data: allPersData } = await (supabase
             .from('personality_summary').select('*')
-            .eq('professional_id', p.id)
+            .eq('professional_id', p.id) as any
           const totalPers = allPersData?.reduce((sum, d) => sum + (d.vote_count || 0), 0) || 0
-          if (persData && persData.vote_count > 0) {
-            results.push({ professional: p, vote_count: persData.vote_count, total_votes: totalPers })
+          const vc = persData?.vote_count || 0
+          if (vc > 0) {
+            results.push({ professional: p, vote_count: vc, total_votes: totalPers, days_active: daysActive, rate: vc / daysActive })
           }
         }
 
-        // Collect specialist entries (custom personality fortes with votes)
+        // Specialist entries (custom personality fortes)
         if (p.custom_personality_fortes && p.custom_personality_fortes.length > 0) {
           for (const cf of p.custom_personality_fortes) {
-            const { data: customPersData } = await supabase
+            const { data: customPersData } = await (supabase
               .from('personality_summary').select('*')
-              .eq('professional_id', p.id)
-              .eq('category', cf.id)
-              .single()
+              .eq('professional_id', p.id) as any
+              .eq('category', cf.id) as any
+              .single() as any)
             if (customPersData && customPersData.vote_count > 0) {
-              const key = cf.id
-              if (!specialistMap.has(key)) specialistMap.set(key, [])
-              specialistMap.get(key)!.push({
-                professional: p,
-                forte_label: cf.label,
-                forte_key: cf.id,
-                vote_count: customPersData.vote_count,
+              if (!specialistMap.has(cf.id)) specialistMap.set(cf.id, [])
+              specialistMap.get(cf.id)!.push({
+                professional: p, forte_label: cf.label, forte_key: cf.id, vote_count: customPersData.vote_count,
               })
             }
           }
@@ -143,12 +148,16 @@ export default function ExplorePage() {
       }
     }
 
-    results.sort((a, b) => b.vote_count - a.vote_count)
-    // Filter zeros for non-all
+    // Sort by selected mode
+    if (rankMode === 'active') {
+      results.sort((a, b) => b.rate - a.rate)
+    } else {
+      results.sort((a, b) => b.vote_count - a.vote_count)
+    }
+
     const filtered = selectedCategory === 'all' ? results : results.filter(r => r.vote_count > 0)
     setRankings(filtered)
 
-    // Flatten specialists, sorted by vote count
     const allSpecialists: SpecialistEntry[] = []
     specialistMap.forEach((entries) => {
       entries.sort((a, b) => b.vote_count - a.vote_count)
@@ -162,10 +171,10 @@ export default function ExplorePage() {
   return (
     <div className="max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2">プロを探す</h1>
-      <p className="text-sm text-gray-500 mb-6">プルーフやパーソナリティで、あなたに合うプロを見つけよう</p>
+      <p className="text-sm text-gray-500 mb-6">プルーフや人柄で、あなたに合うプロを見つけよう</p>
 
       {/* 強み / パーソナリティ タブ */}
-      <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
+      <div className="flex mb-4 bg-gray-100 rounded-lg p-1">
         <button
           onClick={() => setTab('result')}
           className={`flex-1 py-3 rounded-md text-sm font-medium transition ${
@@ -174,7 +183,7 @@ export default function ExplorePage() {
               : 'text-gray-600 hover:text-gray-800'
           }`}
         >
-          強みで探す
+          💪 強みで探す
         </button>
         <button
           onClick={() => setTab('personality')}
@@ -184,7 +193,31 @@ export default function ExplorePage() {
               : 'text-gray-600 hover:text-gray-800'
           }`}
         >
-          パーソナリティで探す
+          🤝 パーソナリティで探す
+        </button>
+      </div>
+
+      {/* 総合 / アクティブ 切り替え */}
+      <div className="flex mb-6 gap-2">
+        <button
+          onClick={() => setRankMode('total')}
+          className={`px-4 py-2 rounded-full text-xs font-medium transition ${
+            rankMode === 'total'
+              ? 'bg-[#1A1A2E] text-white'
+              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+          }`}
+        >
+          🏆 総合ランキング
+        </button>
+        <button
+          onClick={() => setRankMode('active')}
+          className={`px-4 py-2 rounded-full text-xs font-medium transition ${
+            rankMode === 'active'
+              ? 'bg-[#1A1A2E] text-white'
+              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+          }`}
+        >
+          🔥 アクティブランキング
         </button>
       </div>
 
@@ -214,16 +247,22 @@ export default function ExplorePage() {
         <>
           {rankings.length === 0 ? (
             <p className="text-center text-gray-400 py-12">
-              {selectedCategory === 'all' ? 'まだプロが登録されていません' : 'このカテゴリにはまだ投票がありません'}
+              {selectedCategory === 'all' ? 'まだプロが登録されていません' : 'このカテゴリにはまだプルーフがありません'}
             </p>
           ) : (
             <div className="space-y-3 mb-10">
               <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wide">
+                {rankMode === 'active' ? '🔥 ' : '🏆 '}
                 {selectedCategory === 'all'
-                  ? (tab === 'result' ? 'プルーフ総合ランキング' : 'パーソナリティプルーフ総合ランキング')
+                  ? (tab === 'result'
+                    ? (rankMode === 'active' ? '強みプルーフ アクティブランキング' : '強みプルーフ 総合ランキング')
+                    : (rankMode === 'active' ? 'パーソナリティプルーフ アクティブランキング' : 'パーソナリティプルーフ 総合ランキング'))
                   : `${currentCategories.find(c => c.key === selectedCategory)?.label} ランキング`
                 }
               </h2>
+              {rankMode === 'active' && (
+                <p className="text-xs text-gray-400 -mt-1 mb-2">プルーフ数 ÷ 登録日数 = 1日あたりの獲得ペース</p>
+              )}
               {rankings.map((r, i) => {
                 const p = r.professional
                 return (
@@ -251,12 +290,25 @@ export default function ExplorePage() {
                       <div className="text-sm text-gray-500 truncate">{p.title}{p.location ? ` · ${p.location}` : ''}</div>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <div className={`text-xl font-bold ${tab === 'result' ? 'text-[#1A1A2E]' : 'text-[#C4A35A]'}`}>
-                        {r.vote_count}
-                      </div>
-                      <div className="text-xs text-gray-400">
-                        {selectedCategory === 'all' ? 'プルーフ' : `/ ${r.total_votes}`}
-                      </div>
+                      {rankMode === 'active' ? (
+                        <>
+                          <div className={`text-xl font-bold ${tab === 'result' ? 'text-[#1A1A2E]' : 'text-[#C4A35A]'}`}>
+                            {r.rate.toFixed(2)}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            {r.vote_count}件 / {r.days_active}日
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className={`text-xl font-bold ${tab === 'result' ? 'text-[#1A1A2E]' : 'text-[#C4A35A]'}`}>
+                            {r.vote_count}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            {selectedCategory === 'all' ? 'プルーフ' : `/ ${r.total_votes}`}
+                          </div>
+                        </>
+                      )}
                     </div>
                   </a>
                 )
@@ -268,6 +320,7 @@ export default function ExplorePage() {
           {specialists.length > 0 && (
             <div className="mb-10">
               <div className="flex items-center gap-2 mb-4">
+                <span className="text-lg">⭐</span>
                 <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wide">
                   スペシャリスト
                 </h2>
@@ -276,7 +329,6 @@ export default function ExplorePage() {
                 プロが独自に設定した専門分野でプルーフを獲得しています
               </p>
 
-              {/* Group by forte_key */}
               {(() => {
                 const grouped: Map<string, SpecialistEntry[]> = new Map()
                 specialists.forEach(s => {
