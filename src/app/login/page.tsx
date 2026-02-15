@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { Suspense } from 'react'
@@ -17,7 +17,7 @@ function LoginForm() {
   const [googleLoading, setGoogleLoading] = useState(false)
   const [ready, setReady] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
-  const redirecting = useRef(false)
+  const [redirecting, setRedirecting] = useState(false)
   const supabase = createClient() as any
 
   const isClient = role === 'client'
@@ -40,8 +40,8 @@ function LoginForm() {
   }
 
   async function handleLoggedInUser(user: any) {
-    if (redirecting.current) return
-    redirecting.current = true
+    if (redirecting) return
+    setRedirecting(true)
 
     const urlRole = searchParams.get('role') || 'pro'
 
@@ -75,7 +75,7 @@ function LoginForm() {
       window.location.href = '/dashboard'
     } catch (e) {
       console.error('Redirect error:', e)
-      redirecting.current = false
+      setRedirecting(false)
       setReady(true)
     }
   }
