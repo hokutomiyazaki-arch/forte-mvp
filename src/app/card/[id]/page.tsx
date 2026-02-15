@@ -5,6 +5,37 @@ import { createClient } from '@/lib/supabase'
 import { Professional, VoteSummary, Vote } from '@/lib/types'
 import ForteChart from '@/components/ForteChart'
 
+// バッジ階層: FNTはBDCの上位資格。同レベルのFNTを持っていたらBDCは非表示
+// 表示順: レベル1（左）→ レベル3（右）
+const BADGE_ORDER: Record<string, number> = {
+  'bdc-elite': 1,
+  'fnt-basic': 2,
+  'bdc-pro': 3,
+  'fnt-advance': 4,
+  'bdc-legend': 5,
+  'fnt-master': 6,
+}
+
+const BDC_TO_FNT_UPGRADE: Record<string, string> = {
+  'bdc-elite': 'fnt-basic',
+  'bdc-pro': 'fnt-advance',
+  'bdc-legend': 'fnt-master',
+}
+
+function filterAndSortBadges(badges: { id: string; label: string; image_url: string }[]) {
+  if (!badges || badges.length === 0) return []
+  const ids = new Set(badges.map(b => b.id))
+  // BDCバッジを持っていても、対応するFNTバッジがあればBDCを除外
+  const filtered = badges.filter(b => {
+    const upgradeId = BDC_TO_FNT_UPGRADE[b.id]
+    if (upgradeId && ids.has(upgradeId)) return false
+    return true
+  })
+  // レベル順にソート
+  filtered.sort((a, b) => (BADGE_ORDER[a.id] || 99) - (BADGE_ORDER[b.id] || 99))
+  return filtered
+}
+
 export default function CardPage() {
   const params = useParams()
   const id = params.id as string
@@ -47,6 +78,8 @@ export default function CardPage() {
   if (loading) return <div className="text-center py-16 text-gray-400">読み込み中...</div>
   if (!pro) return <div className="text-center py-16 text-gray-400">プロフィールが見つかりません</div>
 
+  const displayBadges = filterAndSortBadges(pro.badges || [])
+
   return (
     <div className="max-w-2xl mx-auto">
       {/* Header */}
@@ -60,7 +93,7 @@ export default function CardPage() {
         )}
         <h1 className="text-2xl font-bold text-[#1A1A2E]">{pro.name}</h1>
         <p className="text-gray-500">{pro.title}</p>
-        
+
         {pro.is_founding_member && (
           <div className="mt-2">
             <span className="px-3 py-1 bg-[#C4A35A] text-white text-xs rounded-full font-medium">
@@ -70,9 +103,9 @@ export default function CardPage() {
         )}
 
         {/* Badges */}
-        {pro.badges && pro.badges.length > 0 && (
+        {displayBadges.length > 0 && (
           <div className="flex justify-center gap-4 mt-4">
-            {pro.badges.map((badge: { id: string; label: string; image_url: string }, i: number) => (
+            {displayBadges.map((badge, i) => (
               <div key={i} className="flex flex-col items-center">
                 <img src={badge.image_url} alt={badge.label} className="w-16 h-16" />
                 <span className="text-[10px] text-gray-400 mt-1">{badge.label}</span>
