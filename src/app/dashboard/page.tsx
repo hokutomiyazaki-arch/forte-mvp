@@ -50,8 +50,9 @@ export default function DashboardPage() {
       const u = session.user
       setUser(u)
 
-      const { data: proData } = await supabase
+      const { data: rawProData } = await supabase
         .from('professionals').select('*').eq('user_id', u.id).single()
+      const proData = rawProData as any
 
       if (proData) {
         setPro(proData)
@@ -64,13 +65,13 @@ export default function DashboardPage() {
         setCustomResultFortes(proData.custom_result_fortes || [])
         setCustomPersonalityFortes(proData.custom_personality_fortes || [])
 
-        const { data: voteData } = await supabase.from('vote_summary').select('*').eq('professional_id', proData.id)
+        const { data: voteData } = await supabase.from('vote_summary').select('*').eq('professional_id', proData.id) as any
         if (voteData) setVotes(voteData)
 
-        const { data: persData } = await supabase.from('personality_summary').select('*').eq('professional_id', proData.id)
+        const { data: persData } = await supabase.from('personality_summary').select('*').eq('professional_id', proData.id) as any
         if (persData) setPersonalityVotes(persData)
 
-        const { count } = await supabase.from('votes').select('*', { count: 'exact', head: true }).eq('professional_id', proData.id)
+        const { count } = await supabase.from('votes').select('*', { count: 'exact', head: true }).eq('professional_id', proData.id) as any
         setTotalVotes(count || 0)
       } else {
         setEditing(true)
@@ -132,7 +133,7 @@ export default function DashboardPage() {
     if (pro) {
       await supabase.from('professionals').update(record).eq('id', pro.id)
     } else {
-      const { data } = await supabase.from('professionals').insert(record).select().single()
+      const { data } = await supabase.from('professionals').insert(record).select().single() as any
       if (data) setPro(data)
     }
     setEditing(false)
