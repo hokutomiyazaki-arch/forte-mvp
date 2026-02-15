@@ -27,7 +27,8 @@ function VoteForm() {
 
   useEffect(() => {
     async function load() {
-      const { data: { user: u } } = await supabase.auth.getUser()
+      const { data: { session } } = await supabase.auth.getSession()
+      const u = session?.user
       setUser(u)
 
       const { data: proData } = await supabase
