@@ -57,8 +57,8 @@ export default function ExplorePage() {
   async function load() {
     setLoading(true)
 
-    const { data: proData } = await supabase
-      .from('professionals').select('*').order('created_at') as any
+    const { data: proData } = await (supabase
+      .from('professionals').select('*').order('created_at')) as any
     if (!proData) { setLoading(false); return }
 
     const results: ProRanking[] = []
@@ -69,20 +69,20 @@ export default function ExplorePage() {
 
       if (tab === 'result') {
         if (selectedCategory === 'all') {
-          const { count } = await supabase
+          const { count } = await (supabase
             .from('votes').select('*', { count: 'exact', head: true })
-            .eq('professional_id', p.id) as any
+            .eq('professional_id', p.id)) as any
           const vc = count || 0
           results.push({ professional: p, vote_count: vc, total_votes: vc, days_active: daysActive, rate: vc / daysActive })
         } else {
-          const { data: summaryData } = await supabase
+          const { data: summaryData } = await (supabase
             .from('vote_summary').select('*')
-            .eq('professional_id', p.id) as any
-            .eq('category', selectedCategory) as any
-            .single() as any)
-          const { count: totalCount } = await supabase
+            .eq('professional_id', p.id)
+            .eq('category', selectedCategory)
+            .single()) as any
+          const { count: totalCount } = await (supabase
             .from('votes').select('*', { count: 'exact', head: true })
-            .eq('professional_id', p.id) as any
+            .eq('professional_id', p.id)) as any
           const vc = summaryData?.vote_count || 0
           if (vc > 0) {
             results.push({ professional: p, vote_count: vc, total_votes: totalCount || 0, days_active: daysActive, rate: vc / daysActive })
@@ -92,11 +92,11 @@ export default function ExplorePage() {
         // Specialist entries (custom result fortes)
         if (p.custom_result_fortes && p.custom_result_fortes.length > 0) {
           for (const cf of p.custom_result_fortes) {
-            const { data: customVoteData } = await supabase
+            const { data: customVoteData } = await (supabase
               .from('vote_summary').select('*')
-              .eq('professional_id', p.id) as any
-              .eq('category', cf.id) as any
-              .single() as any)
+              .eq('professional_id', p.id)
+              .eq('category', cf.id)
+              .single()) as any
             if (customVoteData && customVoteData.vote_count > 0) {
               if (!specialistMap.has(cf.id)) specialistMap.set(cf.id, [])
               specialistMap.get(cf.id)!.push({
@@ -108,20 +108,20 @@ export default function ExplorePage() {
       } else {
         // personality tab
         if (selectedCategory === 'all') {
-          const { data: persData } = await supabase
+          const { data: persData } = await (supabase
             .from('personality_summary').select('*')
-            .eq('professional_id', p.id) as any
+            .eq('professional_id', p.id)) as any
           const total = persData?.reduce((sum, d) => sum + (d.vote_count || 0), 0) || 0
           results.push({ professional: p, vote_count: total, total_votes: total, days_active: daysActive, rate: total / daysActive })
         } else {
-          const { data: persData } = await supabase
+          const { data: persData } = await (supabase
             .from('personality_summary').select('*')
-            .eq('professional_id', p.id) as any
-            .eq('category', selectedCategory) as any
-            .single() as any)
-          const { data: allPersData } = await supabase
+            .eq('professional_id', p.id)
+            .eq('category', selectedCategory)
+            .single()) as any
+          const { data: allPersData } = await (supabase
             .from('personality_summary').select('*')
-            .eq('professional_id', p.id) as any
+            .eq('professional_id', p.id)) as any
           const totalPers = allPersData?.reduce((sum, d) => sum + (d.vote_count || 0), 0) || 0
           const vc = persData?.vote_count || 0
           if (vc > 0) {
@@ -132,11 +132,11 @@ export default function ExplorePage() {
         // Specialist entries (custom personality fortes)
         if (p.custom_personality_fortes && p.custom_personality_fortes.length > 0) {
           for (const cf of p.custom_personality_fortes) {
-            const { data: customPersData } = await supabase
+            const { data: customPersData } = await (supabase
               .from('personality_summary').select('*')
-              .eq('professional_id', p.id) as any
-              .eq('category', cf.id) as any
-              .single() as any)
+              .eq('professional_id', p.id)
+              .eq('category', cf.id)
+              .single()) as any
             if (customPersData && customPersData.vote_count > 0) {
               if (!specialistMap.has(cf.id)) specialistMap.set(cf.id, [])
               specialistMap.get(cf.id)!.push({
