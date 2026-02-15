@@ -83,7 +83,9 @@ function LoginForm() {
   async function handleGoogleLogin() {
     setError('')
     setGoogleLoading(true)
-    const redirectUrl = window.location.origin + '/login?role=' + role + (isClient && nickname ? '&nickname=' + encodeURIComponent(nickname) : '')
+    const callbackParams = new URLSearchParams({ role })
+    if (isClient && nickname) callbackParams.set('nickname', encodeURIComponent(nickname))
+    const redirectUrl = window.location.origin + '/auth/callback?' + callbackParams.toString()
     const { error: authError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: redirectUrl }
@@ -116,7 +118,7 @@ function LoginForm() {
         const { data, error: signUpError } = await supabase.auth.signUp({
           email, password,
           options: {
-            emailRedirectTo: window.location.origin + '/login?role=' + role + (isClient && nickname ? '&nickname=' + encodeURIComponent(nickname) : ''),
+            emailRedirectTo: window.location.origin + '/auth/callback?role=' + role + (isClient && nickname ? '&nickname=' + encodeURIComponent(nickname) : ''),
           }
         })
         if (signUpError) {
