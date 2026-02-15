@@ -120,7 +120,7 @@ export default function DashboardPage() {
     const validResultFortes = customResultFortes.filter(f => f.label.trim())
     const validPersonalityFortes = customPersonalityFortes.filter(f => f.label.trim())
 
-    const record = {
+    const record: any = {
       user_id: user.id, name: form.name, title: form.title,
       location: form.location || null,
       bio: form.bio || null, booking_url: form.booking_url || null,
@@ -131,9 +131,9 @@ export default function DashboardPage() {
     }
 
     if (pro) {
-      await supabase.from('professionals').update(record).eq('id', pro.id)
+      await (supabase.from('professionals') as any).update(record).eq('id', pro.id)
     } else {
-      const { data } = await supabase.from('professionals').insert(record).select().single() as any
+      const { data } = await (supabase.from('professionals') as any).insert(record).select().single()
       if (data) setPro(data)
     }
     setEditing(false)
@@ -144,7 +144,7 @@ export default function DashboardPage() {
     if (!pro) return
     const token = crypto.randomUUID()
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-    await supabase.from('qr_tokens').insert({ professional_id: pro.id, token, expires_at: expiresAt })
+    await (supabase.from('qr_tokens') as any).insert({ professional_id: pro.id, token, expires_at: expiresAt })
     const voteUrl = `${window.location.origin}/vote/${pro.id}?token=${token}`
     setQrUrl(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(voteUrl)}`)
   }
