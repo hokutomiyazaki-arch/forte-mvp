@@ -5,54 +5,13 @@ import { createClient } from '@/lib/supabase'
 export default function Navbar() {
   const supabase = createClient() as any
   const [user, setUser] = useState<any>(null)
-  const [isPro, setIsPro] = useState(false)
-  const [isClient, setIsClient] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
-    async function check() {
-      try {
-        const { data: { session } } = await supabase.auth.getSession()
-        const u = session?.user || null
-        setUser(u)
-
-        if (u) {
-          const { data: proData } = await supabase
-            .from('professionals').select('id').eq('user_id', u.id).single()
-          setIsPro(!!proData)
-
-          const { data: clientData } = await supabase
-            .from('clients').select('id').eq('user_id', u.id).single()
-          setIsClient(!!clientData)
-        }
-      } catch (e) {
-        console.error('Navbar check error:', e)
-      }
-
-      setLoading(false)
-    }
-    check()
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      try {
-        const u = session?.user || null
-        setUser(u)
-        if (u) {
-          const { data: proData } = await supabase
-            .from('professionals').select('id').eq('user_id', u.id).single()
-          setIsPro(!!proData)
-          const { data: clientData } = await supabase
-            .from('clients').select('id').eq('user_id', u.id).single()
-          setIsClient(!!clientData)
-        } else {
-          setIsPro(false)
-          setIsClient(false)
-        }
-      } catch (e) {
-        console.error('Navbar auth change error:', e)
-      }
-    })
-    return () => subscription.unsubscribe()
+    supabase.auth.getSession().then(({ data: { session } }: any) => {
+      setUser(session?.user || null)
+      setLoaded(true)
+    }).catch(() => setLoaded(true))
   }, [])
 
   async function handleLogout() {
@@ -65,22 +24,15 @@ export default function Navbar() {
       <a href="/" className="text-xl font-bold tracking-wider">PROOF</a>
       <div className="flex gap-4 text-sm items-center">
         <a href="/explore" className="hover:text-[#C4A35A] transition">プロを探す</a>
-        {loading ? null : user ? (
+        {loaded && (user ? (
           <>
-            {isPro && (
-              <a href="/dashboard" className="hover:text-[#C4A35A] transition">プロ管理</a>
-            )}
-            {isClient && (
-              <a href="/mycard" className="hover:text-[#C4A35A] transition">マイカード</a>
-            )}
-            {!isPro && !isClient && (
-              <a href="/dashboard" className="hover:text-[#C4A35A] transition">ダッシュボード</a>
-            )}
+            <a href="/dashboard" className="hover:text-[#C4A35A] transition">ダッシュボード</a>
+            <a href="/mycard" className="hover:text-[#C4A35A] transition">マイカード</a>
             <button onClick={handleLogout} className="hover:text-[#C4A35A] transition">ログアウト</button>
           </>
         ) : (
           <a href="/login" className="hover:text-[#C4A35A] transition">ログイン</a>
-        )}
+        ))}
       </div>
     </nav>
   )
