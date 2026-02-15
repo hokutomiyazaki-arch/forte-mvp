@@ -131,7 +131,7 @@ export default function CardPage() {
       {/* CTA */}
       <div className="flex flex-col sm:flex-row gap-3 mb-8">
         <div className="flex-1 text-center py-3 bg-gray-100 text-gray-500 font-medium rounded-lg text-sm">
-          プルーフは施術後にプロが発行する24時間限定QRコードからのみ贈れます
+          プルーフはセッション後にプロが発行する24時間限定QRコードからのみ贈れます
         </div>
         {pro.booking_url && (
           <a href={pro.booking_url} target="_blank" rel="noopener"
