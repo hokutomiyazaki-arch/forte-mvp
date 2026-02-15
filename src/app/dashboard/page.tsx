@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { Professional, VoteSummary, CustomForte, getResultForteLabel } from '@/lib/types'
+import { Professional, VoteSummary, CustomForte, getResultForteLabel, RESULT_FORTES, PERSONALITY_FORTES } from '@/lib/types'
 import ForteChart from '@/components/ForteChart'
 
 export default function DashboardPage() {
@@ -16,8 +16,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
 
   const [form, setForm] = useState({
-    name: '', title: '', location: '', years_experience: 0,
-    bio: '', booking_url: '', coupon_text: '', specialties: '',
+    name: '', title: '', location: '',
+    bio: '', booking_url: '', coupon_text: '',
   })
   const [customResultFortes, setCustomResultFortes] = useState<CustomForte[]>([])
   const [customPersonalityFortes, setCustomPersonalityFortes] = useState<CustomForte[]>([])
@@ -36,10 +36,9 @@ export default function DashboardPage() {
         setPro(proData)
         setForm({
           name: proData.name || '', title: proData.title || '',
-          location: proData.location || '', years_experience: proData.years_experience || 0,
+          location: proData.location || '',
           bio: proData.bio || '', booking_url: proData.booking_url || '',
           coupon_text: proData.coupon_text || '',
-          specialties: proData.specialties?.join(', ') || '',
         })
         setCustomResultFortes(proData.custom_result_fortes || [])
         setCustomPersonalityFortes(proData.custom_personality_fortes || [])
@@ -53,7 +52,6 @@ export default function DashboardPage() {
         const { count } = await supabase.from('votes').select('*', { count: 'exact', head: true }).eq('professional_id', proData.id)
         setTotalVotes(count || 0)
       } else {
-        // No pro profile yet — show creation form (don't redirect even if client exists)
         setEditing(true)
       }
       setLoading(false)
@@ -102,10 +100,9 @@ export default function DashboardPage() {
 
     const record = {
       user_id: user.id, name: form.name, title: form.title,
-      location: form.location || null, years_experience: form.years_experience || null,
+      location: form.location || null,
       bio: form.bio || null, booking_url: form.booking_url || null,
       coupon_text: form.coupon_text || null,
-      specialties: form.specialties ? form.specialties.split(',').map(s => s.trim()).filter(Boolean) : [],
       custom_result_fortes: validResultFortes,
       custom_personality_fortes: validPersonalityFortes,
       is_founding_member: true,
@@ -128,6 +125,14 @@ export default function DashboardPage() {
     await supabase.from('qr_tokens').insert({ professional_id: pro.id, token, expires_at: expiresAt })
     const voteUrl = `${window.location.origin}/vote/${pro.id}?token=${token}`
     setQrUrl(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(voteUrl)}`)
+  }
+
+  // 登録日数を計算
+  function getDaysSinceRegistration(): number {
+    if (!pro?.created_at) return 0
+    const created = new Date(pro.created_at)
+    const now = new Date()
+    return Math.floor((now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24))
   }
 
   if (loading) return <div className="text-center py-16 text-gray-400">読み込み中...</div>
@@ -156,26 +161,25 @@ export default function DashboardPage() {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none" placeholder="東京都渋谷区" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">経験年数</label>
-            <input type="number" value={form.years_experience} onChange={e => setForm({...form, years_experience: Number(e.target.value)})}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none" />
-          </div>
-          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">自己紹介</label>
             <textarea value={form.bio} onChange={e => setForm({...form, bio: e.target.value})} rows={4}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none resize-none" />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">対応できる悩み（カンマ区切り）</label>
-            <input value={form.specialties} onChange={e => setForm({...form, specialties: e.target.value})}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
-              placeholder="腰痛, 肩こり, パフォーマンス向上" />
-          </div>
 
-          {/* カスタム強みプルーフ */}
+          {/* デフォルト強みプルーフ一覧 + カスタム */}
           <div className="border-t pt-4">
-            <label className="block text-sm font-bold text-[#1A1A2E] mb-2">💪 オリジナル強みプルーフ（最大3つ）</label>
-            <p className="text-xs text-gray-500 mb-3">デフォルト7項目に加えて、あなた独自の強みカテゴリを追加できます</p>
+            <label className="block text-sm font-bold text-[#1A1A2E] mb-2">💪 強みプルーフ</label>
+            <p className="text-xs text-gray-500 mb-3">クライアントが投票時に選べる強みカテゴリです</p>
+            <div className="space-y-1 mb-4">
+              {RESULT_FORTES.map(f => (
+                <div key={f.key} className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg">
+                  <span className="w-2 h-2 rounded-full bg-[#1A1A2E] flex-shrink-0"></span>
+                  <span className="text-sm text-gray-700">{f.label}</span>
+                  <span className="text-xs text-gray-400 ml-auto">{f.desc}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs font-medium text-gray-600 mb-2">＋ オリジナル強みプルーフ（最大3つ追加可）</p>
             {customResultFortes.map((f, i) => (
               <div key={f.id} className="flex gap-2 mb-2">
                 <input value={f.label} onChange={e => updateCustomForte('result', i, 'label', e.target.value)}
@@ -187,14 +191,24 @@ export default function DashboardPage() {
             ))}
             {customResultFortes.length < 3 && (
               <button type="button" onClick={() => addCustomForte('result')}
-                className="text-sm text-[#C4A35A] hover:underline">+ 強みプルーフを追加</button>
+                className="text-sm text-[#C4A35A] hover:underline">+ オリジナル強みを追加</button>
             )}
           </div>
 
-          {/* カスタムパーソナリティプルーフ */}
+          {/* デフォルトパーソナリティプルーフ一覧 + カスタム */}
           <div className="border-t pt-4">
-            <label className="block text-sm font-bold text-[#C4A35A] mb-2">🤝 オリジナルパーソナリティプルーフ（最大3つ）</label>
-            <p className="text-xs text-gray-500 mb-3">デフォルト7項目に加えて、あなた独自の人柄カテゴリを追加できます</p>
+            <label className="block text-sm font-bold text-[#C4A35A] mb-2">🤝 パーソナリティプルーフ</label>
+            <p className="text-xs text-gray-500 mb-3">クライアントが投票時に選べる人柄カテゴリです</p>
+            <div className="space-y-1 mb-4">
+              {PERSONALITY_FORTES.map(f => (
+                <div key={f.key} className="flex items-center gap-2 px-3 py-2 bg-[#C4A35A]/5 rounded-lg">
+                  <span className="w-2 h-2 rounded-full bg-[#C4A35A] flex-shrink-0"></span>
+                  <span className="text-sm text-gray-700">{f.label}</span>
+                  <span className="text-xs text-gray-400 ml-auto">{f.desc}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs font-medium text-gray-600 mb-2">＋ オリジナルパーソナリティプルーフ（最大3つ追加可）</p>
             {customPersonalityFortes.map((f, i) => (
               <div key={f.id} className="flex gap-2 mb-2">
                 <input value={f.label} onChange={e => updateCustomForte('personality', i, 'label', e.target.value)}
@@ -206,7 +220,7 @@ export default function DashboardPage() {
             ))}
             {customPersonalityFortes.length < 3 && (
               <button type="button" onClick={() => addCustomForte('personality')}
-                className="text-sm text-[#C4A35A] hover:underline">+ パーソナリティプルーフを追加</button>
+                className="text-sm text-[#C4A35A] hover:underline">+ オリジナルパーソナリティを追加</button>
             )}
           </div>
 
@@ -230,6 +244,8 @@ export default function DashboardPage() {
 
   const topForte = votes.length > 0 ?
     getResultForteLabel(votes.sort((a,b) => b.vote_count - a.vote_count)[0]?.category, pro) : '-'
+
+  const daysSinceRegistration = getDaysSinceRegistration()
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -256,7 +272,7 @@ export default function DashboardPage() {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 mb-8">
+      <div className="grid grid-cols-3 gap-4 mb-8">
         <div className="bg-white rounded-xl p-4 shadow-sm text-center">
           <div className="text-3xl font-bold text-[#C4A35A]">{totalVotes}</div>
           <div className="text-sm text-gray-500">総プルーフ数</div>
@@ -264,6 +280,10 @@ export default function DashboardPage() {
         <div className="bg-white rounded-xl p-4 shadow-sm text-center">
           <div className="text-lg font-bold text-[#1A1A2E] truncate">{topForte}</div>
           <div className="text-sm text-gray-500">トッププルーフ</div>
+        </div>
+        <div className="bg-white rounded-xl p-4 shadow-sm text-center">
+          <div className="text-3xl font-bold text-[#1A1A2E]">{daysSinceRegistration}</div>
+          <div className="text-sm text-gray-500">登録日数</div>
         </div>
       </div>
 
