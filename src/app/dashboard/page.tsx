@@ -265,13 +265,13 @@ export default function DashboardPage() {
 
       {/* QR Code */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8 text-center">
-        <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">投票用QRコード</h2>
+        <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">24時間限定 投票用QRコード</h2>
         <p className="text-sm text-gray-500 mb-4">クライアントに見せて投票してもらいましょう（24時間有効）</p>
         {qrUrl ? (
           <img src={qrUrl} alt="QR Code" className="mx-auto mb-4" />
         ) : (
           <button onClick={generateQR} className="px-6 py-3 bg-[#C4A35A] text-white rounded-lg hover:bg-[#b3944f] transition">
-            QRコードを発行する
+            24時間限定QRコードを発行する
           </button>
         )}
       </div>
