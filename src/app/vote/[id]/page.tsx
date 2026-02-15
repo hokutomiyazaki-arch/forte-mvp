@@ -78,7 +78,7 @@ function VoteForm() {
       return
     }
     if (!selectedResult) {
-      setError('実力プルーフを1つ選んでください')
+      setError('強みプルーフを1つ選んでください')
       return
     }
 
@@ -201,7 +201,7 @@ function VoteForm() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-8">
-        {/* 実力プルーフ（1つ選択） */}
+        {/* 強みプルーフ（1つ選択） */}
         <div>
           <h2 className="text-lg font-bold text-[#1A1A2E] mb-1">💪 何が変わりましたか？</h2>
           <p className="text-sm text-gray-500 mb-4">1つ選んでください</p>
@@ -232,9 +232,9 @@ function VoteForm() {
           </div>
         </div>
 
-        {/* 人柄プルーフ（最大3つ選択） */}
+        {/* パーソナリティプルーフ（最大3つ選択） */}
         <div>
-          <h2 className="text-lg font-bold text-[#C4A35A] mb-1">🤝 この人の人柄は？</h2>
+          <h2 className="text-lg font-bold text-[#C4A35A] mb-1">🤝 この人のパーソナリティは？</h2>
           <p className="text-sm text-gray-500 mb-4">最大3つまで選べます（任意）</p>
           <div className="space-y-2">
             {personalityOptions.map(opt => {
