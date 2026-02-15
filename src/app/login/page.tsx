@@ -81,21 +81,7 @@ function LoginForm() {
         return
       }
 
-      const { data: proData } = await supabase
-        .from('professionals').select('id').eq('user_id', user.id).single()
-      if (proData) {
-        window.location.replace('/dashboard')
-        return
-      }
-
-      const { data: clientData } = await supabase
-        .from('clients').select('id').eq('user_id', user.id).single()
-      if (clientData) {
-        window.location.replace('/mycard')
-        return
-      }
-
-      // New user — dashboard
+      // role=pro → always go to dashboard
       window.location.replace('/dashboard')
     } catch (e) {
       console.error('Redirect error:', e)
