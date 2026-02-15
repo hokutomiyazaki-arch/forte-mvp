@@ -7,6 +7,13 @@ let client: ReturnType<typeof supaCreateClient> | null = null
 
 export function createClient() {
   if (client) return client
-  client = supaCreateClient(supabaseUrl, supabaseAnonKey)
+  client = supaCreateClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      flowType: 'implicit',
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true,
+    }
+  })
   return client
 }
