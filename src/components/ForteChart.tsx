@@ -24,11 +24,11 @@ export default function ForteChart({ votes, personalityVotes = [], professional,
 
   return (
     <div className="space-y-6">
-      {/* 実力フォルテ */}
+      {/* 強みプルーフ */}
       {sortedResults.length > 0 && (
         <div>
           <h3 className="text-sm font-bold text-[#1A1A2E] mb-3 flex items-center gap-1">
-            フォルテ
+            強み
           </h3>
           <div className="space-y-2">
             {sortedResults.map(v => (
@@ -53,11 +53,11 @@ export default function ForteChart({ votes, personalityVotes = [], professional,
         </div>
       )}
 
-      {/* 人柄フォルテ */}
+      {/* パーソナリティプルーフ */}
       {sortedPersonality.length > 0 && (
         <div className="pt-2 border-t border-gray-100">
           <h3 className="text-sm font-bold text-[#C4A35A] mb-3 flex items-center gap-1">
-            人柄
+            パーソナリティ
           </h3>
           <div className="space-y-2">
             {sortedPersonality.map(v => (
