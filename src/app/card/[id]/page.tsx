@@ -61,19 +61,25 @@ export default function CardPage() {
         <h1 className="text-2xl font-bold text-[#1A1A2E]">{pro.name}</h1>
         <p className="text-gray-500">{pro.title}</p>
         
-        <div className="flex flex-wrap justify-center gap-2 mt-3">
-          {pro.is_founding_member && (
+        {pro.is_founding_member && (
+          <div className="mt-2">
             <span className="px-3 py-1 bg-[#C4A35A] text-white text-xs rounded-full font-medium">
               Founding Member
             </span>
-          )}
-          {pro.badges && pro.badges.length > 0 && pro.badges.map((badge: { id: string; label: string; image_url: string }, i: number) => (
-            <span key={i} className="px-3 py-1 bg-[#1A1A2E] text-white text-xs rounded-full font-medium flex items-center gap-1">
-              {badge.image_url && <img src={badge.image_url} alt="" className="w-4 h-4" />}
-              {badge.label}
-            </span>
-          ))}
-        </div>
+          </div>
+        )}
+
+        {/* Badges */}
+        {pro.badges && pro.badges.length > 0 && (
+          <div className="flex justify-center gap-4 mt-4">
+            {pro.badges.map((badge: { id: string; label: string; image_url: string }, i: number) => (
+              <div key={i} className="flex flex-col items-center">
+                <img src={badge.image_url} alt={badge.label} className="w-16 h-16" />
+                <span className="text-[10px] text-gray-400 mt-1">{badge.label}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {pro.location && <p className="text-sm text-gray-400 mt-2">{pro.location}</p>}
         {pro.years_experience && <p className="text-sm text-gray-400">経験 {pro.years_experience} 年</p>}
