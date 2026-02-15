@@ -17,97 +17,81 @@ function LoginForm() {
   const [googleLoading, setGoogleLoading] = useState(false)
   const [ready, setReady] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
-  const [status, setStatus] = useState('読み込み中...')
   const supabase = createClient() as any
 
   const isClient = role === 'client'
 
   useEffect(() => {
-    let done = false
+    let cancelled = false
 
     async function init() {
-      setStatus('セッション確認中...')
-      // Wait for supabase to detect tokens from URL hash
-      await new Promise(r => setTimeout(r, 500))
-
       try {
         const { data: { session } } = await supabase.auth.getSession()
-        console.log('Session check:', session ? 'found' : 'none')
-
-        if (session?.user && !done) {
-          done = true
-          setStatus('ログイン済み、リダイレクト中...')
-          await doRedirect(session.user)
+        if (session?.user && !cancelled) {
+          await redirectUser(session.user)
           return
         }
       } catch (e) {
         console.error('Session check error:', e)
       }
-
-      if (!done) {
-        done = true
-        setReady(true)
-      }
+      if (!cancelled) setReady(true)
     }
-
     init()
 
-    // Listen for auth changes (handles OAuth hash detection)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event: string, session: any) => {
-        console.log('Auth event:', event)
-        if (event === 'SIGNED_IN' && session?.user && !done) {
-          done = true
-          setStatus('ログイン成功、リダイレクト中...')
-          await doRedirect(session.user)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string, session: any) => {
+      if (event === 'SIGNED_IN' && session?.user && !cancelled) {
+        cancelled = true
+        try {
+          const urlRole = searchParams.get('role') || 'pro'
+          if (urlRole === 'client') {
+            const nn = searchParams.get('nickname') || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'ユーザー'
+            await (supabase.from('clients') as any).upsert({
+              user_id: session.user.id,
+              nickname: nn,
+            }, { onConflict: 'user_id' })
+            window.location.href = '/mycard'
+          } else {
+            await redirectUser(session.user)
+          }
+        } catch (e) {
+          console.error('Auth callback error:', e)
+          cancelled = false
+          setReady(true)
         }
       }
-    )
+    })
 
-    return () => subscription.unsubscribe()
+    return () => { cancelled = true; subscription.unsubscribe() }
   }, [])
 
-  async function doRedirect(user: any) {
-    const urlRole = searchParams.get('role') || 'pro'
-
+  async function redirectUser(user: any) {
+    // Check pro first
     try {
-      if (urlRole === 'client') {
-        const nn = searchParams.get('nickname') || user.user_metadata?.full_name || user.email?.split('@')[0] || 'ユーザー'
-        await (supabase.from('clients') as any).upsert(
-          { user_id: user.id, nickname: nn },
-          { onConflict: 'user_id' }
-        )
-        window.location.replace('/mycard')
+      const { data: proData, error: proError } = await (supabase
+        .from('professionals').select('id').eq('user_id', user.id).single()) as any
+      if (proData && !proError) {
+        window.location.href = '/dashboard'
         return
       }
+    } catch (_) { /* no pro record — continue */ }
 
-      // maybeSingle returns null instead of throwing when no row found
-      const { data: proData } = await (supabase
-        .from('professionals').select('id').eq('user_id', user.id).maybeSingle()) as any
-      if (proData) {
-        window.location.replace('/dashboard')
+    // Check client
+    try {
+      const { data: clientData, error: clientError } = await (supabase
+        .from('clients').select('id').eq('user_id', user.id).single()) as any
+      if (clientData && !clientError) {
+        window.location.href = '/mycard'
         return
       }
+    } catch (_) { /* no client record — continue */ }
 
-      const { data: clientData } = await (supabase
-        .from('clients').select('id').eq('user_id', user.id).maybeSingle()) as any
-      if (clientData) {
-        window.location.replace('/mycard')
-        return
-      }
-
-      // New user — dashboard to create profile
-      window.location.replace('/dashboard')
-    } catch (e) {
-      console.error('Redirect error:', e)
-      setReady(true)
-    }
+    // New user — show login form so they can choose role
+    window.location.href = '/dashboard'
   }
 
   async function handleGoogleLogin() {
     setError('')
     setGoogleLoading(true)
-    // Redirect back to THIS page — implicit flow puts tokens in URL hash
     const redirectUrl = window.location.origin + '/login?role=' + role
       + (isClient && nickname ? '&nickname=' + encodeURIComponent(nickname) : '')
     const { error: err } = await supabase.auth.signInWithOAuth({
@@ -138,7 +122,7 @@ function LoginForm() {
         const { data, error: err } = await supabase.auth.signInWithPassword({ email, password })
         if (err) throw err
         if (data.session?.user) {
-          await doRedirect(data.session.user)
+          await redirectUser(data.session.user)
         }
       }
     } catch (err: any) {
@@ -151,7 +135,7 @@ function LoginForm() {
     return (
       <div className="max-w-md mx-auto text-center py-16">
         <div className="animate-spin w-8 h-8 border-4 border-[#C4A35A] border-t-transparent rounded-full mx-auto mb-4"></div>
-        <p className="text-gray-500">{status}</p>
+        <p className="text-gray-500">確認中...</p>
       </div>
     )
   }
