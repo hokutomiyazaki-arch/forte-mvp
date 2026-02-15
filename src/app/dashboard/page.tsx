@@ -5,7 +5,7 @@ import { Professional, VoteSummary, CustomForte, getResultForteLabel } from '@/l
 import ForteChart from '@/components/ForteChart'
 
 export default function DashboardPage() {
-  const supabase = createClient() as any
+  const supabase = createClient()
   const [user, setUser] = useState<any>(null)
   const [pro, setPro] = useState<Professional | null>(null)
   const [votes, setVotes] = useState<VoteSummary[]>([])
@@ -25,19 +25,12 @@ export default function DashboardPage() {
   useEffect(() => {
     async function load() {
       const { data: { session } } = await supabase.auth.getSession()
-      const u = session?.user
-      if (!u) { window.location.href = '/login?role=pro'; return }
+      if (!session?.user) { window.location.href = '/login?role=pro'; return }
+      const u = session.user
       setUser(u)
 
       const { data: proData } = await supabase
         .from('professionals').select('*').eq('user_id', u.id).single()
-
-      if (!proData) {
-        // No pro profile yet — show creation form (don't redirect even if client exists)
-        setEditing(true)
-        setLoading(false)
-        return
-      }
 
       if (proData) {
         setPro(proData)
@@ -60,6 +53,7 @@ export default function DashboardPage() {
         const { count } = await supabase.from('votes').select('*', { count: 'exact', head: true }).eq('professional_id', proData.id)
         setTotalVotes(count || 0)
       } else {
+        // No pro profile yet — show creation form (don't redirect even if client exists)
         setEditing(true)
       }
       setLoading(false)
@@ -200,7 +194,7 @@ export default function DashboardPage() {
           {/* カスタムパーソナリティプルーフ */}
           <div className="border-t pt-4">
             <label className="block text-sm font-bold text-[#C4A35A] mb-2">🤝 オリジナルパーソナリティプルーフ（最大3つ）</label>
-            <p className="text-xs text-gray-500 mb-3">デフォルト7項目に加えて、あなた独自のパーソナリティカテゴリを追加できます</p>
+            <p className="text-xs text-gray-500 mb-3">デフォルト7項目に加えて、あなた独自の人柄カテゴリを追加できます</p>
             {customPersonalityFortes.map((f, i) => (
               <div key={f.id} className="flex gap-2 mb-2">
                 <input value={f.label} onChange={e => updateCustomForte('personality', i, 'label', e.target.value)}
@@ -234,7 +228,8 @@ export default function DashboardPage() {
     )
   }
 
-  const topForte = votes.length > 0 ? getResultForteLabel(votes.sort((a,b) => b.vote_count - a.vote_count)[0]?.category, pro) : '-'
+  const topForte = votes.length > 0 ?
+    getResultForteLabel(votes.sort((a,b) => b.vote_count - a.vote_count)[0]?.category, pro) : '-'
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -244,6 +239,21 @@ export default function DashboardPage() {
           プロフィール編集
         </button>
       </div>
+
+      {/* Badges */}
+      {pro.badges && pro.badges.length > 0 && (
+        <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
+          <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">取得バッジ</h2>
+          <div className="flex flex-wrap justify-center gap-6">
+            {pro.badges.map((badge: { id: string; label: string; image_url: string }, i: number) => (
+              <div key={i} className="flex flex-col items-center">
+                <img src={badge.image_url} alt={badge.label} className="w-16 h-16" />
+                <span className="text-[10px] text-gray-400 mt-1">{badge.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-4 mb-8">
@@ -257,7 +267,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Forte Chart */}
+      {/* Proof Chart */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
         <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">プルーフチャート</h2>
         <ForteChart votes={votes} personalityVotes={personalityVotes} professional={pro} />
@@ -266,7 +276,7 @@ export default function DashboardPage() {
       {/* QR Code */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8 text-center">
         <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">24時間限定 投票用QRコード</h2>
-        <p className="text-sm text-gray-500 mb-4">クライアントに見せて投票してもらいましょう（24時間有効）</p>
+        <p className="text-sm text-gray-500 mb-4">クライアントに見せてプルーフを贈ってもらいましょう</p>
         {qrUrl ? (
           <img src={qrUrl} alt="QR Code" className="mx-auto mb-4" />
         ) : (
