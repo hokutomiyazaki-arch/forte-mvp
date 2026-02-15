@@ -4,6 +4,27 @@ import { createClient } from '@/lib/supabase'
 import { Professional, VoteSummary, CustomForte, getResultForteLabel, RESULT_FORTES, PERSONALITY_FORTES } from '@/lib/types'
 import ForteChart from '@/components/ForteChart'
 
+// バッジ階層: FNTはBDCの上位資格。同レベルのFNTを持っていたらBDCは非表示
+const BADGE_ORDER: Record<string, number> = {
+  'bdc-elite': 1, 'fnt-basic': 2,
+  'bdc-pro': 3, 'fnt-advance': 4,
+  'bdc-legend': 5, 'fnt-master': 6,
+}
+const BDC_TO_FNT_UPGRADE: Record<string, string> = {
+  'bdc-elite': 'fnt-basic', 'bdc-pro': 'fnt-advance', 'bdc-legend': 'fnt-master',
+}
+function filterAndSortBadges(badges: { id: string; label: string; image_url: string }[]) {
+  if (!badges || badges.length === 0) return []
+  const ids = new Set(badges.map(b => b.id))
+  const filtered = badges.filter(b => {
+    const upgradeId = BDC_TO_FNT_UPGRADE[b.id]
+    if (upgradeId && ids.has(upgradeId)) return false
+    return true
+  })
+  filtered.sort((a, b) => (BADGE_ORDER[a.id] || 99) - (BADGE_ORDER[b.id] || 99))
+  return filtered
+}
+
 export default function DashboardPage() {
   const supabase = createClient()
   const [user, setUser] = useState<any>(null)
@@ -257,19 +278,22 @@ export default function DashboardPage() {
       </div>
 
       {/* Badges */}
-      {pro.badges && pro.badges.length > 0 && (
-        <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
-          <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">取得バッジ</h2>
-          <div className="flex flex-wrap justify-center gap-6">
-            {pro.badges.map((badge: { id: string; label: string; image_url: string }, i: number) => (
-              <div key={i} className="flex flex-col items-center">
-                <img src={badge.image_url} alt={badge.label} className="w-16 h-16" />
-                <span className="text-[10px] text-gray-400 mt-1">{badge.label}</span>
-              </div>
-            ))}
+      {(() => {
+        const displayBadges = filterAndSortBadges(pro.badges || [])
+        return displayBadges.length > 0 ? (
+          <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
+            <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">取得バッジ</h2>
+            <div className="flex flex-wrap justify-center gap-6">
+              {displayBadges.map((badge, i) => (
+                <div key={i} className="flex flex-col items-center">
+                  <img src={badge.image_url} alt={badge.label} className="w-16 h-16" />
+                  <span className="text-[10px] text-gray-400 mt-1">{badge.label}</span>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        ) : null
+      })()}
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-8">
