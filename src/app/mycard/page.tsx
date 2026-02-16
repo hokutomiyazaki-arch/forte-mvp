@@ -216,7 +216,7 @@ export default function MyCardPage() {
       {/* プロ登録CTA */}
       {!user && (
         <div className="mt-6 p-4 bg-gray-50 rounded-xl text-center">
-          <p className="text-sm text-gray-600 mb-2">あなたも実力を証明しませんか？</p>
+          <p className="text-sm text-gray-600 mb-2">あなたも強みを証明しませんか？</p>
           <a
             href="/login?role=pro"
             className="inline-block px-6 py-2 bg-[#C4A35A] text-white text-sm font-medium rounded-lg hover:bg-[#b3923f] transition"
