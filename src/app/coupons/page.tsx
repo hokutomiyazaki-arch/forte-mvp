@@ -28,8 +28,8 @@ export default function CouponsPage() {
     async function load() {
       const { data: { user: u } } = await supabase.auth.getUser()
       if (!u) {
-        // 未ログイン → ログインページへ
-        window.location.href = '/login?redirect=/coupons'
+        // 未ログイン → クライアントログインページへ
+        window.location.href = '/login?role=client&redirect=/coupons'
         return
       }
       setUser(u)
