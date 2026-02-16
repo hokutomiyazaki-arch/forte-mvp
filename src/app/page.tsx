@@ -9,7 +9,7 @@ export default function Home() {
         <h1 className="text-5xl font-bold text-[#1A1A2E] tracking-wider mb-4">PROOF</h1>
         <p className="text-lg text-[#C4A35A] italic mb-8">本物が輝く社会へ。</p>
         <p className="text-xl text-[#1A1A2E] font-medium mb-4">
-          あなたの実力を、クライアントの声で証明する。
+          あなたの強みを、クライアントの声で証明する。
         </p>
         <p className="text-gray-600 mb-12 leading-relaxed">
           SNSのフォロワー数でも、口コミの星の数でもない。<br />
@@ -37,7 +37,7 @@ export default function Home() {
         <div className="text-center">
           <div className="text-3xl font-bold text-[#C4A35A] mb-2">蓄積</div>
           <p className="text-sm text-gray-600">
-            あなたの実績は個人に紐づく。店を辞めても、独立しても消えない。ポータブルな実力の証明。
+            あなたの実績は個人に紐づく。店を辞めても、独立しても消えない。ポータブルな強みの証明。
           </p>
         </div>
         <div className="text-center">
@@ -49,7 +49,7 @@ export default function Home() {
         <div className="text-center">
           <div className="text-3xl font-bold text-[#C4A35A] mb-2">逆引き</div>
           <p className="text-sm text-gray-600">
-            「痛みを改善してくれる人」で検索。広告費順ではなく、実力順。
+            「痛みを改善してくれる人」で検索。広告費順ではなく、強み順。
           </p>
         </div>
       </section>
@@ -77,6 +77,18 @@ export default function Home() {
             </tbody>
           </table>
         </div>
+      </section>
+
+      {/* Roadmap */}
+      <section className="py-12 border-t border-gray-200 text-center">
+        <h2 className="text-xl font-bold text-[#1A1A2E] mb-3">PROOFのこれから</h2>
+        <p className="text-gray-600 text-sm mb-6">
+          予約管理、アプリ内メッセージ、プッシュ通知…<br />
+          PROOFはあなたの声で進化します。
+        </p>
+        <Link href="/roadmap" className="text-[#C4A35A] font-medium hover:underline">
+          開発ロードマップを見る →
+        </Link>
       </section>
 
       {/* Founding Member */}
