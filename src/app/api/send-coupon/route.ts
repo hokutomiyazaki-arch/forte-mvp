@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: 'PROOF <noreply@proof-app.com>', // 独自ドメイン設定後に変更
+          from: 'PROOF <info@proof-app.jp>',
           to: email,
           subject: `${proName}さんからクーポンが届いています`,
           html: `
@@ -49,19 +49,19 @@ export async function POST(req: NextRequest) {
                 
                 <div style="background:#f8f6f0;border:2px dashed #C4A35A;border-radius:8px;padding:16px;text-align:center;margin:20px 0;">
                   <p style="color:#666;font-size:12px;margin:0 0 4px;">クーポン内容</p>
-                  <p style="color:#1A1A2E;font-size:18px;font-weight:bold;margin:0 0 12px;">${couponText}</p>
-                  <p style="color:#666;font-size:12px;margin:0 0 4px;">クーポンコード</p>
-                  <p style="color:#C4A35A;font-size:24px;font-weight:bold;font-family:monospace;margin:0;">${couponCode}</p>
+                  <p style="color:#1A1A2E;font-size:18px;font-weight:bold;margin:0;">${couponText}</p>
                 </div>
 
-                <p style="color:#666;font-size:13px;">${proName}さんに直接このコードをお伝えください。</p>
+                <p style="color:#666;font-size:13px;">クーポンを使用するには、以下からログインしてください。</p>
                 
                 <div style="text-align:center;margin:24px 0;">
-                  <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://proof-app.vercel.app'}/card/${proId}" 
-                     style="background:#1A1A2E;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:14px;">
-                    ${proName}さんのカードを見る
+                  <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://forte-mvp.vercel.app'}/mycard" 
+                     style="background:#C4A35A;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:14px;">
+                    ログインしてクーポンを受け取る
                   </a>
                 </div>
+
+                <p style="color:#999;font-size:11px;">※ クーポンは対面時にプロの前で「使用する」ボタンを押してご利用ください。</p>
               </div>
               <div style="padding:16px;text-align:center;background:#f9f9f9;border-radius:0 0 12px 12px;">
                 <p style="color:#999;font-size:11px;margin:0;">
