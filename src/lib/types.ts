@@ -14,6 +14,7 @@ export interface Professional {
   specialties: string[] | null
   booking_url: string | null
   coupon_text: string | null
+  contact_email: string | null
   custom_result_fortes: CustomForte[]
   custom_personality_fortes: CustomForte[]
   is_founding_member: boolean
