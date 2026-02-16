@@ -21,13 +21,13 @@ export async function POST(req: NextRequest) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: 'PROOF <info@proof-app.jp>',
+          from: 'REAL PROOF <info@proof-app.jp>',
           to: email,
           subject: 'プルーフの確認をお願いします',
           html: `
             <div style="max-width:480px;margin:0 auto;font-family:sans-serif;">
               <div style="background:#1A1A2E;padding:24px;border-radius:12px 12px 0 0;">
-                <h1 style="color:#C4A35A;font-size:14px;margin:0;">PROOF</h1>
+                <h1 style="color:#C4A35A;font-size:14px;margin:0;">REAL PROOF</h1>
               </div>
               <div style="padding:24px;background:#fff;border:1px solid #eee;">
                 <p style="color:#333;font-size:16px;font-weight:bold;">プルーフの確認</p>
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
                 </p>
               </div>
               <div style="padding:16px;text-align:center;background:#f9f9f9;border-radius:0 0 12px 12px;">
-                <p style="color:#999;font-size:11px;margin:0;">PROOF — 実力で証明されたプロに出会う</p>
+                <p style="color:#999;font-size:11px;margin:0;">REAL PROOF — 強みで証明されたプロに出会う</p>
               </div>
             </div>
           `,
