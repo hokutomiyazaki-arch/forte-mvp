@@ -190,7 +190,7 @@ export default function DashboardPage() {
 
           {/* デフォルト強みプルーフ一覧 + カスタム */}
           <div className="border-t pt-4">
-            <label className="block text-sm font-bold text-[#1A1A2E] mb-2">💪 強みプルーフ</label>
+            <label className="block text-sm font-bold text-[#1A1A2E] mb-2">強みプルーフ</label>
             <p className="text-xs text-gray-500 mb-3">クライアントが投票時に選べる強みカテゴリです</p>
             <div className="space-y-1 mb-4">
               {RESULT_FORTES.map(f => (
@@ -219,7 +219,7 @@ export default function DashboardPage() {
 
           {/* デフォルトパーソナリティプルーフ一覧 + カスタム */}
           <div className="border-t pt-4">
-            <label className="block text-sm font-bold text-[#C4A35A] mb-2">🤝 パーソナリティプルーフ</label>
+            <label className="block text-sm font-bold text-[#C4A35A] mb-2">パーソナリティプルーフ</label>
             <p className="text-xs text-gray-500 mb-3">クライアントが投票時に選べる人柄カテゴリです</p>
             <div className="space-y-1 mb-4">
               {PERSONALITY_FORTES.map(f => (
