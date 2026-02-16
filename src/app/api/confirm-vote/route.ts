@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   // トークンで確認レコードを取得
   const { data: confirmation, error } = await supabaseAdmin
     .from('vote_confirmations')
-    .select('*, votes(*)')
+    .select('*')
     .eq('token', token)
     .is('confirmed_at', null)
     .single()
@@ -42,7 +42,13 @@ export async function GET(req: NextRequest) {
     .update({ status: 'confirmed' })
     .eq('id', confirmation.vote_id)
 
-  const vote = confirmation.votes
+  // 投票データを別途取得
+  const { data: vote } = await supabaseAdmin
+    .from('votes')
+    .select('*')
+    .eq('id', confirmation.vote_id)
+    .single()
+
   const professionalId = vote?.professional_id
 
   // プロがクーポン設定済みならクーポン発行
