@@ -38,7 +38,7 @@ export default function DashboardPage() {
 
   const [form, setForm] = useState({
     name: '', title: '', location: '',
-    bio: '', booking_url: '', coupon_text: '', photo_url: '',
+    bio: '', booking_url: '', coupon_text: '', photo_url: '', contact_email: '',
   })
   const [customResultFortes, setCustomResultFortes] = useState<CustomForte[]>([])
   const [customPersonalityFortes, setCustomPersonalityFortes] = useState<CustomForte[]>([])
@@ -61,6 +61,7 @@ export default function DashboardPage() {
           location: proData.location || '',
           bio: proData.bio || '', booking_url: proData.booking_url || '',
           coupon_text: proData.coupon_text || '', photo_url: proData.photo_url || '',
+          contact_email: proData.contact_email || '',
         })
         setCustomResultFortes(proData.custom_result_fortes || [])
         setCustomPersonalityFortes(proData.custom_personality_fortes || [])
@@ -125,6 +126,7 @@ export default function DashboardPage() {
       location: form.location || null,
       bio: form.bio || null, booking_url: form.booking_url || null,
       coupon_text: form.coupon_text || null,
+      contact_email: form.contact_email || null,
       photo_url: form.photo_url || null,
       custom_result_fortes: validResultFortes,
       custom_personality_fortes: validPersonalityFortes,
@@ -274,6 +276,12 @@ export default function DashboardPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">予約URL</label>
             <input value={form.booking_url} onChange={e => setForm({...form, booking_url: e.target.value})}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none" placeholder="https://..." />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">お問い合わせメール</label>
+            <input type="email" value={form.contact_email} onChange={e => setForm({...form, contact_email: e.target.value})}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none" placeholder="you@example.com" />
+            <p className="text-xs text-gray-400 mt-1">カードページに「このプロに相談する」ボタンが表示されます</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">投票後のお礼特典</label>
