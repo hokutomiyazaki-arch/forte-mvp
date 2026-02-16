@@ -117,7 +117,7 @@ export default function CardPage() {
         {pro.location && <p className="text-sm text-gray-400 mt-2">{pro.location}</p>}
         {pro.created_at && (
           <p className="text-sm text-gray-400">
-            PROOF登録 {Math.floor((new Date().getTime() - new Date(pro.created_at).getTime()) / (1000 * 60 * 60 * 24))} 日目
+            REAL PROOF登録 {Math.floor((new Date().getTime() - new Date(pro.created_at).getTime()) / (1000 * 60 * 60 * 24))} 日目
           </p>
         )}
       </div>
@@ -162,7 +162,7 @@ export default function CardPage() {
       {/* CTA */}
       <div className="flex flex-col gap-3 mb-8">
         {pro.contact_email && (
-          <a href={`mailto:${pro.contact_email}?subject=${encodeURIComponent(`PROOFを見て相談：${pro.name}さん`)}&body=${encodeURIComponent(`${pro.name}さん\n\nPROOFであなたのプロフィールを拝見し、ご相談したくご連絡しました。\n\n`)}`}
+          <a href={`mailto:${pro.contact_email}?subject=${encodeURIComponent(`REAL PROOFを見て相談：${pro.name}さん`)}&body=${encodeURIComponent(`${pro.name}さん\n\nREAL PROOFであなたのプロフィールを拝見し、ご相談したくご連絡しました。\n\n`)}`}
             className="w-full text-center py-3 bg-[#C4A35A] text-white font-medium rounded-lg hover:bg-[#b3944f] transition">
             このプロに相談する
           </a>
