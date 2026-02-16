@@ -79,7 +79,7 @@ export default function ExplorePage() {
             .from('vote_summary').select('*')
             .eq('professional_id', p.id)
             .eq('category', selectedCategory)
-            .single()) as any
+            .maybeSingle()) as any
           const { count: totalCount } = await (supabase
             .from('votes').select('*', { count: 'exact', head: true })
             .eq('professional_id', p.id)) as any
@@ -96,7 +96,7 @@ export default function ExplorePage() {
               .from('vote_summary').select('*')
               .eq('professional_id', p.id)
               .eq('category', cf.id)
-              .single()) as any
+              .maybeSingle()) as any
             if (customVoteData && customVoteData.vote_count > 0) {
               if (!specialistMap.has(cf.id)) specialistMap.set(cf.id, [])
               specialistMap.get(cf.id)!.push({
@@ -118,7 +118,7 @@ export default function ExplorePage() {
             .from('personality_summary').select('*')
             .eq('professional_id', p.id)
             .eq('category', selectedCategory)
-            .single()) as any
+            .maybeSingle()) as any
           const { data: allPersData } = await (supabase
             .from('personality_summary').select('*')
             .eq('professional_id', p.id)) as any
@@ -136,7 +136,7 @@ export default function ExplorePage() {
               .from('personality_summary').select('*')
               .eq('professional_id', p.id)
               .eq('category', cf.id)
-              .single()) as any
+              .maybeSingle()) as any
             if (customPersData && customPersData.vote_count > 0) {
               if (!specialistMap.has(cf.id)) specialistMap.set(cf.id, [])
               specialistMap.get(cf.id)!.push({
