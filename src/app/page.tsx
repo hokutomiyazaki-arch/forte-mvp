@@ -6,7 +6,7 @@ export default function Home() {
     <div className="max-w-3xl mx-auto">
       {/* Hero */}
       <section className="text-center py-16">
-        <h1 className="text-5xl font-bold text-[#1A1A2E] tracking-wider mb-4">PROOF</h1>
+        <h1 className="text-5xl font-bold text-[#1A1A2E] tracking-wider mb-4">REAL PROOF</h1>
         <p className="text-lg text-[#C4A35A] italic mb-8">本物が輝く社会へ。</p>
         <p className="text-xl text-[#1A1A2E] font-medium mb-4">
           あなたの強みを、クライアントの声で証明する。
@@ -14,7 +14,7 @@ export default function Home() {
         <p className="text-gray-600 mb-12 leading-relaxed">
           SNSのフォロワー数でも、口コミの星の数でもない。<br />
           実際にあなたの施術を受けた人が、あなたの「選ばれる理由」を投票する。<br />
-          実力が正当に評価され、蓄積され、検索される — それがPROOF。
+          強みが正当に評価され、蓄積され、検索される — それがREAL PROOF。
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Link
@@ -66,14 +66,14 @@ export default function Home() {
                 <th className="py-3 px-4 text-left"></th>
                 <th className="py-3 px-4 text-left">ホットペッパー</th>
                 <th className="py-3 px-4 text-left">Google</th>
-                <th className="py-3 px-4 text-left font-bold text-[#C4A35A]">PROOF</th>
+                <th className="py-3 px-4 text-left font-bold text-[#C4A35A]">REAL PROOF</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               <tr><td className="py-2 px-4 font-medium">誰が評価</td><td className="py-2 px-4">匿名の誰か</td><td className="py-2 px-4">匿名の誰か</td><td className="py-2 px-4 font-medium">認証済みクライアント</td></tr>
               <tr className="bg-gray-50"><td className="py-2 px-4 font-medium">紐づき</td><td className="py-2 px-4">店舗</td><td className="py-2 px-4">店舗</td><td className="py-2 px-4 font-medium">個人（ポータブル）</td></tr>
               <tr><td className="py-2 px-4 font-medium">評価の軸</td><td className="py-2 px-4">星5（一次元）</td><td className="py-2 px-4">星5（一次元）</td><td className="py-2 px-4 font-medium">多次元（結果×人柄）</td></tr>
-              <tr className="bg-gray-50"><td className="py-2 px-4 font-medium">検索順</td><td className="py-2 px-4">広告費順</td><td className="py-2 px-4">アルゴリズム</td><td className="py-2 px-4 font-medium">実力順</td></tr>
+              <tr className="bg-gray-50"><td className="py-2 px-4 font-medium">検索順</td><td className="py-2 px-4">広告費順</td><td className="py-2 px-4">アルゴリズム</td><td className="py-2 px-4 font-medium">強み順</td></tr>
             </tbody>
           </table>
         </div>
@@ -81,10 +81,10 @@ export default function Home() {
 
       {/* Roadmap */}
       <section className="py-12 border-t border-gray-200 text-center">
-        <h2 className="text-xl font-bold text-[#1A1A2E] mb-3">PROOFのこれから</h2>
+        <h2 className="text-xl font-bold text-[#1A1A2E] mb-3">REAL PROOFのこれから</h2>
         <p className="text-gray-600 text-sm mb-6">
           予約管理、アプリ内メッセージ、プッシュ通知…<br />
-          PROOFはあなたの声で進化します。
+          REAL PROOFはあなたの声で進化します。
         </p>
         <Link href="/roadmap" className="text-[#C4A35A] font-medium hover:underline">
           開発ロードマップを見る →
@@ -97,7 +97,7 @@ export default function Home() {
         <h2 className="text-2xl font-bold text-[#1A1A2E] mb-4">最初の50名だけの特権</h2>
         <p className="text-gray-600 mb-8">
           永久のFounding Memberバッジ。先行する実績の蓄積。<br />
-          PROOFが10万人のプラットフォームになったとき、あなたは「最初からいた人」。
+          REAL PROOFが10万人のプラットフォームになったとき、あなたは「最初からいた人」。
         </p>
         <Link
           href="/login?role=pro"
