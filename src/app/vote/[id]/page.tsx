@@ -77,6 +77,31 @@ function VoteForm() {
       return
     }
 
+    // 自己投票チェック
+    const { data: { user: currentUser } } = await supabase.auth.getUser()
+    if (currentUser && pro?.user_id && currentUser.id === pro.user_id) {
+      setError('自分自身にはプルーフを贈れません')
+      return
+    }
+
+    // 30分クールダウン: このプロが最後にプルーフを受け取ってから30分以内は受付不可
+    const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString()
+    const { data: recentVote } = await (supabase as any)
+      .from('votes')
+      .select('created_at')
+      .eq('professional_id', proId)
+      .gt('created_at', thirtyMinAgo)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    
+    if (recentVote) {
+      const nextAvailable = new Date(new Date(recentVote.created_at).getTime() + 30 * 60 * 1000)
+      const waitMin = Math.ceil((nextAvailable.getTime() - Date.now()) / 60000)
+      setError(`このプロへのプルーフは30分に1件まで。あと約${waitMin}分お待ちください。`)
+      return
+    }
+
     // メアドをローカルストレージに保存
     localStorage.setItem('proof_voter_email', email)
 
