@@ -183,7 +183,7 @@ export default function ExplorePage() {
               : 'text-gray-600 hover:text-gray-800'
           }`}
         >
-          💪 強みで探す
+          強みで探す
         </button>
         <button
           onClick={() => setTab('personality')}
@@ -193,7 +193,7 @@ export default function ExplorePage() {
               : 'text-gray-600 hover:text-gray-800'
           }`}
         >
-          🤝 パーソナリティで探す
+          パーソナリティで探す
         </button>
       </div>
 
@@ -207,7 +207,7 @@ export default function ExplorePage() {
               : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
           }`}
         >
-          🏆 総合ランキング
+          総合ランキング
         </button>
         <button
           onClick={() => setRankMode('active')}
@@ -217,7 +217,7 @@ export default function ExplorePage() {
               : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
           }`}
         >
-          🔥 アクティブランキング
+          アクティブランキング
         </button>
       </div>
 
@@ -252,7 +252,7 @@ export default function ExplorePage() {
           ) : (
             <div className="space-y-3 mb-10">
               <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wide">
-                {rankMode === 'active' ? '🔥 ' : '🏆 '}
+                
                 {selectedCategory === 'all'
                   ? (tab === 'result'
                     ? (rankMode === 'active' ? '強みプルーフ アクティブランキング' : '強みプルーフ 総合ランキング')
