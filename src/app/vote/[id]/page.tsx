@@ -105,8 +105,8 @@ function VoteForm() {
     // メアドをローカルストレージに保存
     localStorage.setItem('proof_voter_email', email)
 
-    // 投票INSERT
-    const { error: voteError } = await (supabase as any).from('votes').insert({
+    // 投票INSERT（pendingステータスで保存）
+    const { data: voteData, error: voteError } = await (supabase as any).from('votes').insert({
       professional_id: proId,
       voter_email: email,
       client_user_id: null,
@@ -114,7 +114,8 @@ function VoteForm() {
       personality_categories: selectedPersonalities,
       comment: comment.trim() || null,
       qr_token: qrToken,
-    })
+      status: 'pending',
+    }).select().single()
 
     if (voteError) {
       if (voteError.code === '23505') {
@@ -133,36 +134,27 @@ function VoteForm() {
       source: 'vote',
     }).then(() => {}) // エラーは無視（重複の場合）
 
-    // プロがクーポン設定済みならクーポン発行
-    if (pro?.coupon_text) {
-      const couponCode = Math.random().toString(36).substring(2, 10).toUpperCase()
-      const { data: couponData } = await (supabase as any).from('coupons').insert({
-        pro_user_id: pro.user_id,
-        client_email: email,
-        discount_type: 'percentage',
-        discount_value: 10,
-        code: couponCode,
-        status: 'active',
-      }).select().single()
-      
-      if (couponData) {
-        // メール送信（API Route経由）
-        try {
-          await fetch('/api/send-coupon', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email,
-              proName: pro.name,
-              couponCode,
-              couponText: pro.coupon_text,
-              proId: pro.id,
-            }),
-          })
-        } catch (err) {
-          console.error('Coupon email send failed:', err)
-          // メール送信失敗しても投票は成功扱い
-        }
+    // 確認トークンを作成
+    const { data: confirmation } = await (supabase as any)
+      .from('vote_confirmations')
+      .insert({ vote_id: voteData.id })
+      .select()
+      .single()
+
+    // 確認メール送信
+    if (confirmation) {
+      try {
+        await fetch('/api/send-confirmation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email,
+            proName: pro.name,
+            token: confirmation.token,
+          }),
+        })
+      } catch (err) {
+        console.error('Confirmation email send failed:', err)
       }
     }
 
@@ -190,26 +182,23 @@ function VoteForm() {
     )
   }
 
-  // 投票完了画面
+  // 投票完了画面（メール確認待ち）
   if (submitted) {
     return (
       <div className="max-w-md mx-auto text-center py-12 px-4">
-        <div className="text-5xl mb-4">🎉</div>
-        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2">プルーフを贈りました！</h1>
+        <div className="text-5xl mb-4">📩</div>
+        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2">確認メールを送信しました</h1>
         <p className="text-gray-500 mb-6">
-          {pro.name}さんにあなたのプルーフが届きました。
+          入力いただいたメールアドレスに確認メールを送信しました。<br />
+          メール内のリンクをクリックして、プルーフを確定してください。
         </p>
 
-        {/* クーポン通知 */}
-        {pro.coupon_text && (
-          <div className="bg-[#f8f6f0] border border-[#C4A35A]/30 rounded-xl p-4 mb-6 text-left">
-            <p className="text-sm text-[#1A1A2E] font-medium">🎁 クーポンをメールで送信しました</p>
-            <p className="text-xs text-gray-500 mt-1">
-              入力いただいたメールアドレスにクーポンの受け取り方法をお送りしました。
-              メールからログインしてクーポンをご利用ください。
-            </p>
-          </div>
-        )}
+        <div className="bg-[#f8f6f0] border border-[#C4A35A]/30 rounded-xl p-4 mb-6 text-left">
+          <p className="text-sm text-[#1A1A2E] font-medium">⏰ リンクの有効期限は24時間です</p>
+          <p className="text-xs text-gray-500 mt-1">
+            メールが届かない場合は、迷惑メールフォルダをご確認ください。
+          </p>
+        </div>
 
         {/* カードを見る */}
         <a
