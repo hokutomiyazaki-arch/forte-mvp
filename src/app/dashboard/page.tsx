@@ -38,7 +38,7 @@ export default function DashboardPage() {
 
   const [form, setForm] = useState({
     name: '', title: '', location: '',
-    bio: '', booking_url: '', coupon_text: '',
+    bio: '', booking_url: '', coupon_text: '', photo_url: '',
   })
   const [customResultFortes, setCustomResultFortes] = useState<CustomForte[]>([])
   const [customPersonalityFortes, setCustomPersonalityFortes] = useState<CustomForte[]>([])
@@ -60,7 +60,7 @@ export default function DashboardPage() {
           name: proData.name || '', title: proData.title || '',
           location: proData.location || '',
           bio: proData.bio || '', booking_url: proData.booking_url || '',
-          coupon_text: proData.coupon_text || '',
+          coupon_text: proData.coupon_text || '', photo_url: proData.photo_url || '',
         })
         setCustomResultFortes(proData.custom_result_fortes || [])
         setCustomPersonalityFortes(proData.custom_personality_fortes || [])
@@ -125,6 +125,7 @@ export default function DashboardPage() {
       location: form.location || null,
       bio: form.bio || null, booking_url: form.booking_url || null,
       coupon_text: form.coupon_text || null,
+      photo_url: form.photo_url || null,
       custom_result_fortes: validResultFortes,
       custom_personality_fortes: validPersonalityFortes,
       is_founding_member: true,
@@ -166,6 +167,29 @@ export default function DashboardPage() {
           {pro ? 'プロフィール編集' : 'プロフィール作成'}
         </h1>
         <form onSubmit={handleSave} className="space-y-4">
+          {/* プロフ写真 */}
+          <div className="flex flex-col items-center">
+            {form.photo_url ? (
+              <img src={form.photo_url} alt="" className="w-24 h-24 rounded-full object-cover mb-2" />
+            ) : (
+              <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-sm mb-2">写真</div>
+            )}
+            <label className="text-sm text-[#C4A35A] hover:underline cursor-pointer">
+              写真を変更
+              <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                const file = e.target.files?.[0]
+                if (!file || !user) return
+                const ext = file.name.split('.').pop()
+                const path = `${user.id}/avatar.${ext}`
+                const { error } = await (supabase.storage.from('avatars') as any).upload(path, file, { upsert: true })
+                if (!error) {
+                  const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
+                  setForm({...form, photo_url: urlData.publicUrl + '?t=' + Date.now()})
+                }
+              }} />
+            </label>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">名前 *</label>
             <input required value={form.name} onChange={e => setForm({...form, name: e.target.value})}
