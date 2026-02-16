@@ -152,7 +152,7 @@ function LoginForm() {
 
   return (
     <div className="max-w-md mx-auto">
-      <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2 text-center">PROOF</h1>
+      <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2 text-center">REAL PROOF</h1>
       <p className="text-sm text-gray-500 mb-6 text-center">
         {isClient ? 'クライアントとしてログイン' : 'プロとしてログイン'}
       </p>
