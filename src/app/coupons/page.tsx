@@ -51,7 +51,7 @@ export default function CouponsPage() {
     setRedeeming(true)
     setMessage('')
 
-    const { data, error } = await supabase.rpc('redeem_coupon', {
+    const { data, error } = await (supabase as any).rpc('redeem_coupon', {
       coupon_id: couponId,
     })
 
