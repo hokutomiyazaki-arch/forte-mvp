@@ -63,7 +63,7 @@ export default function MyCardPage() {
                 .select('name')
                 .eq('id', c.pro_user_id)
                 .single()
-              return { ...c, pro_name: proData?.name || '不明' }
+              return { ...c, pro_name: (proData as any)?.name || '不明' }
             })
           )
           setCoupons(enriched)
@@ -84,7 +84,7 @@ export default function MyCardPage() {
                 .select('name')
                 .eq('id', v.professional_id)
                 .single()
-              return { ...v, pro_name: proData?.name || '不明' }
+              return { ...v, pro_name: (proData as any)?.name || '不明' }
             })
           )
           setVoteHistory(enrichedVotes)
