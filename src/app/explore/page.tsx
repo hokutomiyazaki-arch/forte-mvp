@@ -70,7 +70,7 @@ export default function ExplorePage() {
       if (tab === 'result') {
         if (selectedCategory === 'all') {
           const { count } = await (supabase
-            .from('votes').select('*', { count: 'exact', head: true })
+            .from('votes').select('*', { count: 'exact', head: true }).eq('status', 'confirmed')
             .eq('professional_id', p.id)) as any
           const vc = count || 0
           results.push({ professional: p, vote_count: vc, total_votes: vc, days_active: daysActive, rate: vc / daysActive })
@@ -81,7 +81,7 @@ export default function ExplorePage() {
             .eq('category', selectedCategory)
             .maybeSingle()) as any
           const { count: totalCount } = await (supabase
-            .from('votes').select('*', { count: 'exact', head: true })
+            .from('votes').select('*', { count: 'exact', head: true }).eq('status', 'confirmed')
             .eq('professional_id', p.id)) as any
           const vc = summaryData?.vote_count || 0
           if (vc > 0) {
