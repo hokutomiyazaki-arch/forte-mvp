@@ -21,7 +21,7 @@ function VoteForm() {
   const [error, setError] = useState('')
   const [alreadyVoted, setAlreadyVoted] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [coupon, setCoupon] = useState<{ code: string; discount_type: string; discount_value: number } | null>(null)
+
 
   const MAX_PERSONALITY = 3
 
@@ -137,7 +137,7 @@ function VoteForm() {
     if (pro?.coupon_text) {
       const couponCode = Math.random().toString(36).substring(2, 10).toUpperCase()
       const { data: couponData } = await (supabase as any).from('coupons').insert({
-        pro_user_id: pro.id,
+        pro_user_id: pro.user_id,
         client_email: email,
         discount_type: 'percentage',
         discount_value: 10,
@@ -146,7 +146,6 @@ function VoteForm() {
       }).select().single()
       
       if (couponData) {
-        setCoupon(couponData)
         // メール送信（API Route経由）
         try {
           await fetch('/api/send-coupon', {
@@ -201,18 +200,13 @@ function VoteForm() {
           {pro.name}さんにあなたのプルーフが届きました。
         </p>
 
-        {/* クーポン表示 */}
-        {coupon && (
-          <div className="bg-gradient-to-r from-[#1A1A2E] to-[#2a2a4e] text-white rounded-xl p-6 mb-6 text-left">
-            <p className="text-[#C4A35A] text-xs font-bold mb-1">THANK YOU COUPON</p>
-            <p className="text-lg font-bold mb-2">{pro.coupon_text}</p>
-            <div className="bg-white/10 rounded-lg px-4 py-2 text-center">
-              <p className="text-xs text-gray-300 mb-1">クーポンコード</p>
-              <p className="text-2xl font-mono font-bold tracking-wider text-[#C4A35A]">{coupon.code}</p>
-            </div>
-            <p className="text-xs text-gray-400 mt-3">
-              {pro.name}さんに直接このコードをお伝えください。
-              メールにも送信しました。
+        {/* クーポン通知 */}
+        {pro.coupon_text && (
+          <div className="bg-[#f8f6f0] border border-[#C4A35A]/30 rounded-xl p-4 mb-6 text-left">
+            <p className="text-sm text-[#1A1A2E] font-medium">🎁 クーポンをメールで送信しました</p>
+            <p className="text-xs text-gray-500 mt-1">
+              入力いただいたメールアドレスにクーポンの受け取り方法をお送りしました。
+              メールからログインしてクーポンをご利用ください。
             </p>
           </div>
         )}
