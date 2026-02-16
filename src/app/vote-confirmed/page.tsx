@@ -49,7 +49,7 @@ function ConfirmedContent() {
       )}
 
       <div className="mt-8 p-4 bg-gray-50 rounded-xl">
-        <p className="text-sm text-gray-600 mb-2">あなたも実力を証明しませんか？</p>
+        <p className="text-sm text-gray-600 mb-2">あなたも強みを証明しませんか？</p>
         <p className="text-xs text-gray-400 mb-3">
           PROOFに登録して、あなたのクライアントからプルーフを集めましょう。
         </p>
