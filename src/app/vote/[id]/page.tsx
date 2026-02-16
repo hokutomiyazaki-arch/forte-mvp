@@ -73,7 +73,7 @@ function VoteForm() {
       return
     }
     if (!selectedResult) {
-      setError('実力プルーフを1つ選んでください')
+      setError('強みプルーフを1つ選んでください')
       return
     }
 
@@ -261,9 +261,9 @@ function VoteForm() {
           </p>
         </div>
 
-        {/* 実力プルーフ選択（1つ） */}
+        {/* 強みプルーフ選択（1つ） */}
         <div>
-          <h2 className="text-lg font-bold text-[#1A1A2E] mb-1">実力プルーフ</h2>
+          <h2 className="text-lg font-bold text-[#1A1A2E] mb-1">強みプルーフ</h2>
           <p className="text-xs text-gray-500 mb-3">一番大きく変わったことを1つ選んでください</p>
           <div className="space-y-2">
             {resultOptions.map(opt => (
