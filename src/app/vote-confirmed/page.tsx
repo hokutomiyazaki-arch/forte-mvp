@@ -13,7 +13,7 @@ function ConfirmedContent() {
   useEffect(() => {
     async function load() {
       if (proId) {
-        const { data } = await supabase
+        const { data } = await (supabase as any)
           .from('professionals')
           .select('name')
           .eq('id', proId)
