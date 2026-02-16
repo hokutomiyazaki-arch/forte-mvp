@@ -34,6 +34,7 @@ export default function DashboardPage() {
   const [totalVotes, setTotalVotes] = useState(0)
   const [qrUrl, setQrUrl] = useState('')
   const [editing, setEditing] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(true)
 
   const [form, setForm] = useState({
@@ -171,16 +172,24 @@ export default function DashboardPage() {
         <form onSubmit={handleSave} className="space-y-4">
           {/* プロフ写真 */}
           <div className="flex flex-col items-center">
-            {form.photo_url ? (
-              <img src={form.photo_url} alt="" className="w-24 h-24 rounded-full object-cover mb-2" />
-            ) : (
-              <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-sm mb-2">写真</div>
-            )}
-            <label className="text-sm text-[#C4A35A] hover:underline cursor-pointer">
-              写真を変更
+            <div className="relative">
+              {form.photo_url ? (
+                <img src={form.photo_url} alt="" className={`w-24 h-24 rounded-full object-cover mb-2 ${uploading ? 'opacity-40' : ''}`} />
+              ) : (
+                <div className={`w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-sm mb-2 ${uploading ? 'opacity-40' : ''}`}>写真</div>
+              )}
+              {uploading && (
+                <div className="absolute inset-0 flex items-center justify-center mb-2">
+                  <div className="w-8 h-8 border-3 border-[#C4A35A] border-t-transparent rounded-full animate-spin"></div>
+                </div>
+              )}
+            </div>
+            <label className={`text-sm text-[#C4A35A] hover:underline ${uploading ? 'pointer-events-none opacity-50' : 'cursor-pointer'}`}>
+              {uploading ? 'アップロード中...' : '写真を変更'}
               <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
                 const file = e.target.files?.[0]
                 if (!file || !user) return
+                setUploading(true)
                 const ext = file.name.split('.').pop()
                 const path = `${user.id}/avatar.${ext}`
                 const { error } = await (supabase.storage.from('avatars') as any).upload(path, file, { upsert: true })
@@ -188,6 +197,7 @@ export default function DashboardPage() {
                   const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
                   setForm({...form, photo_url: urlData.publicUrl + '?t=' + Date.now()})
                 }
+                setUploading(false)
               }} />
             </label>
           </div>
@@ -288,7 +298,8 @@ export default function DashboardPage() {
             <input value={form.coupon_text} onChange={e => setForm({...form, coupon_text: e.target.value})}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none" placeholder="初回セッション10%OFF" />
           </div>
-          <button type="submit" className="w-full py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition">
+          <button type="submit" disabled={uploading}
+            className="w-full py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition disabled:opacity-50 disabled:cursor-not-allowed">
             保存する
           </button>
         </form>
