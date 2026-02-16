@@ -1,307 +1,180 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { Professional, getAllResultOptions, getAllPersonalityOptions } from '@/lib/types'
-import { Suspense } from 'react'
+import { Vote, Professional, getResultForteLabel, getPersonalityForteLabel } from '@/lib/types'
 
-function VoteForm() {
-  const params = useParams()
-  const searchParams = useSearchParams()
-  const proId = params.id as string
-  const qrToken = searchParams.get('token')
+interface VoteWithPro extends Vote {
+  professionals: Professional
+}
+
+interface Coupon {
+  id: string
+  client_user_id: string
+  professional_id: string
+  coupon_text: string
+  used_at: string | null
+  created_at: string
+  professionals: Professional
+}
+
+export default function MyCardPage() {
   const supabase = createClient() as any
-
-  const [pro, setPro] = useState<Professional | null>(null)
-  const [user, setUser] = useState<any>(null)
-  const [selectedResult, setSelectedResult] = useState('')
-  const [selectedPersonalities, setSelectedPersonalities] = useState<string[]>([])
-  const [comment, setComment] = useState('')
-  const [submitted, setSubmitted] = useState(false)
-  const [error, setError] = useState('')
-  const [alreadyVoted, setAlreadyVoted] = useState(false)
-  const [isSelfVote, setIsSelfVote] = useState(false)
+  const [votes, setVotes] = useState<VoteWithPro[]>([])
+  const [coupons, setCoupons] = useState<Coupon[]>([])
+  const [nickname, setNickname] = useState('')
   const [loading, setLoading] = useState(true)
-
-  const MAX_PERSONALITY = 3
+  const [usingCouponId, setUsingCouponId] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
       const { data: { session } } = await supabase.auth.getSession()
-      const u = session?.user
-      setUser(u)
+      const user = session?.user
+      if (!user) { window.location.href = '/login?role=client'; return }
 
-      const { data: proData } = await supabase
-        .from('professionals')
-        .select('*')
-        .eq('id', proId)
-        .single()
-      if (proData) setPro(proData)
+      const { data: clientData } = await supabase
+        .from('clients').select('nickname').eq('user_id', user.id).single()
+      if (clientData) setNickname(clientData.nickname)
 
-      if (u) {
-        const { data: existing } = await supabase
-          .from('votes')
-          .select('id')
-          .eq('professional_id', proId)
-          .eq('client_user_id', u.id)
-          .single()
-        if (existing) setAlreadyVoted(true)
+      const { data: voteData } = await supabase
+        .from('votes')
+        .select('*, professionals(*)')
+        .eq('client_user_id', user.id)
+        .order('created_at', { ascending: false })
 
-        if (proData && proData.user_id === u.id) {
-          setIsSelfVote(true)
-        }
-      }
+      if (voteData) setVotes(voteData as VoteWithPro[])
+
+      // 未使用クーポンを取得
+      const { data: couponData } = await supabase
+        .from('coupons')
+        .select('*, professionals(*)')
+        .eq('client_user_id', user.id)
+        .is('used_at', null)
+        .order('created_at', { ascending: false })
+
+      if (couponData) setCoupons(couponData as Coupon[])
 
       setLoading(false)
     }
     load()
-  }, [proId])
+  }, [])
 
-  function togglePersonality(key: string) {
-    setSelectedPersonalities(prev => {
-      if (prev.includes(key)) {
-        return prev.filter(k => k !== key)
-      }
-      if (prev.length >= MAX_PERSONALITY) return prev
-      return [...prev, key]
-    })
-  }
+  async function useCoupon(couponId: string) {
+    setUsingCouponId(couponId)
+    const { error } = await supabase
+      .from('coupons')
+      .update({ used_at: new Date().toISOString() })
+      .eq('id', couponId)
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!user) {
-      window.location.href = `/login?role=client`
-      return
+    if (!error) {
+      setCoupons(prev => prev.filter(c => c.id !== couponId))
     }
-    if (isSelfVote) {
-      setError('自分自身には投票できません')
-      return
-    }
-    if (!selectedResult) {
-      setError('強みプルーフを1つ選んでください')
-      return
-    }
-
-    if (qrToken) {
-      const { data: tokenData } = await supabase
-        .from('qr_tokens')
-        .select('*')
-        .eq('token', qrToken)
-        .eq('professional_id', proId)
-        .gt('expires_at', new Date().toISOString())
-        .single()
-      
-      if (!tokenData) {
-        setError('QRコードの有効期限が切れています。プロに新しいQRコードを発行してもらってください。')
-        return
-      }
-    }
-
-    const { error: voteError } = await supabase.from('votes').insert({
-      professional_id: proId,
-      client_user_id: user.id,
-      result_category: selectedResult,
-      personality_categories: selectedPersonalities,
-      comment: comment.trim() || null,
-      qr_token: qrToken,
-    })
-
-    if (voteError) {
-      if (voteError.code === '23505') {
-        setError('このプロにはすでに投票済みです')
-      } else {
-        setError(voteError.message)
-      }
-    } else {
-      const { data: clientCheck } = await supabase
-        .from('clients')
-        .select('id')
-        .eq('user_id', user.id)
-        .single()
-      
-      if (!clientCheck) {
-        await supabase.from('clients').insert({
-          user_id: user.id,
-          nickname: user.email?.split('@')[0] || 'ユーザー',
-        })
-      }
-      setSubmitted(true)
-    }
+    setUsingCouponId(null)
   }
 
   if (loading) return <div className="text-center py-16 text-gray-400">読み込み中...</div>
-  if (!pro) return <div className="text-center py-16 text-gray-400">プロが見つかりません</div>
-
-  if (!user) {
-    return (
-      <div className="max-w-md mx-auto text-center py-16">
-        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-4">ログインが必要です</h1>
-        <p className="text-gray-600 mb-6">プルーフを贈るにはクライアント登録が必要です。</p>
-        <a href="/login?role=client" className="px-8 py-3 bg-[#1A1A2E] text-white rounded-lg hover:bg-[#2a2a4e] transition inline-block">
-          クライアントとして登録
-        </a>
-      </div>
-    )
-  }
-
-  if (alreadyVoted) {
-    return (
-      <div className="max-w-md mx-auto text-center py-16">
-        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-4">投票済みです</h1>
-        <p className="text-gray-600 mb-6">{pro.name} さんにはすでにプルーフを贈っています。</p>
-        <a href={`/card/${pro.id}`} className="text-[#C4A35A] hover:underline">カードを見る</a>
-      </div>
-    )
-  }
-
-  if (isSelfVote) {
-    return (
-      <div className="max-w-md mx-auto text-center py-16">
-        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-4">自分には投票できません</h1>
-        <p className="text-gray-600 mb-6">プルーフはクライアントから贈ってもらうものです。</p>
-        <a href="/dashboard" className="px-6 py-3 bg-[#1A1A2E] text-white rounded-lg hover:bg-[#2a2a4e] transition inline-block">
-          ダッシュボードに戻る
-        </a>
-      </div>
-    )
-  }
-
-  if (submitted) {
-    return (
-      <div className="max-w-md mx-auto text-center py-16">
-        <div className="text-4xl mb-4">🎉</div>
-        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-4">プルーフを贈りました！</h1>
-        <p className="text-gray-600 mb-6">{pro.name} さんにプルーフが届きました。</p>
-        {pro.coupon_text && (
-          <div className="bg-[#C4A35A]/10 border border-[#C4A35A] rounded-lg p-4 mb-6">
-            <p className="text-sm font-medium text-[#C4A35A]">お礼の特典</p>
-            <p className="text-[#1A1A2E] mt-1">{pro.coupon_text}</p>
-          </div>
-        )}
-        <div className="flex flex-col gap-3">
-          <a href="/mycard" className="px-6 py-3 bg-[#1A1A2E] text-white rounded-lg hover:bg-[#2a2a4e] transition inline-block">
-            マイカードを見る
-          </a>
-          <a href={`/card/${pro.id}`} className="text-[#C4A35A] hover:underline text-sm">
-            {pro.name} さんのカードを見る
-          </a>
-        </div>
-      </div>
-    )
-  }
-
-  const resultOptions = getAllResultOptions(pro)
-  const personalityOptions = getAllPersonalityOptions(pro)
 
   return (
-    <div className="max-w-lg mx-auto">
+    <div className="max-w-2xl mx-auto">
       <div className="text-center mb-8">
-        <h1 className="text-2xl font-bold text-[#1A1A2E]">{pro.name} さんにプルーフを贈る</h1>
-        <p className="text-gray-500 text-sm mt-1">あなたの体験を投票してください</p>
+        <h1 className="text-2xl font-bold text-[#1A1A2E]">{nickname || 'My'} のカード</h1>
+        <p className="text-gray-500 text-sm mt-1">あなたがプルーフを贈ったプロのコレクション</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-8">
-        {/* 強みプルーフ（1つ選択） */}
-        <div>
-          <h2 className="text-lg font-bold text-[#1A1A2E] mb-1">💪 何が変わりましたか？</h2>
-          <p className="text-sm text-gray-500 mb-4">1つ選んでください</p>
-          <div className="space-y-2">
-            {resultOptions.map(opt => (
-              <label
-                key={opt.key}
-                className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition ${
-                  selectedResult === opt.key
-                    ? 'border-[#1A1A2E] bg-[#1A1A2E]/5'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="result"
-                  value={opt.key}
-                  checked={selectedResult === opt.key}
-                  onChange={() => setSelectedResult(opt.key)}
-                  className="mt-1 accent-[#1A1A2E]"
-                />
-                <div>
-                  <div className="font-medium text-[#1A1A2E]">{opt.label}</div>
-                  <div className="text-xs text-gray-500">{opt.desc}</div>
+      {/* クーポンセクション */}
+      {coupons.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">獲得済みクーポン</h2>
+          <div className="space-y-3">
+            {coupons.map(c => (
+              <div key={c.id} className="bg-white rounded-xl shadow-sm overflow-hidden border border-[#C4A35A]/20">
+                {/* クーポン上部：切り取り線風 */}
+                <div className="bg-gradient-to-r from-[#C4A35A]/10 via-[#C4A35A]/5 to-[#C4A35A]/10 px-5 py-3 flex items-center gap-3">
+                  {c.professionals?.photo_url ? (
+                    <img src={c.professionals.photo_url} alt="" className="w-10 h-10 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-[#1A1A2E] flex items-center justify-center text-white font-bold text-sm">
+                      {c.professionals?.name?.charAt(0) || '?'}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-[#1A1A2E] text-sm truncate">{c.professionals?.name}</div>
+                    <div className="text-xs text-gray-500 truncate">{c.professionals?.title}</div>
+                  </div>
+                  <span className="text-xs text-[#C4A35A] font-medium flex-shrink-0">COUPON</span>
                 </div>
-              </label>
+
+                {/* 切り取り線 */}
+                <div className="border-t border-dashed border-[#C4A35A]/30 mx-4"></div>
+
+                {/* クーポン内容 */}
+                <div className="px-5 py-4">
+                  <p className="text-[#1A1A2E] font-medium mb-3">{c.coupon_text}</p>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-400">
+                      {new Date(c.created_at).toLocaleDateString('ja-JP')} 獲得
+                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault()
+                        if (confirm('クーポンを使用しますか？\n一度使用すると元に戻せません。')) {
+                          useCoupon(c.id)
+                        }
+                      }}
+                      disabled={usingCouponId === c.id}
+                      className="px-4 py-2 bg-[#C4A35A] text-white text-sm font-medium rounded-lg hover:bg-[#b3944f] transition disabled:opacity-50"
+                    >
+                      {usingCouponId === c.id ? '処理中...' : '使用する'}
+                    </button>
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         </div>
+      )}
 
-        {/* パーソナリティプルーフ（最大3つ選択） */}
-        <div>
-          <h2 className="text-lg font-bold text-[#C4A35A] mb-1">🤝 この人のパーソナリティは？</h2>
-          <p className="text-sm text-gray-500 mb-4">最大3つまで選べます（任意）</p>
-          <div className="space-y-2">
-            {personalityOptions.map(opt => {
-              const isSelected = selectedPersonalities.includes(opt.key)
-              const isDisabled = !isSelected && selectedPersonalities.length >= MAX_PERSONALITY
-              return (
-                <label
-                  key={opt.key}
-                  className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition ${
-                    isSelected
-                      ? 'border-[#C4A35A] bg-[#C4A35A]/5'
-                      : isDisabled
-                        ? 'border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed'
-                        : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => !isDisabled && togglePersonality(opt.key)}
-                    disabled={isDisabled}
-                    className="mt-1 accent-[#C4A35A] w-4 h-4"
-                  />
-                  <div>
-                    <div className={`font-medium ${isSelected ? 'text-[#C4A35A]' : 'text-[#1A1A2E]'}`}>{opt.label}</div>
-                    <div className="text-xs text-gray-500">{opt.desc}</div>
+      {/* 投票履歴 */}
+      <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">プルーフ履歴</h2>
+      {votes.length === 0 ? (
+        <div className="text-center py-12">
+          <p className="text-gray-400 mb-4">まだプルーフを贈ったプロがいません</p>
+          <a href="/explore" className="text-[#C4A35A] hover:underline">プロを探す</a>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {votes.map(v => (
+            <a key={v.id} href={`/card/${v.professional_id}`}
+              className="block bg-white rounded-xl p-5 shadow-sm hover:shadow-md transition">
+              <div className="flex items-center gap-4">
+                {v.professionals.photo_url ? (
+                  <img src={v.professionals.photo_url} alt="" className="w-14 h-14 rounded-full object-cover" />
+                ) : (
+                  <div className="w-14 h-14 rounded-full bg-[#1A1A2E] flex items-center justify-center text-white text-xl font-bold">
+                    {v.professionals.name.charAt(0)}
                   </div>
-                </label>
-              )
-            })}
-          </div>
-          {selectedPersonalities.length > 0 && (
-            <p className="text-xs text-[#C4A35A] mt-2">{selectedPersonalities.length}/{MAX_PERSONALITY} 選択中</p>
-          )}
+                )}
+                <div className="flex-1">
+                  <div className="font-bold text-[#1A1A2E]">{v.professionals.name}</div>
+                  <div className="text-sm text-gray-500">{v.professionals.title}</div>
+                  <div className="flex gap-2 mt-2 flex-wrap">
+                    <span className="text-xs px-2 py-0.5 bg-[#1A1A2E]/10 text-[#1A1A2E] rounded-full">
+                      {getResultForteLabel(v.result_category, v.professionals)}
+                    </span>
+                    {v.personality_categories?.map(pc => (
+                      <span key={pc} className="text-xs px-2 py-0.5 bg-[#C4A35A]/10 text-[#C4A35A] rounded-full">
+                        {getPersonalityForteLabel(pc, v.professionals)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              {v.comment && (
+                <p className="text-sm text-gray-600 mt-3 border-l-2 border-[#C4A35A] pl-3">{v.comment}</p>
+              )}
+            </a>
+          ))}
         </div>
-
-        {/* Comment */}
-        <div>
-          <h2 className="text-lg font-bold text-[#1A1A2E] mb-1">ひとこと（任意）</h2>
-          <textarea
-            value={comment}
-            onChange={e => setComment(e.target.value)}
-            maxLength={100}
-            rows={2}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] focus:border-transparent outline-none resize-none"
-            placeholder="このプロへのメッセージ（100文字以内）"
-          />
-          <p className="text-xs text-gray-400 text-right">{comment.length}/100</p>
-        </div>
-
-        {error && <p className="text-red-500 text-sm">{error}</p>}
-
-        <button
-          type="submit"
-          className="w-full py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition"
-        >
-          プルーフを贈る
-        </button>
-      </form>
+      )}
     </div>
-  )
-}
-
-export default function VotePage() {
-  return (
-    <Suspense fallback={<div className="text-center py-16">読み込み中...</div>}>
-      <VoteForm />
-    </Suspense>
   )
 }
