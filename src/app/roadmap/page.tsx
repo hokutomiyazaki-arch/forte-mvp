@@ -37,6 +37,11 @@ const FEATURES = [
     description: 'PWA / ネイティブアプリ化で、新しいプルーフやメッセージの通知をリアルタイムに受信。',
   },
   {
+    status: 'next',
+    title: '地域検索',
+    description: 'エリアや最寄り駅で近くのプロを検索。あなたの街で本物のプロを見つける。',
+  },
+  {
     status: 'planned',
     title: 'プルーフ分析ダッシュボード',
     description: '月別のプルーフ推移、強みの変化トレンド、クライアント層の分析。',
