@@ -3,8 +3,8 @@ import './globals.css'
 import Navbar from '@/components/Navbar'
 
 export const metadata: Metadata = {
-  title: 'PROOF — 本物が輝く社会へ',
-  description: '実力が正当に評価され、蓄積され、検索される。人が人の価値を証明し合うプラットフォーム。',
+  title: 'REAL PROOF — 本物が輝く社会へ',
+  description: '強みが正当に評価され、蓄積され、検索される。人が人の価値を証明し合うプラットフォーム。',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -16,7 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {children}
         </main>
         <footer className="text-center py-8 text-sm text-gray-400">
-          © {new Date().getFullYear()} PROOF by Legrand chariot
+          © {new Date().getFullYear()} REAL PROOF by Legrand chariot
         </footer>
       </body>
     </html>
