@@ -29,7 +29,7 @@ const FEATURES = [
   {
     status: 'next',
     title: 'アプリ内メッセージ',
-    description: 'メールアドレスを公開せずに、PROOF内でプロとクライアントが直接やりとり。',
+    description: 'メールアドレスを公開せずに、REAL PROOF内でプロとクライアントが直接やりとり。',
   },
   {
     status: 'planned',
@@ -68,9 +68,9 @@ export default function RoadmapPage() {
   return (
     <div className="max-w-2xl mx-auto">
       <div className="text-center mb-10">
-        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2">PROOFのこれから</h1>
+        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2">REAL PROOFのこれから</h1>
         <p className="text-gray-500 text-sm">
-          あなたの声でPROOFは進化します。欲しい機能があれば教えてください。
+          あなたの声でREAL PROOFは進化します。欲しい機能があれば教えてください。
         </p>
       </div>
 
