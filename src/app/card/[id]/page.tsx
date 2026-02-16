@@ -160,16 +160,22 @@ export default function CardPage() {
       )}
 
       {/* CTA */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-8">
-        <div className="flex-1 text-center py-3 bg-gray-100 text-gray-500 font-medium rounded-lg text-sm">
-          プルーフはセッション後にプロが発行する24時間限定QRコードからのみ贈れます
-        </div>
+      <div className="flex flex-col gap-3 mb-8">
+        {pro.contact_email && (
+          <a href={`mailto:${pro.contact_email}?subject=${encodeURIComponent(`PROOFを見て相談：${pro.name}さん`)}&body=${encodeURIComponent(`${pro.name}さん\n\nPROOFであなたのプロフィールを拝見し、ご相談したくご連絡しました。\n\n`)}`}
+            className="w-full text-center py-3 bg-[#C4A35A] text-white font-medium rounded-lg hover:bg-[#b3944f] transition">
+            このプロに相談する
+          </a>
+        )}
         {pro.booking_url && (
           <a href={pro.booking_url} target="_blank" rel="noopener"
-            className="flex-1 text-center py-3 border-2 border-[#1A1A2E] text-[#1A1A2E] font-medium rounded-lg hover:bg-[#1A1A2E] hover:text-white transition">
+            className="w-full text-center py-3 border-2 border-[#1A1A2E] text-[#1A1A2E] font-medium rounded-lg hover:bg-[#1A1A2E] hover:text-white transition">
             予約する
           </a>
         )}
+        <div className="text-center py-3 bg-gray-100 text-gray-500 font-medium rounded-lg text-sm">
+          プルーフはセッション後にプロが発行する24時間限定QRコードからのみ贈れます
+        </div>
       </div>
     </div>
   )
