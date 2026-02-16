@@ -62,13 +62,13 @@ export default function CardPage() {
       if (personalityData) setPersonalityVotes(personalityData)
 
       const { data: commentData } = await supabase
-        .from('votes').select('*').eq('professional_id', id)
+        .from('votes').select('*').eq('professional_id', id).eq('status', 'confirmed')
         .not('comment', 'is', null)
         .order('created_at', { ascending: false }).limit(20) as any
       if (commentData) setComments(commentData)
 
       const { count } = await supabase
-        .from('votes').select('*', { count: 'exact', head: true }).eq('professional_id', id) as any
+        .from('votes').select('*', { count: 'exact', head: true }).eq('professional_id', id).eq('status', 'confirmed') as any
       setTotalVotes(count || 0)
       setLoading(false)
     }
