@@ -342,7 +342,7 @@ function VoteForm() {
         )}
         <h1 className="text-xl font-bold text-[#1A1A2E]">{pro.name}</h1>
         <p className="text-sm text-gray-500">{pro.title}</p>
-        <p className="text-xs text-gray-400 mt-1">施術後24時間限定</p>
+        <p className="text-xs text-gray-400 mt-1">セッション後24時間限定</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">

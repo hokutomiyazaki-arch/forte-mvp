@@ -13,7 +13,7 @@ export default function Home() {
         </p>
         <p className="text-gray-600 mb-12 leading-relaxed">
           SNSのフォロワー数でも、口コミの星の数でもない。<br />
-          実際にあなたの施術を受けた人が、あなたの「選ばれる理由」を投票する。<br />
+          実際にあなたのセッションを受けた人が、あなたの「選ばれる理由」を投票する。<br />
           強みが正当に評価され、蓄積され、検索される — それがREAL PROOF。
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
