@@ -140,8 +140,14 @@ export async function GET(req: NextRequest) {
 
       // Step 7: リワードメール送信
       const resendKey = process.env.RESEND_API_KEY
-      if (resendKey && rewardContent && vote.voter_email) {
+      if (resendKey && rewardType && vote.voter_email) {
         const rewardLabel = getRewardLabel(rewardType)
+        const isCouponReward = rewardType === 'coupon'
+        // クーポンのみ内容を開示、それ以外は種類名だけ
+        const contentHtml = isCouponReward && rewardContent
+          ? `<p style="color:#1A1A2E;font-size:18px;font-weight:bold;margin:0;">${rewardContent}</p>`
+          : `<p style="color:#666;font-size:14px;margin:0;">ログインしてリワードの中身を確認してください。</p>`
+        const buttonText = isCouponReward ? '登録してリワードを受け取る' : 'ログインしてリワードの中身を確認する'
         try {
           const emailRes = await fetch('https://api.resend.com/emails', {
             method: 'POST',
@@ -163,16 +169,14 @@ export async function GET(req: NextRequest) {
                     <p style="color:#333;">${pro.name}さんからリワードが届いています。</p>
                     <div style="background:#f8f6f0;border:2px dashed #C4A35A;border-radius:8px;padding:16px;text-align:center;margin:20px 0;">
                       <p style="color:#666;font-size:12px;margin:0 0 4px;">${rewardLabel}</p>
-                      <p style="color:#1A1A2E;font-size:18px;font-weight:bold;margin:0;">${rewardContent}</p>
+                      ${contentHtml}
                     </div>
-                    <p style="color:#666;font-size:13px;">リワードを管理するには、以下からログインしてください。</p>
                     <div style="text-align:center;margin:24px 0;">
                       <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://forte-mvp.vercel.app'}/login?role=client&redirect=/coupons&email=${encodeURIComponent(vote.voter_email)}"
                          style="background:#C4A35A;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:14px;">
-                        登録してリワードを受け取る
+                        ${buttonText}
                       </a>
                     </div>
-                    <p style="color:#999;font-size:11px;">※ リワードは対面時にプロの前で「使用する」ボタンを押してご利用ください。</p>
                   </div>
                   <div style="padding:16px;text-align:center;background:#f9f9f9;border-radius:0 0 12px 12px;">
                     <p style="color:#999;font-size:11px;margin:0;">REAL PROOF — 強みで証明されたプロに出会う</p>
@@ -192,7 +196,7 @@ export async function GET(req: NextRequest) {
           console.error('[confirm-vote] Step 7 FAIL - reward email exception:', err)
         }
       } else {
-        console.log('[confirm-vote] Step 7 SKIP - no RESEND_API_KEY or no reward content')
+        console.log('[confirm-vote] Step 7 SKIP - no RESEND_API_KEY or no reward type')
       }
     } else {
       console.log('[confirm-vote] Already confirmed - skipping Steps 2-7, redirecting to vote-confirmed')

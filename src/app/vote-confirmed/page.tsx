@@ -14,6 +14,8 @@ function ConfirmedContent() {
   const supabase = createClient()
   const [proName, setProName] = useState('')
 
+  const isCoupon = rewardType === 'coupon'
+
   useEffect(() => {
     async function load() {
       if (proId) {
@@ -30,25 +32,32 @@ function ConfirmedContent() {
 
   return (
     <div className="max-w-md mx-auto text-center py-12 px-4">
-      <div className="text-5xl mb-4">🎉</div>
       <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2">プルーフが確定しました！</h1>
       <p className="text-gray-500 mb-6">
         {proName ? `${proName}さんにあなたのプルーフが届きました。` : 'プルーフが正常に確認されました。'}
       </p>
 
       {/* リワード表示 */}
-      {rewardType && rewardContent ? (
+      {rewardType ? (
         <div className="bg-[#f8f6f0] border-2 border-dashed border-[#C4A35A] rounded-xl p-6 mb-6">
           <p className="text-sm text-[#666] mb-1">{getRewardLabel(rewardType)}</p>
-          <p className="text-xl font-bold text-[#1A1A2E] mb-3">{rewardContent}</p>
-          <p className="text-xs text-gray-500">
-            リワードを使用するには、アカウント登録が必要です。
-          </p>
+          {isCoupon && rewardContent ? (
+            <>
+              <p className="text-xl font-bold text-[#1A1A2E] mb-3">{rewardContent}</p>
+              <p className="text-xs text-gray-500">
+                リワードを管理するには、アカウント登録が必要です。
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-gray-600 mb-3">
+              リワードの中身はアカウント登録後に確認できます。
+            </p>
+          )}
           <a
             href={`/login?role=client&redirect=/coupons&email=${encodeURIComponent(voterEmail)}`}
             className="inline-block mt-4 px-6 py-2 bg-[#C4A35A] text-white text-sm font-medium rounded-lg hover:bg-[#b3923f] transition"
           >
-            登録してリワードを受け取る
+            {isCoupon ? '登録してリワードを受け取る' : '登録してリワードの中身を見る'}
           </a>
         </div>
       ) : (
