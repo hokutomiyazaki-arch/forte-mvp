@@ -57,7 +57,7 @@ export default function CouponsPage() {
       }
 
       // プロ情報を一括取得
-      const proIds = [...new Set(couponData.map((c: any) => c.pro_user_id))]
+      const proIds = Array.from(new Set(couponData.map((c: any) => c.pro_user_id)))
       const { data: proData } = await (supabase as any)
         .from('professionals')
         .select('id, name, coupon_text')
