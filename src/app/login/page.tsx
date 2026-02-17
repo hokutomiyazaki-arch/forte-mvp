@@ -102,7 +102,7 @@ function LoginForm() {
       }
     } catch (_) {}
 
-    window.location.href = '/dashboard'
+    window.location.href = '/explore'
   }
 
   async function handleGoogleLogin() {
@@ -128,10 +128,14 @@ function LoginForm() {
 
     try {
       if (mode === 'signup') {
+        const signUpOptions: any = { data: { role } }
+        if (isCouponFlow) {
+          signUpOptions.emailRedirectTo = window.location.origin + '/login?role=client&redirect=/coupons&email=' + encodeURIComponent(email)
+        }
         const { error: err } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { role } }
+          options: signUpOptions,
         })
         if (err) throw err
         setEmailSent(true)

@@ -28,11 +28,25 @@ export default function CouponsPage() {
     async function load() {
       const { data: { user: u } } = await supabase.auth.getUser()
       if (!u) {
-        // 未ログイン → クライアントログインページへ
         window.location.href = '/login?role=client&redirect=/coupons'
         return
       }
       setUser(u)
+
+      // clientsレコードがなければ自動作成
+      const { data: existing } = await (supabase as any)
+        .from('clients')
+        .select('id')
+        .eq('user_id', u.id)
+        .maybeSingle()
+
+      if (!existing) {
+        const nn = u.user_metadata?.full_name || u.email?.split('@')[0] || 'ユーザー'
+        await (supabase as any).from('clients').upsert({
+          user_id: u.id,
+          nickname: nn,
+        }, { onConflict: 'user_id' })
+      }
 
       // 自分のクーポンを取得
       const { data } = await supabase
@@ -41,7 +55,7 @@ export default function CouponsPage() {
         .eq('client_email', u.email)
         .order('created_at', { ascending: false })
 
-      if (data) setCoupons(data)
+      if (data) setCoupons(data as any)
       setLoading(false)
     }
     load()

@@ -5,13 +5,29 @@ import { createClient } from '@/lib/supabase'
 export default function Navbar() {
   const supabase = createClient() as any
   const [user, setUser] = useState<any>(null)
+  const [isPro, setIsPro] = useState(false)
+  const [isClient, setIsClient] = useState(false)
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }: any) => {
-      setUser(session?.user || null)
+    async function init() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        const u = session?.user || null
+        setUser(u)
+
+        if (u) {
+          const [{ data: proData }, { data: clientData }] = await Promise.all([
+            supabase.from('professionals').select('id').eq('user_id', u.id).maybeSingle(),
+            supabase.from('clients').select('id').eq('user_id', u.id).maybeSingle(),
+          ])
+          setIsPro(!!proData)
+          setIsClient(!!clientData)
+        }
+      } catch (_) {}
       setLoaded(true)
-    }).catch(() => setLoaded(true))
+    }
+    init()
   }, [])
 
   async function handleLogout() {
@@ -26,8 +42,8 @@ export default function Navbar() {
         <a href="/explore" className="hover:text-[#C4A35A] transition">プロを探す</a>
         {loaded && (user ? (
           <>
-            <a href="/dashboard" className="hover:text-[#C4A35A] transition">ダッシュボード</a>
-            <a href="/mycard" className="hover:text-[#C4A35A] transition">マイカード</a>
+            {isPro && <a href="/dashboard" className="hover:text-[#C4A35A] transition">ダッシュボード</a>}
+            {isClient && <a href="/mycard" className="hover:text-[#C4A35A] transition">マイカード</a>}
             <button onClick={handleLogout} className="hover:text-[#C4A35A] transition">ログアウト</button>
           </>
         ) : (
