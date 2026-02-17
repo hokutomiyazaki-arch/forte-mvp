@@ -102,7 +102,14 @@ function LoginForm() {
       }
     } catch (_) {}
 
-    window.location.href = '/explore'
+    // roleに応じたフォールバック
+    if (role === 'pro') {
+      window.location.href = '/dashboard'
+    } else if (role === 'client') {
+      window.location.href = '/mycard'
+    } else {
+      window.location.href = '/explore'
+    }
   }
 
   async function handleGoogleLogin() {
