@@ -46,6 +46,7 @@ export default function DashboardPage() {
   const [rewards, setRewards] = useState<{ id?: string; reward_type: string; content: string }[]>([])
   const [confirmingDeregister, setConfirmingDeregister] = useState(false)
   const [deregistering, setDeregistering] = useState(false)
+  const [formError, setFormError] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -137,7 +138,22 @@ export default function DashboardPage() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
+    setFormError('')
     if (!user) return
+
+    const urlPattern = /https?:\/\/|www\./i
+    if (form.name.length > 20) {
+      setFormError('名前は20文字以内で入力してください')
+      return
+    }
+    if (urlPattern.test(form.name)) {
+      setFormError('名前にURLを含めることはできません')
+      return
+    }
+    if (urlPattern.test(form.contact_email)) {
+      setFormError('正しいメールアドレスを入力してください')
+      return
+    }
 
     const validResultFortes = customResultFortes.filter(f => f.label.trim())
     const validPersonalityFortes = customPersonalityFortes.filter(f => f.label.trim())
@@ -272,8 +288,8 @@ export default function DashboardPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">名前 *</label>
-            <input required value={form.name} onChange={e => setForm({...form, name: e.target.value})}
+            <label className="block text-sm font-medium text-gray-700 mb-1">名前 *（20文字以内）</label>
+            <input required maxLength={20} value={form.name} onChange={e => setForm({...form, name: e.target.value})}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none" />
           </div>
           <div>
@@ -416,6 +432,7 @@ export default function DashboardPage() {
             )}
           </div>
 
+          {formError && <p className="text-red-500 text-sm">{formError}</p>}
           <button type="submit" disabled={uploading}
             className="w-full py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition disabled:opacity-50 disabled:cursor-not-allowed">
             保存する

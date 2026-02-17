@@ -89,16 +89,36 @@ function VoteForm() {
       setError('メールアドレスを入力してください')
       return
     }
+    if (/https?:\/\/|www\./i.test(email)) {
+      setError('正しいメールアドレスを入力してください')
+      return
+    }
     if (!selectedResult) {
       setError('強みプルーフを1つ選んでください')
       return
     }
 
-    // 自己投票チェック
+    // 自己投票チェック（ログインユーザーID）
     const { data: { user: currentUser } } = await supabase.auth.getUser()
     if (currentUser && pro?.user_id && currentUser.id === pro.user_id) {
       setError('自分自身にはプルーフを贈れません')
       return
+    }
+
+    // 自己投票チェック（メールアドレスベース）
+    try {
+      const checkRes = await fetch('/api/check-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, proId }),
+      })
+      const checkData = await checkRes.json()
+      if (checkData.isSelf) {
+        setError('ご自身のプルーフには投票できません')
+        return
+      }
+    } catch (err) {
+      console.error('[vote] check-email error:', err)
     }
 
     // 30分クールダウン: このプロが最後にプルーフを受け取ってから30分以内は受付不可
