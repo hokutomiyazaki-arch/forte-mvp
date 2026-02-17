@@ -11,13 +11,9 @@ function ConfirmedContent() {
   const voterEmail = searchParams.get('email') || ''
   const supabase = createClient()
   const [proName, setProName] = useState('')
-  const [userEmail, setUserEmail] = useState('')
 
   useEffect(() => {
     async function load() {
-      const { data: { user } } = await (supabase as any).auth.getUser()
-      if (user?.email) setUserEmail(user.email)
-
       if (proId) {
         const { data } = await (supabase as any)
           .from('professionals')
@@ -29,8 +25,6 @@ function ConfirmedContent() {
     }
     load()
   }, [proId])
-
-  const proSignupEmail = userEmail || voterEmail
 
   return (
     <div className="max-w-md mx-auto text-center py-12 px-4">
@@ -69,19 +63,6 @@ function ConfirmedContent() {
           {proName ? `${proName}さんのカードを見る` : 'カードを見る'}
         </a>
       )}
-
-      <div className="mt-8 p-4 bg-gray-50 rounded-xl">
-        <p className="text-sm text-gray-600 mb-2">あなたも強みを証明しませんか？</p>
-        <p className="text-xs text-gray-400 mb-3">
-          REAL PROOFに登録して、あなたのクライアントからプルーフを集めましょう。
-        </p>
-        <a
-          href={`/login?role=pro${proSignupEmail ? '&email=' + encodeURIComponent(proSignupEmail) : ''}`}
-          className="inline-block px-6 py-2 bg-[#C4A35A] text-white text-sm font-medium rounded-lg hover:bg-[#b3923f] transition"
-        >
-          プロとして無料登録
-        </a>
-      </div>
 
       <a href="/explore" className="block mt-4 text-sm text-[#C4A35A] underline">
         他のプロを探す →

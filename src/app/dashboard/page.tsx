@@ -43,9 +43,6 @@ export default function DashboardPage() {
   })
   const [customResultFortes, setCustomResultFortes] = useState<CustomForte[]>([])
   const [customPersonalityFortes, setCustomPersonalityFortes] = useState<CustomForte[]>([])
-  const [newEmail, setNewEmail] = useState('')
-  const [emailMessage, setEmailMessage] = useState('')
-  const [emailUpdating, setEmailUpdating] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -148,19 +145,6 @@ export default function DashboardPage() {
     }
     setEditing(false)
     window.location.reload()
-  }
-
-  async function handleEmailChange() {
-    if (!newEmail || newEmail === user?.email) return
-    setEmailUpdating(true)
-    setEmailMessage('')
-    const { error } = await (supabase as any).auth.updateUser({ email: newEmail })
-    if (error) {
-      setEmailMessage('エラー: ' + error.message)
-    } else {
-      setEmailMessage('確認メールを新しいアドレスに送信しました。メール内のリンクをクリックして変更を完了してください。')
-    }
-    setEmailUpdating(false)
   }
 
   async function generateQR() {
@@ -307,10 +291,10 @@ export default function DashboardPage() {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none" placeholder="https://..." />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">お問い合わせメール</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">連絡先メールアドレス</label>
             <input type="email" value={form.contact_email} onChange={e => setForm({...form, contact_email: e.target.value})}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none" placeholder="you@example.com" />
-            <p className="text-xs text-gray-400 mt-1">カードページに「このプロに相談する」ボタンが表示されます</p>
+            <p className="text-xs text-gray-400 mt-1">カードページに「このプロに相談する」ボタンが表示されます（ログインメールとは別に設定できます）</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">投票後のお礼特典</label>
@@ -323,34 +307,6 @@ export default function DashboardPage() {
           </button>
         </form>
 
-        {/* メールアドレス変更 */}
-        <div className="border-t mt-8 pt-6">
-          <h2 className="text-sm font-bold text-[#1A1A2E] mb-2">アカウント設定</h2>
-          <label className="block text-sm font-medium text-gray-700 mb-1">メールアドレス</label>
-          <p className="text-xs text-gray-400 mb-2">現在: {user?.email}</p>
-          <div className="flex gap-2">
-            <input
-              type="email"
-              value={newEmail}
-              onChange={e => setNewEmail(e.target.value)}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
-              placeholder="新しいメールアドレス"
-            />
-            <button
-              type="button"
-              onClick={handleEmailChange}
-              disabled={emailUpdating || !newEmail || newEmail === user?.email}
-              className="px-4 py-2 bg-[#1A1A2E] text-white text-sm rounded-lg hover:bg-[#2a2a4e] transition disabled:opacity-50"
-            >
-              {emailUpdating ? '送信中...' : '変更'}
-            </button>
-          </div>
-          {emailMessage && (
-            <p className={`text-sm mt-2 ${emailMessage.startsWith('エラー') ? 'text-red-500' : 'text-green-600'}`}>
-              {emailMessage}
-            </p>
-          )}
-        </div>
       </div>
     )
   }
