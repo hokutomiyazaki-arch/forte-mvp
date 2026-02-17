@@ -25,7 +25,10 @@ export default function CouponsPage() {
 
   useEffect(() => {
     async function load() {
-      const { data: { user: u } } = await supabase.auth.getUser()
+      // getSession()でローカルトークンから確認（getUser()よりも信頼性が高い）
+      const { data: { session } } = await supabase.auth.getSession()
+      const u = session?.user || null
+
       if (!u) {
         window.location.href = '/login?role=client&redirect=/coupons'
         return
@@ -112,6 +115,9 @@ export default function CouponsPage() {
     setRedeeming(true)
     setMessage('')
 
+    const reward = rewards.find(r => r.id === clientRewardId)
+    const isCoupon = reward?.reward_type === 'coupon'
+
     const { error } = await (supabase as any)
       .from('client_rewards')
       .update({ status: 'used', used_at: new Date().toISOString() })
@@ -123,7 +129,7 @@ export default function CouponsPage() {
       setRewards(prev => prev.map(r =>
         r.id === clientRewardId ? { ...r, status: 'used' } : r
       ))
-      setMessage('リワードを使用しました！')
+      setMessage(isCoupon ? 'リワードを使用しました！' : 'リワードを削除しました。')
     }
 
     setRedeeming(false)
@@ -146,12 +152,12 @@ export default function CouponsPage() {
     <div className="max-w-md mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2">リワード</h1>
       <p className="text-sm text-gray-500 mb-6">
-        プルーフを贈ったプロからのリワードです。対面時に「使用する」を押してください。
+        プルーフを贈ったプロからのリワードです。クーポンは対面時に「使用する」を押してください。
       </p>
 
       {message && (
         <div className={`p-3 rounded-lg mb-4 text-sm ${
-          message.startsWith('リワードを使用') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+          message.startsWith('エラー') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'
         }`}>
           {message}
         </div>
@@ -194,45 +200,54 @@ export default function CouponsPage() {
           </div>
 
           {/* アクティブなリワード */}
-          {activeRewards.map(reward => (
-            <div key={reward.id} className="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
-              <a href={`/card/${reward.professional_id}`} className="text-sm text-gray-500 mb-1 hover:text-[#C4A35A] transition inline-block">
-                {reward.pro_name}さんからのリワード
-              </a>
-              <p className="text-xs text-[#C4A35A] mb-1">{getRewardLabel(reward.reward_type)}</p>
-              <p className="text-xl font-bold text-[#1A1A2E] mb-4">「{reward.content}」</p>
+          {activeRewards.map(reward => {
+            const isCoupon = reward.reward_type === 'coupon'
+            return (
+              <div key={reward.id} className="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
+                <a href={`/card/${reward.professional_id}`} className="text-sm text-gray-500 mb-1 hover:text-[#C4A35A] transition inline-block">
+                  {reward.pro_name}さんからのリワード
+                </a>
+                <p className="text-xs text-[#C4A35A] mb-1">{getRewardLabel(reward.reward_type)}</p>
+                <p className="text-xl font-bold text-[#1A1A2E] mb-4">「{reward.content}」</p>
 
-              {confirmingId === reward.id ? (
-                <div className="space-y-2">
-                  <p className="text-sm text-center text-orange-600 font-medium">
-                    本当に使用しますか？この操作は取り消せません。
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleRedeem(reward.id)}
-                      disabled={redeeming}
-                      className="flex-1 py-2 bg-[#C4A35A] text-white font-bold rounded-lg hover:bg-[#b3923f] transition disabled:opacity-50"
-                    >
-                      {redeeming ? '処理中...' : '使用する'}
-                    </button>
-                    <button
-                      onClick={() => setConfirmingId(null)}
-                      className="flex-1 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition"
-                    >
-                      キャンセル
-                    </button>
+                {confirmingId === reward.id ? (
+                  <div className="space-y-2">
+                    <p className="text-sm text-center text-orange-600 font-medium">
+                      {isCoupon ? '本当に使用しますか？この操作は取り消せません。' : 'このリワードを削除しますか？'}
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleRedeem(reward.id)}
+                        disabled={redeeming}
+                        className={`flex-1 py-2 text-white font-bold rounded-lg transition disabled:opacity-50 ${
+                          isCoupon ? 'bg-[#C4A35A] hover:bg-[#b3923f]' : 'bg-red-500 hover:bg-red-600'
+                        }`}
+                      >
+                        {redeeming ? '処理中...' : isCoupon ? '使用する' : '削除する'}
+                      </button>
+                      <button
+                        onClick={() => setConfirmingId(null)}
+                        className="flex-1 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition"
+                      >
+                        キャンセル
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setConfirmingId(reward.id)}
-                  className="w-full py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition text-sm"
-                >
-                  使用する
-                </button>
-              )}
-            </div>
-          ))}
+                ) : (
+                  <button
+                    onClick={() => setConfirmingId(reward.id)}
+                    className={`w-full py-3 font-medium rounded-lg transition text-sm ${
+                      isCoupon
+                        ? 'bg-[#1A1A2E] text-white hover:bg-[#2a2a4e]'
+                        : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                    }`}
+                  >
+                    {isCoupon ? '使用する' : '削除する'}
+                  </button>
+                )}
+              </div>
+            )
+          })}
 
           {/* 使用済みリワード */}
           {usedRewards.length > 0 && (
