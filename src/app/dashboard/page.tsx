@@ -44,6 +44,8 @@ export default function DashboardPage() {
   const [customResultFortes, setCustomResultFortes] = useState<CustomForte[]>([])
   const [customPersonalityFortes, setCustomPersonalityFortes] = useState<CustomForte[]>([])
   const [rewards, setRewards] = useState<{ id?: string; reward_type: string; content: string }[]>([])
+  const [confirmingDeregister, setConfirmingDeregister] = useState(false)
+  const [deregistering, setDeregistering] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -212,6 +214,20 @@ export default function DashboardPage() {
     const created = new Date(pro.created_at)
     const now = new Date()
     return Math.floor((now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24))
+  }
+
+  async function handleDeregister() {
+    if (!pro || !user) return
+    setDeregistering(true)
+    // リワード削除してからプロ削除
+    await (supabase as any).from('rewards').delete().eq('professional_id', pro.id)
+    const { error } = await (supabase as any).from('professionals').delete().eq('id', pro.id)
+    if (error) {
+      console.error('[handleDeregister] error:', error.message)
+      setDeregistering(false)
+      return
+    }
+    window.location.href = '/mycard'
   }
 
   if (loading) return <div className="text-center py-16 text-gray-400">読み込み中...</div>
@@ -486,6 +502,39 @@ export default function DashboardPage() {
           className="px-6 py-3 text-gray-500 hover:text-red-500 transition">
           ログアウト
         </button>
+      </div>
+
+      {/* プロ登録解除 */}
+      <div className="mt-6 text-center">
+        {confirmingDeregister ? (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+            <p className="text-sm text-red-600 font-medium mb-3">
+              本当にプロ登録を解除しますか？プロフィールやプルーフデータが削除されます。この操作は取り消せません。
+            </p>
+            <div className="flex gap-2 justify-center">
+              <button
+                onClick={handleDeregister}
+                disabled={deregistering}
+                className="px-4 py-2 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600 transition disabled:opacity-50"
+              >
+                {deregistering ? '処理中...' : '解除する'}
+              </button>
+              <button
+                onClick={() => setConfirmingDeregister(false)}
+                className="px-4 py-2 bg-gray-100 text-gray-600 text-sm rounded-lg hover:bg-gray-200 transition"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setConfirmingDeregister(true)}
+            className="text-sm text-red-400 hover:text-red-600 transition"
+          >
+            プロ登録を解除する
+          </button>
+        )}
       </div>
     </div>
   )

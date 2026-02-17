@@ -32,6 +32,12 @@ export default function MyPage() {
   const [redeeming, setRedeeming] = useState(false)
   const [message, setMessage] = useState('')
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [showSettings, setShowSettings] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [changingPassword, setChangingPassword] = useState(false)
+  const [isPro, setIsPro] = useState(false)
+  const [userEmail, setUserEmail] = useState('')
 
   useEffect(() => {
     timerRef.current = setTimeout(() => setTimedOut(true), 5000)
@@ -46,6 +52,12 @@ export default function MyPage() {
         }
 
         const email = user.email || ''
+        setUserEmail(email)
+
+        // プロ確認
+        const { data: proCheck } = await (supabase as any)
+          .from('professionals').select('id').eq('user_id', user.id).maybeSingle()
+        setIsPro(!!proCheck)
 
         // client_rewards を取得（active + used）
         const { data: clientRewards } = await (supabase as any)
@@ -56,7 +68,6 @@ export default function MyPage() {
           .order('created_at', { ascending: false })
 
         if (clientRewards && clientRewards.length > 0) {
-          // rewards テーブルから reward_type, content を一括取得
           const rewardIds = Array.from(new Set(clientRewards.map((cr: any) => cr.reward_id)))
           const { data: rewardData } = await (supabase as any)
             .from('rewards')
@@ -70,7 +81,6 @@ export default function MyPage() {
             }
           }
 
-          // professionals テーブルからプロの name を一括取得
           const proIds = Array.from(new Set(clientRewards.map((cr: any) => cr.professional_id)))
           const { data: proData } = await (supabase as any)
             .from('professionals')
@@ -99,7 +109,7 @@ export default function MyPage() {
           setRewards(merged)
         }
 
-        // 投票履歴取得（プロ名を一括取得で最適化）
+        // 投票履歴取得
         const { data: voteData } = await (supabase as any)
           .from('votes')
           .select('id, professional_id, result_category, created_at')
@@ -169,6 +179,37 @@ export default function MyPage() {
     setConfirmingId(null)
   }
 
+  async function handlePasswordChange(e: React.FormEvent) {
+    e.preventDefault()
+    setChangingPassword(true)
+    setMessage('')
+
+    const { error: signInError } = await (supabase as any).auth.signInWithPassword({
+      email: userEmail,
+      password: currentPassword,
+    })
+
+    if (signInError) {
+      setMessage('エラー：現在のパスワードが正しくありません。')
+      setChangingPassword(false)
+      return
+    }
+
+    const { error: updateError } = await (supabase as any).auth.updateUser({
+      password: newPassword,
+    })
+
+    if (updateError) {
+      setMessage('エラー：パスワードの変更に失敗しました。')
+    } else {
+      setMessage('パスワードを変更しました。')
+      setCurrentPassword('')
+      setNewPassword('')
+      setShowSettings(false)
+    }
+    setChangingPassword(false)
+  }
+
   if (loading) {
     if (timedOut) {
       return (
@@ -191,7 +232,52 @@ export default function MyPage() {
 
   return (
     <div className="max-w-lg mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold text-[#1A1A2E] mb-6">マイページ</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-[#1A1A2E]">マイページ</h1>
+        <button
+          onClick={() => setShowSettings(!showSettings)}
+          className="p-2 text-gray-400 hover:text-[#1A1A2E] transition"
+          title="設定"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </button>
+      </div>
+
+      {/* 設定パネル */}
+      {showSettings && (
+        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 shadow-sm">
+          <h2 className="text-sm font-bold text-[#1A1A2E] mb-4">パスワード変更</h2>
+          <form onSubmit={handlePasswordChange} className="space-y-3">
+            <input
+              type="password"
+              value={currentPassword}
+              onChange={e => setCurrentPassword(e.target.value)}
+              required
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
+              placeholder="現在のパスワード"
+            />
+            <input
+              type="password"
+              value={newPassword}
+              onChange={e => setNewPassword(e.target.value)}
+              required
+              minLength={6}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
+              placeholder="新しいパスワード（6文字以上）"
+            />
+            <button
+              type="submit"
+              disabled={changingPassword}
+              className="w-full py-2 bg-[#1A1A2E] text-white text-sm font-medium rounded-lg hover:bg-[#2a2a4e] transition disabled:opacity-50"
+            >
+              {changingPassword ? '変更中...' : 'パスワードを変更'}
+            </button>
+          </form>
+        </div>
+      )}
 
       {message && (
         <div className={`p-3 rounded-lg mb-4 text-sm ${
@@ -235,7 +321,6 @@ export default function MyPage() {
             </div>
           ) : (
             <>
-              {/* アクティブなリワード */}
               {activeRewards.map(reward => {
                 const isCoupon = reward.reward_type === 'coupon'
                 return (
@@ -285,7 +370,6 @@ export default function MyPage() {
                 )
               })}
 
-              {/* 使用済み / 削除済みリワード */}
               {usedRewards.length > 0 && (
                 <div className="mt-4">
                   <h2 className="text-sm font-medium text-gray-400 mb-3">使用済み / 削除済み</h2>
@@ -335,14 +419,24 @@ export default function MyPage() {
         </div>
       )}
 
-      {/* 他のプロを探す */}
-      <div className="mt-8 text-center">
+      {/* フッター */}
+      <div className="mt-8 space-y-3 text-center">
         <a
           href="/explore"
           className="inline-block px-6 py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition"
         >
           他のプロを探す
         </a>
+        {!isPro && (
+          <div>
+            <a
+              href="/dashboard"
+              className="inline-block text-sm text-[#C4A35A] hover:underline"
+            >
+              プロとしても登録する
+            </a>
+          </div>
+        )}
       </div>
     </div>
   )

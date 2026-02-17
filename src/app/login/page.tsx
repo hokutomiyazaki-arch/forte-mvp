@@ -11,6 +11,7 @@ function LoginForm() {
   const emailParam = searchParams.get('email') || ''
   const isCouponFlow = initialRole === 'client' && (redirectTo === '/coupons' || redirectTo === '/mycard')
   const isProSignupFlow = initialRole === 'pro' && !!emailParam
+  const wantsProParam = searchParams.get('wantsPro') === '1'
 
   const [role, setRole] = useState<'pro' | 'client'>(initialRole === 'client' ? 'client' : 'pro')
   const [email, setEmail] = useState(emailParam)
@@ -22,6 +23,7 @@ function LoginForm() {
   const [googleLoading, setGoogleLoading] = useState(false)
   const [ready, setReady] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
+  const [wantsPro, setWantsPro] = useState(false)
   const supabase = createClient() as any
   const isRedirecting = useRef(false)
 
@@ -36,7 +38,17 @@ function LoginForm() {
         if (session?.user && !cancelled) {
           cancelled = true
           if (redirectTo) {
-            window.location.href = redirectTo
+            // クライアントレコード作成
+            if (initialRole === 'client') {
+              try {
+                const nn = searchParams.get('nickname') || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'ユーザー'
+                await (supabase.from('clients') as any).upsert({
+                  user_id: session.user.id,
+                  nickname: nn,
+                }, { onConflict: 'user_id' })
+              } catch (_) {}
+            }
+            window.location.href = wantsProParam ? '/dashboard' : redirectTo
             return
           }
           await redirectUser(session.user)
@@ -75,7 +87,26 @@ function LoginForm() {
     isRedirecting.current = true
 
     const urlRole = searchParams.get('role') || ''
-    console.log('[redirectUser] start, urlRole:', urlRole, 'redirectTo:', redirectTo)
+    const isGoogleUser = user.app_metadata?.provider === 'google'
+    console.log('[redirectUser] start, urlRole:', urlRole, 'redirectTo:', redirectTo, 'isGoogle:', isGoogleUser)
+
+    // 既存レコード確認
+    const [{ data: proData }, { data: clientData }] = await Promise.all([
+      (supabase.from('professionals').select('id').eq('user_id', user.id).maybeSingle()) as any,
+      (supabase.from('clients').select('id').eq('user_id', user.id).maybeSingle()) as any,
+    ])
+    const isNewUser = !proData && !clientData
+
+    // 新規Googleユーザーにウェルカムメール送信
+    if (isNewUser && isGoogleUser) {
+      try {
+        await fetch('/api/welcome-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: user.email, isGoogle: true }),
+        })
+      } catch (_) {}
+    }
 
     // redirectToパラメータ優先
     if (redirectTo) {
@@ -86,32 +117,31 @@ function LoginForm() {
           nickname: nn,
         }, { onConflict: 'user_id' })
       }
-      console.log('[redirectUser] → redirectTo:', redirectTo)
-      window.location.href = redirectTo
+      if (wantsProParam) {
+        console.log('[redirectUser] → /dashboard (wantsPro)')
+        window.location.href = '/dashboard'
+      } else {
+        console.log('[redirectUser] → redirectTo:', redirectTo)
+        window.location.href = redirectTo
+      }
       return
     }
 
-    // 既存プロ確認
-    const { data: proData } = await (supabase
-      .from('professionals').select('id').eq('user_id', user.id).maybeSingle()) as any
-    console.log('[redirectUser] proData:', proData)
+    // 既存プロ
     if (proData) {
       console.log('[redirectUser] → /dashboard (existing pro)')
       window.location.href = '/dashboard'
       return
     }
 
-    // 既存クライアント確認
-    const { data: clientData } = await (supabase
-      .from('clients').select('id').eq('user_id', user.id).maybeSingle()) as any
-    console.log('[redirectUser] clientData:', clientData)
+    // 既存クライアント
     if (clientData) {
       console.log('[redirectUser] → /mycard (existing client)')
       window.location.href = '/mycard'
       return
     }
 
-    // 新規ユーザー: urlRoleに応じてリダイレクト
+    // 新規ユーザー
     if (urlRole === 'pro') {
       console.log('[redirectUser] → /dashboard (new pro)')
       window.location.href = '/dashboard'
@@ -154,7 +184,8 @@ function LoginForm() {
       if (mode === 'signup') {
         const signUpOptions: any = { data: { role } }
         if (isCouponFlow) {
-          signUpOptions.emailRedirectTo = window.location.origin + '/login?role=client&redirect=/coupons&email=' + encodeURIComponent(email)
+          signUpOptions.emailRedirectTo = window.location.origin + '/login?role=client&redirect=/mycard&email=' + encodeURIComponent(email)
+            + (wantsPro ? '&wantsPro=1' : '')
         }
         const { error: err } = await supabase.auth.signUp({
           email,
@@ -162,6 +193,16 @@ function LoginForm() {
           options: signUpOptions,
         })
         if (err) throw err
+
+        // ウェルカムメール送信
+        try {
+          await fetch('/api/welcome-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, isGoogle: false }),
+          })
+        } catch (_) {}
+
         setEmailSent(true)
       } else {
         const { data, error: err } = await supabase.auth.signInWithPassword({ email, password })
@@ -244,6 +285,17 @@ function LoginForm() {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
               placeholder="パスワード（6文字以上）" />
           </div>
+          {mode === 'signup' && (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={wantsPro}
+                onChange={e => setWantsPro(e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300 text-[#C4A35A] focus:ring-[#C4A35A]"
+              />
+              <span className="text-sm text-gray-600">プロとしても登録する</span>
+            </label>
+          )}
           {error && <p className="text-red-500 text-sm">{error}</p>}
           <button type="submit" disabled={submitting}
             className="w-full py-3 bg-[#C4A35A] text-white font-medium rounded-lg hover:bg-[#b3923f] transition disabled:opacity-50">
