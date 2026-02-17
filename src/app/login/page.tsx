@@ -319,17 +319,9 @@ function LoginForm() {
 
       {/* Email/Password */}
       <form onSubmit={handleEmailAuth} className="space-y-4">
-        {isProSignupFlow ? (
-          <div>
-            <input type="email" value={email} readOnly
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-700" />
-            <p className="text-xs text-green-600 mt-1">✓ メールアドレスが入力されています</p>
-          </div>
-        ) : (
-          <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
-            placeholder="メールアドレス" />
-        )}
+        <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
+          placeholder="メールアドレス" />
         <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
           placeholder="パスワード（6文字以上）" />

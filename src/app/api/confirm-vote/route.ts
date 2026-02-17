@@ -28,12 +28,6 @@ export async function GET(req: NextRequest) {
 
     console.log('[confirm-vote] Step 1 OK - confirmation id:', confirmation.id, 'vote_id:', confirmation.vote_id)
 
-    // 期限切れチェック
-    if (new Date(confirmation.expires_at) < new Date()) {
-      console.log('[confirm-vote] Token expired:', confirmation.expires_at)
-      return NextResponse.redirect(new URL('/vote-error?reason=expired', req.url))
-    }
-
     // Step 2: 確認処理 - confirmationを更新
     const { error: updateConfirmError } = await supabaseAdmin
       .from('vote_confirmations')
