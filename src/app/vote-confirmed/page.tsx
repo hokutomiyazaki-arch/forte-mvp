@@ -54,11 +54,12 @@ function ConfirmedContent() {
             </p>
           )}
           <a
-            href={`/login?role=client&redirect=/coupons&email=${encodeURIComponent(voterEmail)}`}
-            className="inline-block mt-4 px-6 py-2 bg-[#C4A35A] text-white text-sm font-medium rounded-lg hover:bg-[#b3923f] transition"
+            href={`/login?role=client&redirect=/mycard&email=${encodeURIComponent(voterEmail)}`}
+            className="inline-block mt-4 px-6 py-3 bg-[#C4A35A] text-white text-sm font-bold rounded-lg hover:bg-[#b3923f] transition"
           >
-            {isCoupon ? '登録してリワードを受け取る' : '登録してリワードの中身を見る'}
+            10秒で完了！リワードをコレクションする
           </a>
+          <p className="text-xs text-gray-400 mt-2">メールアドレスとパスワードを設定するだけ</p>
         </div>
       ) : (
         <div className="bg-gray-50 rounded-xl p-4 mb-6 text-left">

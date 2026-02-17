@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { getRewardLabel } from '@/lib/types'
 
@@ -21,43 +21,42 @@ interface VoteHistory {
   pro_name?: string
 }
 
-export default function MyCardPage() {
+export default function MyPage() {
   const supabase = createClient()
-  const [user, setUser] = useState<any>(null)
-  const [clientEmail, setClientEmail] = useState('')
   const [rewards, setRewards] = useState<RewardWithPro[]>([])
   const [voteHistory, setVoteHistory] = useState<VoteHistory[]>([])
   const [loading, setLoading] = useState(true)
+  const [timedOut, setTimedOut] = useState(false)
   const [tab, setTab] = useState<'rewards' | 'history'>('rewards')
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [redeeming, setRedeeming] = useState(false)
   const [message, setMessage] = useState('')
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
+    timerRef.current = setTimeout(() => setTimedOut(true), 5000)
+
     async function load() {
-      const { data: { user: u } } = await supabase.auth.getUser()
-      setUser(u)
+      try {
+        const { data: { user }, error: authError } = await supabase.auth.getUser()
 
-      // メールアドレス取得（ログイン済みならauth、未ログインならlocalStorage）
-      let email = ''
-      if (u?.email) {
-        email = u.email
-      } else {
-        email = localStorage.getItem('proof_voter_email') || ''
-      }
-      setClientEmail(email)
+        if (authError || !user) {
+          window.location.href = '/login?role=client&redirect=/mycard'
+          return
+        }
 
-      if (email) {
-        // リワード取得
+        const email = user.email || ''
+
+        // client_rewards を取得（active + used）
         const { data: clientRewards } = await (supabase as any)
           .from('client_rewards')
           .select('id, reward_id, professional_id, status')
           .eq('client_email', email)
-          .eq('status', 'active')
+          .in('status', ['active', 'used'])
           .order('created_at', { ascending: false })
 
         if (clientRewards && clientRewards.length > 0) {
-          // reward詳細を一括取得
+          // rewards テーブルから reward_type, content を一括取得
           const rewardIds = Array.from(new Set(clientRewards.map((cr: any) => cr.reward_id)))
           const { data: rewardData } = await (supabase as any)
             .from('rewards')
@@ -71,7 +70,7 @@ export default function MyCardPage() {
             }
           }
 
-          // プロ名を一括取得
+          // professionals テーブルからプロの name を一括取得
           const proIds = Array.from(new Set(clientRewards.map((cr: any) => cr.professional_id)))
           const { data: proData } = await (supabase as any)
             .from('professionals')
@@ -100,36 +99,57 @@ export default function MyCardPage() {
           setRewards(merged)
         }
 
-        // 投票履歴取得
+        // 投票履歴取得（プロ名を一括取得で最適化）
         const { data: voteData } = await (supabase as any)
           .from('votes')
           .select('id, professional_id, result_category, created_at')
           .eq('voter_email', email)
           .order('created_at', { ascending: false })
 
-        if (voteData) {
-          const enrichedVotes = await Promise.all(
-            voteData.map(async (v: any) => {
-              const { data: proData } = await supabase
-                .from('professionals')
-                .select('name')
-                .eq('id', v.professional_id)
-                .maybeSingle()
-              return { ...v, pro_name: (proData as any)?.name || '不明' }
-            })
-          )
-          setVoteHistory(enrichedVotes)
-        }
-      }
+        if (voteData && voteData.length > 0) {
+          const voteProIds = Array.from(new Set(voteData.map((v: any) => v.professional_id)))
+          const { data: voteProData } = await (supabase as any)
+            .from('professionals')
+            .select('id, name')
+            .in('id', voteProIds)
 
+          const voteProMap = new Map<string, string>()
+          if (voteProData) {
+            for (const p of voteProData) {
+              voteProMap.set(p.id, p.name)
+            }
+          }
+
+          setVoteHistory(voteData.map((v: any) => ({
+            ...v,
+            pro_name: voteProMap.get(v.professional_id) || '不明',
+          })))
+        }
+      } catch (e) {
+        console.error('[mypage] load error:', e)
+      }
       setLoading(false)
     }
+
     load()
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
   }, [])
+
+  useEffect(() => {
+    if (!loading && timerRef.current) {
+      clearTimeout(timerRef.current)
+    }
+  }, [loading])
 
   async function handleRedeem(clientRewardId: string) {
     setRedeeming(true)
     setMessage('')
+
+    const reward = rewards.find(r => r.id === clientRewardId)
+    const isCoupon = reward?.reward_type === 'coupon'
 
     const { error } = await (supabase as any)
       .from('client_rewards')
@@ -139,8 +159,10 @@ export default function MyCardPage() {
     if (error) {
       setMessage('エラーが発生しました。もう一度お試しください。')
     } else {
-      setRewards(prev => prev.filter(r => r.id !== clientRewardId))
-      setMessage('リワードを使用しました！')
+      setRewards(prev => prev.map(r =>
+        r.id === clientRewardId ? { ...r, status: 'used' } : r
+      ))
+      setMessage(isCoupon ? 'リワードを使用しました！' : 'リワードを削除しました。')
     }
 
     setRedeeming(false)
@@ -148,26 +170,32 @@ export default function MyCardPage() {
   }
 
   if (loading) {
+    if (timedOut) {
+      return (
+        <div className="text-center py-16 px-4">
+          <p className="text-gray-500 mb-4">データの取得に問題がありました。ページを再読み込みしてください。</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-2 bg-[#1A1A2E] text-white rounded-lg hover:bg-[#2a2a4e] transition text-sm"
+          >
+            再読み込み
+          </button>
+        </div>
+      )
+    }
     return <div className="text-center py-16 text-gray-400">読み込み中...</div>
   }
 
-  if (!clientEmail) {
-    return (
-      <div className="max-w-md mx-auto text-center py-16 px-4">
-        <h1 className="text-xl font-bold text-[#1A1A2E] mb-4">リワード</h1>
-        <p className="text-gray-500 mb-6">プロにプルーフを贈ると、リワードや投票履歴がここに表示されます。</p>
-        <a href="/explore" className="text-[#C4A35A] underline">プロを探す</a>
-      </div>
-    )
-  }
+  const activeRewards = rewards.filter(r => r.status === 'active')
+  const usedRewards = rewards.filter(r => r.status === 'used')
 
   return (
     <div className="max-w-lg mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold text-[#1A1A2E] mb-6">リワード</h1>
+      <h1 className="text-2xl font-bold text-[#1A1A2E] mb-6">マイページ</h1>
 
       {message && (
         <div className={`p-3 rounded-lg mb-4 text-sm ${
-          message.startsWith('リワードを使用') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+          message.startsWith('エラー') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'
         }`}>
           {message}
         </div>
@@ -183,7 +211,7 @@ export default function MyCardPage() {
               : 'border-transparent text-gray-400 hover:text-gray-600'
           }`}
         >
-          リワード ({rewards.length})
+          リワード ({activeRewards.length})
         </button>
         <button
           onClick={() => setTab('history')}
@@ -200,51 +228,80 @@ export default function MyCardPage() {
       {/* リワードタブ */}
       {tab === 'rewards' && (
         <div className="space-y-4">
-          {rewards.length === 0 ? (
+          {activeRewards.length === 0 && usedRewards.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-gray-400 text-sm">リワードはまだありません</p>
               <p className="text-xs text-gray-300 mt-2">プロにプルーフを贈ると、リワードがもらえることがあります。</p>
             </div>
           ) : (
-            rewards.map(r => (
-              <div key={r.id} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-                <a href={`/card/${r.professional_id}`} className="text-sm text-gray-500 mb-1 hover:text-[#C4A35A] transition inline-block">
-                  {r.pro_name}さんからのリワード
-                </a>
-                <p className="text-xs text-[#C4A35A] mb-1">{getRewardLabel(r.reward_type)}</p>
-                <p className="text-xl font-bold text-[#1A1A2E] mb-4">「{r.content}」</p>
+            <>
+              {/* アクティブなリワード */}
+              {activeRewards.map(reward => {
+                const isCoupon = reward.reward_type === 'coupon'
+                return (
+                  <div key={reward.id} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+                    <a href={`/card/${reward.professional_id}`} className="text-sm text-gray-500 mb-1 hover:text-[#C4A35A] transition inline-block">
+                      {reward.pro_name}さんからのリワード
+                    </a>
+                    <p className="text-xs text-[#C4A35A] mb-1">{getRewardLabel(reward.reward_type)}</p>
+                    <p className="text-xl font-bold text-[#1A1A2E] mb-4">{reward.content}</p>
 
-                {confirmingId === r.id ? (
-                  <div className="space-y-2">
-                    <p className="text-sm text-center text-orange-600 font-medium">
-                      本当に使用しますか？この操作は取り消せません。
-                    </p>
-                    <div className="flex gap-2">
+                    {confirmingId === reward.id ? (
+                      <div className="space-y-2">
+                        <p className="text-sm text-center text-orange-600 font-medium">
+                          {isCoupon ? '本当に使用しますか？この操作は取り消せません。' : 'このリワードを削除しますか？'}
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleRedeem(reward.id)}
+                            disabled={redeeming}
+                            className={`flex-1 py-2 text-white font-bold rounded-lg transition disabled:opacity-50 ${
+                              isCoupon ? 'bg-[#C4A35A] hover:bg-[#b3923f]' : 'bg-red-500 hover:bg-red-600'
+                            }`}
+                          >
+                            {redeeming ? '処理中...' : isCoupon ? '使用する' : '削除する'}
+                          </button>
+                          <button
+                            onClick={() => setConfirmingId(null)}
+                            className="flex-1 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition"
+                          >
+                            キャンセル
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
                       <button
-                        onClick={() => handleRedeem(r.id)}
-                        disabled={redeeming}
-                        className="flex-1 py-2 bg-[#C4A35A] text-white font-bold rounded-lg hover:bg-[#b3923f] transition disabled:opacity-50"
+                        onClick={() => setConfirmingId(reward.id)}
+                        className={`w-full py-3 font-medium rounded-lg transition text-sm ${
+                          isCoupon
+                            ? 'bg-[#1A1A2E] text-white hover:bg-[#2a2a4e]'
+                            : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                        }`}
                       >
-                        {redeeming ? '処理中...' : '使用する'}
+                        {isCoupon ? '使用する' : '削除する'}
                       </button>
-                      <button
-                        onClick={() => setConfirmingId(null)}
-                        className="flex-1 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition"
-                      >
-                        キャンセル
-                      </button>
-                    </div>
+                    )}
                   </div>
-                ) : (
-                  <button
-                    onClick={() => setConfirmingId(r.id)}
-                    className="w-full py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition text-sm"
-                  >
-                    使用する
-                  </button>
-                )}
-              </div>
-            ))
+                )
+              })}
+
+              {/* 使用済み / 削除済みリワード */}
+              {usedRewards.length > 0 && (
+                <div className="mt-4">
+                  <h2 className="text-sm font-medium text-gray-400 mb-3">使用済み / 削除済み</h2>
+                  {usedRewards.map(reward => (
+                    <div key={reward.id} className="bg-gray-50 text-gray-400 rounded-xl p-4 mb-2">
+                      <p className="text-xs mb-1">{reward.pro_name}さんからのリワード</p>
+                      <p className="text-xs text-gray-300 mb-1">{getRewardLabel(reward.reward_type)}</p>
+                      <p className="text-sm line-through">{reward.content}</p>
+                      <p className="text-xs mt-1">
+                        {reward.reward_type === 'coupon' ? '使用済み' : '削除済み'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

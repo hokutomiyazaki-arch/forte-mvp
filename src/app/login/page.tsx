@@ -9,7 +9,7 @@ function LoginForm() {
   const initialRole = searchParams.get('role') || 'pro'
   const redirectTo = searchParams.get('redirect') || ''
   const emailParam = searchParams.get('email') || ''
-  const isCouponFlow = initialRole === 'client' && redirectTo === '/coupons'
+  const isCouponFlow = initialRole === 'client' && (redirectTo === '/coupons' || redirectTo === '/mycard')
   const isProSignupFlow = initialRole === 'pro' && !!emailParam
 
   const [role, setRole] = useState<'pro' | 'client'>(initialRole === 'client' ? 'client' : 'pro')

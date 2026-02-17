@@ -171,7 +171,7 @@ export async function GET(req: NextRequest) {
                       ${contentHtml}
                     </div>
                     <div style="text-align:center;margin:24px 0;">
-                      <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://forte-mvp.vercel.app'}/coupons"
+                      <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://forte-mvp.vercel.app'}/mycard"
                          style="display:inline-block;background:#C4A35A;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:14px;text-align:center;">
                         リワードを確認する
                       </a>
