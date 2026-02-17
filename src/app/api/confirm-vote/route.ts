@@ -147,7 +147,6 @@ export async function GET(req: NextRequest) {
         const contentHtml = isCouponReward && rewardContent
           ? `<p style="color:#1A1A2E;font-size:18px;font-weight:bold;margin:0;">${rewardContent}</p>`
           : `<p style="color:#666;font-size:14px;margin:0;">ログインしてリワードの中身を確認してください。</p>`
-        const buttonText = isCouponReward ? '登録してリワードを受け取る' : 'ログインしてリワードの中身を確認する'
         try {
           const emailRes = await fetch('https://api.resend.com/emails', {
             method: 'POST',
@@ -172,9 +171,9 @@ export async function GET(req: NextRequest) {
                       ${contentHtml}
                     </div>
                     <div style="text-align:center;margin:24px 0;">
-                      <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://forte-mvp.vercel.app'}/login?role=client&redirect=/coupons&email=${encodeURIComponent(vote.voter_email)}"
-                         style="background:#C4A35A;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:14px;">
-                        ${buttonText}
+                      <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://forte-mvp.vercel.app'}/coupons"
+                         style="display:inline-block;background:#C4A35A;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:14px;text-align:center;">
+                        リワードを確認する
                       </a>
                     </div>
                   </div>
