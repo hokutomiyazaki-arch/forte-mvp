@@ -98,7 +98,7 @@ export async function GET(req: NextRequest) {
                     </div>
                     <p style="color:#666;font-size:13px;">クーポンを使用するには、以下からログインしてください。</p>
                     <div style="text-align:center;margin:24px 0;">
-                      <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://forte-mvp.vercel.app'}/coupons"
+                      <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://forte-mvp.vercel.app'}/coupons?email=${encodeURIComponent(vote.voter_email)}"
                          style="background:#C4A35A;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:14px;">
                         ログインしてクーポンを受け取る
                       </a>
@@ -116,10 +116,15 @@ export async function GET(req: NextRequest) {
           console.error('Coupon email send failed:', err)
         }
       }
+
+      // クーポン情報をリダイレクトに含める
+      return NextResponse.redirect(
+        new URL(`/vote-confirmed?pro=${professionalId}&coupon=${encodeURIComponent(pro.coupon_text)}&email=${encodeURIComponent(vote.voter_email)}`, req.url)
+      )
     }
   }
 
-  // 確認完了ページにリダイレクト
+  // 確認完了ページにリダイレクト（クーポンなし）
   return NextResponse.redirect(
     new URL(`/vote-confirmed?pro=${professionalId}`, req.url)
   )
