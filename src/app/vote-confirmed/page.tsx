@@ -64,9 +64,6 @@ function ConfirmedContent() {
         </a>
       )}
 
-      <a href="/explore" className="block mt-4 text-sm text-[#C4A35A] underline">
-        他のプロを探す →
-      </a>
     </div>
   )
 }

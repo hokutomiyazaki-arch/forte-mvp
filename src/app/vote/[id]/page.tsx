@@ -21,7 +21,12 @@ function VoteForm() {
   const [error, setError] = useState('')
   const [alreadyVoted, setAlreadyVoted] = useState(false)
   const [loading, setLoading] = useState(true)
-
+  const [submittedVoteId, setSubmittedVoteId] = useState('')
+  const [submittedToken, setSubmittedToken] = useState('')
+  const [showEmailFix, setShowEmailFix] = useState(false)
+  const [fixEmail, setFixEmail] = useState('')
+  const [resending, setResending] = useState(false)
+  const [resendMessage, setResendMessage] = useState('')
 
   const MAX_PERSONALITY = 3
 
@@ -143,6 +148,8 @@ function VoteForm() {
 
     // 確認メール送信
     if (confirmation) {
+      setSubmittedVoteId(voteData.id)
+      setSubmittedToken(confirmation.token)
       try {
         await fetch('/api/send-confirmation', {
           method: 'POST',
@@ -182,23 +189,107 @@ function VoteForm() {
     )
   }
 
+  // メールアドレス修正+再送信
+  async function handleResend() {
+    const newEmail = fixEmail.trim().toLowerCase()
+    if (!newEmail || !newEmail.includes('@')) return
+    setResending(true)
+    setResendMessage('')
+
+    // votesテーブルのvoter_emailを更新
+    const { error: updateError } = await (supabase as any)
+      .from('votes')
+      .update({ voter_email: newEmail })
+      .eq('id', submittedVoteId)
+    if (updateError) {
+      setResendMessage('メールアドレスの更新に失敗しました。')
+      setResending(false)
+      return
+    }
+
+    // ローカルストレージも更新
+    localStorage.setItem('proof_voter_email', newEmail)
+    setVoterEmail(newEmail)
+
+    // 確認メールを再送信
+    try {
+      await fetch('/api/send-confirmation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: newEmail,
+          proName: pro!.name,
+          token: submittedToken,
+        }),
+      })
+      setResendMessage('再送信しました。新しいメールアドレスをご確認ください。')
+      setShowEmailFix(false)
+    } catch {
+      setResendMessage('再送信に失敗しました。もう一度お試しください。')
+    }
+    setResending(false)
+  }
+
   // 投票完了画面（メール確認待ち）
   if (submitted) {
     return (
       <div className="max-w-md mx-auto text-center py-12 px-4">
         <div className="text-5xl mb-4">📩</div>
         <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2">確認メールを送信しました</h1>
-        <p className="text-gray-500 mb-6">
-          入力いただいたメールアドレスに確認メールを送信しました。<br />
+        <p className="text-gray-500 mb-4">
+          <span className="font-medium text-[#1A1A2E]">{voterEmail}</span> に確認メールを送信しました。<br />
           メール内のリンクをクリックして、プルーフを確定してください。
         </p>
 
-        <div className="bg-[#f8f6f0] border border-[#C4A35A]/30 rounded-xl p-4 mb-6 text-left">
-          <p className="text-sm text-[#1A1A2E] font-medium">⏰ リンクの有効期限は24時間です</p>
-          <p className="text-xs text-gray-500 mt-1">
+        <div className="bg-[#f8f6f0] border border-[#C4A35A]/30 rounded-xl p-4 mb-4 text-left">
+          <p className="text-xs text-gray-500">
             メールが届かない場合は、迷惑メールフォルダをご確認ください。
           </p>
         </div>
+
+        {resendMessage && (
+          <div className={`p-3 rounded-lg mb-4 text-sm ${
+            resendMessage.startsWith('再送信しました') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+          }`}>
+            {resendMessage}
+          </div>
+        )}
+
+        {/* メールが届かない場合 */}
+        {!showEmailFix ? (
+          <button
+            onClick={() => { setShowEmailFix(true); setFixEmail(voterEmail) }}
+            className="text-sm text-gray-400 underline mb-6 inline-block"
+          >
+            メールが届かない場合（アドレスを修正して再送信）
+          </button>
+        ) : (
+          <div className="bg-gray-50 rounded-xl p-4 mb-6 text-left">
+            <p className="text-sm font-medium text-[#1A1A2E] mb-2">メールアドレスを修正して再送信</p>
+            <input
+              type="email"
+              value={fixEmail}
+              onChange={e => setFixEmail(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none mb-2"
+              placeholder="正しいメールアドレス"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={handleResend}
+                disabled={resending || !fixEmail.trim()}
+                className="flex-1 py-2 bg-[#C4A35A] text-white text-sm font-medium rounded-lg hover:bg-[#b3923f] transition disabled:opacity-50"
+              >
+                {resending ? '送信中...' : '再送信する'}
+              </button>
+              <button
+                onClick={() => setShowEmailFix(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-600 text-sm rounded-lg hover:bg-gray-300 transition"
+              >
+                閉じる
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* カードを見る */}
         <a
@@ -206,25 +297,6 @@ function VoteForm() {
           className="block w-full py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition mb-3"
         >
           {pro.name}さんのカードを見る
-        </a>
-
-        {/* プロ向けCTA */}
-        <div className="mt-8 p-4 bg-gray-50 rounded-xl">
-          <p className="text-sm text-gray-600 mb-2">あなたも強みを証明しませんか？</p>
-          <p className="text-xs text-gray-400 mb-3">
-            REAL PROOFに登録して、あなたのクライアントからプルーフを集めましょう。
-          </p>
-          <a
-            href="/login?role=pro"
-            className="inline-block px-6 py-2 bg-[#C4A35A] text-white text-sm font-medium rounded-lg hover:bg-[#b3923f] transition"
-          >
-            プロとして無料登録
-          </a>
-        </div>
-
-        {/* Explore導線 */}
-        <a href="/explore" className="block mt-4 text-sm text-[#C4A35A] underline">
-          他のプロを探す →
         </a>
       </div>
     )
