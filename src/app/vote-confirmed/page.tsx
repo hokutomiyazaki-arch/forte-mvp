@@ -2,12 +2,14 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import { getRewardLabel } from '@/lib/types'
 import { Suspense } from 'react'
 
 function ConfirmedContent() {
   const searchParams = useSearchParams()
   const proId = searchParams.get('pro')
-  const couponText = searchParams.get('coupon')
+  const rewardType = searchParams.get('reward_type') || ''
+  const rewardContent = searchParams.get('reward_content') || ''
   const voterEmail = searchParams.get('email') || ''
   const supabase = createClient()
   const [proName, setProName] = useState('')
@@ -34,19 +36,19 @@ function ConfirmedContent() {
         {proName ? `${proName}さんにあなたのプルーフが届きました。` : 'プルーフが正常に確認されました。'}
       </p>
 
-      {/* クーポン表示 */}
-      {couponText ? (
+      {/* リワード表示 */}
+      {rewardType && rewardContent ? (
         <div className="bg-[#f8f6f0] border-2 border-dashed border-[#C4A35A] rounded-xl p-6 mb-6">
-          <p className="text-sm text-[#666] mb-1">🎁 クーポンが届いています</p>
-          <p className="text-xl font-bold text-[#1A1A2E] mb-3">{couponText}</p>
+          <p className="text-sm text-[#666] mb-1">{getRewardLabel(rewardType)}</p>
+          <p className="text-xl font-bold text-[#1A1A2E] mb-3">{rewardContent}</p>
           <p className="text-xs text-gray-500">
-            クーポンを使用するには、アカウント登録が必要です。
+            リワードを使用するには、アカウント登録が必要です。
           </p>
           <a
             href={`/login?role=client&redirect=/coupons&email=${encodeURIComponent(voterEmail)}`}
             className="inline-block mt-4 px-6 py-2 bg-[#C4A35A] text-white text-sm font-medium rounded-lg hover:bg-[#b3923f] transition"
           >
-            登録してクーポンを使う
+            登録してリワードを受け取る
           </a>
         </div>
       ) : (

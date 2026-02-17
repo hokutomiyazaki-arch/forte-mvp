@@ -94,6 +94,24 @@ export const PERSONALITY_FORTES: { key: string; label: string; desc: string }[] 
 ]
 
 // ============================================
+// リワードタイプ
+// ============================================
+export const REWARD_TYPES = [
+  { id: 'coupon', label: 'クーポン（割引・特典）' },
+  { id: 'restaurant', label: 'おすすめのレストラン' },
+  { id: 'secret', label: 'ここだけの秘密' },
+  { id: 'lifehack', label: '知る人ぞ知る裏技' },
+  { id: 'confession', label: '実は私…の内緒話' },
+  { id: 'media', label: 'おすすめの本・映画' },
+  { id: 'spot', label: '穴場スポット' },
+  { id: 'health', label: 'おすすめ健康グッズ' },
+] as const
+
+export function getRewardLabel(rewardType: string): string {
+  return REWARD_TYPES.find(r => r.id === rewardType)?.label || rewardType
+}
+
+// ============================================
 // ヘルパー関数
 // ============================================
 

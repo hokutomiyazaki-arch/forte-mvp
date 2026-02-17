@@ -199,9 +199,9 @@ function LoginForm() {
       <div className="max-w-md mx-auto">
         <div className="text-center mb-6">
           <div className="text-4xl mb-3">🎁</div>
-          <h1 className="text-xl font-bold text-[#1A1A2E] mb-2">クーポンを受け取る</h1>
+          <h1 className="text-xl font-bold text-[#1A1A2E] mb-2">リワードを受け取る</h1>
           <p className="text-sm text-gray-500">
-            クーポンを利用するにはアカウントが必要です。<br />
+            リワードを利用するにはアカウントが必要です。<br />
             パスワードを設定して登録してください。
           </p>
         </div>
@@ -245,7 +245,7 @@ function LoginForm() {
           {error && <p className="text-red-500 text-sm">{error}</p>}
           <button type="submit" disabled={submitting}
             className="w-full py-3 bg-[#C4A35A] text-white font-medium rounded-lg hover:bg-[#b3923f] transition disabled:opacity-50">
-            {submitting ? '処理中...' : mode === 'signup' ? '登録してクーポンを受け取る' : 'ログイン'}
+            {submitting ? '処理中...' : mode === 'signup' ? '登録してリワードを受け取る' : 'ログイン'}
           </button>
         </form>
       </div>

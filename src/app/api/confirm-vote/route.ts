@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getRewardLabel } from '@/lib/types'
 
 export async function GET(req: NextRequest) {
   const supabaseAdmin = createClient(
@@ -81,7 +82,7 @@ export async function GET(req: NextRequest) {
     // Step 5: プロ情報取得
     const { data: pro, error: proError } = await supabaseAdmin
       .from('professionals')
-      .select('id, user_id, name, coupon_text')
+      .select('id, user_id, name')
       .eq('id', professionalId)
       .single()
 
@@ -90,53 +91,53 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL(`/vote-confirmed?pro=${professionalId}`, req.url))
     }
 
-    console.log('[confirm-vote] Step 5 OK - pro:', {
-      id: pro.id,
-      name: pro.name,
-      user_id: pro.user_id,
-      coupon_text: pro.coupon_text,
-    })
+    console.log('[confirm-vote] Step 5 OK - pro:', { id: pro.id, name: pro.name })
 
-    // Step 6: クーポン発行判定
-    if (!pro.coupon_text) {
-      console.log('[confirm-vote] Step 6 SKIP - pro has no coupon_text')
-      return NextResponse.redirect(new URL(`/vote-confirmed?pro=${professionalId}`, req.url))
-    }
+    // Step 5b: client_reward と reward 情報を取得
+    const { data: clientReward } = await supabaseAdmin
+      .from('client_rewards')
+      .select('id, reward_id')
+      .eq('vote_id', vote.id)
+      .maybeSingle()
 
-    if (!vote.voter_email) {
-      console.error('[confirm-vote] Step 6 SKIP - vote has no voter_email')
-      return NextResponse.redirect(new URL(`/vote-confirmed?pro=${professionalId}`, req.url))
-    }
+    let rewardType = ''
+    let rewardContent = ''
 
-    // Step 6: クーポン作成
-    console.log('[confirm-vote] Step 6 - Creating coupon:', {
-      pro_user_id: pro.id,
-      client_email: vote.voter_email,
-      coupon_text: pro.coupon_text,
-    })
+    if (clientReward) {
+      const { data: rewardData } = await supabaseAdmin
+        .from('rewards')
+        .select('reward_type, content')
+        .eq('id', clientReward.reward_id)
+        .maybeSingle()
 
-    const couponCode = Math.random().toString(36).substring(2, 10).toUpperCase()
-    const { data: couponData, error: couponError } = await supabaseAdmin
-      .from('coupons')
-      .insert({
-        pro_user_id: pro.id,
-        client_email: vote.voter_email,
-        discount_type: 'percentage',
-        discount_value: 10,
-        code: couponCode,
-        status: 'active',
-      })
-      .select()
+      if (rewardData) {
+        rewardType = rewardData.reward_type
+        rewardContent = rewardData.content
+      }
 
-    if (couponError) {
-      console.error('[confirm-vote] Step 6 FAIL - coupon insert:', couponError.message, couponError.details, couponError.hint)
+      console.log('[confirm-vote] Step 5b OK - reward:', { rewardType, rewardContent })
     } else {
-      console.log('[confirm-vote] Step 6 OK - coupon created:', couponData)
+      console.log('[confirm-vote] Step 5b - no client_reward for this vote')
     }
 
-    // Step 7: クーポンメール送信
+    // Step 6: リワードをアクティブに
+    if (clientReward) {
+      const { error: rewardUpdateError } = await supabaseAdmin
+        .from('client_rewards')
+        .update({ status: 'active' })
+        .eq('id', clientReward.id)
+
+      if (rewardUpdateError) {
+        console.error('[confirm-vote] Step 6 FAIL - reward update:', rewardUpdateError.message)
+      } else {
+        console.log('[confirm-vote] Step 6 OK - client_reward activated')
+      }
+    }
+
+    // Step 7: リワードメール送信
     const resendKey = process.env.RESEND_API_KEY
-    if (resendKey) {
+    if (resendKey && rewardContent && vote.voter_email) {
+      const rewardLabel = getRewardLabel(rewardType)
       try {
         const emailRes = await fetch('https://api.resend.com/emails', {
           method: 'POST',
@@ -147,7 +148,7 @@ export async function GET(req: NextRequest) {
           body: JSON.stringify({
             from: 'REAL PROOF <info@proof-app.jp>',
             to: vote.voter_email,
-            subject: `${pro.name}さんからクーポンが届いています`,
+            subject: `${pro.name}さんからリワードが届いています`,
             html: `
               <div style="max-width:480px;margin:0 auto;font-family:sans-serif;">
                 <div style="background:#1A1A2E;padding:24px;border-radius:12px 12px 0 0;">
@@ -155,19 +156,19 @@ export async function GET(req: NextRequest) {
                 </div>
                 <div style="padding:24px;background:#fff;border:1px solid #eee;">
                   <p style="color:#333;">プルーフの確認ありがとうございます！</p>
-                  <p style="color:#333;">${pro.name}さんからクーポンが届いています。</p>
+                  <p style="color:#333;">${pro.name}さんからリワードが届いています。</p>
                   <div style="background:#f8f6f0;border:2px dashed #C4A35A;border-radius:8px;padding:16px;text-align:center;margin:20px 0;">
-                    <p style="color:#666;font-size:12px;margin:0 0 4px;">クーポン内容</p>
-                    <p style="color:#1A1A2E;font-size:18px;font-weight:bold;margin:0;">${pro.coupon_text}</p>
+                    <p style="color:#666;font-size:12px;margin:0 0 4px;">${rewardLabel}</p>
+                    <p style="color:#1A1A2E;font-size:18px;font-weight:bold;margin:0;">${rewardContent}</p>
                   </div>
-                  <p style="color:#666;font-size:13px;">クーポンを使用するには、以下からログインしてください。</p>
+                  <p style="color:#666;font-size:13px;">リワードを管理するには、以下からログインしてください。</p>
                   <div style="text-align:center;margin:24px 0;">
                     <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://forte-mvp.vercel.app'}/login?role=client&redirect=/coupons&email=${encodeURIComponent(vote.voter_email)}"
                        style="background:#C4A35A;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:14px;">
-                      登録してクーポンを受け取る
+                      登録してリワードを受け取る
                     </a>
                   </div>
-                  <p style="color:#999;font-size:11px;">※ クーポンは対面時にプロの前で「使用する」ボタンを押してご利用ください。</p>
+                  <p style="color:#999;font-size:11px;">※ リワードは対面時にプロの前で「使用する」ボタンを押してご利用ください。</p>
                 </div>
                 <div style="padding:16px;text-align:center;background:#f9f9f9;border-radius:0 0 12px 12px;">
                   <p style="color:#999;font-size:11px;margin:0;">REAL PROOF — 強みで証明されたプロに出会う</p>
@@ -179,20 +180,25 @@ export async function GET(req: NextRequest) {
 
         if (!emailRes.ok) {
           const errBody = await emailRes.text()
-          console.error('[confirm-vote] Step 7 FAIL - coupon email:', emailRes.status, errBody)
+          console.error('[confirm-vote] Step 7 FAIL - reward email:', emailRes.status, errBody)
         } else {
-          console.log('[confirm-vote] Step 7 OK - coupon email sent to:', vote.voter_email)
+          console.log('[confirm-vote] Step 7 OK - reward email sent to:', vote.voter_email)
         }
       } catch (err) {
-        console.error('[confirm-vote] Step 7 FAIL - coupon email exception:', err)
+        console.error('[confirm-vote] Step 7 FAIL - reward email exception:', err)
       }
     } else {
-      console.log('[confirm-vote] Step 7 SKIP - RESEND_API_KEY not set')
+      console.log('[confirm-vote] Step 7 SKIP - no RESEND_API_KEY or no reward content')
     }
 
-    // クーポン情報をリダイレクトに含める
+    // リワード情報をリダイレクトに含める
+    const redirectParams = new URLSearchParams({ pro: professionalId })
+    if (rewardType) redirectParams.set('reward_type', rewardType)
+    if (rewardContent) redirectParams.set('reward_content', rewardContent)
+    if (vote.voter_email) redirectParams.set('email', vote.voter_email)
+
     return NextResponse.redirect(
-      new URL(`/vote-confirmed?pro=${professionalId}&coupon=${encodeURIComponent(pro.coupon_text)}&email=${encodeURIComponent(vote.voter_email)}`, req.url)
+      new URL(`/vote-confirmed?${redirectParams.toString()}`, req.url)
     )
   } catch (err) {
     console.error('[confirm-vote] Unexpected error:', err)

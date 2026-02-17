@@ -1,13 +1,16 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
+import { getRewardLabel } from '@/lib/types'
 
-interface CouponWithPro {
+interface RewardWithPro {
   id: string
-  pro_user_id: string
+  reward_id: string
+  reward_type: string
+  content: string
   status: string
+  professional_id: string
   pro_name: string
-  coupon_text: string
 }
 
 interface VoteHistory {
@@ -22,10 +25,10 @@ export default function MyCardPage() {
   const supabase = createClient()
   const [user, setUser] = useState<any>(null)
   const [clientEmail, setClientEmail] = useState('')
-  const [coupons, setCoupons] = useState<CouponWithPro[]>([])
+  const [rewards, setRewards] = useState<RewardWithPro[]>([])
   const [voteHistory, setVoteHistory] = useState<VoteHistory[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'coupons' | 'history'>('coupons')
+  const [tab, setTab] = useState<'rewards' | 'history'>('rewards')
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [redeeming, setRedeeming] = useState(false)
   const [message, setMessage] = useState('')
@@ -45,40 +48,56 @@ export default function MyCardPage() {
       setClientEmail(email)
 
       if (email) {
-        // クーポン取得
-        const { data: couponData } = await (supabase as any)
-          .from('coupons')
-          .select('id, pro_user_id, status')
+        // リワード取得
+        const { data: clientRewards } = await (supabase as any)
+          .from('client_rewards')
+          .select('id, reward_id, professional_id, status')
           .eq('client_email', email)
           .eq('status', 'active')
           .order('created_at', { ascending: false })
 
-        if (couponData && couponData.length > 0) {
-          // プロ情報を一括取得
-          const proIds = Array.from(new Set(couponData.map((c: any) => c.pro_user_id)))
-          const { data: proData } = await (supabase as any)
-            .from('professionals')
-            .select('id, name, coupon_text')
-            .in('id', proIds)
+        if (clientRewards && clientRewards.length > 0) {
+          // reward詳細を一括取得
+          const rewardIds = Array.from(new Set(clientRewards.map((cr: any) => cr.reward_id)))
+          const { data: rewardData } = await (supabase as any)
+            .from('rewards')
+            .select('id, reward_type, content')
+            .in('id', rewardIds)
 
-          const proMap = new Map<string, { name: string; coupon_text: string }>()
-          if (proData) {
-            for (const p of proData) {
-              proMap.set(p.id, { name: p.name, coupon_text: p.coupon_text || '' })
+          const rewardMap = new Map<string, { reward_type: string; content: string }>()
+          if (rewardData) {
+            for (const r of rewardData) {
+              rewardMap.set(r.id, { reward_type: r.reward_type, content: r.content })
             }
           }
 
-          const merged: CouponWithPro[] = couponData.map((c: any) => {
-            const pro = proMap.get(c.pro_user_id)
+          // プロ名を一括取得
+          const proIds = Array.from(new Set(clientRewards.map((cr: any) => cr.professional_id)))
+          const { data: proData } = await (supabase as any)
+            .from('professionals')
+            .select('id, name')
+            .in('id', proIds)
+
+          const proMap = new Map<string, string>()
+          if (proData) {
+            for (const p of proData) {
+              proMap.set(p.id, p.name)
+            }
+          }
+
+          const merged: RewardWithPro[] = clientRewards.map((cr: any) => {
+            const reward = rewardMap.get(cr.reward_id)
             return {
-              id: c.id,
-              pro_user_id: c.pro_user_id,
-              status: c.status,
-              pro_name: pro?.name || 'プロ',
-              coupon_text: pro?.coupon_text || '',
+              id: cr.id,
+              reward_id: cr.reward_id,
+              reward_type: reward?.reward_type || '',
+              content: reward?.content || '',
+              status: cr.status,
+              professional_id: cr.professional_id,
+              pro_name: proMap.get(cr.professional_id) || 'プロ',
             }
           })
-          setCoupons(merged)
+          setRewards(merged)
         }
 
         // 投票履歴取得
@@ -108,26 +127,20 @@ export default function MyCardPage() {
     load()
   }, [])
 
-  async function handleRedeem(couponId: string) {
+  async function handleRedeem(clientRewardId: string) {
     setRedeeming(true)
     setMessage('')
 
-    const { data, error } = await (supabase as any).rpc('redeem_coupon', {
-      coupon_id: couponId,
-    })
+    const { error } = await (supabase as any)
+      .from('client_rewards')
+      .update({ status: 'used', used_at: new Date().toISOString() })
+      .eq('id', clientRewardId)
 
     if (error) {
       setMessage('エラーが発生しました。もう一度お試しください。')
-      setRedeeming(false)
-      setConfirmingId(null)
-      return
-    }
-
-    if (data?.success) {
-      setCoupons(prev => prev.filter(c => c.id !== couponId))
-      setMessage('クーポンを使用しました！')
     } else {
-      setMessage(data?.error || 'クーポンの使用に失敗しました。')
+      setRewards(prev => prev.filter(r => r.id !== clientRewardId))
+      setMessage('リワードを使用しました！')
     }
 
     setRedeeming(false)
@@ -142,8 +155,8 @@ export default function MyCardPage() {
     return (
       <div className="max-w-md mx-auto text-center py-16 px-4">
         <h1 className="text-xl font-bold text-[#1A1A2E] mb-4">リワード</h1>
-        <p className="text-gray-500 mb-6">プロにプルーフを贈ると、クーポンや投票履歴がここに表示されます。</p>
-        <a href="/explore" className="text-[#C4A35A] underline">プロを探す →</a>
+        <p className="text-gray-500 mb-6">プロにプルーフを贈ると、リワードや投票履歴がここに表示されます。</p>
+        <a href="/explore" className="text-[#C4A35A] underline">プロを探す</a>
       </div>
     )
   }
@@ -154,7 +167,7 @@ export default function MyCardPage() {
 
       {message && (
         <div className={`p-3 rounded-lg mb-4 text-sm ${
-          message.startsWith('クーポンを使用') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+          message.startsWith('リワードを使用') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
         }`}>
           {message}
         </div>
@@ -163,14 +176,14 @@ export default function MyCardPage() {
       {/* タブ */}
       <div className="flex border-b border-gray-200 mb-6">
         <button
-          onClick={() => setTab('coupons')}
+          onClick={() => setTab('rewards')}
           className={`flex-1 py-3 text-sm font-medium border-b-2 transition ${
-            tab === 'coupons'
+            tab === 'rewards'
               ? 'border-[#C4A35A] text-[#C4A35A]'
               : 'border-transparent text-gray-400 hover:text-gray-600'
           }`}
         >
-          クーポン ({coupons.length})
+          リワード ({rewards.length})
         </button>
         <button
           onClick={() => setTab('history')}
@@ -184,28 +197,31 @@ export default function MyCardPage() {
         </button>
       </div>
 
-      {/* クーポンタブ */}
-      {tab === 'coupons' && (
+      {/* リワードタブ */}
+      {tab === 'rewards' && (
         <div className="space-y-4">
-          {coupons.length === 0 ? (
+          {rewards.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-gray-400 text-sm">クーポンはまだありません</p>
-              <p className="text-xs text-gray-300 mt-2">プロにプルーフを贈ると、クーポンがもらえることがあります。</p>
+              <p className="text-gray-400 text-sm">リワードはまだありません</p>
+              <p className="text-xs text-gray-300 mt-2">プロにプルーフを贈ると、リワードがもらえることがあります。</p>
             </div>
           ) : (
-            coupons.map(c => (
-              <div key={c.id} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-                <p className="text-sm text-gray-500 mb-1">🎁 {c.pro_name}さんからのクーポン</p>
-                <p className="text-xl font-bold text-[#1A1A2E] mb-4">「{c.coupon_text}」</p>
+            rewards.map(r => (
+              <div key={r.id} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+                <a href={`/card/${r.professional_id}`} className="text-sm text-gray-500 mb-1 hover:text-[#C4A35A] transition inline-block">
+                  {r.pro_name}さんからのリワード
+                </a>
+                <p className="text-xs text-[#C4A35A] mb-1">{getRewardLabel(r.reward_type)}</p>
+                <p className="text-xl font-bold text-[#1A1A2E] mb-4">「{r.content}」</p>
 
-                {confirmingId === c.id ? (
+                {confirmingId === r.id ? (
                   <div className="space-y-2">
                     <p className="text-sm text-center text-orange-600 font-medium">
                       本当に使用しますか？この操作は取り消せません。
                     </p>
                     <div className="flex gap-2">
                       <button
-                        onClick={() => handleRedeem(c.id)}
+                        onClick={() => handleRedeem(r.id)}
                         disabled={redeeming}
                         className="flex-1 py-2 bg-[#C4A35A] text-white font-bold rounded-lg hover:bg-[#b3923f] transition disabled:opacity-50"
                       >
@@ -221,7 +237,7 @@ export default function MyCardPage() {
                   </div>
                 ) : (
                   <button
-                    onClick={() => setConfirmingId(c.id)}
+                    onClick={() => setConfirmingId(r.id)}
                     className="w-full py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition text-sm"
                   >
                     使用する
@@ -268,22 +284,9 @@ export default function MyCardPage() {
           href="/explore"
           className="inline-block px-6 py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition"
         >
-          他のプロを探す →
+          他のプロを探す
         </a>
       </div>
-
-      {/* プロ登録CTA */}
-      {!user && (
-        <div className="mt-6 p-4 bg-gray-50 rounded-xl text-center">
-          <p className="text-sm text-gray-600 mb-2">あなたも強みを証明しませんか？</p>
-          <a
-            href="/login?role=pro"
-            className="inline-block px-6 py-2 bg-[#C4A35A] text-white text-sm font-medium rounded-lg hover:bg-[#b3923f] transition"
-          >
-            プロとして無料登録
-          </a>
-        </div>
-      )}
     </div>
   )
 }

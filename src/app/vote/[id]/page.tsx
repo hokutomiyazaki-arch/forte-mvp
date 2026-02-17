@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { Professional, getAllResultOptions, getAllPersonalityOptions } from '@/lib/types'
+import { Professional, getAllResultOptions, getAllPersonalityOptions, getRewardLabel } from '@/lib/types'
 import { Suspense } from 'react'
 
 function VoteForm() {
@@ -27,6 +27,8 @@ function VoteForm() {
   const [fixEmail, setFixEmail] = useState('')
   const [resending, setResending] = useState(false)
   const [resendMessage, setResendMessage] = useState('')
+  const [proRewards, setProRewards] = useState<{ id: string; reward_type: string }[]>([])
+  const [selectedRewardId, setSelectedRewardId] = useState('')
 
   const MAX_PERSONALITY = 3
 
@@ -39,6 +41,16 @@ function VoteForm() {
         .eq('id', proId)
         .single()
       if (proData) setPro(proData)
+
+      // リワード取得
+      const { data: rewardData } = await (supabase as any)
+        .from('rewards')
+        .select('id, reward_type')
+        .eq('professional_id', proId)
+        .order('sort_order')
+      if (rewardData && rewardData.length > 0) {
+        setProRewards(rewardData)
+      }
 
       // ローカルストレージからメアド復元（2回目以降入力不要）
       const savedEmail = localStorage.getItem('proof_voter_email')
@@ -145,6 +157,17 @@ function VoteForm() {
       .insert({ vote_id: voteData.id })
       .select()
       .single()
+
+    // リワード選択をclient_rewardsに保存
+    if (selectedRewardId && voteData) {
+      await (supabase as any).from('client_rewards').insert({
+        vote_id: voteData.id,
+        reward_id: selectedRewardId,
+        professional_id: proId,
+        client_email: email,
+        status: 'pending',
+      })
+    }
 
     // 確認メール送信
     if (confirmation) {
@@ -337,7 +360,7 @@ function VoteForm() {
             required
           />
           <p className="text-xs text-gray-400 mt-1">
-            クーポンの送付に使用します。プロには公開されません。
+            リワードの送付に使用します。プロには公開されません。
           </p>
         </div>
 
@@ -426,6 +449,38 @@ function VoteForm() {
           />
           <p className="text-xs text-gray-400 text-right">{comment.length}/100</p>
         </div>
+
+        {/* リワード選択 */}
+        {proRewards.length > 0 && (
+          <div>
+            <h2 className="text-lg font-bold text-[#1A1A2E] mb-1">お礼リワードを選ぶ（任意）</h2>
+            <p className="text-xs text-gray-500 mb-3">プルーフ確定後にリワードの内容が届きます</p>
+            <div className="space-y-2">
+              {proRewards.map(reward => (
+                <label
+                  key={reward.id}
+                  className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition ${
+                    selectedRewardId === reward.id
+                      ? 'border-[#C4A35A] bg-[#C4A35A]/5'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="reward"
+                    value={reward.id}
+                    checked={selectedRewardId === reward.id}
+                    onChange={() => setSelectedRewardId(reward.id)}
+                    className="accent-[#C4A35A] w-4 h-4"
+                  />
+                  <div className={`font-medium ${selectedRewardId === reward.id ? 'text-[#C4A35A]' : 'text-[#1A1A2E]'}`}>
+                    {getRewardLabel(reward.reward_type)}
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
 
         {error && <p className="text-red-500 text-sm">{error}</p>}
 
