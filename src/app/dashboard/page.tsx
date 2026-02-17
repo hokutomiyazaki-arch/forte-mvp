@@ -43,6 +43,9 @@ export default function DashboardPage() {
   })
   const [customResultFortes, setCustomResultFortes] = useState<CustomForte[]>([])
   const [customPersonalityFortes, setCustomPersonalityFortes] = useState<CustomForte[]>([])
+  const [newEmail, setNewEmail] = useState('')
+  const [emailMessage, setEmailMessage] = useState('')
+  const [emailUpdating, setEmailUpdating] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -55,29 +58,30 @@ export default function DashboardPage() {
         .from('professionals').select('*').eq('user_id', u.id).single()
       const proData = rawProData as any
 
-      if (proData) {
-        setPro(proData)
-        setForm({
-          name: proData.name || '', title: proData.title || '',
-          location: proData.location || '',
-          bio: proData.bio || '', booking_url: proData.booking_url || '',
-          coupon_text: proData.coupon_text || '', photo_url: proData.photo_url || '',
-          contact_email: proData.contact_email || '',
-        })
-        setCustomResultFortes(proData.custom_result_fortes || [])
-        setCustomPersonalityFortes(proData.custom_personality_fortes || [])
-
-        const { data: voteData } = await supabase.from('vote_summary').select('*').eq('professional_id', proData.id) as any
-        if (voteData) setVotes(voteData)
-
-        const { data: persData } = await supabase.from('personality_summary').select('*').eq('professional_id', proData.id) as any
-        if (persData) setPersonalityVotes(persData)
-
-        const { count } = await supabase.from('votes').select('*', { count: 'exact', head: true }).eq('professional_id', proData.id) as any
-        setTotalVotes(count || 0)
-      } else {
-        setEditing(true)
+      if (!proData) {
+        window.location.href = '/login?role=pro'
+        return
       }
+
+      setPro(proData)
+      setForm({
+        name: proData.name || '', title: proData.title || '',
+        location: proData.location || '',
+        bio: proData.bio || '', booking_url: proData.booking_url || '',
+        coupon_text: proData.coupon_text || '', photo_url: proData.photo_url || '',
+        contact_email: proData.contact_email || '',
+      })
+      setCustomResultFortes(proData.custom_result_fortes || [])
+      setCustomPersonalityFortes(proData.custom_personality_fortes || [])
+
+      const { data: voteData } = await supabase.from('vote_summary').select('*').eq('professional_id', proData.id) as any
+      if (voteData) setVotes(voteData)
+
+      const { data: persData } = await supabase.from('personality_summary').select('*').eq('professional_id', proData.id) as any
+      if (persData) setPersonalityVotes(persData)
+
+      const { count } = await supabase.from('votes').select('*', { count: 'exact', head: true }).eq('professional_id', proData.id) as any
+      setTotalVotes(count || 0)
       setLoading(false)
     }
     load()
@@ -134,14 +138,22 @@ export default function DashboardPage() {
       is_founding_member: true,
     }
 
-    if (pro) {
-      await (supabase.from('professionals') as any).update(record).eq('id', pro.id)
-    } else {
-      const { data } = await (supabase.from('professionals') as any).insert(record).select().single()
-      if (data) setPro(data)
-    }
+    await (supabase.from('professionals') as any).update(record).eq('id', pro!.id)
     setEditing(false)
     window.location.reload()
+  }
+
+  async function handleEmailChange() {
+    if (!newEmail || newEmail === user?.email) return
+    setEmailUpdating(true)
+    setEmailMessage('')
+    const { error } = await (supabase as any).auth.updateUser({ email: newEmail })
+    if (error) {
+      setEmailMessage('エラー: ' + error.message)
+    } else {
+      setEmailMessage('確認メールを新しいアドレスに送信しました。メール内のリンクをクリックして変更を完了してください。')
+    }
+    setEmailUpdating(false)
   }
 
   async function generateQR() {
@@ -163,12 +175,10 @@ export default function DashboardPage() {
 
   if (loading) return <div className="text-center py-16 text-gray-400">読み込み中...</div>
 
-  if (editing || !pro) {
+  if (editing && pro) {
     return (
       <div className="max-w-lg mx-auto">
-        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-6">
-          {pro ? 'プロフィール編集' : 'プロフィール作成'}
-        </h1>
+        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-6">プロフィール編集</h1>
         <form onSubmit={handleSave} className="space-y-4">
           {/* プロフ写真 */}
           <div className="flex flex-col items-center">
@@ -303,6 +313,35 @@ export default function DashboardPage() {
             保存する
           </button>
         </form>
+
+        {/* メールアドレス変更 */}
+        <div className="border-t mt-8 pt-6">
+          <h2 className="text-sm font-bold text-[#1A1A2E] mb-2">アカウント設定</h2>
+          <label className="block text-sm font-medium text-gray-700 mb-1">メールアドレス</label>
+          <p className="text-xs text-gray-400 mb-2">現在: {user?.email}</p>
+          <div className="flex gap-2">
+            <input
+              type="email"
+              value={newEmail}
+              onChange={e => setNewEmail(e.target.value)}
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
+              placeholder="新しいメールアドレス"
+            />
+            <button
+              type="button"
+              onClick={handleEmailChange}
+              disabled={emailUpdating || !newEmail || newEmail === user?.email}
+              className="px-4 py-2 bg-[#1A1A2E] text-white text-sm rounded-lg hover:bg-[#2a2a4e] transition disabled:opacity-50"
+            >
+              {emailUpdating ? '送信中...' : '変更'}
+            </button>
+          </div>
+          {emailMessage && (
+            <p className={`text-sm mt-2 ${emailMessage.startsWith('エラー') ? 'text-red-500' : 'text-green-600'}`}>
+              {emailMessage}
+            </p>
+          )}
+        </div>
       </div>
     )
   }

@@ -11,9 +11,13 @@ function ConfirmedContent() {
   const voterEmail = searchParams.get('email') || ''
   const supabase = createClient()
   const [proName, setProName] = useState('')
+  const [userEmail, setUserEmail] = useState('')
 
   useEffect(() => {
     async function load() {
+      const { data: { user } } = await (supabase as any).auth.getUser()
+      if (user?.email) setUserEmail(user.email)
+
       if (proId) {
         const { data } = await (supabase as any)
           .from('professionals')
@@ -25,6 +29,8 @@ function ConfirmedContent() {
     }
     load()
   }, [proId])
+
+  const proSignupEmail = userEmail || voterEmail
 
   return (
     <div className="max-w-md mx-auto text-center py-12 px-4">
@@ -70,7 +76,7 @@ function ConfirmedContent() {
           REAL PROOFに登録して、あなたのクライアントからプルーフを集めましょう。
         </p>
         <a
-          href="/login?role=pro"
+          href={`/login?role=pro${proSignupEmail ? '&email=' + encodeURIComponent(proSignupEmail) : ''}`}
           className="inline-block px-6 py-2 bg-[#C4A35A] text-white text-sm font-medium rounded-lg hover:bg-[#b3923f] transition"
         >
           プロとして無料登録
