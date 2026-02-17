@@ -49,24 +49,10 @@ function LoginForm() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string, session: any) => {
       console.log('[onAuthStateChange] event:', event, 'cancelled:', cancelled)
-      if (event === 'SIGNED_IN' && session?.user && !cancelled) {
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user && !cancelled) {
         cancelled = true
         try {
-          const urlRole = searchParams.get('role') || 'pro'
-          console.log('[onAuthStateChange] urlRole:', urlRole)
-          if (urlRole === 'client') {
-            if (isRedirecting.current) return
-            isRedirecting.current = true
-            const nn = searchParams.get('nickname') || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'ユーザー'
-            await (supabase.from('clients') as any).upsert({
-              user_id: session.user.id,
-              nickname: nn,
-            }, { onConflict: 'user_id' })
-            console.log('[onAuthStateChange] → client redirect:', redirectTo || '/mycard')
-            window.location.href = redirectTo || '/mycard'
-          } else {
-            await redirectUser(session.user)
-          }
+          await redirectUser(session.user)
         } catch (e) {
           console.error('[onAuthStateChange] error:', e)
           isRedirecting.current = false
@@ -85,12 +71,14 @@ function LoginForm() {
       return
     }
     isRedirecting.current = true
-    console.log('[redirectUser] start, role:', role, 'redirectTo:', redirectTo)
+
+    const urlRole = searchParams.get('role') || ''
+    console.log('[redirectUser] start, urlRole:', urlRole, 'redirectTo:', redirectTo)
 
     // redirectToパラメータ優先
     if (redirectTo) {
-      if (isClient) {
-        const nn = user.user_metadata?.full_name || user.email?.split('@')[0] || 'ユーザー'
+      if (urlRole === 'client') {
+        const nn = searchParams.get('nickname') || user.user_metadata?.full_name || user.email?.split('@')[0] || 'ユーザー'
         await (supabase.from('clients') as any).upsert({
           user_id: user.id,
           nickname: nn,
@@ -101,7 +89,7 @@ function LoginForm() {
       return
     }
 
-    // プロ確認
+    // 既存プロ確認
     const { data: proData } = await (supabase
       .from('professionals').select('id').eq('user_id', user.id).maybeSingle()) as any
     console.log('[redirectUser] proData:', proData)
@@ -111,7 +99,7 @@ function LoginForm() {
       return
     }
 
-    // クライアント確認
+    // 既存クライアント確認
     const { data: clientData } = await (supabase
       .from('clients').select('id').eq('user_id', user.id).maybeSingle()) as any
     console.log('[redirectUser] clientData:', clientData)
@@ -121,15 +109,20 @@ function LoginForm() {
       return
     }
 
-    // roleに応じたフォールバック
-    if (role === 'pro') {
-      console.log('[redirectUser] → /dashboard (new pro fallback)')
+    // 新規ユーザー: urlRoleに応じてリダイレクト
+    if (urlRole === 'pro') {
+      console.log('[redirectUser] → /dashboard (new pro)')
       window.location.href = '/dashboard'
-    } else if (role === 'client') {
-      console.log('[redirectUser] → /mycard (new client fallback)')
+    } else if (urlRole === 'client') {
+      const nn = searchParams.get('nickname') || user.user_metadata?.full_name || user.email?.split('@')[0] || 'ユーザー'
+      await (supabase.from('clients') as any).upsert({
+        user_id: user.id,
+        nickname: nn,
+      }, { onConflict: 'user_id' })
+      console.log('[redirectUser] → /mycard (new client)')
       window.location.href = '/mycard'
     } else {
-      console.log('[redirectUser] → /explore (no role fallback)')
+      console.log('[redirectUser] → /explore (no role)')
       window.location.href = '/explore'
     }
   }
