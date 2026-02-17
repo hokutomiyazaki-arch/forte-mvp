@@ -16,7 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {children}
         </main>
         <footer className="text-center py-8 text-sm text-gray-400">
-          © {new Date().getFullYear()} REAL PROOF by Legrand chariot
+          © 2026 REAL PROOF｜株式会社Legrand chariot
         </footer>
       </body>
     </html>

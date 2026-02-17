@@ -14,12 +14,11 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Step 1: トークンで確認レコードを取得
+    // Step 1: トークンで確認レコードを取得（confirmed_at の有無問わず）
     const { data: confirmation, error: confirmError } = await supabaseAdmin
       .from('vote_confirmations')
       .select('*')
       .eq('token', token)
-      .is('confirmed_at', null)
       .single()
 
     if (confirmError || !confirmation) {
@@ -27,33 +26,36 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL('/vote-error?reason=invalid-token', req.url))
     }
 
-    console.log('[confirm-vote] Step 1 OK - confirmation id:', confirmation.id, 'vote_id:', confirmation.vote_id)
+    const alreadyConfirmed = !!confirmation.confirmed_at
+    console.log('[confirm-vote] Step 1 OK - confirmation id:', confirmation.id, 'vote_id:', confirmation.vote_id, 'alreadyConfirmed:', alreadyConfirmed)
 
-    // Step 2: 確認処理 - confirmationを更新
-    const { error: updateConfirmError } = await supabaseAdmin
-      .from('vote_confirmations')
-      .update({ confirmed_at: new Date().toISOString() })
-      .eq('id', confirmation.id)
+    if (!alreadyConfirmed) {
+      // Step 2: 確認処理 - confirmationを更新
+      const { error: updateConfirmError } = await supabaseAdmin
+        .from('vote_confirmations')
+        .update({ confirmed_at: new Date().toISOString() })
+        .eq('id', confirmation.id)
 
-    if (updateConfirmError) {
-      console.error('[confirm-vote] Step 2 FAIL - update confirmation:', updateConfirmError.message)
-    } else {
-      console.log('[confirm-vote] Step 2 OK - confirmation marked as confirmed')
+      if (updateConfirmError) {
+        console.error('[confirm-vote] Step 2 FAIL - update confirmation:', updateConfirmError.message)
+      } else {
+        console.log('[confirm-vote] Step 2 OK - confirmation marked as confirmed')
+      }
+
+      // Step 3: 投票ステータスをconfirmedに更新
+      const { error: updateVoteError } = await supabaseAdmin
+        .from('votes')
+        .update({ status: 'confirmed' })
+        .eq('id', confirmation.vote_id)
+
+      if (updateVoteError) {
+        console.error('[confirm-vote] Step 3 FAIL - update vote status:', updateVoteError.message)
+      } else {
+        console.log('[confirm-vote] Step 3 OK - vote status set to confirmed')
+      }
     }
 
-    // Step 3: 投票ステータスをconfirmedに更新
-    const { error: updateVoteError } = await supabaseAdmin
-      .from('votes')
-      .update({ status: 'confirmed' })
-      .eq('id', confirmation.vote_id)
-
-    if (updateVoteError) {
-      console.error('[confirm-vote] Step 3 FAIL - update vote status:', updateVoteError.message)
-    } else {
-      console.log('[confirm-vote] Step 3 OK - vote status set to confirmed')
-    }
-
-    // Step 4: 投票データを別途取得
+    // Step 4: 投票データを取得
     const { data: vote, error: voteError } = await supabaseAdmin
       .from('votes')
       .select('*')
@@ -120,75 +122,80 @@ export async function GET(req: NextRequest) {
       console.log('[confirm-vote] Step 5b - no client_reward for this vote')
     }
 
-    // Step 6: リワードをアクティブに
-    if (clientReward) {
-      const { error: rewardUpdateError } = await supabaseAdmin
-        .from('client_rewards')
-        .update({ status: 'active' })
-        .eq('id', clientReward.id)
+    // 初回確認時のみ: リワードをアクティブにしてメール送信
+    if (!alreadyConfirmed) {
+      // Step 6: リワードをアクティブに
+      if (clientReward) {
+        const { error: rewardUpdateError } = await supabaseAdmin
+          .from('client_rewards')
+          .update({ status: 'active' })
+          .eq('id', clientReward.id)
 
-      if (rewardUpdateError) {
-        console.error('[confirm-vote] Step 6 FAIL - reward update:', rewardUpdateError.message)
-      } else {
-        console.log('[confirm-vote] Step 6 OK - client_reward activated')
-      }
-    }
-
-    // Step 7: リワードメール送信
-    const resendKey = process.env.RESEND_API_KEY
-    if (resendKey && rewardContent && vote.voter_email) {
-      const rewardLabel = getRewardLabel(rewardType)
-      try {
-        const emailRes = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${resendKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            from: 'REAL PROOF <info@proof-app.jp>',
-            to: vote.voter_email,
-            subject: `${pro.name}さんからリワードが届いています`,
-            html: `
-              <div style="max-width:480px;margin:0 auto;font-family:sans-serif;">
-                <div style="background:#1A1A2E;padding:24px;border-radius:12px 12px 0 0;">
-                  <h1 style="color:#C4A35A;font-size:14px;margin:0;">REAL PROOF</h1>
-                </div>
-                <div style="padding:24px;background:#fff;border:1px solid #eee;">
-                  <p style="color:#333;">プルーフの確認ありがとうございます！</p>
-                  <p style="color:#333;">${pro.name}さんからリワードが届いています。</p>
-                  <div style="background:#f8f6f0;border:2px dashed #C4A35A;border-radius:8px;padding:16px;text-align:center;margin:20px 0;">
-                    <p style="color:#666;font-size:12px;margin:0 0 4px;">${rewardLabel}</p>
-                    <p style="color:#1A1A2E;font-size:18px;font-weight:bold;margin:0;">${rewardContent}</p>
-                  </div>
-                  <p style="color:#666;font-size:13px;">リワードを管理するには、以下からログインしてください。</p>
-                  <div style="text-align:center;margin:24px 0;">
-                    <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://forte-mvp.vercel.app'}/login?role=client&redirect=/coupons&email=${encodeURIComponent(vote.voter_email)}"
-                       style="background:#C4A35A;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:14px;">
-                      登録してリワードを受け取る
-                    </a>
-                  </div>
-                  <p style="color:#999;font-size:11px;">※ リワードは対面時にプロの前で「使用する」ボタンを押してご利用ください。</p>
-                </div>
-                <div style="padding:16px;text-align:center;background:#f9f9f9;border-radius:0 0 12px 12px;">
-                  <p style="color:#999;font-size:11px;margin:0;">REAL PROOF — 強みで証明されたプロに出会う</p>
-                </div>
-              </div>
-            `,
-          }),
-        })
-
-        if (!emailRes.ok) {
-          const errBody = await emailRes.text()
-          console.error('[confirm-vote] Step 7 FAIL - reward email:', emailRes.status, errBody)
+        if (rewardUpdateError) {
+          console.error('[confirm-vote] Step 6 FAIL - reward update:', rewardUpdateError.message)
         } else {
-          console.log('[confirm-vote] Step 7 OK - reward email sent to:', vote.voter_email)
+          console.log('[confirm-vote] Step 6 OK - client_reward activated')
         }
-      } catch (err) {
-        console.error('[confirm-vote] Step 7 FAIL - reward email exception:', err)
+      }
+
+      // Step 7: リワードメール送信
+      const resendKey = process.env.RESEND_API_KEY
+      if (resendKey && rewardContent && vote.voter_email) {
+        const rewardLabel = getRewardLabel(rewardType)
+        try {
+          const emailRes = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${resendKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from: 'REAL PROOF <info@proof-app.jp>',
+              to: vote.voter_email,
+              subject: `${pro.name}さんからリワードが届いています`,
+              html: `
+                <div style="max-width:480px;margin:0 auto;font-family:sans-serif;">
+                  <div style="background:#1A1A2E;padding:24px;border-radius:12px 12px 0 0;">
+                    <h1 style="color:#C4A35A;font-size:14px;margin:0;">REAL PROOF</h1>
+                  </div>
+                  <div style="padding:24px;background:#fff;border:1px solid #eee;">
+                    <p style="color:#333;">プルーフの確認ありがとうございます！</p>
+                    <p style="color:#333;">${pro.name}さんからリワードが届いています。</p>
+                    <div style="background:#f8f6f0;border:2px dashed #C4A35A;border-radius:8px;padding:16px;text-align:center;margin:20px 0;">
+                      <p style="color:#666;font-size:12px;margin:0 0 4px;">${rewardLabel}</p>
+                      <p style="color:#1A1A2E;font-size:18px;font-weight:bold;margin:0;">${rewardContent}</p>
+                    </div>
+                    <p style="color:#666;font-size:13px;">リワードを管理するには、以下からログインしてください。</p>
+                    <div style="text-align:center;margin:24px 0;">
+                      <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://forte-mvp.vercel.app'}/login?role=client&redirect=/coupons&email=${encodeURIComponent(vote.voter_email)}"
+                         style="background:#C4A35A;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:14px;">
+                        登録してリワードを受け取る
+                      </a>
+                    </div>
+                    <p style="color:#999;font-size:11px;">※ リワードは対面時にプロの前で「使用する」ボタンを押してご利用ください。</p>
+                  </div>
+                  <div style="padding:16px;text-align:center;background:#f9f9f9;border-radius:0 0 12px 12px;">
+                    <p style="color:#999;font-size:11px;margin:0;">REAL PROOF — 強みで証明されたプロに出会う</p>
+                  </div>
+                </div>
+              `,
+            }),
+          })
+
+          if (!emailRes.ok) {
+            const errBody = await emailRes.text()
+            console.error('[confirm-vote] Step 7 FAIL - reward email:', emailRes.status, errBody)
+          } else {
+            console.log('[confirm-vote] Step 7 OK - reward email sent to:', vote.voter_email)
+          }
+        } catch (err) {
+          console.error('[confirm-vote] Step 7 FAIL - reward email exception:', err)
+        }
+      } else {
+        console.log('[confirm-vote] Step 7 SKIP - no RESEND_API_KEY or no reward content')
       }
     } else {
-      console.log('[confirm-vote] Step 7 SKIP - no RESEND_API_KEY or no reward content')
+      console.log('[confirm-vote] Already confirmed - skipping Steps 2-7, redirecting to vote-confirmed')
     }
 
     // リワード情報をリダイレクトに含める
