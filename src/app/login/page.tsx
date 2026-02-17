@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { Suspense } from 'react'
@@ -23,6 +23,7 @@ function LoginForm() {
   const [ready, setReady] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
   const supabase = createClient() as any
+  const isRedirecting = useRef(false)
 
   const isClient = role === 'client'
 
@@ -35,6 +36,7 @@ function LoginForm() {
         const { data: { session } } = await supabase.auth.getSession()
         console.log('[init] session:', session ? 'exists' : 'none')
         if (session?.user && !cancelled) {
+          cancelled = true
           await redirectUser(session.user)
           return
         }
@@ -53,6 +55,8 @@ function LoginForm() {
           const urlRole = searchParams.get('role') || 'pro'
           console.log('[onAuthStateChange] urlRole:', urlRole)
           if (urlRole === 'client') {
+            if (isRedirecting.current) return
+            isRedirecting.current = true
             const nn = searchParams.get('nickname') || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'ユーザー'
             await (supabase.from('clients') as any).upsert({
               user_id: session.user.id,
@@ -65,6 +69,7 @@ function LoginForm() {
           }
         } catch (e) {
           console.error('[onAuthStateChange] error:', e)
+          isRedirecting.current = false
           cancelled = false
           setReady(true)
         }
@@ -75,6 +80,11 @@ function LoginForm() {
   }, [])
 
   async function redirectUser(user: any) {
+    if (isRedirecting.current) {
+      console.log('[redirectUser] already redirecting, skip')
+      return
+    }
+    isRedirecting.current = true
     console.log('[redirectUser] start, role:', role, 'redirectTo:', redirectTo)
 
     // redirectToパラメータ優先
