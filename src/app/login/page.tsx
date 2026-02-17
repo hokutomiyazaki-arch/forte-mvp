@@ -31,35 +31,40 @@ function LoginForm() {
 
     async function init() {
       try {
+        console.log('[init] checking session...')
         const { data: { session } } = await supabase.auth.getSession()
+        console.log('[init] session:', session ? 'exists' : 'none')
         if (session?.user && !cancelled) {
           await redirectUser(session.user)
           return
         }
       } catch (e) {
-        console.error('Session check error:', e)
+        console.error('[init] session check error:', e)
       }
       if (!cancelled) setReady(true)
     }
     init()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string, session: any) => {
+      console.log('[onAuthStateChange] event:', event, 'cancelled:', cancelled)
       if (event === 'SIGNED_IN' && session?.user && !cancelled) {
         cancelled = true
         try {
           const urlRole = searchParams.get('role') || 'pro'
+          console.log('[onAuthStateChange] urlRole:', urlRole)
           if (urlRole === 'client') {
             const nn = searchParams.get('nickname') || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'ユーザー'
             await (supabase.from('clients') as any).upsert({
               user_id: session.user.id,
               nickname: nn,
             }, { onConflict: 'user_id' })
+            console.log('[onAuthStateChange] → client redirect:', redirectTo || '/mycard')
             window.location.href = redirectTo || '/mycard'
           } else {
             await redirectUser(session.user)
           }
         } catch (e) {
-          console.error('Auth callback error:', e)
+          console.error('[onAuthStateChange] error:', e)
           cancelled = false
           setReady(true)
         }
@@ -70,7 +75,9 @@ function LoginForm() {
   }, [])
 
   async function redirectUser(user: any) {
-    // If there's a redirect param, go there
+    console.log('[redirectUser] start, role:', role, 'redirectTo:', redirectTo)
+
+    // redirectToパラメータ優先
     if (redirectTo) {
       if (isClient) {
         const nn = user.user_metadata?.full_name || user.email?.split('@')[0] || 'ユーザー'
@@ -79,36 +86,40 @@ function LoginForm() {
           nickname: nn,
         }, { onConflict: 'user_id' })
       }
+      console.log('[redirectUser] → redirectTo:', redirectTo)
       window.location.href = redirectTo
       return
     }
 
-    // Check pro first
-    try {
-      const { data: proData, error: proError } = await (supabase
-        .from('professionals').select('id').eq('user_id', user.id).single()) as any
-      if (proData && !proError) {
-        window.location.href = '/dashboard'
-        return
-      }
-    } catch (_) {}
+    // プロ確認
+    const { data: proData } = await (supabase
+      .from('professionals').select('id').eq('user_id', user.id).maybeSingle()) as any
+    console.log('[redirectUser] proData:', proData)
+    if (proData) {
+      console.log('[redirectUser] → /dashboard (existing pro)')
+      window.location.href = '/dashboard'
+      return
+    }
 
-    // Check client
-    try {
-      const { data: clientData, error: clientError } = await (supabase
-        .from('clients').select('id').eq('user_id', user.id).single()) as any
-      if (clientData && !clientError) {
-        window.location.href = '/mycard'
-        return
-      }
-    } catch (_) {}
+    // クライアント確認
+    const { data: clientData } = await (supabase
+      .from('clients').select('id').eq('user_id', user.id).maybeSingle()) as any
+    console.log('[redirectUser] clientData:', clientData)
+    if (clientData) {
+      console.log('[redirectUser] → /mycard (existing client)')
+      window.location.href = '/mycard'
+      return
+    }
 
     // roleに応じたフォールバック
     if (role === 'pro') {
+      console.log('[redirectUser] → /dashboard (new pro fallback)')
       window.location.href = '/dashboard'
     } else if (role === 'client') {
+      console.log('[redirectUser] → /mycard (new client fallback)')
       window.location.href = '/mycard'
     } else {
+      console.log('[redirectUser] → /explore (no role fallback)')
       window.location.href = '/explore'
     }
   }
