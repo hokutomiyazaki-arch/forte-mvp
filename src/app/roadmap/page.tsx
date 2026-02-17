@@ -14,7 +14,7 @@ const FEATURES = [
   {
     status: 'live',
     title: 'クーポン機能',
-    description: '投票してくれたクライアントにお礼の特典を自動発行。マイカードページで管理・使用。',
+    description: '投票してくれたクライアントにお礼の特典を自動発行。リワードページで管理・使用。',
   },
   {
     status: 'live',
