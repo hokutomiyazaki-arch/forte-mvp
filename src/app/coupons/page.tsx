@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { getRewardLabel } from '@/lib/types'
 
@@ -17,99 +17,101 @@ export default function CouponsPage() {
   const supabase = createClient()
   const [rewards, setRewards] = useState<RewardWithPro[]>([])
   const [loading, setLoading] = useState(true)
-  const [user, setUser] = useState<any>(null)
+  const [timedOut, setTimedOut] = useState(false)
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [redeeming, setRedeeming] = useState(false)
   const [message, setMessage] = useState('')
   const [activeTab, setActiveTab] = useState('all')
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
+    // 5秒タイムアウト
+    timerRef.current = setTimeout(() => setTimedOut(true), 5000)
+
     async function load() {
-      // getSession()でローカルトークンから確認（getUser()よりも信頼性が高い）
-      const { data: { session } } = await supabase.auth.getSession()
-      const u = session?.user || null
+      try {
+        const { data: { user }, error: authError } = await supabase.auth.getUser()
 
-      if (!u) {
-        window.location.href = '/login?role=client&redirect=/coupons'
-        return
-      }
-      setUser(u)
-
-      // clientsレコードがなければ自動作成
-      const { data: existing } = await (supabase as any)
-        .from('clients')
-        .select('id')
-        .eq('user_id', u.id)
-        .maybeSingle()
-
-      if (!existing) {
-        const nn = u.user_metadata?.full_name || u.email?.split('@')[0] || 'ユーザー'
-        await (supabase as any).from('clients').upsert({
-          user_id: u.id,
-          nickname: nn,
-        }, { onConflict: 'user_id' })
-      }
-
-      // client_rewards を取得
-      const { data: clientRewards } = await (supabase as any)
-        .from('client_rewards')
-        .select('id, reward_id, professional_id, status')
-        .eq('client_email', u.email)
-        .in('status', ['active', 'used'])
-        .order('created_at', { ascending: false })
-
-      if (!clientRewards || clientRewards.length === 0) {
-        setLoading(false)
-        return
-      }
-
-      // reward詳細を一括取得
-      const rewardIds = Array.from(new Set(clientRewards.map((cr: any) => cr.reward_id)))
-      const { data: rewardData } = await (supabase as any)
-        .from('rewards')
-        .select('id, reward_type, content')
-        .in('id', rewardIds)
-
-      const rewardMap = new Map<string, { reward_type: string; content: string }>()
-      if (rewardData) {
-        for (const r of rewardData) {
-          rewardMap.set(r.id, { reward_type: r.reward_type, content: r.content })
+        if (authError || !user) {
+          window.location.href = '/login?role=client&redirect=/coupons'
+          return
         }
-      }
 
-      // プロ名を一括取得
-      const proIds = Array.from(new Set(clientRewards.map((cr: any) => cr.professional_id)))
-      const { data: proData } = await (supabase as any)
-        .from('professionals')
-        .select('id, name')
-        .in('id', proIds)
+        // client_rewards を取得
+        const { data: clientRewards } = await (supabase as any)
+          .from('client_rewards')
+          .select('id, reward_id, professional_id, status')
+          .eq('client_email', user.email)
+          .in('status', ['active', 'used'])
+          .order('created_at', { ascending: false })
 
-      const proMap = new Map<string, string>()
-      if (proData) {
-        for (const p of proData) {
-          proMap.set(p.id, p.name)
+        if (!clientRewards || clientRewards.length === 0) {
+          setLoading(false)
+          return
         }
-      }
 
-      // マージ
-      const merged: RewardWithPro[] = clientRewards.map((cr: any) => {
-        const reward = rewardMap.get(cr.reward_id)
-        return {
-          id: cr.id,
-          reward_id: cr.reward_id,
-          reward_type: reward?.reward_type || '',
-          content: reward?.content || '',
-          status: cr.status,
-          professional_id: cr.professional_id,
-          pro_name: proMap.get(cr.professional_id) || 'プロ',
+        // rewards テーブルから reward_type, content を一括取得
+        const rewardIds = Array.from(new Set(clientRewards.map((cr: any) => cr.reward_id)))
+        const { data: rewardData } = await (supabase as any)
+          .from('rewards')
+          .select('id, reward_type, content')
+          .in('id', rewardIds)
+
+        const rewardMap = new Map<string, { reward_type: string; content: string }>()
+        if (rewardData) {
+          for (const r of rewardData) {
+            rewardMap.set(r.id, { reward_type: r.reward_type, content: r.content })
+          }
         }
-      })
 
-      setRewards(merged)
+        // professionals テーブルからプロの name を一括取得
+        const proIds = Array.from(new Set(clientRewards.map((cr: any) => cr.professional_id)))
+        const { data: proData } = await (supabase as any)
+          .from('professionals')
+          .select('id, name')
+          .in('id', proIds)
+
+        const proMap = new Map<string, string>()
+        if (proData) {
+          for (const p of proData) {
+            proMap.set(p.id, p.name)
+          }
+        }
+
+        // マージ
+        const merged: RewardWithPro[] = clientRewards.map((cr: any) => {
+          const reward = rewardMap.get(cr.reward_id)
+          return {
+            id: cr.id,
+            reward_id: cr.reward_id,
+            reward_type: reward?.reward_type || '',
+            content: reward?.content || '',
+            status: cr.status,
+            professional_id: cr.professional_id,
+            pro_name: proMap.get(cr.professional_id) || 'プロ',
+          }
+        })
+
+        setRewards(merged)
+      } catch (e) {
+        console.error('[coupons] load error:', e)
+      }
       setLoading(false)
     }
+
     load()
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
   }, [])
+
+  // loading解除時にタイマークリア
+  useEffect(() => {
+    if (!loading && timerRef.current) {
+      clearTimeout(timerRef.current)
+    }
+  }, [loading])
 
   async function handleRedeem(clientRewardId: string) {
     setRedeeming(true)
@@ -137,10 +139,23 @@ export default function CouponsPage() {
   }
 
   if (loading) {
+    if (timedOut) {
+      return (
+        <div className="text-center py-16 px-4">
+          <p className="text-gray-500 mb-4">データの取得に問題がありました。ページを再読み込みしてください。</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-2 bg-[#1A1A2E] text-white rounded-lg hover:bg-[#2a2a4e] transition text-sm"
+          >
+            再読み込み
+          </button>
+        </div>
+      )
+    }
     return <div className="text-center py-16 text-gray-400">読み込み中...</div>
   }
 
-  // タブ用: ユーザーが持っているリワードタイプ
+  // タブ用
   const rewardTypeSet = Array.from(new Set(rewards.map(r => r.reward_type).filter(Boolean)))
   const filteredRewards = activeTab === 'all'
     ? rewards
@@ -208,7 +223,7 @@ export default function CouponsPage() {
                   {reward.pro_name}さんからのリワード
                 </a>
                 <p className="text-xs text-[#C4A35A] mb-1">{getRewardLabel(reward.reward_type)}</p>
-                <p className="text-xl font-bold text-[#1A1A2E] mb-4">「{reward.content}」</p>
+                <p className="text-xl font-bold text-[#1A1A2E] mb-4">{reward.content}</p>
 
                 {confirmingId === reward.id ? (
                   <div className="space-y-2">
@@ -249,15 +264,18 @@ export default function CouponsPage() {
             )
           })}
 
-          {/* 使用済みリワード */}
+          {/* 使用済み / 削除済みリワード */}
           {usedRewards.length > 0 && (
             <div className="mt-8">
-              <h2 className="text-sm font-medium text-gray-400 mb-3">使用済み</h2>
+              <h2 className="text-sm font-medium text-gray-400 mb-3">使用済み / 削除済み</h2>
               {usedRewards.map(reward => (
                 <div key={reward.id} className="bg-gray-50 text-gray-400 rounded-xl p-4 mb-2">
                   <p className="text-xs mb-1">{reward.pro_name}さんからのリワード</p>
                   <p className="text-xs text-gray-300 mb-1">{getRewardLabel(reward.reward_type)}</p>
-                  <p className="text-sm line-through">「{reward.content}」</p>
+                  <p className="text-sm line-through">{reward.content}</p>
+                  <p className="text-xs mt-1">
+                    {reward.reward_type === 'coupon' ? '使用済み' : '削除済み'}
+                  </p>
                 </div>
               ))}
             </div>
