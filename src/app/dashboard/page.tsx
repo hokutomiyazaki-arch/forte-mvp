@@ -54,12 +54,14 @@ export default function DashboardPage() {
       const u = session.user
       setUser(u)
 
-      const { data: rawProData } = await supabase
-        .from('professionals').select('*').eq('user_id', u.id).single()
+      const { data: rawProData } = await (supabase
+        .from('professionals').select('*').eq('user_id', u.id).maybeSingle()) as any
       const proData = rawProData as any
 
       if (!proData) {
-        window.location.href = '/login?role=pro'
+        // 新規プロ → プロフィール作成フォームを表示
+        setEditing(true)
+        setLoading(false)
         return
       }
 
@@ -138,7 +140,12 @@ export default function DashboardPage() {
       is_founding_member: true,
     }
 
-    await (supabase.from('professionals') as any).update(record).eq('id', pro!.id)
+    if (pro) {
+      await (supabase.from('professionals') as any).update(record).eq('id', pro.id)
+    } else {
+      const { data } = await (supabase.from('professionals') as any).insert(record).select().single()
+      if (data) setPro(data)
+    }
     setEditing(false)
     window.location.reload()
   }
@@ -175,10 +182,12 @@ export default function DashboardPage() {
 
   if (loading) return <div className="text-center py-16 text-gray-400">読み込み中...</div>
 
-  if (editing && pro) {
+  if (editing) {
     return (
       <div className="max-w-lg mx-auto">
-        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-6">プロフィール編集</h1>
+        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-6">
+          {pro ? 'プロフィール編集' : 'プロフィール作成'}
+        </h1>
         <form onSubmit={handleSave} className="space-y-4">
           {/* プロフ写真 */}
           <div className="flex flex-col items-center">
