@@ -79,6 +79,24 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Proof Exchange */}
+      <section className="py-12 border-t border-gray-200">
+        <h2 className="text-2xl font-bold text-[#1A1A2E] mb-6 text-center">プルーフの交換</h2>
+        <div className="bg-[#1A1A2E] rounded-xl p-8 text-center">
+          <p className="text-gray-300 leading-relaxed mb-6">
+            クライアントはプロに「あなたの技術は本物だ」と投票で証明する。<br />
+            プロはお返しに、自分だけが知る"本物の情報"をリワードとして届ける。<br />
+            クーポンだけじゃない。あなたがプルーフする情報が、クライアントの投票を後押しする。
+          </p>
+          <p className="text-sm text-gray-400 mb-6">
+            例：おすすめの本、行きつけのレストラン、ここだけの健康法...
+          </p>
+          <p className="text-[#C4A35A] font-medium">
+            プルーフの交換が生まれる場所。それがREAL PROOF。
+          </p>
+        </div>
+      </section>
+
       {/* Roadmap */}
       <section className="py-12 border-t border-gray-200 text-center">
         <h2 className="text-xl font-bold text-[#1A1A2E] mb-3">REAL PROOFのこれから</h2>

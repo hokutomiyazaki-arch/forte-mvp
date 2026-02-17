@@ -153,24 +153,32 @@ export default function DashboardPage() {
     }
 
     let professionalId = pro?.id
+    const isNew = !pro
 
     if (pro) {
-      await (supabase.from('professionals') as any).update(record).eq('id', pro.id)
+      const { error: updateError } = await (supabase.from('professionals') as any).update(record).eq('id', pro.id)
+      if (updateError) console.error('[handleSave] update pro error:', updateError.message)
       professionalId = pro.id
     } else {
-      const { data } = await (supabase.from('professionals') as any).insert(record).select().single()
+      const { data, error: insertError } = await (supabase.from('professionals') as any).insert(record).select().single()
+      if (insertError) console.error('[handleSave] insert pro error:', insertError.message)
       if (data) {
         setPro(data)
         professionalId = data.id
+        console.log('[handleSave] new pro created, id:', data.id)
       }
     }
 
     // リワード保存
     if (professionalId) {
-      await (supabase as any).from('rewards').delete().eq('professional_id', professionalId)
+      // 既存プロの場合のみ既存リワードを削除（新規はまだリワードがないので不要）
+      if (!isNew) {
+        const { error: delError } = await (supabase as any).from('rewards').delete().eq('professional_id', professionalId)
+        if (delError) console.error('[handleSave] delete rewards error:', delError.message)
+      }
       const validRewards = rewards.filter(r => r.reward_type && r.content.trim())
       if (validRewards.length > 0) {
-        await (supabase as any).from('rewards').insert(
+        const { error: rewardError } = await (supabase as any).from('rewards').insert(
           validRewards.map((r, idx) => ({
             professional_id: professionalId,
             reward_type: r.reward_type,
@@ -178,7 +186,11 @@ export default function DashboardPage() {
             sort_order: idx,
           }))
         )
+        if (rewardError) console.error('[handleSave] insert rewards error:', rewardError.message)
+        else console.log('[handleSave] rewards saved:', validRewards.length)
       }
+    } else {
+      console.error('[handleSave] no professionalId, rewards not saved')
     }
 
     setEditing(false)
