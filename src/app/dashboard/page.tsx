@@ -82,7 +82,7 @@ export default function DashboardPage() {
       const { data: persData } = await supabase.from('personality_summary').select('*').eq('professional_id', proData.id) as any
       if (persData) setPersonalityVotes(persData)
 
-      const { count } = await supabase.from('votes').select('*', { count: 'exact', head: true }).eq('professional_id', proData.id) as any
+      const { count } = await supabase.from('votes').select('*', { count: 'exact', head: true }).eq('professional_id', proData.id).eq('status', 'confirmed') as any
       setTotalVotes(count || 0)
       setLoading(false)
     }
