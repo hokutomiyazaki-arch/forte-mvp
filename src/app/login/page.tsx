@@ -32,11 +32,13 @@ function LoginForm() {
 
     async function init() {
       try {
-        console.log('[init] checking session...')
         const { data: { session } } = await supabase.auth.getSession()
-        console.log('[init] session:', session ? 'exists' : 'none')
         if (session?.user && !cancelled) {
           cancelled = true
+          if (redirectTo) {
+            window.location.href = redirectTo
+            return
+          }
           await redirectUser(session.user)
           return
         }
