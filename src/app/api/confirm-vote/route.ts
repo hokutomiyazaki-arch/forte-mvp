@@ -117,7 +117,7 @@ export async function GET(req: NextRequest) {
 
     // Step 6: クーポン作成
     console.log('[confirm-vote] Step 6 - Creating coupon:', {
-      pro_user_id: pro.user_id,
+      pro_user_id: pro.id,
       client_email: vote.voter_email,
       coupon_text: pro.coupon_text,
     })
@@ -126,7 +126,7 @@ export async function GET(req: NextRequest) {
     const { data: couponData, error: couponError } = await supabaseAdmin
       .from('coupons')
       .insert({
-        pro_user_id: pro.user_id,
+        pro_user_id: pro.id,
         client_email: vote.voter_email,
         discount_type: 'percentage',
         discount_value: 10,
