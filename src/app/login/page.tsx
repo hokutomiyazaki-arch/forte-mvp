@@ -178,6 +178,33 @@ function LoginForm() {
       } catch (_) {}
     }
 
+    // Handle wantsPro=1: create professional from URL params (email confirmation redirect)
+    if (wantsProParam && !proData) {
+      const urlProName = searchParams.get('proName')
+      const urlProTitle = searchParams.get('proTitle')
+      const urlProArea = searchParams.get('proArea')
+      if (urlProName) {
+        if (urlRole === 'client' && !clientData) {
+          const nn = searchParams.get('nickname') || user.user_metadata?.full_name || user.email?.split('@')[0] || 'ユーザー'
+          await (supabase.from('clients') as any).upsert({
+            user_id: user.id,
+            nickname: nn,
+          }, { onConflict: 'user_id' })
+        }
+        await (supabase.from('professionals') as any).upsert({
+          user_id: user.id,
+          name: urlProName,
+          title: urlProTitle || '未設定',
+          prefecture: '未設定',
+          area_description: urlProArea || null,
+        }, { onConflict: 'user_id' })
+        await supabase.auth.updateUser({ data: { role: 'pro' } })
+        console.log('[redirectUser] → /dashboard (wantsPro from URL params)')
+        window.location.href = '/dashboard'
+        return
+      }
+    }
+
     if (redirectTo) {
       if (urlRole === 'client') {
         const nn = searchParams.get('nickname') || user.user_metadata?.full_name || user.email?.split('@')[0] || 'ユーザー'
@@ -217,21 +244,8 @@ function LoginForm() {
         user_id: user.id,
         nickname: nn,
       }, { onConflict: 'user_id' })
-
-      // 「プロとしても登録する」がONの場合
-      if (alsoRegisterPro && proName.trim()) {
-        await (supabase.from('professionals') as any).upsert({
-          user_id: user.id,
-          name: proName.trim(),
-          title: proTitle.trim() || '未設定',
-          location: proArea.trim() || null,
-        }, { onConflict: 'user_id' })
-        console.log('[redirectUser] → /dashboard (new client + pro)')
-        window.location.href = '/dashboard'
-      } else {
-        console.log('[redirectUser] → /mycard (new client)')
-        window.location.href = '/mycard'
-      }
+      console.log('[redirectUser] → /mycard (new client)')
+      window.location.href = '/mycard'
     } else {
       console.log('[redirectUser] → /explore (no role)')
       window.location.href = '/explore'
@@ -264,9 +278,10 @@ function LoginForm() {
         const signUpOptions: any = { data: { role } }
         if (isCouponFlow) {
           signUpOptions.emailRedirectTo = window.location.origin + '/login?role=client&redirect=/mycard&email=' + encodeURIComponent(email)
-            + (wantsPro ? '&wantsPro=1' : '')
+            + (wantsPro ? '&wantsPro=1&proName=' + encodeURIComponent(proName.trim()) + '&proTitle=' + encodeURIComponent(proTitle.trim()) + '&proArea=' + encodeURIComponent(proArea.trim()) : '')
         } else if (alsoRegisterPro) {
           signUpOptions.emailRedirectTo = window.location.origin + '/login?role=' + role + '&wantsPro=1'
+            + '&proName=' + encodeURIComponent(proName.trim()) + '&proTitle=' + encodeURIComponent(proTitle.trim()) + '&proArea=' + encodeURIComponent(proArea.trim())
         }
         const { error: err } = await supabase.auth.signUp({
           email,
