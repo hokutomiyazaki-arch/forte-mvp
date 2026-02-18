@@ -33,22 +33,12 @@ export default function MyPage() {
   const [message, setMessage] = useState('')
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [showSettings, setShowSettings] = useState(false)
-  const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
   const [changingPassword, setChangingPassword] = useState(false)
   const [isPro, setIsPro] = useState(false)
-  const [userEmail, setUserEmail] = useState('')
-  const [showSetupPassword, setShowSetupPassword] = useState(false)
-  const [setupPassword, setSetupPassword] = useState('')
-  const [setupPasswordConfirm, setSetupPasswordConfirm] = useState('')
-  const [settingUpPassword, setSettingUpPassword] = useState(false)
-  const [setupPasswordMessage, setSetupPasswordMessage] = useState('')
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('setupPassword') === '1') {
-      setShowSetupPassword(true)
-    }
-
     timerRef.current = setTimeout(() => setTimedOut(true), 5000)
 
     async function load() {
@@ -61,7 +51,6 @@ export default function MyPage() {
         }
 
         const email = user.email || ''
-        setUserEmail(email)
 
         // プロ確認
         const { data: proCheck } = await (supabase as any)
@@ -188,40 +177,18 @@ export default function MyPage() {
     setConfirmingId(null)
   }
 
-  async function handleSetupPassword(e: React.FormEvent) {
-    e.preventDefault()
-    setSetupPasswordMessage('')
-    if (setupPassword.length < 6) {
-      setSetupPasswordMessage('パスワードは6文字以上で入力してください')
-      return
-    }
-    if (setupPassword !== setupPasswordConfirm) {
-      setSetupPasswordMessage('パスワードが一致しません')
-      return
-    }
-    setSettingUpPassword(true)
-    const { error } = await (supabase as any).auth.updateUser({ password: setupPassword })
-    if (error) {
-      setSetupPasswordMessage('パスワードの設定に失敗しました')
-    } else {
-      setSetupPasswordMessage('パスワードを設定しました')
-      setTimeout(() => setShowSetupPassword(false), 1500)
-    }
-    setSettingUpPassword(false)
-  }
-
   async function handlePasswordChange(e: React.FormEvent) {
     e.preventDefault()
     setChangingPassword(true)
     setMessage('')
 
-    const { error: signInError } = await (supabase as any).auth.signInWithPassword({
-      email: userEmail,
-      password: currentPassword,
-    })
-
-    if (signInError) {
-      setMessage('エラー：現在のパスワードが正しくありません。')
+    if (newPassword.length < 6) {
+      setMessage('エラー：パスワードは6文字以上で入力してください')
+      setChangingPassword(false)
+      return
+    }
+    if (newPassword !== newPasswordConfirm) {
+      setMessage('エラー：パスワードが一致しません')
       setChangingPassword(false)
       return
     }
@@ -234,8 +201,8 @@ export default function MyPage() {
       setMessage('エラー：パスワードの変更に失敗しました。')
     } else {
       setMessage('パスワードを変更しました。')
-      setCurrentPassword('')
       setNewPassword('')
+      setNewPasswordConfirm('')
       setShowSettings(false)
     }
     setChangingPassword(false)
@@ -261,65 +228,8 @@ export default function MyPage() {
   const activeRewards = rewards.filter(r => r.status === 'active')
   const usedRewards = rewards.filter(r => r.status === 'used')
 
-  const setupPasswordModal = showSetupPassword && (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
-      <div className="bg-white rounded-xl p-6 max-w-sm w-full shadow-lg">
-        {setupPasswordMessage === 'パスワードを設定しました' ? (
-          <div className="text-center py-4">
-            <div className="text-4xl mb-3">✓</div>
-            <p className="text-green-600 font-medium">{setupPasswordMessage}</p>
-          </div>
-        ) : (
-          <>
-            <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">パスワードを設定</h2>
-            <p className="text-sm text-gray-500 mb-4">
-              メール+パスワードでもログインできるよう、パスワードを設定してください
-            </p>
-            <form onSubmit={handleSetupPassword} className="space-y-3">
-              <input
-                type="password"
-                value={setupPassword}
-                onChange={e => setSetupPassword(e.target.value)}
-                required
-                minLength={6}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
-                placeholder="パスワード（6文字以上）"
-              />
-              <input
-                type="password"
-                value={setupPasswordConfirm}
-                onChange={e => setSetupPasswordConfirm(e.target.value)}
-                required
-                minLength={6}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
-                placeholder="パスワード（確認）"
-              />
-              {setupPasswordMessage && (
-                <p className="text-red-500 text-sm">{setupPasswordMessage}</p>
-              )}
-              <button
-                type="submit"
-                disabled={settingUpPassword}
-                className="w-full py-2 bg-[#1A1A2E] text-white text-sm font-medium rounded-lg hover:bg-[#2a2a4e] transition disabled:opacity-50"
-              >
-                {settingUpPassword ? '設定中...' : 'パスワードを設定'}
-              </button>
-            </form>
-            <button
-              onClick={() => setShowSetupPassword(false)}
-              className="w-full mt-2 py-2 text-sm text-gray-400 hover:text-gray-600 transition"
-            >
-              あとで設定する
-            </button>
-          </>
-        )}
-      </div>
-    </div>
-  )
-
   return (
     <div className="max-w-lg mx-auto px-4 py-8">
-      {setupPasswordModal}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-[#1A1A2E]">マイページ</h1>
         <button
@@ -341,20 +251,21 @@ export default function MyPage() {
           <form onSubmit={handlePasswordChange} className="space-y-3">
             <input
               type="password"
-              value={currentPassword}
-              onChange={e => setCurrentPassword(e.target.value)}
-              required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
-              placeholder="現在のパスワード"
-            />
-            <input
-              type="password"
               value={newPassword}
               onChange={e => setNewPassword(e.target.value)}
               required
               minLength={6}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
               placeholder="新しいパスワード（6文字以上）"
+            />
+            <input
+              type="password"
+              value={newPasswordConfirm}
+              onChange={e => setNewPasswordConfirm(e.target.value)}
+              required
+              minLength={6}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
+              placeholder="新しいパスワード（確認）"
             />
             <button
               type="submit"

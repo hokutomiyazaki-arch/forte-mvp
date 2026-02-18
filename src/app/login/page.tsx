@@ -136,8 +136,6 @@ function LoginForm() {
       } catch (_) {}
     }
 
-    const sp = isGoogleUser ? '?setupPassword=1' : ''
-
     if (redirectTo) {
       if (urlRole === 'client') {
         const nn = searchParams.get('nickname') || user.user_metadata?.full_name || user.email?.split('@')[0] || 'ユーザー'
@@ -148,29 +146,29 @@ function LoginForm() {
       }
       if (wantsProParam) {
         console.log('[redirectUser] → /dashboard (wantsPro)')
-        window.location.href = '/dashboard' + sp
+        window.location.href = '/dashboard'
       } else {
         console.log('[redirectUser] → redirectTo:', redirectTo)
-        window.location.href = redirectTo + sp
+        window.location.href = redirectTo
       }
       return
     }
 
     if (proData) {
       console.log('[redirectUser] → /dashboard (existing pro)')
-      window.location.href = '/dashboard' + sp
+      window.location.href = '/dashboard'
       return
     }
 
     if (clientData) {
       console.log('[redirectUser] → /mycard (existing client)')
-      window.location.href = '/mycard' + sp
+      window.location.href = '/mycard'
       return
     }
 
     if (urlRole === 'pro') {
       console.log('[redirectUser] → /dashboard (new pro)')
-      window.location.href = '/dashboard' + sp
+      window.location.href = '/dashboard'
     } else if (urlRole === 'client') {
       const nn = searchParams.get('nickname') || user.user_metadata?.full_name || user.email?.split('@')[0] || 'ユーザー'
       await (supabase.from('clients') as any).upsert({
@@ -178,10 +176,10 @@ function LoginForm() {
         nickname: nn,
       }, { onConflict: 'user_id' })
       console.log('[redirectUser] → /mycard (new client)')
-      window.location.href = '/mycard' + sp
+      window.location.href = '/mycard'
     } else {
       console.log('[redirectUser] → /explore (no role)')
-      window.location.href = '/explore' + sp
+      window.location.href = '/explore'
     }
   }
 
