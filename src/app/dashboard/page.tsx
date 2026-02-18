@@ -47,8 +47,17 @@ export default function DashboardPage() {
   const [confirmingDeregister, setConfirmingDeregister] = useState(false)
   const [deregistering, setDeregistering] = useState(false)
   const [formError, setFormError] = useState('')
+  const [showSetupPassword, setShowSetupPassword] = useState(false)
+  const [setupPassword, setSetupPassword] = useState('')
+  const [setupPasswordConfirm, setSetupPasswordConfirm] = useState('')
+  const [settingPassword, setSettingPassword] = useState(false)
+  const [setupPasswordMessage, setSetupPasswordMessage] = useState('')
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('setupPassword') === '1') {
+      setShowSetupPassword(true)
+    }
+
     async function load() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.user) { window.location.href = '/login?role=pro'; return }
@@ -232,6 +241,28 @@ export default function DashboardPage() {
     return Math.floor((now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24))
   }
 
+  async function handleSetupPassword(e: React.FormEvent) {
+    e.preventDefault()
+    setSetupPasswordMessage('')
+    if (setupPassword.length < 6) {
+      setSetupPasswordMessage('パスワードは6文字以上で入力してください')
+      return
+    }
+    if (setupPassword !== setupPasswordConfirm) {
+      setSetupPasswordMessage('パスワードが一致しません')
+      return
+    }
+    setSettingPassword(true)
+    const { error } = await (supabase as any).auth.updateUser({ password: setupPassword })
+    if (error) {
+      setSetupPasswordMessage('パスワードの設定に失敗しました')
+    } else {
+      setSetupPasswordMessage('パスワードを設定しました')
+      setTimeout(() => setShowSetupPassword(false), 1500)
+    }
+    setSettingPassword(false)
+  }
+
   async function handleDeregister() {
     if (!pro || !user) return
     setDeregistering(true)
@@ -248,9 +279,66 @@ export default function DashboardPage() {
 
   if (loading) return <div className="text-center py-16 text-gray-400">読み込み中...</div>
 
+  const setupPasswordModal = showSetupPassword && (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
+      <div className="bg-white rounded-xl p-6 max-w-sm w-full shadow-lg">
+        {setupPasswordMessage === 'パスワードを設定しました' ? (
+          <div className="text-center py-4">
+            <div className="text-4xl mb-3">✓</div>
+            <p className="text-green-600 font-medium">{setupPasswordMessage}</p>
+          </div>
+        ) : (
+          <>
+            <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">パスワードを設定</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              メール+パスワードでもログインできるよう、パスワードを設定してください
+            </p>
+            <form onSubmit={handleSetupPassword} className="space-y-3">
+              <input
+                type="password"
+                value={setupPassword}
+                onChange={e => setSetupPassword(e.target.value)}
+                required
+                minLength={6}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
+                placeholder="パスワード（6文字以上）"
+              />
+              <input
+                type="password"
+                value={setupPasswordConfirm}
+                onChange={e => setSetupPasswordConfirm(e.target.value)}
+                required
+                minLength={6}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
+                placeholder="パスワード（確認）"
+              />
+              {setupPasswordMessage && (
+                <p className="text-red-500 text-sm">{setupPasswordMessage}</p>
+              )}
+              <button
+                type="submit"
+                disabled={settingPassword}
+                className="w-full py-2 bg-[#1A1A2E] text-white text-sm font-medium rounded-lg hover:bg-[#2a2a4e] transition disabled:opacity-50"
+              >
+                {settingPassword ? '設定中...' : 'パスワードを設定'}
+              </button>
+            </form>
+            <button
+              onClick={() => setShowSetupPassword(false)}
+              className="w-full mt-2 py-2 text-sm text-gray-400 hover:text-gray-600 transition"
+            >
+              あとで設定する
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+
   if (editing) {
     return (
       <div className="max-w-lg mx-auto">
+        {setupPasswordModal}
         <h1 className="text-2xl font-bold text-[#1A1A2E] mb-6">
           {pro ? 'プロフィール編集' : 'プロフィール作成'}
         </h1>
@@ -450,6 +538,7 @@ export default function DashboardPage() {
 
   return (
     <div className="max-w-3xl mx-auto">
+      {setupPasswordModal}
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-bold text-[#1A1A2E]">ダッシュボード</h1>
         <button onClick={() => setEditing(true)} className="text-sm text-[#C4A35A] hover:underline">
