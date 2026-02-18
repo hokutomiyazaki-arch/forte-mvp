@@ -24,6 +24,12 @@ function LoginForm() {
   const [ready, setReady] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
   const [wantsPro, setWantsPro] = useState(false)
+  const [showReset, setShowReset] = useState(false)
+  const [resetEmail, setResetEmail] = useState('')
+  const [resetSent, setResetSent] = useState(false)
+  const [resettingPassword, setResettingPassword] = useState(false)
+  const [emailCheckResult, setEmailCheckResult] = useState<{ exists: boolean; provider: string | null } | null>(null)
+  const [checkingEmail, setCheckingEmail] = useState(false)
   const supabase = createClient() as any
   const isRedirecting = useRef(false)
 
@@ -38,7 +44,6 @@ function LoginForm() {
         if (session?.user && !cancelled) {
           cancelled = true
           if (redirectTo) {
-            // クライアントレコード作成
             if (initialRole === 'client') {
               try {
                 const nn = searchParams.get('nickname') || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'ユーザー'
@@ -79,6 +84,31 @@ function LoginForm() {
     return () => { cancelled = true; subscription.unsubscribe() }
   }, [])
 
+  // couponフローでメールアドレスが入力済みの場合、既存ユーザーかチェック
+  useEffect(() => {
+    if (isCouponFlow && ready && email && email.includes('@')) {
+      checkEmail(email)
+    }
+  }, [ready])
+
+  async function checkEmail(emailToCheck: string) {
+    if (!emailToCheck || !emailToCheck.includes('@')) return
+    setCheckingEmail(true)
+    try {
+      const res = await fetch('/api/check-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailToCheck }),
+      })
+      const data = await res.json()
+      setEmailCheckResult(data)
+      if (data.exists && data.provider !== 'google') {
+        setMode('login')
+      }
+    } catch (_) {}
+    setCheckingEmail(false)
+  }
+
   async function redirectUser(user: any) {
     if (isRedirecting.current) {
       console.log('[redirectUser] already redirecting, skip')
@@ -90,14 +120,12 @@ function LoginForm() {
     const isGoogleUser = user.app_metadata?.provider === 'google'
     console.log('[redirectUser] start, urlRole:', urlRole, 'redirectTo:', redirectTo, 'isGoogle:', isGoogleUser)
 
-    // 既存レコード確認
     const [{ data: proData }, { data: clientData }] = await Promise.all([
       (supabase.from('professionals').select('id').eq('user_id', user.id).maybeSingle()) as any,
       (supabase.from('clients').select('id').eq('user_id', user.id).maybeSingle()) as any,
     ])
     const isNewUser = !proData && !clientData
 
-    // 新規Googleユーザーにウェルカムメール送信
     if (isNewUser && isGoogleUser) {
       try {
         await fetch('/api/welcome-email', {
@@ -108,7 +136,6 @@ function LoginForm() {
       } catch (_) {}
     }
 
-    // redirectToパラメータ優先
     if (redirectTo) {
       if (urlRole === 'client') {
         const nn = searchParams.get('nickname') || user.user_metadata?.full_name || user.email?.split('@')[0] || 'ユーザー'
@@ -127,21 +154,18 @@ function LoginForm() {
       return
     }
 
-    // 既存プロ
     if (proData) {
       console.log('[redirectUser] → /dashboard (existing pro)')
       window.location.href = '/dashboard'
       return
     }
 
-    // 既存クライアント
     if (clientData) {
       console.log('[redirectUser] → /mycard (existing client)')
       window.location.href = '/mycard'
       return
     }
 
-    // 新規ユーザー
     if (urlRole === 'pro') {
       console.log('[redirectUser] → /dashboard (new pro)')
       window.location.href = '/dashboard'
@@ -194,7 +218,6 @@ function LoginForm() {
         })
         if (err) throw err
 
-        // ウェルカムメール送信
         try {
           await fetch('/api/welcome-email', {
             method: 'POST',
@@ -217,6 +240,21 @@ function LoginForm() {
     setSubmitting(false)
   }
 
+  async function handleResetPassword() {
+    if (!resetEmail || !resetEmail.includes('@')) return
+    setResettingPassword(true)
+    setError('')
+    const { error: err } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+      redirectTo: window.location.origin + '/mycard',
+    })
+    if (err) {
+      setError(err.message)
+    } else {
+      setResetSent(true)
+    }
+    setResettingPassword(false)
+  }
+
   if (!ready) {
     return (
       <div className="max-w-md mx-auto text-center py-16">
@@ -236,8 +274,73 @@ function LoginForm() {
     )
   }
 
-  // クーポン受け取りフロー：シンプルUI
+  // パスワードリセットUI
+  const resetUI = (
+    <>
+      {showReset ? (
+        resetSent ? (
+          <p className="text-sm text-green-600 text-center mt-4">パスワードリセットメールを送信しました</p>
+        ) : (
+          <div className="mt-4 space-y-2">
+            <input
+              type="email"
+              value={resetEmail}
+              onChange={e => setResetEmail(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
+              placeholder="メールアドレス"
+            />
+            <button
+              onClick={handleResetPassword}
+              disabled={resettingPassword}
+              className="w-full py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition disabled:opacity-50"
+            >
+              {resettingPassword ? '送信中...' : 'リセットメールを送信'}
+            </button>
+          </div>
+        )
+      ) : (
+        <button
+          onClick={() => { setShowReset(true); setResetEmail(email) }}
+          className="block w-full text-center text-sm text-gray-400 hover:text-gray-600 mt-4 transition"
+        >
+          パスワードを忘れた方はこちら
+        </button>
+      )}
+    </>
+  )
+
+  // クーポン受け取りフロー
   if (isCouponFlow) {
+    // Googleアカウント検出
+    if (emailCheckResult?.exists && emailCheckResult?.provider === 'google') {
+      return (
+        <div className="max-w-md mx-auto">
+          <div className="text-center mb-6">
+            <div className="text-4xl mb-3">🎁</div>
+            <h1 className="text-xl font-bold text-[#1A1A2E] mb-2">リワードを受け取る</h1>
+          </div>
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 text-center">
+            <p className="text-sm text-blue-700 font-medium mb-1">
+              このメールアドレスはGoogleアカウントで登録されています
+            </p>
+            <p className="text-xs text-blue-500">Googleアカウントでログインしてください</p>
+          </div>
+          <button onClick={handleGoogleLogin} disabled={googleLoading}
+            className="w-full py-3 bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-2 text-sm font-medium">
+            {googleLoading ? (
+              <div className="animate-spin w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full"></div>
+            ) : (
+              <>
+                <svg className="w-5 h-5" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                Googleでログイン
+              </>
+            )}
+          </button>
+          {error && <p className="text-red-500 text-sm mt-4">{error}</p>}
+        </div>
+      )
+    }
+
     return (
       <div className="max-w-md mx-auto">
         <div className="text-center mb-6">
@@ -261,6 +364,10 @@ function LoginForm() {
           </button>
         </div>
 
+        {checkingEmail && (
+          <p className="text-xs text-gray-400 text-center mb-4">アカウント確認中...</p>
+        )}
+
         <form onSubmit={handleEmailAuth} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">メールアドレス</label>
@@ -273,6 +380,7 @@ function LoginForm() {
             ) : (
               <>
                 <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
+                  onBlur={() => email && email.includes('@') && checkEmail(email)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
                   placeholder="メールアドレス" />
                 <p className="text-xs text-gray-400 mt-1">※ 投票時に入力したメールアドレスで登録してください</p>
@@ -302,6 +410,7 @@ function LoginForm() {
             {submitting ? '処理中...' : mode === 'signup' ? '登録してリワードを受け取る' : 'ログイン'}
           </button>
         </form>
+        {mode === 'login' && resetUI}
       </div>
     )
   }
@@ -385,6 +494,7 @@ function LoginForm() {
           {submitting ? '処理中...' : mode === 'signup' ? '新規登録' : 'ログイン'}
         </button>
       </form>
+      {mode === 'login' && resetUI}
     </div>
   )
 }
