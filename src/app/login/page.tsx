@@ -38,6 +38,22 @@ function LoginForm() {
   useEffect(() => {
     let cancelled = false
 
+    // OAuth リダイレクト後のエラーチェック（URLハッシュ）
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const hashParams = new URLSearchParams(window.location.hash.substring(1))
+      const errorDesc = hashParams.get('error_description')
+      if (errorDesc) {
+        if (errorDesc.includes('already registered') || errorDesc.includes('already exists')) {
+          setError('このメールアドレスは既にパスワードで登録されています。メールアドレスとパスワードでログインしてください。')
+        } else {
+          setError(errorDesc)
+        }
+        window.location.hash = ''
+        setReady(true)
+        return
+      }
+    }
+
     async function init() {
       try {
         const { data: { session } } = await supabase.auth.getSession()
