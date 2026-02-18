@@ -25,6 +25,17 @@ function filterAndSortBadges(badges: { id: string; label: string; image_url: str
   return filtered
 }
 
+const PREFECTURES = [
+  '北海道','青森県','岩手県','宮城県','秋田県','山形県','福島県',
+  '茨城県','栃木県','群馬県','埼玉県','千葉県','東京都','神奈川県',
+  '新潟県','富山県','石川県','福井県','山梨県','長野県',
+  '岐阜県','静岡県','愛知県','三重県',
+  '滋賀県','京都府','大阪府','兵庫県','奈良県','和歌山県',
+  '鳥取県','島根県','岡山県','広島県','山口県',
+  '徳島県','香川県','愛媛県','高知県',
+  '福岡県','佐賀県','長崎県','熊本県','大分県','宮崎県','鹿児島県','沖縄県',
+]
+
 export default function DashboardPage() {
   const supabase = createClient()
   const [user, setUser] = useState<any>(null)
@@ -38,8 +49,9 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
 
   const [form, setForm] = useState({
-    name: '', title: '', location: '',
-    bio: '', booking_url: '', coupon_text: '', photo_url: '', contact_email: '',
+    name: '', title: '', prefecture: '', area_description: '',
+    is_online_available: false, years_experience: '',
+    bio: '', booking_url: '', photo_url: '', contact_email: '',
   })
   const [customResultFortes, setCustomResultFortes] = useState<CustomForte[]>([])
   const [customPersonalityFortes, setCustomPersonalityFortes] = useState<CustomForte[]>([])
@@ -71,9 +83,12 @@ export default function DashboardPage() {
       setPro(proData)
       setForm({
         name: proData.name || '', title: proData.title || '',
-        location: proData.location || '',
+        prefecture: proData.prefecture || '',
+        area_description: proData.area_description || '',
+        is_online_available: proData.is_online_available || false,
+        years_experience: proData.years_experience != null ? String(proData.years_experience) : '',
         bio: proData.bio || '', booking_url: proData.booking_url || '',
-        coupon_text: proData.coupon_text || '', photo_url: proData.photo_url || '',
+        photo_url: proData.photo_url || '',
         contact_email: proData.contact_email || '',
       })
       setCustomResultFortes(proData.custom_result_fortes || [])
@@ -179,9 +194,11 @@ export default function DashboardPage() {
 
     const record: any = {
       user_id: user.id, name: form.name, title: form.title,
-      location: form.location || null,
+      prefecture: form.prefecture || null,
+      area_description: form.area_description || null,
+      is_online_available: form.is_online_available,
+      years_experience: form.years_experience ? parseInt(form.years_experience, 10) : null,
       bio: form.bio || null, booking_url: form.booking_url || null,
-      coupon_text: form.coupon_text || null,
       contact_email: form.contact_email || null,
       photo_url: form.photo_url || null,
       custom_result_fortes: validResultFortes,
@@ -317,15 +334,39 @@ export default function DashboardPage() {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">肩書き *</label>
-            <input required value={form.title} onChange={e => setForm({...form, title: e.target.value})}
+            <label className="block text-sm font-medium text-gray-700 mb-1">肩書き</label>
+            <input value={form.title} onChange={e => setForm({...form, title: e.target.value})}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
               placeholder="パーソナルトレーナー / 整体師 など" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">エリア</label>
-            <input value={form.location} onChange={e => setForm({...form, location: e.target.value})}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none" placeholder="東京都渋谷区" />
+            <label className="block text-sm font-medium text-gray-700 mb-1">都道府県 *</label>
+            <select required value={form.prefecture} onChange={e => setForm({...form, prefecture: e.target.value})}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none">
+              <option value="">選択してください</option>
+              {PREFECTURES.map(p => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">活動エリア</label>
+            <input value={form.area_description} onChange={e => setForm({...form, area_description: e.target.value})}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
+              placeholder="渋谷・恵比寿エリア / 出張対応：関東全域 など" />
+          </div>
+          <div className="flex items-center gap-2">
+            <input type="checkbox" checked={form.is_online_available}
+              onChange={e => setForm({...form, is_online_available: e.target.checked})}
+              className="w-4 h-4 rounded border-gray-300 text-[#C4A35A] focus:ring-[#C4A35A]" />
+            <label className="text-sm font-medium text-gray-700">オンライン対応可</label>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">経験年数</label>
+            <input type="number" min="0" value={form.years_experience}
+              onChange={e => setForm({...form, years_experience: e.target.value})}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
+              placeholder="例: 10" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">自己紹介</label>
