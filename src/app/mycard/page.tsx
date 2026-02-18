@@ -437,6 +437,20 @@ export default function MyPage() {
           </div>
         )}
       </div>
+
+      {/* アカウント削除 */}
+      <div className="mt-12 text-center">
+        <button
+          onClick={async () => {
+            if (!window.confirm('本当にアカウントを削除しますか？この操作は取り消せません。')) return
+            await supabase.auth.signOut()
+            window.location.href = '/'
+          }}
+          className="text-sm text-red-400 hover:text-red-600 transition"
+        >
+          アカウントを削除する
+        </button>
+      </div>
     </div>
   )
 }

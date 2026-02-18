@@ -237,7 +237,6 @@ export default function DashboardPage() {
     }
 
     setEditing(false)
-    window.location.reload()
   }
 
   async function generateQR() {

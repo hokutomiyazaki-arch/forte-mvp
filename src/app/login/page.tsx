@@ -30,20 +30,46 @@ function LoginForm() {
   const [resettingPassword, setResettingPassword] = useState(false)
   const [emailCheckResult, setEmailCheckResult] = useState<{ exists: boolean; provider: string | null } | null>(null)
   const [checkingEmail, setCheckingEmail] = useState(false)
+  const [alsoRegisterPro, setAlsoRegisterPro] = useState(false)
+  const [proName, setProName] = useState('')
+  const [proTitle, setProTitle] = useState('')
+  const [proPrefecture, setProPrefecture] = useState('')
+  const [proArea, setProArea] = useState('')
+  const [proOnline, setProOnline] = useState(false)
   const supabase = createClient() as any
   const isRedirecting = useRef(false)
+
+  const PREFECTURES = [
+    '北海道','青森県','岩手県','宮城県','秋田県','山形県','福島県',
+    '茨城県','栃木県','群馬県','埼玉県','千葉県','東京都','神奈川県',
+    '新潟県','富山県','石川県','福井県','山梨県','長野県',
+    '岐阜県','静岡県','愛知県','三重県',
+    '滋賀県','京都府','大阪府','兵庫県','奈良県','和歌山県',
+    '鳥取県','島根県','岡山県','広島県','山口県',
+    '徳島県','香川県','愛媛県','高知県',
+    '福岡県','佐賀県','長崎県','熊本県','大分県','宮崎県','鹿児島県','沖縄県',
+  ]
 
   const isClient = role === 'client'
 
   useEffect(() => {
     let cancelled = false
 
-    // OAuth リダイレクト後のエラーチェック（URLハッシュ）
-    if (typeof window !== 'undefined' && window.location.hash) {
-      const hashParams = new URLSearchParams(window.location.hash.substring(1))
-      const errorDesc = hashParams.get('error_description')
+    // OAuth リダイレクト後のエラーチェック（URLハッシュ + クエリパラメータ両対応）
+    if (typeof window !== 'undefined') {
+      let errorDesc: string | null = null
+
+      if (window.location.hash) {
+        const hashParams = new URLSearchParams(window.location.hash.substring(1))
+        errorDesc = hashParams.get('error_description')
+      }
+      if (!errorDesc) {
+        const qp = new URLSearchParams(window.location.search)
+        errorDesc = qp.get('error_description')
+      }
+
       if (errorDesc) {
-        if (errorDesc.includes('already registered') || errorDesc.includes('already exists')) {
+        if (errorDesc.includes('already registered') || errorDesc.includes('already exists') || errorDesc.includes('identity is already linked')) {
           setError('このメールアドレスは既にパスワードで登録されています。メールアドレスとパスワードでログインしてください。')
         } else {
           setError(errorDesc)
@@ -191,8 +217,21 @@ function LoginForm() {
         user_id: user.id,
         nickname: nn,
       }, { onConflict: 'user_id' })
-      console.log('[redirectUser] → /mycard (new client)')
-      window.location.href = '/mycard'
+
+      // 「プロとしても登録する」がONの場合
+      if (alsoRegisterPro && proName.trim()) {
+        await (supabase.from('professionals') as any).upsert({
+          user_id: user.id,
+          name: proName.trim(),
+          title: proTitle.trim() || '未設定',
+          location: proArea.trim() || null,
+        }, { onConflict: 'user_id' })
+        console.log('[redirectUser] → /dashboard (new client + pro)')
+        window.location.href = '/dashboard'
+      } else {
+        console.log('[redirectUser] → /mycard (new client)')
+        window.location.href = '/mycard'
+      }
     } else {
       console.log('[redirectUser] → /explore (no role)')
       window.location.href = '/explore'
@@ -226,6 +265,8 @@ function LoginForm() {
         if (isCouponFlow) {
           signUpOptions.emailRedirectTo = window.location.origin + '/login?role=client&redirect=/mycard&email=' + encodeURIComponent(email)
             + (wantsPro ? '&wantsPro=1' : '')
+        } else if (alsoRegisterPro) {
+          signUpOptions.emailRedirectTo = window.location.origin + '/login?role=' + role + '&wantsPro=1'
         }
         const { error: err } = await supabase.auth.signUp({
           email,
@@ -380,15 +421,39 @@ function LoginForm() {
               placeholder="パスワード（6文字以上）" />
           </div>
           {mode === 'signup' && (
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={wantsPro}
-                onChange={e => setWantsPro(e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 text-[#C4A35A] focus:ring-[#C4A35A]"
-              />
-              <span className="text-sm text-gray-600">プロとしても登録する</span>
-            </label>
+            <div className="border border-gray-200 rounded-lg p-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={wantsPro}
+                  onChange={e => { setWantsPro(e.target.checked); setAlsoRegisterPro(e.target.checked) }}
+                  className="w-4 h-4 rounded border-gray-300 text-[#C4A35A] focus:ring-[#C4A35A]"
+                />
+                <span className="text-sm font-medium text-[#1A1A2E]">プロとしても登録する</span>
+              </label>
+              {wantsPro && (
+                <div className="mt-3 space-y-3 border-t border-gray-100 pt-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">名前 <span className="text-red-400">*</span></label>
+                    <input type="text" value={proName} onChange={e => setProName(e.target.value)} required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
+                      placeholder="表示名" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">肩書き <span className="text-red-400">*</span></label>
+                    <input type="text" value={proTitle} onChange={e => setProTitle(e.target.value)} required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
+                      placeholder="例: パーソナルトレーナー" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">エリア</label>
+                    <input type="text" value={proArea} onChange={e => setProArea(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
+                      placeholder="東京都渋谷区 / 出張対応 など" />
+                  </div>
+                </div>
+              )}
+            </div>
           )}
           {error && <p className="text-red-500 text-sm">{error}</p>}
           <button type="submit" disabled={submitting}
@@ -474,6 +539,44 @@ function LoginForm() {
         <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
           placeholder="パスワード（6文字以上）" />
+
+        {/* プロ同時登録（signupモード時のみ） */}
+        {mode === 'signup' && (
+          <div className="border border-gray-200 rounded-lg p-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={alsoRegisterPro}
+                onChange={e => setAlsoRegisterPro(e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300 text-[#C4A35A] focus:ring-[#C4A35A]"
+              />
+              <span className="text-sm font-medium text-[#1A1A2E]">プロとしても登録する</span>
+            </label>
+            {alsoRegisterPro && (
+              <div className="mt-3 space-y-3 border-t border-gray-100 pt-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">名前 <span className="text-red-400">*</span></label>
+                  <input type="text" value={proName} onChange={e => setProName(e.target.value)} required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
+                    placeholder="表示名" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">肩書き <span className="text-red-400">*</span></label>
+                  <input type="text" value={proTitle} onChange={e => setProTitle(e.target.value)} required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
+                    placeholder="例: パーソナルトレーナー" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">エリア</label>
+                  <input type="text" value={proArea} onChange={e => setProArea(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
+                    placeholder="東京都渋谷区 / 出張対応 など" />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {error && <p className="text-red-500 text-sm">{error}</p>}
         <button type="submit" disabled={submitting}
           className="w-full py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition disabled:opacity-50">

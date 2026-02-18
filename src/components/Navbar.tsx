@@ -12,8 +12,8 @@ export default function Navbar() {
   useEffect(() => {
     async function init() {
       try {
-        const { data: { user: authUser } } = await supabase.auth.getUser()
-        const u = authUser || null
+        const { data: { session } } = await supabase.auth.getSession()
+        const u = session?.user || null
         setUser(u)
 
         if (u) {
@@ -24,7 +24,9 @@ export default function Navbar() {
           setIsPro(!!proData)
           setIsClient(!!clientData)
         }
-      } catch (_) {}
+      } catch (_) {
+        setUser(null)
+      }
       setLoaded(true)
     }
     init()
