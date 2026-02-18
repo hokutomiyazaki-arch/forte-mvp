@@ -283,7 +283,7 @@ function LoginForm() {
           signUpOptions.emailRedirectTo = window.location.origin + '/login?role=' + role + '&wantsPro=1'
             + '&proName=' + encodeURIComponent(proName.trim()) + '&proTitle=' + encodeURIComponent(proTitle.trim()) + '&proArea=' + encodeURIComponent(proArea.trim())
         }
-        const { error: err } = await supabase.auth.signUp({
+        const { data: signUpData, error: err } = await supabase.auth.signUp({
           email,
           password,
           options: signUpOptions,
@@ -297,6 +297,20 @@ function LoginForm() {
             body: JSON.stringify({ email, isGoogle: false }),
           })
         } catch (_) {}
+
+        if (alsoRegisterPro && proName.trim()) {
+          const userId = signUpData.user?.id
+          if (userId) {
+            await (supabase.from('professionals') as any).upsert({
+              user_id: userId,
+              name: proName.trim(),
+              title: proTitle.trim() || '未設定',
+              prefecture: '未設定',
+              area_description: proArea.trim() || null,
+            }, { onConflict: 'user_id' })
+            await supabase.auth.updateUser({ data: { role: 'pro' } })
+          }
+        }
 
         setEmailSent(true)
       } else {
