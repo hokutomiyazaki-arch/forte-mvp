@@ -317,6 +317,18 @@ function LoginForm() {
         const { data, error: err } = await supabase.auth.signInWithPassword({ email, password })
         if (err) throw err
         if (data.session?.user) {
+          if (alsoRegisterPro && proName.trim()) {
+            await (supabase.from('professionals') as any).upsert({
+              user_id: data.session.user.id,
+              name: proName.trim(),
+              title: proTitle.trim() || '未設定',
+              prefecture: '未設定',
+              area_description: proArea.trim() || null,
+            }, { onConflict: 'user_id' })
+            await supabase.auth.updateUser({ data: { role: 'pro' } })
+            window.location.href = '/dashboard'
+            return
+          }
           await redirectUser(data.session.user)
         }
       }
