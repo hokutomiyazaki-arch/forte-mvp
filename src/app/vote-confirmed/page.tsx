@@ -13,11 +13,15 @@ function ConfirmedContent() {
   const voterEmail = searchParams.get('email') || ''
   const supabase = createClient()
   const [proName, setProName] = useState('')
+  const [loggedIn, setLoggedIn] = useState(false)
 
   const isCoupon = rewardType === 'coupon'
 
   useEffect(() => {
     async function load() {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user) setLoggedIn(true)
+
       if (proId) {
         const { data } = await (supabase as any)
           .from('professionals')
@@ -54,7 +58,7 @@ function ConfirmedContent() {
             </p>
           )}
           <a
-            href={`/login?role=client&redirect=/mycard&email=${encodeURIComponent(voterEmail)}`}
+            href={loggedIn ? '/mycard' : `/login?role=client&redirect=/mycard&email=${encodeURIComponent(voterEmail)}`}
             className="inline-block mt-4 px-6 py-3 bg-[#C4A35A] text-white text-sm font-bold rounded-lg hover:bg-[#b3923f] transition"
           >
             10秒で完了！リワードをコレクションする
