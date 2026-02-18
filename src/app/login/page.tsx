@@ -11,7 +11,6 @@ function LoginForm() {
   const emailParam = searchParams.get('email') || ''
   const isCouponFlow = initialRole === 'client' && (redirectTo === '/coupons' || redirectTo === '/mycard')
   const isProSignupFlow = initialRole === 'pro' && !!emailParam
-  const wantsProParam = searchParams.get('wantsPro') === '1'
 
   const [role, setRole] = useState<'pro' | 'client'>(initialRole === 'client' ? 'client' : 'pro')
   const [email, setEmail] = useState(emailParam)
@@ -23,32 +22,14 @@ function LoginForm() {
   const [googleLoading, setGoogleLoading] = useState(false)
   const [ready, setReady] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
-  const [wantsPro, setWantsPro] = useState(false)
   const [showReset, setShowReset] = useState(false)
   const [resetEmail, setResetEmail] = useState('')
   const [resetSent, setResetSent] = useState(false)
   const [resettingPassword, setResettingPassword] = useState(false)
   const [emailCheckResult, setEmailCheckResult] = useState<{ exists: boolean; provider: string | null } | null>(null)
   const [checkingEmail, setCheckingEmail] = useState(false)
-  const [alsoRegisterPro, setAlsoRegisterPro] = useState(false)
-  const [proName, setProName] = useState('')
-  const [proTitle, setProTitle] = useState('')
-  const [proPrefecture, setProPrefecture] = useState('')
-  const [proArea, setProArea] = useState('')
-  const [proOnline, setProOnline] = useState(false)
   const supabase = createClient() as any
   const isRedirecting = useRef(false)
-
-  const PREFECTURES = [
-    '北海道','青森県','岩手県','宮城県','秋田県','山形県','福島県',
-    '茨城県','栃木県','群馬県','埼玉県','千葉県','東京都','神奈川県',
-    '新潟県','富山県','石川県','福井県','山梨県','長野県',
-    '岐阜県','静岡県','愛知県','三重県',
-    '滋賀県','京都府','大阪府','兵庫県','奈良県','和歌山県',
-    '鳥取県','島根県','岡山県','広島県','山口県',
-    '徳島県','香川県','愛媛県','高知県',
-    '福岡県','佐賀県','長崎県','熊本県','大分県','宮崎県','鹿児島県','沖縄県',
-  ]
 
   const isClient = role === 'client'
 
@@ -95,7 +76,7 @@ function LoginForm() {
                 }, { onConflict: 'user_id' })
               } catch (_) {}
             }
-            window.location.href = wantsProParam ? '/dashboard' : redirectTo
+            window.location.href = redirectTo
             return
           }
           await redirectUser(session.user)
@@ -178,33 +159,6 @@ function LoginForm() {
       } catch (_) {}
     }
 
-    // Handle wantsPro=1: create professional from URL params (email confirmation redirect)
-    if (wantsProParam && !proData) {
-      const urlProName = searchParams.get('proName')
-      const urlProTitle = searchParams.get('proTitle')
-      const urlProArea = searchParams.get('proArea')
-      if (urlProName) {
-        if (urlRole === 'client' && !clientData) {
-          const nn = searchParams.get('nickname') || user.user_metadata?.full_name || user.email?.split('@')[0] || 'ユーザー'
-          await (supabase.from('clients') as any).upsert({
-            user_id: user.id,
-            nickname: nn,
-          }, { onConflict: 'user_id' })
-        }
-        await (supabase.from('professionals') as any).upsert({
-          user_id: user.id,
-          name: urlProName,
-          title: urlProTitle || '未設定',
-          prefecture: '未設定',
-          area_description: urlProArea || null,
-        }, { onConflict: 'user_id' })
-        await supabase.auth.updateUser({ data: { role: 'pro' } })
-        console.log('[redirectUser] → /dashboard (wantsPro from URL params)')
-        window.location.href = '/dashboard'
-        return
-      }
-    }
-
     if (redirectTo) {
       if (urlRole === 'client') {
         const nn = searchParams.get('nickname') || user.user_metadata?.full_name || user.email?.split('@')[0] || 'ユーザー'
@@ -213,13 +167,8 @@ function LoginForm() {
           nickname: nn,
         }, { onConflict: 'user_id' })
       }
-      if (wantsProParam) {
-        console.log('[redirectUser] → /dashboard (wantsPro)')
-        window.location.href = '/dashboard'
-      } else {
-        console.log('[redirectUser] → redirectTo:', redirectTo)
-        window.location.href = redirectTo
-      }
+      console.log('[redirectUser] → redirectTo:', redirectTo)
+      window.location.href = redirectTo
       return
     }
 
@@ -278,12 +227,8 @@ function LoginForm() {
         const signUpOptions: any = { data: { role } }
         if (isCouponFlow) {
           signUpOptions.emailRedirectTo = window.location.origin + '/login?role=client&redirect=/mycard&email=' + encodeURIComponent(email)
-            + (wantsPro ? '&wantsPro=1&proName=' + encodeURIComponent(proName.trim()) + '&proTitle=' + encodeURIComponent(proTitle.trim()) + '&proArea=' + encodeURIComponent(proArea.trim()) : '')
-        } else if (alsoRegisterPro) {
-          signUpOptions.emailRedirectTo = window.location.origin + '/login?role=' + role + '&wantsPro=1'
-            + '&proName=' + encodeURIComponent(proName.trim()) + '&proTitle=' + encodeURIComponent(proTitle.trim()) + '&proArea=' + encodeURIComponent(proArea.trim())
         }
-        const { data: signUpData, error: err } = await supabase.auth.signUp({
+        const { error: err } = await supabase.auth.signUp({
           email,
           password,
           options: signUpOptions,
@@ -298,37 +243,11 @@ function LoginForm() {
           })
         } catch (_) {}
 
-        if (alsoRegisterPro && proName.trim()) {
-          const userId = signUpData.user?.id
-          if (userId) {
-            await (supabase.from('professionals') as any).upsert({
-              user_id: userId,
-              name: proName.trim(),
-              title: proTitle.trim() || '未設定',
-              prefecture: '未設定',
-              area_description: proArea.trim() || null,
-            }, { onConflict: 'user_id' })
-            await supabase.auth.updateUser({ data: { role: 'pro' } })
-          }
-        }
-
         setEmailSent(true)
       } else {
         const { data, error: err } = await supabase.auth.signInWithPassword({ email, password })
         if (err) throw err
         if (data.session?.user) {
-          if (alsoRegisterPro && proName.trim()) {
-            await (supabase.from('professionals') as any).upsert({
-              user_id: data.session.user.id,
-              name: proName.trim(),
-              title: proTitle.trim() || '未設定',
-              prefecture: '未設定',
-              area_description: proArea.trim() || null,
-            }, { onConflict: 'user_id' })
-            await supabase.auth.updateUser({ data: { role: 'pro' } })
-            window.location.href = '/dashboard'
-            return
-          }
           await redirectUser(data.session.user)
         }
       }
@@ -461,41 +380,6 @@ function LoginForm() {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
               placeholder="パスワード（6文字以上）" />
           </div>
-          {mode === 'signup' && (
-            <div className="border border-gray-200 rounded-lg p-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={wantsPro}
-                  onChange={e => { setWantsPro(e.target.checked); setAlsoRegisterPro(e.target.checked) }}
-                  className="w-4 h-4 rounded border-gray-300 text-[#C4A35A] focus:ring-[#C4A35A]"
-                />
-                <span className="text-sm font-medium text-[#1A1A2E]">プロとしても登録する</span>
-              </label>
-              {wantsPro && (
-                <div className="mt-3 space-y-3 border-t border-gray-100 pt-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">名前 <span className="text-red-400">*</span></label>
-                    <input type="text" value={proName} onChange={e => setProName(e.target.value)} required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
-                      placeholder="表示名" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">肩書き <span className="text-red-400">*</span></label>
-                    <input type="text" value={proTitle} onChange={e => setProTitle(e.target.value)} required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
-                      placeholder="例: パーソナルトレーナー" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">エリア</label>
-                    <input type="text" value={proArea} onChange={e => setProArea(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
-                      placeholder="東京都渋谷区 / 出張対応 など" />
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
           {error && <p className="text-red-500 text-sm">{error}</p>}
           <button type="submit" disabled={submitting}
             className="w-full py-3 bg-[#C4A35A] text-white font-medium rounded-lg hover:bg-[#b3923f] transition disabled:opacity-50">
@@ -580,43 +464,6 @@ function LoginForm() {
         <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
           placeholder="パスワード（6文字以上）" />
-
-        {/* プロ同時登録（signupモード時のみ） */}
-        {mode === 'signup' && (
-          <div className="border border-gray-200 rounded-lg p-4">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={alsoRegisterPro}
-                onChange={e => setAlsoRegisterPro(e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 text-[#C4A35A] focus:ring-[#C4A35A]"
-              />
-              <span className="text-sm font-medium text-[#1A1A2E]">プロとしても登録する</span>
-            </label>
-            {alsoRegisterPro && (
-              <div className="mt-3 space-y-3 border-t border-gray-100 pt-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">名前 <span className="text-red-400">*</span></label>
-                  <input type="text" value={proName} onChange={e => setProName(e.target.value)} required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
-                    placeholder="表示名" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">肩書き <span className="text-red-400">*</span></label>
-                  <input type="text" value={proTitle} onChange={e => setProTitle(e.target.value)} required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
-                    placeholder="例: パーソナルトレーナー" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">エリア</label>
-                  <input type="text" value={proArea} onChange={e => setProArea(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
-                    placeholder="東京都渋谷区 / 出張対応 など" />
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
         {error && <p className="text-red-500 text-sm">{error}</p>}
         <button type="submit" disabled={submitting}
