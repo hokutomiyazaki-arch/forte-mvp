@@ -112,13 +112,20 @@ function VoteForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, proId }),
       })
+      if (!checkRes.ok) {
+        setError('投票の確認中にエラーが発生しました。もう一度お試しください。')
+        return
+      }
       const checkData = await checkRes.json()
+      console.log('[vote] check-email result:', checkData)
       if (checkData.isSelf) {
         setError('ご自身のプルーフには投票できません')
         return
       }
     } catch (err) {
       console.error('[vote] check-email error:', err)
+      setError('投票の確認中にエラーが発生しました。もう一度お試しください。')
+      return
     }
 
     // 30分クールダウン: このプロが最後にプルーフを受け取ってから30分以内は受付不可
