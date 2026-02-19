@@ -16,11 +16,12 @@ interface Props {
 export default function ForteChart({ votes, personalityVotes = [], professional, showLabels = true }: Props) {
   const sortedResults = [...votes].sort((a, b) => b.vote_count - a.vote_count)
   const sortedPersonality = [...personalityVotes].sort((a, b) => b.vote_count - a.vote_count)
-  const maxVotes = Math.max(
+  const rawMax = Math.max(
     ...sortedResults.map(v => v.vote_count),
     ...sortedPersonality.map(v => v.vote_count),
     1
   )
+  const maxVotes = Math.ceil(rawMax * 1.5)
 
   return (
     <div className="space-y-6">
