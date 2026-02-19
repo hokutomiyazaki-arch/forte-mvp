@@ -340,7 +340,9 @@ export default function DashboardPage() {
   // プルーフ選択ロジック
   const validCustomCount = customProofs.filter(c => c.label.trim()).length
   const totalSelected = selectedProofIds.size + validCustomCount
-  const isMaxSelected = totalSelected >= 8
+  const isMaxSelected = totalSelected >= 9
+  const isExactNine = totalSelected === 9
+  const remaining = 9 - totalSelected
 
   function toggleProofId(id: string) {
     setSelectedProofIds(prev => {
@@ -348,7 +350,7 @@ export default function DashboardPage() {
       if (next.has(id)) {
         next.delete(id)
       } else {
-        if (totalSelected >= 8) return prev
+        if (totalSelected >= 9) return prev
         next.add(id)
       }
       return next
@@ -657,8 +659,9 @@ export default function DashboardPage() {
             {/* プログレスバー */}
             <div className="mb-4">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-medium text-[#1A1A2E]">{totalSelected} / 8 選択中</span>
-                {isMaxSelected && <span className="text-xs text-[#C4A35A] font-medium">上限に達しました</span>}
+                <span className="text-sm font-medium text-[#1A1A2E]">{totalSelected} / 9 選択中</span>
+                {isExactNine && <span className="text-xs text-[#C4A35A] font-medium">✓ 選択完了</span>}
+                {remaining > 0 && <span className="text-xs text-[#9CA3AF] font-medium">あと{remaining}個選んでください</span>}
               </div>
               <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
                 <div
@@ -667,7 +670,7 @@ export default function DashboardPage() {
                       ? 'bg-gradient-to-r from-[#C4A35A] to-[#d4b86a]'
                       : 'bg-gradient-to-r from-[#1A1A2E] to-[#2a2a4e]'
                   }`}
-                  style={{ width: `${(totalSelected / 8) * 100}%` }}
+                  style={{ width: `${(totalSelected / 9) * 100}%` }}
                 />
               </div>
             </div>
@@ -783,7 +786,7 @@ export default function DashboardPage() {
             {proofError && <p className="text-red-500 text-sm mb-2">{proofError}</p>}
             <button
               onClick={handleSaveProofs}
-              disabled={proofSaving}
+              disabled={proofSaving || !isExactNine}
               className={`w-full py-3 rounded-xl text-sm font-medium tracking-wider transition-colors ${
                 proofSaved
                   ? 'bg-green-500 text-white'
