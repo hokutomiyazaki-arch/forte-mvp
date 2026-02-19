@@ -96,9 +96,7 @@ function LoginForm() {
             await redirectUser(session.user)
           } catch (e) {
             console.error('[init] redirectUser error:', e)
-            isRedirecting.current = false
-            cancelled = false
-            setReady(true)
+            window.location.href = '/explore'
           }
           return
         }
@@ -118,14 +116,20 @@ function LoginForm() {
           await redirectUser(session.user)
         } catch (e) {
           console.error('[onAuthStateChange] error:', e)
-          isRedirecting.current = false
-          cancelled = false
-          setReady(true)
+          window.location.href = '/explore'
         }
       }
     })
 
-    return () => { cancelled = true; subscription.unsubscribe() }
+    // 5秒経っても ready にならなければ強制的にリダイレクト
+    const safetyTimer = setTimeout(() => {
+      if (!ready) {
+        console.warn('[login] safety timeout')
+        window.location.href = '/explore'
+      }
+    }, 5000)
+
+    return () => { cancelled = true; subscription.unsubscribe(); clearTimeout(safetyTimer) }
   }, [])
 
   // couponフローでメールアドレスが入力済みの場合、既存ユーザーかチェック
