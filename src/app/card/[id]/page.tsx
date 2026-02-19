@@ -179,7 +179,7 @@ export default function CardPage() {
       {/* CTA */}
       <div className="flex flex-col gap-3 mb-8">
         {pro.is_online_available && (
-          <div className="text-center text-sm text-[#C4A35A] font-medium mb-2">
+          <div className="text-center text-sm text-[#C4A35A] font-medium py-2">
             オンライン対応可
           </div>
         )}

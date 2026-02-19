@@ -17,6 +17,7 @@ export interface Professional {
   contact_email: string | null
   custom_result_fortes: CustomForte[]
   custom_personality_fortes: CustomForte[]
+  is_online_available: boolean
   is_founding_member: boolean
   badges: Badge[]
   created_at: string
