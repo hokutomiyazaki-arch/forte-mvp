@@ -92,7 +92,14 @@ function LoginForm() {
         const { data: { session } } = await supabase.auth.getSession()
         if (session?.user && !cancelled) {
           cancelled = true
-          await redirectUser(session.user)
+          try {
+            await redirectUser(session.user)
+          } catch (e) {
+            console.error('[init] redirectUser error:', e)
+            isRedirecting.current = false
+            cancelled = false
+            setReady(true)
+          }
           return
         }
       } catch (e) {
