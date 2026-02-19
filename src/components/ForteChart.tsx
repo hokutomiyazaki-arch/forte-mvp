@@ -1,5 +1,5 @@
 'use client'
-import { VoteSummary, Professional, getResultForteLabel, getPersonalityForteLabel } from '@/lib/types'
+import { VoteSummary, Professional } from '@/lib/types'
 
 interface PersonalitySummary {
   category: string
@@ -35,7 +35,7 @@ export default function ForteChart({ votes, personalityVotes = [], professional,
               <div key={v.category}>
                 <div className="flex justify-between items-center mb-1">
                   <span className="text-sm font-medium text-[#1A1A2E]">
-                    {getResultForteLabel(v.category, professional)}
+                    {v.category}
                   </span>
                   {showLabels && (
                     <span className="text-sm text-[#1A1A2E] font-bold">{v.vote_count}</span>
@@ -64,7 +64,7 @@ export default function ForteChart({ votes, personalityVotes = [], professional,
               <div key={v.category}>
                 <div className="flex justify-between items-center mb-1">
                   <span className="text-sm font-medium text-[#C4A35A]">
-                    {getPersonalityForteLabel(v.category, professional)}
+                    {v.category}
                   </span>
                   {showLabels && (
                     <span className="text-sm text-[#C4A35A] font-bold">{v.vote_count}</span>

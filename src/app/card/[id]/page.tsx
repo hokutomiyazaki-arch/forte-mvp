@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { Professional, VoteSummary, Vote } from '@/lib/types'
+import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import ForteChart from '@/components/ForteChart'
 
 // バッジ階層: FNTはBDCの上位資格。同レベルのFNTを持っていたらBDCは非表示
@@ -53,13 +54,29 @@ export default function CardPage() {
         .from('professionals').select('*').eq('id', id).single() as any
       if (proData) setPro(proData)
 
-      const { data: voteData } = await supabase
+      // vote_summary: proof_id → ラベル変換
+      const { data: rawVoteData } = await supabase
         .from('vote_summary').select('*').eq('professional_id', id) as any
-      if (voteData) setVotes(voteData)
+      if (rawVoteData && proData) {
+        const { data: piData } = await supabase
+          .from('proof_items').select('id, strength_label') as any
+        if (piData) {
+          const labeledVotes = resolveProofLabels(rawVoteData, piData, proData.custom_proofs || [])
+          setVotes(labeledVotes)
+        }
+      }
 
-      const { data: personalityData } = await supabase
+      // personality_summary: personality_id → ラベル変換
+      const { data: rawPersData } = await supabase
         .from('personality_summary').select('*').eq('professional_id', id) as any
-      if (personalityData) setPersonalityVotes(personalityData)
+      if (rawPersData) {
+        const { data: persItems } = await supabase
+          .from('personality_items').select('id, personality_label') as any
+        if (persItems) {
+          const labeledPers = resolvePersonalityLabels(rawPersData, persItems)
+          setPersonalityVotes(labeledPers)
+        }
+      }
 
       const { data: commentData } = await supabase
         .from('votes').select('*').eq('professional_id', id).eq('status', 'confirmed')
