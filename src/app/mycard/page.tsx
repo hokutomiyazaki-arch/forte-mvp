@@ -45,9 +45,12 @@ export default function MyPage() {
 
     async function load() {
       try {
+        console.log('[mycard] load start')
         const { data: { session } } = await supabase.auth.getSession()
+        console.log('[mycard] session:', session?.user?.email || 'none')
 
         if (!session?.user) {
+          console.log('[mycard] no session, redirecting to login')
           window.location.href = '/login?role=client&redirect=/mycard'
           return
         }
@@ -55,19 +58,22 @@ export default function MyPage() {
         const user = session.user
         const email = user.email || ''
         setUserEmail(email)
+        console.log('[mycard] user email:', email, 'user_id:', user.id)
 
         // プロ確認
         const { data: proCheck } = await (supabase as any)
           .from('professionals').select('id').eq('user_id', user.id).maybeSingle()
         setIsPro(!!proCheck)
+        console.log('[mycard] isPro:', !!proCheck)
 
         // client_rewards を取得（active + used）
-        const { data: clientRewards } = await (supabase as any)
+        const { data: clientRewards, error: crError } = await (supabase as any)
           .from('client_rewards')
           .select('id, reward_id, professional_id, status')
           .eq('client_email', email)
           .in('status', ['active', 'used'])
           .order('created_at', { ascending: false })
+        console.log('[mycard] client_rewards fetch:', { count: clientRewards?.length, error: crError?.message })
 
         if (clientRewards && clientRewards.length > 0) {
           const rewardIds = Array.from(new Set(clientRewards.map((cr: any) => cr.reward_id)))
@@ -115,11 +121,12 @@ export default function MyPage() {
         }
 
         // 投票履歴取得
-        const { data: voteData } = await (supabase as any)
+        const { data: voteData, error: voteError } = await (supabase as any)
           .from('votes')
           .select('id, professional_id, result_category, created_at')
           .eq('voter_email', email)
           .order('created_at', { ascending: false })
+        console.log('[mycard] votes fetch:', { count: voteData?.length, error: voteError?.message })
 
         if (voteData && voteData.length > 0) {
           const voteProIds = Array.from(new Set(voteData.map((v: any) => v.professional_id)))
@@ -141,8 +148,9 @@ export default function MyPage() {
           })))
         }
       } catch (e) {
-        console.error('[mypage] load error:', e)
+        console.error('[mycard] load error:', e)
       }
+      console.log('[mycard] load complete')
       setLoading(false)
     }
 

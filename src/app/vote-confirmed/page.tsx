@@ -25,41 +25,49 @@ function ConfirmedContent() {
 
   useEffect(() => {
     async function load() {
+      console.log('[vote-confirmed] load start, proId:', proId, 'voteId:', voteId)
+
       // セッション確認
       const { data: { session } } = await supabase.auth.getSession()
+      console.log('[vote-confirmed] session:', session?.user?.email || 'none')
       if (session?.user) {
         setLoggedIn(true)
       }
 
       // プロ名取得
       if (proId) {
-        const { data: proData } = await (supabase as any)
+        const { data: proData, error: proError } = await (supabase as any)
           .from('professionals')
           .select('name')
           .eq('id', proId)
           .maybeSingle()
+        console.log('[vote-confirmed] pro fetch:', { proData, proError: proError?.message })
         if (proData) setProName(proData.name)
       }
 
       // vote_id ベースでDBからリワード情報を取得
       if (voteId) {
         // 投票データ取得
-        const { data: vote } = await (supabase as any)
+        const { data: vote, error: voteError } = await (supabase as any)
           .from('votes')
           .select('voter_email, selected_reward_id, professional_id')
           .eq('id', voteId)
           .maybeSingle()
+
+        console.log('[vote-confirmed] vote fetch:', { vote, voteError: voteError?.message })
 
         if (vote) {
           setVoterEmail(vote.voter_email || '')
 
           // リワード取得
           if (vote.selected_reward_id) {
-            const { data: rewardData } = await (supabase as any)
+            const { data: rewardData, error: rewardError } = await (supabase as any)
               .from('rewards')
               .select('reward_type, content, title')
               .eq('id', vote.selected_reward_id)
               .maybeSingle()
+
+            console.log('[vote-confirmed] reward fetch:', { rewardData, rewardError: rewardError?.message })
 
             if (rewardData) {
               setReward({
@@ -72,6 +80,7 @@ function ConfirmedContent() {
         }
       }
 
+      console.log('[vote-confirmed] load complete')
       setLoading(false)
     }
     load()
