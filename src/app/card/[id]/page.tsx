@@ -178,6 +178,11 @@ export default function CardPage() {
 
       {/* CTA */}
       <div className="flex flex-col gap-3 mb-8">
+        {pro.is_online_available && (
+          <div className="text-center text-sm text-[#C4A35A] font-medium mb-2">
+            オンライン対応可
+          </div>
+        )}
         {pro.contact_email && (
           <a href={`mailto:${pro.contact_email}?subject=${encodeURIComponent(`REAL PROOFを見て相談：${pro.name}さん`)}&body=${encodeURIComponent(`${pro.name}さん\n\nREAL PROOFであなたのプロフィールを拝見し、ご相談したくご連絡しました。\n\n`)}`}
             className="w-full text-center py-3 bg-[#C4A35A] text-white font-medium rounded-lg hover:bg-[#b3944f] transition">
