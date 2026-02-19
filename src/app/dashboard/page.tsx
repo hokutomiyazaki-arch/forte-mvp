@@ -270,21 +270,25 @@ export default function DashboardPage() {
       is_founding_member: true,
     }
 
-    let professionalId = pro?.id
     const isNew = !pro
 
-    if (pro) {
-      const { error: updateError } = await (supabase.from('professionals') as any).update(record).eq('id', pro.id)
-      if (updateError) console.error('[handleSave] update pro error:', updateError.message)
-      professionalId = pro.id
-    } else {
-      const { data, error: insertError } = await (supabase.from('professionals') as any).insert(record).select().single()
-      if (insertError) console.error('[handleSave] insert pro error:', insertError.message)
-      if (data) {
-        setPro(data)
-        professionalId = data.id
-        console.log('[handleSave] new pro created, id:', data.id)
-      }
+    const upsertRecord = pro ? { ...record, id: pro.id } : record
+    const { data: savedData, error: saveError } = await (supabase.from('professionals') as any)
+      .upsert(upsertRecord, { onConflict: 'user_id' })
+      .select()
+      .maybeSingle()
+
+    if (saveError) {
+      console.error('[handleSave] upsert pro error:', saveError.message)
+      setFormError('プロフィールの保存に失敗しました。もう一度お試しください。')
+      return
+    }
+
+    let professionalId = pro?.id
+    if (savedData) {
+      setPro(savedData)
+      professionalId = savedData.id
+      if (isNew) console.log('[handleSave] new pro created, id:', savedData.id)
     }
 
     // リワード保存
@@ -687,7 +691,7 @@ export default function DashboardPage() {
 
       {/* Badges */}
       {(() => {
-        const displayBadges = filterAndSortBadges(pro.badges || [])
+        const displayBadges = filterAndSortBadges(pro?.badges || [])
         return displayBadges.length > 0 ? (
           <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
             <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">取得バッジ</h2>
@@ -917,9 +921,11 @@ export default function DashboardPage() {
 
       {/* Links */}
       <div className="flex gap-4">
-        <a href={`/card/${pro.id}`} className="flex-1 text-center py-3 border-2 border-[#1A1A2E] text-[#1A1A2E] rounded-lg hover:bg-[#1A1A2E] hover:text-white transition">
-          カードを見る
-        </a>
+        {pro && (
+          <a href={`/card/${pro.id}`} className="flex-1 text-center py-3 border-2 border-[#1A1A2E] text-[#1A1A2E] rounded-lg hover:bg-[#1A1A2E] hover:text-white transition">
+            カードを見る
+          </a>
+        )}
         <button onClick={async () => { await supabase.auth.signOut(); window.location.href = '/' }}
           className="px-6 py-3 text-gray-500 hover:text-red-500 transition">
           ログアウト
