@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { Professional, VoteSummary, CustomForte, getResultForteLabel, RESULT_FORTES, PERSONALITY_FORTES, REWARD_TYPES } from '@/lib/types'
+import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYPES } from '@/lib/types'
 import ForteChart from '@/components/ForteChart'
 
 // バッジ階層: FNTはBDCの上位資格。同レベルのFNTを持っていたらBDCは非表示
@@ -103,6 +103,13 @@ export default function DashboardPage() {
       const u = session.user
       setUser(u)
 
+      // プルーフ項目マスタ取得（プロの有無にかかわらず必要）
+      const { data: piData } = await supabase
+        .from('proof_items').select('*').order('sort_order') as any
+      if (piData) {
+        setProofItems(piData)
+      }
+
       const { data: rawProData } = await (supabase
         .from('professionals').select('*').eq('user_id', u.id).maybeSingle()) as any
       const proData = rawProData as any
@@ -151,11 +158,8 @@ export default function DashboardPage() {
       const { count } = await supabase.from('votes').select('*', { count: 'exact', head: true }).eq('professional_id', proData.id).eq('status', 'confirmed') as any
       setTotalVotes(count || 0)
 
-      // プルーフ項目マスタ取得 & 選択状態復元
-      const { data: piData } = await supabase
-        .from('proof_items').select('*').order('sort_order') as any
+      // プルーフ選択状態を復元（マスタは上で取得済み）
       if (piData) {
-        setProofItems(piData)
         const validIds = new Set(piData.map((p: ProofItem) => p.id))
         const savedProofs: string[] = proData.selected_proofs || []
         setSelectedProofIds(new Set(savedProofs.filter((id: string) => validIds.has(id))))
@@ -482,64 +486,6 @@ export default function DashboardPage() {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none resize-none" />
           </div>
 
-          {/* デフォルト強みプルーフ一覧 + カスタム */}
-          <div className="border-t pt-4">
-            <label className="block text-sm font-bold text-[#1A1A2E] mb-2">強みプルーフ</label>
-            <p className="text-xs text-gray-500 mb-3">クライアントが投票時に選べる強みカテゴリです</p>
-            <div className="space-y-1 mb-4">
-              {RESULT_FORTES.map(f => (
-                <div key={f.key} className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg">
-                  <span className="w-2 h-2 rounded-full bg-[#1A1A2E] flex-shrink-0"></span>
-                  <span className="text-sm text-gray-700">{f.label}</span>
-                  <span className="text-xs text-gray-400 ml-auto">{f.desc}</span>
-                </div>
-              ))}
-            </div>
-            <p className="text-xs font-medium text-gray-600 mb-2">＋ オリジナル強みプルーフ（最大3つ追加可）</p>
-            {customResultFortes.map((f, i) => (
-              <div key={f.id} className="flex gap-2 mb-2">
-                <input value={f.label} onChange={e => updateCustomForte('result', i, 'label', e.target.value)}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#C4A35A]"
-                  placeholder="カテゴリ名（例：呼吸が楽になった）" />
-                <button type="button" onClick={() => removeCustomForte('result', i)}
-                  className="px-3 py-2 text-red-400 hover:text-red-600 text-sm">✕</button>
-              </div>
-            ))}
-            {customResultFortes.length < 3 && (
-              <button type="button" onClick={() => addCustomForte('result')}
-                className="text-sm text-[#C4A35A] hover:underline">+ オリジナル強みを追加</button>
-            )}
-          </div>
-
-          {/* デフォルトパーソナリティプルーフ一覧 + カスタム */}
-          <div className="border-t pt-4">
-            <label className="block text-sm font-bold text-[#C4A35A] mb-2">パーソナリティプルーフ</label>
-            <p className="text-xs text-gray-500 mb-3">クライアントが投票時に選べる人柄カテゴリです</p>
-            <div className="space-y-1 mb-4">
-              {PERSONALITY_FORTES.map(f => (
-                <div key={f.key} className="flex items-center gap-2 px-3 py-2 bg-[#C4A35A]/5 rounded-lg">
-                  <span className="w-2 h-2 rounded-full bg-[#C4A35A] flex-shrink-0"></span>
-                  <span className="text-sm text-gray-700">{f.label}</span>
-                  <span className="text-xs text-gray-400 ml-auto">{f.desc}</span>
-                </div>
-              ))}
-            </div>
-            <p className="text-xs font-medium text-gray-600 mb-2">＋ オリジナルパーソナリティプルーフ（最大3つ追加可）</p>
-            {customPersonalityFortes.map((f, i) => (
-              <div key={f.id} className="flex gap-2 mb-2">
-                <input value={f.label} onChange={e => updateCustomForte('personality', i, 'label', e.target.value)}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#C4A35A]"
-                  placeholder="カテゴリ名（例：ユーモアがある）" />
-                <button type="button" onClick={() => removeCustomForte('personality', i)}
-                  className="px-3 py-2 text-red-400 hover:text-red-600 text-sm">✕</button>
-              </div>
-            ))}
-            {customPersonalityFortes.length < 3 && (
-              <button type="button" onClick={() => addCustomForte('personality')}
-                className="text-sm text-[#C4A35A] hover:underline">+ オリジナルパーソナリティを追加</button>
-            )}
-          </div>
-
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">予約URL</label>
             <input value={form.booking_url} onChange={e => setForm({...form, booking_url: e.target.value})}
@@ -830,7 +776,7 @@ export default function DashboardPage() {
 
             {/* 注記 */}
             <p className="text-xs text-[#9CA3AF] mb-4">
-              ※ 「期待できそう！」と「特にない」はすべてのプロに自動で表示されます
+              ※ 「期待できそう！」はすべてのプロに自動で表示されます
             </p>
 
             {/* 保存ボタン */}
