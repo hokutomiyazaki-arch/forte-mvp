@@ -509,7 +509,9 @@ function VoteForm() {
   const proofCount = isHopeful ? 1 : selectedProofIds.size
   const personalityCount = selectedPersonalityIds.size
   const rewardCount = selectedRewardId ? 1 : 0
-  const canSubmit = !!sessionCount && voterEmail.trim().length > 0 && voterEmail.includes('@')
+  const hasRewards = proRewards.length > 0
+  const rewardSatisfied = !hasRewards || !!selectedRewardId
+  const canSubmit = !!sessionCount && voterEmail.trim().length > 0 && voterEmail.includes('@') && rewardSatisfied
 
   // 強みプルーフの表示項目（プロが設定した9項目）
   const allProofDisplayItems = [
@@ -535,7 +537,63 @@ function VoteForm() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
 
-          {/* ── 1. セッション回数セレクター ── */}
+          {/* ── 1. リワード選択（常時展開、必須） ── */}
+          {hasRewards && (
+            <div className="bg-white rounded-xl p-4 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-bold text-[#1A1A2E]">
+                  リワードを選ぶ <span className="text-red-400">*</span>
+                </p>
+                <span className="text-xs text-[#9CA3AF]">{rewardCount}/1</span>
+              </div>
+              <div className="space-y-2">
+                {proRewards.map(reward => {
+                  const isSelected = selectedRewardId === reward.id
+                  const displayLabel = reward.reward_type === 'surprise'
+                    ? 'シークレット — 何が出るかお楽しみ！'
+                    : reward.title && (reward.reward_type === 'selfcare' || reward.reward_type === 'freeform')
+                      ? reward.title
+                      : getRewardLabel(reward.reward_type)
+                  return (
+                    <label
+                      key={reward.id}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${
+                        isSelected ? 'bg-[#FAFAF7]' : 'hover:bg-[#FAFAF7]'
+                      }`}
+                    >
+                      <div className="relative flex-shrink-0">
+                        <input
+                          type="radio"
+                          name="reward"
+                          value={reward.id}
+                          checked={isSelected}
+                          onChange={() => setSelectedRewardId(isSelected ? '' : reward.id)}
+                          className="sr-only"
+                        />
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+                          isSelected
+                            ? 'border-[#C4A35A]'
+                            : 'border-[#E5E7EB]'
+                        }`}>
+                          {isSelected && (
+                            <div className="w-2.5 h-2.5 rounded-full bg-[#C4A35A]" />
+                          )}
+                        </div>
+                      </div>
+                      <span className={`text-sm ${isSelected ? 'text-[#1A1A2E] font-medium' : 'text-[#1A1A2E]'}`}>
+                        {displayLabel}
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+              <p className="text-xs text-[#9CA3AF] mt-3">
+                リワードの内容は投票後に開示されます
+              </p>
+            </div>
+          )}
+
+          {/* ── 2. セッション回数セレクター ── */}
           <div className="bg-white rounded-xl p-4 shadow-sm">
             <p className="text-sm font-bold text-[#1A1A2E] mb-3">
               {pro.name}さんのセッションは？
@@ -730,61 +788,7 @@ function VoteForm() {
             </p>
           </div>
 
-          {/* ── 6. リワード選択（アコーディオン） ── */}
-          {proRewards.length > 0 && (
-            <Accordion
-              title="リワードを選ぶ"
-              count={rewardCount}
-              max={1}
-              isOpen={accordionOpen.reward}
-              onToggle={() => setAccordionOpen(prev => ({ ...prev, reward: !prev.reward }))}
-            >
-              <div className="space-y-2">
-                {proRewards.map(reward => {
-                  const isSelected = selectedRewardId === reward.id
-                  const displayLabel = reward.reward_type === 'surprise'
-                    ? 'シークレット — 何が出るかお楽しみ！'
-                    : reward.title && (reward.reward_type === 'selfcare' || reward.reward_type === 'freeform')
-                      ? reward.title
-                      : getRewardLabel(reward.reward_type)
-                  return (
-                    <label
-                      key={reward.id}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${
-                        isSelected ? 'bg-[#FAFAF7]' : 'hover:bg-[#FAFAF7]'
-                      }`}
-                    >
-                      <div className="relative flex-shrink-0">
-                        <input
-                          type="radio"
-                          name="reward"
-                          value={reward.id}
-                          checked={isSelected}
-                          onChange={() => setSelectedRewardId(isSelected ? '' : reward.id)}
-                          className="sr-only"
-                        />
-                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
-                          isSelected
-                            ? 'border-[#C4A35A]'
-                            : 'border-[#E5E7EB]'
-                        }`}>
-                          {isSelected && (
-                            <div className="w-2.5 h-2.5 rounded-full bg-[#C4A35A]" />
-                          )}
-                        </div>
-                      </div>
-                      <span className={`text-sm ${isSelected ? 'text-[#1A1A2E] font-medium' : 'text-[#1A1A2E]'}`}>
-                        {displayLabel}
-                      </span>
-                    </label>
-                  )
-                })}
-              </div>
-              <p className="text-xs text-[#9CA3AF] mt-3">
-                リワードの内容は投票後に開示されます
-              </p>
-            </Accordion>
-          )}
+          {/* リワードセクションは上部に移動済み */}
 
           {/* エラー表示 */}
           {error && (
@@ -808,7 +812,7 @@ function VoteForm() {
             </button>
             {!canSubmit && (
               <p className="text-xs text-[#9CA3AF] text-center mt-2">
-                セッション回数とメールアドレスを入力してください
+                {hasRewards ? 'リワード・セッション回数・メールアドレスを入力してください' : 'セッション回数とメールアドレスを入力してください'}
               </p>
             )}
           </div>
