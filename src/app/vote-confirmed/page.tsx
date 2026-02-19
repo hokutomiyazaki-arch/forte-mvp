@@ -113,9 +113,17 @@ function ConfirmedContent() {
             {reward.title && (
               <p className="text-sm text-gray-500 mb-2">{reward.title}</p>
             )}
-            <p className="text-lg font-semibold text-[#1A1A2E] mb-4">
-              {reward.content}
-            </p>
+
+            {/* couponは常に表示、それ以外はログイン済みのみ表示 */}
+            {reward.reward_type === 'coupon' || loggedIn ? (
+              <p className="text-lg font-semibold text-[#1A1A2E] mb-4">
+                {reward.content}
+              </p>
+            ) : (
+              <p className="text-sm text-gray-400 mb-4">
+                アカウント登録後にリワードの中身を確認できます
+              </p>
+            )}
 
             {loggedIn ? (
               <>
