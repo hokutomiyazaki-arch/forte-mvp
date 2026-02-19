@@ -45,7 +45,7 @@ export default function Navbar() {
         {loaded && (user ? (
           <>
             {isPro && <a href="/dashboard" className="hover:text-[#C4A35A] transition">ダッシュボード</a>}
-            {isClient && <a href="/mycard" className="hover:text-[#C4A35A] transition">マイページ</a>}
+            <a href="/mycard" className="hover:text-[#C4A35A] transition">マイページ</a>
             <button onClick={handleLogout} className="hover:text-[#C4A35A] transition">ログアウト</button>
           </>
         ) : (
