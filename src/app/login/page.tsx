@@ -12,6 +12,11 @@ function LoginForm() {
   const isCouponFlow = initialRole === 'client' && (redirectTo === '/coupons' || redirectTo === '/mycard')
   const isProSignupFlow = initialRole === 'pro' && !!emailParam
 
+  // SSR対策: redirectパラメータの有無をレンダリング時に判定
+  const hasRedirect = typeof window !== 'undefined'
+    ? !!new URLSearchParams(window.location.search).get('redirect')
+    : !!redirectTo
+
   const [role, setRole] = useState<'pro' | 'client'>(initialRole === 'client' ? 'client' : 'pro')
   const [email, setEmail] = useState(emailParam)
   const [password, setPassword] = useState('')
@@ -288,6 +293,16 @@ function LoginForm() {
       setResetSent(true)
     }
     setResettingPassword(false)
+  }
+
+  // redirect付きの場合: useEffect内でリダイレクト処理中。他のUIは一切表示しない
+  if (hasRedirect) {
+    return (
+      <div className="max-w-md mx-auto text-center py-16">
+        <div className="animate-spin w-8 h-8 border-4 border-[#C4A35A] border-t-transparent rounded-full mx-auto mb-4"></div>
+        <p className="text-gray-500">リダイレクト中...</p>
+      </div>
+    )
   }
 
   if (!ready) {
