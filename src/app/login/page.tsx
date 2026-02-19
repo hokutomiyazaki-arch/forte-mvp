@@ -33,22 +33,28 @@ function LoginForm() {
 
   const isClient = role === 'client'
 
-  // 最優先: redirect パラメータがある場合の即時処理
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search)
     const redirect = urlParams.get('redirect')
-    if (!redirect) return
-    supabase.auth.getSession().then(({ data: { session } }: any) => {
-      if (session) {
-        window.location.replace(redirect)
-      } else {
-        const email = urlParams.get('email') || ''
-        window.location.replace('/mycard' + (email ? '?email=' + encodeURIComponent(email) : ''))
-      }
-    })
-  }, [])
 
-  useEffect(() => {
+    // ========== redirect専用パス: getSession → リダイレクトのみ ==========
+    if (redirect) {
+      console.log('[login] redirect mode, checking session...')
+      supabase.auth.getSession().then(({ data: { session } }: any) => {
+        console.log('[login] redirect mode, session:', !!session)
+        if (session) {
+          console.log('[login] redirecting to:', redirect)
+          window.location.replace(redirect)
+        } else {
+          const em = urlParams.get('email') || ''
+          console.log('[login] no session, redirecting to mycard')
+          window.location.replace('/mycard' + (em ? '?email=' + encodeURIComponent(em) : ''))
+        }
+      })
+      return // cleanup不要、onAuthStateChange不登録
+    }
+
+    // ========== 通常のログインページ処理（redirectなしの場合のみ） ==========
     let cancelled = false
 
     // OAuth リダイレクト後のエラーチェック（URLハッシュ + クエリパラメータ両対応）
@@ -78,30 +84,7 @@ function LoginForm() {
 
     async function init() {
       try {
-        // URLから直接 redirect パラメータを取得（searchParamsに依存しない）
-        const urlParams = new URLSearchParams(window.location.search)
-        const directRedirect = urlParams.get('redirect')
-
         const { data: { session } } = await supabase.auth.getSession()
-
-        // ログイン済み + redirect がある場合は即座にリダイレクト
-        if (session?.user && directRedirect && !cancelled) {
-          cancelled = true
-          const urlRole = urlParams.get('role') || ''
-          if (urlRole === 'client') {
-            try {
-              const nn = urlParams.get('nickname') || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'ユーザー'
-              await (supabase.from('clients') as any).upsert({
-                user_id: session.user.id,
-                nickname: nn,
-              }, { onConflict: 'user_id' })
-            } catch (_) {}
-          }
-          window.location.href = directRedirect
-          return
-        }
-
-        // ログイン済みだが redirect なし → 通常のredirectUser
         if (session?.user && !cancelled) {
           cancelled = true
           await redirectUser(session.user)
@@ -115,33 +98,10 @@ function LoginForm() {
     init()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string, session: any) => {
-      // URLから直接パラメータ取得（searchParamsに依存しない）
-      const urlParams = new URLSearchParams(window.location.search)
-      const directRedirect = urlParams.get('redirect')
-      console.log('[onAuthStateChange] event:', event, 'cancelled:', cancelled, 'directRedirect:', directRedirect)
+      console.log('[onAuthStateChange] event:', event, 'cancelled:', cancelled)
 
       if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user && !cancelled) {
         cancelled = true
-
-        // redirect がある場合は即座にリダイレクト（DB問い合わせを避ける）
-        if (directRedirect) {
-          if (isRedirecting.current) return
-          isRedirecting.current = true
-          const urlRole = urlParams.get('role') || ''
-          if (urlRole === 'client') {
-            try {
-              const nn = urlParams.get('nickname') || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'ユーザー'
-              await (supabase.from('clients') as any).upsert({
-                user_id: session.user.id,
-                nickname: nn,
-              }, { onConflict: 'user_id' })
-            } catch (_) {}
-          }
-          console.log('[onAuthStateChange] → directRedirect (skip DB):', directRedirect)
-          window.location.href = directRedirect
-          return
-        }
-
         try {
           await redirectUser(session.user)
         } catch (e) {
