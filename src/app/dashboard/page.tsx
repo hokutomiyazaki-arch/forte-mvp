@@ -88,6 +88,7 @@ export default function DashboardPage() {
   const [formError, setFormError] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
+  const [hasEmailIdentity, setHasEmailIdentity] = useState(false)
 
   // プルーフ選択用 state
   const [proofItems, setProofItems] = useState<ProofItem[]>([])
@@ -104,6 +105,8 @@ export default function DashboardPage() {
       if (!session?.user) { window.location.href = '/login?role=pro'; return }
       const u = session.user
       setUser(u)
+      const emailIdentity = u.identities?.find((i: any) => i.provider === 'email')
+      setHasEmailIdentity(!!emailIdentity)
 
       // プルーフ項目マスタ取得（プロの有無にかかわらず必要）
       const { data: piData } = await supabase
@@ -247,8 +250,8 @@ export default function DashboardPage() {
         return
       }
     }
-    // 新規プロ登録時はパスワード必須
-    if (!pro && !newPassword) {
+    // 新規プロ登録時はパスワード必須（email identityがある場合は任意）
+    if (!pro && !hasEmailIdentity && !newPassword) {
       setFormError('パスワードを設定してください')
       return
     }
@@ -649,7 +652,7 @@ export default function DashboardPage() {
           {/* パスワード設定 */}
           <div className="border-t pt-4">
             <label className="block text-sm font-bold text-[#1A1A2E] mb-2">
-              {pro ? 'パスワード変更（変更しない場合は空欄）' : 'パスワード設定 *'}
+              {pro ? 'パスワード変更（変更しない場合は空欄）' : hasEmailIdentity ? 'パスワード変更（変更しない場合は空欄）' : 'パスワード設定 *'}
             </label>
             <div className="space-y-2">
               <input
@@ -657,18 +660,18 @@ export default function DashboardPage() {
                 value={newPassword}
                 onChange={e => setNewPassword(e.target.value)}
                 minLength={6}
-                required={!pro}
+                required={!pro && !hasEmailIdentity}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
-                placeholder={pro ? '新しいパスワード（6文字以上）' : 'パスワード（6文字以上）'}
+                placeholder={pro ? '新しいパスワード（6文字以上）' : hasEmailIdentity ? '新しいパスワード（6文字以上）' : 'パスワード（6文字以上）'}
               />
               <input
                 type="password"
                 value={newPasswordConfirm}
                 onChange={e => setNewPasswordConfirm(e.target.value)}
                 minLength={6}
-                required={!pro}
+                required={!pro && !hasEmailIdentity}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
-                placeholder={pro ? '新しいパスワード（確認）' : 'パスワード（確認）'}
+                placeholder={pro ? '新しいパスワード（確認）' : hasEmailIdentity ? '新しいパスワード（確認）' : 'パスワード（確認）'}
               />
             </div>
           </div>
