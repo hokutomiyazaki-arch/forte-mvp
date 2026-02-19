@@ -151,12 +151,21 @@ function ConfirmedContent() {
               </>
             ) : (
               <>
-                <a
-                  href={`/login?role=client&redirect=/mycard&email=${encodeURIComponent(voterEmail)}`}
-                  className="inline-block w-full py-3 bg-[#C4A35A] text-white text-sm font-bold rounded-lg hover:bg-[#b3923f] transition"
+                <button
+                  onClick={async () => {
+                    // クリック時にセッションを再チェック（初回ロード時と状態が変わっている可能性）
+                    const { data: { session: freshSession } } = await supabase.auth.getSession()
+                    console.log('[vote-confirmed] button click session check:', freshSession?.user?.email || 'none')
+                    if (freshSession?.user) {
+                      window.location.href = '/mycard'
+                    } else {
+                      window.location.href = `/login?role=client&redirect=/mycard&email=${encodeURIComponent(voterEmail)}`
+                    }
+                  }}
+                  className="inline-block w-full py-3 bg-[#C4A35A] text-white text-sm font-bold rounded-lg hover:bg-[#b3923f] transition cursor-pointer"
                 >
                   リワードをコレクションする
-                </a>
+                </button>
                 <p className="text-xs text-gray-400 mt-2">パスワードを設定するだけ</p>
               </>
             )}

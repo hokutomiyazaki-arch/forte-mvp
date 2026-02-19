@@ -50,10 +50,22 @@ export default function MyPage() {
         console.log('[mycard] session:', session?.user?.email || 'none')
 
         if (!session?.user) {
-          console.log('[mycard] no session, redirecting to login')
+          // ループ防止: login→mycard→login の無限ループを検知
+          const loopCount = parseInt(sessionStorage.getItem('mycard_redirect_count') || '0')
+          if (loopCount >= 2) {
+            console.error('[mycard] redirect loop detected, stopping. count:', loopCount)
+            sessionStorage.removeItem('mycard_redirect_count')
+            // ループ時はログイン画面にredirectなしで飛ばす（ループ防止）
+            window.location.href = '/login'
+            return
+          }
+          sessionStorage.setItem('mycard_redirect_count', String(loopCount + 1))
+          console.log('[mycard] no session, redirecting to login, loopCount:', loopCount + 1)
           window.location.href = '/login?role=client&redirect=/mycard'
           return
         }
+        // 正常到達時はループカウンターをリセット
+        sessionStorage.removeItem('mycard_redirect_count')
 
         const user = session.user
         const email = user.email || ''
