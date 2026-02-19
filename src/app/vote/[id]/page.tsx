@@ -286,13 +286,24 @@ function VoteForm() {
     // メアドをローカルストレージに保存
     localStorage.setItem('proof_voter_email', email)
 
+    // 選択IDを分類（UUID vs カスタム）
+    const allSelectedProofIds = Array.from(selectedProofIds)
+    const uuidProofIds = allSelectedProofIds.filter(id => !id.startsWith('custom_'))
+    const customProofIds = allSelectedProofIds.filter(id => id.startsWith('custom_'))
+    const hasProofs = allSelectedProofIds.length > 0
+
     // vote_type 判定
     let voteType = 'personality_only'
     if (isHopeful) {
       voteType = 'hopeful'
-    } else if (selectedProofIds.size > 0) {
+    } else if (hasProofs) {
       voteType = 'proof'
     }
+
+    // selected_proof_ids: UUID と カスタムID を両方 TEXT[] として送信
+    const proofIdsToSend = isHopeful ? null : (hasProofs ? allSelectedProofIds : null)
+
+    console.log('[handleSubmit] proof IDs:', { uuidProofIds, customProofIds, proofIdsToSend })
 
     // 投票INSERT
     const { data: voteData, error: voteError } = await (supabase as any).from('votes').insert({
@@ -301,7 +312,7 @@ function VoteForm() {
       client_user_id: null,
       session_count: sessionCount,
       vote_type: voteType,
-      selected_proof_ids: isHopeful ? null : (selectedProofIds.size > 0 ? Array.from(selectedProofIds) : null),
+      selected_proof_ids: proofIdsToSend,
       selected_personality_ids: selectedPersonalityIds.size > 0 ? Array.from(selectedPersonalityIds) : null,
       selected_reward_id: selectedRewardId || null,
       comment: comment.trim() || null,
@@ -323,7 +334,7 @@ function VoteForm() {
         voter_email: email,
         session_count: sessionCount,
         vote_type: voteType,
-        selected_proof_ids: isHopeful ? null : (selectedProofIds.size > 0 ? Array.from(selectedProofIds) : null),
+        selected_proof_ids: proofIdsToSend,
         selected_personality_ids: selectedPersonalityIds.size > 0 ? Array.from(selectedPersonalityIds) : null,
         selected_reward_id: selectedRewardId || null,
         qr_token: qrToken,
