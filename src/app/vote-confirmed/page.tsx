@@ -10,6 +10,7 @@ function ConfirmedContent() {
   const proId = searchParams.get('pro')
   const rewardType = searchParams.get('reward_type') || ''
   const rewardContent = searchParams.get('reward_content') || ''
+  const rewardTitle = searchParams.get('reward_title') || ''
   const voterEmail = searchParams.get('email') || ''
   const supabase = createClient()
   const [proName, setProName] = useState('')
@@ -45,6 +46,9 @@ function ConfirmedContent() {
       {rewardType ? (
         <div className="bg-[#f8f6f0] border-2 border-dashed border-[#C4A35A] rounded-xl p-6 mb-6">
           <p className="text-sm text-[#666] mb-1">{getRewardLabel(rewardType)}</p>
+          {rewardTitle && (
+            <p className="text-lg font-bold text-[#1A1A2E] mb-2">{rewardTitle}</p>
+          )}
           {isCoupon && rewardContent ? (
             <>
               <p className="text-xl font-bold text-[#1A1A2E] mb-3">{rewardContent}</p>

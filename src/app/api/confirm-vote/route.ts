@@ -104,20 +104,22 @@ export async function GET(req: NextRequest) {
 
     let rewardType = ''
     let rewardContent = ''
+    let rewardTitle = ''
 
     if (clientReward) {
       const { data: rewardData } = await supabaseAdmin
         .from('rewards')
-        .select('reward_type, content')
+        .select('reward_type, content, title')
         .eq('id', clientReward.reward_id)
         .maybeSingle()
 
       if (rewardData) {
         rewardType = rewardData.reward_type
-        rewardContent = rewardData.content
+        rewardContent = rewardData.content || ''
+        rewardTitle = rewardData.title || ''
       }
 
-      console.log('[confirm-vote] Step 5b OK - reward:', { rewardType, rewardContent })
+      console.log('[confirm-vote] Step 5b OK - reward:', { rewardType, rewardContent, rewardTitle })
     } else {
       console.log('[confirm-vote] Step 5b - no client_reward for this vote')
     }
@@ -205,6 +207,7 @@ export async function GET(req: NextRequest) {
     const redirectParams = new URLSearchParams({ pro: professionalId })
     if (rewardType) redirectParams.set('reward_type', rewardType)
     if (rewardContent) redirectParams.set('reward_content', rewardContent)
+    if (rewardTitle) redirectParams.set('reward_title', rewardTitle)
     if (vote.voter_email) redirectParams.set('email', vote.voter_email)
 
     return NextResponse.redirect(
