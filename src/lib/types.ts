@@ -97,18 +97,22 @@ export const PERSONALITY_FORTES: { key: string; label: string; desc: string }[] 
 // リワードタイプ
 // ============================================
 export const REWARD_TYPES = [
-  { id: 'coupon', label: 'クーポン（割引・特典）' },
-  { id: 'restaurant', label: 'おすすめのレストラン' },
-  { id: 'secret', label: 'ここだけの秘密' },
-  { id: 'lifehack', label: '知る人ぞ知る裏技' },
-  { id: 'confession', label: '実は私…の内緒話' },
-  { id: 'media', label: 'おすすめの本・映画' },
-  { id: 'spot', label: '穴場スポット' },
-  { id: 'health', label: 'おすすめ健康グッズ' },
+  { id: 'coupon',    label: '次回特典',           description: '延長15分無料、オプション無料追加など', hasTitle: false },
+  { id: 'secret',    label: 'プロの秘密',         description: 'あなただけが知っている専門知識やテクニック', hasTitle: false },
+  { id: 'selfcare',  label: '自宅でできる○○',    description: 'セルフケア・セルフワークを教える', hasTitle: true },
+  { id: 'book',      label: 'おすすめの一冊',     description: 'あなたの人生を変えた本', hasTitle: false },
+  { id: 'spot',      label: 'おすすめスポット',   description: 'あなたの行きつけ', hasTitle: false },
+  { id: 'media',     label: 'おすすめ作品',       description: '映画・音楽・Podcast', hasTitle: false },
+  { id: 'surprise',  label: 'シークレット',       description: '種類すら非公開！何が出るかお楽しみ', hasTitle: false },
+  { id: 'freeform',  label: '自由記入',           description: '何でもOK。タイトルと内容を自由に設定', hasTitle: true },
 ] as const
 
 export function getRewardLabel(rewardType: string): string {
   return REWARD_TYPES.find(r => r.id === rewardType)?.label || rewardType
+}
+
+export function getRewardType(id: string) {
+  return REWARD_TYPES.find(r => r.id === id)
 }
 
 // ============================================
