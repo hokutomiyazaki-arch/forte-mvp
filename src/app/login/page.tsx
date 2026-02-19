@@ -121,15 +121,7 @@ function LoginForm() {
       }
     })
 
-    // 5秒経っても ready にならなければ強制的にリダイレクト
-    const safetyTimer = setTimeout(() => {
-      if (!ready) {
-        console.warn('[login] safety timeout')
-        window.location.href = '/explore'
-      }
-    }, 5000)
-
-    return () => { cancelled = true; subscription.unsubscribe(); clearTimeout(safetyTimer) }
+    return () => { cancelled = true; subscription.unsubscribe() }
   }, [])
 
   // couponフローでメールアドレスが入力済みの場合、既存ユーザーかチェック
