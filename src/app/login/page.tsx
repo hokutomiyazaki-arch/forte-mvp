@@ -251,12 +251,20 @@ function LoginForm() {
         if (isCouponFlow) {
           signUpOptions.emailRedirectTo = window.location.origin + '/login?role=client&redirect=/mycard&email=' + encodeURIComponent(email)
         }
-        const { error: err } = await supabase.auth.signUp({
+        const { data, error: err } = await supabase.auth.signUp({
           email,
           password,
           options: signUpOptions,
         })
         if (err) throw err
+
+        // 既存ユーザー検知: identities が空 = このメールは既に登録済み
+        if (data.user && (!data.user.identities || data.user.identities.length === 0)) {
+          setError('このメールアドレスは既に登録されています。ログインしてください。')
+          setMode('login')
+          setSubmitting(false)
+          return
+        }
 
         try {
           await fetch('/api/welcome-email', {

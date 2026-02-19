@@ -213,6 +213,14 @@ function MyCardContent() {
         })
         if (error) throw error
 
+        // 既存ユーザー検知: identities が空 = このメールは既に登録済み
+        if (data.user && (!data.user.identities || data.user.identities.length === 0)) {
+          setAuthError('このメールアドレスは既に登録されています。ログインしてください。')
+          setAuthFormMode('login')
+          setAuthSubmitting(false)
+          return
+        }
+
         // Supabaseの設定によってはメール確認が必要
         if (data.session) {
           // メール確認不要: そのままセッション確立
