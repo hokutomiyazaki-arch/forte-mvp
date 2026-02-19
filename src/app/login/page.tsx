@@ -376,9 +376,10 @@ function LoginForm() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">パスワード</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
-              placeholder="パスワード（6文字以上）" />
+              placeholder="パスワード" />
+            <p className="text-xs text-gray-400 mt-1">6文字以上で設定してください</p>
           </div>
           {error && <p className="text-red-500 text-sm">{error}</p>}
           <button type="submit" disabled={submitting}
@@ -461,9 +462,14 @@ function LoginForm() {
         <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
           placeholder="メールアドレス" />
-        <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
-          placeholder="パスワード（6文字以上）" />
+        <div>
+          <input type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
+            placeholder="パスワード" />
+          {mode === 'signup' && (
+            <p className="text-xs text-gray-400 mt-1">6文字以上で設定してください</p>
+          )}
+        </div>
 
         {error && <p className="text-red-500 text-sm">{error}</p>}
         <button type="submit" disabled={submitting}

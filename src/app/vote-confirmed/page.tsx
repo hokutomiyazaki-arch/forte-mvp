@@ -148,7 +148,7 @@ function ConfirmedContent() {
                 >
                   リワードをコレクションする
                 </a>
-                <p className="text-xs text-gray-400 mt-2">メールアドレスとパスワードを設定するだけ</p>
+                <p className="text-xs text-gray-400 mt-2">パスワードを設定するだけ</p>
               </>
             )}
           </div>
