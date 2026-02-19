@@ -7,6 +7,7 @@ interface RewardWithPro {
   id: string
   reward_id: string
   reward_type: string
+  title: string
   content: string
   status: string
   professional_id: string
@@ -37,20 +38,23 @@ export default function MyPage() {
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
   const [changingPassword, setChangingPassword] = useState(false)
   const [isPro, setIsPro] = useState(false)
+  const [userEmail, setUserEmail] = useState('')
 
   useEffect(() => {
     timerRef.current = setTimeout(() => setTimedOut(true), 5000)
 
     async function load() {
       try {
-        const { data: { user }, error: authError } = await supabase.auth.getUser()
+        const { data: { session } } = await supabase.auth.getSession()
 
-        if (authError || !user) {
+        if (!session?.user) {
           window.location.href = '/login?role=client&redirect=/mycard'
           return
         }
 
+        const user = session.user
         const email = user.email || ''
+        setUserEmail(email)
 
         // プロ確認
         const { data: proCheck } = await (supabase as any)
@@ -69,13 +73,13 @@ export default function MyPage() {
           const rewardIds = Array.from(new Set(clientRewards.map((cr: any) => cr.reward_id)))
           const { data: rewardData } = await (supabase as any)
             .from('rewards')
-            .select('id, reward_type, content')
+            .select('id, reward_type, title, content')
             .in('id', rewardIds)
 
-          const rewardMap = new Map<string, { reward_type: string; content: string }>()
+          const rewardMap = new Map<string, { reward_type: string; title: string; content: string }>()
           if (rewardData) {
             for (const r of rewardData) {
-              rewardMap.set(r.id, { reward_type: r.reward_type, content: r.content })
+              rewardMap.set(r.id, { reward_type: r.reward_type, title: r.title || '', content: r.content })
             }
           }
 
@@ -98,6 +102,7 @@ export default function MyPage() {
               id: cr.id,
               reward_id: cr.reward_id,
               reward_type: reward?.reward_type || '',
+              title: reward?.title || '',
               content: reward?.content || '',
               status: cr.status,
               professional_id: cr.professional_id,
@@ -230,7 +235,7 @@ export default function MyPage() {
 
   return (
     <div className="max-w-lg mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-2">
         <h1 className="text-2xl font-bold text-[#1A1A2E]">マイページ</h1>
         <button
           onClick={() => setShowSettings(!showSettings)}
@@ -243,6 +248,9 @@ export default function MyPage() {
           </svg>
         </button>
       </div>
+      {userEmail && (
+        <p className="text-sm text-gray-400 mb-6">{userEmail}</p>
+      )}
 
       {/* 設定パネル */}
       {showSettings && (
@@ -328,6 +336,9 @@ export default function MyPage() {
                       {reward.pro_name}さんからのリワード
                     </a>
                     <p className="text-xs text-[#C4A35A] mb-1">{getRewardLabel(reward.reward_type)}</p>
+                    {reward.title && (
+                      <p className="text-sm text-gray-500 mb-1">{reward.title}</p>
+                    )}
                     <p className="text-xl font-bold text-[#1A1A2E] mb-4">{reward.content}</p>
 
                     {confirmingId === reward.id ? (
@@ -376,6 +387,9 @@ export default function MyPage() {
                     <div key={reward.id} className="bg-gray-50 text-gray-400 rounded-xl p-4 mb-2">
                       <p className="text-xs mb-1">{reward.pro_name}さんからのリワード</p>
                       <p className="text-xs text-gray-300 mb-1">{getRewardLabel(reward.reward_type)}</p>
+                      {reward.title && (
+                        <p className="text-xs text-gray-300 mb-1">{reward.title}</p>
+                      )}
                       <p className="text-sm line-through">{reward.content}</p>
                       <p className="text-xs mt-1">
                         {reward.reward_type === 'coupon' ? '使用済み' : '削除済み'}

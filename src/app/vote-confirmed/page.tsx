@@ -5,85 +5,156 @@ import { createClient } from '@/lib/supabase'
 import { getRewardLabel } from '@/lib/types'
 import { Suspense } from 'react'
 
+interface RewardInfo {
+  reward_type: string
+  content: string
+  title: string
+}
+
 function ConfirmedContent() {
   const searchParams = useSearchParams()
-  const proId = searchParams.get('pro')
-  const rewardType = searchParams.get('reward_type') || ''
-  const rewardContent = searchParams.get('reward_content') || ''
-  const rewardTitle = searchParams.get('reward_title') || ''
-  const voterEmail = searchParams.get('email') || ''
+  const proId = searchParams.get('pro') || ''
+  const voteId = searchParams.get('vote_id') || ''
   const supabase = createClient()
+
   const [proName, setProName] = useState('')
   const [loggedIn, setLoggedIn] = useState(false)
-
-  const isCoupon = rewardType === 'coupon'
+  const [voterEmail, setVoterEmail] = useState('')
+  const [reward, setReward] = useState<RewardInfo | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
+      // セッション確認
       const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user) setLoggedIn(true)
+      if (session?.user) {
+        setLoggedIn(true)
+      }
 
+      // プロ名取得
       if (proId) {
-        const { data } = await (supabase as any)
+        const { data: proData } = await (supabase as any)
           .from('professionals')
           .select('name')
           .eq('id', proId)
-          .single()
-        if (data) setProName(data.name)
+          .maybeSingle()
+        if (proData) setProName(proData.name)
       }
+
+      // vote_id ベースでDBからリワード情報を取得
+      if (voteId) {
+        // 投票データ取得
+        const { data: vote } = await (supabase as any)
+          .from('votes')
+          .select('voter_email, selected_reward_id, professional_id')
+          .eq('id', voteId)
+          .maybeSingle()
+
+        if (vote) {
+          setVoterEmail(vote.voter_email || '')
+
+          // リワード取得
+          if (vote.selected_reward_id) {
+            const { data: rewardData } = await (supabase as any)
+              .from('rewards')
+              .select('reward_type, content, title')
+              .eq('id', vote.selected_reward_id)
+              .maybeSingle()
+
+            if (rewardData) {
+              setReward({
+                reward_type: rewardData.reward_type || '',
+                content: rewardData.content || '',
+                title: rewardData.title || '',
+              })
+            }
+          }
+        }
+      }
+
+      setLoading(false)
     }
     load()
-  }, [proId])
+  }, [proId, voteId])
+
+  if (loading) {
+    return <div className="text-center py-16 text-gray-400">読み込み中...</div>
+  }
+
+  // リワードの表示名を決定
+  const rewardDisplayName = reward
+    ? (reward.title || getRewardLabel(reward.reward_type))
+    : ''
 
   return (
-    <div className="max-w-md mx-auto text-center py-12 px-4">
-      <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2">プルーフが確定しました！</h1>
-      <p className="text-gray-500 mb-6">
-        {proName ? `${proName}さんにあなたのプルーフが届きました。` : 'プルーフが正常に確認されました。'}
-      </p>
+    <div className="min-h-screen bg-[#FAFAF7]">
+      <div className="max-w-md mx-auto text-center py-12 px-4">
+        {/* 確定メッセージ */}
+        <div className="w-16 h-16 rounded-full bg-[#C4A35A]/10 flex items-center justify-center mx-auto mb-4">
+          <svg className="w-8 h-8 text-[#C4A35A]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2">プルーフが確定しました！</h1>
+        <p className="text-gray-500 mb-6">
+          {proName ? `${proName}さんにあなたのプルーフが届きました。` : 'プルーフが正常に確認されました。'}
+        </p>
 
-      {/* リワード表示 */}
-      {rewardType ? (
-        <div className="bg-[#f8f6f0] border-2 border-dashed border-[#C4A35A] rounded-xl p-6 mb-6">
-          <p className="text-sm text-[#666] mb-1">{getRewardLabel(rewardType)}</p>
-          {rewardTitle && (
-            <p className="text-lg font-bold text-[#1A1A2E] mb-2">{rewardTitle}</p>
-          )}
-          {isCoupon && rewardContent ? (
-            <>
-              <p className="text-xl font-bold text-[#1A1A2E] mb-3">{rewardContent}</p>
-              <p className="text-xs text-gray-500">
-                リワードを管理するには、アカウント登録が必要です。
-              </p>
-            </>
-          ) : (
-            <p className="text-sm text-gray-600 mb-3">
-              リワードの中身はアカウント登録後に確認できます。
+        {/* リワード表示 */}
+        {reward && (
+          <div className="bg-white border-2 border-dashed border-[#C4A35A] rounded-xl p-6 mb-6">
+            <p className="text-xs text-[#C4A35A] font-medium mb-1">
+              {getRewardLabel(reward.reward_type)}
             </p>
-          )}
+            {reward.title && (
+              <p className="text-sm text-gray-500 mb-2">{reward.title}</p>
+            )}
+            <p className="text-lg font-semibold text-[#1A1A2E] mb-4">
+              {reward.content}
+            </p>
+
+            {loggedIn ? (
+              <>
+                <div className="flex items-center justify-center gap-2 text-sm text-green-600 mb-4">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>リワードをコレクションに保存しました</span>
+                </div>
+                <a
+                  href="/mycard"
+                  className="inline-block w-full py-3 bg-[#C4A35A] text-white text-sm font-bold rounded-lg hover:bg-[#b3923f] transition"
+                >
+                  マイカードを見る
+                </a>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-gray-500 mb-3">
+                  アカウント登録でリワードを保存できます
+                </p>
+                <a
+                  href={`/login?role=client&redirect=/mycard&email=${encodeURIComponent(voterEmail)}`}
+                  className="inline-block w-full py-3 bg-[#C4A35A] text-white text-sm font-bold rounded-lg hover:bg-[#b3923f] transition"
+                >
+                  リワードをコレクションする
+                </a>
+                <p className="text-xs text-gray-400 mt-2">メールアドレスとパスワードを設定するだけ</p>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* プロのカードを見るボタン */}
+        {proId && (
           <a
-            href={loggedIn ? '/mycard' : `/login?role=client&redirect=/mycard&email=${encodeURIComponent(voterEmail)}`}
-            className="inline-block mt-4 px-6 py-3 bg-[#C4A35A] text-white text-sm font-bold rounded-lg hover:bg-[#b3923f] transition"
+            href={`/card/${proId}`}
+            className="block w-full py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition mb-3"
           >
-            10秒で完了！リワードをコレクションする
+            {proName ? `${proName}さんのカードを見る` : 'カードを見る'}
           </a>
-          <p className="text-xs text-gray-400 mt-2">メールアドレスとパスワードを設定するだけ</p>
-        </div>
-      ) : (
-        <div className="bg-gray-50 rounded-xl p-4 mb-6 text-left">
-          <p className="text-sm text-gray-600">プルーフが正常に反映されました。</p>
-        </div>
-      )}
-
-      {proId && (
-        <a
-          href={`/card/${proId}`}
-          className="block w-full py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition mb-3"
-        >
-          {proName ? `${proName}さんのカードを見る` : 'カードを見る'}
-        </a>
-      )}
-
+        )}
+      </div>
     </div>
   )
 }

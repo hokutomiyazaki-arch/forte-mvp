@@ -203,12 +203,8 @@ export async function GET(req: NextRequest) {
       console.log('[confirm-vote] Already confirmed - skipping Steps 2-7, redirecting to vote-confirmed')
     }
 
-    // リワード情報をリダイレクトに含める
-    const redirectParams = new URLSearchParams({ pro: professionalId })
-    if (rewardType) redirectParams.set('reward_type', rewardType)
-    if (rewardContent) redirectParams.set('reward_content', rewardContent)
-    if (rewardTitle) redirectParams.set('reward_title', rewardTitle)
-    if (vote.voter_email) redirectParams.set('email', vote.voter_email)
+    // vote_id ベースのリダイレクト（リワード情報はフロントがDBから取得）
+    const redirectParams = new URLSearchParams({ pro: professionalId, vote_id: vote.id })
 
     return NextResponse.redirect(
       new URL(`/vote-confirmed?${redirectParams.toString()}`, req.url)
