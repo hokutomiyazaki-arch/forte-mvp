@@ -57,6 +57,8 @@ function MyCardContent() {
   const [userEmail, setUserEmail] = useState('')
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [timedOut, setTimedOut] = useState(false)
+  const [isPasswordReset, setIsPasswordReset] = useState(false)
+  const passwordSectionRef = useRef<HTMLDivElement>(null)
 
   // データ取得（セッション確立後に呼ぶ）
   async function loadData(email: string, userId: string) {
@@ -160,6 +162,10 @@ function MyCardContent() {
   // 初回: セッション確認
   useEffect(() => {
     async function checkSession() {
+      if (window.location.hash.includes('type=recovery')) {
+        setIsPasswordReset(true)
+        setShowSettings(true)
+      }
       console.log('[mycard] checkSession start')
       const { data: { session } } = await supabase.auth.getSession()
       console.log('[mycard] session:', session?.user?.email || 'none')
@@ -180,6 +186,15 @@ function MyCardContent() {
     }
     checkSession()
   }, [])
+
+  // パスワードリセット着地時にスクロール
+  useEffect(() => {
+    if (isPasswordReset && authMode === 'ready') {
+      setTimeout(() => {
+        passwordSectionRef.current?.scrollIntoView({ behavior: 'smooth' })
+      }, 300)
+    }
+  }, [isPasswordReset, authMode])
 
   // 既存ユーザーチェック
   async function checkExistingEmail(emailToCheck: string) {
@@ -456,6 +471,12 @@ function MyCardContent() {
 
   return (
     <div className="max-w-lg mx-auto px-4 py-8">
+      {isPasswordReset && (
+        <div className="bg-[#C4A35A]/10 border border-[#C4A35A] rounded-lg p-4 mb-4 text-center">
+          <p className="text-sm font-bold text-[#1A1A2E]">パスワードを再設定してください</p>
+          <p className="text-xs text-gray-500 mt-1">下のパスワード変更欄から新しいパスワードを設定できます</p>
+        </div>
+      )}
       <div className="flex items-center justify-between mb-2">
         <h1 className="text-2xl font-bold text-[#1A1A2E]">リワード</h1>
         <button
@@ -475,7 +496,7 @@ function MyCardContent() {
 
       {/* 設定パネル */}
       {showSettings && (
-        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 shadow-sm">
+        <div ref={passwordSectionRef} className="bg-white border border-gray-200 rounded-xl p-5 mb-6 shadow-sm">
           <h2 className="text-sm font-bold text-[#1A1A2E] mb-4">パスワード変更</h2>
           <form onSubmit={handlePasswordChange} className="space-y-3">
             <input
