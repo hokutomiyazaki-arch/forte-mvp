@@ -25,6 +25,31 @@ function filterAndSortBadges(badges: { id: string; label: string; image_url: str
   return filtered
 }
 
+// プルーフ項目の型
+interface ProofItem {
+  id: string
+  tab: string
+  label: string
+  strength_label: string
+  sort_order: number
+}
+
+interface CustomProof {
+  id: string
+  label: string
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  basic: '基本',
+  body_pro: 'ボディプロ',
+  yoga: 'ヨガ',
+  pilates: 'ピラティス',
+  esthe: 'エステ',
+  sports: 'スポーツ',
+  education: '教育',
+}
+const CATEGORY_KEYS = Object.keys(CATEGORY_LABELS)
+
 const PREFECTURES = [
   '北海道','青森県','岩手県','宮城県','秋田県','山形県','福島県',
   '茨城県','栃木県','群馬県','埼玉県','千葉県','東京都','神奈川県',
@@ -61,6 +86,15 @@ export default function DashboardPage() {
   const [formError, setFormError] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
+
+  // プルーフ選択用 state
+  const [proofItems, setProofItems] = useState<ProofItem[]>([])
+  const [selectedProofIds, setSelectedProofIds] = useState<Set<string>>(new Set())
+  const [customProofs, setCustomProofs] = useState<CustomProof[]>([])
+  const [activeTab, setActiveTab] = useState('basic')
+  const [proofSaving, setProofSaving] = useState(false)
+  const [proofSaved, setProofSaved] = useState(false)
+  const [proofError, setProofError] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -116,6 +150,18 @@ export default function DashboardPage() {
 
       const { count } = await supabase.from('votes').select('*', { count: 'exact', head: true }).eq('professional_id', proData.id).eq('status', 'confirmed') as any
       setTotalVotes(count || 0)
+
+      // プルーフ項目マスタ取得 & 選択状態復元
+      const { data: piData } = await supabase
+        .from('proof_items').select('*').order('sort_order') as any
+      if (piData) {
+        setProofItems(piData)
+        const validIds = new Set(piData.map((p: ProofItem) => p.id))
+        const savedProofs: string[] = proData.selected_proofs || []
+        setSelectedProofIds(new Set(savedProofs.filter((id: string) => validIds.has(id))))
+        setCustomProofs(proData.custom_proofs || [])
+      }
+
       setLoading(false)
     }
     load()
@@ -285,6 +331,68 @@ export default function DashboardPage() {
       return
     }
     window.location.href = '/mycard'
+  }
+
+  // プルーフ選択ロジック
+  const validCustomCount = customProofs.filter(c => c.label.trim()).length
+  const totalSelected = selectedProofIds.size + validCustomCount
+  const isMaxSelected = totalSelected >= 8
+
+  function toggleProofId(id: string) {
+    setSelectedProofIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        if (totalSelected >= 8) return prev
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  function addCustomProof() {
+    if (customProofs.length >= 3 || isMaxSelected) return
+    setCustomProofs([...customProofs, { id: `custom_${Date.now()}`, label: '' }])
+  }
+
+  function updateCustomProofLabel(idx: number, label: string) {
+    const updated = [...customProofs]
+    updated[idx] = { ...updated[idx], label }
+    setCustomProofs(updated)
+  }
+
+  function removeCustomProof(idx: number) {
+    setCustomProofs(customProofs.filter((_, i) => i !== idx))
+  }
+
+  async function handleSaveProofs() {
+    if (!pro) return
+    setProofSaving(true)
+    setProofError('')
+
+    const filteredCustom = customProofs.filter(c => c.label.trim())
+
+    const { error } = await (supabase.from('professionals') as any)
+      .update({
+        selected_proofs: Array.from(selectedProofIds),
+        custom_proofs: filteredCustom,
+      })
+      .eq('id', pro.id)
+
+    if (error) {
+      setProofError('保存に失敗しました。もう一度お試しください。')
+      console.error('[handleSaveProofs] error:', error.message)
+    } else {
+      setProofSaved(true)
+      setTimeout(() => setProofSaved(false), 2500)
+    }
+    setProofSaving(false)
+  }
+
+  // カテゴリごとの選択数を算出
+  function getCategorySelectedCount(tab: string): number {
+    return proofItems.filter(p => p.tab === tab && selectedProofIds.has(p.id)).length
   }
 
   if (loading) return <div className="text-center py-16 text-gray-400">読み込み中...</div>
@@ -587,6 +695,182 @@ export default function DashboardPage() {
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
         <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">プルーフチャート</h2>
         <ForteChart votes={votes} personalityVotes={personalityVotes} professional={pro} />
+      </div>
+
+      {/* プルーフ設定 */}
+      <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
+        <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">プルーフ設定</h2>
+        <p className="text-sm text-[#9CA3AF] mb-4">
+          クライアントに投票してもらう「強み項目」を選んでください
+        </p>
+
+        {proofItems.length === 0 ? (
+          <p className="text-sm text-red-500">項目を読み込めませんでした</p>
+        ) : (
+          <>
+            {/* プログレスバー */}
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm font-medium text-[#1A1A2E]">{totalSelected} / 8 選択中</span>
+                {isMaxSelected && <span className="text-xs text-[#C4A35A] font-medium">上限に達しました</span>}
+              </div>
+              <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    isMaxSelected
+                      ? 'bg-gradient-to-r from-[#C4A35A] to-[#d4b86a]'
+                      : 'bg-gradient-to-r from-[#1A1A2E] to-[#2a2a4e]'
+                  }`}
+                  style={{ width: `${(totalSelected / 8) * 100}%` }}
+                />
+              </div>
+            </div>
+
+            {/* カテゴリタブ */}
+            <div className="flex overflow-x-auto gap-1 mb-4 pb-1 -mx-1 px-1">
+              {CATEGORY_KEYS.map(key => {
+                const count = getCategorySelectedCount(key)
+                const isActive = activeTab === key
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setActiveTab(key)}
+                    className={`flex-shrink-0 px-3 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
+                      isActive
+                        ? 'text-[#1A1A2E] font-bold border-[#C4A35A]'
+                        : 'text-[#9CA3AF] border-transparent hover:text-[#6B7280]'
+                    }`}
+                  >
+                    {CATEGORY_LABELS[key]}
+                    {count > 0 && (
+                      <span className={`ml-1 inline-flex items-center justify-center w-5 h-5 text-xs rounded-full ${
+                        isActive ? 'bg-[#C4A35A] text-white' : 'bg-gray-200 text-[#6B7280]'
+                      }`}>
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* 項目リスト */}
+            <div className="space-y-2 mb-6">
+              {proofItems
+                .filter(p => p.tab === activeTab)
+                .map(item => {
+                  const isChecked = selectedProofIds.has(item.id)
+                  const isDisabled = !isChecked && isMaxSelected
+                  return (
+                    <label
+                      key={item.id}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${
+                        isDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-[#FAFAF7]'
+                      } ${isChecked ? 'bg-[#FAFAF7]' : ''}`}
+                    >
+                      <div className="relative flex-shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          disabled={isDisabled}
+                          onChange={() => toggleProofId(item.id)}
+                          className="sr-only"
+                        />
+                        <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
+                          isChecked
+                            ? 'bg-[#C4A35A] border-[#C4A35A]'
+                            : 'bg-white border-[#E5E7EB]'
+                        }`}>
+                          {isChecked && (
+                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-sm text-[#1A1A2E]">{item.label}</span>
+                        <span className="text-xs text-[#9CA3AF] ml-2">{item.strength_label}</span>
+                      </div>
+                    </label>
+                  )
+                })}
+            </div>
+
+            {/* カスタム項目 */}
+            <div className="border-t border-[#E5E7EB] pt-4 mb-4">
+              <p className="text-sm font-medium text-[#1A1A2E] mb-2">カスタム項目（最大3個）</p>
+              {customProofs.map((cp, idx) => (
+                <div key={cp.id} className="flex gap-2 mb-2">
+                  <input
+                    value={cp.label}
+                    onChange={e => updateCustomProofLabel(idx, e.target.value)}
+                    className="flex-1 px-3 py-2 bg-[#FAFAF7] border border-[#E5E7EB] rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#C4A35A] focus:border-[#C4A35A]"
+                    placeholder="例：独自のアプローチがある"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeCustomProof(idx)}
+                    className="px-3 py-2 text-[#9CA3AF] border border-[#E5E7EB] rounded-lg hover:text-red-500 hover:border-red-300 transition-colors text-sm"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              {customProofs.length < 3 && !isMaxSelected && (
+                <button
+                  type="button"
+                  onClick={addCustomProof}
+                  className="w-full py-2 border-2 border-dashed border-[#E5E7EB] rounded-lg text-sm text-[#9CA3AF] hover:border-[#C4A35A] hover:text-[#C4A35A] transition-colors"
+                >
+                  + カスタム項目を追加
+                </button>
+              )}
+            </div>
+
+            {/* 注記 */}
+            <p className="text-xs text-[#9CA3AF] mb-4">
+              ※ 「期待できそう！」と「特にない」はすべてのプロに自動で表示されます
+            </p>
+
+            {/* 保存ボタン */}
+            {proofError && <p className="text-red-500 text-sm mb-2">{proofError}</p>}
+            <button
+              onClick={handleSaveProofs}
+              disabled={proofSaving}
+              className={`w-full py-3 rounded-xl text-sm font-medium tracking-wider transition-colors ${
+                proofSaved
+                  ? 'bg-green-500 text-white'
+                  : 'bg-[#1A1A2E] text-[#C4A35A] hover:bg-[#2a2a4e]'
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              {proofSaving ? '保存中...' : proofSaved ? '保存しました' : 'プルーフ設定を保存'}
+            </button>
+
+            {/* 選択一覧 */}
+            {totalSelected > 0 && (
+              <div className="mt-4 pt-4 border-t border-[#E5E7EB]">
+                <p className="text-xs text-[#9CA3AF] mb-2">選択中の項目</p>
+                <div className="flex flex-wrap gap-2">
+                  {proofItems
+                    .filter(p => selectedProofIds.has(p.id))
+                    .map(p => (
+                      <span key={p.id} className="px-3 py-1 bg-[#C4A35A]/10 text-[#1A1A2E] text-xs rounded-full">
+                        {p.strength_label}
+                      </span>
+                    ))}
+                  {customProofs
+                    .filter(c => c.label.trim())
+                    .map(c => (
+                      <span key={c.id} className="px-3 py-1 bg-[#C4A35A] text-white text-xs rounded-full">
+                        {c.label}
+                      </span>
+                    ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* QR Code */}
