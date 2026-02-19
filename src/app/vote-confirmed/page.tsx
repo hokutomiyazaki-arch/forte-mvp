@@ -111,13 +111,6 @@ function ConfirmedContent() {
           const isDifferentAccount = loggedIn && voterEmail && sessionEmail && sessionEmail !== voterEmail
           return (
             <div className="bg-white border-2 border-dashed border-[#C4A35A] rounded-xl p-6 mb-6">
-              <p className="text-sm text-[#C4A35A] font-semibold mb-2">
-                {getRewardLabel(reward.reward_type)}
-              </p>
-              <p className="text-sm text-gray-500 mb-4">
-                リワードの中身はマイページで確認できます
-              </p>
-
               {isDifferentAccount ? (
                 <>
                   <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
@@ -138,30 +131,40 @@ function ConfirmedContent() {
                     ログアウトしてアカウントを切り替える
                   </button>
                 </>
-              ) : loggedIn ? (
-                <>
-                  <div className="flex items-center justify-center gap-2 text-sm text-green-600 mb-4">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span>コレクションに保存しました</span>
-                  </div>
-                  <a
-                    href="/mycard"
-                    className="inline-block w-full py-3 bg-[#C4A35A] text-white text-sm font-bold rounded-lg hover:bg-[#b3923f] transition"
-                  >
-                    マイページで確認する
-                  </a>
-                </>
               ) : (
                 <>
-                  <a
-                    href={`/mycard${voterEmail ? '?email=' + encodeURIComponent(voterEmail) : ''}`}
-                    className="inline-block w-full py-3 bg-[#C4A35A] text-white text-sm font-bold rounded-lg hover:bg-[#b3923f] transition"
-                  >
-                    アカウント登録してリワードを受け取る
-                  </a>
-                  <p className="text-xs text-gray-400 mt-2">アカウント登録してコレクションに保存できます</p>
+                  <p className="text-sm text-[#C4A35A] font-semibold mb-2">
+                    {reward.title || getRewardLabel(reward.reward_type)}
+                  </p>
+                  <p className="text-sm text-gray-500 mb-4">
+                    リワードの中身はマイページで確認できます
+                  </p>
+                  {loggedIn ? (
+                    <>
+                      <div className="flex items-center justify-center gap-2 text-sm text-green-600 mb-4">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span>コレクションに保存しました</span>
+                      </div>
+                      <a
+                        href="/mycard"
+                        className="inline-block w-full py-3 bg-[#C4A35A] text-white text-sm font-bold rounded-lg hover:bg-[#b3923f] transition"
+                      >
+                        マイページで確認する
+                      </a>
+                    </>
+                  ) : (
+                    <>
+                      <a
+                        href={`/mycard${voterEmail ? '?email=' + encodeURIComponent(voterEmail) : ''}`}
+                        className="inline-block w-full py-3 bg-[#C4A35A] text-white text-sm font-bold rounded-lg hover:bg-[#b3923f] transition"
+                      >
+                        アカウント登録してリワードを受け取る
+                      </a>
+                      <p className="text-xs text-gray-400 mt-2">アカウント登録してコレクションに保存できます</p>
+                    </>
+                  )}
                 </>
               )}
             </div>

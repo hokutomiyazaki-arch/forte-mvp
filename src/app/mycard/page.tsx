@@ -547,10 +547,9 @@ function MyCardContent() {
                   <div key={reward.id} className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
                     {/* リワード情報エリア */}
                     <div className="p-5">
-                      <p className="text-xs text-[#C4A35A] font-medium mb-1">{getRewardLabel(reward.reward_type)}</p>
-                      {reward.title && (
-                        <p className="text-sm text-gray-500 mb-1">{reward.title}</p>
-                      )}
+                      <p className="text-xs text-[#C4A35A] font-medium mb-1">
+                        {reward.title || getRewardLabel(reward.reward_type)}
+                      </p>
                       <p className="text-xl font-bold text-[#1A1A2E] mb-4">{reward.content}</p>
 
                       {confirmingId === reward.id ? (
@@ -612,10 +611,9 @@ function MyCardContent() {
                   {usedRewards.map(reward => (
                     <div key={reward.id} className="bg-gray-50 text-gray-400 rounded-xl overflow-hidden mb-2">
                       <div className="p-4">
-                        <p className="text-xs text-gray-300 mb-1">{getRewardLabel(reward.reward_type)}</p>
-                        {reward.title && (
-                          <p className="text-xs text-gray-300 mb-1">{reward.title}</p>
-                        )}
+                        <p className="text-xs text-gray-300 mb-1">
+                          {reward.title || getRewardLabel(reward.reward_type)}
+                        </p>
                         <p className="text-sm line-through">{reward.content}</p>
                         <p className="text-xs mt-1">
                           {reward.reward_type === 'coupon' ? '使用済み' : '削除済み'}

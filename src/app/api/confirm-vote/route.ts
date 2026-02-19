@@ -144,15 +144,8 @@ export async function GET(req: NextRequest) {
       const resendKey = process.env.RESEND_API_KEY
       if (resendKey && rewardType && vote.voter_email) {
         const rewardLabel = getRewardLabel(rewardType)
-        const isCouponReward = rewardType === 'coupon'
-        // カスタムタイトル表示（titleがあればカテゴリ名の下に表示）
-        const titleHtml = rewardTitle
-          ? `<p style="color:#333;font-size:14px;margin:4px 0 8px;">${rewardTitle}</p>`
-          : ''
-        // クーポンは内容を開示、それ以外はパスワード設定を促す
-        const contentHtml = isCouponReward && rewardContent
-          ? `<p style="color:#1A1A2E;font-size:18px;font-weight:bold;margin:0;">${rewardContent}</p>`
-          : `<p style="color:#666;font-size:14px;margin:0;">パスワードを設定してリワードの中身を確認しましょう。</p>`
+        // メールにはリワードの種類ラベルのみ表示。内容(content/title)は一切載せない
+        const contentHtml = `<p style="color:#666;font-size:14px;margin:0;">リワードの中身はマイページで確認できます</p>`
         try {
           const emailRes = await fetch('https://api.resend.com/emails', {
             method: 'POST',
@@ -174,7 +167,6 @@ export async function GET(req: NextRequest) {
                     <p style="color:#333;">${pro.name}さんからリワードが届いています。</p>
                     <div style="background:#f8f6f0;border:2px dashed #C4A35A;border-radius:8px;padding:16px;text-align:center;margin:20px 0;">
                       <p style="color:#666;font-size:12px;margin:0 0 4px;">${rewardLabel}</p>
-                      ${titleHtml}
                       ${contentHtml}
                     </div>
                     <div style="text-align:center;margin:24px 0;">
