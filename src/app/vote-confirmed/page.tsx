@@ -109,9 +109,21 @@ function ConfirmedContent() {
             {reward.title && (
               <p className="text-sm text-gray-500 mb-2">{reward.title}</p>
             )}
-            <p className="text-lg font-semibold text-[#1A1A2E] mb-4">
-              {reward.content}
-            </p>
+
+            {/* クーポンは即表示、それ以外はログイン後に表示 */}
+            {reward.reward_type === 'coupon' ? (
+              <p className="text-lg font-semibold text-[#1A1A2E] mb-4">
+                {reward.content}
+              </p>
+            ) : loggedIn ? (
+              <p className="text-lg font-semibold text-[#1A1A2E] mb-4">
+                {reward.content}
+              </p>
+            ) : (
+              <p className="text-sm text-gray-500 mb-4">
+                アカウント登録後にリワードの中身を確認できます
+              </p>
+            )}
 
             {loggedIn ? (
               <>
@@ -130,9 +142,6 @@ function ConfirmedContent() {
               </>
             ) : (
               <>
-                <p className="text-xs text-gray-500 mb-3">
-                  アカウント登録でリワードを保存できます
-                </p>
                 <a
                   href={`/login?role=client&redirect=/mycard&email=${encodeURIComponent(voterEmail)}`}
                   className="inline-block w-full py-3 bg-[#C4A35A] text-white text-sm font-bold rounded-lg hover:bg-[#b3923f] transition"

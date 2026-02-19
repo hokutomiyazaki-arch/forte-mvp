@@ -331,51 +331,62 @@ export default function MyPage() {
               {activeRewards.map(reward => {
                 const isCoupon = reward.reward_type === 'coupon'
                 return (
-                  <div key={reward.id} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-                    <a href={`/card/${reward.professional_id}`} className="text-sm text-gray-500 mb-1 hover:text-[#C4A35A] transition inline-block">
-                      {reward.pro_name}さんからのリワード
-                    </a>
-                    <p className="text-xs text-[#C4A35A] mb-1">{getRewardLabel(reward.reward_type)}</p>
-                    {reward.title && (
-                      <p className="text-sm text-gray-500 mb-1">{reward.title}</p>
-                    )}
-                    <p className="text-xl font-bold text-[#1A1A2E] mb-4">{reward.content}</p>
+                  <div key={reward.id} className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+                    {/* リワード情報エリア */}
+                    <div className="p-5">
+                      <p className="text-xs text-[#C4A35A] font-medium mb-1">{getRewardLabel(reward.reward_type)}</p>
+                      {reward.title && (
+                        <p className="text-sm text-gray-500 mb-1">{reward.title}</p>
+                      )}
+                      <p className="text-xl font-bold text-[#1A1A2E] mb-4">{reward.content}</p>
 
-                    {confirmingId === reward.id ? (
-                      <div className="space-y-2">
-                        <p className="text-sm text-center text-orange-600 font-medium">
-                          {isCoupon ? '本当に使用しますか？この操作は取り消せません。' : 'このリワードを削除しますか？'}
-                        </p>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleRedeem(reward.id)}
-                            disabled={redeeming}
-                            className={`flex-1 py-2 text-white font-bold rounded-lg transition disabled:opacity-50 ${
-                              isCoupon ? 'bg-[#C4A35A] hover:bg-[#b3923f]' : 'bg-red-500 hover:bg-red-600'
-                            }`}
-                          >
-                            {redeeming ? '処理中...' : isCoupon ? '使用する' : '削除する'}
-                          </button>
-                          <button
-                            onClick={() => setConfirmingId(null)}
-                            className="flex-1 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition"
-                          >
-                            キャンセル
-                          </button>
+                      {confirmingId === reward.id ? (
+                        <div className="space-y-2">
+                          <p className="text-sm text-center text-orange-600 font-medium">
+                            {isCoupon ? '本当に使用しますか？この操作は取り消せません。' : 'このリワードを削除しますか？'}
+                          </p>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleRedeem(reward.id)}
+                              disabled={redeeming}
+                              className={`flex-1 py-2 text-white font-bold rounded-lg transition disabled:opacity-50 ${
+                                isCoupon ? 'bg-[#C4A35A] hover:bg-[#b3923f]' : 'bg-red-500 hover:bg-red-600'
+                              }`}
+                            >
+                              {redeeming ? '処理中...' : isCoupon ? '使用する' : '削除する'}
+                            </button>
+                            <button
+                              onClick={() => setConfirmingId(null)}
+                              className="flex-1 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition"
+                            >
+                              キャンセル
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setConfirmingId(reward.id)}
-                        className={`w-full py-3 font-medium rounded-lg transition text-sm ${
-                          isCoupon
-                            ? 'bg-[#1A1A2E] text-white hover:bg-[#2a2a4e]'
-                            : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-                        }`}
+                      ) : (
+                        <button
+                          onClick={() => setConfirmingId(reward.id)}
+                          className={`w-full py-3 font-medium rounded-lg transition text-sm ${
+                            isCoupon
+                              ? 'bg-[#1A1A2E] text-white hover:bg-[#2a2a4e]'
+                              : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                          }`}
+                        >
+                          {isCoupon ? '使用する' : '削除する'}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* プロ情報エリア */}
+                    <div className="border-t border-gray-100 px-5 py-3 bg-[#FAFAF7] flex items-center justify-between">
+                      <p className="text-sm text-gray-500">{reward.pro_name}さん</p>
+                      <a
+                        href={`/card/${reward.professional_id}`}
+                        className="text-xs text-[#C4A35A] font-medium hover:underline transition"
                       >
-                        {isCoupon ? '使用する' : '削除する'}
-                      </button>
-                    )}
+                        このプロのカードを見る →
+                      </a>
+                    </div>
                   </div>
                 )
               })}
@@ -384,16 +395,26 @@ export default function MyPage() {
                 <div className="mt-4">
                   <h2 className="text-sm font-medium text-gray-400 mb-3">使用済み / 削除済み</h2>
                   {usedRewards.map(reward => (
-                    <div key={reward.id} className="bg-gray-50 text-gray-400 rounded-xl p-4 mb-2">
-                      <p className="text-xs mb-1">{reward.pro_name}さんからのリワード</p>
-                      <p className="text-xs text-gray-300 mb-1">{getRewardLabel(reward.reward_type)}</p>
-                      {reward.title && (
-                        <p className="text-xs text-gray-300 mb-1">{reward.title}</p>
-                      )}
-                      <p className="text-sm line-through">{reward.content}</p>
-                      <p className="text-xs mt-1">
-                        {reward.reward_type === 'coupon' ? '使用済み' : '削除済み'}
-                      </p>
+                    <div key={reward.id} className="bg-gray-50 text-gray-400 rounded-xl overflow-hidden mb-2">
+                      <div className="p-4">
+                        <p className="text-xs text-gray-300 mb-1">{getRewardLabel(reward.reward_type)}</p>
+                        {reward.title && (
+                          <p className="text-xs text-gray-300 mb-1">{reward.title}</p>
+                        )}
+                        <p className="text-sm line-through">{reward.content}</p>
+                        <p className="text-xs mt-1">
+                          {reward.reward_type === 'coupon' ? '使用済み' : '削除済み'}
+                        </p>
+                      </div>
+                      <div className="border-t border-gray-200 px-4 py-2 flex items-center justify-between">
+                        <p className="text-xs text-gray-300">{reward.pro_name}さん</p>
+                        <a
+                          href={`/card/${reward.professional_id}`}
+                          className="text-xs text-gray-400 hover:text-[#C4A35A] transition"
+                        >
+                          カードを見る →
+                        </a>
+                      </div>
                     </div>
                   ))}
                 </div>
