@@ -310,38 +310,67 @@ function VoteForm() {
     }).select().single()
 
     if (voteError) {
+      console.error('[handleSubmit] Vote INSERT error:', {
+        code: voteError.code,
+        message: voteError.message,
+        details: voteError.details,
+        hint: voteError.hint,
+        status: (voteError as any).status,
+        statusText: (voteError as any).statusText,
+      })
+      console.error('[handleSubmit] Vote payload:', {
+        professional_id: proId,
+        voter_email: email,
+        session_count: sessionCount,
+        vote_type: voteType,
+        selected_proof_ids: isHopeful ? null : (selectedProofIds.size > 0 ? Array.from(selectedProofIds) : null),
+        selected_personality_ids: selectedPersonalityIds.size > 0 ? Array.from(selectedPersonalityIds) : null,
+        selected_reward_id: selectedRewardId || null,
+        qr_token: qrToken,
+      })
       if (voteError.code === '23505') {
         setError('このメールアドレスでは既に投票済みです')
       } else {
-        console.error('Vote error:', voteError)
-        setError('送信に失敗しました。もう一度お試しください。')
+        setError(`送信に失敗しました (${voteError.code || 'unknown'}): ${voteError.message || '不明なエラー'}`)
       }
       return
     }
 
+    console.log('[handleSubmit] Vote INSERT OK - vote_id:', voteData.id)
+
     // メアドをPROOFリストに保存
-    await (supabase as any).from('vote_emails').insert({
+    const { error: emailInsertError } = await (supabase as any).from('vote_emails').insert({
       email,
       professional_id: proId,
       source: 'vote',
-    }).then(() => {})
+    })
+    if (emailInsertError) {
+      console.error('[handleSubmit] vote_emails INSERT error:', emailInsertError)
+    }
 
     // 確認トークンを作成
-    const { data: confirmation } = await (supabase as any)
+    const { data: confirmation, error: confirmError } = await (supabase as any)
       .from('vote_confirmations')
       .insert({ vote_id: voteData.id })
       .select()
       .single()
 
+    if (confirmError) {
+      console.error('[handleSubmit] vote_confirmations INSERT error:', confirmError)
+    }
+
     // リワード選択をclient_rewardsに保存
     if (selectedRewardId && voteData) {
-      await (supabase as any).from('client_rewards').insert({
+      const { error: rewardInsertError } = await (supabase as any).from('client_rewards').insert({
         vote_id: voteData.id,
         reward_id: selectedRewardId,
         professional_id: proId,
         client_email: email,
         status: 'pending',
       })
+      if (rewardInsertError) {
+        console.error('[handleSubmit] client_rewards INSERT error:', rewardInsertError)
+      }
     }
 
     // 確認メール送信
@@ -349,7 +378,7 @@ function VoteForm() {
       setSubmittedVoteId(voteData.id)
       setSubmittedToken(confirmation.token)
       try {
-        await fetch('/api/send-confirmation', {
+        const emailRes = await fetch('/api/send-confirmation', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -358,9 +387,16 @@ function VoteForm() {
             token: confirmation.token,
           }),
         })
+        if (!emailRes.ok) {
+          console.error('[handleSubmit] send-confirmation API error:', emailRes.status, await emailRes.text())
+        } else {
+          console.log('[handleSubmit] Confirmation email sent OK')
+        }
       } catch (err) {
-        console.error('Confirmation email send failed:', err)
+        console.error('[handleSubmit] Confirmation email send failed:', err)
       }
+    } else {
+      console.error('[handleSubmit] No confirmation created - skipping email send')
     }
 
     setSubmitted(true)
