@@ -104,26 +104,15 @@ function ConfirmedContent() {
           {proName ? `${proName}さんにあなたのプルーフが届きました。` : 'プルーフが正常に確認されました。'}
         </p>
 
-        {/* リワード表示 — ログイン状態に関係なく内容を直接表示 */}
+        {/* リワード表示 — 種類ラベルのみ。内容はマイページでのみ確認可能 */}
         {reward && (
           <div className="bg-white border-2 border-dashed border-[#C4A35A] rounded-xl p-6 mb-6">
-            <p className="text-xs text-[#C4A35A] font-medium mb-1">
+            <p className="text-sm text-[#C4A35A] font-semibold mb-2">
               {getRewardLabel(reward.reward_type)}
             </p>
-            {reward.title && (
-              <p className="text-sm text-gray-500 mb-2">{reward.title}</p>
-            )}
-
-            {/* couponは常に表示、それ以外はログイン済みのみ表示 */}
-            {reward.reward_type === 'coupon' || loggedIn ? (
-              <p className="text-lg font-semibold text-[#1A1A2E] mb-4">
-                {reward.content}
-              </p>
-            ) : (
-              <p className="text-sm text-gray-400 mb-4">
-                アカウント登録後にリワードの中身を確認できます
-              </p>
-            )}
+            <p className="text-sm text-gray-500 mb-4">
+              リワードの中身はマイページで確認できます
+            </p>
 
             {loggedIn ? (
               <>
@@ -137,7 +126,7 @@ function ConfirmedContent() {
                   href="/mycard"
                   className="inline-block w-full py-3 bg-[#C4A35A] text-white text-sm font-bold rounded-lg hover:bg-[#b3923f] transition"
                 >
-                  マイカードを見る
+                  マイページで確認する
                 </a>
               </>
             ) : (

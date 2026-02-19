@@ -461,6 +461,15 @@ export default function DashboardPage() {
             </label>
           </div>
 
+          {/* 登録メールアドレス（読み取り専用） */}
+          {user?.email && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">登録メールアドレス</label>
+              <input value={user.email} readOnly disabled
+                className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed" />
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">名前 *（20文字以内）</label>
             <input required maxLength={20} value={form.name} onChange={e => setForm({...form, name: e.target.value})}
@@ -683,7 +692,12 @@ export default function DashboardPage() {
   return (
     <div className="max-w-3xl mx-auto">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-bold text-[#1A1A2E]">ダッシュボード</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-[#1A1A2E]">ダッシュボード</h1>
+          {user?.email && (
+            <p className="text-sm text-gray-400 mt-1">{user.email}</p>
+          )}
+        </div>
         <button onClick={() => setEditing(true)} className="text-sm text-[#C4A35A] hover:underline">
           プロフィール編集
         </button>
