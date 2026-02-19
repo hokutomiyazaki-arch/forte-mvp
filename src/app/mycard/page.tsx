@@ -98,7 +98,7 @@ export default function MyPage() {
 
           const merged: RewardWithPro[] = clientRewards.map((cr: any) => {
             const reward = rewardMap.get(cr.reward_id)
-            return {
+            const item = {
               id: cr.id,
               reward_id: cr.reward_id,
               reward_type: reward?.reward_type || '',
@@ -108,6 +108,8 @@ export default function MyPage() {
               professional_id: cr.professional_id,
               pro_name: proMap.get(cr.professional_id) || 'プロ',
             }
+            console.log('[mycard] reward item:', { id: item.id, professional_id: item.professional_id, pro_name: item.pro_name, reward_type: item.reward_type })
+            return item
           })
           setRewards(merged)
         }
@@ -380,12 +382,14 @@ export default function MyPage() {
                     {/* プロ情報エリア */}
                     <div className="border-t border-gray-100 px-5 py-3 bg-[#FAFAF7] flex items-center justify-between">
                       <p className="text-sm text-gray-500">{reward.pro_name}さん</p>
-                      <a
-                        href={`/card/${reward.professional_id}`}
-                        className="text-xs text-[#C4A35A] font-medium hover:underline transition"
-                      >
-                        このプロのカードを見る →
-                      </a>
+                      {reward.professional_id && (
+                        <a
+                          href={`/card/${reward.professional_id}`}
+                          className="text-xs text-[#C4A35A] font-medium hover:underline transition"
+                        >
+                          このプロのカードを見る →
+                        </a>
+                      )}
                     </div>
                   </div>
                 )
@@ -408,12 +412,14 @@ export default function MyPage() {
                       </div>
                       <div className="border-t border-gray-200 px-4 py-2 flex items-center justify-between">
                         <p className="text-xs text-gray-300">{reward.pro_name}さん</p>
-                        <a
-                          href={`/card/${reward.professional_id}`}
-                          className="text-xs text-gray-400 hover:text-[#C4A35A] transition"
-                        >
-                          カードを見る →
-                        </a>
+                        {reward.professional_id && (
+                          <a
+                            href={`/card/${reward.professional_id}`}
+                            className="text-xs text-gray-400 hover:text-[#C4A35A] transition"
+                          >
+                            カードを見る →
+                          </a>
+                        )}
                       </div>
                     </div>
                   ))}
