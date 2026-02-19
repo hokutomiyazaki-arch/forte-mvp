@@ -63,22 +63,32 @@ function LoginForm() {
 
     async function init() {
       try {
+        // URLから直接 redirect パラメータを取得（searchParamsに依存しない）
+        const urlParams = new URLSearchParams(window.location.search)
+        const directRedirect = urlParams.get('redirect')
+
         const { data: { session } } = await supabase.auth.getSession()
+
+        // ログイン済み + redirect がある場合は即座にリダイレクト
+        if (session?.user && directRedirect && !cancelled) {
+          cancelled = true
+          const urlRole = urlParams.get('role') || ''
+          if (urlRole === 'client') {
+            try {
+              const nn = urlParams.get('nickname') || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'ユーザー'
+              await (supabase.from('clients') as any).upsert({
+                user_id: session.user.id,
+                nickname: nn,
+              }, { onConflict: 'user_id' })
+            } catch (_) {}
+          }
+          window.location.href = directRedirect
+          return
+        }
+
+        // ログイン済みだが redirect なし → 通常のredirectUser
         if (session?.user && !cancelled) {
           cancelled = true
-          if (redirectTo) {
-            if (initialRole === 'client') {
-              try {
-                const nn = searchParams.get('nickname') || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'ユーザー'
-                await (supabase.from('clients') as any).upsert({
-                  user_id: session.user.id,
-                  nickname: nn,
-                }, { onConflict: 'user_id' })
-              } catch (_) {}
-            }
-            window.location.href = redirectTo
-            return
-          }
           await redirectUser(session.user)
           return
         }
@@ -90,25 +100,30 @@ function LoginForm() {
     init()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string, session: any) => {
-      console.log('[onAuthStateChange] event:', event, 'cancelled:', cancelled, 'redirectTo:', redirectTo)
+      // URLから直接パラメータ取得（searchParamsに依存しない）
+      const urlParams = new URLSearchParams(window.location.search)
+      const directRedirect = urlParams.get('redirect')
+      console.log('[onAuthStateChange] event:', event, 'cancelled:', cancelled, 'directRedirect:', directRedirect)
+
       if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user && !cancelled) {
         cancelled = true
 
-        // redirectTo がある場合は即座にリダイレクト（DB問い合わせを避ける）
-        if (redirectTo) {
+        // redirect がある場合は即座にリダイレクト（DB問い合わせを避ける）
+        if (directRedirect) {
           if (isRedirecting.current) return
           isRedirecting.current = true
-          if (initialRole === 'client') {
+          const urlRole = urlParams.get('role') || ''
+          if (urlRole === 'client') {
             try {
-              const nn = searchParams.get('nickname') || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'ユーザー'
+              const nn = urlParams.get('nickname') || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'ユーザー'
               await (supabase.from('clients') as any).upsert({
                 user_id: session.user.id,
                 nickname: nn,
               }, { onConflict: 'user_id' })
             } catch (_) {}
           }
-          console.log('[onAuthStateChange] → redirectTo (skip DB):', redirectTo)
-          window.location.href = redirectTo
+          console.log('[onAuthStateChange] → directRedirect (skip DB):', directRedirect)
+          window.location.href = directRedirect
           return
         }
 
@@ -158,27 +173,30 @@ function LoginForm() {
     }
     isRedirecting.current = true
 
-    const urlRole = searchParams.get('role') || ''
+    // URLから直接パラメータ取得（searchParamsに依存しない）
+    const urlParams = new URLSearchParams(window.location.search)
+    const urlRole = urlParams.get('role') || ''
+    const directRedirect = urlParams.get('redirect') || ''
     const isGoogleUser = user.app_metadata?.provider === 'google'
-    console.log('[redirectUser] start, urlRole:', urlRole, 'redirectTo:', redirectTo, 'isGoogle:', isGoogleUser)
+    console.log('[redirectUser] start, urlRole:', urlRole, 'directRedirect:', directRedirect, 'isGoogle:', isGoogleUser)
 
-    // redirectTo がある場合: DB問い合わせをスキップして即座に遷移
-    if (redirectTo) {
+    // redirect がある場合: DB問い合わせをスキップして即座に遷移
+    if (directRedirect) {
       if (urlRole === 'client') {
         try {
-          const nn = searchParams.get('nickname') || user.user_metadata?.full_name || user.email?.split('@')[0] || 'ユーザー'
+          const nn = urlParams.get('nickname') || user.user_metadata?.full_name || user.email?.split('@')[0] || 'ユーザー'
           await (supabase.from('clients') as any).upsert({
             user_id: user.id,
             nickname: nn,
           }, { onConflict: 'user_id' })
         } catch (_) {}
       }
-      console.log('[redirectUser] → redirectTo (skip DB):', redirectTo)
-      window.location.href = redirectTo
+      console.log('[redirectUser] → directRedirect (skip DB):', directRedirect)
+      window.location.href = directRedirect
       return
     }
 
-    // redirectTo がない場合のみ: DB問い合わせでリダイレクト先を判定
+    // redirect がない場合のみ: DB問い合わせでリダイレクト先を判定
     const [{ data: proData }, { data: clientData }] = await Promise.all([
       (supabase.from('professionals').select('id').eq('user_id', user.id).maybeSingle()) as any,
       (supabase.from('clients').select('id').eq('user_id', user.id).maybeSingle()) as any,
@@ -212,7 +230,7 @@ function LoginForm() {
       window.location.href = '/dashboard'
     } else if (urlRole === 'client') {
       try {
-        const nn = searchParams.get('nickname') || user.user_metadata?.full_name || user.email?.split('@')[0] || 'ユーザー'
+        const nn = urlParams.get('nickname') || user.user_metadata?.full_name || user.email?.split('@')[0] || 'ユーザー'
         await (supabase.from('clients') as any).upsert({
           user_id: user.id,
           nickname: nn,
