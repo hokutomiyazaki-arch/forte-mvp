@@ -135,12 +135,12 @@ function ConfirmedContent() {
             ) : (
               <>
                 <a
-                  href={`/login?role=client&redirect=/mycard&email=${encodeURIComponent(voterEmail)}`}
+                  href={`/mycard${voterEmail ? '?email=' + encodeURIComponent(voterEmail) : ''}`}
                   className="inline-block w-full py-3 bg-[#C4A35A] text-white text-sm font-bold rounded-lg hover:bg-[#b3923f] transition"
                 >
-                  パスワードを設定してリワードを保存
+                  リワードを保存する
                 </a>
-                <p className="text-xs text-gray-400 mt-2">コレクションに保存して、いつでも確認できます</p>
+                <p className="text-xs text-gray-400 mt-2">アカウント登録してコレクションに保存できます</p>
               </>
             )}
           </div>

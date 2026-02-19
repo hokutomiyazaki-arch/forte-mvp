@@ -1,7 +1,9 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { getRewardLabel } from '@/lib/types'
+import { Suspense } from 'react'
 
 interface RewardWithPro {
   id: string
@@ -22,163 +24,257 @@ interface VoteHistory {
   pro_name?: string
 }
 
-export default function MyPage() {
+function MyCardContent() {
+  const searchParams = useSearchParams()
+  const emailParam = searchParams.get('email') || ''
   const supabase = createClient()
+
+  // 認証状態: 'loading' | 'auth' | 'ready'
+  const [authMode, setAuthMode] = useState<'loading' | 'auth' | 'ready'>('loading')
+
+  // インラインログインフォーム用
+  const [authEmail, setAuthEmail] = useState(emailParam)
+  const [authPassword, setAuthPassword] = useState('')
+  const [authError, setAuthError] = useState('')
+  const [authSubmitting, setAuthSubmitting] = useState(false)
+  const [authFormMode, setAuthFormMode] = useState<'signup' | 'login'>('signup')
+  const [authEmailSent, setAuthEmailSent] = useState(false)
+  const [checkingEmail, setCheckingEmail] = useState(false)
+
+  // 通常のmycard用state
   const [rewards, setRewards] = useState<RewardWithPro[]>([])
   const [voteHistory, setVoteHistory] = useState<VoteHistory[]>([])
-  const [loading, setLoading] = useState(true)
-  const [timedOut, setTimedOut] = useState(false)
+  const [dataLoading, setDataLoading] = useState(false)
   const [tab, setTab] = useState<'rewards' | 'history'>('rewards')
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [redeeming, setRedeeming] = useState(false)
   const [message, setMessage] = useState('')
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
   const [changingPassword, setChangingPassword] = useState(false)
   const [isPro, setIsPro] = useState(false)
   const [userEmail, setUserEmail] = useState('')
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [timedOut, setTimedOut] = useState(false)
 
-  useEffect(() => {
+  // データ取得（セッション確立後に呼ぶ）
+  async function loadData(email: string, userId: string) {
+    setDataLoading(true)
     timerRef.current = setTimeout(() => setTimedOut(true), 5000)
+    try {
+      console.log('[mycard] loadData start, email:', email, 'userId:', userId)
 
-    async function load() {
-      try {
-        console.log('[mycard] load start')
-        const { data: { session } } = await supabase.auth.getSession()
-        console.log('[mycard] session:', session?.user?.email || 'none')
+      // プロ確認
+      const { data: proCheck } = await (supabase as any)
+        .from('professionals').select('id').eq('user_id', userId).maybeSingle()
+      setIsPro(!!proCheck)
 
-        if (!session?.user) {
-          // ループ防止: login→mycard→login の無限ループを検知
-          const loopCount = parseInt(sessionStorage.getItem('mycard_redirect_count') || '0')
-          if (loopCount >= 2) {
-            console.error('[mycard] redirect loop detected, stopping. count:', loopCount)
-            sessionStorage.removeItem('mycard_redirect_count')
-            // ループ時はログイン画面にredirectなしで飛ばす（ループ防止）
-            window.location.href = '/login'
-            return
+      // client_rewards を取得（active + used）
+      const { data: clientRewards, error: crError } = await (supabase as any)
+        .from('client_rewards')
+        .select('id, reward_id, professional_id, status')
+        .eq('client_email', email)
+        .in('status', ['active', 'used'])
+        .order('created_at', { ascending: false })
+      console.log('[mycard] client_rewards:', { count: clientRewards?.length, error: crError?.message })
+
+      if (clientRewards && clientRewards.length > 0) {
+        const rewardIds = Array.from(new Set(clientRewards.map((cr: any) => cr.reward_id)))
+        const { data: rewardData } = await (supabase as any)
+          .from('rewards')
+          .select('id, reward_type, title, content')
+          .in('id', rewardIds)
+
+        const rewardMap = new Map<string, { reward_type: string; title: string; content: string }>()
+        if (rewardData) {
+          for (const r of rewardData) {
+            rewardMap.set(r.id, { reward_type: r.reward_type, title: r.title || '', content: r.content })
           }
-          sessionStorage.setItem('mycard_redirect_count', String(loopCount + 1))
-          console.log('[mycard] no session, redirecting to login, loopCount:', loopCount + 1)
-          window.location.href = '/login?role=client&redirect=/mycard'
-          return
-        }
-        // 正常到達時はループカウンターをリセット
-        sessionStorage.removeItem('mycard_redirect_count')
-
-        const user = session.user
-        const email = user.email || ''
-        setUserEmail(email)
-        console.log('[mycard] user email:', email, 'user_id:', user.id)
-
-        // プロ確認
-        const { data: proCheck } = await (supabase as any)
-          .from('professionals').select('id').eq('user_id', user.id).maybeSingle()
-        setIsPro(!!proCheck)
-        console.log('[mycard] isPro:', !!proCheck)
-
-        // client_rewards を取得（active + used）
-        const { data: clientRewards, error: crError } = await (supabase as any)
-          .from('client_rewards')
-          .select('id, reward_id, professional_id, status')
-          .eq('client_email', email)
-          .in('status', ['active', 'used'])
-          .order('created_at', { ascending: false })
-        console.log('[mycard] client_rewards fetch:', { count: clientRewards?.length, error: crError?.message })
-
-        if (clientRewards && clientRewards.length > 0) {
-          const rewardIds = Array.from(new Set(clientRewards.map((cr: any) => cr.reward_id)))
-          const { data: rewardData } = await (supabase as any)
-            .from('rewards')
-            .select('id, reward_type, title, content')
-            .in('id', rewardIds)
-
-          const rewardMap = new Map<string, { reward_type: string; title: string; content: string }>()
-          if (rewardData) {
-            for (const r of rewardData) {
-              rewardMap.set(r.id, { reward_type: r.reward_type, title: r.title || '', content: r.content })
-            }
-          }
-
-          const proIds = Array.from(new Set(clientRewards.map((cr: any) => cr.professional_id)))
-          const { data: proData } = await (supabase as any)
-            .from('professionals')
-            .select('id, name')
-            .in('id', proIds)
-
-          const proMap = new Map<string, string>()
-          if (proData) {
-            for (const p of proData) {
-              proMap.set(p.id, p.name)
-            }
-          }
-
-          const merged: RewardWithPro[] = clientRewards.map((cr: any) => {
-            const reward = rewardMap.get(cr.reward_id)
-            const item = {
-              id: cr.id,
-              reward_id: cr.reward_id,
-              reward_type: reward?.reward_type || '',
-              title: reward?.title || '',
-              content: reward?.content || '',
-              status: cr.status,
-              professional_id: cr.professional_id,
-              pro_name: proMap.get(cr.professional_id) || 'プロ',
-            }
-            console.log('[mycard] reward item:', { id: item.id, professional_id: item.professional_id, pro_name: item.pro_name, reward_type: item.reward_type })
-            return item
-          })
-          setRewards(merged)
         }
 
-        // 投票履歴取得
-        const { data: voteData, error: voteError } = await (supabase as any)
-          .from('votes')
-          .select('id, professional_id, result_category, created_at')
-          .eq('voter_email', email)
-          .order('created_at', { ascending: false })
-        console.log('[mycard] votes fetch:', { count: voteData?.length, error: voteError?.message })
+        const proIds = Array.from(new Set(clientRewards.map((cr: any) => cr.professional_id)))
+        const { data: proData } = await (supabase as any)
+          .from('professionals')
+          .select('id, name')
+          .in('id', proIds)
 
-        if (voteData && voteData.length > 0) {
-          const voteProIds = Array.from(new Set(voteData.map((v: any) => v.professional_id)))
-          const { data: voteProData } = await (supabase as any)
-            .from('professionals')
-            .select('id, name')
-            .in('id', voteProIds)
-
-          const voteProMap = new Map<string, string>()
-          if (voteProData) {
-            for (const p of voteProData) {
-              voteProMap.set(p.id, p.name)
-            }
+        const proMap = new Map<string, string>()
+        if (proData) {
+          for (const p of proData) {
+            proMap.set(p.id, p.name)
           }
-
-          setVoteHistory(voteData.map((v: any) => ({
-            ...v,
-            pro_name: voteProMap.get(v.professional_id) || '不明',
-          })))
         }
-      } catch (e) {
-        console.error('[mycard] load error:', e)
+
+        const merged: RewardWithPro[] = clientRewards.map((cr: any) => {
+          const reward = rewardMap.get(cr.reward_id)
+          return {
+            id: cr.id,
+            reward_id: cr.reward_id,
+            reward_type: reward?.reward_type || '',
+            title: reward?.title || '',
+            content: reward?.content || '',
+            status: cr.status,
+            professional_id: cr.professional_id,
+            pro_name: proMap.get(cr.professional_id) || 'プロ',
+          }
+        })
+        setRewards(merged)
       }
-      console.log('[mycard] load complete')
-      setLoading(false)
-    }
 
-    load()
+      // 投票履歴取得
+      const { data: voteData } = await (supabase as any)
+        .from('votes')
+        .select('id, professional_id, result_category, created_at')
+        .eq('voter_email', email)
+        .order('created_at', { ascending: false })
 
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
+      if (voteData && voteData.length > 0) {
+        const voteProIds = Array.from(new Set(voteData.map((v: any) => v.professional_id)))
+        const { data: voteProData } = await (supabase as any)
+          .from('professionals')
+          .select('id, name')
+          .in('id', voteProIds)
+
+        const voteProMap = new Map<string, string>()
+        if (voteProData) {
+          for (const p of voteProData) {
+            voteProMap.set(p.id, p.name)
+          }
+        }
+
+        setVoteHistory(voteData.map((v: any) => ({
+          ...v,
+          pro_name: voteProMap.get(v.professional_id) || '不明',
+        })))
+      }
+
+      console.log('[mycard] loadData complete')
+    } catch (e) {
+      console.error('[mycard] loadData error:', e)
     }
+    if (timerRef.current) clearTimeout(timerRef.current)
+    setDataLoading(false)
+  }
+
+  // 初回: セッション確認
+  useEffect(() => {
+    async function checkSession() {
+      console.log('[mycard] checkSession start')
+      const { data: { session } } = await supabase.auth.getSession()
+      console.log('[mycard] session:', session?.user?.email || 'none')
+
+      if (session?.user) {
+        const email = session.user.email || ''
+        setUserEmail(email)
+        setAuthMode('ready')
+        await loadData(email, session.user.id)
+      } else {
+        // 未ログイン: インラインフォーム表示
+        setAuthMode('auth')
+        // emailパラメータがある場合、既存ユーザーかチェック
+        if (emailParam && emailParam.includes('@')) {
+          checkExistingEmail(emailParam)
+        }
+      }
+    }
+    checkSession()
   }, [])
 
-  useEffect(() => {
-    if (!loading && timerRef.current) {
-      clearTimeout(timerRef.current)
-    }
-  }, [loading])
+  // 既存ユーザーチェック
+  async function checkExistingEmail(emailToCheck: string) {
+    setCheckingEmail(true)
+    try {
+      const res = await fetch('/api/check-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailToCheck }),
+      })
+      const data = await res.json()
+      if (data.exists) {
+        setAuthFormMode('login')
+      }
+    } catch (_) {}
+    setCheckingEmail(false)
+  }
 
+  // インラインログイン/新規登録
+  async function handleAuth(e: React.FormEvent) {
+    e.preventDefault()
+    setAuthError('')
+    setAuthSubmitting(true)
+
+    try {
+      if (authFormMode === 'signup') {
+        const { data, error } = await supabase.auth.signUp({
+          email: authEmail,
+          password: authPassword,
+          options: { data: { role: 'client' } },
+        })
+        if (error) throw error
+
+        // Supabaseの設定によってはメール確認が必要
+        if (data.session) {
+          // メール確認不要: そのままセッション確立
+          const user = data.session.user
+          const email = user.email || ''
+          setUserEmail(email)
+
+          // clients テーブルにupsert
+          try {
+            const nn = user.user_metadata?.full_name || email.split('@')[0] || 'ユーザー'
+            await (supabase as any).from('clients').upsert({
+              user_id: user.id,
+              nickname: nn,
+            }, { onConflict: 'user_id' })
+          } catch (_) {}
+
+          // ウェルカムメール送信
+          try {
+            await fetch('/api/welcome-email', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, isGoogle: false }),
+            })
+          } catch (_) {}
+
+          setAuthMode('ready')
+          await loadData(email, user.id)
+        } else {
+          // メール確認が必要
+          setAuthEmailSent(true)
+        }
+      } else {
+        // ログイン
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: authEmail,
+          password: authPassword,
+        })
+        if (error) throw error
+
+        if (data.session?.user) {
+          const user = data.session.user
+          const email = user.email || ''
+          setUserEmail(email)
+          setAuthMode('ready')
+          await loadData(email, user.id)
+        }
+      }
+    } catch (err: any) {
+      const msg = err.message || ''
+      if (msg.includes('Invalid login credentials')) {
+        setAuthError('メールアドレスまたはパスワードが正しくありません')
+      } else if (msg.includes('User already registered')) {
+        setAuthError('このメールアドレスは既に登録されています。ログインしてください。')
+        setAuthFormMode('login')
+      } else {
+        setAuthError(msg || 'エラーが発生しました')
+      }
+    }
+    setAuthSubmitting(false)
+  }
+
+  // リワード使用/削除
   async function handleRedeem(clientRewardId: string) {
     setRedeeming(true)
     setMessage('')
@@ -204,6 +300,7 @@ export default function MyPage() {
     setConfirmingId(null)
   }
 
+  // パスワード変更
   async function handlePasswordChange(e: React.FormEvent) {
     e.preventDefault()
     setChangingPassword(true)
@@ -235,7 +332,100 @@ export default function MyPage() {
     setChangingPassword(false)
   }
 
-  if (loading) {
+  // ========== ローディング画面 ==========
+  if (authMode === 'loading') {
+    return <div className="text-center py-16 text-gray-400">読み込み中...</div>
+  }
+
+  // ========== メール確認待ち画面 ==========
+  if (authEmailSent) {
+    return (
+      <div className="max-w-md mx-auto text-center py-16 px-4">
+        <div className="w-16 h-16 rounded-full bg-[#C4A35A]/10 flex items-center justify-center mx-auto mb-4">
+          <svg className="w-8 h-8 text-[#C4A35A]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+        </div>
+        <h1 className="text-xl font-bold text-[#1A1A2E] mb-4">確認メールを送信しました</h1>
+        <p className="text-sm text-gray-500">
+          {authEmail} にメールを送信しました。<br />
+          メール内のリンクをクリックして登録を完了してください。
+        </p>
+      </div>
+    )
+  }
+
+  // ========== インラインログインフォーム ==========
+  if (authMode === 'auth') {
+    return (
+      <div className="max-w-md mx-auto px-4 py-12">
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 rounded-full bg-[#C4A35A]/10 flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-[#C4A35A]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+          <h1 className="text-xl font-bold text-[#1A1A2E] mb-2">リワードを保存するには<br />アカウント登録が必要です</h1>
+          <p className="text-sm text-gray-500">パスワードを設定するだけで完了します</p>
+        </div>
+
+        {/* 新規登録/ログイン切替 */}
+        <div className="flex mb-6 text-sm">
+          <button
+            onClick={() => { setAuthFormMode('signup'); setAuthError('') }}
+            className={`flex-1 py-2 border-b-2 transition ${authFormMode === 'signup' ? 'border-[#C4A35A] text-[#1A1A2E] font-medium' : 'border-transparent text-gray-400'}`}
+          >
+            新規登録
+          </button>
+          <button
+            onClick={() => { setAuthFormMode('login'); setAuthError('') }}
+            className={`flex-1 py-2 border-b-2 transition ${authFormMode === 'login' ? 'border-[#C4A35A] text-[#1A1A2E] font-medium' : 'border-transparent text-gray-400'}`}
+          >
+            ログイン
+          </button>
+        </div>
+
+        {checkingEmail && (
+          <p className="text-xs text-gray-400 text-center mb-4">アカウント確認中...</p>
+        )}
+
+        <form onSubmit={handleAuth} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">メールアドレス</label>
+            {emailParam ? (
+              <>
+                <input type="email" value={authEmail} readOnly
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-700" />
+                <p className="text-xs text-green-600 mt-1">投票時のメールアドレスが入力されています</p>
+              </>
+            ) : (
+              <input type="email" value={authEmail} onChange={e => setAuthEmail(e.target.value)} required
+                onBlur={() => authEmail && authEmail.includes('@') && checkExistingEmail(authEmail)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
+                placeholder="メールアドレス" />
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">パスワード</label>
+            <input type="password" value={authPassword} onChange={e => setAuthPassword(e.target.value)} required minLength={6}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
+              placeholder="パスワード" />
+            <p className="text-xs text-gray-400 mt-1">6文字以上で設定してください</p>
+          </div>
+
+          {authError && <p className="text-red-500 text-sm">{authError}</p>}
+
+          <button type="submit" disabled={authSubmitting}
+            className="w-full py-3 bg-[#C4A35A] text-white font-medium rounded-lg hover:bg-[#b3923f] transition disabled:opacity-50">
+            {authSubmitting ? '処理中...' : authFormMode === 'signup' ? 'アカウント作成' : 'ログイン'}
+          </button>
+        </form>
+      </div>
+    )
+  }
+
+  // ========== データ取得中 ==========
+  if (dataLoading) {
     if (timedOut) {
       return (
         <div className="text-center py-16 px-4">
@@ -252,6 +442,7 @@ export default function MyPage() {
     return <div className="text-center py-16 text-gray-400">読み込み中...</div>
   }
 
+  // ========== 通常のmycard表示 ==========
   const activeRewards = rewards.filter(r => r.status === 'active')
   const usedRewards = rewards.filter(r => r.status === 'used')
 
@@ -525,5 +716,13 @@ export default function MyPage() {
         </button>
       </div>
     </div>
+  )
+}
+
+export default function MyCardPage() {
+  return (
+    <Suspense fallback={<div className="text-center py-16 text-gray-400">読み込み中...</div>}>
+      <MyCardContent />
+    </Suspense>
   )
 }
