@@ -165,7 +165,7 @@ export default function DashboardPage() {
       // personality_summary: personality_id → ラベル変換
       const { data: rawPersData } = await supabase.from('personality_summary').select('*').eq('professional_id', proData.id) as any
       if (rawPersData) {
-        const { data: persItems } = await supabase.from('personality_items').select('id, personality_label') as any
+        const { data: persItems } = await supabase.from('personality_items').select('id, label') as any
         if (persItems) {
           const labeledPers = resolvePersonalityLabels(rawPersData, persItems)
           setPersonalityVotes(labeledPers)

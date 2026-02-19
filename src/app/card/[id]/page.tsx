@@ -71,7 +71,7 @@ export default function CardPage() {
         .from('personality_summary').select('*').eq('professional_id', id) as any
       if (rawPersData) {
         const { data: persItems } = await supabase
-          .from('personality_items').select('id, personality_label') as any
+          .from('personality_items').select('id, label') as any
         if (persItems) {
           const labeledPers = resolvePersonalityLabels(rawPersData, persItems)
           setPersonalityVotes(labeledPers)

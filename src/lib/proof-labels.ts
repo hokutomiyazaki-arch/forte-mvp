@@ -26,7 +26,7 @@ interface ProofItem {
 
 interface PersonalityItem {
   id: string
-  personality_label: string
+  label: string
 }
 
 interface CustomProof {
@@ -75,7 +75,7 @@ export function resolvePersonalityLabels(
 ): LabeledSummary[] {
   const personalityMap = new Map<string, string>()
   for (const item of personalityItems) {
-    personalityMap.set(item.id, item.personality_label)
+    personalityMap.set(item.id, item.label)
   }
 
   return rawPersonality.map(v => ({
