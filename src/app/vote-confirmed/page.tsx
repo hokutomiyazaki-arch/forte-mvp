@@ -137,7 +137,7 @@ function ConfirmedContent() {
                     {reward.title || getRewardLabel(reward.reward_type)}
                   </p>
                   <p className="text-sm text-gray-500 mb-4">
-                    リワードの中身はマイページで確認できます
+                    リワードの中身はリワードタブで確認できます
                   </p>
                   {loggedIn ? (
                     <>
@@ -151,7 +151,7 @@ function ConfirmedContent() {
                         href="/mycard"
                         className="inline-block w-full py-3 bg-[#C4A35A] text-white text-sm font-bold rounded-lg hover:bg-[#b3923f] transition"
                       >
-                        マイページで確認する
+                        リワードで確認する
                       </a>
                     </>
                   ) : (

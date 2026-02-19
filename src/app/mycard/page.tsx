@@ -449,7 +449,7 @@ function MyCardContent() {
   return (
     <div className="max-w-lg mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-2">
-        <h1 className="text-2xl font-bold text-[#1A1A2E]">マイページ</h1>
+        <h1 className="text-2xl font-bold text-[#1A1A2E]">リワード</h1>
         <button
           onClick={() => setShowSettings(!showSettings)}
           className="p-2 text-gray-400 hover:text-[#1A1A2E] transition"
