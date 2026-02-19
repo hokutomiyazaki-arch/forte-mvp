@@ -119,7 +119,8 @@ export function getRewardType(id: string) {
 // ヘルパー関数
 // ============================================
 
-export function getResultForteLabel(key: string, pro?: Professional | null): string {
+export function getResultForteLabel(key: string | undefined | null, pro?: Professional | null): string {
+  if (!key) return '-'
   if (key.startsWith('cr_') && pro?.custom_result_fortes) {
     const custom = pro.custom_result_fortes.find(c => c.id === key)
     if (custom) return custom.label
@@ -127,7 +128,8 @@ export function getResultForteLabel(key: string, pro?: Professional | null): str
   return RESULT_FORTES.find(o => o.key === key)?.label || key
 }
 
-export function getPersonalityForteLabel(key: string, pro?: Professional | null): string {
+export function getPersonalityForteLabel(key: string | undefined | null, pro?: Professional | null): string {
+  if (!key) return '-'
   if (key.startsWith('cp_') && pro?.custom_personality_fortes) {
     const custom = pro.custom_personality_fortes.find(c => c.id === key)
     if (custom) return custom.label
