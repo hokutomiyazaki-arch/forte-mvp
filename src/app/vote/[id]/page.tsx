@@ -1,10 +1,86 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { Professional, getAllResultOptions, getAllPersonalityOptions, getRewardLabel } from '@/lib/types'
+import { Professional, getRewardLabel } from '@/lib/types'
 import { Suspense } from 'react'
 
+interface ProofItem {
+  id: string
+  label: string
+  strength_label: string
+  sort_order: number
+}
+
+interface CustomProof {
+  id: string
+  label: string
+}
+
+interface PersonalityItem {
+  id: string
+  label: string
+  personality_label: string
+  sort_order: number
+}
+
+interface RewardItem {
+  id: string
+  reward_type: string
+  title: string
+}
+
+// ── アコーディオンコンポーネント ──
+function Accordion({
+  title,
+  count,
+  max,
+  isOpen,
+  onToggle,
+  children,
+}: {
+  title: string
+  count: number
+  max: number
+  isOpen: boolean
+  onToggle: () => void
+  children: React.ReactNode
+}) {
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [height, setHeight] = useState(0)
+
+  useEffect(() => {
+    if (contentRef.current) {
+      setHeight(contentRef.current.scrollHeight)
+    }
+  }, [isOpen, children])
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center justify-between px-4 py-3.5"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-[#9CA3AF]">{isOpen ? '\u25BC' : '\u25B6'}</span>
+          <span className="text-sm font-bold text-[#1A1A2E]">{title}（{count}/{max}）</span>
+        </div>
+        <span className="text-[10px] px-2 py-0.5 bg-gray-100 text-[#9CA3AF] rounded-full">任意</span>
+      </button>
+      <div
+        className="transition-all duration-300 ease-in-out overflow-hidden"
+        style={{ maxHeight: isOpen ? height + 'px' : '0px' }}
+      >
+        <div ref={contentRef} className="px-4 pb-4">
+          {children}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── メインフォーム ──
 function VoteForm() {
   const params = useParams()
   const searchParams = useSearchParams()
@@ -12,47 +88,89 @@ function VoteForm() {
   const qrToken = searchParams.get('token')
   const supabase = createClient()
 
+  // 基本 state
   const [pro, setPro] = useState<Professional | null>(null)
-  const [voterEmail, setVoterEmail] = useState('')
-  const [selectedResult, setSelectedResult] = useState('')
-  const [selectedPersonalities, setSelectedPersonalities] = useState<string[]>([])
-  const [comment, setComment] = useState('')
+  const [loading, setLoading] = useState(true)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
   const [alreadyVoted, setAlreadyVoted] = useState(false)
-  const [loading, setLoading] = useState(true)
   const [submittedVoteId, setSubmittedVoteId] = useState('')
   const [submittedToken, setSubmittedToken] = useState('')
   const [showEmailFix, setShowEmailFix] = useState(false)
   const [fixEmail, setFixEmail] = useState('')
   const [resending, setResending] = useState(false)
   const [resendMessage, setResendMessage] = useState('')
-  const [proRewards, setProRewards] = useState<{ id: string; reward_type: string }[]>([])
+
+  // フォーム state
+  const [sessionCount, setSessionCount] = useState<'first' | 'repeat' | ''>('')
+  const [voterEmail, setVoterEmail] = useState('')
+  const [comment, setComment] = useState('')
   const [selectedRewardId, setSelectedRewardId] = useState('')
 
+  // 強みプルーフ
+  const [proofItems, setProofItems] = useState<ProofItem[]>([])
+  const [customProofs, setCustomProofs] = useState<CustomProof[]>([])
+  const [selectedProofIds, setSelectedProofIds] = useState<Set<string>>(new Set())
+  const [isHopeful, setIsHopeful] = useState(false)
+  const MAX_PROOF = 3
+
+  // 人柄プルーフ
+  const [personalityItems, setPersonalityItems] = useState<PersonalityItem[]>([])
+  const [selectedPersonalityIds, setSelectedPersonalityIds] = useState<Set<string>>(new Set())
   const MAX_PERSONALITY = 3
+
+  // リワード
+  const [proRewards, setProRewards] = useState<RewardItem[]>([])
+
+  // アコーディオン
+  const [accordionOpen, setAccordionOpen] = useState({ proof: false, personality: false, reward: false })
 
   useEffect(() => {
     async function load() {
       // プロ情報取得
-      const { data: proData } = await supabase
+      const { data: proData } = await (supabase as any)
         .from('professionals')
         .select('*')
         .eq('id', proId)
-        .single()
+        .maybeSingle()
       if (proData) setPro(proData)
 
-      // リワード取得
-      const { data: rewardData } = await (supabase as any)
-        .from('rewards')
-        .select('id, reward_type')
-        .eq('professional_id', proId)
-        .order('sort_order')
-      if (rewardData && rewardData.length > 0) {
-        setProRewards(rewardData)
+      if (proData) {
+        // 強みプルーフ: プロが選んだ proof_items を取得
+        const selectedProofs: string[] = proData.selected_proofs || []
+        if (selectedProofs.length > 0) {
+          const { data: piData } = await (supabase as any)
+            .from('proof_items')
+            .select('id, label, strength_label, sort_order')
+            .in('id', selectedProofs)
+            .order('sort_order')
+          if (piData) setProofItems(piData)
+        }
+
+        // カスタムプルーフ
+        if (proData.custom_proofs && proData.custom_proofs.length > 0) {
+          setCustomProofs(proData.custom_proofs)
+        }
+
+        // リワード取得
+        const { data: rewardData } = await (supabase as any)
+          .from('rewards')
+          .select('id, reward_type, title')
+          .eq('professional_id', proId)
+          .order('sort_order')
+        if (rewardData && rewardData.length > 0) {
+          setProRewards(rewardData)
+        }
       }
 
-      // ローカルストレージからメアド復元（2回目以降入力不要）
+      // 人柄プルーフ: 全10項目取得
+      const { data: persItems } = await (supabase as any)
+        .from('personality_items')
+        .select('id, label, personality_label, sort_order')
+        .order('sort_order')
+      if (persItems) setPersonalityItems(persItems)
+
+      // ローカルストレージからメアド復元
       const savedEmail = localStorage.getItem('proof_voter_email')
       if (savedEmail) {
         setVoterEmail(savedEmail)
@@ -71,19 +189,50 @@ function VoteForm() {
     load()
   }, [proId])
 
-  function togglePersonality(key: string) {
-    setSelectedPersonalities(prev => {
-      if (prev.includes(key)) return prev.filter(k => k !== key)
-      if (prev.length >= MAX_PERSONALITY) return prev
-      return [...prev, key]
+  // ── 強みプルーフ選択 ──
+  function toggleProofId(id: string) {
+    if (isHopeful) return
+    setSelectedProofIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        if (next.size >= MAX_PROOF) return prev
+        next.add(id)
+      }
+      return next
     })
   }
 
+  function toggleHopeful() {
+    if (selectedProofIds.size > 0) return
+    setIsHopeful(!isHopeful)
+  }
+
+  // ── 人柄プルーフ選択 ──
+  function togglePersonalityId(id: string) {
+    setSelectedPersonalityIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        if (next.size >= MAX_PERSONALITY) return prev
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  // ── 投票送信 ──
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
 
     // バリデーション
+    if (!sessionCount) {
+      setError('セッション回数を選択してください')
+      return
+    }
     const email = voterEmail.trim().toLowerCase()
     if (!email || !email.includes('@')) {
       setError('メールアドレスを入力してください')
@@ -91,17 +240,6 @@ function VoteForm() {
     }
     if (/https?:\/\/|www\./i.test(email)) {
       setError('正しいメールアドレスを入力してください')
-      return
-    }
-    if (!selectedResult) {
-      setError('強みプルーフを1つ選んでください')
-      return
-    }
-
-    // 自己投票チェック（ログインユーザーID）
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-    if (currentUser && pro?.user_id && currentUser.id === pro.user_id) {
-      setError('自分自身にはプルーフを贈れません')
       return
     }
 
@@ -117,7 +255,6 @@ function VoteForm() {
         return
       }
       const checkData = await checkRes.json()
-      console.log('[vote] check-email result:', checkData)
       if (checkData.isSelf) {
         setError('ご自身のプルーフには投票できません')
         return
@@ -128,7 +265,7 @@ function VoteForm() {
       return
     }
 
-    // 30分クールダウン: このプロが最後にプルーフを受け取ってから30分以内は受付不可
+    // 30分クールダウン
     const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString()
     const { data: recentVote } = await (supabase as any)
       .from('votes')
@@ -138,7 +275,7 @@ function VoteForm() {
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
-    
+
     if (recentVote) {
       const nextAvailable = new Date(new Date(recentVote.created_at).getTime() + 30 * 60 * 1000)
       const waitMin = Math.ceil((nextAvailable.getTime() - Date.now()) / 60000)
@@ -149,13 +286,24 @@ function VoteForm() {
     // メアドをローカルストレージに保存
     localStorage.setItem('proof_voter_email', email)
 
-    // 投票INSERT（pendingステータスで保存）
+    // vote_type 判定
+    let voteType = 'personality_only'
+    if (isHopeful) {
+      voteType = 'hopeful'
+    } else if (selectedProofIds.size > 0) {
+      voteType = 'proof'
+    }
+
+    // 投票INSERT
     const { data: voteData, error: voteError } = await (supabase as any).from('votes').insert({
       professional_id: proId,
       voter_email: email,
       client_user_id: null,
-      result_category: selectedResult,
-      personality_categories: selectedPersonalities,
+      session_count: sessionCount,
+      vote_type: voteType,
+      selected_proof_ids: isHopeful ? null : (selectedProofIds.size > 0 ? Array.from(selectedProofIds) : null),
+      selected_personality_ids: selectedPersonalityIds.size > 0 ? Array.from(selectedPersonalityIds) : null,
+      selected_reward_id: selectedRewardId || null,
       comment: comment.trim() || null,
       qr_token: qrToken,
       status: 'pending',
@@ -176,7 +324,7 @@ function VoteForm() {
       email,
       professional_id: proId,
       source: 'vote',
-    }).then(() => {}) // エラーは無視（重複の場合）
+    }).then(() => {})
 
     // 確認トークンを作成
     const { data: confirmation } = await (supabase as any)
@@ -206,7 +354,7 @@ function VoteForm() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             email,
-            proName: pro.name,
+            proName: pro!.name,
             token: confirmation.token,
           }),
         })
@@ -218,6 +366,7 @@ function VoteForm() {
     setSubmitted(true)
   }
 
+  // ── ローディング ──
   if (loading) {
     return <div className="text-center py-16 text-gray-400">読み込み中...</div>
   }
@@ -226,10 +375,15 @@ function VoteForm() {
     return <div className="text-center py-16 text-gray-400">プロが見つかりません</div>
   }
 
+  // ── 投票済み ──
   if (alreadyVoted) {
     return (
       <div className="max-w-md mx-auto text-center py-16 px-4">
-        <div className="text-5xl mb-4">✓</div>
+        <div className="w-16 h-16 rounded-full bg-[#C4A35A]/10 flex items-center justify-center mx-auto mb-4">
+          <svg className="w-8 h-8 text-[#C4A35A]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
         <h1 className="text-xl font-bold text-[#1A1A2E] mb-2">投票済みです</h1>
         <p className="text-gray-500 mb-6">{pro.name}さんへのプルーフは既に送信済みです。</p>
         <a href={`/card/${pro.id}`} className="text-[#C4A35A] underline">
@@ -239,14 +393,13 @@ function VoteForm() {
     )
   }
 
-  // メールアドレス修正+再送信
+  // ── メールアドレス修正+再送信 ──
   async function handleResend() {
     const newEmail = fixEmail.trim().toLowerCase()
     if (!newEmail || !newEmail.includes('@')) return
     setResending(true)
     setResendMessage('')
 
-    // votesテーブルのvoter_emailを更新
     const { error: updateError } = await (supabase as any)
       .from('votes')
       .update({ voter_email: newEmail })
@@ -257,11 +410,9 @@ function VoteForm() {
       return
     }
 
-    // ローカルストレージも更新
     localStorage.setItem('proof_voter_email', newEmail)
     setVoterEmail(newEmail)
 
-    // 確認メールを再送信
     try {
       await fetch('/api/send-confirmation', {
         method: 'POST',
@@ -280,18 +431,22 @@ function VoteForm() {
     setResending(false)
   }
 
-  // 投票完了画面（メール確認待ち）
+  // ── 投票完了画面 ──
   if (submitted) {
     return (
       <div className="max-w-md mx-auto text-center py-12 px-4">
-        <div className="text-5xl mb-4">📩</div>
+        <div className="w-16 h-16 rounded-full bg-[#1A1A2E] flex items-center justify-center mx-auto mb-4">
+          <svg className="w-8 h-8 text-[#C4A35A]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+        </div>
         <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2">確認メールを送信しました</h1>
         <p className="text-gray-500 mb-4">
           <span className="font-medium text-[#1A1A2E]">{voterEmail}</span> に確認メールを送信しました。<br />
           メール内のリンクをクリックして、プルーフを確定してください。
         </p>
 
-        <div className="bg-[#f8f6f0] border border-[#C4A35A]/30 rounded-xl p-4 mb-4 text-left">
+        <div className="bg-[#FAFAF7] border border-[#C4A35A]/30 rounded-xl p-4 mb-4 text-left">
           <p className="text-xs text-gray-500">
             メールが届かない場合は、迷惑メールフォルダをご確認ください。
           </p>
@@ -305,7 +460,6 @@ function VoteForm() {
           </div>
         )}
 
-        {/* メールが届かない場合 */}
         {!showEmailFix ? (
           <button
             onClick={() => { setShowEmailFix(true); setFixEmail(voterEmail) }}
@@ -341,7 +495,6 @@ function VoteForm() {
           </div>
         )}
 
-        {/* カードを見る */}
         <a
           href={`/card/${pro.id}`}
           className="block w-full py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition mb-3"
@@ -352,172 +505,316 @@ function VoteForm() {
     )
   }
 
-  // 投票フォーム
-  const resultOptions = getAllResultOptions(pro)
-  const personalityOptions = getAllPersonalityOptions(pro)
+  // ── 投票フォーム ──
+  const proofCount = isHopeful ? 1 : selectedProofIds.size
+  const personalityCount = selectedPersonalityIds.size
+  const rewardCount = selectedRewardId ? 1 : 0
+  const canSubmit = !!sessionCount && voterEmail.trim().length > 0 && voterEmail.includes('@')
+
+  // 強みプルーフの表示項目（プロが設定した9項目）
+  const allProofDisplayItems = [
+    ...proofItems.map(p => ({ id: p.id, label: p.label, isCustom: false })),
+    ...customProofs.filter(c => c.label?.trim()).map(c => ({ id: c.id, label: c.label, isCustom: true })),
+  ]
 
   return (
-    <div className="max-w-lg mx-auto px-4 py-8">
-      {/* プロ情報ヘッダー */}
-      <div className="text-center mb-8">
-        {pro.photo_url && (
-          <img
-            src={pro.photo_url}
-            alt={pro.name}
-            className="w-20 h-20 rounded-full mx-auto mb-3 object-cover border-2 border-[#C4A35A]"
-          />
-        )}
-        <h1 className="text-xl font-bold text-[#1A1A2E]">{pro.name}</h1>
-        <p className="text-sm text-gray-500">{pro.title}</p>
-        <p className="text-xs text-gray-400 mt-1">セッション後24時間限定</p>
-      </div>
-
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* メールアドレス入力 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            メールアドレス
-          </label>
-          <input
-            type="email"
-            value={voterEmail}
-            onChange={e => setVoterEmail(e.target.value)}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] focus:border-transparent outline-none"
-            placeholder="your@email.com"
-            required
-          />
-          <p className="text-xs text-gray-400 mt-1">
-            リワードの送付に使用します。プロには公開されません。
-          </p>
-        </div>
-
-        {/* 強みプルーフ選択（1つ） */}
-        <div>
-          <h2 className="text-lg font-bold text-[#1A1A2E] mb-1">強みプルーフ</h2>
-          <p className="text-xs text-gray-500 mb-3">一番大きく変わったことを1つ選んでください</p>
-          <div className="space-y-2">
-            {resultOptions.map(opt => (
-              <label
-                key={opt.key}
-                className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition ${
-                  selectedResult === opt.key
-                    ? 'border-[#C4A35A] bg-[#C4A35A]/5'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="result"
-                  value={opt.key}
-                  checked={selectedResult === opt.key}
-                  onChange={() => setSelectedResult(opt.key)}
-                  className="accent-[#C4A35A] w-4 h-4"
-                />
-                <div>
-                  <div className={`font-medium ${selectedResult === opt.key ? 'text-[#C4A35A]' : 'text-[#1A1A2E]'}`}>
-                    {opt.label}
-                  </div>
-                  <div className="text-xs text-gray-500">{opt.desc}</div>
-                </div>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {/* 人柄プルーフ選択（最大3つ） */}
-        <div>
-          <h2 className="text-lg font-bold text-[#1A1A2E] mb-1">人柄プルーフ（任意）</h2>
-          <p className="text-xs text-gray-500 mb-3">当てはまるものを最大{MAX_PERSONALITY}つまで</p>
-          <div className="space-y-2">
-            {personalityOptions.map(opt => {
-              const isSelected = selectedPersonalities.includes(opt.key)
-              const isDisabled = !isSelected && selectedPersonalities.length >= MAX_PERSONALITY
-              return (
-                <label
-                  key={opt.key}
-                  className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition ${
-                    isSelected
-                      ? 'border-[#C4A35A] bg-[#C4A35A]/5'
-                      : isDisabled
-                        ? 'border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed'
-                        : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => !isDisabled && togglePersonality(opt.key)}
-                    disabled={isDisabled}
-                    className="mt-1 accent-[#C4A35A] w-4 h-4"
-                  />
-                  <div>
-                    <div className={`font-medium ${isSelected ? 'text-[#C4A35A]' : 'text-[#1A1A2E]'}`}>{opt.label}</div>
-                    <div className="text-xs text-gray-500">{opt.desc}</div>
-                  </div>
-                </label>
-              )
-            })}
-          </div>
-          {selectedPersonalities.length > 0 && (
-            <p className="text-xs text-[#C4A35A] mt-2">{selectedPersonalities.length}/{MAX_PERSONALITY} 選択中</p>
+    <div className="min-h-screen bg-[#FAFAF7]">
+      <div className="max-w-lg mx-auto px-4 py-8">
+        {/* プロ情報ヘッダー */}
+        <div className="text-center mb-8">
+          {pro.photo_url && (
+            <img
+              src={pro.photo_url}
+              alt={pro.name}
+              className="w-20 h-20 rounded-full mx-auto mb-3 object-cover border-2 border-[#C4A35A]"
+            />
           )}
+          <h1 className="text-xl font-bold text-[#1A1A2E]">{pro.name}</h1>
+          {pro.title && <p className="text-sm text-gray-500">{pro.title}</p>}
         </div>
 
-        {/* コメント */}
-        <div>
-          <h2 className="text-lg font-bold text-[#1A1A2E] mb-1">ひとこと（任意）</h2>
-          <textarea
-            value={comment}
-            onChange={e => setComment(e.target.value)}
-            maxLength={100}
-            rows={2}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] focus:border-transparent outline-none resize-none"
-            placeholder="このプロへのメッセージ（100文字以内）"
-          />
-          <p className="text-xs text-gray-400 text-right">{comment.length}/100</p>
-        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
 
-        {/* リワード選択 */}
-        {proRewards.length > 0 && (
-          <div>
-            <h2 className="text-lg font-bold text-[#1A1A2E] mb-1">お礼リワードを選ぶ（任意）</h2>
-            <p className="text-xs text-gray-500 mb-3">プルーフ確定後にリワードの内容が届きます</p>
-            <div className="space-y-2">
-              {proRewards.map(reward => (
-                <label
-                  key={reward.id}
-                  className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition ${
-                    selectedRewardId === reward.id
-                      ? 'border-[#C4A35A] bg-[#C4A35A]/5'
-                      : 'border-gray-200 hover:border-gray-300'
+          {/* ── 1. セッション回数セレクター ── */}
+          <div className="bg-white rounded-xl p-4 shadow-sm">
+            <p className="text-sm font-bold text-[#1A1A2E] mb-3">
+              {pro.name}さんのセッションは？
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { value: 'first' as const, label: '1回目' },
+                { value: 'repeat' as const, label: '2回目以降' },
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setSessionCount(opt.value)}
+                  className={`py-3 px-4 rounded-lg text-sm font-medium border-2 transition-colors ${
+                    sessionCount === opt.value
+                      ? 'border-[#C4A35A] bg-[#1A1A2E] text-[#C4A35A]'
+                      : 'border-[#E5E7EB] bg-white text-[#1A1A2E] hover:border-gray-300'
                   }`}
                 >
-                  <input
-                    type="radio"
-                    name="reward"
-                    value={reward.id}
-                    checked={selectedRewardId === reward.id}
-                    onChange={() => setSelectedRewardId(reward.id)}
-                    className="accent-[#C4A35A] w-4 h-4"
-                  />
-                  <div className={`font-medium ${selectedRewardId === reward.id ? 'text-[#C4A35A]' : 'text-[#1A1A2E]'}`}>
-                    {getRewardLabel(reward.reward_type)}
-                  </div>
-                </label>
+                  {opt.label}
+                </button>
               ))}
             </div>
           </div>
-        )}
 
-        {error && <p className="text-red-500 text-sm">{error}</p>}
+          {/* ── 2. 強みプルーフ（アコーディオン） ── */}
+          <Accordion
+            title="強みプルーフ"
+            count={proofCount}
+            max={MAX_PROOF}
+            isOpen={accordionOpen.proof}
+            onToggle={() => setAccordionOpen(prev => ({ ...prev, proof: !prev.proof }))}
+          >
+            {allProofDisplayItems.length > 0 ? (
+              <div className="space-y-2">
+                {allProofDisplayItems.map(item => {
+                  const isChecked = selectedProofIds.has(item.id)
+                  const isDisabled = isHopeful || (!isChecked && selectedProofIds.size >= MAX_PROOF)
+                  return (
+                    <label
+                      key={item.id}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                        isDisabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:bg-[#FAFAF7]'
+                      } ${isChecked ? 'bg-[#FAFAF7]' : ''}`}
+                    >
+                      <div className="relative flex-shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          disabled={isDisabled}
+                          onChange={() => toggleProofId(item.id)}
+                          className="sr-only"
+                        />
+                        <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
+                          isChecked
+                            ? 'bg-[#C4A35A] border-[#C4A35A]'
+                            : 'bg-white border-[#E5E7EB]'
+                        }`}>
+                          {isChecked && (
+                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </div>
+                      </div>
+                      <span className="text-sm text-[#1A1A2E]">{item.label}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            ) : null}
 
-        <button
-          type="submit"
-          className="w-full py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition"
-        >
-          プルーフを贈る
-        </button>
-      </form>
+            {/* 区切り線 + 期待できそう！ */}
+            <div className="border-t border-[#E5E7EB] mt-3 pt-3">
+              <label
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                  selectedProofIds.size > 0 ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:bg-[#FAFAF7]'
+                } ${isHopeful ? 'bg-[#FAFAF7]' : ''}`}
+              >
+                <div className="relative flex-shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={isHopeful}
+                    disabled={selectedProofIds.size > 0}
+                    onChange={toggleHopeful}
+                    className="sr-only"
+                  />
+                  <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
+                    isHopeful
+                      ? 'bg-[#C4A35A] border-[#C4A35A]'
+                      : 'bg-white border-[#E5E7EB]'
+                  }`}>
+                    {isHopeful && (
+                      <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </div>
+                </div>
+                <span className="text-sm text-[#1A1A2E]">期待できそう！</span>
+              </label>
+              {isHopeful && (
+                <p className="text-xs text-[#9CA3AF] ml-11 mt-1">
+                  「期待できそう！」を選ぶと他の項目は選択できません
+                </p>
+              )}
+              {selectedProofIds.size > 0 && (
+                <p className="text-xs text-[#9CA3AF] ml-11 mt-1">
+                  他の項目を選択中は「期待できそう！」は選択できません
+                </p>
+              )}
+            </div>
+          </Accordion>
+
+          {/* ── 3. 人柄プルーフ（アコーディオン） ── */}
+          <Accordion
+            title="人柄プルーフ"
+            count={personalityCount}
+            max={MAX_PERSONALITY}
+            isOpen={accordionOpen.personality}
+            onToggle={() => setAccordionOpen(prev => ({ ...prev, personality: !prev.personality }))}
+          >
+            <div className="space-y-2">
+              {personalityItems.map(item => {
+                const isChecked = selectedPersonalityIds.has(item.id)
+                const isDisabled = !isChecked && selectedPersonalityIds.size >= MAX_PERSONALITY
+                return (
+                  <label
+                    key={item.id}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                      isDisabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:bg-[#FAFAF7]'
+                    } ${isChecked ? 'bg-[#FAFAF7]' : ''}`}
+                  >
+                    <div className="relative flex-shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        disabled={isDisabled}
+                        onChange={() => togglePersonalityId(item.id)}
+                        className="sr-only"
+                      />
+                      <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
+                        isChecked
+                          ? 'bg-[#C4A35A] border-[#C4A35A]'
+                          : 'bg-white border-[#E5E7EB]'
+                      }`}>
+                        {isChecked && (
+                          <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-sm text-[#1A1A2E]">{item.label}</span>
+                  </label>
+                )
+              })}
+            </div>
+          </Accordion>
+
+          {/* ── 4. ひとことコメント ── */}
+          <div className="bg-white rounded-xl p-4 shadow-sm">
+            <label className="block text-sm font-bold text-[#1A1A2E] mb-1">
+              ひとことコメント（任意）
+            </label>
+            <textarea
+              value={comment}
+              onChange={e => setComment(e.target.value)}
+              maxLength={100}
+              rows={2}
+              className="w-full px-3 py-2.5 bg-[#FAFAF7] border border-[#E5E7EB] rounded-lg text-sm focus:ring-2 focus:ring-[#C4A35A] focus:border-[#C4A35A] outline-none resize-none"
+              placeholder="このプロへのメッセージ（100文字以内）"
+            />
+            <p className="text-xs text-[#9CA3AF] text-right mt-1">{comment.length}/100</p>
+          </div>
+
+          {/* ── 5. メールアドレス ── */}
+          <div className="bg-white rounded-xl p-4 shadow-sm">
+            <label className="block text-sm font-bold text-[#1A1A2E] mb-1">
+              メールアドレス <span className="text-red-400">*</span>
+            </label>
+            <input
+              type="email"
+              value={voterEmail}
+              onChange={e => setVoterEmail(e.target.value)}
+              className="w-full px-3 py-2.5 bg-[#FAFAF7] border border-[#E5E7EB] rounded-lg text-sm focus:ring-2 focus:ring-[#C4A35A] focus:border-[#C4A35A] outline-none"
+              placeholder="your@email.com"
+              required
+            />
+            <p className="text-xs text-[#9CA3AF] mt-1">
+              投票の認証に使用します
+            </p>
+          </div>
+
+          {/* ── 6. リワード選択（アコーディオン） ── */}
+          {proRewards.length > 0 && (
+            <Accordion
+              title="リワードを選ぶ"
+              count={rewardCount}
+              max={1}
+              isOpen={accordionOpen.reward}
+              onToggle={() => setAccordionOpen(prev => ({ ...prev, reward: !prev.reward }))}
+            >
+              <div className="space-y-2">
+                {proRewards.map(reward => {
+                  const isSelected = selectedRewardId === reward.id
+                  const displayLabel = reward.reward_type === 'surprise'
+                    ? 'シークレット — 何が出るかお楽しみ！'
+                    : reward.title && (reward.reward_type === 'selfcare' || reward.reward_type === 'freeform')
+                      ? reward.title
+                      : getRewardLabel(reward.reward_type)
+                  return (
+                    <label
+                      key={reward.id}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${
+                        isSelected ? 'bg-[#FAFAF7]' : 'hover:bg-[#FAFAF7]'
+                      }`}
+                    >
+                      <div className="relative flex-shrink-0">
+                        <input
+                          type="radio"
+                          name="reward"
+                          value={reward.id}
+                          checked={isSelected}
+                          onChange={() => setSelectedRewardId(isSelected ? '' : reward.id)}
+                          className="sr-only"
+                        />
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+                          isSelected
+                            ? 'border-[#C4A35A]'
+                            : 'border-[#E5E7EB]'
+                        }`}>
+                          {isSelected && (
+                            <div className="w-2.5 h-2.5 rounded-full bg-[#C4A35A]" />
+                          )}
+                        </div>
+                      </div>
+                      <span className={`text-sm ${isSelected ? 'text-[#1A1A2E] font-medium' : 'text-[#1A1A2E]'}`}>
+                        {displayLabel}
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+              <p className="text-xs text-[#9CA3AF] mt-3">
+                リワードの内容は投票後に開示されます
+              </p>
+            </Accordion>
+          )}
+
+          {/* エラー表示 */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+              <p className="text-red-600 text-sm">{error}</p>
+            </div>
+          )}
+
+          {/* ── 7. 投票ボタン ── */}
+          <div>
+            <button
+              type="submit"
+              disabled={!canSubmit}
+              className={`w-full py-3.5 rounded-xl text-sm font-medium tracking-wider transition-colors ${
+                canSubmit
+                  ? 'bg-[#1A1A2E] text-[#C4A35A] hover:bg-[#2a2a4e]'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              }`}
+            >
+              投票する
+            </button>
+            {!canSubmit && (
+              <p className="text-xs text-[#9CA3AF] text-center mt-2">
+                セッション回数とメールアドレスを入力してください
+              </p>
+            )}
+          </div>
+
+        </form>
+      </div>
     </div>
   )
 }
