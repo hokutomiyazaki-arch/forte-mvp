@@ -317,7 +317,7 @@ export default function DashboardPage() {
     }
 
     // パスワード設定/変更
-    if (newPassword) {
+    if (newPassword && newPassword.length > 0) {
       const { error: pwError } = await (supabase as any).auth.updateUser({ password: newPassword })
       if (pwError) console.error('[handleSave] password update error:', pwError.message)
     }
