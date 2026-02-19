@@ -33,6 +33,21 @@ function LoginForm() {
 
   const isClient = role === 'client'
 
+  // 最優先: redirect パラメータがある場合の即時処理
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const redirect = urlParams.get('redirect')
+    if (!redirect) return
+    supabase.auth.getSession().then(({ data: { session } }: any) => {
+      if (session) {
+        window.location.replace(redirect)
+      } else {
+        const email = urlParams.get('email') || ''
+        window.location.replace('/mycard' + (email ? '?email=' + encodeURIComponent(email) : ''))
+      }
+    })
+  }, [])
+
   useEffect(() => {
     let cancelled = false
 
