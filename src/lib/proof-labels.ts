@@ -21,7 +21,7 @@ interface LabeledSummary {
 
 interface ProofItem {
   id: string
-  strength_label: string
+  label: string
 }
 
 interface PersonalityItem {
@@ -36,7 +36,7 @@ interface CustomProof {
 
 /**
  * vote_summary の proof_id を表示ラベルに変換
- * - UUID → proof_items.strength_label
+ * - UUID → proof_items.label
  * - custom_xxx → customProofs の label
  * - 見つからない → proof_id をそのまま表示
  */
@@ -47,7 +47,7 @@ export function resolveProofLabels(
 ): LabeledSummary[] {
   const proofMap = new Map<string, string>()
   for (const item of proofItems) {
-    proofMap.set(item.id, item.strength_label)
+    proofMap.set(item.id, item.label)
   }
 
   const customMap = new Map<string, string>()

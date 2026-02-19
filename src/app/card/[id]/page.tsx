@@ -59,7 +59,7 @@ export default function CardPage() {
         .from('vote_summary').select('*').eq('professional_id', id) as any
       if (rawVoteData && proData) {
         const { data: piData } = await supabase
-          .from('proof_items').select('id, strength_label') as any
+          .from('proof_items').select('id, label') as any
         if (piData) {
           const labeledVotes = resolveProofLabels(rawVoteData, piData, proData.custom_proofs || [])
           setVotes(labeledVotes)
