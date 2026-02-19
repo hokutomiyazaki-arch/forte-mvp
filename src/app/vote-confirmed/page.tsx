@@ -90,11 +90,6 @@ function ConfirmedContent() {
     return <div className="text-center py-16 text-gray-400">読み込み中...</div>
   }
 
-  // リワードの表示名を決定
-  const rewardDisplayName = reward
-    ? (reward.title || getRewardLabel(reward.reward_type))
-    : ''
-
   return (
     <div className="min-h-screen bg-[#FAFAF7]">
       <div className="max-w-md mx-auto text-center py-12 px-4">
@@ -109,7 +104,7 @@ function ConfirmedContent() {
           {proName ? `${proName}さんにあなたのプルーフが届きました。` : 'プルーフが正常に確認されました。'}
         </p>
 
-        {/* リワード表示 */}
+        {/* リワード表示 — ログイン状態に関係なく内容を直接表示 */}
         {reward && (
           <div className="bg-white border-2 border-dashed border-[#C4A35A] rounded-xl p-6 mb-6">
             <p className="text-xs text-[#C4A35A] font-medium mb-1">
@@ -118,21 +113,9 @@ function ConfirmedContent() {
             {reward.title && (
               <p className="text-sm text-gray-500 mb-2">{reward.title}</p>
             )}
-
-            {/* クーポンは即表示、それ以外はログイン後に表示 */}
-            {reward.reward_type === 'coupon' ? (
-              <p className="text-lg font-semibold text-[#1A1A2E] mb-4">
-                {reward.content}
-              </p>
-            ) : loggedIn ? (
-              <p className="text-lg font-semibold text-[#1A1A2E] mb-4">
-                {reward.content}
-              </p>
-            ) : (
-              <p className="text-sm text-gray-500 mb-4">
-                アカウント登録後にリワードの中身を確認できます
-              </p>
-            )}
+            <p className="text-lg font-semibold text-[#1A1A2E] mb-4">
+              {reward.content}
+            </p>
 
             {loggedIn ? (
               <>
@@ -140,7 +123,7 @@ function ConfirmedContent() {
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
-                  <span>リワードをコレクションに保存しました</span>
+                  <span>コレクションに保存しました</span>
                 </div>
                 <a
                   href="/mycard"
@@ -151,22 +134,13 @@ function ConfirmedContent() {
               </>
             ) : (
               <>
-                <button
-                  onClick={async () => {
-                    // クリック時にセッションを再チェック（初回ロード時と状態が変わっている可能性）
-                    const { data: { session: freshSession } } = await supabase.auth.getSession()
-                    console.log('[vote-confirmed] button click session check:', freshSession?.user?.email || 'none')
-                    if (freshSession?.user) {
-                      window.location.href = '/mycard'
-                    } else {
-                      window.location.href = `/login?role=client&redirect=/mycard&email=${encodeURIComponent(voterEmail)}`
-                    }
-                  }}
-                  className="inline-block w-full py-3 bg-[#C4A35A] text-white text-sm font-bold rounded-lg hover:bg-[#b3923f] transition cursor-pointer"
+                <a
+                  href={`/login?role=client&redirect=/mycard&email=${encodeURIComponent(voterEmail)}`}
+                  className="inline-block w-full py-3 bg-[#C4A35A] text-white text-sm font-bold rounded-lg hover:bg-[#b3923f] transition"
                 >
-                  リワードをコレクションする
-                </button>
-                <p className="text-xs text-gray-400 mt-2">パスワードを設定するだけ</p>
+                  パスワードを設定してリワードを保存
+                </a>
+                <p className="text-xs text-gray-400 mt-2">コレクションに保存して、いつでも確認できます</p>
               </>
             )}
           </div>
