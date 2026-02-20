@@ -674,6 +674,8 @@ function VoteForm() {
             isOpen={accordionOpen.proof}
             onToggle={() => setAccordionOpen(prev => ({ ...prev, proof: !prev.proof }))}
           >
+            <p className="text-sm text-gray-500 mb-2">{pro.name}さんの強みを0〜3つ選んでください</p>
+            <p className="text-xs text-gray-400 mb-3">選ばなくてもOKです</p>
             {allProofDisplayItems.length > 0 ? (
               <div className="space-y-2">
                 {allProofDisplayItems.map(item => {
@@ -763,6 +765,8 @@ function VoteForm() {
             isOpen={accordionOpen.personality}
             onToggle={() => setAccordionOpen(prev => ({ ...prev, personality: !prev.personality }))}
           >
+            <p className="text-sm text-gray-500 mb-2">{pro.name}さんの人柄を0〜3つ選んでください</p>
+            <p className="text-xs text-gray-400 mb-3">選ばなくてもOKです</p>
             <div className="space-y-2">
               {personalityItems.map(item => {
                 const isChecked = selectedPersonalityIds.has(item.id)
