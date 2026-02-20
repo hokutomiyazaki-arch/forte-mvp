@@ -71,6 +71,7 @@ export default function DashboardPage() {
   const [personalityVotes, setPersonalityVotes] = useState<{category: string, vote_count: number}[]>([])
   const [totalVotes, setTotalVotes] = useState(0)
   const [qrUrl, setQrUrl] = useState('')
+  const [qrRefreshed, setQrRefreshed] = useState(false)
   const [editing, setEditing] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -331,6 +332,8 @@ export default function DashboardPage() {
 
   async function generateQR() {
     if (!pro) return
+    // 既存トークンを削除
+    await (supabase.from('qr_tokens') as any).delete().eq('professional_id', pro.id)
     const token = crypto.randomUUID()
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
     await (supabase.from('qr_tokens') as any).insert({ professional_id: pro.id, token, expires_at: expiresAt })
@@ -1169,7 +1172,19 @@ export default function DashboardPage() {
             <>
               <p className="text-sm text-gray-500 mb-4">クライアントに見せてプルーフを贈ってもらいましょう</p>
               {qrUrl ? (
-                <img src={qrUrl} alt="QR Code" className="mx-auto mb-4" />
+                <>
+                  <img src={qrUrl} alt="QR Code" className="mx-auto mb-4" />
+                  <button
+                    onClick={async () => {
+                      await generateQR()
+                      setQrRefreshed(true)
+                      setTimeout(() => setQrRefreshed(false), 2000)
+                    }}
+                    className="text-sm text-[#9CA3AF] hover:text-[#C4A35A] transition-colors"
+                  >
+                    {qrRefreshed ? '更新しました ✓' : 'QRコードを更新する'}
+                  </button>
+                </>
               ) : (
                 <button onClick={generateQR} className="px-6 py-3 bg-[#C4A35A] text-white rounded-lg hover:bg-[#b3944f] transition">
                   24時間限定QRコードを発行する
