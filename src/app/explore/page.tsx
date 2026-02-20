@@ -1,237 +1,196 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase'
-import { Professional, RESULT_FORTES, PERSONALITY_FORTES, getResultForteLabel, getPersonalityForteLabel } from '@/lib/types'
 
-interface ProRanking {
-  professional: Professional
-  vote_count: number
-  total_votes: number
-  days_active: number
-  rate: number // vote_count / days_active
-}
+const CATEGORY_TABS: { key: string; label: string }[] = [
+  { key: 'all', label: '総合' },
+  { key: 'basic', label: '基本' },
+  { key: 'body_pro', label: 'ボディプロ' },
+  { key: 'yoga', label: 'ヨガ' },
+  { key: 'pilates', label: 'ピラティス' },
+  { key: 'esthe', label: 'エステ' },
+  { key: 'sports', label: 'スポーツ' },
+  { key: 'education', label: '教育' },
+  { key: 'specialist', label: 'スペシャリスト' },
+]
 
-interface SpecialistEntry {
-  professional: Professional
-  forte_label: string
-  forte_key: string
-  vote_count: number
-}
-
-function getDaysActive(created_at: string): number {
-  const created = new Date(created_at)
-  const now = new Date()
-  const days = Math.floor((now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24))
-  return Math.max(days, 1) // 最低1日
-}
+const PREFECTURES = [
+  '北海道','青森県','岩手県','宮城県','秋田県','山形県','福島県',
+  '茨城県','栃木県','群馬県','埼玉県','千葉県','東京都','神奈川県',
+  '新潟県','富山県','石川県','福井県','山梨県','長野県',
+  '岐阜県','静岡県','愛知県','三重県',
+  '滋賀県','京都府','大阪府','兵庫県','奈良県','和歌山県',
+  '鳥取県','島根県','岡山県','広島県','山口県',
+  '徳島県','香川県','愛媛県','高知県',
+  '福岡県','佐賀県','長崎県','熊本県','大分県','宮崎県','鹿児島県','沖縄県',
+]
 
 export default function ExplorePage() {
   const supabase = createClient()
-  const [tab, setTab] = useState<'result' | 'personality'>('result')
-  const [rankMode, setRankMode] = useState<'total' | 'active'>('total')
-  const [selectedCategory, setSelectedCategory] = useState('all')
-  const [rankings, setRankings] = useState<ProRanking[]>([])
-  const [specialists, setSpecialists] = useState<SpecialistEntry[]>([])
+
+  // データ
+  const [pros, setPros] = useState<any[]>([])
+  const [voteSummary, setVoteSummary] = useState<any[]>([])
+  const [proofItems, setProofItems] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  const resultCategories = [
-    { key: 'all', label: '総合' },
-    ...RESULT_FORTES.map(f => ({ key: f.key, label: f.label })),
-  ]
+  // フィルタ
+  const [searchName, setSearchName] = useState('')
+  const [selectedPrefecture, setSelectedPrefecture] = useState('')
+  const [onlineOnly, setOnlineOnly] = useState(false)
 
-  const personalityCategories = [
-    { key: 'all', label: '総合' },
-    ...PERSONALITY_FORTES.map(f => ({ key: f.key, label: f.label })),
-  ]
+  // タブ・展開
+  const [selectedTab, setSelectedTab] = useState('all')
+  const [expandedItem, setExpandedItem] = useState<string | null>(null)
 
-  const currentCategories = tab === 'result' ? resultCategories : personalityCategories
-
+  // データ取得（1回のみ）
   useEffect(() => {
-    setSelectedCategory('all')
-  }, [tab])
-
-  useEffect(() => {
+    async function load() {
+      const [prosRes, voteRes, proofRes] = await Promise.all([
+        supabase.from('professionals').select('*') as any,
+        supabase.from('vote_summary').select('*') as any,
+        supabase.from('proof_items').select('*') as any,
+      ])
+      if (prosRes.data) setPros(prosRes.data)
+      if (voteRes.data) setVoteSummary(voteRes.data)
+      if (proofRes.data) setProofItems(proofRes.data)
+      setLoading(false)
+    }
     load()
-  }, [tab, selectedCategory, rankMode])
+  }, [])
 
-  async function load() {
-    setLoading(true)
+  // proof_items の ID セット
+  const proofItemIdSet = useMemo(() => new Set(proofItems.map(p => p.id)), [proofItems])
 
-    const { data: proData } = await (supabase
-      .from('professionals').select('*').order('created_at')) as any
-    if (!proData) { setLoading(false); return }
-
-    const results: ProRanking[] = []
-    const specialistMap: Map<string, SpecialistEntry[]> = new Map()
-
-    for (const p of proData) {
-      const daysActive = getDaysActive(p.created_at)
-
-      if (tab === 'result') {
-        if (selectedCategory === 'all') {
-          const { count } = await (supabase
-            .from('votes').select('*', { count: 'exact', head: true }).eq('status', 'confirmed')
-            .eq('professional_id', p.id)) as any
-          const vc = count || 0
-          results.push({ professional: p, vote_count: vc, total_votes: vc, days_active: daysActive, rate: vc / daysActive })
-        } else {
-          const { data: summaryData } = await (supabase
-            .from('vote_summary').select('*')
-            .eq('professional_id', p.id)
-            .eq('category', selectedCategory)
-            .maybeSingle()) as any
-          const { count: totalCount } = await (supabase
-            .from('votes').select('*', { count: 'exact', head: true }).eq('status', 'confirmed')
-            .eq('professional_id', p.id)) as any
-          const vc = summaryData?.vote_count || 0
-          if (vc > 0) {
-            results.push({ professional: p, vote_count: vc, total_votes: totalCount || 0, days_active: daysActive, rate: vc / daysActive })
-          }
-        }
-
-        // Specialist entries (custom result fortes)
-        if (p.custom_result_fortes && p.custom_result_fortes.length > 0) {
-          for (const cf of p.custom_result_fortes) {
-            const { data: customVoteData } = await (supabase
-              .from('vote_summary').select('*')
-              .eq('professional_id', p.id)
-              .eq('category', cf.id)
-              .maybeSingle()) as any
-            if (customVoteData && customVoteData.vote_count > 0) {
-              if (!specialistMap.has(cf.id)) specialistMap.set(cf.id, [])
-              specialistMap.get(cf.id)!.push({
-                professional: p, forte_label: cf.label, forte_key: cf.id, vote_count: customVoteData.vote_count,
-              })
-            }
-          }
-        }
-      } else {
-        // personality tab
-        if (selectedCategory === 'all') {
-          const { data: persData } = await (supabase
-            .from('personality_summary').select('*')
-            .eq('professional_id', p.id)) as any
-          const total = persData?.reduce((sum, d) => sum + (d.vote_count || 0), 0) || 0
-          results.push({ professional: p, vote_count: total, total_votes: total, days_active: daysActive, rate: total / daysActive })
-        } else {
-          const { data: persData } = await (supabase
-            .from('personality_summary').select('*')
-            .eq('professional_id', p.id)
-            .eq('category', selectedCategory)
-            .maybeSingle()) as any
-          const { data: allPersData } = await (supabase
-            .from('personality_summary').select('*')
-            .eq('professional_id', p.id)) as any
-          const totalPers = allPersData?.reduce((sum, d) => sum + (d.vote_count || 0), 0) || 0
-          const vc = persData?.vote_count || 0
-          if (vc > 0) {
-            results.push({ professional: p, vote_count: vc, total_votes: totalPers, days_active: daysActive, rate: vc / daysActive })
-          }
-        }
-
-        // Specialist entries (custom personality fortes)
-        if (p.custom_personality_fortes && p.custom_personality_fortes.length > 0) {
-          for (const cf of p.custom_personality_fortes) {
-            const { data: customPersData } = await (supabase
-              .from('personality_summary').select('*')
-              .eq('professional_id', p.id)
-              .eq('category', cf.id)
-              .maybeSingle()) as any
-            if (customPersData && customPersData.vote_count > 0) {
-              if (!specialistMap.has(cf.id)) specialistMap.set(cf.id, [])
-              specialistMap.get(cf.id)!.push({
-                professional: p, forte_label: cf.label, forte_key: cf.id, vote_count: customPersData.vote_count,
-              })
-            }
-          }
-        }
-      }
+  // カスタム項目のラベル取得
+  function getCustomProofLabel(proofId: string): string {
+    for (const p of pros) {
+      const cp = (p.custom_proofs || []).find((c: any) => c.id === proofId)
+      if (cp) return cp.label
     }
+    return '独自の強み'
+  }
 
-    // Sort by selected mode
-    if (rankMode === 'active') {
-      results.sort((a, b) => b.rate - a.rate)
-    } else {
-      results.sort((a, b) => b.vote_count - a.vote_count)
-    }
-
-    const filtered = selectedCategory === 'all' ? results : results.filter(r => r.vote_count > 0)
-    setRankings(filtered)
-
-    const allSpecialists: SpecialistEntry[] = []
-    specialistMap.forEach((entries) => {
-      entries.sort((a, b) => b.vote_count - a.vote_count)
-      allSpecialists.push(...entries)
+  // 1. フィルタされたプロ
+  const filteredPros = useMemo(() => {
+    return pros.filter(p => {
+      if (searchName && !p.name.toLowerCase().includes(searchName.toLowerCase())) return false
+      if (selectedPrefecture && p.prefecture !== selectedPrefecture) return false
+      if (onlineOnly && !p.is_online_available) return false
+      return true
     })
-    setSpecialists(allSpecialists)
+  }, [pros, searchName, selectedPrefecture, onlineOnly])
 
-    setLoading(false)
+  const filteredProIds = useMemo(() => new Set(filteredPros.map(p => p.id)), [filteredPros])
+
+  // 2. フィルタされた voteSummary
+  const filteredVotes = useMemo(() => {
+    return voteSummary.filter(v => filteredProIds.has(v.professional_id))
+  }, [voteSummary, filteredProIds])
+
+  // 3. タブに応じた対象 proof_id
+  const targetProofIds = useMemo(() => {
+    if (selectedTab === 'all') {
+      return null // フィルタなし
+    }
+    if (selectedTab === 'specialist') {
+      return new Set(filteredVotes.map(v => v.proof_id).filter(id => !proofItemIdSet.has(id)))
+    }
+    return new Set(proofItems.filter(p => p.tab === selectedTab).map(p => p.id))
+  }, [selectedTab, proofItems, filteredVotes, proofItemIdSet])
+
+  // 4. 項目ごとの集計（レベル2表示用）
+  const itemRankings = useMemo(() => {
+    const targetVotes = targetProofIds
+      ? filteredVotes.filter(v => targetProofIds.has(v.proof_id))
+      : filteredVotes
+
+    const totals = new Map<string, number>()
+    for (const v of targetVotes) {
+      totals.set(v.proof_id, (totals.get(v.proof_id) || 0) + v.vote_count)
+    }
+
+    const items = Array.from(totals.entries()).map(([proofId, total]) => ({
+      proofId,
+      label: proofItemIdSet.has(proofId)
+        ? proofItems.find(p => p.id === proofId)?.label || '-'
+        : getCustomProofLabel(proofId),
+      totalVotes: total,
+      isCustom: !proofItemIdSet.has(proofId),
+    }))
+
+    items.sort((a, b) => b.totalVotes - a.totalVotes)
+    return items.filter(i => i.totalVotes > 0)
+  }, [filteredVotes, targetProofIds, proofItems, proofItemIdSet, pros])
+
+  // 5. 展開中の項目に対するプロカード一覧（レベル3表示用）
+  const expandedPros = useMemo(() => {
+    if (!expandedItem) return []
+    return filteredVotes
+      .filter(v => v.proof_id === expandedItem)
+      .sort((a, b) => b.vote_count - a.vote_count)
+      .map(v => ({
+        pro: filteredPros.find(p => p.id === v.professional_id),
+        voteCount: v.vote_count,
+      }))
+      .filter(entry => entry.pro)
+  }, [expandedItem, filteredVotes, filteredPros])
+
+  if (loading) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-16 text-center text-gray-400">
+        読み込み中...
+      </div>
+    )
   }
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-3xl mx-auto px-4 py-8">
+      {/* ヘッダー */}
       <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2">プロを探す</h1>
-      <p className="text-sm text-gray-500 mb-6">プルーフや人柄で、あなたに合うプロを見つけよう</p>
+      <p className="text-sm text-gray-500 mb-6">プルーフで、あなたに合うプロを見つけよう</p>
 
-      {/* 強み / パーソナリティ タブ */}
-      <div className="flex mb-4 bg-gray-100 rounded-lg p-1">
-        <button
-          onClick={() => setTab('result')}
-          className={`flex-1 py-3 rounded-md text-sm font-medium transition ${
-            tab === 'result'
-              ? 'bg-[#1A1A2E] text-white shadow'
-              : 'text-gray-600 hover:text-gray-800'
-          }`}
+      {/* 名前検索 */}
+      <input
+        type="text"
+        value={searchName}
+        onChange={e => setSearchName(e.target.value)}
+        placeholder="名前で検索"
+        className="w-full px-4 py-3 bg-[#FAFAF7] border border-[#E5E7EB] rounded-xl text-sm mb-4 outline-none focus:ring-2 focus:ring-[#C4A35A]"
+      />
+
+      {/* 都道府県 + オンライン */}
+      <div className="flex gap-3 mb-6">
+        <select
+          value={selectedPrefecture}
+          onChange={e => setSelectedPrefecture(e.target.value)}
+          className="flex-1 px-3 py-2 bg-[#FAFAF7] border border-[#E5E7EB] rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#C4A35A]"
         >
-          強みで探す
-        </button>
-        <button
-          onClick={() => setTab('personality')}
-          className={`flex-1 py-3 rounded-md text-sm font-medium transition ${
-            tab === 'personality'
-              ? 'bg-[#C4A35A] text-white shadow'
-              : 'text-gray-600 hover:text-gray-800'
-          }`}
-        >
-          パーソナリティで探す
-        </button>
+          <option value="">全国</option>
+          {PREFECTURES.map(p => (
+            <option key={p} value={p}>{p}</option>
+          ))}
+        </select>
+        <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer whitespace-nowrap">
+          <input
+            type="checkbox"
+            checked={onlineOnly}
+            onChange={e => setOnlineOnly(e.target.checked)}
+            className="w-4 h-4 accent-[#C4A35A]"
+          />
+          オンライン対応
+        </label>
       </div>
 
-      {/* 総合 / アクティブ 切り替え */}
-      <div className="flex mb-6 gap-2">
-        <button
-          onClick={() => setRankMode('total')}
-          className={`px-4 py-2 rounded-full text-xs font-medium transition ${
-            rankMode === 'total'
-              ? 'bg-[#1A1A2E] text-white'
-              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-          }`}
-        >
-          総合ランキング
-        </button>
-        <button
-          onClick={() => setRankMode('active')}
-          className={`px-4 py-2 rounded-full text-xs font-medium transition ${
-            rankMode === 'active'
-              ? 'bg-[#1A1A2E] text-white'
-              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-          }`}
-        >
-          アクティブランキング
-        </button>
-      </div>
-
-      {/* カテゴリフィルター */}
+      {/* カテゴリタブ */}
       <div className="flex gap-2 overflow-x-auto pb-4 mb-6 -mx-4 px-4" style={{ scrollbarWidth: 'none' }}>
-        {currentCategories.map(cat => (
+        {CATEGORY_TABS.map(cat => (
           <button
             key={cat.key}
-            onClick={() => setSelectedCategory(cat.key)}
+            onClick={() => { setSelectedTab(cat.key); setExpandedItem(null) }}
             className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition ${
-              selectedCategory === cat.key
-                ? tab === 'result'
-                  ? 'bg-[#1A1A2E] text-white'
-                  : 'bg-[#C4A35A] text-white'
+              selectedTab === cat.key
+                ? 'bg-[#1A1A2E] text-white'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
@@ -240,143 +199,72 @@ export default function ExplorePage() {
         ))}
       </div>
 
-      {/* ランキング */}
-      {loading ? (
-        <div className="text-center py-12 text-gray-400">読み込み中...</div>
+      {/* 強み項目リスト */}
+      {itemRankings.length === 0 ? (
+        <p className="text-center text-gray-400 py-12">まだプルーフがありません</p>
       ) : (
-        <>
-          {rankings.length === 0 ? (
-            <p className="text-center text-gray-400 py-12">
-              {selectedCategory === 'all' ? 'まだプロが登録されていません' : 'このカテゴリにはまだプルーフがありません'}
-            </p>
-          ) : (
-            <div className="space-y-3 mb-10">
-              <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wide">
-                
-                {selectedCategory === 'all'
-                  ? (tab === 'result'
-                    ? (rankMode === 'active' ? '強みプルーフ アクティブランキング' : '強みプルーフ 総合ランキング')
-                    : (rankMode === 'active' ? 'パーソナリティプルーフ アクティブランキング' : 'パーソナリティプルーフ 総合ランキング'))
-                  : `${currentCategories.find(c => c.key === selectedCategory)?.label} ランキング`
-                }
-              </h2>
-              {rankMode === 'active' && (
-                <p className="text-xs text-gray-400 -mt-1 mb-2">プルーフ数 ÷ 登録日数 = 1日あたりの獲得ペース</p>
-              )}
-              {rankings.map((r, i) => {
-                const p = r.professional
-                return (
-                  <a key={p.id} href={`/card/${p.id}`}
-                    className="flex items-center gap-4 bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition">
-                    <div className={`text-lg font-bold w-8 text-center ${
-                      i === 0 ? 'text-[#C4A35A]' : i === 1 ? 'text-gray-400' : i === 2 ? 'text-amber-700' : 'text-gray-300'
-                    }`}>
-                      {i + 1}
-                    </div>
-                    {p.photo_url ? (
-                      <img src={p.photo_url} alt="" className="w-12 h-12 rounded-full object-cover" />
-                    ) : (
-                      <div className="w-12 h-12 rounded-full bg-[#1A1A2E] flex items-center justify-center text-white font-bold">
-                        {p.name.charAt(0)}
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="font-bold text-[#1A1A2E] flex items-center gap-2 flex-wrap">
-                        {p.name}
-                        {p.is_founding_member && (
-                          <span className="text-xs px-2 py-0.5 bg-[#C4A35A] text-white rounded-full">FM</span>
-                        )}
-                      </div>
-                      <div className="text-sm text-gray-500 truncate">{p.title}{p.location ? ` · ${p.location}` : ''}</div>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      {rankMode === 'active' ? (
-                        <>
-                          <div className={`text-xl font-bold ${tab === 'result' ? 'text-[#1A1A2E]' : 'text-[#C4A35A]'}`}>
-                            {r.rate.toFixed(2)}
-                          </div>
-                          <div className="text-xs text-gray-400">
-                            {r.vote_count}件 / {r.days_active}日
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div className={`text-xl font-bold ${tab === 'result' ? 'text-[#1A1A2E]' : 'text-[#C4A35A]'}`}>
-                            {r.vote_count}
-                          </div>
-                          <div className="text-xs text-gray-400">
-                            {selectedCategory === 'all' ? 'プルーフ' : `/ ${r.total_votes}`}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </a>
-                )
-              })}
-            </div>
-          )}
-
-          {/* スペシャリスト セクション */}
-          {specialists.length > 0 && (
-            <div className="mb-10">
-              <div className="flex items-center gap-2 mb-4">
-                <span className="text-lg">⭐</span>
-                <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wide">
-                  スペシャリスト
-                </h2>
-              </div>
-              <p className="text-xs text-gray-400 mb-4">
-                プロが独自に設定した専門分野でプルーフを獲得しています
-              </p>
-
-              {(() => {
-                const grouped: Map<string, SpecialistEntry[]> = new Map()
-                specialists.forEach(s => {
-                  if (!grouped.has(s.forte_key)) grouped.set(s.forte_key, [])
-                  grouped.get(s.forte_key)!.push(s)
-                })
-
-                return Array.from(grouped.entries()).map(([key, entries]) => (
-                  <div key={key} className="mb-6">
-                    <div className={`inline-block px-3 py-1 rounded-full text-xs font-bold mb-3 ${
-                      tab === 'result'
-                        ? 'bg-[#1A1A2E]/10 text-[#1A1A2E]'
-                        : 'bg-[#C4A35A]/10 text-[#C4A35A]'
-                    }`}>
-                      {entries[0].forte_label}
-                    </div>
-                    <div className="space-y-2">
-                      {entries.map((s, i) => {
-                        const p = s.professional
-                        return (
-                          <a key={`${p.id}-${s.forte_key}`} href={`/card/${p.id}`}
-                            className="flex items-center gap-4 bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition border-l-4 border-[#C4A35A]">
-                            <div className="text-sm font-bold text-[#C4A35A] w-6 text-center">{i + 1}</div>
-                            {p.photo_url ? (
-                              <img src={p.photo_url} alt="" className="w-10 h-10 rounded-full object-cover" />
-                            ) : (
-                              <div className="w-10 h-10 rounded-full bg-[#1A1A2E] flex items-center justify-center text-white text-sm font-bold">
-                                {p.name.charAt(0)}
-                              </div>
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <div className="font-bold text-[#1A1A2E] text-sm">{p.name}</div>
-                              <div className="text-xs text-gray-500 truncate">{p.title}</div>
-                            </div>
-                            <div className="text-right flex-shrink-0">
-                              <div className="text-lg font-bold text-[#C4A35A]">{s.vote_count}</div>
-                              <div className="text-xs text-gray-400">プルーフ</div>
-                            </div>
-                          </a>
-                        )
-                      })}
-                    </div>
+        <div className="space-y-3">
+          {itemRankings.map(item => {
+            const isExpanded = expandedItem === item.proofId
+            return (
+              <div key={item.proofId}>
+                {/* レベル2: 項目行 */}
+                <div
+                  onClick={() => setExpandedItem(isExpanded ? null : item.proofId)}
+                  className={`flex items-center justify-between p-4 cursor-pointer transition ${
+                    isExpanded
+                      ? 'bg-white rounded-xl shadow-sm border-l-4 border-[#C4A35A]'
+                      : 'bg-white rounded-xl shadow-sm hover:shadow-md'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-gray-400 text-xs">{isExpanded ? '▼' : '▶'}</span>
+                    <span className="text-sm font-medium text-[#1A1A2E] truncate">{item.label}</span>
                   </div>
-                ))
-              })()}
-            </div>
-          )}
-        </>
+                  <span className="text-[#C4A35A] font-bold text-sm ml-4 flex-shrink-0">{item.totalVotes}票</span>
+                </div>
+
+                {/* レベル3: プロカード一覧 */}
+                {isExpanded && (
+                  <div className="mt-2 space-y-2">
+                    {expandedPros.map(({ pro, voteCount }) => (
+                      <a
+                        key={pro.id}
+                        href={`/card/${pro.id}`}
+                        className="flex items-center gap-3 bg-[#FAFAF7] rounded-lg p-3 ml-4 hover:bg-gray-100 transition"
+                      >
+                        {/* 写真 or イニシャル */}
+                        {pro.photo_url ? (
+                          <img src={pro.photo_url} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-[#1A1A2E] flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                            {pro.name.charAt(0)}
+                          </div>
+                        )}
+                        {/* 情報 */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-sm text-[#1A1A2E]">{pro.name}</span>
+                            {pro.is_founding_member && (
+                              <span className="text-xs px-1.5 py-0.5 bg-[#C4A35A] text-white rounded-full leading-none">FM</span>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-500 truncate">
+                            {[pro.title, pro.prefecture, pro.is_online_available ? 'オンライン対応' : null]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </div>
+                        </div>
+                        {/* 票数 */}
+                        <span className="text-[#C4A35A] font-bold text-sm flex-shrink-0">{voteCount}票</span>
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
       )}
     </div>
   )

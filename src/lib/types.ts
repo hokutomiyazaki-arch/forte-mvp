@@ -18,6 +18,10 @@ export interface Professional {
   custom_result_fortes: CustomForte[]
   custom_personality_fortes: CustomForte[]
   is_online_available: boolean
+  prefecture: string | null
+  area_description: string | null
+  selected_proofs: string[] | null
+  custom_proofs: { id: string; label: string }[] | null
   is_founding_member: boolean
   badges: Badge[]
   created_at: string
