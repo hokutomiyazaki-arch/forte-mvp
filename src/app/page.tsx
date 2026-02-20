@@ -1,9 +1,12 @@
 'use client'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase'
 
 export default function Home() {
   const revealRefs = useRef<HTMLElement[]>([])
+  const [fmRemaining, setFmRemaining] = useState<number | null>(null)
+  const [fmTotalCap, setFmTotalCap] = useState<number>(50)
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -20,6 +23,28 @@ export default function Home() {
       if (el) observer.observe(el)
     })
     return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    async function loadFmCount() {
+      const supabase = createClient()
+      const { data: config } = await (supabase as any)
+        .from('founding_member_config')
+        .select('total_cap')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      const cap = config?.total_cap || 50
+      setFmTotalCap(cap)
+
+      const { count } = await supabase
+        .from('professionals')
+        .select('*', { count: 'exact', head: true })
+        .eq('founding_member_status' as any, 'achieved') as any
+      const achieved = count || 0
+      setFmRemaining(Math.max(0, cap - achieved))
+    }
+    loadFmCount()
   }, [])
 
   const addRevealRef = (el: HTMLElement | null) => {
@@ -716,8 +741,16 @@ export default function Home() {
                 Founding Memberに挑戦する →
               </Link>
             </div>
-            <span style={{ display: 'block', marginTop: 16, fontSize: 12, color: '#888888' }}>
-              残り50名
+            <span style={{ display: 'block', marginTop: 16, fontSize: 12, color: fmRemaining !== null && fmRemaining > 0 && fmRemaining <= 10 ? '#C4A35A' : '#888888', fontWeight: fmRemaining !== null && fmRemaining > 0 && fmRemaining <= 10 ? 700 : 400 }}>
+              {fmRemaining === null
+                ? '読み込み中...'
+                : fmRemaining > 10
+                  ? `残り${fmRemaining}名`
+                  : fmRemaining > 0
+                    ? `残りわずか${fmRemaining}名`
+                    : fmTotalCap >= 100
+                      ? 'Founding Memberの募集は終了しました'
+                      : '満席 — 追加枠を準備中'}
             </span>
           </div>
         </div>
