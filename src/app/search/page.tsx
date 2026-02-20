@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase'
 import { PREFECTURES } from '@/lib/prefectures'
 import { COLORS, FONTS } from '@/lib/design-tokens'
+import Logo from '@/components/Logo'
 
 const T = { ...COLORS, font: FONTS.main, fontMono: FONTS.mono }
 
@@ -213,6 +214,13 @@ export default function SearchPage() {
             })}
           </div>
         )}
+
+        {/* フッター */}
+        <div style={{ textAlign: 'center', padding: '32px 0 16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <Logo size={0.6} dark={false} showTagline={false} />
+          </div>
+        </div>
       </div>
     </div>
   )

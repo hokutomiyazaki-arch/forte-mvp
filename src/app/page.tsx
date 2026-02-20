@@ -1,5 +1,6 @@
 'use client'
 import Link from 'next/link'
+import Logo from '@/components/Logo'
 
 export default function Home() {
   return (
@@ -124,6 +125,13 @@ export default function Home() {
           Founding Memberとして登録する
         </Link>
       </section>
+
+      {/* フッター */}
+      <div className="text-center py-8 border-t border-gray-200">
+        <div className="flex justify-center">
+          <Logo size={0.6} dark={false} showTagline={false} />
+        </div>
+      </div>
     </div>
   )
 }
