@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase'
 import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYPES, getRewardType } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import ForteChart from '@/components/ForteChart'
+import VoiceShareModal from '@/components/VoiceShareCard'
 
 // バッジ階層: FNTはBDCの上位資格。同レベルのFNTを持っていたらBDCは非表示
 const BADGE_ORDER: Record<string, number> = {
@@ -111,6 +112,7 @@ export default function DashboardPage() {
   const [expandedVoice, setExpandedVoice] = useState<string | null>(null)
   const [phraseSelecting, setPhraseSelecting] = useState<string | null>(null)
   const [selectedPhrases, setSelectedPhrases] = useState<Record<string, number>>({})
+  const [shareModalVoice, setShareModalVoice] = useState<{ id: string; comment: string; created_at: string } | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -1275,6 +1277,7 @@ export default function DashboardPage() {
                       )}
 
                       <button
+                        onClick={() => setShareModalVoice(c)}
                         style={{
                           width: '100%', padding: '10px', border: '1px solid #C4A35A',
                           background: 'transparent', color: '#C4A35A', borderRadius: 10,
@@ -1296,6 +1299,28 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Voice Share Modal */}
+      {shareModalVoice && pro && (
+        <VoiceShareModal
+          isOpen={true}
+          onClose={() => setShareModalVoice(null)}
+          voice={shareModalVoice}
+          phraseId={selectedPhrases[shareModalVoice.id] || voicePhrases.find(p => p.is_default)?.id || 1}
+          phraseText={
+            voicePhrases.find(p => p.id === selectedPhrases[shareModalVoice.id])?.text
+            || voicePhrases.find(p => p.is_default)?.text || ''
+          }
+          proId={pro.id}
+          proName={pro.name}
+          proTitle={pro.title}
+          proPhotoUrl={pro.photo_url}
+          proPrefecture={pro.prefecture}
+          proAreaDescription={pro.area_description}
+          totalProofs={totalVotes}
+          topStrengths={votes.sort((a, b) => b.vote_count - a.vote_count).slice(0, 3).map(v => ({ label: v.category, count: v.vote_count }))}
+        />
+      )}
 
       {/* Links */}
       <div className="flex gap-4">

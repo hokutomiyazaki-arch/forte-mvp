@@ -6,6 +6,7 @@ import { Professional, VoteSummary, Vote } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import { COLORS, FONTS } from '@/lib/design-tokens'
 import Logo from '@/components/Logo'
+import VoiceShareModal from '@/components/VoiceShareCard'
 
 // デザイントークンのローカルショートカット
 const T = {
@@ -106,6 +107,7 @@ export default function CardPage() {
   const [selectedPhrases, setSelectedPhrases] = useState<Record<string, number>>({})
   const [phrases, setPhrases] = useState<GratitudePhrase[]>([])
   const [animated, setAnimated] = useState(false)
+  const [shareModalVoice, setShareModalVoice] = useState<Vote | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -456,8 +458,9 @@ export default function CardPage() {
                           </div>
                         )}
 
-                        {/* お礼ボタン (タスク7でモーダル連携) */}
+                        {/* お礼ボタン → モーダル */}
                         <button
+                          onClick={() => setShareModalVoice(c)}
                           style={{
                             width: '100%', padding: '10px', border: `1px solid ${T.gold}`,
                             background: 'transparent', color: T.gold, borderRadius: 10,
@@ -511,6 +514,28 @@ export default function CardPage() {
       </div>
 
       {/* ★ タスク11で RelatedPros をここに追加 ★ */}
+
+      {/* Voice Share Modal */}
+      {shareModalVoice && pro && (
+        <VoiceShareModal
+          isOpen={true}
+          onClose={() => setShareModalVoice(null)}
+          voice={shareModalVoice}
+          phraseId={selectedPhrases[shareModalVoice.id] || phrases.find(p => p.is_default)?.id || 1}
+          phraseText={
+            phrases.find(p => p.id === selectedPhrases[shareModalVoice.id])?.text
+            || phrases.find(p => p.is_default)?.text || ''
+          }
+          proId={pro.id}
+          proName={pro.name}
+          proTitle={pro.title}
+          proPhotoUrl={pro.photo_url}
+          proPrefecture={pro.prefecture}
+          proAreaDescription={pro.area_description}
+          totalProofs={totalVotes}
+          topStrengths={sortedVotes.slice(0, 3).map(v => ({ label: v.category, count: v.vote_count }))}
+        />
+      )}
 
       {/* ═══ フッター ═══ */}
       <div style={{ textAlign: 'center', padding: '24px 0 16px' }}>
