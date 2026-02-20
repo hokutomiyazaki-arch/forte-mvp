@@ -180,10 +180,25 @@ function LoginForm() {
     }
 
     // redirect がない場合のみ: DB問い合わせでリダイレクト先を判定
-    const [{ data: proData }, { data: clientData }] = await Promise.all([
-      (supabase.from('professionals').select('id').eq('user_id', user.id).maybeSingle()) as any,
-      (supabase.from('clients').select('id').eq('user_id', user.id).maybeSingle()) as any,
-    ])
+    console.log('[redirectUser] querying DB...')
+    let proData = null
+    let clientData = null
+    try {
+      const result = await Promise.race([
+        Promise.all([
+          (supabase.from('professionals').select('id').eq('user_id', user.id).maybeSingle()) as any,
+          (supabase.from('clients').select('id').eq('user_id', user.id).maybeSingle()) as any,
+        ]),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('DB query timeout')), 5000))
+      ]) as any
+      proData = result[0]?.data
+      clientData = result[1]?.data
+    } catch (e) {
+      console.error('[redirectUser] DB query failed/timeout:', e)
+      window.location.href = '/explore'
+      return
+    }
+    console.log('[redirectUser] DB result — pro:', !!proData, 'client:', !!clientData)
     const isNewUser = !proData && !clientData
 
     if (isNewUser && isGoogleUser) {
