@@ -105,6 +105,13 @@ export default function DashboardPage() {
   const [proofError, setProofError] = useState('')
   const [customProofVoteCounts, setCustomProofVoteCounts] = useState<Map<string, number>>(new Map())
 
+  // Voices用 state
+  const [voiceComments, setVoiceComments] = useState<{ id: string; comment: string; created_at: string }[]>([])
+  const [voicePhrases, setVoicePhrases] = useState<{ id: number; text: string; is_default: boolean; sort_order: number }[]>([])
+  const [expandedVoice, setExpandedVoice] = useState<string | null>(null)
+  const [phraseSelecting, setPhraseSelecting] = useState<string | null>(null)
+  const [selectedPhrases, setSelectedPhrases] = useState<Record<string, number>>({})
+
   useEffect(() => {
     async function load() {
       const { data: { session } } = await supabase.auth.getSession()
@@ -198,6 +205,19 @@ export default function DashboardPage() {
         setSelectedProofIds(new Set(savedProofs.filter((id: string) => validIds.has(id) || customIds.has(id))))
         setCustomProofs(proData.custom_proofs || [])
       }
+
+      // Voices: コメント付き確定投票を取得
+      const { data: voiceData } = await supabase
+        .from('votes').select('id, comment, created_at')
+        .eq('professional_id', proData.id).eq('status', 'confirmed')
+        .not('comment', 'is', null).neq('comment', '')
+        .order('created_at', { ascending: false }) as any
+      if (voiceData) setVoiceComments(voiceData)
+
+      // 感謝フレーズ
+      const { data: phrasesData } = await supabase
+        .from('gratitude_phrases').select('*').order('sort_order') as any
+      if (phrasesData) setVoicePhrases(phrasesData)
 
       setLoading(false)
     }
@@ -1184,6 +1204,97 @@ export default function DashboardPage() {
             </>
           )
         })()}
+      </div>
+
+      {/* Voices */}
+      <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
+        <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#A0A0A0', letterSpacing: 2, textTransform: 'uppercase' as const, fontFamily: "'DM Sans', sans-serif", display: 'block', marginBottom: 4 }}>
+            VOICES — {voiceComments.length} COMMENTS
+          </span>
+          クライアントの声
+        </h2>
+        {voiceComments.length > 0 ? (
+          <div className="space-y-3">
+            {voiceComments.map(c => {
+              const isExpanded = expandedVoice === c.id
+              const isSelectingPhrase = phraseSelecting === c.id
+              const selectedPhraseId = selectedPhrases[c.id]
+              const selectedPhraseText = voicePhrases.find(p => p.id === selectedPhraseId)?.text
+                || voicePhrases.find(p => p.is_default)?.text || ''
+
+              return (
+                <div key={c.id}
+                  onClick={() => { if (!isExpanded) setExpandedVoice(c.id) }}
+                  style={{
+                    background: '#1A1A2E', borderRadius: 14, padding: '18px 16px',
+                    cursor: !isExpanded ? 'pointer' : 'default',
+                  }}
+                >
+                  <div style={{ fontSize: 32, color: '#C4A35A40', fontFamily: 'Georgia, serif', lineHeight: 1 }}>&ldquo;</div>
+                  <div style={{ fontSize: 13, color: '#fff', lineHeight: 1.9, margin: '4px 0 10px' }}>{c.comment}</div>
+                  <div style={{ fontSize: 11, color: '#444', fontFamily: "'DM Sans', sans-serif" }}>
+                    {new Date(c.created_at).toLocaleDateString('ja-JP')}
+                  </div>
+
+                  {isExpanded && (
+                    <div style={{ borderTop: '1px solid #333', marginTop: 14, paddingTop: 14 }}
+                      onClick={e => e.stopPropagation()}>
+                      <div style={{ fontSize: 11, color: '#A0A0A0', marginBottom: 8 }}>感謝のひとこと</div>
+
+                      {isSelectingPhrase ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+                          {voicePhrases.map(p => (
+                            <button key={p.id}
+                              onClick={() => {
+                                setSelectedPhrases(prev => ({ ...prev, [c.id]: p.id }))
+                                setPhraseSelecting(null)
+                              }}
+                              style={{
+                                background: selectedPhraseId === p.id ? '#C4A35A' : '#2a2a3e',
+                                color: selectedPhraseId === p.id ? '#1A1A2E' : '#ccc',
+                                border: 'none', borderRadius: 8, padding: '8px 12px',
+                                fontSize: 12, cursor: 'pointer', textAlign: 'left' as const,
+                              }}
+                            >
+                              {p.text}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div
+                          onClick={() => setPhraseSelecting(c.id)}
+                          style={{
+                            background: '#2a2a3e', borderRadius: 8, padding: '8px 12px',
+                            fontSize: 12, color: '#C4A35A', cursor: 'pointer', marginBottom: 12,
+                            fontStyle: 'italic',
+                          }}
+                        >
+                          ── {selectedPhraseText || '感謝フレーズを選ぶ'}
+                        </div>
+                      )}
+
+                      <button
+                        style={{
+                          width: '100%', padding: '10px', border: '1px solid #C4A35A',
+                          background: 'transparent', color: '#C4A35A', borderRadius: 10,
+                          fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                        }}
+                      >
+                        この声にお礼する
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <p className="text-gray-400 text-sm">コメントがまだありません。</p>
+            <p className="text-gray-400 text-xs mt-1">クライアントからコメント付き投票が届くとここに表示されます。</p>
+          </div>
+        )}
       </div>
 
       {/* Links */}
