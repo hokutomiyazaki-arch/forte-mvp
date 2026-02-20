@@ -84,6 +84,9 @@ export default function DashboardPage() {
   const [customPersonalityFortes, setCustomPersonalityFortes] = useState<CustomForte[]>([])
   const [rewards, setRewards] = useState<{ id?: string; reward_type: string; title: string; content: string }[]>([])
   const [showRewardPicker, setShowRewardPicker] = useState(false)
+  const [rewardSaving, setRewardSaving] = useState(false)
+  const [rewardSaved, setRewardSaved] = useState(false)
+  const [rewardError, setRewardError] = useState('')
   const [confirmingDeregister, setConfirmingDeregister] = useState(false)
   const [deregistering, setDeregistering] = useState(false)
   const [formError, setFormError] = useState('')
@@ -307,31 +310,6 @@ export default function DashboardPage() {
       if (isNew) console.log('[handleSave] new pro created, id:', savedData.id)
     }
 
-    // リワード保存
-    if (professionalId) {
-      // 既存プロの場合のみ既存リワードを削除（新規はまだリワードがないので不要）
-      if (!isNew) {
-        const { error: delError } = await (supabase as any).from('rewards').delete().eq('professional_id', professionalId)
-        if (delError) console.error('[handleSave] delete rewards error:', delError.message)
-      }
-      const validRewards = rewards.filter(r => r.reward_type && r.content.trim())
-      if (validRewards.length > 0) {
-        const { error: rewardError } = await (supabase as any).from('rewards').insert(
-          validRewards.map((r, idx) => ({
-            professional_id: professionalId,
-            reward_type: r.reward_type,
-            title: r.title.trim() || '',
-            content: r.content.trim(),
-            sort_order: idx,
-          }))
-        )
-        if (rewardError) console.error('[handleSave] insert rewards error:', rewardError.message)
-        else console.log('[handleSave] rewards saved:', validRewards.length)
-      }
-    } else {
-      console.error('[handleSave] no professionalId, rewards not saved')
-    }
-
     // パスワード設定/変更
     if (newPassword && newPassword.length > 0) {
       const { error: pwError } = await (supabase as any).auth.updateUser({ password: newPassword })
@@ -427,6 +405,45 @@ export default function DashboardPage() {
       setTimeout(() => setProofSaved(false), 2500)
     }
     setProofSaving(false)
+  }
+
+  async function handleSaveRewards() {
+    if (!pro) return
+    setRewardSaving(true)
+    setRewardError('')
+
+    // 既存リワードを削除
+    const { error: delError } = await (supabase as any).from('rewards').delete().eq('professional_id', pro.id)
+    if (delError) {
+      console.error('[handleSaveRewards] delete error:', delError.message)
+      setRewardError('保存に失敗しました。もう一度お試しください。')
+      setRewardSaving(false)
+      return
+    }
+
+    // 有効なリワードのみ保存
+    const validRewards = rewards.filter(r => r.reward_type && r.content.trim())
+    if (validRewards.length > 0) {
+      const { error: insertError } = await (supabase as any).from('rewards').insert(
+        validRewards.map((r, idx) => ({
+          professional_id: pro.id,
+          reward_type: r.reward_type,
+          title: r.title.trim() || '',
+          content: r.content.trim(),
+          sort_order: idx,
+        }))
+      )
+      if (insertError) {
+        console.error('[handleSaveRewards] insert error:', insertError.message)
+        setRewardError('保存に失敗しました。もう一度お試しください。')
+        setRewardSaving(false)
+        return
+      }
+    }
+
+    setRewardSaved(true)
+    setTimeout(() => setRewardSaved(false), 2500)
+    setRewardSaving(false)
   }
 
   // カテゴリごとの選択数を算出
@@ -625,125 +642,6 @@ export default function DashboardPage() {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none" placeholder="you@example.com" />
             <p className="text-xs text-gray-400 mt-1">カードページに「このプロに相談する」ボタンが表示されます（ログインメールとは別に設定できます）</p>
           </div>
-          {/* リワード設定（最大3つ） */}
-          <div className="border-t pt-4">
-            <label className="block text-sm font-bold text-[#1A1A2E] mb-2">リワード設定（最大3つ）</label>
-            <p className="text-xs text-[#9CA3AF] mb-4">
-              投票してくれたクライアントへのお礼を設定。プロの秘密やおすすめを共有して、信頼を深めましょう。
-            </p>
-
-            {/* プログレスバー */}
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-medium text-[#1A1A2E]">{rewards.length} / 3 設定中</span>
-              </div>
-              <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all duration-300 ${
-                    rewards.length >= 3
-                      ? 'bg-gradient-to-r from-[#C4A35A] to-[#d4b86a]'
-                      : 'bg-gradient-to-r from-[#1A1A2E] to-[#2a2a4e]'
-                  }`}
-                  style={{ width: `${(rewards.length / 3) * 100}%` }}
-                />
-              </div>
-            </div>
-
-            {/* 設定済みリワード一覧 */}
-            {rewards.length > 0 && (
-              <div className="space-y-3 mb-4">
-                {rewards.map((reward, idx) => {
-                  const rt = getRewardType(reward.reward_type)
-                  const displayLabel = rt?.label || reward.reward_type
-                  const needsTitle = rt?.hasTitle || false
-                  return (
-                    <div key={idx} className="p-4 bg-[#FAFAF7] rounded-lg border border-[#E5E7EB]">
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-sm font-semibold text-[#1A1A2E]">
-                          {idx + 1}. {displayLabel}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setRewards(rewards.filter((_, i) => i !== idx))}
-                          className="text-sm text-[#9CA3AF] hover:text-red-500 transition-colors"
-                        >
-                          削除
-                        </button>
-                      </div>
-                      {needsTitle && (
-                        <input
-                          value={reward.title}
-                          onChange={e => {
-                            const updated = [...rewards]
-                            updated[idx] = { ...updated[idx], title: e.target.value }
-                            setRewards(updated)
-                          }}
-                          className="w-full px-3 py-2 mb-2 bg-white border border-[#E5E7EB] rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#C4A35A] focus:border-[#C4A35A]"
-                          placeholder={reward.reward_type === 'selfcare' ? 'タイトル（例：自宅でできる肩こり解消法）' : 'タイトル（例：FNTアプリドリル）'}
-                        />
-                      )}
-                      <textarea
-                        value={reward.content}
-                        onChange={e => {
-                          const updated = [...rewards]
-                          updated[idx] = { ...updated[idx], content: e.target.value }
-                          setRewards(updated)
-                        }}
-                        rows={2}
-                        className="w-full px-3 py-2 bg-white border border-[#E5E7EB] rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#C4A35A] focus:border-[#C4A35A] resize-none"
-                        placeholder="リワードの内容を入力..."
-                      />
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-
-            {/* リワード追加UI */}
-            {rewards.length < 3 && (
-              <div className="border border-dashed border-[#E5E7EB] rounded-lg p-4">
-                {!showRewardPicker ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowRewardPicker(true)}
-                    className="w-full py-2 text-sm text-[#C4A35A] font-medium hover:text-[#b3923f] transition-colors"
-                  >
-                    + リワードを追加（残り{3 - rewards.length}枠）
-                  </button>
-                ) : (
-                  <>
-                    <p className="text-sm font-medium text-[#1A1A2E] mb-3">カテゴリを選択</p>
-                    <div className="space-y-2 mb-3">
-                      {REWARD_TYPES
-                        .filter(rt => !rewards.some(r => r.reward_type === rt.id))
-                        .map(rt => (
-                          <button
-                            key={rt.id}
-                            type="button"
-                            onClick={() => {
-                              setRewards([...rewards, { reward_type: rt.id, title: '', content: '' }])
-                              setShowRewardPicker(false)
-                            }}
-                            className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-[#FAFAF7] transition-colors"
-                          >
-                            <span className="text-sm font-medium text-[#1A1A2E]">{rt.label}</span>
-                            <span className="text-xs text-[#9CA3AF] ml-2">{rt.description}</span>
-                          </button>
-                        ))}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowRewardPicker(false)}
-                      className="text-xs text-[#9CA3AF] hover:text-[#6B7280] transition-colors"
-                    >
-                      キャンセル
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-
           {/* パスワード設定 */}
           <div className="border-t pt-4">
             <label className="block text-sm font-bold text-[#1A1A2E] mb-2">
@@ -1061,17 +959,215 @@ export default function DashboardPage() {
         )}
       </div>
 
+      {/* リワード設定 */}
+      <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
+        <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">リワード設定</h2>
+        <p className="text-sm text-[#9CA3AF] mb-4">
+          投票してくれたクライアントへのお礼を設定。プロの秘密やおすすめを共有して、信頼を深めましょう。
+        </p>
+
+        {/* プログレスバー */}
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-sm font-medium text-[#1A1A2E]">{rewards.length} / 3 設定中</span>
+            {rewards.length === 3 && <span className="text-xs text-[#C4A35A] font-medium">✓ 設定完了</span>}
+            {rewards.length < 3 && <span className="text-xs text-[#9CA3AF] font-medium">あと{3 - rewards.length}枠</span>}
+          </div>
+          <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-300 ${
+                rewards.length >= 3
+                  ? 'bg-gradient-to-r from-[#C4A35A] to-[#d4b86a]'
+                  : 'bg-gradient-to-r from-[#1A1A2E] to-[#2a2a4e]'
+              }`}
+              style={{ width: `${(rewards.length / 3) * 100}%` }}
+            />
+          </div>
+        </div>
+
+        {/* 設定済みリワード一覧 */}
+        {rewards.length > 0 && (
+          <div className="space-y-3 mb-4">
+            {rewards.map((reward, idx) => {
+              const rt = getRewardType(reward.reward_type)
+              const displayLabel = rt?.label || reward.reward_type
+              const needsTitle = rt?.hasTitle || false
+              return (
+                <div key={idx} className="p-4 bg-[#FAFAF7] rounded-lg border border-[#E5E7EB]">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-semibold text-[#1A1A2E]">
+                      {idx + 1}. {displayLabel}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setRewards(rewards.filter((_, i) => i !== idx))}
+                      className="text-sm text-[#9CA3AF] hover:text-red-500 transition-colors"
+                    >
+                      削除
+                    </button>
+                  </div>
+                  {needsTitle && (
+                    <input
+                      value={reward.title}
+                      onChange={e => {
+                        const updated = [...rewards]
+                        updated[idx] = { ...updated[idx], title: e.target.value }
+                        setRewards(updated)
+                      }}
+                      className="w-full px-3 py-2 mb-2 bg-white border border-[#E5E7EB] rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#C4A35A] focus:border-[#C4A35A]"
+                      placeholder={reward.reward_type === 'selfcare' ? 'タイトル（例：自宅でできる肩こり解消法）' : 'タイトル（例：FNTアプリドリル）'}
+                    />
+                  )}
+                  <textarea
+                    value={reward.content}
+                    onChange={e => {
+                      const updated = [...rewards]
+                      updated[idx] = { ...updated[idx], content: e.target.value }
+                      setRewards(updated)
+                    }}
+                    rows={2}
+                    className="w-full px-3 py-2 bg-white border border-[#E5E7EB] rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#C4A35A] focus:border-[#C4A35A] resize-none"
+                    placeholder="リワードの内容を入力..."
+                  />
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* リワード追加UI */}
+        {rewards.length < 3 && (
+          <div className="border border-dashed border-[#E5E7EB] rounded-lg p-4 mb-4">
+            {!showRewardPicker ? (
+              <button
+                type="button"
+                onClick={() => setShowRewardPicker(true)}
+                className="w-full py-2 text-sm text-[#C4A35A] font-medium hover:text-[#b3923f] transition-colors"
+              >
+                + リワードを追加（残り{3 - rewards.length}枠）
+              </button>
+            ) : (
+              <>
+                <p className="text-sm font-medium text-[#1A1A2E] mb-3">カテゴリを選択</p>
+                <div className="space-y-2 mb-3">
+                  {REWARD_TYPES
+                    .filter(rt => !rewards.some(r => r.reward_type === rt.id))
+                    .map(rt => (
+                      <button
+                        key={rt.id}
+                        type="button"
+                        onClick={() => {
+                          setRewards([...rewards, { reward_type: rt.id, title: '', content: '' }])
+                          setShowRewardPicker(false)
+                        }}
+                        className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-[#FAFAF7] transition-colors"
+                      >
+                        <span className="text-sm font-medium text-[#1A1A2E]">{rt.label}</span>
+                        <span className="text-xs text-[#9CA3AF] ml-2">{rt.description}</span>
+                      </button>
+                    ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowRewardPicker(false)}
+                  className="text-xs text-[#9CA3AF] hover:text-[#6B7280] transition-colors"
+                >
+                  キャンセル
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* 保存ボタン */}
+        {rewardError && <p className="text-red-500 text-sm mb-2">{rewardError}</p>}
+        <button
+          onClick={handleSaveRewards}
+          disabled={rewardSaving}
+          className={`w-full py-3 rounded-xl text-sm font-medium tracking-wider transition-colors ${
+            rewardSaved
+              ? 'bg-green-500 text-white'
+              : 'bg-[#1A1A2E] text-[#C4A35A] hover:bg-[#2a2a4e]'
+          } disabled:opacity-50 disabled:cursor-not-allowed`}
+        >
+          {rewardSaving ? '保存中...' : rewardSaved ? '保存しました' : 'リワード設定を保存'}
+        </button>
+
+        {/* 設定済み一覧 */}
+        {rewards.filter(r => r.content.trim()).length > 0 && (
+          <div className="mt-4 pt-4 border-t border-[#E5E7EB]">
+            <p className="text-xs text-[#9CA3AF] mb-2">設定中のリワード</p>
+            <div className="flex flex-wrap gap-2">
+              {rewards.filter(r => r.content.trim()).map((r, idx) => {
+                const rt = getRewardType(r.reward_type)
+                return (
+                  <span key={idx} className="px-3 py-1 bg-[#C4A35A]/10 text-[#1A1A2E] text-xs rounded-full">
+                    {rt?.label || r.reward_type}
+                  </span>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* QR Code */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8 text-center">
         <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">24時間限定 投票用QRコード</h2>
-        <p className="text-sm text-gray-500 mb-4">クライアントに見せてプルーフを贈ってもらいましょう</p>
-        {qrUrl ? (
-          <img src={qrUrl} alt="QR Code" className="mx-auto mb-4" />
-        ) : (
-          <button onClick={generateQR} className="px-6 py-3 bg-[#C4A35A] text-white rounded-lg hover:bg-[#b3944f] transition">
-            24時間限定QRコードを発行する
-          </button>
-        )}
+        {(() => {
+          const proofsReady = selectedProofIds.size === 9
+          const rewardsReady = rewards.filter(r => r.reward_type && r.content.trim()).length >= 1
+          const isReady = proofsReady && rewardsReady
+
+          if (!isReady) {
+            return (
+              <div className="py-4">
+                <p className="text-sm text-[#9CA3AF] mb-3">
+                  QRコードを発行するには、以下の設定を完了してください：
+                </p>
+                <div className="space-y-2">
+                  {!proofsReady && (
+                    <div className="flex items-center justify-center gap-2 text-sm">
+                      <span className="text-red-400">✗</span>
+                      <span className="text-[#1A1A2E]">プルーフ設定（{selectedProofIds.size} / 9 選択中）</span>
+                    </div>
+                  )}
+                  {proofsReady && (
+                    <div className="flex items-center justify-center gap-2 text-sm">
+                      <span className="text-green-500">✓</span>
+                      <span className="text-[#9CA3AF]">プルーフ設定 完了</span>
+                    </div>
+                  )}
+                  {!rewardsReady && (
+                    <div className="flex items-center justify-center gap-2 text-sm">
+                      <span className="text-red-400">✗</span>
+                      <span className="text-[#1A1A2E]">リワード設定（{rewards.filter(r => r.content.trim()).length} / 1 以上）</span>
+                    </div>
+                  )}
+                  {rewardsReady && (
+                    <div className="flex items-center justify-center gap-2 text-sm">
+                      <span className="text-green-500">✓</span>
+                      <span className="text-[#9CA3AF]">リワード設定 完了</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          }
+
+          return (
+            <>
+              <p className="text-sm text-gray-500 mb-4">クライアントに見せてプルーフを贈ってもらいましょう</p>
+              {qrUrl ? (
+                <img src={qrUrl} alt="QR Code" className="mx-auto mb-4" />
+              ) : (
+                <button onClick={generateQR} className="px-6 py-3 bg-[#C4A35A] text-white rounded-lg hover:bg-[#b3944f] transition">
+                  24時間限定QRコードを発行する
+                </button>
+              )}
+            </>
+          )
+        })()}
       </div>
 
       {/* Links */}
