@@ -78,7 +78,7 @@ export default function DashboardPage() {
 
   const [form, setForm] = useState({
     name: '', title: '', prefecture: '', area_description: '',
-    is_online_available: false, years_experience: '',
+    is_online_available: false,
     bio: '', booking_url: '', photo_url: '', contact_email: '',
   })
   const [customResultFortes, setCustomResultFortes] = useState<CustomForte[]>([])
@@ -138,7 +138,6 @@ export default function DashboardPage() {
         prefecture: proData.prefecture || '',
         area_description: proData.area_description || '',
         is_online_available: proData.is_online_available || false,
-        years_experience: proData.years_experience != null ? String(proData.years_experience) : '',
         bio: proData.bio || '', booking_url: proData.booking_url || '',
         photo_url: proData.photo_url || '',
         contact_email: proData.contact_email || '',
@@ -288,7 +287,6 @@ export default function DashboardPage() {
       prefecture: form.prefecture || null,
       area_description: form.area_description || null,
       is_online_available: form.is_online_available,
-      years_experience: form.years_experience ? parseInt(form.years_experience, 10) : null,
       bio: form.bio || null, booking_url: form.booking_url || null,
       contact_email: form.contact_email || null,
       photo_url: form.photo_url || null,
@@ -630,13 +628,6 @@ export default function DashboardPage() {
               onChange={e => setForm({...form, is_online_available: e.target.checked})}
               className="w-4 h-4 rounded border-gray-300 text-[#C4A35A] focus:ring-[#C4A35A]" />
             <label className="text-sm font-medium text-gray-700">オンライン対応可</label>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">経験年数</label>
-            <input type="number" min="0" value={form.years_experience}
-              onChange={e => setForm({...form, years_experience: e.target.value})}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
-              placeholder="例: 10" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">自己紹介</label>
