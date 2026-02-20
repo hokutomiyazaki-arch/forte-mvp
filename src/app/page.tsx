@@ -1,135 +1,729 @@
 'use client'
+import { useEffect, useRef } from 'react'
 import Link from 'next/link'
 
 export default function Home() {
+  const revealRefs = useRef<HTMLElement[]>([])
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible')
+          }
+        })
+      },
+      { threshold: 0.12 }
+    )
+    revealRefs.current.forEach((el) => {
+      if (el) observer.observe(el)
+    })
+    return () => observer.disconnect()
+  }, [])
+
+  const addRevealRef = (el: HTMLElement | null) => {
+    if (el && !revealRefs.current.includes(el)) {
+      revealRefs.current.push(el)
+    }
+  }
+
   return (
-    <div className="max-w-3xl mx-auto">
-      {/* Hero */}
-      <section className="text-center py-16">
-        <h1 className="text-5xl font-bold text-[#1A1A2E] tracking-wider mb-4">REAL PROOF</h1>
-        <p className="text-lg text-[#C4A35A] italic mb-8">本物が輝く社会へ。</p>
-        <p className="text-xl text-[#1A1A2E] font-medium mb-4">
-          あなたの強みを、クライアントの声で証明する。
-        </p>
-        <p className="text-gray-600 mb-12 leading-relaxed">
-          SNSのフォロワー数でも、口コミの星の数でもない。<br />
-          実際にあなたのセッションを受けた人が、あなたの「選ばれる理由」を投票する。<br />
-          強みが正当に評価され、蓄積され、検索される — それがREAL PROOF。
-        </p>
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <Link
-            href="/login?role=pro"
-            className="px-8 py-4 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition text-center"
+    <div style={{ margin: '-2rem -1rem 0', fontFamily: "'Noto Sans JP', 'DM Sans', sans-serif" }}>
+      <style>{`
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(16px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .reveal-section {
+          opacity: 0;
+          transform: translateY(20px);
+          transition: all 0.6s ease;
+        }
+        .reveal-section.visible {
+          opacity: 1;
+          transform: translateY(0);
+        }
+        .pillar-card-item {
+          transition: all 0.3s;
+        }
+        .pillar-card-item:hover {
+          border-color: #C4A35A !important;
+          box-shadow: 0 4px 20px rgba(196,163,90,0.1);
+          transform: translateY(-3px);
+        }
+        .btn-gold-hover:hover {
+          background: #b5963f !important;
+          transform: translateY(-1px);
+          box-shadow: 0 6px 20px rgba(196,163,90,0.25);
+        }
+        .btn-dark-hover:hover {
+          background: #2a2a4a !important;
+          transform: translateY(-1px);
+        }
+        .btn-outline-hover:hover {
+          border-color: #C4A35A !important;
+          color: #C4A35A !important;
+        }
+      `}</style>
+
+      {/* ================================ */}
+      {/* SECTION 1: HERO                  */}
+      {/* ================================ */}
+      <section
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: '60px 24px 100px',
+          background: '#FAFAF7',
+          textAlign: 'center',
+        }}
+      >
+        <div style={{ maxWidth: 780, margin: '0 auto' }}>
+          <div
+            style={{
+              fontFamily: "'DM Sans', sans-serif",
+              fontSize: 42,
+              fontWeight: 700,
+              letterSpacing: 5,
+              color: '#1A1A2E',
+              marginBottom: 8,
+              opacity: 0,
+              animation: 'fadeUp 0.7s ease forwards 0.1s',
+            }}
           >
-            プロとして登録する
-          </Link>
-          <Link
-            href="/login?role=client"
-            className="px-8 py-4 border-2 border-[#1A1A2E] text-[#1A1A2E] font-medium rounded-lg hover:bg-[#1A1A2E] hover:text-white transition text-center"
+            REAL PROOF
+          </div>
+          <div
+            style={{
+              fontSize: 13,
+              color: '#C4A35A',
+              letterSpacing: 3,
+              marginBottom: 52,
+              opacity: 0,
+              animation: 'fadeUp 0.7s ease forwards 0.25s',
+            }}
           >
-            クライアントとして登録する
-          </Link>
+            本物が輝く社会へ。
+          </div>
+
+          <h1
+            style={{
+              fontSize: 26,
+              fontWeight: 700,
+              lineHeight: 1.8,
+              color: '#1A1A2E',
+              marginBottom: 28,
+              opacity: 0,
+              animation: 'fadeUp 0.7s ease forwards 0.4s',
+            }}
+          >
+            あなたの強みを一番知っているのは、<br />
+            <span style={{ color: '#C4A35A' }}>あなたのクライアントだ。</span>
+          </h1>
+
+          <p
+            style={{
+              fontSize: 14,
+              lineHeight: 2,
+              color: '#444444',
+              marginBottom: 20,
+              opacity: 0,
+              animation: 'fadeUp 0.7s ease forwards 0.55s',
+            }}
+          >
+            なのに、選ばれる基準は★の数、フォロワー数、広告費。<br />
+            どれも、あなたの本当の強みを映していない。
+          </p>
+
+          <p
+            style={{
+              fontSize: 14,
+              lineHeight: 2,
+              color: '#444444',
+              marginBottom: 36,
+              opacity: 0,
+              animation: 'fadeUp 0.7s ease forwards 0.65s',
+            }}
+          >
+            REAL PROOFは、実際にあなたのセッションを受けたクライアントだけが<br />
+            「何が強いか」を投票で証明するプラットフォーム。
+          </p>
+
+          <div
+            style={{
+              marginBottom: 40,
+              opacity: 0,
+              animation: 'fadeUp 0.7s ease forwards 0.75s',
+            }}
+          >
+            <Link
+              href="/login?role=pro"
+              className="btn-gold-hover"
+              style={{
+                display: 'inline-block',
+                padding: '16px 48px',
+                background: '#C4A35A',
+                color: '#FFFFFF',
+                fontWeight: 700,
+                fontSize: 14,
+                letterSpacing: 1,
+                textDecoration: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.3s',
+              }}
+            >
+              強みを証明する →
+            </Link>
+          </div>
+
+          <p
+            style={{
+              fontSize: 13,
+              lineHeight: 2,
+              color: '#888888',
+              opacity: 0,
+              animation: 'fadeUp 0.7s ease forwards 0.85s',
+            }}
+          >
+            集客に困っていなくても。SNSが苦手でも。実績がゼロでも。<br />
+            クライアントの声が、あなたの最強の武器になる。
+          </p>
         </div>
       </section>
 
-      {/* 3 values */}
-      <section className="grid md:grid-cols-3 gap-8 py-12">
-        <div className="text-center">
-          <div className="text-3xl font-bold text-[#C4A35A] mb-2">蓄積</div>
-          <p className="text-sm text-gray-600">
-            あなたの実績は個人に紐づく。店を辞めても、独立しても消えない。ポータブルな強みの証明。
-          </p>
-        </div>
-        <div className="text-center">
-          <div className="text-3xl font-bold text-[#C4A35A] mb-2">多次元</div>
-          <p className="text-sm text-gray-600">
-            星5段階の一次元ではない。「何が変わったか」の複数軸で、あなたの本当の強みが見える。
-          </p>
-        </div>
-        <div className="text-center">
-          <div className="text-3xl font-bold text-[#C4A35A] mb-2">逆引き</div>
-          <p className="text-sm text-gray-600">
-            「痛みを改善してくれる人」で検索。広告費順ではなく、強み順。
-          </p>
+      {/* Divider (gold) */}
+      <div style={{ width: 48, height: 1, background: 'rgba(196,163,90,0.25)', margin: '0 auto 100px' }} />
+
+      {/* ================================ */}
+      {/* SECTION 2: HOW IT WORKS          */}
+      {/* ================================ */}
+      <section
+        ref={addRevealRef}
+        className="reveal-section"
+        style={{ padding: '100px 24px', textAlign: 'center', background: '#FAFAF7' }}
+      >
+        <div style={{ maxWidth: 780, margin: '0 auto' }}>
+          <div
+            style={{
+              fontFamily: "'DM Sans', sans-serif",
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: 4,
+              color: '#C4A35A',
+              textTransform: 'uppercase' as const,
+              marginBottom: 16,
+            }}
+          >
+            How It Works
+          </div>
+          <h2
+            style={{
+              fontSize: 22,
+              fontWeight: 700,
+              color: '#1A1A2E',
+              lineHeight: 1.6,
+              marginBottom: 56,
+            }}
+          >
+            強みを集める。強みで選ぶ。強みを育てる。
+          </h2>
+
+          <div style={{ display: 'flex', gap: 24, justifyContent: 'center', flexWrap: 'wrap', textAlign: 'center' }}>
+            {/* Step 1 */}
+            <div style={{ flex: 1, minWidth: 220, maxWidth: 260 }}>
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 40,
+                  height: 40,
+                  border: '1.5px solid #C4A35A',
+                  borderRadius: '50%',
+                  fontFamily: "'DM Sans', sans-serif",
+                  fontWeight: 700,
+                  fontSize: 15,
+                  color: '#C4A35A',
+                  marginBottom: 18,
+                }}
+              >
+                1
+              </div>
+              <div style={{ fontSize: 17, fontWeight: 700, color: '#1A1A2E', marginBottom: 6 }}>
+                強みを集める
+              </div>
+              <div style={{ fontSize: 11, color: '#C4A35A', letterSpacing: 1, marginBottom: 14, fontWeight: 500 }}>
+                — プロが主語
+              </div>
+              <p style={{ fontSize: 13, lineHeight: 1.9, color: '#444444' }}>
+                セッション後、クライアントがQRコードかNFCカードから投票。「結果を出してくれた」「説明がわかりやすかった」「空間が心地よかった」── あなたの強みを、クライアントの本音が教えてくれる。
+              </p>
+            </div>
+
+            {/* Arrow */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#C4A35A', minWidth: 32, paddingTop: 20 }}>
+              →
+            </div>
+
+            {/* Step 2 */}
+            <div style={{ flex: 1, minWidth: 220, maxWidth: 260 }}>
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 40,
+                  height: 40,
+                  border: '1.5px solid #C4A35A',
+                  borderRadius: '50%',
+                  fontFamily: "'DM Sans', sans-serif",
+                  fontWeight: 700,
+                  fontSize: 15,
+                  color: '#C4A35A',
+                  marginBottom: 18,
+                }}
+              >
+                2
+              </div>
+              <div style={{ fontSize: 17, fontWeight: 700, color: '#1A1A2E', marginBottom: 6 }}>
+                強みで選ぶ
+              </div>
+              <div style={{ fontSize: 11, color: '#C4A35A', letterSpacing: 1, marginBottom: 14, fontWeight: 500 }}>
+                — クライアントが主語
+              </div>
+              <p style={{ fontSize: 13, lineHeight: 1.9, color: '#444444' }}>
+                「姿勢改善が得意な人」「メンタルケアに強い人」── クライアントは★ではなく、強みでプロを選ぶ。広告費を払う必要はない。あなたの強みが、集客になる。
+              </p>
+            </div>
+
+            {/* Arrow */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#C4A35A', minWidth: 32, paddingTop: 20 }}>
+              →
+            </div>
+
+            {/* Step 3 */}
+            <div style={{ flex: 1, minWidth: 220, maxWidth: 260 }}>
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 40,
+                  height: 40,
+                  border: '1.5px solid #C4A35A',
+                  borderRadius: '50%',
+                  fontFamily: "'DM Sans', sans-serif",
+                  fontWeight: 700,
+                  fontSize: 15,
+                  color: '#C4A35A',
+                  marginBottom: 18,
+                }}
+              >
+                3
+              </div>
+              <div style={{ fontSize: 17, fontWeight: 700, color: '#1A1A2E', marginBottom: 6 }}>
+                強みを育てる
+              </div>
+              <div style={{ fontSize: 11, color: '#C4A35A', letterSpacing: 1, marginBottom: 14, fontWeight: 500 }}>
+                — プロが主語
+              </div>
+              <p style={{ fontSize: 13, lineHeight: 1.9, color: '#444444' }}>
+                投票は蓄積される。辞めても、独立しても、消えない。続けるほどあなただけの「強みの証明」が育っていく。資格では見えない成長が、クライアントの声で見える。最初の1票から始まる。
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* Why different */}
-      <section className="py-12 border-t border-gray-200">
-        <h2 className="text-2xl font-bold text-[#1A1A2E] mb-6 text-center">
-          口コミサイトとは何が違うのか
-        </h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-[#1A1A2E] text-white">
-                <th className="py-3 px-4 text-left"></th>
-                <th className="py-3 px-4 text-left">ホットペッパー</th>
-                <th className="py-3 px-4 text-left">Google</th>
-                <th className="py-3 px-4 text-left font-bold text-[#C4A35A]">REAL PROOF</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              <tr><td className="py-2 px-4 font-medium">誰が評価</td><td className="py-2 px-4">匿名の誰か</td><td className="py-2 px-4">匿名の誰か</td><td className="py-2 px-4 font-medium">認証済みクライアント</td></tr>
-              <tr className="bg-gray-50"><td className="py-2 px-4 font-medium">紐づき</td><td className="py-2 px-4">店舗</td><td className="py-2 px-4">店舗</td><td className="py-2 px-4 font-medium">個人（ポータブル）</td></tr>
-              <tr><td className="py-2 px-4 font-medium">評価の軸</td><td className="py-2 px-4">星5（一次元）</td><td className="py-2 px-4">星5（一次元）</td><td className="py-2 px-4 font-medium">多次元（結果×人柄）</td></tr>
-              <tr className="bg-gray-50"><td className="py-2 px-4 font-medium">検索順</td><td className="py-2 px-4">広告費順</td><td className="py-2 px-4">アルゴリズム</td><td className="py-2 px-4 font-medium">強み順</td></tr>
-            </tbody>
-          </table>
+      {/* Divider */}
+      <div style={{ width: 48, height: 1, background: '#E8E4DC', margin: '0 auto 100px' }} />
+
+      {/* ================================ */}
+      {/* SECTION 3: COMPARISON TABLE      */}
+      {/* ================================ */}
+      <section
+        ref={addRevealRef}
+        className="reveal-section"
+        style={{ padding: '100px 24px', textAlign: 'center', background: '#FAFAF7' }}
+      >
+        <div style={{ maxWidth: 780, margin: '0 auto' }}>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1A1A2E', lineHeight: 1.6, marginBottom: 56 }}>
+            ★で選ぶ時代は終わった。
+          </h2>
+          <div style={{ overflowX: 'auto' }}>
+            <table
+              style={{
+                width: '100%',
+                maxWidth: 720,
+                margin: '0 auto',
+                borderCollapse: 'collapse',
+                fontSize: 13,
+              }}
+            >
+              <thead>
+                <tr>
+                  <th style={{ padding: '16px 10px', fontWeight: 700, textAlign: 'center', borderBottom: '2px solid #ddd', fontSize: 13, color: '#1A1A2E' }}></th>
+                  <th style={{ padding: '16px 10px', fontWeight: 700, textAlign: 'center', borderBottom: '2px solid #ddd', fontSize: 13, color: '#1A1A2E' }}>ホットペッパー</th>
+                  <th style={{ padding: '16px 10px', fontWeight: 700, textAlign: 'center', borderBottom: '2px solid #ddd', fontSize: 13, color: '#1A1A2E' }}>Google</th>
+                  <th style={{ padding: '16px 10px', fontWeight: 700, textAlign: 'center', borderBottom: '2px solid #C4A35A', fontSize: 13, color: '#C4A35A' }}>REAL PROOF</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  ['誰が評価', '匿名の誰か', '匿名の誰か', '認証済みクライアント'],
+                  ['紐づき', '店舗のみ', '店舗のみ', '個人＋店舗'],
+                  ['評価の軸', '★5（一次元）', '★5（一次元）', '多次元（結果×人柄）'],
+                  ['検索順', '広告費順', 'アルゴリズム', '強み順'],
+                  ['不正対策', 'なし', 'なし', '対面認証（QR+NFC）'],
+                  ['独立時', 'リセット', 'リセット', '持ち運べる'],
+                ].map(([label, hp, google, rp], i, arr) => (
+                  <tr key={label}>
+                    <td style={{ padding: '13px 10px', textAlign: 'left', borderBottom: i === arr.length - 1 ? 'none' : '1px solid #eee', fontWeight: 600, color: '#1A1A2E', fontSize: 12 }}>{label}</td>
+                    <td style={{ padding: '13px 10px', textAlign: 'center', borderBottom: i === arr.length - 1 ? 'none' : '1px solid #eee', color: '#444444' }}>{hp}</td>
+                    <td style={{ padding: '13px 10px', textAlign: 'center', borderBottom: i === arr.length - 1 ? 'none' : '1px solid #eee', color: '#444444' }}>{google}</td>
+                    <td style={{ padding: '13px 10px', textAlign: 'center', borderBottom: i === arr.length - 1 ? 'none' : '1px solid #eee', color: '#1A1A2E', fontWeight: 600, background: 'rgba(196,163,90,0.08)' }}>{rp}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
-      {/* Proof Exchange */}
-      <section className="py-12 border-t border-gray-200">
-        <h2 className="text-2xl font-bold text-[#1A1A2E] mb-6 text-center">プルーフの交換</h2>
-        <div className="bg-[#1A1A2E] rounded-xl p-8 text-center">
-          <p className="text-gray-300 leading-relaxed mb-6">
-            クライアントはプロに「あなたの技術は本物だ」と投票で証明する。<br />
-            プロはお返しに、自分だけが知る"本物の情報"をリワードとして届ける。<br />
-            クーポンだけじゃない。あなたがプルーフする情報が、クライアントの投票を後押しする。
-          </p>
-          <p className="text-sm text-gray-400 mb-6">
-            例：おすすめの本、行きつけのレストラン、ここだけの健康法...
-          </p>
-          <p className="text-[#C4A35A] font-medium">
-            プルーフの交換が生まれる場所。それがREAL PROOF。
-          </p>
+      {/* Divider */}
+      <div style={{ width: 48, height: 1, background: '#E8E4DC', margin: '0 auto 100px' }} />
+
+      {/* ================================ */}
+      {/* SECTION 4: 3 PILLARS             */}
+      {/* ================================ */}
+      <section
+        ref={addRevealRef}
+        className="reveal-section"
+        style={{ padding: '100px 24px', textAlign: 'center', background: '#FAFAF7' }}
+      >
+        <div style={{ maxWidth: 780, margin: '0 auto' }}>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1A1A2E', lineHeight: 1.6, marginBottom: 56 }}>
+            REAL PROOFが他と違う、3つの理由。
+          </h2>
+          <div style={{ display: 'flex', gap: 28, justifyContent: 'center', flexWrap: 'wrap' }}>
+            {[
+              {
+                label: '蓄積',
+                heading: '辞めても、消えない。',
+                desc: 'あなたの実績は店ではなく個人に紐づく。独立しても、転職しても、あなたの強みの証明は一生あなたのもの。',
+              },
+              {
+                label: '多次元',
+                heading: '★じゃ、わからない。',
+                desc: '「★4.5」で何がわかる？ REAL PROOFは「痛み改善が得意」「メンタルに強い」── 本当の強みが見える。',
+              },
+              {
+                label: '信頼性',
+                heading: '嘘が、つけない。',
+                desc: '投票できるのは対面でサービスを受けた人だけ。匿名だから忖度もない。届くのは本音だけ。',
+              },
+            ].map((pillar) => (
+              <div
+                key={pillar.label}
+                className="pillar-card-item"
+                style={{
+                  flex: 1,
+                  minWidth: 220,
+                  maxWidth: 260,
+                  textAlign: 'center',
+                  padding: '36px 24px',
+                  border: '1px solid #E8E4DC',
+                  background: '#FFFFFF',
+                }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 3, color: '#C4A35A', marginBottom: 14 }}>
+                  {pillar.label}
+                </div>
+                <div style={{ fontSize: 17, fontWeight: 700, color: '#1A1A2E', marginBottom: 14 }}>
+                  {pillar.heading}
+                </div>
+                <p style={{ fontSize: 13, lineHeight: 1.9, color: '#444444' }}>
+                  {pillar.desc}
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* Roadmap */}
-      <section className="py-12 border-t border-gray-200 text-center">
-        <h2 className="text-xl font-bold text-[#1A1A2E] mb-3">REAL PROOFのこれから</h2>
-        <p className="text-gray-600 text-sm mb-6">
-          予約管理、アプリ内メッセージ、プッシュ通知…<br />
-          REAL PROOFはあなたの声で進化します。
-        </p>
-        <Link href="/roadmap" className="text-[#C4A35A] font-medium hover:underline">
-          開発ロードマップを見る →
-        </Link>
+      {/* Divider */}
+      <div style={{ width: 48, height: 1, background: '#E8E4DC', margin: '0 auto 100px' }} />
+
+      {/* ================================ */}
+      {/* SECTION 5: VOICES                */}
+      {/* ================================ */}
+      <section
+        ref={addRevealRef}
+        className="reveal-section"
+        style={{ padding: '100px 24px', textAlign: 'center', background: '#FAFAF7' }}
+      >
+        <div style={{ maxWidth: 780, margin: '0 auto' }}>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1A1A2E', lineHeight: 1.6, marginBottom: 48 }}>
+            この悩み、あなただけじゃない。
+          </h2>
+
+          <div style={{ display: 'flex', gap: 20, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 48 }}>
+            {[
+              { role: '整体師', quote: '「技術には自信がある。でも新規のお客さんに、それをどう伝えればいいかわからない。」' },
+              { role: 'ヨガインストラクター', quote: '「SNSを頑張っても、本当に届いてほしい人に届かない。」' },
+              { role: 'パーソナルトレーナー', quote: '「ホットペッパーの★は広告費で決まる。実力で選ばれたい。」' },
+            ].map((v) => (
+              <div
+                key={v.role}
+                style={{
+                  flex: 1,
+                  minWidth: 220,
+                  maxWidth: 260,
+                  padding: '28px 22px',
+                  border: '1px solid #E8E4DC',
+                  background: '#FFFFFF',
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ fontSize: 11, color: '#C4A35A', letterSpacing: 1, marginBottom: 12, fontWeight: 500 }}>
+                  {v.role}
+                </div>
+                <p style={{ fontSize: 13, lineHeight: 1.9, color: '#444444' }}>
+                  {v.quote}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <p style={{ fontSize: 14, color: '#1A1A2E', fontWeight: 500, marginBottom: 56 }}>
+            REAL PROOFは、この問題を解決するために生まれました。
+          </p>
+
+          <div style={{ marginTop: 48 }}>
+            <p style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E', marginBottom: 24 }}>
+              あなたに届く投票は、こんな感じ。
+            </p>
+            <div
+              style={{
+                maxWidth: 480,
+                margin: '0 auto 24px',
+                padding: '48px 24px',
+                border: '2px dashed #E8E4DC',
+                background: '#FFFFFF',
+                color: '#888888',
+                fontSize: 13,
+              }}
+            >
+              [ 投票UIモック画像 ]
+            </div>
+            <p style={{ fontSize: 14, color: '#444444' }}>
+              1つひとつの投票が、あなたの強みを形にする。
+            </p>
+          </div>
+        </div>
       </section>
 
-      {/* Founding Member */}
-      <section className="py-12 border-t border-gray-200 text-center">
-        <p className="text-[#C4A35A] font-medium mb-2">Founding Member</p>
-        <h2 className="text-2xl font-bold text-[#1A1A2E] mb-4">最初の50名だけの特権</h2>
-        <p className="text-gray-600 mb-8">
-          永久のFounding Memberバッジ。先行する実績の蓄積。<br />
-          REAL PROOFが10万人のプラットフォームになったとき、あなたは「最初からいた人」。
-        </p>
-        <Link
-          href="/login?role=pro"
-          className="inline-block px-8 py-4 bg-[#C4A35A] text-white font-medium rounded-lg hover:bg-[#b3944f] transition"
-        >
-          Founding Memberとして登録する
-        </Link>
+      {/* Divider */}
+      <div style={{ width: 48, height: 1, background: '#E8E4DC', margin: '0 auto 100px' }} />
+
+      {/* ================================ */}
+      {/* SECTION 6: FOUNDER'S NOTE        */}
+      {/* ================================ */}
+      <section
+        ref={addRevealRef}
+        className="reveal-section"
+        style={{ padding: '100px 24px', background: '#FAFAF7', borderTop: '1px solid #E8E4DC' }}
+      >
+        <div style={{ maxWidth: 680, margin: '0 auto' }}>
+          <div style={{ display: 'flex', gap: 48, alignItems: 'flex-start', textAlign: 'left', flexWrap: 'wrap', justifyContent: 'center' }}>
+            {/* Photo placeholder */}
+            <div
+              style={{
+                width: 160,
+                minWidth: 160,
+                height: 200,
+                background: '#FFFFFF',
+                border: '1px solid #E8E4DC',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#888888',
+                fontSize: 11,
+              }}
+            >
+              [ 創業者写真 ]
+            </div>
+
+            {/* Text */}
+            <div style={{ flex: 1, minWidth: 280 }}>
+              <div
+                style={{
+                  fontFamily: "'DM Sans', sans-serif",
+                  fontSize: 11,
+                  fontStyle: 'italic',
+                  color: '#888888',
+                  marginBottom: 16,
+                }}
+              >
+                ── Founder&apos;s Note
+              </div>
+              <h2 style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.7, color: '#1A1A2E', marginBottom: 20 }}>
+                「マーケティングで選ばれる時代は、<br />もう終わりにしたい。」
+              </h2>
+              <p style={{ fontSize: 13, lineHeight: 1.9, color: '#444444', marginBottom: 20 }}>
+                15年間、技術職の現場に立ち続けてきた創業者が、<br />
+                なぜ「強みの証明」にこだわるのか。
+              </p>
+              <Link
+                href="/about"
+                style={{
+                  fontSize: 13,
+                  color: '#C4A35A',
+                  textDecoration: 'none',
+                  letterSpacing: 0.5,
+                  fontWeight: 500,
+                  transition: 'opacity 0.3s',
+                }}
+              >
+                ストーリーを読む →
+              </Link>
+            </div>
+          </div>
+        </div>
       </section>
 
-      {/* フッター */}
-      <div style={{ textAlign: 'center', padding: '24px 0' }}>
-        <div style={{ fontSize: 14, fontWeight: 800, color: '#1A1A2E', letterSpacing: '2px' }}>REALPROOF</div>
-        <div style={{ fontSize: 10, color: '#888888', marginTop: 4 }}>強みが、あなたを定義する。</div>
-      </div>
+      {/* Divider (gold) */}
+      <div style={{ width: 48, height: 1, background: 'rgba(196,163,90,0.25)', margin: '0 auto 100px' }} />
+
+      {/* ================================ */}
+      {/* SECTION 7: FOUNDING MEMBER + CTA */}
+      {/* ================================ */}
+      <section
+        ref={addRevealRef}
+        className="reveal-section"
+        style={{ padding: '100px 24px 60px', background: '#FAFAF7' }}
+      >
+        <div style={{ maxWidth: 780, margin: '0 auto' }}>
+          {/* Everyone CTA */}
+          <div style={{ marginBottom: 80, textAlign: 'center' }}>
+            <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1A1A2E', marginBottom: 24 }}>
+              REAL PROOFは、今日から誰でも使えます。
+            </h2>
+            <Link
+              href="/login?role=pro"
+              className="btn-dark-hover"
+              style={{
+                display: 'inline-block',
+                padding: '16px 48px',
+                background: '#1A1A2E',
+                color: '#FAFAF7',
+                fontWeight: 700,
+                fontSize: 14,
+                letterSpacing: 1,
+                textDecoration: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.3s',
+              }}
+            >
+              プロとして登録する →
+            </Link>
+          </div>
+
+          {/* Founding Member Box */}
+          <div
+            style={{
+              maxWidth: 600,
+              margin: '0 auto',
+              padding: '48px 40px',
+              border: '1px solid rgba(196,163,90,0.25)',
+              background: '#FFFFFF',
+              textAlign: 'center',
+            }}
+          >
+            <div
+              style={{
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: 4,
+                color: '#C4A35A',
+                textTransform: 'uppercase' as const,
+                marginBottom: 12,
+              }}
+            >
+              Founding Member
+            </div>
+            <h3 style={{ fontSize: 20, fontWeight: 700, color: '#1A1A2E', marginBottom: 20 }}>
+              最初の50名だけの特権。ただし、条件がある。
+            </h3>
+            <p style={{ fontSize: 13, lineHeight: 1.9, color: '#444444', marginBottom: 28 }}>
+              30日以内に、クライアントから5票以上を集めること。<br />
+              使った人だけが、Founding Memberになれる。
+            </p>
+            <ul
+              style={{
+                listStyle: 'none',
+                marginBottom: 32,
+                textAlign: 'left',
+                display: 'inline-block',
+                padding: 0,
+              }}
+            >
+              {[
+                '永久の Founding Member バッジ',
+                'プラットフォームの進化に直接関与',
+                '月1回のフィードバックで、一緒にREAL PROOFを作る',
+              ].map((perk) => (
+                <li
+                  key={perk}
+                  style={{
+                    fontSize: 13,
+                    color: '#444444',
+                    lineHeight: 2,
+                    paddingLeft: 20,
+                    position: 'relative',
+                  }}
+                >
+                  <span style={{ position: 'absolute', left: 0, color: '#C4A35A', fontSize: 10 }}>◆</span>
+                  {perk}
+                </li>
+              ))}
+            </ul>
+            <div>
+              <Link
+                href="/login?role=pro"
+                className="btn-gold-hover"
+                style={{
+                  display: 'inline-block',
+                  padding: '16px 48px',
+                  background: '#C4A35A',
+                  color: '#FFFFFF',
+                  fontWeight: 700,
+                  fontSize: 14,
+                  letterSpacing: 1,
+                  textDecoration: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s',
+                }}
+              >
+                Founding Memberに挑戦する →
+              </Link>
+            </div>
+            <span style={{ display: 'block', marginTop: 16, fontSize: 12, color: '#888888' }}>
+              残り50名
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer — layout.tsx has the shared footer, but top page shows its own divider */}
     </div>
   )
 }
