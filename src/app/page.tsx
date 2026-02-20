@@ -1,6 +1,5 @@
 'use client'
 import Link from 'next/link'
-import Logo from '@/components/Logo'
 
 export default function Home() {
   return (
@@ -127,10 +126,9 @@ export default function Home() {
       </section>
 
       {/* フッター */}
-      <div className="text-center py-8 border-t border-gray-200">
-        <div className="flex justify-center">
-          <Logo size={0.6} dark={false} showTagline={false} />
-        </div>
+      <div style={{ textAlign: 'center', padding: '24px 0' }}>
+        <div style={{ fontSize: 14, fontWeight: 800, color: '#1A1A2E', letterSpacing: '2px' }}>REALPROOF</div>
+        <div style={{ fontSize: 10, color: '#A0A0A0', marginTop: 4 }}>強みが、あなたを定義する。</div>
       </div>
     </div>
   )

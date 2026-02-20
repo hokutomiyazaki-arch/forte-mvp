@@ -5,7 +5,6 @@ import { createClient } from '@/lib/supabase'
 import { Professional, VoteSummary, Vote } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import { COLORS, FONTS } from '@/lib/design-tokens'
-import Logo from '@/components/Logo'
 import VoiceShareModal from '@/components/VoiceShareCard'
 import RelatedPros from '@/components/RelatedPros'
 
@@ -577,13 +576,9 @@ export default function CardPage() {
       )}
 
       {/* ═══ フッター ═══ */}
-      <div style={{ textAlign: 'center', padding: '24px 0 16px' }}>
-        <div style={{ fontSize: 10, color: T.textMuted, letterSpacing: 3, fontFamily: T.font, marginBottom: 10 }}>
-          強みが、あなたを定義する。
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <Logo size={0.6} dark={false} />
-        </div>
+      <div style={{ textAlign: 'center', padding: '24px 0' }}>
+        <div style={{ fontSize: 14, fontWeight: 800, color: '#1A1A2E', letterSpacing: '2px' }}>REALPROOF</div>
+        <div style={{ fontSize: 10, color: '#A0A0A0', marginTop: 4 }}>強みが、あなたを定義する。</div>
       </div>
     </div>
   )

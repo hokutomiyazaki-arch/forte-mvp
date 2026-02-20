@@ -1,8 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import Logo from '@/components/Logo'
-
 export default function Navbar() {
   const supabase = createClient() as any
   const [user, setUser] = useState<any>(null)
@@ -47,7 +45,9 @@ export default function Navbar() {
 
   return (
     <nav className="bg-[#1A1A2E] text-white px-6 py-3 flex items-center justify-between">
-      <a href="/"><Logo size={0.7} dark={true} showTagline={false} /></a>
+      <a href="/" style={{ textDecoration: 'none' }}>
+        <span style={{ fontSize: 18, fontWeight: 800, color: '#fff', letterSpacing: '2px' }}>REALPROOF</span>
+      </a>
       <div className="flex gap-4 text-sm items-center">
         <a href="/explore" className="hover:text-[#C4A35A] transition">プロを探す</a>
         {loaded && (user ? (

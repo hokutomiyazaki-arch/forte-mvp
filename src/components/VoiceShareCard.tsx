@@ -4,7 +4,6 @@ import { useState } from 'react'
 import html2canvas from 'html2canvas'
 import { createClient } from '@/lib/supabase'
 import { COLORS, FONTS } from '@/lib/design-tokens'
-import Logo from '@/components/Logo'
 
 const T = { ...COLORS, font: FONTS.main, fontMono: FONTS.mono, fontSerif: FONTS.serif }
 
@@ -72,7 +71,10 @@ function VoiceCardWarm({ comment, phraseText }: { comment: string; phraseText: s
         </div>
 
         {/* Logo */}
-        <Logo size={0.7} dark={false} showTagline={false} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 300, color: '#1A1A2E', letterSpacing: '3px', fontFamily: "'DM Sans', sans-serif" }}>REAL</span>
+          <span style={{ fontSize: 12, fontWeight: 800, color: '#C4A35A', letterSpacing: '3px', fontFamily: "'DM Sans', sans-serif" }}>PROOF</span>
+        </div>
       </div>
     </div>
   )
