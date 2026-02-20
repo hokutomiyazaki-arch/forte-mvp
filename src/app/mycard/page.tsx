@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { getRewardLabel } from '@/lib/types'
+import RewardContent from '@/components/RewardContent'
 import { Suspense } from 'react'
 
 interface RewardWithPro {
@@ -603,7 +604,7 @@ function MyCardContent() {
                       <p className="text-xs text-[#C4A35A] font-medium mb-1">
                         {reward.title || getRewardLabel(reward.reward_type)}
                       </p>
-                      <p className="text-xl font-bold text-[#1A1A2E] mb-4">{reward.content}</p>
+                      <RewardContent content={reward.content} className="text-xl font-bold text-[#1A1A2E] mb-4" />
 
                       {confirmingId === reward.id ? (
                         <div className="space-y-2">
@@ -667,7 +668,7 @@ function MyCardContent() {
                         <p className="text-xs text-gray-300 mb-1">
                           {reward.title || getRewardLabel(reward.reward_type)}
                         </p>
-                        <p className="text-sm line-through">{reward.content}</p>
+                        <RewardContent content={reward.content} className="text-sm" strikethrough />
                         <p className="text-xs mt-1">
                           {reward.reward_type === 'coupon' ? '使用済み' : '削除済み'}
                         </p>

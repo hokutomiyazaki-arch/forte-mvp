@@ -1027,7 +1027,7 @@ export default function DashboardPage() {
                     }}
                     rows={2}
                     className="w-full px-3 py-2 bg-white border border-[#E5E7EB] rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#C4A35A] focus:border-[#C4A35A] resize-none"
-                    placeholder="リワードの内容を入力..."
+                    placeholder="リワードの内容を入力...（URLを入れるとボタンに変換されます）"
                   />
                 </div>
               )
