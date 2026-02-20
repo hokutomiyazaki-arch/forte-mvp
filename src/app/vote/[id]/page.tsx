@@ -94,6 +94,7 @@ function VoteForm() {
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
   const [alreadyVoted, setAlreadyVoted] = useState(false)
+  const [tokenExpired, setTokenExpired] = useState(false)
   const [submittedVoteId, setSubmittedVoteId] = useState('')
   const [submittedToken, setSubmittedToken] = useState('')
   const [showEmailFix, setShowEmailFix] = useState(false)
@@ -127,6 +128,28 @@ function VoteForm() {
 
   useEffect(() => {
     async function load() {
+      // QRトークン期限チェック
+      if (qrToken) {
+        const { data: tokenData } = await (supabase as any)
+          .from('qr_tokens')
+          .select('expires_at')
+          .eq('token', qrToken)
+          .maybeSingle()
+
+        if (!tokenData) {
+          setTokenExpired(true)
+          setLoading(false)
+          return
+        }
+
+        const expiresAt = new Date(tokenData.expires_at)
+        if (expiresAt < new Date()) {
+          setTokenExpired(true)
+          setLoading(false)
+          return
+        }
+      }
+
       // プロ情報取得
       const { data: proData } = await (supabase as any)
         .from('professionals')
@@ -417,6 +440,20 @@ function VoteForm() {
   // ── ローディング ──
   if (loading) {
     return <div className="text-center py-16 text-gray-400">読み込み中...</div>
+  }
+
+  if (tokenExpired) {
+    return (
+      <div className="max-w-md mx-auto text-center py-16 px-4">
+        <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
+          <svg className="w-8 h-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <h1 className="text-xl font-bold text-[#1A1A2E] mb-2">QRコードの有効期限が切れています</h1>
+        <p className="text-gray-500 mb-6">このQRコードは24時間の有効期限が過ぎています。プロに新しいQRコードを発行してもらってください。</p>
+      </div>
+    )
   }
 
   if (!pro) {
