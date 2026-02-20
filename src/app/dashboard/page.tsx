@@ -91,7 +91,7 @@ export default function DashboardPage() {
   const [selectedProofIds, setSelectedProofIds] = useState<Set<string>>(new Set())
   const [customProofs, setCustomProofs] = useState<CustomProof[]>([])
   const [activeTab, setActiveTab] = useState('basic')
-  const [dashboardTab, setDashboardTab] = useState<'profile' | 'settings' | 'votes' | 'voices'>('profile')
+  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices'>('profile')
   const [proofSaving, setProofSaving] = useState(false)
   const [proofSaved, setProofSaved] = useState(false)
   const [proofError, setProofError] = useState('')
@@ -720,8 +720,8 @@ export default function DashboardPage() {
       <div style={{ display: 'flex', overflowX: 'auto', gap: 0, marginBottom: 24, borderBottom: '1px solid #E5E7EB', scrollbarWidth: 'none' as any }}>
         {([
           { key: 'profile' as const, label: 'プロフィール' },
-          { key: 'settings' as const, label: '強み&リワード設定' },
-          { key: 'votes' as const, label: '投票一覧' },
+          { key: 'proofs' as const, label: '強み設定' },
+          { key: 'rewards' as const, label: 'リワード設定' },
           { key: 'voices' as const, label: 'Voices' },
         ]).map(tab => (
           <button
@@ -858,40 +858,18 @@ export default function DashboardPage() {
         <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">24時間限定 投票用QRコード</h2>
         {(() => {
           const proofsReady = selectedProofIds.size === 9
-          const rewardsReady = rewards.filter(r => r.reward_type && r.content.trim()).length >= 1
-          const isReady = proofsReady && rewardsReady
 
-          if (!isReady) {
+          if (!proofsReady) {
             return (
               <div className="py-4">
                 <p className="text-sm text-[#9CA3AF] mb-3">
-                  QRコードを発行するには、以下の設定を完了してください：
+                  QRコードを発行するには、プルーフ設定を完了してください：
                 </p>
                 <div className="space-y-2">
-                  {!proofsReady && (
-                    <div className="flex items-center justify-center gap-2 text-sm">
-                      <span className="text-red-400">✗</span>
-                      <span className="text-[#1A1A2E]">プルーフ設定（{selectedProofIds.size} / 9 選択中）</span>
-                    </div>
-                  )}
-                  {proofsReady && (
-                    <div className="flex items-center justify-center gap-2 text-sm">
-                      <span className="text-green-500">✓</span>
-                      <span className="text-[#9CA3AF]">プルーフ設定 完了</span>
-                    </div>
-                  )}
-                  {!rewardsReady && (
-                    <div className="flex items-center justify-center gap-2 text-sm">
-                      <span className="text-red-400">✗</span>
-                      <span className="text-[#1A1A2E]">リワード設定（{rewards.filter(r => r.content.trim()).length} / 1 以上）</span>
-                    </div>
-                  )}
-                  {rewardsReady && (
-                    <div className="flex items-center justify-center gap-2 text-sm">
-                      <span className="text-green-500">✓</span>
-                      <span className="text-[#9CA3AF]">リワード設定 完了</span>
-                    </div>
-                  )}
+                  <div className="flex items-center justify-center gap-2 text-sm">
+                    <span className="text-red-400">✗</span>
+                    <span className="text-[#1A1A2E]">プルーフ設定（{selectedProofIds.size} / 9 選択中）</span>
+                  </div>
                 </div>
               </div>
             )
@@ -926,8 +904,8 @@ export default function DashboardPage() {
 
       </>)}
 
-      {/* ═══ Tab: 強み&リワード設定 ═══ */}
-      {dashboardTab === 'settings' && (<>
+      {/* ═══ Tab: 強み設定 ═══ */}
+      {dashboardTab === 'proofs' && (<>
 
       {/* プルーフ設定 */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
@@ -1149,9 +1127,17 @@ export default function DashboardPage() {
         )}
       </div>
 
+      </>)}
+
+      {/* ═══ Tab: リワード設定 ═══ */}
+      {dashboardTab === 'rewards' && (<>
+
       {/* リワード設定 */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
         <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">リワード設定</h2>
+        <p className="text-sm text-[#9CA3AF] mb-4">
+          リワードは任意です。設定しなくても投票は受け付けられます。
+        </p>
         <p className="text-sm text-[#9CA3AF] mb-4">
           投票してくれたクライアントへのお礼を設定。プロの秘密やおすすめを共有して、信頼を深めましょう。
         </p>
@@ -1302,17 +1288,6 @@ export default function DashboardPage() {
       </div>
 
       </>)}
-
-      {/* ═══ Tab: 投票一覧 ═══ */}
-      {dashboardTab === 'votes' && (
-        <div className="bg-white rounded-xl p-6 shadow-sm mb-8 text-center">
-          <div style={{ padding: '32px 0' }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>📊</div>
-            <p className="text-sm text-[#555555] font-medium mb-2">投票データはプルーフチャートに反映されています</p>
-            <p className="text-xs text-[#9CA3AF]">「プロフィール」タブでチャートを確認できます</p>
-          </div>
-        </div>
-      )}
 
       {/* ═══ Tab: Voices ═══ */}
       {dashboardTab === 'voices' && (<>
