@@ -34,6 +34,13 @@ export default function Navbar() {
 
   async function handleLogout() {
     await supabase.auth.signOut()
+    // モバイルブラウザのキャッシュ対策
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('sb-')) localStorage.removeItem(key)
+    })
+    Object.keys(sessionStorage).forEach(key => {
+      if (key.startsWith('sb-')) sessionStorage.removeItem(key)
+    })
     window.location.href = '/'
   }
 

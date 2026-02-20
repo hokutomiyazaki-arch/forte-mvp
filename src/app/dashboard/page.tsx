@@ -1202,7 +1202,12 @@ export default function DashboardPage() {
             カードを見る
           </a>
         )}
-        <button onClick={async () => { await supabase.auth.signOut(); window.location.href = '/' }}
+        <button onClick={async () => {
+          await supabase.auth.signOut()
+          Object.keys(localStorage).forEach(key => { if (key.startsWith('sb-')) localStorage.removeItem(key) })
+          Object.keys(sessionStorage).forEach(key => { if (key.startsWith('sb-')) sessionStorage.removeItem(key) })
+          window.location.href = '/'
+        }}
           className="px-6 py-3 text-gray-500 hover:text-red-500 transition">
           ログアウト
         </button>

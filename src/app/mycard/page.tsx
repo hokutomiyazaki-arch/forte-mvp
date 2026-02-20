@@ -760,6 +760,8 @@ function MyCardContent() {
               return
             }
             await supabase.auth.signOut()
+            Object.keys(localStorage).forEach(key => { if (key.startsWith('sb-')) localStorage.removeItem(key) })
+            Object.keys(sessionStorage).forEach(key => { if (key.startsWith('sb-')) sessionStorage.removeItem(key) })
             window.location.href = '/'
           }}
           className="text-sm text-red-400 hover:text-red-600 transition"

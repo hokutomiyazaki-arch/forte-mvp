@@ -124,6 +124,8 @@ function ConfirmedContent() {
                   <button
                     onClick={async () => {
                       await (supabase as any).auth.signOut()
+                      Object.keys(localStorage).forEach(key => { if (key.startsWith('sb-')) localStorage.removeItem(key) })
+                      Object.keys(sessionStorage).forEach(key => { if (key.startsWith('sb-')) sessionStorage.removeItem(key) })
                       window.location.href = `/mycard?email=${encodeURIComponent(voterEmail)}`
                     }}
                     className="inline-block w-full py-3 bg-[#1A1A2E] text-white text-sm font-bold rounded-lg hover:bg-[#2a2a4e] transition"
