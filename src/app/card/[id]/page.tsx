@@ -7,6 +7,7 @@ import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels
 import { COLORS, FONTS } from '@/lib/design-tokens'
 import Logo from '@/components/Logo'
 import VoiceShareModal from '@/components/VoiceShareCard'
+import RelatedPros from '@/components/RelatedPros'
 
 // デザイントークンのローカルショートカット
 const T = {
@@ -108,6 +109,7 @@ export default function CardPage() {
   const [phrases, setPhrases] = useState<GratitudePhrase[]>([])
   const [animated, setAnimated] = useState(false)
   const [shareModalVoice, setShareModalVoice] = useState<Vote | null>(null)
+  const [shareCopied, setShareCopied] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -513,7 +515,44 @@ export default function CardPage() {
         </div>
       </div>
 
-      {/* ★ タスク11で RelatedPros をここに追加 ★ */}
+      {/* ═══ 同地域のプロ ═══ */}
+      {pro.prefecture && (
+        <RelatedPros currentProId={id} prefecture={pro.prefecture} maxDisplay={3} />
+      )}
+
+      {/* ═══ 紹介リンク ═══ */}
+      <div style={{
+        background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14,
+        padding: '20px 18px', textAlign: 'center', marginBottom: 16,
+      }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: T.dark, marginBottom: 6 }}>
+          このプロを友だちに紹介する
+        </div>
+        <div style={{ fontSize: 11, color: T.textMuted, marginBottom: 14 }}>
+          あなたの紹介で信頼がつながります
+        </div>
+        <button
+          onClick={async () => {
+            const url = `${window.location.origin}/card/${id}`
+            if (navigator.share) {
+              try {
+                await navigator.share({ title: `${pro.name}のカード`, url })
+              } catch { /* cancelled */ }
+            } else {
+              await navigator.clipboard.writeText(url)
+              setShareCopied(true)
+              setTimeout(() => setShareCopied(false), 2000)
+            }
+          }}
+          style={{
+            width: '100%', padding: '12px', border: 'none', borderRadius: 12,
+            background: T.gold, color: '#fff', fontSize: 13, fontWeight: 700,
+            cursor: 'pointer', fontFamily: T.font,
+          }}
+        >
+          {shareCopied ? 'コピーしました！' : 'リンクをシェア'}
+        </button>
+      </div>
 
       {/* Voice Share Modal */}
       {shareModalVoice && pro && (
