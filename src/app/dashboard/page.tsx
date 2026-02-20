@@ -474,10 +474,11 @@ export default function DashboardPage() {
       if (affectedVotes && affectedVotes.length > 0) {
         for (const vote of affectedVotes) {
           const updatedIds = (vote.selected_proof_ids || []).filter((id: string) => id !== cp.id)
-          await (supabase as any)
+          const { error: voteError } = await (supabase as any)
             .from('votes')
             .update({ selected_proof_ids: updatedIds })
             .eq('id', vote.id)
+          if (voteError) console.error('votes update error:', voteError)
         }
       }
 
@@ -497,7 +498,24 @@ export default function DashboardPage() {
     })
 
     // customProofs 配列から除去
-    setCustomProofs(customProofs.filter((_, i) => i !== idx))
+    const updatedCustomProofs = customProofs.filter((_, i) => i !== idx)
+    const updatedSelectedIds = [...selectedProofIds].filter(id => id !== cp.id)
+    setCustomProofs(updatedCustomProofs)
+
+    // professionals テーブルに即座に永続化
+    const { error } = await (supabase as any)
+      .from('professionals')
+      .update({
+        custom_proofs: updatedCustomProofs,
+        selected_proofs: updatedSelectedIds,
+      })
+      .eq('id', pro.id)
+
+    if (error) {
+      alert('削除の保存に失敗しました。もう一度お試しください。')
+      console.error(error)
+      return
+    }
   }
 
   if (loading) return <div className="text-center py-16 text-gray-400">読み込み中...</div>
