@@ -340,7 +340,7 @@ function LoginForm() {
     <>
       {showReset ? (
         resetSent ? (
-          <p className="text-sm text-green-600 text-center mt-4">パスワードリセットメールを送信しました</p>
+          <p className="text-sm text-green-600 text-center mt-4">ご登録がある場合はパスワードリセットメールが送信されます</p>
         ) : (
           <div className="mt-4 space-y-2">
             <input

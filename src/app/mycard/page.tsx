@@ -58,6 +58,7 @@ function MyCardContent() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [timedOut, setTimedOut] = useState(false)
   const [isPasswordReset, setIsPasswordReset] = useState(false)
+  const [resetLinkError, setResetLinkError] = useState(false)
   const passwordSectionRef = useRef<HTMLDivElement>(null)
 
   // データ取得（セッション確立後に呼ぶ）
@@ -162,7 +163,12 @@ function MyCardContent() {
   // 初回: セッション確認
   useEffect(() => {
     async function checkSession() {
-      if (window.location.hash.includes('type=recovery')) {
+      const hash = window.location.hash
+      if (hash.includes('error=access_denied') || hash.includes('otp_expired')) {
+        setResetLinkError(true)
+        window.location.hash = ''
+      }
+      if (hash.includes('type=recovery')) {
         setIsPasswordReset(true)
         setShowSettings(true)
       }
@@ -353,6 +359,24 @@ function MyCardContent() {
       setShowSettings(false)
     }
     setChangingPassword(false)
+  }
+
+  // ========== リセットリンク期限切れ ==========
+  if (resetLinkError) {
+    return (
+      <div className="max-w-md mx-auto text-center py-16">
+        <div className="text-5xl mb-4">⚠️</div>
+        <h1 className="text-xl font-bold text-[#1A1A2E] mb-4">
+          リンクの有効期限が切れています
+        </h1>
+        <p className="text-gray-500 mb-6">
+          もう一度パスワードリセットをお試しください
+        </p>
+        <a href="/login" className="px-6 py-3 bg-[#1A1A2E] text-white rounded-lg font-medium">
+          ログインページへ
+        </a>
+      </div>
+    )
   }
 
   // ========== ローディング画面 ==========
