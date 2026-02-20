@@ -499,25 +499,17 @@ export default function DashboardPage() {
 
     // customProofs 配列から除去
     const updatedCustomProofs = customProofs.filter((_, i) => i !== idx)
-    const updatedSelectedIds = [...selectedProofIds].filter(id => id !== cp.id)
+    const updatedSelectedIds = Array.from(selectedProofIds).filter(id => id !== cp.id)
     setCustomProofs(updatedCustomProofs)
 
     // professionals テーブルに即座に永続化
-    console.log('=== DELETE DEBUG ===')
-    console.log('pro.id:', pro.id)
-    console.log('updatedCustomProofs:', JSON.stringify(updatedCustomProofs))
-    console.log('updatedSelectedIds:', JSON.stringify(updatedSelectedIds))
-    const { error, data, status } = await (supabase as any)
+    const { error } = await (supabase as any)
       .from('professionals')
       .update({
-        custom_proofs: updatedCustomProofs,
+        custom_proofs: updatedCustomProofs.filter(c => c.label.trim()),
         selected_proofs: updatedSelectedIds,
       })
       .eq('id', pro.id)
-      .select()
-    console.log('update status:', status)
-    console.log('update error:', error)
-    console.log('update data:', data)
 
     if (error) {
       alert('削除の保存に失敗しました。もう一度お試しください。')
