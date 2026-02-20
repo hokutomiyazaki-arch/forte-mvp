@@ -292,13 +292,16 @@ export default function DashboardPage() {
     const isNew = !pro
 
     const upsertRecord = pro ? { ...record, id: pro.id } : record
+    console.log('[handleSave] user.id:', user.id)
+    console.log('[handleSave] pro:', pro)
+    console.log('[handleSave] upsertRecord:', JSON.stringify(upsertRecord))
     const { data: savedData, error: saveError } = await (supabase.from('professionals') as any)
       .upsert(upsertRecord, { onConflict: 'user_id' })
       .select()
       .maybeSingle()
 
     if (saveError) {
-      console.error('[handleSave] upsert pro error:', saveError.message)
+      console.error('[handleSave] upsert pro error:', saveError.message, 'code:', (saveError as any).code, 'details:', (saveError as any).details)
       setFormError('プロフィールの保存に失敗しました。もう一度お試しください。')
       return
     }
