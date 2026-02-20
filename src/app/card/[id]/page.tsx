@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase'
 import { Professional, VoteSummary, Vote } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import { COLORS, FONTS } from '@/lib/design-tokens'
-import VoiceShareModal from '@/components/VoiceShareCard'
+// VoiceShareModal removed — public card is view-only
 import RelatedPros from '@/components/RelatedPros'
 
 // デザイントークンのローカルショートカット
@@ -84,13 +84,6 @@ function RingChart({ label, count, max, size = 76 }: { label: string; count: num
   )
 }
 
-interface GratitudePhrase {
-  id: number
-  text: string
-  is_default: boolean
-  sort_order: number
-}
-
 export default function CardPage() {
   const params = useParams()
   const id = params.id as string
@@ -102,12 +95,7 @@ export default function CardPage() {
   const [totalVotes, setTotalVotes] = useState(0)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'strengths' | 'certs' | 'voices'>('strengths')
-  const [expandedVoice, setExpandedVoice] = useState<string | null>(null)
-  const [phraseSelecting, setPhraseSelecting] = useState<string | null>(null)
-  const [selectedPhrases, setSelectedPhrases] = useState<Record<string, number>>({})
-  const [phrases, setPhrases] = useState<GratitudePhrase[]>([])
   const [animated, setAnimated] = useState(false)
-  const [shareModalVoice, setShareModalVoice] = useState<Vote | null>(null)
   const [shareCopied, setShareCopied] = useState(false)
 
   useEffect(() => {
@@ -151,10 +139,6 @@ export default function CardPage() {
       setTotalVotes(count || 0)
 
       // 感謝フレーズ
-      const { data: phrasesData } = await supabase
-        .from('gratitude_phrases').select('*').order('sort_order') as any
-      if (phrasesData) setPhrases(phrasesData)
-
       setLoading(false)
       // バーアニメーション開始を少し遅延
       setTimeout(() => setAnimated(true), 100)
@@ -384,7 +368,7 @@ export default function CardPage() {
         </div>
       )}
 
-      {/* ═══ タブコンテンツ: Voices ═══ */}
+      {/* ═══ タブコンテンツ: Voices（閲覧専用） ═══ */}
       {activeTab === 'voices' && (
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: T.textMuted, letterSpacing: 2, textTransform: 'uppercase', fontFamily: T.fontMono, marginBottom: 10 }}>
@@ -392,89 +376,24 @@ export default function CardPage() {
           </div>
           {voiceCount > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {comments.map((c: Vote) => {
-                const isExpanded = expandedVoice === c.id
-                const isSelectingPhrase = phraseSelecting === c.id
-                const selectedPhraseId = selectedPhrases[c.id]
-                const selectedPhraseText = phrases.find(p => p.id === selectedPhraseId)?.text
-                  || phrases.find(p => p.is_default)?.text || ''
-
-                return (
-                  <div key={c.id}
-                    onClick={() => {
-                      if (!isExpanded) setExpandedVoice(c.id)
-                    }}
-                    style={{
-                      background: T.dark, borderRadius: 14, padding: '18px 16px',
-                      cursor: !isExpanded ? 'pointer' : 'default',
-                      transition: 'all 0.3s',
-                    }}
-                  >
-                    {/* 引用符 */}
-                    <div style={{ fontSize: 32, color: `${T.gold}40`, fontFamily: 'Georgia, serif', lineHeight: 1 }}>&ldquo;</div>
-                    {/* コメント */}
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#fff', lineHeight: 1.9, margin: '4px 0 10px' }}>{c.comment}</div>
-                    {/* 日付 */}
-                    <div style={{ fontSize: 11, color: '#444', fontFamily: T.fontMono }}>
-                      {new Date(c.created_at).toLocaleDateString('ja-JP')}
-                    </div>
-
-                    {/* 展開部分 */}
-                    {isExpanded && (
-                      <div style={{ borderTop: '1px solid #333', marginTop: 14, paddingTop: 14 }}
-                        onClick={e => e.stopPropagation()}>
-                        {/* 感謝フレーズ */}
-                        <div style={{ fontSize: 11, color: T.textMuted, marginBottom: 8 }}>感謝のひとこと</div>
-
-                        {isSelectingPhrase ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
-                            {phrases.map(p => (
-                              <button key={p.id}
-                                onClick={() => {
-                                  setSelectedPhrases(prev => ({ ...prev, [c.id]: p.id }))
-                                  setPhraseSelecting(null)
-                                }}
-                                style={{
-                                  background: selectedPhraseId === p.id ? T.gold : '#2a2a3e',
-                                  color: selectedPhraseId === p.id ? T.dark : '#ccc',
-                                  border: 'none', borderRadius: 8, padding: '8px 12px',
-                                  fontSize: 12, cursor: 'pointer', textAlign: 'left',
-                                  fontFamily: T.font,
-                                }}
-                              >
-                                {p.text}
-                              </button>
-                            ))}
-                          </div>
-                        ) : (
-                          <div
-                            onClick={() => setPhraseSelecting(c.id)}
-                            style={{
-                              background: '#2a2a3e', borderRadius: 8, padding: '8px 12px',
-                              fontSize: 12, color: T.gold, cursor: 'pointer', marginBottom: 12,
-                              fontStyle: 'italic',
-                            }}
-                          >
-                            ── {selectedPhraseText || '感謝フレーズを選ぶ'}
-                          </div>
-                        )}
-
-                        {/* お礼ボタン → モーダル */}
-                        <button
-                          onClick={() => setShareModalVoice(c)}
-                          style={{
-                            width: '100%', padding: '10px', border: `1px solid ${T.gold}`,
-                            background: 'transparent', color: T.gold, borderRadius: 10,
-                            fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.font,
-                          }}
-                        >
-                          この声にお礼する
-                        </button>
-                      </div>
-                    )}
+              {comments.map((c: Vote) => (
+                <div key={c.id}
+                  style={{
+                    background: 'linear-gradient(170deg, #FAF8F4 0%, #F3EFE7 100%)',
+                    border: '1px solid #E8E4DC',
+                    borderRadius: 14, padding: '20px',
+                  }}
+                >
+                  {/* 引用符 */}
+                  <div style={{ fontSize: 32, color: 'rgba(196, 163, 90, 0.3)', fontFamily: 'Georgia, serif', lineHeight: 1 }}>&ldquo;</div>
+                  {/* コメント */}
+                  <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', lineHeight: 1.8, margin: '4px 0 10px' }}>{c.comment}</div>
+                  {/* 日付 */}
+                  <div style={{ fontSize: 11, color: T.textMuted, fontFamily: T.fontMono }}>
+                    {new Date(c.created_at).toLocaleDateString('ja-JP')}
                   </div>
-                )
-              })}
+                </div>
+              ))}
             </div>
           ) : (
             <div style={{ textAlign: 'center', padding: '32px 0', color: T.textMuted, fontSize: 13 }}>
@@ -552,28 +471,6 @@ export default function CardPage() {
           {shareCopied ? 'コピーしました！' : 'リンクをシェア'}
         </button>
       </div>
-
-      {/* Voice Share Modal */}
-      {shareModalVoice && pro && (
-        <VoiceShareModal
-          isOpen={true}
-          onClose={() => setShareModalVoice(null)}
-          voice={shareModalVoice}
-          phraseId={selectedPhrases[shareModalVoice.id] || phrases.find(p => p.is_default)?.id || 1}
-          phraseText={
-            phrases.find(p => p.id === selectedPhrases[shareModalVoice.id])?.text
-            || phrases.find(p => p.is_default)?.text || ''
-          }
-          proId={pro.id}
-          proName={pro.name}
-          proTitle={pro.title}
-          proPhotoUrl={pro.photo_url}
-          proPrefecture={pro.prefecture}
-          proAreaDescription={pro.area_description}
-          totalProofs={totalVotes}
-          topStrengths={sortedVotes.slice(0, 3).map(v => ({ label: v.category, count: v.vote_count }))}
-        />
-      )}
 
       {/* ═══ フッター ═══ */}
       <div style={{ textAlign: 'center', padding: '24px 0' }}>

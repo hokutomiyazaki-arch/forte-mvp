@@ -83,23 +83,25 @@ export default function VoiceHashPage() {
     <div style={{ background: T.bg, minHeight: '100vh', fontFamily: T.font }}>
       <div style={{ maxWidth: 420, margin: '0 auto', padding: '32px 16px' }}>
 
-        {/* ① Voice表示 */}
+        {/* ① Voice表示（クリーム背景） */}
         <div style={{
-          background: T.dark, borderRadius: 18, padding: '28px 22px', marginBottom: 16,
+          background: 'linear-gradient(170deg, #FAF8F4 0%, #F3EFE7 100%)',
+          border: '1px solid #E8E4DC',
+          borderRadius: 18, padding: '28px 22px', marginBottom: 16,
         }}>
           {/* 引用符 */}
-          <div style={{ fontSize: 48, color: `${T.gold}40`, fontFamily: 'Georgia, serif', lineHeight: 1 }}>&ldquo;</div>
+          <div style={{ fontSize: 48, color: 'rgba(196, 163, 90, 0.3)', fontFamily: 'Georgia, serif', lineHeight: 1 }}>&ldquo;</div>
 
           {/* コメント */}
           <div style={{
-            color: '#fff', fontSize: 20, fontFamily: T.fontSerif,
+            color: '#1A1A2E', fontSize: 20, fontFamily: T.fontSerif,
             fontWeight: 700, lineHeight: 2.0, margin: '8px 0 20px',
           }}>
             {vote.comment}
           </div>
 
           {/* 区切り + 感謝フレーズ */}
-          <div style={{ height: 1, background: '#333', marginBottom: 12 }} />
+          <div style={{ height: 1, background: 'rgba(196, 163, 90, 0.3)', marginBottom: 12 }} />
           <div style={{ color: T.gold, fontSize: 12, fontStyle: 'italic', fontWeight: 700 }}>
             ── {phrase.text}
           </div>

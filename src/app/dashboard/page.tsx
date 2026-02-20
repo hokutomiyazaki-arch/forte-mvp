@@ -1274,20 +1274,22 @@ export default function DashboardPage() {
                 <div key={c.id}
                   onClick={() => { if (!isExpanded) setExpandedVoice(c.id) }}
                   style={{
-                    background: '#1A1A2E', borderRadius: 14, padding: '18px 16px',
+                    background: 'linear-gradient(170deg, #FAF8F4 0%, #F3EFE7 100%)',
+                    border: '1px solid #E8E4DC',
+                    borderRadius: 14, padding: '20px',
                     cursor: !isExpanded ? 'pointer' : 'default',
                   }}
                 >
-                  <div style={{ fontSize: 32, color: '#C4A35A40', fontFamily: 'Georgia, serif', lineHeight: 1 }}>&ldquo;</div>
-                  <div style={{ fontSize: 13, color: '#fff', lineHeight: 1.9, margin: '4px 0 10px' }}>{c.comment}</div>
-                  <div style={{ fontSize: 11, color: '#444', fontFamily: "'DM Sans', sans-serif" }}>
+                  <div style={{ fontSize: 32, color: 'rgba(196, 163, 90, 0.3)', fontFamily: 'Georgia, serif', lineHeight: 1 }}>&ldquo;</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', lineHeight: 1.8, margin: '4px 0 10px' }}>{c.comment}</div>
+                  <div style={{ fontSize: 11, color: '#888888', fontFamily: "'DM Sans', sans-serif" }}>
                     {new Date(c.created_at).toLocaleDateString('ja-JP')}
                   </div>
 
                   {isExpanded && (
-                    <div style={{ borderTop: '1px solid #333', marginTop: 14, paddingTop: 14 }}
+                    <div style={{ borderTop: '1px solid #E8E4DC', marginTop: 14, paddingTop: 14 }}
                       onClick={e => e.stopPropagation()}>
-                      <div style={{ fontSize: 11, color: '#A0A0A0', marginBottom: 8 }}>感謝のひとこと</div>
+                      <div style={{ fontSize: 11, color: '#888888', marginBottom: 8 }}>感謝のひとこと</div>
 
                       {isSelectingPhrase ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
@@ -1298,9 +1300,9 @@ export default function DashboardPage() {
                                 setPhraseSelecting(null)
                               }}
                               style={{
-                                background: selectedPhraseId === p.id ? '#C4A35A' : '#2a2a3e',
-                                color: selectedPhraseId === p.id ? '#1A1A2E' : '#ccc',
-                                border: 'none', borderRadius: 8, padding: '8px 12px',
+                                background: selectedPhraseId === p.id ? '#C4A35A' : '#FAF8F4',
+                                color: selectedPhraseId === p.id ? '#fff' : '#555555',
+                                border: '1px solid #E8E4DC', borderRadius: 8, padding: '8px 12px',
                                 fontSize: 12, cursor: 'pointer', textAlign: 'left' as const,
                               }}
                             >
@@ -1312,7 +1314,8 @@ export default function DashboardPage() {
                         <div
                           onClick={() => setPhraseSelecting(c.id)}
                           style={{
-                            background: '#2a2a3e', borderRadius: 8, padding: '8px 12px',
+                            background: '#FAF8F4', border: '1px solid #E8E4DC',
+                            borderRadius: 8, padding: '8px 12px',
                             fontSize: 12, color: '#C4A35A', cursor: 'pointer', marginBottom: 12,
                             fontStyle: 'italic',
                           }}
