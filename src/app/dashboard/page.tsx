@@ -48,6 +48,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   esthe: 'エステ',
   sports: 'スポーツ',
   education: '教育',
+  specialist: 'スペシャリスト',
 }
 const CATEGORY_KEYS = Object.keys(CATEGORY_LABELS)
 
@@ -98,6 +99,7 @@ export default function DashboardPage() {
   const [proofSaving, setProofSaving] = useState(false)
   const [proofSaved, setProofSaved] = useState(false)
   const [proofError, setProofError] = useState('')
+  const [customProofVoteCounts, setCustomProofVoteCounts] = useState<Map<string, number>>(new Map())
 
   useEffect(() => {
     async function load() {
@@ -160,6 +162,15 @@ export default function DashboardPage() {
       if (rawVoteData && piData) {
         const labeledVotes = resolveProofLabels(rawVoteData, piData, proData.custom_proofs || [])
         setVotes(labeledVotes)
+
+        // カスタムプルーフの票数を保存
+        const customVoteCounts = new Map<string, number>()
+        for (const v of rawVoteData) {
+          if (typeof v.proof_id === 'string' && v.proof_id.startsWith('custom_')) {
+            customVoteCounts.set(v.proof_id, v.vote_count || 0)
+          }
+        }
+        setCustomProofVoteCounts(customVoteCounts)
       }
 
       // personality_summary: personality_id → ラベル変換
@@ -178,8 +189,10 @@ export default function DashboardPage() {
       // プルーフ選択状態を復元（マスタは上で取得済み）
       if (piData) {
         const validIds = new Set(piData.map((p: ProofItem) => p.id))
+        const customIds = new Set((proData.custom_proofs || []).map((c: CustomProof) => c.id))
         const savedProofs: string[] = proData.selected_proofs || []
-        setSelectedProofIds(new Set(savedProofs.filter((id: string) => validIds.has(id))))
+        // regular proof_item IDs + custom proof IDs の両方を復元
+        setSelectedProofIds(new Set(savedProofs.filter((id: string) => validIds.has(id) || customIds.has(id))))
         setCustomProofs(proData.custom_proofs || [])
       }
 
@@ -360,8 +373,7 @@ export default function DashboardPage() {
   }
 
   // プルーフ選択ロジック
-  const validCustomCount = customProofs.filter(c => c.label.trim()).length
-  const totalSelected = selectedProofIds.size + validCustomCount
+  const totalSelected = selectedProofIds.size
   const isMaxSelected = totalSelected >= 9
   const isExactNine = totalSelected === 9
   const remaining = 9 - totalSelected
@@ -390,21 +402,7 @@ export default function DashboardPage() {
     setCustomProofs(updated)
   }
 
-  async function removeCustomProof(idx: number) {
-    if (pro && customProofs[idx]?.id) {
-      const { data } = await (supabase as any)
-        .from('vote_summary')
-        .select('vote_count')
-        .eq('proof_id', customProofs[idx].id)
-        .eq('professional_id', pro.id)
-        .maybeSingle()
-      if (data && data.vote_count > 0) {
-        alert(`この項目には${data.vote_count}票の投票があるため削除できません`)
-        return
-      }
-    }
-    setCustomProofs(customProofs.filter((_, i) => i !== idx))
-  }
+  // removeCustomProof は deleteCustomProof に統合済み
 
   async function handleSaveProofs() {
     if (!pro) return
@@ -413,6 +411,7 @@ export default function DashboardPage() {
 
     const filteredCustom = customProofs.filter(c => c.label.trim())
 
+    // selectedProofIds には regular + custom 両方の ID が含まれる
     const { error } = await (supabase.from('professionals') as any)
       .update({
         selected_proofs: Array.from(selectedProofIds),
@@ -432,7 +431,73 @@ export default function DashboardPage() {
 
   // カテゴリごとの選択数を算出
   function getCategorySelectedCount(tab: string): number {
+    if (tab === 'specialist') {
+      return customProofs.filter(c => c.label.trim() && selectedProofIds.has(c.id)).length
+    }
     return proofItems.filter(p => p.tab === tab && selectedProofIds.has(p.id)).length
+  }
+
+  // カスタムプルーフのチェックボックスON/OFF
+  function toggleCustomProofSelection(id: string) {
+    setSelectedProofIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        if (totalSelected >= 9) return prev
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  // カスタムプルーフ削除（投票データクリーンアップ含む）
+  async function deleteCustomProof(idx: number) {
+    const cp = customProofs[idx]
+    if (!cp || !pro) return
+
+    const voteCount = customProofVoteCounts.get(cp.id) || 0
+
+    if (voteCount > 0) {
+      const confirmed = confirm(
+        `この項目には${voteCount}票の投票があります。削除すると投票データからもこの項目が除去されます。本当に削除しますか？`
+      )
+      if (!confirmed) return
+
+      // votes テーブルから該当 proof_id を除去
+      const { data: affectedVotes } = await (supabase as any)
+        .from('votes')
+        .select('id, selected_proof_ids')
+        .eq('professional_id', pro.id)
+        .contains('selected_proof_ids', [cp.id])
+
+      if (affectedVotes && affectedVotes.length > 0) {
+        for (const vote of affectedVotes) {
+          const updatedIds = (vote.selected_proof_ids || []).filter((id: string) => id !== cp.id)
+          await (supabase as any)
+            .from('votes')
+            .update({ selected_proof_ids: updatedIds })
+            .eq('id', vote.id)
+        }
+      }
+
+      // ローカルの票数マップからも削除
+      setCustomProofVoteCounts(prev => {
+        const next = new Map(prev)
+        next.delete(cp.id)
+        return next
+      })
+    }
+
+    // selectedProofIds からも除去
+    setSelectedProofIds(prev => {
+      const next = new Set(prev)
+      next.delete(cp.id)
+      return next
+    })
+
+    // customProofs 配列から除去
+    setCustomProofs(customProofs.filter((_, i) => i !== idx))
   }
 
   if (loading) return <div className="text-center py-16 text-gray-400">読み込み中...</div>
@@ -817,27 +882,28 @@ export default function DashboardPage() {
             </div>
 
             {/* 項目リスト */}
-            <div className="space-y-2 mb-6">
-              {proofItems
-                .filter(p => p.tab === activeTab)
-                .map(item => {
-                  const isChecked = selectedProofIds.has(item.id)
+            {activeTab === 'specialist' ? (
+              /* スペシャリストタブ: カスタム項目の管理 */
+              <div className="space-y-2 mb-6">
+                <p className="text-xs text-[#9CA3AF] mb-3">
+                  あなた独自の強み項目を作成し、チェックで投票対象に追加できます（最大3個）
+                </p>
+
+                {customProofs.map((cp, idx) => {
+                  const isChecked = selectedProofIds.has(cp.id)
                   const isDisabled = !isChecked && isMaxSelected
+                  const voteCount = customProofVoteCounts.get(cp.id) || 0
+                  const hasLabel = cp.label.trim().length > 0
+
                   return (
-                    <label
-                      key={item.id}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${
-                        isDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-[#FAFAF7]'
-                      } ${isChecked ? 'bg-[#FAFAF7]' : ''}`}
-                    >
-                      <div className="relative flex-shrink-0">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          disabled={isDisabled}
-                          onChange={() => toggleProofId(item.id)}
-                          className="sr-only"
-                        />
+                    <div key={cp.id} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                      isChecked ? 'bg-[#FAFAF7]' : ''
+                    }`}>
+                      {/* チェックボックス */}
+                      <div
+                        className={`relative flex-shrink-0 ${hasLabel ? 'cursor-pointer' : 'opacity-30 cursor-not-allowed'}`}
+                        onClick={() => hasLabel && !isDisabled && toggleCustomProofSelection(cp.id)}
+                      >
                         <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
                           isChecked
                             ? 'bg-[#C4A35A] border-[#C4A35A]'
@@ -850,45 +916,87 @@ export default function DashboardPage() {
                           )}
                         </div>
                       </div>
-                      <div>
-                        <span className="text-sm text-[#1A1A2E]">{item.label}</span>
-                        <span className="text-xs text-[#9CA3AF] ml-2">{item.strength_label}</span>
-                      </div>
-                    </label>
+
+                      {/* ラベル入力 */}
+                      <input
+                        value={cp.label}
+                        onChange={e => updateCustomProofLabel(idx, e.target.value)}
+                        className="flex-1 px-3 py-1.5 bg-white border border-[#E5E7EB] rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#C4A35A] focus:border-[#C4A35A]"
+                        placeholder="例：独自のアプローチがある"
+                      />
+
+                      {/* 票数 */}
+                      {voteCount > 0 && (
+                        <span className="text-xs text-[#C4A35A] font-medium flex-shrink-0">{voteCount}票</span>
+                      )}
+
+                      {/* 削除ボタン */}
+                      <button
+                        type="button"
+                        onClick={() => deleteCustomProof(idx)}
+                        className="px-2 py-1.5 text-[#9CA3AF] hover:text-red-500 transition-colors text-sm flex-shrink-0"
+                      >
+                        ✕
+                      </button>
+                    </div>
                   )
                 })}
-            </div>
 
-            {/* カスタム項目 */}
-            <div className="border-t border-[#E5E7EB] pt-4 mb-4">
-              <p className="text-sm font-medium text-[#1A1A2E] mb-2">カスタム項目（最大3個）</p>
-              {customProofs.map((cp, idx) => (
-                <div key={cp.id} className="flex gap-2 mb-2">
-                  <input
-                    value={cp.label}
-                    onChange={e => updateCustomProofLabel(idx, e.target.value)}
-                    className="flex-1 px-3 py-2 bg-[#FAFAF7] border border-[#E5E7EB] rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#C4A35A] focus:border-[#C4A35A]"
-                    placeholder="例：独自のアプローチがある"
-                  />
+                {/* カスタム項目追加ボタン */}
+                {customProofs.length < 3 && (
                   <button
                     type="button"
-                    onClick={() => removeCustomProof(idx)}
-                    className="px-3 py-2 text-[#9CA3AF] border border-[#E5E7EB] rounded-lg hover:text-red-500 hover:border-red-300 transition-colors text-sm"
+                    onClick={addCustomProof}
+                    className="w-full py-2 border-2 border-dashed border-[#E5E7EB] rounded-lg text-sm text-[#9CA3AF] hover:border-[#C4A35A] hover:text-[#C4A35A] transition-colors"
                   >
-                    ✕
+                    + カスタム項目を追加（残り{3 - customProofs.length}枠）
                   </button>
-                </div>
-              ))}
-              {customProofs.length < 3 && !isMaxSelected && (
-                <button
-                  type="button"
-                  onClick={addCustomProof}
-                  className="w-full py-2 border-2 border-dashed border-[#E5E7EB] rounded-lg text-sm text-[#9CA3AF] hover:border-[#C4A35A] hover:text-[#C4A35A] transition-colors"
-                >
-                  + カスタム項目を追加
-                </button>
-              )}
-            </div>
+                )}
+              </div>
+            ) : (
+              /* 通常タブ: 既存プルーフ項目 */
+              <div className="space-y-2 mb-6">
+                {proofItems
+                  .filter(p => p.tab === activeTab)
+                  .map(item => {
+                    const isChecked = selectedProofIds.has(item.id)
+                    const isDisabled = !isChecked && isMaxSelected
+                    return (
+                      <label
+                        key={item.id}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${
+                          isDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-[#FAFAF7]'
+                        } ${isChecked ? 'bg-[#FAFAF7]' : ''}`}
+                      >
+                        <div className="relative flex-shrink-0">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            disabled={isDisabled}
+                            onChange={() => toggleProofId(item.id)}
+                            className="sr-only"
+                          />
+                          <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
+                            isChecked
+                              ? 'bg-[#C4A35A] border-[#C4A35A]'
+                              : 'bg-white border-[#E5E7EB]'
+                          }`}>
+                            {isChecked && (
+                              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </div>
+                        </div>
+                        <div>
+                          <span className="text-sm text-[#1A1A2E]">{item.label}</span>
+                          <span className="text-xs text-[#9CA3AF] ml-2">{item.strength_label}</span>
+                        </div>
+                      </label>
+                    )
+                  })}
+              </div>
+            )}
 
             {/* 注記 */}
             <p className="text-xs text-[#9CA3AF] mb-4">
@@ -922,7 +1030,7 @@ export default function DashboardPage() {
                       </span>
                     ))}
                   {customProofs
-                    .filter(c => c.label.trim())
+                    .filter(c => c.label.trim() && selectedProofIds.has(c.id))
                     .map(c => (
                       <span key={c.id} className="px-3 py-1 bg-[#C4A35A] text-white text-xs rounded-full">
                         {c.label}
