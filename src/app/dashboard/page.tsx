@@ -503,13 +503,21 @@ export default function DashboardPage() {
     setCustomProofs(updatedCustomProofs)
 
     // professionals テーブルに即座に永続化
-    const { error } = await (supabase as any)
+    console.log('=== DELETE DEBUG ===')
+    console.log('pro.id:', pro.id)
+    console.log('updatedCustomProofs:', JSON.stringify(updatedCustomProofs))
+    console.log('updatedSelectedIds:', JSON.stringify(updatedSelectedIds))
+    const { error, data, status } = await (supabase as any)
       .from('professionals')
       .update({
         custom_proofs: updatedCustomProofs,
         selected_proofs: updatedSelectedIds,
       })
       .eq('id', pro.id)
+      .select()
+    console.log('update status:', status)
+    console.log('update error:', error)
+    console.log('update data:', data)
 
     if (error) {
       alert('削除の保存に失敗しました。もう一度お試しください。')
