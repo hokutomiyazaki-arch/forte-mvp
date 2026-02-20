@@ -463,32 +463,32 @@ export default function DashboardPage() {
         `この項目には${voteCount}票の投票があります。削除すると投票データからもこの項目が除去されます。本当に削除しますか？`
       )
       if (!confirmed) return
-
-      // votes テーブルから該当 proof_id を除去
-      const { data: affectedVotes } = await (supabase as any)
-        .from('votes')
-        .select('id, selected_proof_ids')
-        .eq('professional_id', pro.id)
-        .contains('selected_proof_ids', [cp.id])
-
-      if (affectedVotes && affectedVotes.length > 0) {
-        for (const vote of affectedVotes) {
-          const updatedIds = (vote.selected_proof_ids || []).filter((id: string) => id !== cp.id)
-          const { error: voteError } = await (supabase as any)
-            .from('votes')
-            .update({ selected_proof_ids: updatedIds })
-            .eq('id', vote.id)
-          if (voteError) console.error('votes update error:', voteError)
-        }
-      }
-
-      // ローカルの票数マップからも削除
-      setCustomProofVoteCounts(prev => {
-        const next = new Map(prev)
-        next.delete(cp.id)
-        return next
-      })
     }
+
+    // votes テーブルから該当 proof_id を除去（常に実行）
+    const { data: affectedVotes } = await (supabase as any)
+      .from('votes')
+      .select('id, selected_proof_ids')
+      .eq('professional_id', pro.id)
+      .contains('selected_proof_ids', [cp.id])
+
+    if (affectedVotes && affectedVotes.length > 0) {
+      for (const vote of affectedVotes) {
+        const updatedIds = (vote.selected_proof_ids || []).filter((id: string) => id !== cp.id)
+        const { error: voteError } = await (supabase as any)
+          .from('votes')
+          .update({ selected_proof_ids: updatedIds })
+          .eq('id', vote.id)
+        if (voteError) console.error('votes update error:', voteError)
+      }
+    }
+
+    // ローカルの票数マップからも削除
+    setCustomProofVoteCounts(prev => {
+      const next = new Map(prev)
+      next.delete(cp.id)
+      return next
+    })
 
     // selectedProofIds からも除去
     setSelectedProofIds(prev => {
