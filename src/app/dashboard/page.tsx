@@ -241,6 +241,13 @@ export default function DashboardPage() {
     setFormError('')
     if (!user) return
 
+    // セッションリフレッシュ（投票フローで作られた古いセッション対策）
+    const { data: { session }, error: refreshError } = await supabase.auth.refreshSession()
+    if (refreshError || !session) {
+      setFormError('セッションの有効期限が切れています。再ログインしてください。')
+      return
+    }
+
     const urlPattern = /https?:\/\/|www\./i
     if (form.name.length > 20) {
       setFormError('名前は20文字以内で入力してください')
