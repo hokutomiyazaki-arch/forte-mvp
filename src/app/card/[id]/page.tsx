@@ -183,9 +183,18 @@ export default function CardPage() {
               {pro.area_description && <span> · {pro.area_description}</span>}
               {pro.is_online_available && <span style={{ marginLeft: 6, color: T.gold }}>● オンライン対応</span>}
             </div>
-            {pro.is_founding_member && (
-              <span style={{ display: 'inline-block', marginTop: 4, padding: '2px 8px', background: T.gold, color: '#fff', fontSize: 10, borderRadius: 99, fontWeight: 600 }}>
-                Founding Member
+            {(pro as any).founding_member_status === 'achieved' && (
+              <span style={{
+                display: 'inline-block', marginTop: 6,
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: 10, fontWeight: 700, letterSpacing: 2,
+                textTransform: 'uppercase' as const,
+                color: '#C4A35A',
+                background: 'rgba(196,163,90,0.12)',
+                border: '1px solid rgba(196,163,90,0.3)',
+                borderRadius: 4, padding: '4px 10px',
+              }}>
+                FOUNDING MEMBER
               </span>
             )}
           </div>

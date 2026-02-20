@@ -749,6 +749,70 @@ export default function DashboardPage() {
       {/* ═══ Tab: プロフィール ═══ */}
       {dashboardTab === 'profile' && (<>
 
+      {/* Founding Member Challenge */}
+      {(pro as any)?.founding_member_status === 'achieved' && (
+        <div style={{
+          background: 'rgba(196,163,90,0.08)',
+          border: '1px solid rgba(196,163,90,0.3)',
+          borderRadius: 14,
+          padding: '16px 20px',
+          marginBottom: 20,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+        }}>
+          <span style={{ fontSize: 18 }}>✦</span>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: '#C4A35A' }}>
+              Founding Member
+            </div>
+            <div style={{ fontSize: 11, color: '#888' }}>
+              達成日: {(pro as any).founding_member_achieved_at
+                ? new Date((pro as any).founding_member_achieved_at).toLocaleDateString('ja-JP')
+                : '—'}
+            </div>
+          </div>
+        </div>
+      )}
+      {(pro as any)?.founding_member_status !== 'achieved' &&
+       (pro as any)?.founding_member_status !== 'expired' &&
+       pro?.created_at && (() => {
+        const createdAt = new Date(pro.created_at)
+        const now = new Date()
+        const daysSince = Math.floor((now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24))
+        const daysLeft = Math.max(0, 30 - daysSince)
+        const neededVotes = Math.max(0, 5 - totalVotes)
+        if (daysLeft <= 0) return null
+        return (
+          <div style={{
+            background: '#FFFFFF',
+            border: '1px solid #E8E4DC',
+            borderRadius: 14,
+            padding: 20,
+            marginBottom: 20,
+          }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: '#1A1A2E', marginBottom: 12 }}>
+              Founding Member チャレンジ
+            </div>
+            <div style={{ fontSize: 13, color: '#444', marginBottom: 8 }}>
+              あと{neededVotes}票（残り{daysLeft}日）
+            </div>
+            <div style={{ height: 8, background: '#F0EDE6', borderRadius: 4, overflow: 'hidden' }}>
+              <div style={{
+                width: `${Math.min(100, (totalVotes / 5) * 100)}%`,
+                height: '100%',
+                background: '#C4A35A',
+                borderRadius: 4,
+                transition: 'width 0.8s ease',
+              }} />
+            </div>
+            <div style={{ fontSize: 11, color: '#888', marginTop: 8 }}>
+              30日以内に5票集めるとFounding Memberバッジを獲得！
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Badges */}
       {(() => {
         const displayBadges = filterAndSortBadges(pro?.badges || [])
