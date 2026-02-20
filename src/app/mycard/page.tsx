@@ -601,10 +601,10 @@ function MyCardContent() {
                   <div key={reward.id} className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
                     {/* リワード情報エリア */}
                     <div className="p-5">
-                      <p className="text-xs text-[#C4A35A] font-medium mb-1">
+                      <p className="text-base text-[#C4A35A] font-semibold mb-3 text-center">
                         {reward.title || getRewardLabel(reward.reward_type)}
                       </p>
-                      <RewardContent content={reward.content} className="text-xl font-bold text-[#1A1A2E] mb-4" />
+                      <RewardContent content={reward.content} className="text-lg font-bold text-[#1A1A2E] mb-4 text-center" />
 
                       {confirmingId === reward.id ? (
                         <div className="space-y-2">
