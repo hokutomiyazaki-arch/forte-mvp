@@ -4,6 +4,7 @@ import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { getRewardLabel } from '@/lib/types'
 import { Suspense } from 'react'
+import RelatedPros from '@/components/RelatedPros'
 
 interface RewardInfo {
   reward_type: string
@@ -18,11 +19,13 @@ function ConfirmedContent() {
   const supabase = createClient()
 
   const [proName, setProName] = useState('')
+  const [proPrefecture, setProPrefecture] = useState('')
   const [loggedIn, setLoggedIn] = useState(false)
   const [sessionEmail, setSessionEmail] = useState('')
   const [voterEmail, setVoterEmail] = useState('')
   const [reward, setReward] = useState<RewardInfo | null>(null)
   const [loading, setLoading] = useState(true)
+  const [shareCopied, setShareCopied] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -36,15 +39,18 @@ function ConfirmedContent() {
         setSessionEmail(session.user.email || '')
       }
 
-      // プロ名取得
+      // プロ名・都道府県取得
       if (proId) {
         const { data: proData, error: proError } = await (supabase as any)
           .from('professionals')
-          .select('name')
+          .select('name, prefecture')
           .eq('id', proId)
           .maybeSingle()
         console.log('[vote-confirmed] pro fetch:', { proData, proError: proError?.message })
-        if (proData) setProName(proData.name)
+        if (proData) {
+          setProName(proData.name)
+          setProPrefecture(proData.prefecture || '')
+        }
       }
 
       // vote_id ベースでDBからリワード情報を取得
@@ -181,6 +187,48 @@ function ConfirmedContent() {
           >
             {proName ? `${proName}さんのカードを見る` : 'カードを見る'}
           </a>
+        )}
+
+        {/* 同地域のプロ */}
+        {proId && proPrefecture && (
+          <>
+            <div className="my-6 border-t border-gray-200" />
+            <div className="text-left">
+              <RelatedPros currentProId={proId} prefecture={proPrefecture} maxDisplay={3} />
+            </div>
+          </>
+        )}
+
+        {/* 紹介リンク */}
+        {proId && (
+          <>
+            <div className="my-6 border-t border-gray-200" />
+            <div className="bg-white rounded-xl p-6 border border-gray-200">
+              <p className="text-sm font-bold text-[#1A1A2E] mb-2">
+                このプロを友だちに紹介する
+              </p>
+              <p className="text-xs text-gray-400 mb-4">
+                あなたの紹介で信頼がつながります
+              </p>
+              <button
+                onClick={async () => {
+                  const url = `${window.location.origin}/card/${proId}`
+                  if (navigator.share) {
+                    try {
+                      await navigator.share({ title: `${proName || 'プロ'}のカード`, url })
+                    } catch { /* cancelled */ }
+                  } else {
+                    await navigator.clipboard.writeText(url)
+                    setShareCopied(true)
+                    setTimeout(() => setShareCopied(false), 2000)
+                  }
+                }}
+                className="w-full py-3 bg-[#C4A35A] text-white text-sm font-bold rounded-lg hover:bg-[#b3923f] transition"
+              >
+                {shareCopied ? 'コピーしました！' : 'リンクをシェア'}
+              </button>
+            </div>
+          </>
         )}
       </div>
     </div>
