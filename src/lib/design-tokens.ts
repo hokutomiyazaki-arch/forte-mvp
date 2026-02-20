@@ -7,8 +7,8 @@ export const COLORS = {
   goldLight: '#C4A35A15',
   goldBorder: '#C4A35A30',
   text: '#2D2D2D',
-  textSub: '#6B6B6B',
-  textMuted: '#A0A0A0',
+  textSub: '#555555',
+  textMuted: '#888888',
   divider: '#E8E4DC',
 };
 

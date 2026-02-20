@@ -95,7 +95,7 @@ function ConfirmedContent() {
   }, [proId, voteId])
 
   if (loading) {
-    return <div className="text-center py-16 text-gray-400">読み込み中...</div>
+    return <div className="text-center py-16 text-gray-500">読み込み中...</div>
   }
 
   return (
@@ -107,8 +107,8 @@ function ConfirmedContent() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2">プルーフが確定しました！</h1>
-        <p className="text-gray-500 mb-6">
+        <h1 className="text-2xl font-extrabold text-[#1A1A2E] mb-2">プルーフが確定しました！</h1>
+        <p className="text-gray-600 mb-6">
           {proName ? `${proName}さんにあなたのプルーフが届きました。` : 'プルーフが正常に確認されました。'}
         </p>
 
@@ -207,7 +207,7 @@ function ConfirmedContent() {
               <p className="text-sm font-bold text-[#1A1A2E] mb-2">
                 このプロを友だちに紹介する
               </p>
-              <p className="text-xs text-gray-400 mb-4">
+              <p className="text-xs text-gray-500 mb-4">
                 あなたの紹介で信頼がつながります
               </p>
               <button

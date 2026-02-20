@@ -16,12 +16,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-screen" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans JP", sans-serif' }}>
+      <body className="min-h-screen" style={{ fontFamily: "'Zen Maru Gothic', 'Noto Sans JP', sans-serif", fontWeight: 500, color: '#1A1A2E', WebkitFontSmoothing: 'antialiased' }}>
         <Navbar />
         <main className="max-w-5xl mx-auto px-4 py-8">
           {children}
         </main>
-        <footer className="text-center py-8 text-sm text-gray-400 space-y-2">
+        <footer className="text-center py-8 text-sm text-gray-500 space-y-2">
           <div>
             <a href="/legal" className="hover:text-[#C4A35A] transition">特定商取引法に基づく表記</a>
           </div>

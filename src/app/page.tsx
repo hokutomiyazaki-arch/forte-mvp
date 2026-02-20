@@ -128,7 +128,7 @@ export default function Home() {
       {/* フッター */}
       <div style={{ textAlign: 'center', padding: '24px 0' }}>
         <div style={{ fontSize: 14, fontWeight: 800, color: '#1A1A2E', letterSpacing: '2px' }}>REALPROOF</div>
-        <div style={{ fontSize: 10, color: '#A0A0A0', marginTop: 4 }}>強みが、あなたを定義する。</div>
+        <div style={{ fontSize: 10, color: '#888888', marginTop: 4 }}>強みが、あなたを定義する。</div>
       </div>
     </div>
   )

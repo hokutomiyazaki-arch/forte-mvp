@@ -115,7 +115,7 @@ function MiniProfileCard({
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 900, color: T.dark }}>{name}</div>
-          <div style={{ fontSize: 11, color: T.gold, fontWeight: 500 }}>{title}</div>
+          <div style={{ fontSize: 11, color: T.gold, fontWeight: 600 }}>{title}</div>
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           <span style={{ fontSize: 18, fontWeight: 'bold', color: T.gold, fontFamily: T.fontMono }}>{totalProofs}</span>

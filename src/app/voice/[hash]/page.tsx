@@ -126,7 +126,7 @@ export default function VoiceHashPage() {
               )}
               <div>
                 <div style={{ fontSize: 15, fontWeight: 900, color: T.dark }}>{pro.name}</div>
-                <div style={{ fontSize: 11, color: T.gold, fontWeight: 500, marginTop: 2 }}>{pro.title}</div>
+                <div style={{ fontSize: 11, color: T.gold, fontWeight: 600, marginTop: 2 }}>{pro.title}</div>
                 <div style={{ fontSize: 10, color: T.textMuted, marginTop: 4 }}>
                   {pro.prefecture}{pro.area_description ? ` · ${pro.area_description}` : ''}
                 </div>
@@ -171,7 +171,7 @@ export default function VoiceHashPage() {
         {/* ④ フッター */}
         <div style={{ textAlign: 'center', padding: '24px 0' }}>
           <div style={{ fontSize: 14, fontWeight: 800, color: '#1A1A2E', letterSpacing: '2px' }}>REALPROOF</div>
-          <div style={{ fontSize: 10, color: '#A0A0A0', marginTop: 4 }}>強みが、あなたを定義する。</div>
+          <div style={{ fontSize: 10, color: '#888888', marginTop: 4 }}>強みが、あなたを定義する。</div>
         </div>
       </div>
     </div>

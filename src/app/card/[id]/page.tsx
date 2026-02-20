@@ -193,14 +193,14 @@ export default function CardPage() {
           )}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 20, fontWeight: 900, color: T.dark }}>{pro.name}</div>
-            <div style={{ fontSize: 12, color: T.gold, fontWeight: 500, marginTop: 2 }}>{pro.title}</div>
+            <div style={{ fontSize: 12, color: T.gold, fontWeight: 700, marginTop: 2 }}>{pro.title}</div>
             <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>
               {pro.prefecture && <span>{pro.prefecture}</span>}
               {pro.area_description && <span> · {pro.area_description}</span>}
               {pro.is_online_available && <span style={{ marginLeft: 6, color: T.gold }}>● オンライン対応</span>}
             </div>
             {pro.is_founding_member && (
-              <span style={{ display: 'inline-block', marginTop: 4, padding: '2px 8px', background: T.gold, color: '#fff', fontSize: 10, borderRadius: 99, fontWeight: 500 }}>
+              <span style={{ display: 'inline-block', marginTop: 4, padding: '2px 8px', background: T.gold, color: '#fff', fontSize: 10, borderRadius: 99, fontWeight: 600 }}>
                 Founding Member
               </span>
             )}
@@ -216,7 +216,7 @@ export default function CardPage() {
       {/* ═══ BIO ═══ */}
       {pro.bio && (
         <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: '16px 18px', marginBottom: 12 }}>
-          <p style={{ fontSize: 12, color: T.textSub, lineHeight: 1.9, whiteSpace: 'pre-wrap', margin: 0 }}>{pro.bio}</p>
+          <p style={{ fontSize: 12, color: T.textSub, lineHeight: 1.9, whiteSpace: 'pre-wrap', margin: 0, fontWeight: 500 }}>{pro.bio}</p>
         </div>
       )}
 
@@ -232,7 +232,7 @@ export default function CardPage() {
             onClick={() => setActiveTab(tab.key)}
             style={{
               flex: 1, padding: '8px 4px', border: 'none', cursor: 'pointer',
-              borderRadius: 10, fontSize: 12, fontWeight: 600, fontFamily: T.font,
+              borderRadius: 10, fontSize: 12, fontWeight: 700, fontFamily: T.font,
               background: activeTab === tab.key ? T.dark : 'transparent',
               color: activeTab === tab.key ? T.gold : T.textMuted,
               transition: 'all 0.2s',
@@ -272,7 +272,7 @@ export default function CardPage() {
                       return (
                         <div key={v.category}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                            <span style={{ fontSize: 14, fontWeight: 'bold', color: T.text }}>{v.category}</span>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{v.category}</span>
                             <span style={{ fontSize: 16, fontWeight: 'bold', color: T.gold, fontFamily: T.fontMono }}>{v.vote_count}</span>
                           </div>
                           <div style={{ height: 8, background: '#F0EDE6', borderRadius: 99 }}>
@@ -298,7 +298,7 @@ export default function CardPage() {
                       return (
                         <div key={v.category}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                            <span style={{ fontSize: 13, color: T.text }}>{v.category}</span>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{v.category}</span>
                             <span style={{ fontSize: 13, color: T.textMuted, fontFamily: T.fontMono }}>{v.vote_count}</span>
                           </div>
                           <div style={{ height: 5, background: '#F0EDE6', borderRadius: 99 }}>
@@ -413,7 +413,7 @@ export default function CardPage() {
                     {/* 引用符 */}
                     <div style={{ fontSize: 32, color: `${T.gold}40`, fontFamily: 'Georgia, serif', lineHeight: 1 }}>&ldquo;</div>
                     {/* コメント */}
-                    <div style={{ fontSize: 13, color: '#fff', lineHeight: 1.9, margin: '4px 0 10px' }}>{c.comment}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#fff', lineHeight: 1.9, margin: '4px 0 10px' }}>{c.comment}</div>
                     {/* 日付 */}
                     <div style={{ fontSize: 11, color: '#444', fontFamily: T.fontMono }}>
                       {new Date(c.created_at).toLocaleDateString('ja-JP')}
@@ -490,7 +490,7 @@ export default function CardPage() {
           <a href={pro.booking_url} target="_blank" rel="noopener"
             style={{
               display: 'block', textAlign: 'center', padding: 15, borderRadius: 14,
-              background: T.dark, color: T.gold, fontWeight: 600, fontSize: 14,
+              background: T.dark, color: T.gold, fontWeight: 700, fontSize: 14,
               textDecoration: 'none', fontFamily: T.font,
             }}>
             予約する
@@ -501,7 +501,7 @@ export default function CardPage() {
             style={{
               display: 'block', textAlign: 'center', padding: 14, borderRadius: 14,
               background: 'transparent', border: `1.5px solid ${T.dark}`, color: T.dark,
-              fontWeight: 600, fontSize: 14, textDecoration: 'none', fontFamily: T.font,
+              fontWeight: 700, fontSize: 14, textDecoration: 'none', fontFamily: T.font,
             }}>
             このプロに相談する
           </a>
@@ -578,7 +578,7 @@ export default function CardPage() {
       {/* ═══ フッター ═══ */}
       <div style={{ textAlign: 'center', padding: '24px 0' }}>
         <div style={{ fontSize: 14, fontWeight: 800, color: '#1A1A2E', letterSpacing: '2px' }}>REALPROOF</div>
-        <div style={{ fontSize: 10, color: '#A0A0A0', marginTop: 4 }}>強みが、あなたを定義する。</div>
+        <div style={{ fontSize: 10, color: '#888888', marginTop: 4 }}>強みが、あなたを定義する。</div>
       </div>
     </div>
   )

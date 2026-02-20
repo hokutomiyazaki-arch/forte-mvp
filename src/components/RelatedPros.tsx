@@ -101,7 +101,7 @@ export default function RelatedPros({
 
   return (
     <div style={{ background: T.bg, padding: '16px 0' }}>
-      <div style={{ fontSize: 14, fontWeight: 700, color: T.dark, marginBottom: 14, fontFamily: T.font }}>
+      <div style={{ fontSize: 14, fontWeight: 800, color: T.dark, marginBottom: 14, fontFamily: T.font }}>
         {title}
       </div>
 
@@ -138,9 +138,9 @@ export default function RelatedPros({
                 )}
 
                 {/* 名前 */}
-                <div style={{ fontSize: 14, fontWeight: 'bold', color: T.dark, textAlign: 'center' }}>{p.name}</div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: T.dark, textAlign: 'center' }}>{p.name}</div>
                 {/* 肩書き */}
-                <div style={{ fontSize: 11, color: T.textSub, textAlign: 'center', marginTop: 2 }}>{p.title}</div>
+                <div style={{ fontSize: 11, color: T.textSub, fontWeight: 600, textAlign: 'center', marginTop: 2 }}>{p.title}</div>
                 {/* エリア */}
                 <div style={{ fontSize: 10, color: T.textMuted, textAlign: 'center', marginTop: 2 }}>
                   {p.prefecture}{p.area_description ? ` · ${p.area_description}` : ''}

@@ -91,7 +91,7 @@ export default function SearchPage() {
       <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px' }}>
 
         {/* ヘッダー */}
-        <h1 style={{ fontSize: 20, fontWeight: 900, color: T.dark, marginBottom: 4 }}>プロを探す</h1>
+        <h1 style={{ fontSize: 20, fontWeight: 800, color: T.dark, marginBottom: 4 }}>プロを探す</h1>
         <p style={{ fontSize: 12, color: T.textSub, marginBottom: 16 }}>プルーフで、あなたに合うプロを見つけよう</p>
 
         {/* 検索バー */}
@@ -179,7 +179,7 @@ export default function SearchPage() {
                   {/* 情報 */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 14, fontWeight: 'bold', color: T.dark }}>{p.name}</span>
+                      <span style={{ fontSize: 14, fontWeight: 800, color: T.dark }}>{p.name}</span>
                       {p.is_founding_member && (
                         <span style={{
                           fontSize: 9, padding: '1px 6px', background: T.gold, color: '#fff',
@@ -187,7 +187,7 @@ export default function SearchPage() {
                         }}>FM</span>
                       )}
                     </div>
-                    <div style={{ fontSize: 11, color: T.gold, fontWeight: 500, marginTop: 2 }}>{p.title}</div>
+                    <div style={{ fontSize: 11, color: T.gold, fontWeight: 600, marginTop: 2 }}>{p.title}</div>
                     <div style={{ fontSize: 10, color: T.textMuted, marginTop: 2 }}>
                       {p.prefecture}{p.area_description ? ` · ${p.area_description}` : ''}
                       {p.is_online_available && <span style={{ marginLeft: 4, color: T.gold }}>● オンライン</span>}
@@ -217,7 +217,7 @@ export default function SearchPage() {
         {/* フッター */}
         <div style={{ textAlign: 'center', padding: '24px 0' }}>
           <div style={{ fontSize: 14, fontWeight: 800, color: '#1A1A2E', letterSpacing: '2px' }}>REALPROOF</div>
-          <div style={{ fontSize: 10, color: '#A0A0A0', marginTop: 4 }}>強みが、あなたを定義する。</div>
+          <div style={{ fontSize: 10, color: '#888888', marginTop: 4 }}>強みが、あなたを定義する。</div>
         </div>
       </div>
     </div>
