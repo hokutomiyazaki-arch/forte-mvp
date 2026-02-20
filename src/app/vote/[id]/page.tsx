@@ -138,11 +138,12 @@ function VoteForm() {
       if (proData) {
         // 強みプルーフ: プロが選んだ proof_items を取得
         const selectedProofs: string[] = proData.selected_proofs || []
-        if (selectedProofs.length > 0) {
+        const regularProofIds = selectedProofs.filter(id => !id.startsWith('custom_'))
+        if (regularProofIds.length > 0) {
           const { data: piData } = await (supabase as any)
             .from('proof_items')
             .select('id, label, strength_label, sort_order')
-            .in('id', selectedProofs)
+            .in('id', regularProofIds)
             .order('sort_order')
           if (piData) setProofItems(piData)
         }
