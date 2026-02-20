@@ -390,7 +390,19 @@ export default function DashboardPage() {
     setCustomProofs(updated)
   }
 
-  function removeCustomProof(idx: number) {
+  async function removeCustomProof(idx: number) {
+    if (pro && customProofs[idx]?.id) {
+      const { data } = await (supabase as any)
+        .from('vote_summary')
+        .select('vote_count')
+        .eq('proof_id', customProofs[idx].id)
+        .eq('professional_id', pro.id)
+        .maybeSingle()
+      if (data && data.vote_count > 0) {
+        alert(`この項目には${data.vote_count}票の投票があるため削除できません`)
+        return
+      }
+    }
     setCustomProofs(customProofs.filter((_, i) => i !== idx))
   }
 
