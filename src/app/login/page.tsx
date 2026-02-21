@@ -27,6 +27,7 @@ function LoginForm() {
   const [googleLoading, setGoogleLoading] = useState(false)
   const [ready, setReady] = useState(false)
   const [loginDebug, setLoginDebug] = useState('login: loading...')
+  const [showDebug, setShowDebug] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
   const [showReset, setShowReset] = useState(false)
   const [resetEmail, setResetEmail] = useState('')
@@ -38,6 +39,10 @@ function LoginForm() {
   const isRedirecting = useRef(false)
 
   const isClient = role === 'client'
+
+  useEffect(() => {
+    setShowDebug(new URLSearchParams(window.location.search).has('debug'))
+  }, [])
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search)
@@ -450,12 +455,12 @@ function LoginForm() {
     setResettingPassword(false)
   }
 
-  // DEBUG: loginページ専用のデバッグバー（オレンジ、Navbarの赤バーの上に表示）
-  const loginDebugBar = (
+  // DEBUG: loginページ専用のデバッグバー（?debug=1 の時のみ表示）
+  const loginDebugBar = showDebug ? (
     <div className="fixed bottom-6 left-0 right-0 bg-orange-500 text-white text-xs p-1 z-[9999] text-center">
       {loginDebug}
     </div>
-  )
+  ) : null
 
   // redirect付きの場合: useEffect内でリダイレクト処理中。他のUIは一切表示しない
   if (hasRedirect) {

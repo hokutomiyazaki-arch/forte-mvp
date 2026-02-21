@@ -8,6 +8,11 @@ export default function Navbar() {
   const [isClient, setIsClient] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const [debugInfo, setDebugInfo] = useState<string>('loading...')
+  const [showDebug, setShowDebug] = useState(false)
+
+  useEffect(() => {
+    setShowDebug(new URLSearchParams(window.location.search).has('debug'))
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -133,10 +138,12 @@ export default function Navbar() {
         ))}
       </div>
     </nav>
-    {/* DEBUG: 一時的なデバッグ表示 — 原因特定後に削除 */}
-    <div className="fixed bottom-0 left-0 right-0 bg-red-600 text-white text-xs p-1 z-[9999] text-center">
-      {debugInfo}
-    </div>
+    {/* DEBUG: ?debug=1 の時のみ表示 */}
+    {showDebug && (
+      <div className="fixed bottom-0 left-0 right-0 bg-red-600 text-white text-xs p-1 z-[9999] text-center">
+        {debugInfo}
+      </div>
+    )}
     </>
   )
 }

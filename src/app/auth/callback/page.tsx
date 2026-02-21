@@ -4,8 +4,10 @@ import { createClient } from '@/lib/supabase'
 
 export default function AuthCallback() {
   const [debugInfo, setDebugInfo] = useState('callback: loading...')
+  const [showDebug, setShowDebug] = useState(false)
 
   useEffect(() => {
+    setShowDebug(new URLSearchParams(window.location.search).has('debug'))
     const supabase = createClient() as any
 
     // デバッグ: URL状態を表示
@@ -69,10 +71,12 @@ export default function AuthCallback() {
   return (
     <div className="text-center py-16 text-gray-400">
       認証中...
-      {/* DEBUG: auth/callback専用デバッグバー（青） */}
-      <div className="fixed bottom-6 left-0 right-0 bg-blue-600 text-white text-xs p-1 z-[9999] text-center">
-        {debugInfo}
-      </div>
+      {/* DEBUG: ?debug=1 の時のみ表示 */}
+      {showDebug && (
+        <div className="fixed bottom-6 left-0 right-0 bg-blue-600 text-white text-xs p-1 z-[9999] text-center">
+          {debugInfo}
+        </div>
+      )}
     </div>
   )
 }

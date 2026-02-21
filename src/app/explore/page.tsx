@@ -32,25 +32,25 @@ export default function ExplorePage() {
   // タブ・展開
   const [selectedTab, setSelectedTab] = useState('all')
   const [expandedItem, setExpandedItem] = useState<string | null>(null)
+  const [showDebug, setShowDebug] = useState(false)
 
-  // デバッグ: 超シンプル通信テスト（process.envを使わない）
+  // デバッグ: ?debug=1 の時のみ通信テスト実行
   useEffect(() => {
+    const isDebug = new URLSearchParams(window.location.search).has('debug')
+    setShowDebug(isDebug)
+    if (!isDebug) return
     const el = document.getElementById('debug-bar-explore')
     if (el) el.textContent = 'test started...'
 
-    // Supabaseクライアントからanon keyを取得（process.envに依存しない）
     const anonKey = (supabase as any).supabaseKey
       || (supabase as any).rest?.headers?.apikey
       || (supabase as any).realtime?.params?.apikey
       || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
       || ''
 
-    // Step 1: まずfetch自体が動くか（Google向け）
     fetch('https://www.google.com/favicon.ico', { mode: 'no-cors' })
       .then(() => {
         if (el) el.textContent = `google OK (key=${anonKey ? anonKey.substring(0, 10) : 'NONE'}), testing supabase...`
-
-        // Step 2: Supabase REST API に直接 GET（anon keyのみ）
         const start = Date.now()
         return fetch(
           'https://eikzgzqnydptpqjwxbfu.supabase.co/rest/v1/professionals?select=id&limit=1',
@@ -174,11 +174,13 @@ export default function ExplorePage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
-      {/* デバッグバー */}
-      <div id="debug-bar-explore"
-        style={{position:'fixed',bottom:'60px',left:0,right:0,background:'blue',color:'white',textAlign:'center',padding:'4px',zIndex:9999,fontSize:'12px'}}>
-        DB test: waiting...
-      </div>
+      {/* デバッグバー: ?debug=1 の時のみ表示 */}
+      {showDebug && (
+        <div id="debug-bar-explore"
+          style={{position:'fixed',bottom:'60px',left:0,right:0,background:'blue',color:'white',textAlign:'center',padding:'4px',zIndex:9999,fontSize:'12px'}}>
+          DB test: waiting...
+        </div>
+      )}
       {/* ヘッダー */}
       <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2">プロを探す</h1>
       <p className="text-sm text-gray-500 mb-6">プルーフで、あなたに合うプロを見つけよう</p>
