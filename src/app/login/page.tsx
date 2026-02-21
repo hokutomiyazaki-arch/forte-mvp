@@ -26,6 +26,7 @@ function LoginForm() {
   const [submitting, setSubmitting] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   const [ready, setReady] = useState(false)
+  const [loginDebug, setLoginDebug] = useState('login: loading...')
   const [emailSent, setEmailSent] = useState(false)
   const [showReset, setShowReset] = useState(false)
   const [resetEmail, setResetEmail] = useState('')
@@ -100,16 +101,25 @@ function LoginForm() {
 
     async function init() {
       const hash = window.location.hash
+      const search = window.location.search
+      const sbKeys = Object.keys(localStorage).filter(k => k.startsWith('sb-'))
       const hasOAuthTokens = hash.includes('access_token') || hash.includes('refresh_token')
-      const urlSearchParams = new URLSearchParams(window.location.search)
+      const urlSearchParams = new URLSearchParams(search)
       const hasAuthCode = urlSearchParams.has('code')
+
+      // デバッグ: 現在のURL状態を全て表示
+      setLoginDebug(
+        `hash: ${hash ? hash.substring(0, 50) : 'none'} | ` +
+        `search: ${search ? search.substring(0, 50) : 'none'} | ` +
+        `sb-keys: ${sbKeys.length}`
+      )
 
       // OAuth直後はトークンがURLにあるがlocalStorageにはまだない
       // この場合はgetSession()をスキップしてはいけない
       if (!hasOAuthTokens && !hasAuthCode) {
-        const sbKeys = Object.keys(localStorage).filter(k => k.startsWith('sb-'))
         if (sbKeys.length === 0) {
           console.log('[login/init] no sb-keys, no oauth → show form')
+          setLoginDebug(`no sb-keys, no oauth → show form | hash: ${hash ? hash.substring(0, 30) : 'none'}`)
           if (!cancelled) setReady(true)
           return
         }
@@ -117,6 +127,7 @@ function LoginForm() {
 
       // OAuth直後 or sb-keysがある場合: セッション確認
       console.log('[login/init] checking session (oauth:', hasOAuthTokens || hasAuthCode, ')')
+      setLoginDebug(`checking session... oauth: ${hasOAuthTokens || hasAuthCode} | sb-keys: ${sbKeys.length}`)
 
       try {
         // OAuth後は処理に少し時間がかかるので5秒に延長
@@ -132,6 +143,7 @@ function LoginForm() {
           session = data?.session || null
         } catch (e) {
           console.log('[init] getSession timeout - treating as no session')
+          setLoginDebug(`timeout → show form | oauth: ${hasOAuthTokens || hasAuthCode}`)
           session = null
         }
 
@@ -145,11 +157,14 @@ function LoginForm() {
         if (session?.user) {
           cancelled = true
           console.log('[login/init] session found → redirect /explore')
+          setLoginDebug(`session found (${session.user.email}) → redirecting...`)
           window.location.href = '/explore'
           return
         }
+        setLoginDebug(`no session after check | oauth: ${hasOAuthTokens || hasAuthCode}`)
       } catch (e) {
         console.error('[init] session check error:', e)
+        setLoginDebug(`error: ${e instanceof Error ? e.message : 'unknown'}`)
       }
       if (!cancelled) setReady(true)
     }
@@ -355,12 +370,20 @@ function LoginForm() {
     setResettingPassword(false)
   }
 
+  // DEBUG: loginページ専用のデバッグバー（オレンジ、Navbarの赤バーの上に表示）
+  const loginDebugBar = (
+    <div className="fixed bottom-6 left-0 right-0 bg-orange-500 text-white text-xs p-1 z-[9999] text-center">
+      {loginDebug}
+    </div>
+  )
+
   // redirect付きの場合: useEffect内でリダイレクト処理中。他のUIは一切表示しない
   if (hasRedirect) {
     return (
       <div className="max-w-md mx-auto text-center py-16">
         <div className="animate-spin w-8 h-8 border-4 border-[#C4A35A] border-t-transparent rounded-full mx-auto mb-4"></div>
         <p className="text-gray-500">リダイレクト中...</p>
+        {loginDebugBar}
       </div>
     )
   }
@@ -370,6 +393,7 @@ function LoginForm() {
       <div className="max-w-md mx-auto text-center py-16">
         <div className="animate-spin w-8 h-8 border-4 border-[#C4A35A] border-t-transparent rounded-full mx-auto mb-4"></div>
         <p className="text-gray-500">確認中...</p>
+        {loginDebugBar}
       </div>
     )
   }
@@ -481,6 +505,7 @@ function LoginForm() {
           </button>
         </form>
         {resetUI}
+        {loginDebugBar}
       </div>
     )
   }
@@ -571,6 +596,7 @@ function LoginForm() {
         </button>
       </form>
       {mode === 'login' && resetUI}
+      {loginDebugBar}
     </div>
   )
 }
