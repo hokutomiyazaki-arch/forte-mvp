@@ -87,7 +87,21 @@ export async function POST(req: NextRequest) {
 
     if (insertError) throw insertError
 
-    // 6. Resendでメール送信
+    // 6. org_membersにpendingレコードを作成（プロ側ダッシュボードで表示用）
+    const { error: memberError } = await supabaseAdmin
+      .from('org_members')
+      .insert({
+        organization_id: organizationId,
+        professional_id: proData.id,
+        status: 'pending',
+      })
+
+    if (memberError) {
+      console.error('[org-invite] org_members insert error:', memberError)
+      // 招待レコードは作成済みなので続行（メンバーレコードは承認時に再作成可能）
+    }
+
+    // 7. Resendでメール送信
     const resendKey = process.env.RESEND_API_KEY
     if (resendKey) {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://forte-mvp.vercel.app'

@@ -115,6 +115,10 @@ export default function DashboardPage() {
   const [nfcSuccess, setNfcSuccess] = useState('')
   const [nfcLostCard, setNfcLostCard] = useState<string | null>(null) // 紛失報告したカードUID
 
+  // 団体招待 state
+  const [pendingInvites, setPendingInvites] = useState<{id: string; organization_id: string; org_name: string; invited_at: string}[]>([])
+  const [inviteProcessing, setInviteProcessing] = useState<string | null>(null)
+
   useEffect(() => {
     async function load() {
       const { session, user: u } = await getSessionSafe()
@@ -236,6 +240,22 @@ export default function DashboardPage() {
         .eq('status', 'active')
         .maybeSingle()
       if (nfcData) setNfcCard(nfcData)
+
+      // 団体からの招待を取得
+      const { data: memberInvites } = await (supabase as any)
+        .from('org_members')
+        .select('id, organization_id, invited_at, organizations(name)')
+        .eq('professional_id', proData.id)
+        .eq('status', 'pending')
+
+      if (memberInvites) {
+        setPendingInvites(memberInvites.map((m: any) => ({
+          id: m.id,
+          organization_id: m.organization_id,
+          org_name: m.organizations?.name || '不明な団体',
+          invited_at: m.invited_at,
+        })))
+      }
 
       setLoading(false)
     }
@@ -479,6 +499,43 @@ export default function DashboardPage() {
       return
     }
     window.location.href = '/mycard'
+  }
+
+  // 団体招待の承認/拒否
+  async function handleAcceptInvite(memberId: string, orgId: string) {
+    setInviteProcessing(memberId)
+    const { error } = await (supabase as any)
+      .from('org_members')
+      .update({ status: 'active', accepted_at: new Date().toISOString() })
+      .eq('id', memberId)
+
+    if (!error) {
+      setPendingInvites(prev => prev.filter(i => i.id !== memberId))
+
+      // org_invitationsのstatusも更新
+      if (user?.email) {
+        await (supabase as any)
+          .from('org_invitations')
+          .update({ status: 'accepted' })
+          .eq('organization_id', orgId)
+          .eq('invited_email', user.email.toLowerCase())
+          .eq('status', 'pending')
+      }
+    }
+    setInviteProcessing(null)
+  }
+
+  async function handleDeclineInvite(memberId: string) {
+    setInviteProcessing(memberId)
+    const { error } = await (supabase as any)
+      .from('org_members')
+      .update({ status: 'removed', removed_at: new Date().toISOString() })
+      .eq('id', memberId)
+
+    if (!error) {
+      setPendingInvites(prev => prev.filter(i => i.id !== memberId))
+    }
+    setInviteProcessing(null)
   }
 
   // プルーフ選択ロジック
@@ -855,6 +912,41 @@ export default function DashboardPage() {
 
       {/* ═══ Tab: プロフィール ═══ */}
       {dashboardTab === 'profile' && (<>
+
+      {/* 団体からの招待 */}
+      {pendingInvites.length > 0 && (
+        <div className="bg-white rounded-xl p-5 shadow-sm mb-6 border-l-4 border-[#C4A35A]">
+          <h3 className="text-sm font-bold text-[#1A1A2E] mb-3">団体からの招待</h3>
+          <div className="space-y-3">
+            {pendingInvites.map(inv => (
+              <div key={inv.id} className="flex items-center justify-between py-2">
+                <div>
+                  <div className="text-sm font-medium text-[#1A1A2E]">{inv.org_name}</div>
+                  <div className="text-xs text-gray-400">
+                    {new Date(inv.invited_at).toLocaleDateString('ja-JP')} に招待
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleAcceptInvite(inv.id, inv.organization_id)}
+                    disabled={inviteProcessing === inv.id}
+                    className="px-3 py-1.5 bg-[#1A1A2E] text-white text-xs font-medium rounded-lg hover:bg-[#2a2a4e] transition disabled:opacity-50"
+                  >
+                    {inviteProcessing === inv.id ? '...' : '承認'}
+                  </button>
+                  <button
+                    onClick={() => handleDeclineInvite(inv.id)}
+                    disabled={inviteProcessing === inv.id}
+                    className="px-3 py-1.5 bg-gray-100 text-gray-500 text-xs font-medium rounded-lg hover:bg-gray-200 transition disabled:opacity-50"
+                  >
+                    拒否
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Founding Member Challenge */}
       {(pro as any)?.founding_member_status === 'achieved' && (
