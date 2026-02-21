@@ -106,41 +106,64 @@ function LoginForm() {
       const urlSearchParams = new URLSearchParams(search)
       const hasAuthCode = urlSearchParams.has('code')
 
-      // ===== OAuth ハッシュにトークンがある場合: 手動で setSession =====
-      if (hash.includes('access_token')) {
-        const hashParams = new URLSearchParams(hash.substring(1))
-        const access_token = hashParams.get('access_token')
-        const refresh_token = hashParams.get('refresh_token') || ''
+      // ===== OAuth ハッシュにトークンがある場合: localStorageに直接書き込み（ネットワーク不要） =====
+      if (hash && hash.includes('access_token')) {
+        console.log('[init] OAuth hash detected')
+        setLoginDebug('oauth: writing tokens to localStorage...')
 
-        console.log('[login/init] OAuth hash detected, calling setSession manually')
-        setLoginDebug(`OAuth hash → setSession... at=${access_token ? access_token.substring(0, 10) : 'none'}`)
+        const params = new URLSearchParams(hash.substring(1))
+        const accessToken = params.get('access_token')
+        const refreshToken = params.get('refresh_token')
+        const expiresAt = params.get('expires_at')
+        const expiresIn = params.get('expires_in')
+        const tokenType = params.get('token_type')
+        const providerToken = params.get('provider_token')
 
-        if (access_token) {
+        if (accessToken && refreshToken) {
           try {
-            const { data, error } = await supabase.auth.setSession({
-              access_token,
-              refresh_token,
-            })
-            // ハッシュをクリア
+            // JWTのペイロードからユーザー情報を抽出
+            const payload = JSON.parse(atob(accessToken.split('.')[1]))
+
+            // Supabaseが期待するlocalStorageのキーと値を直接構築
+            const storageKey = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'))
+              || 'sb-eikzgzqnydptpqjwxbfu-auth-token'
+
+            const sessionData = {
+              access_token: accessToken,
+              refresh_token: refreshToken,
+              expires_at: parseInt(expiresAt || '0'),
+              expires_in: parseInt(expiresIn || '3600'),
+              token_type: tokenType || 'bearer',
+              provider_token: providerToken,
+              user: {
+                id: payload.sub,
+                email: payload.email,
+                app_metadata: payload.app_metadata || {},
+                user_metadata: payload.user_metadata || {},
+                aud: payload.aud,
+                role: payload.role,
+                created_at: '',
+              }
+            }
+
+            localStorage.setItem(storageKey, JSON.stringify(sessionData))
+
+            console.log('[init] tokens written to localStorage, key:', storageKey)
+            setLoginDebug('oauth: tokens saved → redirecting...')
+
+            // ハッシュをURLから消す
             window.history.replaceState(null, '', window.location.pathname + window.location.search)
 
-            if (data?.session?.user && !cancelled) {
-              cancelled = true
-              console.log('[login/init] setSession OK →', data.session.user.email)
-              setLoginDebug(`setSession OK (${data.session.user.email}) → /explore`)
-              window.location.href = '/explore'
-              return
-            }
-            if (error) {
-              console.error('[login/init] setSession error:', error.message)
-              setLoginDebug(`setSession error: ${error.message}`)
-            }
-          } catch (e) {
-            console.error('[login/init] setSession exception:', e)
-            setLoginDebug(`setSession exception: ${e instanceof Error ? e.message : 'unknown'}`)
+            // リダイレクト
+            window.location.href = '/explore'
+            return
+          } catch (e: any) {
+            console.error('[init] failed to write tokens:', e)
+            setLoginDebug('oauth error: ' + (e.message || 'unknown'))
           }
         }
-        // setSession が失敗した場合はフォーム表示
+
+        // トークン書き込み失敗 → フォーム表示
         if (!cancelled) setReady(true)
         return
       }
