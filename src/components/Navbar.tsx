@@ -26,7 +26,7 @@ export default function Navbar() {
 
       try {
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('timeout')), 3000)
+          setTimeout(() => reject(new Error('timeout')), 1500)
         )
         const sessionPromise = supabase.auth.getSession()
 
@@ -55,8 +55,30 @@ export default function Navbar() {
         }
       } catch (e) {
         if (!cancelled) {
-          setUser(null)
-          setDebugInfo(`error: ${e instanceof Error ? e.message : 'unknown'} | sb-keys: ${sbKeys.length}`)
+          // タイムアウトだがsb-keysがある → ログイン状態と仮定
+          if (sbKeys.length > 0) {
+            // localStorageからauth-tokenを直接パースしてユーザー情報を取得
+            let fallbackUser: any = { email: 'loading...' }
+            try {
+              const authKey = sbKeys.find(k => k.includes('auth-token'))
+              if (authKey) {
+                const raw = localStorage.getItem(authKey)
+                if (raw) {
+                  const parsed = JSON.parse(raw)
+                  const userObj = parsed?.user || parsed?.currentSession?.user
+                  if (userObj?.email) {
+                    fallbackUser = userObj
+                  }
+                }
+              }
+            } catch (_) {}
+            setUser(fallbackUser)
+            setIsPro(true) // sb-keysがある → プロの可能性が高い、ダッシュボードリンク表示
+            setDebugInfo(`timeout → assume logged-in (${fallbackUser.email}) | sb-keys: ${sbKeys.length}`)
+          } else {
+            setUser(null)
+            setDebugInfo(`error: ${e instanceof Error ? e.message : 'unknown'} | sb-keys: ${sbKeys.length}`)
+          }
         }
       }
       if (!cancelled) setLoaded(true)
