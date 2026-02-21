@@ -61,6 +61,7 @@ export default function DashboardPage() {
   const [votes, setVotes] = useState<VoteSummary[]>([])
   const [personalityVotes, setPersonalityVotes] = useState<{category: string, vote_count: number}[]>([])
   const [totalVotes, setTotalVotes] = useState(0)
+  const [bookmarkCount, setBookmarkCount] = useState(0)
   const [qrUrl, setQrUrl] = useState('')
   const [qrRefreshed, setQrRefreshed] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -196,6 +197,13 @@ export default function DashboardPage() {
 
       const { count } = await supabase.from('votes').select('*', { count: 'exact', head: true }).eq('professional_id', proData.id).eq('status', 'confirmed') as any
       setTotalVotes(count || 0)
+
+      // ブックマーク数取得
+      const { count: bmCount } = await (supabase as any)
+        .from('bookmarks')
+        .select('*', { count: 'exact', head: true })
+        .eq('professional_id', proData.id)
+      setBookmarkCount(bmCount || 0)
 
       // プルーフ選択状態を復元（マスタは上で取得済み）
       if (piData) {
@@ -931,18 +939,23 @@ export default function DashboardPage() {
       })()}
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-4 gap-3 mb-8">
         <div className="bg-white rounded-xl p-4 shadow-sm text-center">
           <div className="text-3xl font-bold text-[#C4A35A]">{totalVotes}</div>
-          <div className="text-sm text-gray-500">総プルーフ数</div>
+          <div className="text-xs text-gray-500">総プルーフ数</div>
         </div>
         <div className="bg-white rounded-xl p-4 shadow-sm text-center">
           <div className="text-lg font-bold text-[#1A1A2E] truncate">{topForte}</div>
-          <div className="text-sm text-gray-500">トッププルーフ</div>
+          <div className="text-xs text-gray-500">トッププルーフ</div>
         </div>
         <div className="bg-white rounded-xl p-4 shadow-sm text-center">
           <div className="text-3xl font-bold text-[#1A1A2E]">{daysSinceRegistration}</div>
-          <div className="text-sm text-gray-500">登録日数</div>
+          <div className="text-xs text-gray-500">登録日数</div>
+        </div>
+        <div className="bg-white rounded-xl p-4 shadow-sm text-center" style={{ background: bookmarkCount > 0 ? 'rgba(196,163,90,0.06)' : undefined, border: bookmarkCount > 0 ? '1px solid rgba(196,163,90,0.2)' : undefined }}>
+          <div style={{ fontSize: 14, marginBottom: 2 }}>♡</div>
+          <div className="text-2xl font-bold text-[#1A1A2E]" style={{ fontFamily: "'Inter', sans-serif" }}>{bookmarkCount}</div>
+          <div className="text-xs text-gray-500">ブックマーク</div>
         </div>
       </div>
 
