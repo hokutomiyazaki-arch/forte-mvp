@@ -54,7 +54,7 @@ export default function Home() {
   }
 
   return (
-    <div style={{ margin: '-2rem -1rem 0', fontFamily: "'Noto Sans JP', 'DM Sans', sans-serif" }}>
+    <div style={{ margin: '-2rem -1rem 0', fontFamily: "'Noto Sans JP', 'Inter', sans-serif" }}>
       <style>{`
         @keyframes fadeUp {
           from { opacity: 0; transform: translateY(16px); }
@@ -90,6 +90,107 @@ export default function Home() {
           border-color: #C4A35A !important;
           color: #C4A35A !important;
         }
+        /* ── Mobile responsive ── */
+        .how-it-works-grid {
+          display: flex;
+          gap: 24px;
+          justify-content: center;
+          flex-wrap: wrap;
+          text-align: center;
+        }
+        .how-it-works-arrow {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 20px;
+          color: #C4A35A;
+          min-width: 32px;
+          padding-top: 20px;
+        }
+        .pillars-grid {
+          display: flex;
+          gap: 28px;
+          justify-content: center;
+          flex-wrap: wrap;
+        }
+        .voices-grid {
+          display: flex;
+          gap: 20px;
+          justify-content: center;
+          flex-wrap: wrap;
+          margin-bottom: 48px;
+        }
+        .founder-grid {
+          display: flex;
+          gap: 48px;
+          align-items: flex-start;
+          text-align: left;
+          flex-wrap: wrap;
+          justify-content: center;
+        }
+        .founder-photo {
+          width: 160px;
+          min-width: 160px;
+        }
+        .founder-text {
+          flex: 1;
+          min-width: 280px;
+        }
+        .fm-box {
+          max-width: 600px;
+          margin: 0 auto;
+          padding: 48px 40px;
+          border: 1px solid rgba(196,163,90,0.25);
+          background: #FFFFFF;
+          text-align: center;
+        }
+        .top-section {
+          padding: 100px 24px;
+        }
+        .comparison-table {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          padding-bottom: 8px;
+        }
+        @media (max-width: 768px) {
+          .top-section {
+            padding: 48px 20px;
+          }
+          .how-it-works-grid {
+            flex-direction: column;
+            align-items: center;
+          }
+          .how-it-works-arrow {
+            transform: rotate(90deg);
+            padding-top: 0;
+            min-width: auto;
+          }
+          .pillars-grid {
+            flex-direction: column;
+          }
+          .pillar-card-item {
+            padding: 20px !important;
+          }
+          .voices-grid {
+            flex-direction: column;
+          }
+          .founder-grid {
+            flex-direction: column;
+            text-align: center;
+            align-items: center;
+          }
+          .founder-photo {
+            width: 200px;
+            min-width: auto;
+          }
+          .founder-text {
+            text-align: center;
+            min-width: auto;
+          }
+          .fm-box {
+            padding: 24px 20px;
+          }
+        }
       `}</style>
 
       {/* ================================ */}
@@ -102,7 +203,7 @@ export default function Home() {
           flexDirection: 'column',
           justifyContent: 'center',
           alignItems: 'center',
-          padding: '60px 24px 100px',
+          padding: '120px 20px 60px',
           background: '#FAFAF7',
           textAlign: 'center',
         }}
@@ -110,10 +211,10 @@ export default function Home() {
         <div style={{ maxWidth: 780, margin: '0 auto' }}>
           <div
             style={{
-              fontFamily: "'DM Sans', sans-serif",
-              fontSize: 42,
-              fontWeight: 700,
-              letterSpacing: 5,
+              fontFamily: "'Inter', sans-serif",
+              fontSize: 'clamp(20px, 5vw, 42px)',
+              fontWeight: 800,
+              letterSpacing: 4,
               color: '#1A1A2E',
               marginBottom: 8,
               opacity: 0,
@@ -124,10 +225,11 @@ export default function Home() {
           </div>
           <div
             style={{
-              fontSize: 13,
+              fontSize: 'clamp(12px, 2.5vw, 14px)',
+              fontWeight: 600,
               color: '#C4A35A',
               letterSpacing: 3,
-              marginBottom: 52,
+              marginBottom: 'clamp(28px, 6vw, 52px)',
               opacity: 0,
               animation: 'fadeUp 0.7s ease forwards 0.25s',
             }}
@@ -137,11 +239,11 @@ export default function Home() {
 
           <h1
             style={{
-              fontSize: 26,
-              fontWeight: 700,
+              fontSize: 'clamp(18px, 4.5vw, 26px)',
+              fontWeight: 800,
               lineHeight: 1.8,
               color: '#1A1A2E',
-              marginBottom: 28,
+              marginBottom: 'clamp(16px, 4vw, 28px)',
               opacity: 0,
               animation: 'fadeUp 0.7s ease forwards 0.4s',
             }}
@@ -152,10 +254,14 @@ export default function Home() {
 
           <p
             style={{
-              fontSize: 14,
+              fontSize: 'clamp(13px, 2.8vw, 15px)',
+              fontWeight: 500,
               lineHeight: 2,
               color: '#444444',
-              marginBottom: 20,
+              maxWidth: 600,
+              margin: '0 auto',
+              marginBottom: 'clamp(12px, 3vw, 20px)',
+              padding: '0 8px',
               opacity: 0,
               animation: 'fadeUp 0.7s ease forwards 0.55s',
             }}
@@ -166,10 +272,14 @@ export default function Home() {
 
           <p
             style={{
-              fontSize: 14,
+              fontSize: 'clamp(13px, 2.8vw, 15px)',
+              fontWeight: 500,
               lineHeight: 2,
               color: '#444444',
-              marginBottom: 36,
+              maxWidth: 600,
+              margin: '0 auto',
+              marginBottom: 'clamp(24px, 5vw, 40px)',
+              padding: '0 8px',
               opacity: 0,
               animation: 'fadeUp 0.7s ease forwards 0.65s',
             }}
@@ -200,6 +310,9 @@ export default function Home() {
                 border: 'none',
                 cursor: 'pointer',
                 transition: 'all 0.3s',
+                width: '100%',
+                maxWidth: 320,
+                textAlign: 'center',
               }}
             >
               強みを証明する →
@@ -208,9 +321,12 @@ export default function Home() {
 
           <p
             style={{
-              fontSize: 13,
-              lineHeight: 2,
+              fontSize: 'clamp(11px, 2.2vw, 13px)',
+              fontWeight: 500,
+              lineHeight: 1.9,
               color: '#888888',
+              marginTop: 'clamp(20px, 4vw, 32px)',
+              padding: '0 8px',
               opacity: 0,
               animation: 'fadeUp 0.7s ease forwards 0.85s',
             }}
@@ -229,13 +345,13 @@ export default function Home() {
       {/* ================================ */}
       <section
         ref={addRevealRef}
-        className="reveal-section"
-        style={{ padding: '100px 24px', textAlign: 'center', background: '#FAFAF7' }}
+        className="reveal-section top-section"
+        style={{ textAlign: 'center', background: '#FAFAF7' }}
       >
         <div style={{ maxWidth: 780, margin: '0 auto' }}>
           <div
             style={{
-              fontFamily: "'DM Sans', sans-serif",
+              fontFamily: "'Inter', sans-serif",
               fontSize: 11,
               fontWeight: 700,
               letterSpacing: 4,
@@ -258,7 +374,7 @@ export default function Home() {
             強みを集める。強みで選ぶ。強みを育てる。
           </h2>
 
-          <div style={{ display: 'flex', gap: 24, justifyContent: 'center', flexWrap: 'wrap', textAlign: 'center' }}>
+          <div className="how-it-works-grid">
             {/* Step 1 */}
             <div style={{ flex: 1, minWidth: 220, maxWidth: 260 }}>
               <div
@@ -270,7 +386,7 @@ export default function Home() {
                   height: 40,
                   border: '1.5px solid #C4A35A',
                   borderRadius: '50%',
-                  fontFamily: "'DM Sans', sans-serif",
+                  fontFamily: "'Inter', sans-serif",
                   fontWeight: 700,
                   fontSize: 15,
                   color: '#C4A35A',
@@ -291,9 +407,7 @@ export default function Home() {
             </div>
 
             {/* Arrow */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#C4A35A', minWidth: 32, paddingTop: 20 }}>
-              →
-            </div>
+            <div className="how-it-works-arrow">→</div>
 
             {/* Step 2 */}
             <div style={{ flex: 1, minWidth: 220, maxWidth: 260 }}>
@@ -306,7 +420,7 @@ export default function Home() {
                   height: 40,
                   border: '1.5px solid #C4A35A',
                   borderRadius: '50%',
-                  fontFamily: "'DM Sans', sans-serif",
+                  fontFamily: "'Inter', sans-serif",
                   fontWeight: 700,
                   fontSize: 15,
                   color: '#C4A35A',
@@ -327,9 +441,7 @@ export default function Home() {
             </div>
 
             {/* Arrow */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#C4A35A', minWidth: 32, paddingTop: 20 }}>
-              →
-            </div>
+            <div className="how-it-works-arrow">→</div>
 
             {/* Step 3 */}
             <div style={{ flex: 1, minWidth: 220, maxWidth: 260 }}>
@@ -342,7 +454,7 @@ export default function Home() {
                   height: 40,
                   border: '1.5px solid #C4A35A',
                   borderRadius: '50%',
-                  fontFamily: "'DM Sans', sans-serif",
+                  fontFamily: "'Inter', sans-serif",
                   fontWeight: 700,
                   fontSize: 15,
                   color: '#C4A35A',
@@ -373,21 +485,22 @@ export default function Home() {
       {/* ================================ */}
       <section
         ref={addRevealRef}
-        className="reveal-section"
-        style={{ padding: '100px 24px', textAlign: 'center', background: '#FAFAF7' }}
+        className="reveal-section top-section"
+        style={{ textAlign: 'center', background: '#FAFAF7' }}
       >
         <div style={{ maxWidth: 780, margin: '0 auto' }}>
           <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1A1A2E', lineHeight: 1.6, marginBottom: 56 }}>
             ★で選ぶ時代は終わった。
           </h2>
-          <div style={{ overflowX: 'auto' }}>
+          <div className="comparison-table">
             <table
               style={{
                 width: '100%',
+                minWidth: 600,
                 maxWidth: 720,
                 margin: '0 auto',
                 borderCollapse: 'collapse',
-                fontSize: 13,
+                fontSize: 'clamp(11px, 2.5vw, 14px)',
               }}
             >
               <thead>
@@ -428,14 +541,14 @@ export default function Home() {
       {/* ================================ */}
       <section
         ref={addRevealRef}
-        className="reveal-section"
-        style={{ padding: '100px 24px', textAlign: 'center', background: '#FAFAF7' }}
+        className="reveal-section top-section"
+        style={{ textAlign: 'center', background: '#FAFAF7' }}
       >
         <div style={{ maxWidth: 780, margin: '0 auto' }}>
           <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1A1A2E', lineHeight: 1.6, marginBottom: 56 }}>
             REAL PROOFが他と違う、3つの理由。
           </h2>
-          <div style={{ display: 'flex', gap: 28, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <div className="pillars-grid">
             {[
               {
                 label: '蓄積',
@@ -489,15 +602,15 @@ export default function Home() {
       {/* ================================ */}
       <section
         ref={addRevealRef}
-        className="reveal-section"
-        style={{ padding: '100px 24px', textAlign: 'center', background: '#FAFAF7' }}
+        className="reveal-section top-section"
+        style={{ textAlign: 'center', background: '#FAFAF7' }}
       >
         <div style={{ maxWidth: 780, margin: '0 auto' }}>
           <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1A1A2E', lineHeight: 1.6, marginBottom: 48 }}>
             この悩み、あなただけじゃない。
           </h2>
 
-          <div style={{ display: 'flex', gap: 20, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 48 }}>
+          <div className="voices-grid">
             {[
               { role: '整体師', quote: '「技術には自信がある。でも新規のお客さんに、それをどう伝えればいいかわからない。」' },
               { role: 'ヨガインストラクター', quote: '「SNSを頑張っても、本当に届いてほしい人に届かない。」' },
@@ -561,16 +674,15 @@ export default function Home() {
       {/* ================================ */}
       <section
         ref={addRevealRef}
-        className="reveal-section"
-        style={{ padding: '100px 24px', background: '#FAFAF7', borderTop: '1px solid #E8E4DC' }}
+        className="reveal-section top-section"
+        style={{ background: '#FAFAF7', borderTop: '1px solid #E8E4DC' }}
       >
         <div style={{ maxWidth: 680, margin: '0 auto' }}>
-          <div style={{ display: 'flex', gap: 48, alignItems: 'flex-start', textAlign: 'left', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <div className="founder-grid">
             {/* Photo placeholder */}
             <div
+              className="founder-photo"
               style={{
-                width: 160,
-                minWidth: 160,
                 height: 200,
                 background: '#FFFFFF',
                 border: '1px solid #E8E4DC',
@@ -585,10 +697,10 @@ export default function Home() {
             </div>
 
             {/* Text */}
-            <div style={{ flex: 1, minWidth: 280 }}>
+            <div className="founder-text">
               <div
                 style={{
-                  fontFamily: "'DM Sans', sans-serif",
+                  fontFamily: "'Inter', sans-serif",
                   fontSize: 11,
                   fontStyle: 'italic',
                   color: '#888888',
@@ -630,8 +742,8 @@ export default function Home() {
       {/* ================================ */}
       <section
         ref={addRevealRef}
-        className="reveal-section"
-        style={{ padding: '100px 24px 60px', background: '#FAFAF7' }}
+        className="reveal-section top-section"
+        style={{ background: '#FAFAF7', paddingBottom: 60 }}
       >
         <div style={{ maxWidth: 780, margin: '0 auto' }}>
           {/* Everyone CTA */}
@@ -661,19 +773,10 @@ export default function Home() {
           </div>
 
           {/* Founding Member Box */}
-          <div
-            style={{
-              maxWidth: 600,
-              margin: '0 auto',
-              padding: '48px 40px',
-              border: '1px solid rgba(196,163,90,0.25)',
-              background: '#FFFFFF',
-              textAlign: 'center',
-            }}
-          >
+          <div className="fm-box">
             <div
               style={{
-                fontFamily: "'DM Sans', sans-serif",
+                fontFamily: "'Inter', sans-serif",
                 fontSize: 11,
                 fontWeight: 700,
                 letterSpacing: 4,

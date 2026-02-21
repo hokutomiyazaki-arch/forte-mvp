@@ -44,11 +44,18 @@ export default function Navbar() {
   }
 
   return (
+    <>
+      <style>{`
+        @media (max-width: 768px) {
+          .nav-links { gap: 12px !important; }
+          .nav-links a, .nav-links button { font-size: 11px !important; }
+        }
+      `}</style>
     <nav className="bg-[#1A1A2E] text-white px-6 py-3 flex items-center justify-between">
       <a href="/" style={{ textDecoration: 'none' }}>
-        <span style={{ fontSize: 18, fontWeight: 800, color: '#fff', letterSpacing: '2px' }}>REALPROOF</span>
+        <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 16, fontWeight: 800, color: '#FAFAF7', letterSpacing: '2px' }}>REALPROOF</span>
       </a>
-      <div className="flex gap-4 text-sm items-center">
+      <div className="nav-links flex gap-4 text-sm items-center">
         <a href="/explore" className="hover:text-[#C4A35A] transition">プロを探す</a>
         {loaded && (user ? (
           <>
@@ -61,5 +68,6 @@ export default function Navbar() {
         ))}
       </div>
     </nav>
+    </>
   )
 }
