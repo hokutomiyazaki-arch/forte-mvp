@@ -7,6 +7,7 @@ export default function Navbar() {
   const [isPro, setIsPro] = useState(false)
   const [isClient, setIsClient] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const [debugInfo, setDebugInfo] = useState<string>('loading...')
 
   useEffect(() => {
     let cancelled = false
@@ -22,6 +23,13 @@ export default function Navbar() {
 
         if (cancelled) return
 
+        const sbKeys = Object.keys(localStorage).filter(k => k.startsWith('sb-'))
+        setDebugInfo(
+          `session: ${data?.session ? 'YES (' + data.session.user.email + ')' : 'NO'} | ` +
+          `sb-keys: ${sbKeys.length} | ` +
+          `expires: ${data?.session?.expires_at ? new Date(data.session.expires_at * 1000).toLocaleTimeString() : 'N/A'}`
+        )
+
         const u = data?.session?.user || null
         setUser(u)
 
@@ -35,8 +43,11 @@ export default function Navbar() {
             setIsClient(!!clientData)
           }
         }
-      } catch (_) {
-        if (!cancelled) setUser(null)
+      } catch (e) {
+        if (!cancelled) {
+          setUser(null)
+          setDebugInfo(`error: ${e instanceof Error ? e.message : 'unknown'}`)
+        }
       }
       if (!cancelled) setLoaded(true)
     }
@@ -90,6 +101,10 @@ export default function Navbar() {
         ))}
       </div>
     </nav>
+    {/* DEBUG: 一時的なデバッグ表示 — 原因特定後に削除 */}
+    <div className="fixed bottom-0 left-0 right-0 bg-red-600 text-white text-xs p-1 z-[9999] text-center">
+      {debugInfo}
+    </div>
     </>
   )
 }

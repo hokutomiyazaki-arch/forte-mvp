@@ -90,6 +90,12 @@ function LoginForm() {
     async function init() {
       try {
         const { data: { session } } = await supabase.auth.getSession()
+        console.log('[login/init] session:', session ? 'EXISTS' : 'NULL')
+        console.log('[login/init] sb-keys:', Object.keys(localStorage).filter(k => k.startsWith('sb-')))
+        if (session) {
+          console.log('[login/init] user:', session.user.email)
+          console.log('[login/init] expires:', new Date((session as any).expires_at * 1000))
+        }
         if (session?.user && !cancelled) {
           cancelled = true
           window.location.href = '/explore'
@@ -103,7 +109,7 @@ function LoginForm() {
     init()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string, session: any) => {
-      console.log('[onAuthStateChange] event:', event, 'cancelled:', cancelled)
+      console.log('[onAuthStateChange] event:', event, 'session:', session ? 'EXISTS' : 'NULL', 'cancelled:', cancelled)
 
       if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user && !cancelled) {
         cancelled = true
