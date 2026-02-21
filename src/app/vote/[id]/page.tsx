@@ -102,6 +102,10 @@ function VoteForm() {
   const [resending, setResending] = useState(false)
   const [resendMessage, setResendMessage] = useState('')
 
+  // セッション（ログイン済みユーザー）
+  const [sessionEmail, setSessionEmail] = useState<string | null>(null)
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+
   // フォーム state
   const [sessionCount, setSessionCount] = useState<'first' | 'repeat' | ''>('')
   const [voterEmail, setVoterEmail] = useState('')
@@ -194,18 +198,33 @@ function VoteForm() {
         .order('sort_order')
       if (persItems) setPersonalityItems(persItems)
 
-      // ローカルストレージからメアド復元
-      const savedEmail = localStorage.getItem('proof_voter_email')
-      if (savedEmail) {
-        setVoterEmail(savedEmail)
-        // 既に投票済みかチェック
+      // セッション確認（ログイン済みユーザーのメール自動取得）
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user?.email) {
+        setSessionEmail(session.user.email)
+        setIsLoggedIn(true)
+        // ログイン済みならセッションメールで重複投票チェック
         const { data: existing } = await (supabase as any)
           .from('votes')
           .select('id')
           .eq('professional_id', proId)
-          .eq('voter_email', savedEmail)
+          .eq('voter_email', session.user.email)
           .maybeSingle()
         if (existing) setAlreadyVoted(true)
+      } else {
+        // 未ログイン: ローカルストレージからメアド復元
+        const savedEmail = localStorage.getItem('proof_voter_email')
+        if (savedEmail) {
+          setVoterEmail(savedEmail)
+          // 既に投票済みかチェック
+          const { data: existing } = await (supabase as any)
+            .from('votes')
+            .select('id')
+            .eq('professional_id', proId)
+            .eq('voter_email', savedEmail)
+            .maybeSingle()
+          if (existing) setAlreadyVoted(true)
+        }
       }
 
       setLoading(false)
@@ -257,7 +276,12 @@ function VoteForm() {
       setError('セッション回数を選択してください')
       return
     }
-    const email = voterEmail.trim().toLowerCase()
+
+    // メール: ログイン済みならセッションから、未ログインならフォーム入力値
+    const email = isLoggedIn
+      ? (sessionEmail || '').trim().toLowerCase()
+      : voterEmail.trim().toLowerCase()
+
     if (!email || !email.includes('@')) {
       setError('メールアドレスを入力してください')
       return
@@ -307,8 +331,10 @@ function VoteForm() {
       return
     }
 
-    // メアドをローカルストレージに保存
-    localStorage.setItem('proof_voter_email', email)
+    // メアドをローカルストレージに保存（未ログイン時のみ）
+    if (!isLoggedIn) {
+      localStorage.setItem('proof_voter_email', email)
+    }
 
     // 選択IDを分類（UUID vs カスタム）
     const allSelectedProofIds = Array.from(selectedProofIds)
@@ -518,6 +544,7 @@ function VoteForm() {
 
   // ── 投票完了画面 ──
   if (submitted) {
+    const displayEmail = isLoggedIn ? sessionEmail : voterEmail
     return (
       <div className="max-w-md mx-auto text-center py-12 px-4">
         <div className="w-16 h-16 rounded-full bg-[#1A1A2E] flex items-center justify-center mx-auto mb-4">
@@ -527,7 +554,7 @@ function VoteForm() {
         </div>
         <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2">確認メールを送信しました</h1>
         <p className="text-gray-500 mb-4">
-          <span className="font-medium text-[#1A1A2E]">{voterEmail}</span> に確認メールを送信しました。<br />
+          <span className="font-medium text-[#1A1A2E]">{displayEmail}</span> に確認メールを送信しました。<br />
           メール内のリンクをクリックして、プルーフを確定してください。
         </p>
 
@@ -545,39 +572,44 @@ function VoteForm() {
           </div>
         )}
 
-        {!showEmailFix ? (
-          <button
-            onClick={() => { setShowEmailFix(true); setFixEmail(voterEmail) }}
-            className="text-sm text-gray-400 underline mb-6 inline-block"
-          >
-            メールが届かない場合（アドレスを修正して再送信）
-          </button>
-        ) : (
-          <div className="bg-gray-50 rounded-xl p-4 mb-6 text-left">
-            <p className="text-sm font-medium text-[#1A1A2E] mb-2">メールアドレスを修正して再送信</p>
-            <input
-              type="email"
-              value={fixEmail}
-              onChange={e => setFixEmail(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none mb-2"
-              placeholder="正しいメールアドレス"
-            />
-            <div className="flex gap-2">
+        {/* メール修正+再送信UI（未ログイン時のみ表示） */}
+        {!isLoggedIn && (
+          <>
+            {!showEmailFix ? (
               <button
-                onClick={handleResend}
-                disabled={resending || !fixEmail.trim()}
-                className="flex-1 py-2 bg-[#C4A35A] text-white text-sm font-medium rounded-lg hover:bg-[#b3923f] transition disabled:opacity-50"
+                onClick={() => { setShowEmailFix(true); setFixEmail(voterEmail) }}
+                className="text-sm text-gray-400 underline mb-6 inline-block"
               >
-                {resending ? '送信中...' : '再送信する'}
+                メールが届かない場合（アドレスを修正して再送信）
               </button>
-              <button
-                onClick={() => setShowEmailFix(false)}
-                className="px-4 py-2 bg-gray-200 text-gray-600 text-sm rounded-lg hover:bg-gray-300 transition"
-              >
-                閉じる
-              </button>
-            </div>
-          </div>
+            ) : (
+              <div className="bg-gray-50 rounded-xl p-4 mb-6 text-left">
+                <p className="text-sm font-medium text-[#1A1A2E] mb-2">メールアドレスを修正して再送信</p>
+                <input
+                  type="email"
+                  value={fixEmail}
+                  onChange={e => setFixEmail(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none mb-2"
+                  placeholder="正しいメールアドレス"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleResend}
+                    disabled={resending || !fixEmail.trim()}
+                    className="flex-1 py-2 bg-[#C4A35A] text-white text-sm font-medium rounded-lg hover:bg-[#b3923f] transition disabled:opacity-50"
+                  >
+                    {resending ? '送信中...' : '再送信する'}
+                  </button>
+                  <button
+                    onClick={() => setShowEmailFix(false)}
+                    className="px-4 py-2 bg-gray-200 text-gray-600 text-sm rounded-lg hover:bg-gray-300 transition"
+                  >
+                    閉じる
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         <a
@@ -596,7 +628,10 @@ function VoteForm() {
   const rewardCount = selectedRewardId ? 1 : 0
   const hasRewards = proRewards.length > 0
   const rewardSatisfied = !hasRewards || !!selectedRewardId
-  const canSubmit = !!sessionCount && voterEmail.trim().length > 0 && voterEmail.includes('@') && rewardSatisfied
+  const emailSatisfied = isLoggedIn
+    ? !!sessionEmail
+    : (voterEmail.trim().length > 0 && voterEmail.includes('@'))
+  const canSubmit = !!sessionCount && emailSatisfied && rewardSatisfied
 
   // 強みプルーフの表示項目（プロが設定した9項目）
   const allProofDisplayItems = [
@@ -618,6 +653,11 @@ function VoteForm() {
           )}
           <h1 className="text-xl font-bold text-[#1A1A2E]">{pro.name}</h1>
           {pro.title && <p className="text-sm text-gray-500">{pro.title}</p>}
+          {isLoggedIn && sessionEmail && (
+            <p className="text-xs text-gray-400 mt-2">
+              ✓ {sessionEmail} でログイン中
+            </p>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -859,23 +899,25 @@ function VoteForm() {
             <p className="text-xs text-[#9CA3AF] text-right mt-1">{comment.length}/100</p>
           </div>
 
-          {/* ── 5. メールアドレス ── */}
-          <div className="bg-white rounded-xl p-4 shadow-sm">
-            <label className="block text-sm font-bold text-[#1A1A2E] mb-1">
-              メールアドレス <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="email"
-              value={voterEmail}
-              onChange={e => setVoterEmail(e.target.value)}
-              className="w-full px-3 py-2.5 bg-[#FAFAF7] border border-[#E5E7EB] rounded-lg text-sm focus:ring-2 focus:ring-[#C4A35A] focus:border-[#C4A35A] outline-none"
-              placeholder="your@email.com"
-              required
-            />
-            <p className="text-xs text-[#9CA3AF] mt-1">
-              投票の認証に使用します
-            </p>
-          </div>
+          {/* ── 5. メールアドレス（未ログイン時のみ表示） ── */}
+          {!isLoggedIn && (
+            <div className="bg-white rounded-xl p-4 shadow-sm">
+              <label className="block text-sm font-bold text-[#1A1A2E] mb-1">
+                メールアドレス <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="email"
+                value={voterEmail}
+                onChange={e => setVoterEmail(e.target.value)}
+                className="w-full px-3 py-2.5 bg-[#FAFAF7] border border-[#E5E7EB] rounded-lg text-sm focus:ring-2 focus:ring-[#C4A35A] focus:border-[#C4A35A] outline-none"
+                placeholder="your@email.com"
+                required
+              />
+              <p className="text-xs text-[#9CA3AF] mt-1">
+                投票の認証に使用します
+              </p>
+            </div>
+          )}
 
           {/* リワードセクションは上部に移動済み */}
 
@@ -901,7 +943,10 @@ function VoteForm() {
             </button>
             {!canSubmit && (
               <p className="text-xs text-[#9CA3AF] text-center mt-2">
-                {hasRewards ? 'リワード・セッション回数・メールアドレスを入力してください' : 'セッション回数とメールアドレスを入力してください'}
+                {isLoggedIn
+                  ? (hasRewards ? 'リワードとセッション回数を選択してください' : 'セッション回数を選択してください')
+                  : (hasRewards ? 'リワード・セッション回数・メールアドレスを入力してください' : 'セッション回数とメールアドレスを入力してください')
+                }
               </p>
             )}
           </div>
