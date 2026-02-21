@@ -44,6 +44,14 @@ function filterAndSortBadges(badges: { id: string; label: string; image_url: str
   return filtered
 }
 
+// FNTバッジのリンクURL判定
+const FNT_BADGE_IDS = new Set(['fnt-basic', 'fnt-advance', 'fnt-master', 'tbu'])
+const FNT_WORKSHOP_URL = 'https://functional.neuro-training.jp/workshop/'
+
+function getBadgeUrl(badgeId: string): string | null {
+  return FNT_BADGE_IDS.has(badgeId) ? FNT_WORKSHOP_URL : null
+}
+
 // バーの色（ランク順）
 function getBarColor(rank: number): string {
   if (rank === 0) return '#C4A35AFF'
@@ -411,29 +419,50 @@ export default function CardPage() {
           </div>
           {displayBadges.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {displayBadges.map((badge, i) => (
-                <div key={i}
-                  style={{
-                    background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14,
-                    padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14,
-                    cursor: 'pointer', transition: 'border-color 0.2s',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.borderColor = T.gold)}
-                  onMouseLeave={e => (e.currentTarget.style.borderColor = T.cardBorder)}
-                >
-                  {badge.image_url ? (
-                    <img src={badge.image_url} alt={badge.label} style={{ width: 56, height: 56, objectFit: 'contain' }} />
-                  ) : (
-                    <div style={{ width: 56, height: 56, borderRadius: 12, background: `linear-gradient(135deg, ${T.gold}, #D4B96A)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 20, fontWeight: 'bold' }}>
-                      IMG
+              {displayBadges.map((badge, i) => {
+                const badgeUrl = getBadgeUrl(badge.id)
+                const badgeContent = (
+                  <div key={i}
+                    style={{
+                      background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14,
+                      padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14,
+                      cursor: badgeUrl ? 'pointer' : 'default', transition: 'border-color 0.2s, opacity 0.2s',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.borderColor = T.gold
+                      if (badgeUrl) e.currentTarget.style.opacity = '0.85'
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.borderColor = T.cardBorder
+                      e.currentTarget.style.opacity = '1'
+                    }}
+                  >
+                    {badge.image_url ? (
+                      <img src={badge.image_url} alt={badge.label} style={{ width: 56, height: 56, objectFit: 'contain' }} />
+                    ) : (
+                      <div style={{ width: 56, height: 56, borderRadius: 12, background: `linear-gradient(135deg, ${T.gold}, #D4B96A)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 20, fontWeight: 'bold' }}>
+                        IMG
+                      </div>
+                    )}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: 'bold', color: T.text }}>{badge.label}</div>
+                      <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>認定バッジ</div>
                     </div>
-                  )}
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 'bold', color: T.text }}>{badge.label}</div>
-                    <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>認定バッジ</div>
+                    {badgeUrl && (
+                      <svg style={{ width: 14, height: 14, color: T.textMuted, flexShrink: 0 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    )}
                   </div>
-                </div>
-              ))}
+                )
+                return badgeUrl ? (
+                  <a key={i} href={badgeUrl} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+                    {badgeContent}
+                  </a>
+                ) : (
+                  badgeContent
+                )
+              })}
             </div>
           ) : (
             <div style={{ textAlign: 'center', padding: '32px 0', color: T.textMuted, fontSize: 13 }}>
