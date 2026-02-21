@@ -338,9 +338,9 @@ export default function CardPage() {
                       const pct = (v.vote_count / maxVotes) * 100
                       return (
                         <div key={v.category}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                            <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{v.category}</span>
-                            <span style={{ fontSize: 16, fontWeight: 'bold', color: T.gold, fontFamily: T.fontMono }}>{v.vote_count}</span>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, gap: 8 }}>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: T.text, lineHeight: 1.4, wordBreak: 'break-word' as const }}>{v.category}</span>
+                            <span style={{ fontSize: 16, fontWeight: 'bold', color: T.gold, fontFamily: T.fontMono, flexShrink: 0 }}>{v.vote_count}</span>
                           </div>
                           <div style={{ height: 8, background: '#F0EDE6', borderRadius: 99 }}>
                             <div style={{
@@ -364,9 +364,9 @@ export default function CardPage() {
                       const pct = (v.vote_count / maxVotes) * 100
                       return (
                         <div key={v.category}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{v.category}</span>
-                            <span style={{ fontSize: 13, color: T.textMuted, fontFamily: T.fontMono }}>{v.vote_count}</span>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4, gap: 8 }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: T.text, lineHeight: 1.4, wordBreak: 'break-word' as const }}>{v.category}</span>
+                            <span style={{ fontSize: 13, color: T.textMuted, fontFamily: T.fontMono, flexShrink: 0 }}>{v.vote_count}</span>
                           </div>
                           <div style={{ height: 5, background: '#F0EDE6', borderRadius: 99 }}>
                             <div style={{
