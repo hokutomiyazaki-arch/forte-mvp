@@ -1625,9 +1625,11 @@ export default function DashboardPage() {
           </a>
         )}
         <button onClick={async () => {
-          await supabase.auth.signOut()
-          Object.keys(localStorage).forEach(key => { if (key.startsWith('sb-')) localStorage.removeItem(key) })
-          Object.keys(sessionStorage).forEach(key => { if (key.startsWith('sb-')) sessionStorage.removeItem(key) })
+          try { await supabase.auth.signOut({ scope: 'local' }) } catch (e) { console.error('signOut error:', e) }
+          try {
+            Object.keys(localStorage).forEach(key => { if (key.startsWith('sb-') || key.includes('supabase')) localStorage.removeItem(key) })
+            Object.keys(sessionStorage).forEach(key => { if (key.startsWith('sb-') || key.includes('supabase')) sessionStorage.removeItem(key) })
+          } catch (e) { console.error('storage clear error:', e) }
           window.location.href = '/'
         }}
           className="px-6 py-3 text-gray-500 hover:text-red-500 transition">

@@ -892,9 +892,11 @@ function MyCardContent() {
               alert('アカウント削除に失敗しました。もう一度お試しください。')
               return
             }
-            await supabase.auth.signOut()
-            Object.keys(localStorage).forEach(key => { if (key.startsWith('sb-')) localStorage.removeItem(key) })
-            Object.keys(sessionStorage).forEach(key => { if (key.startsWith('sb-')) sessionStorage.removeItem(key) })
+            try { await supabase.auth.signOut({ scope: 'local' }) } catch (e) { console.error('signOut error:', e) }
+            try {
+              Object.keys(localStorage).forEach(key => { if (key.startsWith('sb-') || key.includes('supabase')) localStorage.removeItem(key) })
+              Object.keys(sessionStorage).forEach(key => { if (key.startsWith('sb-') || key.includes('supabase')) sessionStorage.removeItem(key) })
+            } catch (e) { console.error('storage clear error:', e) }
             window.location.href = '/'
           }}
           className="text-sm text-red-400 hover:text-red-600 transition"

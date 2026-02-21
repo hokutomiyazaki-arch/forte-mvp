@@ -9,10 +9,20 @@ export default function Navbar() {
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
-    async function init() {
+    let cancelled = false
+
+    async function checkSession() {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
-        const u = session?.user || null
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), 3000)
+        )
+        const sessionPromise = supabase.auth.getSession()
+
+        const { data } = await Promise.race([sessionPromise, timeoutPromise]) as any
+
+        if (cancelled) return
+
+        const u = data?.session?.user || null
         setUser(u)
 
         if (u) {
@@ -20,26 +30,38 @@ export default function Navbar() {
             supabase.from('professionals').select('id').eq('user_id', u.id).maybeSingle(),
             supabase.from('clients').select('id').eq('user_id', u.id).maybeSingle(),
           ])
-          setIsPro(!!proData)
-          setIsClient(!!clientData)
+          if (!cancelled) {
+            setIsPro(!!proData)
+            setIsClient(!!clientData)
+          }
         }
       } catch (_) {
-        setUser(null)
+        if (!cancelled) setUser(null)
       }
-      setLoaded(true)
+      if (!cancelled) setLoaded(true)
     }
-    init()
+
+    checkSession()
+    return () => { cancelled = true }
   }, [])
 
   async function handleLogout() {
-    await supabase.auth.signOut()
-    // モバイルブラウザのキャッシュ対策
-    Object.keys(localStorage).forEach(key => {
-      if (key.startsWith('sb-')) localStorage.removeItem(key)
-    })
-    Object.keys(sessionStorage).forEach(key => {
-      if (key.startsWith('sb-')) sessionStorage.removeItem(key)
-    })
+    try {
+      await supabase.auth.signOut({ scope: 'local' })
+    } catch (e) {
+      console.error('signOut error:', e)
+    }
+    // ブラウザストレージを完全クリア
+    try {
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('sb-') || key.includes('supabase')) localStorage.removeItem(key)
+      })
+      Object.keys(sessionStorage).forEach(key => {
+        if (key.startsWith('sb-') || key.includes('supabase')) sessionStorage.removeItem(key)
+      })
+    } catch (e) {
+      console.error('storage clear error:', e)
+    }
     window.location.href = '/'
   }
 

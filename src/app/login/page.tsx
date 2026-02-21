@@ -92,12 +92,7 @@ function LoginForm() {
         const { data: { session } } = await supabase.auth.getSession()
         if (session?.user && !cancelled) {
           cancelled = true
-          try {
-            await redirectUser(session.user)
-          } catch (e) {
-            console.error('[init] redirectUser error:', e)
-            window.location.href = '/explore'
-          }
+          window.location.href = '/explore'
           return
         }
       } catch (e) {
