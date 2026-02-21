@@ -89,15 +89,31 @@ function LoginForm() {
 
     async function init() {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('session_timeout')), 3000)
+        )
+        const sessionPromise = supabase.auth.getSession()
+
+        let session = null
+        try {
+          const { data } = await Promise.race([sessionPromise, timeoutPromise]) as any
+          session = data?.session || null
+        } catch (e) {
+          console.log('[init] getSession timeout - treating as no session')
+          session = null
+        }
+
         console.log('[login/init] session:', session ? 'EXISTS' : 'NULL')
         console.log('[login/init] sb-keys:', Object.keys(localStorage).filter(k => k.startsWith('sb-')))
         if (session) {
           console.log('[login/init] user:', session.user.email)
-          console.log('[login/init] expires:', new Date((session as any).expires_at * 1000))
         }
-        if (session?.user && !cancelled) {
+
+        if (cancelled) return
+
+        if (session?.user) {
           cancelled = true
+          console.log('[login/init] session found → redirect /explore')
           window.location.href = '/explore'
           return
         }
@@ -108,17 +124,13 @@ function LoginForm() {
     }
     init()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string, session: any) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, session: any) => {
       console.log('[onAuthStateChange] event:', event, 'session:', session ? 'EXISTS' : 'NULL', 'cancelled:', cancelled)
 
       if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user && !cancelled) {
         cancelled = true
-        try {
-          await redirectUser(session.user)
-        } catch (e) {
-          console.error('[onAuthStateChange] error:', e)
-          window.location.href = '/explore'
-        }
+        console.log('[onAuthStateChange] SIGNED_IN → redirect /explore')
+        window.location.href = '/explore'
       }
     })
 

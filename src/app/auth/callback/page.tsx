@@ -9,6 +9,7 @@ export default function AuthCallback() {
     // Supabase client library automatically picks up the tokens from the URL hash
     // We just need to wait for the session to be established
     supabase.auth.onAuthStateChange((event: string, session: any) => {
+      console.log('[auth/callback] onAuthStateChange:', event, !!session)
       if (event === 'SIGNED_IN' && session) {
         // Get role/nickname from URL search params
         const params = new URLSearchParams(window.location.search)
@@ -23,19 +24,31 @@ export default function AuthCallback() {
       }
     })
 
-    // Also check if session already exists (in case onAuthStateChange already fired)
+    // Also check if session already exists (with timeout)
     setTimeout(async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session) {
-        const params = new URLSearchParams(window.location.search)
-        const role = params.get('role') || 'pro'
-        const nickname = params.get('nickname') || ''
+      try {
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), 3000)
+        )
+        const sessionPromise = supabase.auth.getSession()
+        const { data } = await Promise.race([sessionPromise, timeoutPromise]) as any
+        const session = data?.session
 
-        const redirectParams = new URLSearchParams()
-        redirectParams.set('role', role)
-        if (nickname) redirectParams.set('nickname', nickname)
+        console.log('[auth/callback] getSession check:', session ? 'EXISTS' : 'NULL')
 
-        window.location.href = '/login?' + redirectParams.toString()
+        if (session) {
+          const params = new URLSearchParams(window.location.search)
+          const role = params.get('role') || 'pro'
+          const nickname = params.get('nickname') || ''
+
+          const redirectParams = new URLSearchParams()
+          redirectParams.set('role', role)
+          if (nickname) redirectParams.set('nickname', nickname)
+
+          window.location.href = '/login?' + redirectParams.toString()
+        }
+      } catch (e) {
+        console.log('[auth/callback] getSession timeout - waiting for onAuthStateChange')
       }
     }, 1000)
   }, [])

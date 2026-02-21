@@ -46,7 +46,8 @@ export default function Navbar() {
       } catch (e) {
         if (!cancelled) {
           setUser(null)
-          setDebugInfo(`error: ${e instanceof Error ? e.message : 'unknown'}`)
+          const sbKeys = Object.keys(localStorage).filter(k => k.startsWith('sb-'))
+          setDebugInfo(`error: ${e instanceof Error ? e.message : 'unknown'} | sb-keys: ${sbKeys.length}`)
         }
       }
       if (!cancelled) setLoaded(true)
