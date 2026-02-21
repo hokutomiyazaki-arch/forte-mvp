@@ -32,7 +32,7 @@ export default function Home() {
       const { data: config } = await (supabase as any)
         .from('founding_member_config')
         .select('total_cap')
-        .order('created_at', { ascending: false })
+        .order('activated_at', { ascending: false })
         .limit(1)
         .maybeSingle()
       const cap = config?.total_cap || 50
