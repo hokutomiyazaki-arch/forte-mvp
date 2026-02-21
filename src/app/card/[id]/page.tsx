@@ -110,6 +110,7 @@ export default function CardPage() {
   const [bookmarkLoading, setBookmarkLoading] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [bookmarkCount, setBookmarkCount] = useState(0)
+  const [orgs, setOrgs] = useState<{id: string; name: string; type: string}[]>([])
 
   useEffect(() => {
     async function load() {
@@ -169,6 +170,24 @@ export default function CardPage() {
           .eq('professional_id', id)
           .maybeSingle()
         setIsBookmarked(!!bookmark)
+      }
+
+      // 所属団体を取得
+      const { data: memberData } = await (supabase as any)
+        .from('org_members')
+        .select('organization_id, organizations(id, name, type)')
+        .eq('professional_id', id)
+        .eq('status', 'active')
+
+      if (memberData) {
+        setOrgs(memberData
+          .filter((m: any) => m.organizations)
+          .map((m: any) => ({
+            id: m.organizations.id,
+            name: m.organizations.name,
+            type: m.organizations.type,
+          }))
+        )
       }
 
       setLoading(false)
@@ -279,6 +298,27 @@ export default function CardPage() {
               }}>
                 FOUNDING MEMBER
               </span>
+            )}
+            {orgs.length > 0 && (
+              <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {orgs.map(o => (
+                  <a
+                    key={o.id}
+                    href={`/org/${o.id}`}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      fontSize: 11, fontWeight: 600, color: T.textMuted,
+                      background: '#F5F3EF', borderRadius: 6, padding: '3px 10px',
+                      textDecoration: 'none', transition: 'color 0.2s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.color = T.gold)}
+                    onMouseLeave={e => (e.currentTarget.style.color = T.textMuted)}
+                  >
+                    <span style={{ fontSize: 10 }}>{o.type === 'store' ? '🏪' : o.type === 'credential' ? '🎓' : '📚'}</span>
+                    {o.name}
+                  </a>
+                ))}
+              </div>
             )}
           </div>
         </div>
