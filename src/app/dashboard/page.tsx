@@ -939,14 +939,10 @@ export default function DashboardPage() {
       })()}
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-3 mb-8">
+      <div className="grid grid-cols-3 gap-3 mb-3">
         <div className="bg-white rounded-xl p-4 shadow-sm text-center">
           <div className="text-3xl font-bold text-[#C4A35A]">{totalVotes}</div>
           <div className="text-xs text-gray-500">総プルーフ数</div>
-        </div>
-        <div className="bg-white rounded-xl p-4 shadow-sm text-center">
-          <div className="text-lg font-bold text-[#1A1A2E] truncate">{topForte}</div>
-          <div className="text-xs text-gray-500">トッププルーフ</div>
         </div>
         <div className="bg-white rounded-xl p-4 shadow-sm text-center">
           <div className="text-3xl font-bold text-[#1A1A2E]">{daysSinceRegistration}</div>
@@ -958,6 +954,23 @@ export default function DashboardPage() {
           <div className="text-xs text-gray-500">ブックマーク</div>
         </div>
       </div>
+
+      {/* トッププルーフ — 黒背景横長 */}
+      {topForte !== '-' && (
+        <div className="rounded-xl p-4 mb-8 flex items-center justify-between gap-3" style={{ background: '#1A1A2E' }}>
+          <div>
+            <div className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#9CA3AF', fontFamily: "'Inter', sans-serif" }}>TOP PROOF</div>
+            <div className="text-lg font-bold mt-0.5" style={{ color: '#FFFFFF' }}>{topForte}</div>
+          </div>
+          <div className="text-right">
+            <div className="text-2xl font-bold" style={{ color: '#C4A35A', fontFamily: "'Inter', sans-serif" }}>
+              {votes.length > 0 ? votes.sort((a, b) => b.vote_count - a.vote_count)[0]?.vote_count : 0}
+            </div>
+            <div className="text-[10px]" style={{ color: '#9CA3AF' }}>votes</div>
+          </div>
+        </div>
+      )}
+      {topForte === '-' && <div className="mb-8" />}
 
       {/* Proof Chart */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">

@@ -108,6 +108,7 @@ export default function CardPage() {
   const [isBookmarked, setIsBookmarked] = useState(false)
   const [bookmarkLoading, setBookmarkLoading] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [bookmarkCount, setBookmarkCount] = useState(0)
 
   useEffect(() => {
     async function load() {
@@ -148,6 +149,13 @@ export default function CardPage() {
         .from('votes').select('*', { count: 'exact', head: true })
         .eq('professional_id', id).eq('status', 'confirmed') as any
       setTotalVotes(count || 0)
+
+      // ブックマーク数を取得
+      const { count: bmCount } = await (supabase as any)
+        .from('bookmarks')
+        .select('*', { count: 'exact', head: true })
+        .eq('professional_id', id)
+      setBookmarkCount(bmCount || 0)
 
       // セッション取得 + ブックマーク状態チェック
       const { data: { session } } = await supabase.auth.getSession()
@@ -274,9 +282,17 @@ export default function CardPage() {
           </div>
         </div>
         <div style={{ height: 1, background: T.divider, margin: '16px 0' }} />
-        <div style={{ textAlign: 'center' }}>
-          <span style={{ fontSize: 30, fontWeight: 'bold', color: T.gold, fontFamily: T.fontMono }}>{totalVotes}</span>
-          <span style={{ fontSize: 13, color: T.textSub, marginLeft: 6 }}>proofs</span>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 24 }}>
+          <div style={{ textAlign: 'center' }}>
+            <span style={{ fontSize: 30, fontWeight: 'bold', color: T.gold, fontFamily: T.fontMono }}>{totalVotes}</span>
+            <span style={{ fontSize: 13, color: T.textSub, marginLeft: 6 }}>proofs</span>
+          </div>
+          {bookmarkCount > 0 && (
+            <div style={{ textAlign: 'center' }}>
+              <span style={{ fontSize: 20, fontWeight: 'bold', color: T.text, fontFamily: T.fontMono }}>{bookmarkCount}</span>
+              <span style={{ fontSize: 11, color: T.textMuted, marginLeft: 4 }}>♡</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -398,6 +414,31 @@ export default function CardPage() {
                 </div>
                 <div style={{ textAlign: 'center', marginTop: 14, fontSize: 12, color: T.textSub }}>
                   パーソナリティへの投票 計 <span style={{ fontWeight: 'bold', color: T.gold }}>{totalPersonality}</span>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* BOOKMARK ENGAGEMENT */}
+          {bookmarkCount > 0 && (
+            <>
+              <div style={{ fontSize: 10, fontWeight: 700, color: T.textMuted, letterSpacing: 2, textTransform: 'uppercase', fontFamily: T.fontMono, marginBottom: 10, marginTop: 16 }}>
+                ENGAGEMENT
+              </div>
+              <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: 18 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8, gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>♡ ブックマーク</span>
+                  <span style={{ fontSize: 16, fontWeight: 'bold', color: T.gold, fontFamily: T.fontMono, flexShrink: 0 }}>{bookmarkCount}</span>
+                </div>
+                <div style={{ width: '100%', height: 8, background: '#F0EDE6', borderRadius: 99 }}>
+                  <div style={{
+                    height: 8, borderRadius: 99, background: 'linear-gradient(90deg, #C4A35A, #D4B96A)',
+                    width: animated ? `${Math.min(bookmarkCount * 10, 100)}%` : '0%',
+                    transition: 'width 1.2s ease 0.3s',
+                  }} />
+                </div>
+                <div style={{ textAlign: 'center', marginTop: 10, fontSize: 11, color: T.textMuted }}>
+                  {bookmarkCount}人がこのプロに注目しています
                 </div>
               </div>
             </>
