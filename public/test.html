@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>通信テスト</title></head>
+<body style="padding:20px;font-family:monospace;font-size:16px;line-height:2.5">
+<h2>REALPROOF 通信テスト</h2>
+<div id="log"></div>
+<script>
+var log = document.getElementById('log');
+function w(msg) { log.innerHTML += msg + '<br>'; }
+w('1. ✅ ページ表示OK・JS実行OK');
+// Step 1: 外部通信テスト
+w('2. 外部通信テスト中...');
+var t1 = Date.now();
+fetch('https://httpbin.org/get')
+  .then(function(r) {
+    w('3. ✅ 外部通信OK (' + (Date.now()-t1) + 'ms)');
+
+    // Step 2: Supabase通信テスト
+    w('4. Supabase通信テスト中...');
+    var t2 = Date.now();
+    return fetch('https://eikzgzqnydptpqjwxbfu.supabase.co/rest/v1/professionals?select=id&limit=1', {
+      headers: {
+        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpa3pnenFueWRwdHBxand4YmZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzgzNjk2NzQsImV4cCI6MjA1Mzk0NTY3NH0.KMnXGSgHTSzOfeXpc-U7JGt7YvxQFIaKEXDJN6NYdMQ'
+      }
+    });
+  })
+  .then(function(r) {
+    var ms = Date.now()-t1;
+    return r.text().then(function(body) {
+      w('5. ✅ Supabase通信OK (status:' + r.status + ', ' + ms + 'ms)');
+      w('6. レスポンス: ' + body.substring(0, 200));
+      w('');
+      w('<b>=== 通信は正常。問題はSupabase JSクライアントの初期化 ===</b>');
+    });
+  })
+  .catch(function(e) {
+    w('❌ エラー: ' + e.message);
+  });
+</script>
+</body>
+</html>
