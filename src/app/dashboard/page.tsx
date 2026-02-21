@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
+import { getSessionSafe } from '@/lib/auth-helper'
 import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYPES, getRewardType } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import ForteChart from '@/components/ForteChart'
@@ -116,9 +117,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function load() {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.user) { window.location.href = '/login?role=pro'; return }
-      const u = session.user
+      const { session, user: u } = await getSessionSafe()
+      if (!session || !u) { window.location.href = '/login?role=pro'; return }
       setUser(u)
       const emailIdentity = u.identities?.find((i: any) => i.provider === 'email')
       setHasEmailIdentity(!!emailIdentity)

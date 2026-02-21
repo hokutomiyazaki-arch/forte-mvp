@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import { getSessionSafe } from '@/lib/auth-helper'
 import { Professional, getRewardLabel } from '@/lib/types'
 import { Suspense } from 'react'
 
@@ -199,16 +200,16 @@ function VoteForm() {
       if (persItems) setPersonalityItems(persItems)
 
       // セッション確認（ログイン済みユーザーのメール自動取得）
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user?.email) {
-        setSessionEmail(session.user.email)
+      const { user: sessionUser } = await getSessionSafe()
+      if (sessionUser?.email) {
+        setSessionEmail(sessionUser.email)
         setIsLoggedIn(true)
         // ログイン済みならセッションメールで重複投票チェック
         const { data: existing } = await (supabase as any)
           .from('votes')
           .select('id')
           .eq('professional_id', proId)
-          .eq('voter_email', session.user.email)
+          .eq('voter_email', sessionUser.email)
           .maybeSingle()
         if (existing) setAlreadyVoted(true)
       } else {

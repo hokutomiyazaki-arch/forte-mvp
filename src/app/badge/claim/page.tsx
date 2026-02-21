@@ -2,6 +2,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import { getSessionSafe } from '@/lib/auth-helper'
 
 const BADGE_CODES: Record<string, { id: string; label: string; image_url: string }> = {
   'FNT-BASIC': { id: 'fnt-basic', label: 'FNT Basic 認定', image_url: '/badges/fnt-basic.png' },
@@ -26,11 +27,11 @@ function ClaimForm() {
   }, [])
 
   async function claimBadge() {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.user) { setStatus('no-login'); return }
+    const { session, user: sessionUser } = await getSessionSafe()
+    if (!session || !sessionUser) { setStatus('no-login'); return }
 
     const { data: pro } = await supabase
-      .from('professionals').select('id, badges').eq('user_id', session.user.id).single()
+      .from('professionals').select('id, badges').eq('user_id', sessionUser.id).maybeSingle()
     if (!pro) { setStatus('no-pro'); return }
 
     const existing = pro.badges || []

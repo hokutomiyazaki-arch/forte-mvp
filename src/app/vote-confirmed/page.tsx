@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import { getSessionSafe } from '@/lib/auth-helper'
 import { getRewardLabel } from '@/lib/types'
 import { Suspense } from 'react'
 import RelatedPros from '@/components/RelatedPros'
@@ -32,11 +33,11 @@ function ConfirmedContent() {
       console.log('[vote-confirmed] load start, proId:', proId, 'voteId:', voteId)
 
       // セッション確認
-      const { data: { session } } = await supabase.auth.getSession()
-      console.log('[vote-confirmed] session:', session?.user?.email || 'none')
-      if (session?.user) {
+      const { session, user: sessionUser } = await getSessionSafe()
+      console.log('[vote-confirmed] session:', sessionUser?.email || 'none')
+      if (sessionUser) {
         setLoggedIn(true)
-        setSessionEmail(session.user.email || '')
+        setSessionEmail(sessionUser.email || '')
       }
 
       // プロ名・都道府県取得

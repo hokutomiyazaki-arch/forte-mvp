@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
+import { getSessionSafe } from '@/lib/auth-helper'
 import { Professional, Vote } from '@/lib/types'
 
 const ADMIN_EMAILS = ['info@functionalneurotraining.com']
@@ -20,8 +21,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     async function load() {
-      const { data: { session } } = await supabase.auth.getSession()
-      const user = session?.user
+      const { user } = await getSessionSafe()
       if (!user || !ADMIN_EMAILS.includes(user.email || '')) {
         setLoading(false)
         return

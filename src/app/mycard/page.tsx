@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import { getSessionSafe } from '@/lib/auth-helper'
 import { getRewardLabel } from '@/lib/types'
 import RewardContent from '@/components/RewardContent'
 import { Suspense } from 'react'
@@ -199,14 +200,14 @@ function MyCardContent() {
         setShowSettings(true)
       }
       console.log('[mycard] checkSession start')
-      const { data: { session } } = await supabase.auth.getSession()
-      console.log('[mycard] session:', session?.user?.email || 'none')
+      const { session, user } = await getSessionSafe()
+      console.log('[mycard] session:', user?.email || 'none')
 
-      if (session?.user) {
-        const email = session.user.email || ''
+      if (session && user) {
+        const email = user.email || ''
         setUserEmail(email)
         setAuthMode('ready')
-        await loadData(email, session.user.id)
+        await loadData(email, user.id)
       } else {
         // 未ログイン: インラインフォーム表示
         setAuthMode('auth')

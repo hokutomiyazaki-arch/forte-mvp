@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import { getSessionSafe } from '@/lib/auth-helper'
 import { Professional, VoteSummary, Vote } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import { COLORS, FONTS } from '@/lib/design-tokens'
@@ -158,13 +159,13 @@ export default function CardPage() {
       setBookmarkCount(bmCount || 0)
 
       // セッション取得 + ブックマーク状態チェック
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user) {
-        setCurrentUserId(session.user.id)
+      const { user: sessionUser } = await getSessionSafe()
+      if (sessionUser) {
+        setCurrentUserId(sessionUser.id)
         const { data: bookmark } = await (supabase as any)
           .from('bookmarks')
           .select('id')
-          .eq('user_id', session.user.id)
+          .eq('user_id', sessionUser.id)
           .eq('professional_id', id)
           .maybeSingle()
         setIsBookmarked(!!bookmark)
