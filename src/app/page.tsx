@@ -13,14 +13,15 @@ export default function Home() {
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            entry.target.classList.add('visible')
+            entry.target.classList.add('animate-in')
+            observer.unobserve(entry.target)
           }
         })
       },
       { threshold: 0.12 }
     )
-    revealRefs.current.forEach((el) => {
-      if (el) observer.observe(el)
+    document.querySelectorAll('.scroll-fade').forEach((el) => {
+      observer.observe(el)
     })
     return () => observer.disconnect()
   }, [])
@@ -47,111 +48,124 @@ export default function Home() {
     loadFmCount()
   }, [])
 
-  const addRevealRef = (el: HTMLElement | null) => {
-    if (el && !revealRefs.current.includes(el)) {
-      revealRefs.current.push(el)
-    }
-  }
-
   return (
     <div style={{ margin: '-2rem -1rem 0', fontFamily: "'Noto Sans JP', 'Inter', sans-serif" }}>
       <style>{`
+        /* ═══ Fade-up animation (HERO stagger) ═══ */
         @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(16px); }
-          to { opacity: 1; transform: translateY(0); }
+          from {
+            opacity: 0;
+            transform: translateY(24px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
         }
-        .reveal-section {
+        .fade-up {
+          animation: fadeUp 0.8s ease-out forwards;
+          opacity: 0;
+        }
+        .fade-up-1 { animation-delay: 0s; }
+        .fade-up-2 { animation-delay: 0.12s; }
+        .fade-up-3 { animation-delay: 0.24s; }
+        .fade-up-4 { animation-delay: 0.36s; }
+        .fade-up-5 { animation-delay: 0.48s; }
+        .fade-up-6 { animation-delay: 0.60s; }
+        .fade-up-7 { animation-delay: 0.72s; }
+
+        /* ═══ Scroll-fade (IntersectionObserver) ═══ */
+        .scroll-fade {
           opacity: 0;
           transform: translateY(20px);
-          transition: all 0.6s ease;
+          transition: opacity 0.7s ease-out, transform 0.7s ease-out;
         }
-        .reveal-section.visible {
+        .scroll-fade.animate-in {
           opacity: 1;
           transform: translateY(0);
         }
+
+        /* ═══ Hover effects ═══ */
         .pillar-card-item {
-          transition: all 0.3s;
+          transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .pillar-card-item:hover {
           border-color: #C4A35A !important;
-          box-shadow: 0 4px 20px rgba(196,163,90,0.1);
-          transform: translateY(-3px);
+          box-shadow: 0 12px 40px rgba(196,163,90,0.12);
+          transform: translateY(-4px);
+        }
+        .btn-gold-hover {
+          transition: all 0.3s;
         }
         .btn-gold-hover:hover {
           background: #b5963f !important;
-          transform: translateY(-1px);
-          box-shadow: 0 6px 20px rgba(196,163,90,0.25);
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px rgba(196,163,90,0.3);
+        }
+        .btn-dark-hover {
+          transition: all 0.3s;
         }
         .btn-dark-hover:hover {
-          background: #2a2a4a !important;
-          transform: translateY(-1px);
+          background: #2A2A3E !important;
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px rgba(26,26,46,0.2);
         }
-        .btn-outline-hover:hover {
-          border-color: #C4A35A !important;
-          color: #C4A35A !important;
+        .founder-link:hover {
+          text-decoration: underline !important;
         }
-        /* ── Mobile responsive ── */
+
+        /* ═══ Layout grids ═══ */
         .how-it-works-grid {
           display: flex;
-          gap: 24px;
+          gap: 32px;
           justify-content: center;
-          flex-wrap: wrap;
           text-align: center;
         }
         .how-it-works-arrow {
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 20px;
-          color: #C4A35A;
-          min-width: 32px;
-          padding-top: 20px;
+          font-size: 28px;
+          color: rgba(196,163,90,0.4);
+          min-width: 28px;
+          flex-shrink: 0;
         }
         .pillars-grid {
           display: flex;
-          gap: 28px;
+          gap: 24px;
           justify-content: center;
-          flex-wrap: wrap;
         }
         .voices-grid {
           display: flex;
-          gap: 20px;
+          gap: 24px;
           justify-content: center;
-          flex-wrap: wrap;
-          margin-bottom: 48px;
+          margin-bottom: 40px;
         }
         .founder-grid {
           display: flex;
-          gap: 48px;
-          align-items: flex-start;
+          gap: 40px;
+          align-items: center;
           text-align: left;
-          flex-wrap: wrap;
           justify-content: center;
         }
         .founder-photo {
-          width: 160px;
-          min-width: 160px;
+          width: 280px;
+          min-width: 280px;
         }
         .founder-text {
           flex: 1;
           min-width: 280px;
-        }
-        .fm-box {
-          max-width: 600px;
-          margin: 0 auto;
-          padding: 48px 40px;
-          border: 1px solid rgba(196,163,90,0.25);
-          background: #FFFFFF;
-          text-align: center;
-        }
-        .top-section {
-          padding: 100px 24px;
         }
         .comparison-table {
           overflow-x: auto;
           -webkit-overflow-scrolling: touch;
           padding-bottom: 8px;
         }
+        .top-section {
+          padding: clamp(60px, 10vw, 100px) 20px;
+        }
+
+        /* ═══ Mobile responsive ═══ */
         @media (max-width: 768px) {
           .top-section {
             padding: 48px 20px;
@@ -159,17 +173,16 @@ export default function Home() {
           .how-it-works-grid {
             flex-direction: column;
             align-items: center;
+            gap: 24px;
           }
           .how-it-works-arrow {
-            transform: rotate(90deg);
-            padding-top: 0;
-            min-width: auto;
+            display: none !important;
           }
           .pillars-grid {
             flex-direction: column;
           }
           .pillar-card-item {
-            padding: 20px !important;
+            padding: 24px 20px !important;
           }
           .voices-grid {
             flex-direction: column;
@@ -188,7 +201,7 @@ export default function Home() {
             min-width: auto;
           }
           .fm-box {
-            padding: 24px 20px;
+            padding: 28px 20px !important;
           }
         }
       `}</style>
@@ -208,108 +221,108 @@ export default function Home() {
           textAlign: 'center',
         }}
       >
-        <div style={{ maxWidth: 780, margin: '0 auto' }}>
+        <div style={{ maxWidth: 680, margin: '0 auto' }}>
+          {/* REAL PROOF logo */}
           <div
+            className="fade-up fade-up-1"
             style={{
               fontFamily: "'Inter', sans-serif",
-              fontSize: 'clamp(20px, 5vw, 42px)',
-              fontWeight: 800,
-              letterSpacing: 4,
+              fontSize: 'clamp(24px, 5vw, 36px)',
+              fontWeight: 900,
+              letterSpacing: 6,
               color: '#1A1A2E',
               marginBottom: 8,
-              opacity: 0,
-              animation: 'fadeUp 0.7s ease forwards 0.1s',
             }}
           >
             REAL PROOF
           </div>
+
+          {/* Tagline */}
           <div
+            className="fade-up fade-up-2"
             style={{
-              fontSize: 'clamp(12px, 2.5vw, 14px)',
+              fontFamily: "'Noto Sans JP', sans-serif",
+              fontSize: 13,
               fontWeight: 600,
               color: '#C4A35A',
-              letterSpacing: 3,
+              letterSpacing: 4,
               marginBottom: 'clamp(28px, 6vw, 52px)',
-              opacity: 0,
-              animation: 'fadeUp 0.7s ease forwards 0.25s',
             }}
           >
             本物が輝く社会へ。
           </div>
 
+          {/* Main heading */}
           <h1
+            className="fade-up fade-up-3"
             style={{
-              fontSize: 'clamp(18px, 4.5vw, 26px)',
-              fontWeight: 800,
-              lineHeight: 1.8,
+              fontFamily: "'Noto Sans JP', sans-serif",
+              fontSize: 'clamp(22px, 5vw, 32px)',
+              fontWeight: 900,
+              lineHeight: 1.9,
               color: '#1A1A2E',
               marginBottom: 'clamp(16px, 4vw, 28px)',
-              opacity: 0,
-              animation: 'fadeUp 0.7s ease forwards 0.4s',
             }}
           >
             あなたの強みを一番知っているのは、<br />
             <span style={{ color: '#C4A35A' }}>あなたのクライアントだ。</span>
           </h1>
 
+          {/* Conflict text */}
           <p
+            className="fade-up fade-up-4"
             style={{
               fontSize: 'clamp(13px, 2.8vw, 15px)',
               fontWeight: 500,
-              lineHeight: 2,
-              color: '#444444',
+              lineHeight: 2.0,
+              color: '#666666',
               maxWidth: 600,
               margin: '0 auto',
               marginBottom: 'clamp(12px, 3vw, 20px)',
               padding: '0 8px',
-              opacity: 0,
-              animation: 'fadeUp 0.7s ease forwards 0.55s',
             }}
           >
             なのに、選ばれる基準は★の数、フォロワー数、広告費。<br />
             どれも、あなたの本当の強みを映していない。
           </p>
 
+          {/* Solution text */}
           <p
+            className="fade-up fade-up-5"
             style={{
               fontSize: 'clamp(13px, 2.8vw, 15px)',
               fontWeight: 500,
-              lineHeight: 2,
+              lineHeight: 2.0,
               color: '#444444',
               maxWidth: 600,
               margin: '0 auto',
               marginBottom: 'clamp(24px, 5vw, 40px)',
               padding: '0 8px',
-              opacity: 0,
-              animation: 'fadeUp 0.7s ease forwards 0.65s',
             }}
           >
             REAL PROOFは、実際にあなたのセッションを受けたクライアントだけが<br />
             「何が強いか」を投票で証明するプラットフォーム。
           </p>
 
+          {/* CTA button */}
           <div
-            style={{
-              marginBottom: 40,
-              opacity: 0,
-              animation: 'fadeUp 0.7s ease forwards 0.75s',
-            }}
+            className="fade-up fade-up-6"
+            style={{ marginBottom: 40 }}
           >
             <Link
               href="/login?role=pro"
               className="btn-gold-hover"
               style={{
                 display: 'inline-block',
-                padding: '16px 48px',
+                padding: '18px 56px',
                 background: '#C4A35A',
                 color: '#FFFFFF',
                 fontWeight: 700,
-                fontSize: 14,
+                fontSize: 15,
                 letterSpacing: 1,
                 textDecoration: 'none',
                 border: 'none',
                 cursor: 'pointer',
-                transition: 'all 0.3s',
                 width: '100%',
                 maxWidth: 320,
                 textAlign: 'center',
@@ -319,16 +332,16 @@ export default function Home() {
             </Link>
           </div>
 
+          {/* Footer text */}
           <p
+            className="fade-up fade-up-7"
             style={{
               fontSize: 'clamp(11px, 2.2vw, 13px)',
               fontWeight: 500,
               lineHeight: 1.9,
-              color: '#888888',
+              color: '#999999',
               marginTop: 'clamp(20px, 4vw, 32px)',
               padding: '0 8px',
-              opacity: 0,
-              animation: 'fadeUp 0.7s ease forwards 0.85s',
             }}
           >
             集客に困っていなくても。SNSが苦手でも。実績がゼロでも。<br />
@@ -337,24 +350,20 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Divider (gold) */}
-      <div style={{ width: 48, height: 1, background: 'rgba(196,163,90,0.25)', margin: '0 auto 100px' }} />
-
       {/* ================================ */}
       {/* SECTION 2: HOW IT WORKS          */}
       {/* ================================ */}
       <section
-        ref={addRevealRef}
-        className="reveal-section top-section"
+        className="scroll-fade top-section"
         style={{ textAlign: 'center', background: '#FAFAF7' }}
       >
-        <div style={{ maxWidth: 780, margin: '0 auto' }}>
+        <div style={{ maxWidth: 960, margin: '0 auto' }}>
           <div
             style={{
               fontFamily: "'Inter', sans-serif",
               fontSize: 11,
               fontWeight: 700,
-              letterSpacing: 4,
+              letterSpacing: 5,
               color: '#C4A35A',
               textTransform: 'uppercase' as const,
               marginBottom: 16,
@@ -364,11 +373,12 @@ export default function Home() {
           </div>
           <h2
             style={{
-              fontSize: 22,
-              fontWeight: 700,
+              fontFamily: "'Noto Sans JP', sans-serif",
+              fontSize: 'clamp(18px, 4vw, 24px)',
+              fontWeight: 800,
               color: '#1A1A2E',
               lineHeight: 1.6,
-              marginBottom: 56,
+              marginBottom: 48,
             }}
           >
             強みを集める。強みで選ぶ。強みを育てる。
@@ -376,32 +386,32 @@ export default function Home() {
 
           <div className="how-it-works-grid">
             {/* Step 1 */}
-            <div style={{ flex: 1, minWidth: 220, maxWidth: 260 }}>
+            <div style={{ flex: 1, minWidth: 220, maxWidth: 280 }}>
               <div
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  width: 40,
-                  height: 40,
+                  width: 44,
+                  height: 44,
                   border: '1.5px solid #C4A35A',
                   borderRadius: '50%',
                   fontFamily: "'Inter', sans-serif",
                   fontWeight: 700,
-                  fontSize: 15,
+                  fontSize: 16,
                   color: '#C4A35A',
-                  marginBottom: 18,
+                  margin: '0 auto 20px',
                 }}
               >
                 1
               </div>
-              <div style={{ fontSize: 17, fontWeight: 700, color: '#1A1A2E', marginBottom: 6 }}>
+              <div style={{ fontSize: 'clamp(16px, 3.5vw, 18px)', fontWeight: 800, color: '#1A1A2E', marginBottom: 6 }}>
                 強みを集める
               </div>
-              <div style={{ fontSize: 11, color: '#C4A35A', letterSpacing: 1, marginBottom: 14, fontWeight: 500 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: '#C4A35A', letterSpacing: 2, marginBottom: 12 }}>
                 — プロが主語
               </div>
-              <p style={{ fontSize: 13, lineHeight: 1.9, color: '#444444' }}>
+              <p style={{ fontSize: 'clamp(13px, 2.8vw, 14px)', fontWeight: 500, lineHeight: 2.0, color: '#555555' }}>
                 セッション後、クライアントがQRコードかNFCカードから投票。「結果を出してくれた」「説明がわかりやすかった」「空間が心地よかった」── あなたの強みを、クライアントの本音が教えてくれる。
               </p>
             </div>
@@ -410,32 +420,32 @@ export default function Home() {
             <div className="how-it-works-arrow">→</div>
 
             {/* Step 2 */}
-            <div style={{ flex: 1, minWidth: 220, maxWidth: 260 }}>
+            <div style={{ flex: 1, minWidth: 220, maxWidth: 280 }}>
               <div
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  width: 40,
-                  height: 40,
+                  width: 44,
+                  height: 44,
                   border: '1.5px solid #C4A35A',
                   borderRadius: '50%',
                   fontFamily: "'Inter', sans-serif",
                   fontWeight: 700,
-                  fontSize: 15,
+                  fontSize: 16,
                   color: '#C4A35A',
-                  marginBottom: 18,
+                  margin: '0 auto 20px',
                 }}
               >
                 2
               </div>
-              <div style={{ fontSize: 17, fontWeight: 700, color: '#1A1A2E', marginBottom: 6 }}>
+              <div style={{ fontSize: 'clamp(16px, 3.5vw, 18px)', fontWeight: 800, color: '#1A1A2E', marginBottom: 6 }}>
                 強みで選ぶ
               </div>
-              <div style={{ fontSize: 11, color: '#C4A35A', letterSpacing: 1, marginBottom: 14, fontWeight: 500 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: '#C4A35A', letterSpacing: 2, marginBottom: 12 }}>
                 — クライアントが主語
               </div>
-              <p style={{ fontSize: 13, lineHeight: 1.9, color: '#444444' }}>
+              <p style={{ fontSize: 'clamp(13px, 2.8vw, 14px)', fontWeight: 500, lineHeight: 2.0, color: '#555555' }}>
                 「姿勢改善が得意な人」「メンタルケアに強い人」── クライアントは★ではなく、強みでプロを選ぶ。広告費を払う必要はない。あなたの強みが、集客になる。
               </p>
             </div>
@@ -444,32 +454,32 @@ export default function Home() {
             <div className="how-it-works-arrow">→</div>
 
             {/* Step 3 */}
-            <div style={{ flex: 1, minWidth: 220, maxWidth: 260 }}>
+            <div style={{ flex: 1, minWidth: 220, maxWidth: 280 }}>
               <div
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  width: 40,
-                  height: 40,
+                  width: 44,
+                  height: 44,
                   border: '1.5px solid #C4A35A',
                   borderRadius: '50%',
                   fontFamily: "'Inter', sans-serif",
                   fontWeight: 700,
-                  fontSize: 15,
+                  fontSize: 16,
                   color: '#C4A35A',
-                  marginBottom: 18,
+                  margin: '0 auto 20px',
                 }}
               >
                 3
               </div>
-              <div style={{ fontSize: 17, fontWeight: 700, color: '#1A1A2E', marginBottom: 6 }}>
+              <div style={{ fontSize: 'clamp(16px, 3.5vw, 18px)', fontWeight: 800, color: '#1A1A2E', marginBottom: 6 }}>
                 強みを育てる
               </div>
-              <div style={{ fontSize: 11, color: '#C4A35A', letterSpacing: 1, marginBottom: 14, fontWeight: 500 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: '#C4A35A', letterSpacing: 2, marginBottom: 12 }}>
                 — プロが主語
               </div>
-              <p style={{ fontSize: 13, lineHeight: 1.9, color: '#444444' }}>
+              <p style={{ fontSize: 'clamp(13px, 2.8vw, 14px)', fontWeight: 500, lineHeight: 2.0, color: '#555555' }}>
                 投票は蓄積される。辞めても、独立しても、消えない。続けるほどあなただけの「強みの証明」が育っていく。資格では見えない成長が、クライアントの声で見える。最初の1票から始まる。
               </p>
             </div>
@@ -477,38 +487,45 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Divider */}
-      <div style={{ width: 48, height: 1, background: '#E8E4DC', margin: '0 auto 100px' }} />
-
       {/* ================================ */}
       {/* SECTION 3: COMPARISON TABLE      */}
       {/* ================================ */}
       <section
-        ref={addRevealRef}
-        className="reveal-section top-section"
+        className="scroll-fade top-section"
         style={{ textAlign: 'center', background: '#FAFAF7' }}
       >
-        <div style={{ maxWidth: 780, margin: '0 auto' }}>
-          <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1A1A2E', lineHeight: 1.6, marginBottom: 56 }}>
+        <div style={{ maxWidth: 960, margin: '0 auto' }}>
+          <h2 style={{
+            fontFamily: "'Noto Sans JP', sans-serif",
+            fontSize: 'clamp(18px, 4vw, 24px)',
+            fontWeight: 800,
+            color: '#1A1A2E',
+            lineHeight: 1.6,
+            marginBottom: 40,
+          }}>
             ★で選ぶ時代は終わった。
           </h2>
           <div className="comparison-table">
             <table
               style={{
                 width: '100%',
-                minWidth: 600,
-                maxWidth: 720,
+                minWidth: 580,
+                maxWidth: 960,
                 margin: '0 auto',
-                borderCollapse: 'collapse',
-                fontSize: 'clamp(11px, 2.5vw, 14px)',
+                borderCollapse: 'separate' as const,
+                borderSpacing: 0,
+                borderRadius: 14,
+                overflow: 'hidden',
+                border: '1px solid #E8E4DC',
+                fontSize: 'clamp(12px, 2.5vw, 14px)',
               }}
             >
               <thead>
                 <tr>
-                  <th style={{ padding: '16px 10px', fontWeight: 700, textAlign: 'center', borderBottom: '2px solid #ddd', fontSize: 13, color: '#1A1A2E' }}></th>
-                  <th style={{ padding: '16px 10px', fontWeight: 700, textAlign: 'center', borderBottom: '2px solid #ddd', fontSize: 13, color: '#1A1A2E' }}>ホットペッパー</th>
-                  <th style={{ padding: '16px 10px', fontWeight: 700, textAlign: 'center', borderBottom: '2px solid #ddd', fontSize: 13, color: '#1A1A2E' }}>Google</th>
-                  <th style={{ padding: '16px 10px', fontWeight: 700, textAlign: 'center', borderBottom: '2px solid #C4A35A', fontSize: 13, color: '#C4A35A' }}>REAL PROOF</th>
+                  <th style={{ padding: '16px 20px', fontWeight: 700, textAlign: 'center', borderBottom: '1px solid #E8E4DC', fontSize: 13, color: '#1A1A2E', background: '#FAFAF7' }}></th>
+                  <th style={{ padding: '16px 20px', fontWeight: 700, textAlign: 'center', borderBottom: '1px solid #E8E4DC', fontSize: 13, color: '#1A1A2E', background: '#FAFAF7' }}>ホットペッパー</th>
+                  <th style={{ padding: '16px 20px', fontWeight: 700, textAlign: 'center', borderBottom: '1px solid #E8E4DC', fontSize: 13, color: '#1A1A2E', background: '#FAFAF7' }}>Google</th>
+                  <th style={{ padding: '16px 20px', fontWeight: 800, textAlign: 'center', borderBottom: '2px solid #C4A35A', fontSize: 13, color: '#C4A35A', background: '#FAFAF7' }}>REAL PROOF</th>
                 </tr>
               </thead>
               <tbody>
@@ -521,10 +538,10 @@ export default function Home() {
                   ['独立時', 'リセット', 'リセット', '持ち運べる'],
                 ].map(([label, hp, google, rp], i, arr) => (
                   <tr key={label}>
-                    <td style={{ padding: '13px 10px', textAlign: 'left', borderBottom: i === arr.length - 1 ? 'none' : '1px solid #eee', fontWeight: 600, color: '#1A1A2E', fontSize: 12 }}>{label}</td>
-                    <td style={{ padding: '13px 10px', textAlign: 'center', borderBottom: i === arr.length - 1 ? 'none' : '1px solid #eee', color: '#444444' }}>{hp}</td>
-                    <td style={{ padding: '13px 10px', textAlign: 'center', borderBottom: i === arr.length - 1 ? 'none' : '1px solid #eee', color: '#444444' }}>{google}</td>
-                    <td style={{ padding: '13px 10px', textAlign: 'center', borderBottom: i === arr.length - 1 ? 'none' : '1px solid #eee', color: '#1A1A2E', fontWeight: 600, background: 'rgba(196,163,90,0.08)' }}>{rp}</td>
+                    <td style={{ padding: '14px 20px', textAlign: 'left', borderBottom: i === arr.length - 1 ? 'none' : '1px solid #F0EDE6', fontWeight: 600, color: '#666666', fontSize: 'clamp(12px, 2.5vw, 14px)', width: 120 }}>{label}</td>
+                    <td style={{ padding: '14px 20px', textAlign: 'center', borderBottom: i === arr.length - 1 ? 'none' : '1px solid #F0EDE6', color: '#444444', fontWeight: 500 }}>{hp}</td>
+                    <td style={{ padding: '14px 20px', textAlign: 'center', borderBottom: i === arr.length - 1 ? 'none' : '1px solid #F0EDE6', color: '#444444', fontWeight: 500 }}>{google}</td>
+                    <td style={{ padding: '14px 20px', textAlign: 'center', borderBottom: i === arr.length - 1 ? 'none' : '1px solid #F0EDE6', color: '#1A1A2E', fontWeight: 700, background: 'rgba(196,163,90,0.05)' }}>{rp}</td>
                   </tr>
                 ))}
               </tbody>
@@ -533,19 +550,22 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Divider */}
-      <div style={{ width: 48, height: 1, background: '#E8E4DC', margin: '0 auto 100px' }} />
-
       {/* ================================ */}
       {/* SECTION 4: 3 PILLARS             */}
       {/* ================================ */}
       <section
-        ref={addRevealRef}
-        className="reveal-section top-section"
+        className="scroll-fade top-section"
         style={{ textAlign: 'center', background: '#FAFAF7' }}
       >
-        <div style={{ maxWidth: 780, margin: '0 auto' }}>
-          <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1A1A2E', lineHeight: 1.6, marginBottom: 56 }}>
+        <div style={{ maxWidth: 960, margin: '0 auto' }}>
+          <h2 style={{
+            fontFamily: "'Noto Sans JP', sans-serif",
+            fontSize: 'clamp(18px, 4vw, 24px)',
+            fontWeight: 800,
+            color: '#1A1A2E',
+            lineHeight: 1.6,
+            marginBottom: 48,
+          }}>
             REAL PROOFが他と違う、3つの理由。
           </h2>
           <div className="pillars-grid">
@@ -572,20 +592,41 @@ export default function Home() {
                 style={{
                   flex: 1,
                   minWidth: 220,
-                  maxWidth: 260,
                   textAlign: 'center',
-                  padding: '36px 24px',
+                  padding: '32px 28px',
                   border: '1px solid #E8E4DC',
+                  borderRadius: 14,
                   background: '#FFFFFF',
                 }}
               >
-                <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 3, color: '#C4A35A', marginBottom: 14 }}>
+                <div style={{
+                  fontFamily: "'Inter', sans-serif",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: 4,
+                  color: '#C4A35A',
+                  textTransform: 'uppercase' as const,
+                  marginBottom: 14,
+                }}>
                   {pillar.label}
                 </div>
-                <div style={{ fontSize: 17, fontWeight: 700, color: '#1A1A2E', marginBottom: 14 }}>
+                <div style={{
+                  fontFamily: "'Noto Sans JP', sans-serif",
+                  fontSize: 'clamp(16px, 3.5vw, 19px)',
+                  fontWeight: 800,
+                  color: '#1A1A2E',
+                  lineHeight: 1.6,
+                  marginBottom: 12,
+                }}>
                   {pillar.heading}
                 </div>
-                <p style={{ fontSize: 13, lineHeight: 1.9, color: '#444444' }}>
+                <p style={{
+                  fontFamily: "'Noto Sans JP', sans-serif",
+                  fontSize: 'clamp(13px, 2.8vw, 14px)',
+                  fontWeight: 500,
+                  lineHeight: 2.0,
+                  color: '#555555',
+                }}>
                   {pillar.desc}
                 </p>
               </div>
@@ -594,19 +635,22 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Divider */}
-      <div style={{ width: 48, height: 1, background: '#E8E4DC', margin: '0 auto 100px' }} />
-
       {/* ================================ */}
       {/* SECTION 5: VOICES                */}
       {/* ================================ */}
       <section
-        ref={addRevealRef}
-        className="reveal-section top-section"
+        className="scroll-fade top-section"
         style={{ textAlign: 'center', background: '#FAFAF7' }}
       >
-        <div style={{ maxWidth: 780, margin: '0 auto' }}>
-          <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1A1A2E', lineHeight: 1.6, marginBottom: 48 }}>
+        <div style={{ maxWidth: 960, margin: '0 auto' }}>
+          <h2 style={{
+            fontFamily: "'Noto Sans JP', sans-serif",
+            fontSize: 'clamp(18px, 4vw, 24px)',
+            fontWeight: 800,
+            color: '#1A1A2E',
+            lineHeight: 1.6,
+            marginBottom: 40,
+          }}>
             この悩み、あなただけじゃない。
           </h2>
 
@@ -621,61 +665,74 @@ export default function Home() {
                 style={{
                   flex: 1,
                   minWidth: 220,
-                  maxWidth: 260,
-                  padding: '28px 22px',
+                  padding: 28,
                   border: '1px solid #E8E4DC',
+                  borderRadius: 14,
                   background: '#FFFFFF',
                   textAlign: 'left',
                 }}
               >
-                <div style={{ fontSize: 11, color: '#C4A35A', letterSpacing: 1, marginBottom: 12, fontWeight: 500 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#C4A35A', letterSpacing: 2, marginBottom: 12 }}>
                   {v.role}
                 </div>
-                <p style={{ fontSize: 13, lineHeight: 1.9, color: '#444444' }}>
+                <p style={{ fontSize: 'clamp(14px, 3vw, 15px)', fontWeight: 500, lineHeight: 2.0, color: '#444444', fontStyle: 'normal' }}>
                   {v.quote}
                 </p>
               </div>
             ))}
           </div>
 
-          <p style={{ fontSize: 14, color: '#1A1A2E', fontWeight: 500, marginBottom: 56 }}>
+          <p style={{
+            fontSize: 'clamp(13px, 2.8vw, 15px)',
+            fontWeight: 600,
+            color: '#1A1A2E',
+            marginTop: 40,
+            textAlign: 'center',
+          }}>
             REAL PROOFは、この問題を解決するために生まれました。
           </p>
 
           <div style={{ marginTop: 48 }}>
-            <p style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E', marginBottom: 24 }}>
+            <p style={{
+              fontFamily: "'Noto Sans JP', sans-serif",
+              fontSize: 18,
+              fontWeight: 700,
+              color: '#1A1A2E',
+              marginBottom: 24,
+              textAlign: 'center',
+            }}>
               あなたに届く投票は、こんな感じ。
             </p>
             <div
               style={{
-                maxWidth: 480,
+                maxWidth: 400,
                 margin: '0 auto 24px',
-                padding: '48px 24px',
-                border: '2px dashed #E8E4DC',
-                background: '#FFFFFF',
-                color: '#888888',
+                height: 300,
+                background: '#F5F2ED',
+                borderRadius: 14,
+                border: '1px dashed #D0CCC4',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#999999',
                 fontSize: 13,
               }}
             >
-              [ 投票UIモック画像 ]
+              投票UIモック（後日差し替え）
             </div>
-            <p style={{ fontSize: 14, color: '#444444' }}>
+            <p style={{ fontSize: 14, fontWeight: 500, color: '#555555', textAlign: 'center' }}>
               1つひとつの投票が、あなたの強みを形にする。
             </p>
           </div>
         </div>
       </section>
 
-      {/* Divider */}
-      <div style={{ width: 48, height: 1, background: '#E8E4DC', margin: '0 auto 100px' }} />
-
       {/* ================================ */}
       {/* SECTION 6: FOUNDER'S NOTE        */}
       {/* ================================ */}
       <section
-        ref={addRevealRef}
-        className="reveal-section top-section"
-        style={{ background: '#FAFAF7', borderTop: '1px solid #E8E4DC' }}
+        className="scroll-fade top-section"
+        style={{ background: '#FAFAF7' }}
       >
         <div style={{ maxWidth: 680, margin: '0 auto' }}>
           <div className="founder-grid">
@@ -683,9 +740,10 @@ export default function Home() {
             <div
               className="founder-photo"
               style={{
-                height: 200,
-                background: '#FFFFFF',
+                aspectRatio: '1',
+                background: '#F0EDE6',
                 border: '1px solid #E8E4DC',
+                borderRadius: 14,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -700,30 +758,37 @@ export default function Home() {
             <div className="founder-text">
               <div
                 style={{
-                  fontFamily: "'Inter', sans-serif",
-                  fontSize: 11,
                   fontStyle: 'italic',
-                  color: '#888888',
-                  marginBottom: 16,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  color: '#999999',
+                  marginBottom: 20,
                 }}
               >
                 ── Founder&apos;s Note
               </div>
-              <h2 style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.7, color: '#1A1A2E', marginBottom: 20 }}>
+              <h2 style={{
+                fontFamily: "'Noto Sans JP', sans-serif",
+                fontSize: 'clamp(18px, 4vw, 22px)',
+                fontWeight: 800,
+                lineHeight: 1.8,
+                color: '#1A1A2E',
+                marginBottom: 16,
+              }}>
                 「マーケティングで選ばれる時代は、<br />もう終わりにしたい。」
               </h2>
-              <p style={{ fontSize: 13, lineHeight: 1.9, color: '#444444', marginBottom: 20 }}>
+              <p style={{ fontSize: 14, fontWeight: 500, lineHeight: 2.0, color: '#555555', marginBottom: 20 }}>
                 15年間、技術職の現場に立ち続けてきた創業者が、<br />
                 なぜ「強みの証明」にこだわるのか。
               </p>
               <Link
                 href="/about"
+                className="founder-link"
                 style={{
-                  fontSize: 13,
+                  fontSize: 14,
                   color: '#C4A35A',
                   textDecoration: 'none',
-                  letterSpacing: 0.5,
-                  fontWeight: 500,
+                  fontWeight: 700,
                   transition: 'opacity 0.3s',
                 }}
               >
@@ -734,21 +799,22 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Divider (gold) */}
-      <div style={{ width: 48, height: 1, background: 'rgba(196,163,90,0.25)', margin: '0 auto 100px' }} />
-
       {/* ================================ */}
       {/* SECTION 7: FOUNDING MEMBER + CTA */}
       {/* ================================ */}
       <section
-        ref={addRevealRef}
-        className="reveal-section top-section"
+        className="scroll-fade top-section"
         style={{ background: '#FAFAF7', paddingBottom: 60 }}
       >
-        <div style={{ maxWidth: 780, margin: '0 auto' }}>
+        <div style={{ maxWidth: 680, margin: '0 auto', textAlign: 'center' }}>
           {/* Everyone CTA */}
-          <div style={{ marginBottom: 80, textAlign: 'center' }}>
-            <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1A1A2E', marginBottom: 24 }}>
+          <div style={{ marginBottom: 48 }}>
+            <h2 style={{
+              fontSize: 'clamp(14px, 3vw, 16px)',
+              fontWeight: 600,
+              color: '#1A1A2E',
+              marginBottom: 24,
+            }}>
               REAL PROOFは、今日から誰でも使えます。
             </h2>
             <Link
@@ -756,16 +822,15 @@ export default function Home() {
               className="btn-dark-hover"
               style={{
                 display: 'inline-block',
-                padding: '16px 48px',
+                padding: '18px 56px',
                 background: '#1A1A2E',
-                color: '#FAFAF7',
+                color: '#FFFFFF',
                 fontWeight: 700,
-                fontSize: 14,
+                fontSize: 15,
                 letterSpacing: 1,
                 textDecoration: 'none',
                 border: 'none',
                 cursor: 'pointer',
-                transition: 'all 0.3s',
               }}
             >
               プロとして登録する →
@@ -773,7 +838,18 @@ export default function Home() {
           </div>
 
           {/* Founding Member Box */}
-          <div className="fm-box">
+          <div
+            className="fm-box"
+            style={{
+              maxWidth: 680,
+              margin: '0 auto',
+              padding: 'clamp(28px, 5vw, 48px)',
+              background: '#FFFFFF',
+              border: '1px solid #C4A35A',
+              borderRadius: 16,
+              textAlign: 'center',
+            }}
+          >
             <div
               style={{
                 fontFamily: "'Inter', sans-serif",
@@ -782,24 +858,37 @@ export default function Home() {
                 letterSpacing: 4,
                 color: '#C4A35A',
                 textTransform: 'uppercase' as const,
-                marginBottom: 12,
+                marginBottom: 20,
               }}
             >
               Founding Member
             </div>
-            <h3 style={{ fontSize: 20, fontWeight: 700, color: '#1A1A2E', marginBottom: 20 }}>
+            <h3 style={{
+              fontSize: 'clamp(16px, 3.5vw, 20px)',
+              fontWeight: 800,
+              color: '#1A1A2E',
+              lineHeight: 1.8,
+              marginBottom: 16,
+            }}>
               最初の50名だけの特権。ただし、条件がある。
             </h3>
-            <p style={{ fontSize: 13, lineHeight: 1.9, color: '#444444', marginBottom: 28 }}>
+            <p style={{
+              fontSize: 'clamp(13px, 2.8vw, 15px)',
+              fontWeight: 500,
+              lineHeight: 2.0,
+              color: '#555555',
+              marginBottom: 24,
+            }}>
               30日以内に、クライアントから5票以上を集めること。<br />
               使った人だけが、Founding Memberになれる。
             </p>
             <ul
               style={{
                 listStyle: 'none',
-                marginBottom: 32,
+                marginBottom: 28,
                 textAlign: 'left',
-                display: 'inline-block',
+                maxWidth: 400,
+                margin: '0 auto 28px',
                 padding: 0,
               }}
             >
@@ -811,9 +900,10 @@ export default function Home() {
                 <li
                   key={perk}
                   style={{
-                    fontSize: 13,
-                    color: '#444444',
-                    lineHeight: 2,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: '#1A1A2E',
+                    lineHeight: 2.2,
                     paddingLeft: 20,
                     position: 'relative',
                   }}
@@ -829,22 +919,30 @@ export default function Home() {
                 className="btn-gold-hover"
                 style={{
                   display: 'inline-block',
-                  padding: '16px 48px',
+                  padding: '18px 48px',
                   background: '#C4A35A',
                   color: '#FFFFFF',
                   fontWeight: 700,
-                  fontSize: 14,
+                  fontSize: 15,
                   letterSpacing: 1,
                   textDecoration: 'none',
                   border: 'none',
                   cursor: 'pointer',
-                  transition: 'all 0.3s',
+                  width: '100%',
+                  maxWidth: 360,
+                  textAlign: 'center',
                 }}
               >
                 Founding Memberに挑戦する →
               </Link>
             </div>
-            <span style={{ display: 'block', marginTop: 16, fontSize: 12, color: fmRemaining !== null && fmRemaining > 0 && fmRemaining <= 10 ? '#C4A35A' : '#888888', fontWeight: fmRemaining !== null && fmRemaining > 0 && fmRemaining <= 10 ? 700 : 400 }}>
+            <span style={{
+              display: 'block',
+              marginTop: 12,
+              fontSize: 13,
+              fontWeight: fmRemaining !== null && fmRemaining > 0 && fmRemaining <= 10 ? 700 : 600,
+              color: fmRemaining !== null && fmRemaining > 0 && fmRemaining <= 10 ? '#C4A35A' : '#888888',
+            }}>
               {fmRemaining === null
                 ? '読み込み中...'
                 : fmRemaining > 10
