@@ -330,42 +330,55 @@ export default function CardPage() {
                 STRENGTH PROOFS
               </div>
 
-              {/* Top 3 — フルワイド行レイアウト */}
+              {/* Top 3 — バーチャート（ラベル上段+バー下段で折り返し確保） */}
               {top3.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
-                  {top3.map((v, i) => (
-                    <div key={v.category}
-                      style={{
-                        width: '100%', padding: '12px 16px', background: T.dark, borderRadius: 12,
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
-                      }}
-                    >
-                      <span style={{ fontSize: 14, fontWeight: 700, color: '#fff', lineHeight: 1.5 }}>{v.category}</span>
-                      <span style={{ fontSize: 15, fontWeight: 'bold', color: T.gold, fontFamily: T.fontMono, flexShrink: 0, whiteSpace: 'nowrap' }}>
-                        {v.vote_count}票
-                      </span>
-                    </div>
-                  ))}
+                <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: 18, marginBottom: 10 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    {top3.map((v, i) => {
+                      const pct = (v.vote_count / maxVotes) * 100
+                      return (
+                        <div key={v.category} style={{ width: '100%' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, gap: 8 }}>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: T.text, lineHeight: 1.5, overflowWrap: 'anywhere' as const, minWidth: 0 }}>{v.category}</span>
+                            <span style={{ fontSize: 16, fontWeight: 'bold', color: T.gold, fontFamily: T.fontMono, flexShrink: 0 }}>{v.vote_count}</span>
+                          </div>
+                          <div style={{ width: '100%', height: 8, background: '#F0EDE6', borderRadius: 99 }}>
+                            <div style={{
+                              height: 8, borderRadius: 99, background: getBarColor(i),
+                              width: animated ? `${pct}%` : '0%',
+                              transition: `width 1.2s ease ${i * 0.08}s`,
+                            }} />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
               )}
 
-              {/* 残り — フルワイド行レイアウト */}
+              {/* 残り — バーチャート */}
               {rest.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
-                  {rest.map((v, i) => (
-                    <div key={v.category}
-                      style={{
-                        width: '100%', padding: '10px 16px', background: T.cardBg,
-                        border: `1px solid ${T.cardBorder}`, borderRadius: 10,
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
-                      }}
-                    >
-                      <span style={{ fontSize: 13, fontWeight: 600, color: T.text, lineHeight: 1.5 }}>{v.category}</span>
-                      <span style={{ fontSize: 13, color: T.textMuted, fontFamily: T.fontMono, flexShrink: 0, whiteSpace: 'nowrap' }}>
-                        {v.vote_count}票
-                      </span>
-                    </div>
-                  ))}
+                <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: 18, marginBottom: 10 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {rest.map((v, i) => {
+                      const pct = (v.vote_count / maxVotes) * 100
+                      return (
+                        <div key={v.category} style={{ width: '100%' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4, gap: 8 }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: T.text, lineHeight: 1.5, overflowWrap: 'anywhere' as const, minWidth: 0 }}>{v.category}</span>
+                            <span style={{ fontSize: 13, color: T.textMuted, fontFamily: T.fontMono, flexShrink: 0 }}>{v.vote_count}</span>
+                          </div>
+                          <div style={{ width: '100%', height: 5, background: '#F0EDE6', borderRadius: 99 }}>
+                            <div style={{
+                              height: 5, borderRadius: 99, background: getBarColor(3),
+                              width: animated ? `${pct}%` : '0%',
+                              transition: `width 1.2s ease ${(i + 3) * 0.08}s`,
+                            }} />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
               )}
             </>
