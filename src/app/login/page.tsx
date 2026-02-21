@@ -103,10 +103,76 @@ function LoginForm() {
       const hash = window.location.hash
       const search = window.location.search
       const sbKeys = Object.keys(localStorage).filter(k => k.startsWith('sb-'))
-      const hasOAuthTokens = hash.includes('access_token') || hash.includes('refresh_token')
       const urlSearchParams = new URLSearchParams(search)
       const hasAuthCode = urlSearchParams.has('code')
 
+      // ===== OAuth ハッシュにトークンがある場合: 手動で setSession =====
+      if (hash.includes('access_token')) {
+        const hashParams = new URLSearchParams(hash.substring(1))
+        const access_token = hashParams.get('access_token')
+        const refresh_token = hashParams.get('refresh_token') || ''
+
+        console.log('[login/init] OAuth hash detected, calling setSession manually')
+        setLoginDebug(`OAuth hash → setSession... at=${access_token ? access_token.substring(0, 10) : 'none'}`)
+
+        if (access_token) {
+          try {
+            const { data, error } = await supabase.auth.setSession({
+              access_token,
+              refresh_token,
+            })
+            // ハッシュをクリア
+            window.history.replaceState(null, '', window.location.pathname + window.location.search)
+
+            if (data?.session?.user && !cancelled) {
+              cancelled = true
+              console.log('[login/init] setSession OK →', data.session.user.email)
+              setLoginDebug(`setSession OK (${data.session.user.email}) → /explore`)
+              window.location.href = '/explore'
+              return
+            }
+            if (error) {
+              console.error('[login/init] setSession error:', error.message)
+              setLoginDebug(`setSession error: ${error.message}`)
+            }
+          } catch (e) {
+            console.error('[login/init] setSession exception:', e)
+            setLoginDebug(`setSession exception: ${e instanceof Error ? e.message : 'unknown'}`)
+          }
+        }
+        // setSession が失敗した場合はフォーム表示
+        if (!cancelled) setReady(true)
+        return
+      }
+
+      // ===== auth code がある場合: exchangeCodeForSession を待つ =====
+      if (hasAuthCode) {
+        console.log('[login/init] auth code detected, waiting for session exchange...')
+        setLoginDebug(`auth code → waiting for exchange... sb-keys: ${sbKeys.length}`)
+        try {
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('session_timeout')), 5000)
+          )
+          const sessionPromise = supabase.auth.getSession()
+          const { data } = await Promise.race([sessionPromise, timeoutPromise]) as any
+          const session = data?.session || null
+
+          if (session?.user && !cancelled) {
+            cancelled = true
+            console.log('[login/init] code exchange session OK →', session.user.email)
+            setLoginDebug(`code exchange OK (${session.user.email}) → /explore`)
+            window.location.href = '/explore'
+            return
+          }
+        } catch (e) {
+          console.log('[login/init] code exchange timeout')
+          setLoginDebug(`code exchange timeout`)
+        }
+        if (!cancelled) setReady(true)
+        return
+      }
+
+      // ===== 通常フロー: sb-keysがなければ即フォーム表示 =====
       // デバッグ: 現在のURL状態を全て表示
       setLoginDebug(
         `hash: ${hash ? hash.substring(0, 50) : 'none'} | ` +
@@ -114,26 +180,20 @@ function LoginForm() {
         `sb-keys: ${sbKeys.length}`
       )
 
-      // OAuth直後はトークンがURLにあるがlocalStorageにはまだない
-      // この場合はgetSession()をスキップしてはいけない
-      if (!hasOAuthTokens && !hasAuthCode) {
-        if (sbKeys.length === 0) {
-          console.log('[login/init] no sb-keys, no oauth → show form')
-          setLoginDebug(`no sb-keys, no oauth → show form | hash: ${hash ? hash.substring(0, 30) : 'none'}`)
-          if (!cancelled) setReady(true)
-          return
-        }
+      if (sbKeys.length === 0) {
+        console.log('[login/init] no sb-keys, no oauth → show form')
+        setLoginDebug(`no sb-keys → show form`)
+        if (!cancelled) setReady(true)
+        return
       }
 
-      // OAuth直後 or sb-keysがある場合: セッション確認
-      console.log('[login/init] checking session (oauth:', hasOAuthTokens || hasAuthCode, ')')
-      setLoginDebug(`checking session... oauth: ${hasOAuthTokens || hasAuthCode} | sb-keys: ${sbKeys.length}`)
+      // ===== sb-keysがある場合: getSessionで確認 =====
+      console.log('[login/init] sb-keys exist, checking session...')
+      setLoginDebug(`checking session... sb-keys: ${sbKeys.length}`)
 
       try {
-        // OAuth後は処理に少し時間がかかるので5秒に延長
-        const timeoutMs = (hasOAuthTokens || hasAuthCode) ? 5000 : 3000
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('session_timeout')), timeoutMs)
+          setTimeout(() => reject(new Error('session_timeout')), 3000)
         )
         const sessionPromise = supabase.auth.getSession()
 
@@ -142,15 +202,12 @@ function LoginForm() {
           const { data } = await Promise.race([sessionPromise, timeoutPromise]) as any
           session = data?.session || null
         } catch (e) {
-          console.log('[init] getSession timeout - treating as no session')
-          setLoginDebug(`timeout → show form | oauth: ${hasOAuthTokens || hasAuthCode}`)
+          console.log('[init] getSession timeout')
+          setLoginDebug(`timeout → show form`)
           session = null
         }
 
         console.log('[login/init] session:', session ? 'EXISTS' : 'NULL')
-        if (session) {
-          console.log('[login/init] user:', session.user.email)
-        }
 
         if (cancelled) return
 
@@ -161,7 +218,7 @@ function LoginForm() {
           window.location.href = '/explore'
           return
         }
-        setLoginDebug(`no session after check | oauth: ${hasOAuthTokens || hasAuthCode}`)
+        setLoginDebug(`no session | sb-keys: ${sbKeys.length}`)
       } catch (e) {
         console.error('[init] session check error:', e)
         setLoginDebug(`error: ${e instanceof Error ? e.message : 'unknown'}`)
