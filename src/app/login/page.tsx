@@ -94,8 +94,8 @@ function LoginForm() {
 
       if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user && !cancelled) {
         cancelled = true
-        console.log('[onAuthStateChange] SIGNED_IN → redirect /explore')
-        window.location.href = '/explore'
+        console.log('[onAuthStateChange] SIGNED_IN → redirect /dashboard')
+        window.location.href = '/dashboard'
       }
     })
 
@@ -155,7 +155,7 @@ function LoginForm() {
             window.history.replaceState(null, '', window.location.pathname + window.location.search)
 
             // リダイレクト
-            window.location.href = '/explore'
+            window.location.href = '/dashboard'
             return
           } catch (e: any) {
             console.error('[init] failed to write tokens:', e)
@@ -183,8 +183,8 @@ function LoginForm() {
           if (session?.user && !cancelled) {
             cancelled = true
             console.log('[login/init] code exchange session OK →', session.user.email)
-            setLoginDebug(`code exchange OK (${session.user.email}) → /explore`)
-            window.location.href = '/explore'
+            setLoginDebug(`code exchange OK (${session.user.email}) → /dashboard`)
+            window.location.href = '/dashboard'
             return
           }
         } catch (e) {
@@ -236,9 +236,9 @@ function LoginForm() {
 
         if (session?.user) {
           cancelled = true
-          console.log('[login/init] session found → redirect /explore')
+          console.log('[login/init] session found → redirect /dashboard')
           setLoginDebug(`session found (${session.user.email}) → redirecting...`)
-          window.location.href = '/explore'
+          window.location.href = '/dashboard'
           return
         }
         setLoginDebug(`no session | sb-keys: ${sbKeys.length}`)
@@ -324,7 +324,7 @@ function LoginForm() {
       clientData = result[1]?.data
     } catch (e) {
       console.error('[redirectUser] DB query failed/timeout:', e)
-      window.location.href = '/explore'
+      window.location.href = '/dashboard'
       return
     }
     console.log('[redirectUser] DB result — pro:', !!proData, 'client:', !!clientData)
@@ -366,8 +366,8 @@ function LoginForm() {
       console.log('[redirectUser] → /mycard (new client)')
       window.location.href = '/mycard'
     } else {
-      console.log('[redirectUser] → /explore (no role)')
-      window.location.href = '/explore'
+      console.log('[redirectUser] → /dashboard (no role)')
+      window.location.href = '/dashboard'
     }
   }
 
