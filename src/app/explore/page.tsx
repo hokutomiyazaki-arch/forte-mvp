@@ -33,34 +33,42 @@ export default function ExplorePage() {
   const [selectedTab, setSelectedTab] = useState('all')
   const [expandedItem, setExpandedItem] = useState<string | null>(null)
 
-  // デバッグ: Supabase直接通信テスト
+  // デバッグ: 超シンプル通信テスト（process.envを使わない）
   useEffect(() => {
-    const testConnection = async () => {
-      const start = Date.now()
-      try {
-        const res = await fetch(
+    const el = document.getElementById('debug-bar-explore')
+    if (el) el.textContent = 'test started...'
+
+    // Supabaseクライアントからanon keyを取得（process.envに依存しない）
+    const anonKey = (supabase as any).supabaseKey
+      || (supabase as any).rest?.headers?.apikey
+      || (supabase as any).realtime?.params?.apikey
+      || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      || ''
+
+    // Step 1: まずfetch自体が動くか（Google向け）
+    fetch('https://www.google.com/favicon.ico', { mode: 'no-cors' })
+      .then(() => {
+        if (el) el.textContent = `google OK (key=${anonKey ? anonKey.substring(0, 10) : 'NONE'}), testing supabase...`
+
+        // Step 2: Supabase REST API に直接 GET（anon keyのみ）
+        const start = Date.now()
+        return fetch(
           'https://eikzgzqnydptpqjwxbfu.supabase.co/rest/v1/professionals?select=id&limit=1',
           {
+            method: 'GET',
             headers: {
-              'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
-              'Authorization': 'Bearer ' + (JSON.parse(localStorage.getItem('sb-eikzgzqnydptpqjwxbfu-auth-token') || '{}')?.access_token || ''),
+              'apikey': anonKey,
+              'Authorization': 'Bearer ' + anonKey,
             }
           }
-        )
-        const elapsed = Date.now() - start
-        const data = await res.json()
-        console.log(`[DB TEST] ${elapsed}ms, status: ${res.status}, data:`, data)
-
-        const el = document.getElementById('debug-bar-explore')
-        if (el) el.textContent = `DB: ${elapsed}ms | status: ${res.status} | rows: ${data?.length || 0}`
-      } catch (e: any) {
-        const elapsed = Date.now() - start
-        console.log(`[DB TEST] ${elapsed}ms, error:`, e.message)
-        const el = document.getElementById('debug-bar-explore')
-        if (el) el.textContent = `DB: ${elapsed}ms | error: ${e.message}`
-      }
-    }
-    testConnection()
+        ).then(res => {
+          const elapsed = Date.now() - start
+          if (el) el.textContent = `supabase: ${res.status} in ${elapsed}ms | key=${anonKey ? anonKey.substring(0, 10) : 'NONE'}`
+        })
+      })
+      .catch(err => {
+        if (el) el.textContent = `error: ${err.message} | key=${anonKey ? anonKey.substring(0, 10) : 'NONE'}`
+      })
   }, [])
 
   // データ取得（1回のみ）
