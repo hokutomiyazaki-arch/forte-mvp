@@ -158,7 +158,7 @@ export default function VoiceShareModal({
       >
         {/* カラーピッカー */}
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#ccc', marginBottom: 8, fontFamily: "'Open Sans', sans-serif" }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#ccc', marginBottom: 8, fontFamily: "'Inter', sans-serif" }}>
             カードの色
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
@@ -191,7 +191,7 @@ export default function VoiceShareModal({
             borderRadius: 18,
             padding: '32px 26px',
             width: 340,
-            fontFamily: "'Open Sans', sans-serif",
+            fontFamily: "'Inter', sans-serif",
             display: 'flex',
             flexDirection: 'column',
             position: 'relative',
@@ -264,13 +264,13 @@ export default function VoiceShareModal({
               <div>
                 <div style={{
                   fontSize: 15, fontWeight: 800, color: colorScheme.text,
-                  fontFamily: "'Open Sans', sans-serif",
+                  fontFamily: "'Inter', sans-serif",
                 }}>
                   {proName}
                 </div>
                 <div style={{
                   fontSize: 11, fontWeight: 600, color: colorScheme.gold,
-                  fontFamily: "'Open Sans', sans-serif",
+                  fontFamily: "'Inter', sans-serif",
                   marginTop: 2,
                 }}>
                   {proTitle}
@@ -279,7 +279,7 @@ export default function VoiceShareModal({
             </div>
 
             {/* Logo */}
-            <div style={{ fontFamily: "'Open Sans', sans-serif" }}>
+            <div style={{ fontFamily: "'Inter', sans-serif" }}>
               <span style={{ fontWeight: 400, letterSpacing: 2, color: colorScheme.text, fontSize: 13 }}>
                 REAL
               </span>
@@ -302,7 +302,7 @@ export default function VoiceShareModal({
             padding: '18px 24px',
             background: '#C4A35A',
             color: '#FFFFFF',
-            fontFamily: "'Open Sans', sans-serif",
+            fontFamily: "'Inter', sans-serif",
             fontWeight: 800,
             fontSize: 15,
             borderRadius: 14,
@@ -327,7 +327,7 @@ export default function VoiceShareModal({
             padding: 14,
             background: 'transparent',
             color: '#888',
-            fontFamily: "'Open Sans', sans-serif",
+            fontFamily: "'Inter', sans-serif",
             fontWeight: 600,
             fontSize: 13,
             border: 'none',

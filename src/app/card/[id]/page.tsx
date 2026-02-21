@@ -186,7 +186,7 @@ export default function CardPage() {
             {(pro as any).founding_member_status === 'achieved' && (
               <span style={{
                 display: 'inline-block', marginTop: 6,
-                fontFamily: "'DM Sans', sans-serif",
+                fontFamily: "'Inter', sans-serif",
                 fontSize: 10, fontWeight: 700, letterSpacing: 2,
                 textTransform: 'uppercase' as const,
                 color: '#C4A35A',

@@ -37,14 +37,14 @@ export default function Logo({ size = 1, dark = false, showTagline = true }: Log
             fill={gold}
             fontSize="20"
             fontWeight="700"
-            fontFamily="'DM Sans', 'Inter', sans-serif"
+            fontFamily="'Inter', sans-serif"
           >
             R
           </text>
         </svg>
 
         {/* ワードマーク */}
-        <div style={{ letterSpacing: 5, fontFamily: "'DM Sans', 'Inter', sans-serif", fontSize: 18 * size }}>
+        <div style={{ letterSpacing: 5, fontFamily: "'Inter', sans-serif", fontSize: 18 * size }}>
           <span style={{ fontWeight: 300, color: textColor }}>REAL</span>
           <span style={{ fontWeight: 700, color: gold }}>PROOF</span>
         </div>
@@ -59,7 +59,7 @@ export default function Logo({ size = 1, dark = false, showTagline = true }: Log
             opacity: 0.7,
             color: gold,
             letterSpacing: 3,
-            fontFamily: "'Zen Maru Gothic', sans-serif",
+            fontFamily: "'Noto Sans JP', 'Inter', sans-serif",
             marginTop: 4 * size,
             paddingLeft: (44 + 10) * size,
           }}

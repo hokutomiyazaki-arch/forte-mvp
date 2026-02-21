@@ -1,11 +1,11 @@
 export default function AboutPage() {
   return (
-    <div style={{ margin: '-2rem -1rem 0', fontFamily: "'Noto Sans JP', 'DM Sans', sans-serif", background: '#FAFAF7' }}>
+    <div style={{ margin: '-2rem -1rem 0', fontFamily: "'Noto Sans JP', 'Inter', sans-serif", background: '#FAFAF7' }}>
       <article style={{ maxWidth: 680, margin: '0 auto', padding: '120px 24px 80px' }}>
         {/* Header */}
         <div
           style={{
-            fontFamily: "'DM Sans', sans-serif",
+            fontFamily: "'Inter', sans-serif",
             fontSize: 11,
             fontWeight: 700,
             letterSpacing: 4,

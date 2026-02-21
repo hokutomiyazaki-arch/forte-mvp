@@ -11,12 +11,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ja">
       <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700;900&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,300&family=Noto+Sans+JP:wght@300;400;500;700&family=Noto+Serif+JP:wght@400;500;600;700&family=Open+Sans:wght@400;600;700;800&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+JP:wght@400;500;600;700;800;900&display=swap"
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-screen" style={{ fontFamily: "'Zen Maru Gothic', 'Noto Sans JP', sans-serif", fontWeight: 500, color: '#1A1A2E', WebkitFontSmoothing: 'antialiased' }}>
+      <body className="min-h-screen" style={{ fontFamily: "'Noto Sans JP', 'Inter', sans-serif", fontWeight: 500, color: '#1A1A2E', WebkitFontSmoothing: 'antialiased', MozOsxFontSmoothing: 'grayscale' as any }}>
         <Navbar />
         <main className="max-w-5xl mx-auto px-4 py-8">
           {children}

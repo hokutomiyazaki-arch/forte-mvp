@@ -13,7 +13,7 @@ export const COLORS = {
 };
 
 export const FONTS = {
-  main: "'Zen Maru Gothic', 'Rounded Mplus 1c', 'Noto Sans JP', sans-serif",
-  mono: "'DM Sans', sans-serif",
+  main: "'Noto Sans JP', 'Inter', sans-serif",
+  mono: "'Inter', sans-serif",
   serif: "'Noto Serif JP', Georgia, serif",
 };

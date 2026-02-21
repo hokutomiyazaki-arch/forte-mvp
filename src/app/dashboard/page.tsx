@@ -1295,7 +1295,7 @@ export default function DashboardPage() {
       {/* Voices */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
         <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">
-          <span style={{ fontSize: 10, fontWeight: 700, color: '#A0A0A0', letterSpacing: 2, textTransform: 'uppercase' as const, fontFamily: "'DM Sans', sans-serif", display: 'block', marginBottom: 4 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#A0A0A0', letterSpacing: 2, textTransform: 'uppercase' as const, fontFamily: "'Inter', sans-serif", display: 'block', marginBottom: 4 }}>
             VOICES — {voiceComments.length} COMMENTS
           </span>
           クライアントの声
@@ -1321,7 +1321,7 @@ export default function DashboardPage() {
                 >
                   <div style={{ fontSize: 32, color: 'rgba(196, 163, 90, 0.3)', fontFamily: 'Georgia, serif', lineHeight: 1 }}>&ldquo;</div>
                   <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', lineHeight: 1.8, margin: '4px 0 10px' }}>{c.comment}</div>
-                  <div style={{ fontSize: 11, color: '#888888', fontFamily: "'DM Sans', sans-serif" }}>
+                  <div style={{ fontSize: 11, color: '#888888', fontFamily: "'Inter', sans-serif" }}>
                     {new Date(c.created_at).toLocaleDateString('ja-JP')}
                   </div>
 
