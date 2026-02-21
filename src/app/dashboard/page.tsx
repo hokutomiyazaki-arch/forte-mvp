@@ -116,8 +116,9 @@ export default function DashboardPage() {
   const [nfcLostCard, setNfcLostCard] = useState<string | null>(null) // 紛失報告したカードUID
 
   // 団体招待 state
-  const [pendingInvites, setPendingInvites] = useState<{id: string; organization_id: string; org_name: string; invited_at: string}[]>([])
+  const [pendingInvites, setPendingInvites] = useState<{id: string; organization_id: string; org_name: string; org_type: string; invited_at: string}[]>([])
   const [inviteProcessing, setInviteProcessing] = useState<string | null>(null)
+  const [inviteAccepted, setInviteAccepted] = useState<string | null>(null) // 承認完了メッセージ用
 
   // 所属団体 state
   const [activeOrgs, setActiveOrgs] = useState<{id: string; member_id: string; org_name: string; org_type: string; accepted_at: string}[]>([])
@@ -248,7 +249,7 @@ export default function DashboardPage() {
       // 団体からの招待を取得
       const { data: memberInvites } = await (supabase as any)
         .from('org_members')
-        .select('id, organization_id, invited_at, organizations(name)')
+        .select('id, organization_id, invited_at, organizations(name, type)')
         .eq('professional_id', proData.id)
         .eq('status', 'pending')
 
@@ -257,6 +258,7 @@ export default function DashboardPage() {
           id: m.id,
           organization_id: m.organization_id,
           org_name: m.organizations?.name || '不明な団体',
+          org_type: m.organizations?.type || 'store',
           invited_at: m.invited_at,
         })))
       }
@@ -534,7 +536,28 @@ export default function DashboardPage() {
       .eq('id', memberId)
 
     if (!error) {
+      const accepted = pendingInvites.find(i => i.id === memberId)
       setPendingInvites(prev => prev.filter(i => i.id !== memberId))
+
+      // 承認済みを所属団体リストに追加
+      if (accepted) {
+        setActiveOrgs(prev => [...prev, {
+          id: accepted.organization_id,
+          member_id: memberId,
+          org_name: accepted.org_name,
+          org_type: accepted.org_type,
+          accepted_at: new Date().toISOString(),
+        }])
+
+        // 承認完了メッセージを表示
+        const confirmLabels: Record<string, string> = {
+          store: '所属が確認されました',
+          credential: '認定が付与されました',
+          education: '修了が認定されました',
+        }
+        setInviteAccepted(confirmLabels[accepted.org_type] || '承認されました')
+        setTimeout(() => setInviteAccepted(null), 3000)
+      }
 
       // org_invitationsのstatusも更新
       if (user?.email) {
@@ -952,37 +975,52 @@ export default function DashboardPage() {
       {/* ═══ Tab: プロフィール ═══ */}
       {dashboardTab === 'profile' && (<>
 
+      {/* 承認完了メッセージ */}
+      {inviteAccepted && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-6 text-center">
+          <p className="text-sm font-medium text-green-700">{inviteAccepted}</p>
+        </div>
+      )}
+
       {/* 団体からの招待 */}
       {pendingInvites.length > 0 && (
         <div className="bg-white rounded-xl p-5 shadow-sm mb-6 border-l-4 border-[#C4A35A]">
-          <h3 className="text-sm font-bold text-[#1A1A2E] mb-3">団体からの招待</h3>
           <div className="space-y-3">
-            {pendingInvites.map(inv => (
-              <div key={inv.id} className="flex items-center justify-between py-2">
-                <div>
-                  <div className="text-sm font-medium text-[#1A1A2E]">{inv.org_name}</div>
-                  <div className="text-xs text-gray-400">
-                    {new Date(inv.invited_at).toLocaleDateString('ja-JP')} に招待
+            {pendingInvites.map(inv => {
+              const proSideLabels: Record<string, string> = {
+                store: `${inv.org_name}があなたの所属を確認しています`,
+                credential: `${inv.org_name}からの認定が届いています`,
+                education: `${inv.org_name}からの修了認定が届いています`,
+              }
+              return (
+                <div key={inv.id} className="flex items-center justify-between py-2">
+                  <div>
+                    <div className="text-sm font-medium text-[#1A1A2E]">
+                      {proSideLabels[inv.org_type] || `${inv.org_name}からの招待`}
+                    </div>
+                    <div className="text-xs text-gray-400">
+                      {new Date(inv.invited_at).toLocaleDateString('ja-JP')}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleAcceptInvite(inv.id, inv.organization_id)}
+                      disabled={inviteProcessing === inv.id}
+                      className="px-3 py-1.5 bg-[#1A1A2E] text-white text-xs font-medium rounded-lg hover:bg-[#2a2a4e] transition disabled:opacity-50"
+                    >
+                      {inviteProcessing === inv.id ? '...' : '承認する'}
+                    </button>
+                    <button
+                      onClick={() => handleDeclineInvite(inv.id)}
+                      disabled={inviteProcessing === inv.id}
+                      className="px-3 py-1.5 bg-gray-100 text-gray-500 text-xs font-medium rounded-lg hover:bg-gray-200 transition disabled:opacity-50"
+                    >
+                      拒否
+                    </button>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleAcceptInvite(inv.id, inv.organization_id)}
-                    disabled={inviteProcessing === inv.id}
-                    className="px-3 py-1.5 bg-[#1A1A2E] text-white text-xs font-medium rounded-lg hover:bg-[#2a2a4e] transition disabled:opacity-50"
-                  >
-                    {inviteProcessing === inv.id ? '...' : '承認'}
-                  </button>
-                  <button
-                    onClick={() => handleDeclineInvite(inv.id)}
-                    disabled={inviteProcessing === inv.id}
-                    className="px-3 py-1.5 bg-gray-100 text-gray-500 text-xs font-medium rounded-lg hover:bg-gray-200 transition disabled:opacity-50"
-                  >
-                    拒否
-                  </button>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}

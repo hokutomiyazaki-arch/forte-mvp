@@ -3,6 +3,21 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { getSessionSafe } from '@/lib/auth-helper'
 
+const ORG_TYPE_LABELS: Record<string, { invite: string; inviteDesc: string }> = {
+  store: {
+    invite: 'メンバーを招待',
+    inviteDesc: 'にメンバーを招待します。登録済みのプロのメールアドレスを入力してください。',
+  },
+  credential: {
+    invite: '認定者を追加',
+    inviteDesc: 'に認定者を追加します。登録済みのプロのメールアドレスを入力してください。',
+  },
+  education: {
+    invite: '修了者を追加',
+    inviteDesc: 'に修了者を追加します。登録済みのプロのメールアドレスを入力してください。',
+  },
+}
+
 export default function OrgInvitePage() {
   const supabase = createClient() as any
   const [loading, setLoading] = useState(true)
@@ -110,6 +125,8 @@ export default function OrgInvitePage() {
 
   if (!org) return null
 
+  const L = ORG_TYPE_LABELS[org.type] || ORG_TYPE_LABELS.store
+
   const statusLabels: Record<string, { label: string; color: string }> = {
     pending: { label: '待機中', color: 'text-yellow-600 bg-yellow-50' },
     accepted: { label: '承認済', color: 'text-green-600 bg-green-50' },
@@ -125,9 +142,9 @@ export default function OrgInvitePage() {
         ← ダッシュボードに戻る
       </button>
 
-      <h1 className="text-xl font-bold text-[#1A1A2E] mb-1">スタッフを招待</h1>
+      <h1 className="text-xl font-bold text-[#1A1A2E] mb-1">{L.invite}</h1>
       <p className="text-sm text-gray-500 mb-8">
-        {org.name} にスタッフを招待します。登録済みのプロのメールアドレスを入力してください。
+        {org.name}{L.inviteDesc}
       </p>
 
       {/* 招待フォーム */}

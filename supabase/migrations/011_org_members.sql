@@ -34,6 +34,13 @@ CREATE POLICY "pro_read_own" ON org_members
     professional_id IN (SELECT id FROM professionals WHERE user_id = auth.uid())
   );
 
+-- プロは自分への招待を承認可能（pending → active への UPDATE）
+CREATE POLICY "pro_accept_invite" ON org_members
+  FOR UPDATE USING (
+    professional_id IN (SELECT id FROM professionals WHERE user_id = auth.uid())
+    AND status = 'pending'
+  );
+
 -- プロは「店舗」からのみ自分で離脱可能（status → 'removed' への UPDATE）
 CREATE POLICY "pro_leave_store" ON org_members
   FOR UPDATE USING (

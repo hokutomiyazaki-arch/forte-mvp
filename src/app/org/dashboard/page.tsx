@@ -3,6 +3,42 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { getSessionSafe } from '@/lib/auth-helper'
 
+const ORG_TYPE_LABELS: Record<string, { typeName: string; member: string; members: string; invite: string; count: string; perMember: string; emptyTitle: string; emptyDesc: string; publicPage: string }> = {
+  store: {
+    typeName: '店舗',
+    member: 'メンバー',
+    members: '所属プロフェッショナル',
+    invite: 'メンバーを招待する',
+    count: '所属メンバー',
+    perMember: 'メンバー別プルーフ',
+    emptyTitle: 'まだメンバーがいません',
+    emptyDesc: '下のボタンからメンバーを招待しましょう',
+    publicPage: '店舗ページを見る',
+  },
+  credential: {
+    typeName: '資格発行団体',
+    member: '認定者',
+    members: '認定プロフェッショナル',
+    invite: '認定者を追加',
+    count: '認定者数',
+    perMember: '認定者別プルーフ',
+    emptyTitle: 'まだ認定者がいません',
+    emptyDesc: '下のボタンから認定者を追加しましょう',
+    publicPage: '団体ページを見る',
+  },
+  education: {
+    typeName: '教育団体',
+    member: '修了者',
+    members: '修了プロフェッショナル',
+    invite: '修了者を追加',
+    count: '修了者数',
+    perMember: '修了者別プルーフ',
+    emptyTitle: 'まだ修了者がいません',
+    emptyDesc: '下のボタンから修了者を追加しましょう',
+    publicPage: '団体ページを見る',
+  },
+}
+
 export default function OrgDashboardPage() {
   const supabase = createClient() as any
   const [loading, setLoading] = useState(true)
@@ -83,12 +119,7 @@ export default function OrgDashboardPage() {
 
   if (!org) return null
 
-  const typeLabels: Record<string, string> = {
-    store: '店舗',
-    credential: '資格発行団体',
-    education: '教育団体',
-  }
-
+  const L = ORG_TYPE_LABELS[org.type] || ORG_TYPE_LABELS.store
   const maxVotes = Math.max(...members.map(m => m.total_votes || 0), 1)
 
   return (
@@ -101,7 +132,7 @@ export default function OrgDashboardPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-[#1A1A2E]">{org.name}</h1>
-            <p className="text-xs text-gray-400">{typeLabels[org.type] || org.type}</p>
+            <p className="text-xs text-gray-400">{L.typeName}</p>
           </div>
         </div>
       </div>
@@ -112,7 +143,7 @@ export default function OrgDashboardPage() {
           <div className="text-2xl font-bold text-[#1A1A2E]">
             {aggregate?.active_member_count || members.length}
           </div>
-          <div className="text-xs text-gray-400 mt-1">スタッフ数</div>
+          <div className="text-xs text-gray-400 mt-1">{L.count}</div>
         </div>
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
           <div className="text-2xl font-bold text-[#C4A35A]">
@@ -128,14 +159,14 @@ export default function OrgDashboardPage() {
         </div>
       </div>
 
-      {/* スタッフ別プルーフ */}
+      {/* メンバー別プルーフ */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6">
-        <h2 className="text-sm font-bold text-[#1A1A2E] mb-4">スタッフ別プルーフ</h2>
+        <h2 className="text-sm font-bold text-[#1A1A2E] mb-4">{L.perMember}</h2>
 
         {members.length === 0 ? (
           <div className="text-center py-8">
-            <p className="text-gray-400 text-sm mb-1">まだスタッフがいません</p>
-            <p className="text-gray-300 text-xs">下のボタンからスタッフを招待しましょう</p>
+            <p className="text-gray-400 text-sm mb-1">{L.emptyTitle}</p>
+            <p className="text-gray-300 text-xs">{L.emptyDesc}</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -179,13 +210,13 @@ export default function OrgDashboardPage() {
           onClick={() => window.location.href = '/org/dashboard/invite'}
           className="flex-1 py-3 bg-[#1A1A2E] text-white font-medium rounded-xl hover:bg-[#2a2a4e] transition text-sm"
         >
-          スタッフを招待する
+          {L.invite}
         </button>
         <button
           onClick={() => window.location.href = `/org/${org.id}`}
           className="flex-1 py-3 bg-white text-[#1A1A2E] font-medium rounded-xl border border-gray-200 hover:border-[#C4A35A] transition text-sm"
         >
-          {org.type === 'store' ? '店舗ページを見る' : '団体ページを見る'}
+          {L.publicPage}
         </button>
       </div>
     </div>

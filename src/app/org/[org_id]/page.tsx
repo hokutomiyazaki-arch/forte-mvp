@@ -3,6 +3,27 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams } from 'next/navigation'
 
+const ORG_TYPE_LABELS: Record<string, { typeName: string; members: string; count: string; empty: string }> = {
+  store: {
+    typeName: '店舗',
+    members: '所属プロフェッショナル',
+    count: '所属メンバー',
+    empty: 'メンバー情報はまだありません',
+  },
+  credential: {
+    typeName: '資格発行団体',
+    members: '認定プロフェッショナル',
+    count: '認定者数',
+    empty: '認定者情報はまだありません',
+  },
+  education: {
+    typeName: '教育団体',
+    members: '修了プロフェッショナル',
+    count: '修了者数',
+    empty: '修了者情報はまだありません',
+  },
+}
+
 export default function OrgPublicPage() {
   const supabase = createClient() as any
   const params = useParams()
@@ -74,11 +95,7 @@ export default function OrgPublicPage() {
     )
   }
 
-  const typeLabels: Record<string, string> = {
-    store: '店舗',
-    credential: '資格発行団体',
-    education: '教育団体',
-  }
+  const L = ORG_TYPE_LABELS[org.type] || ORG_TYPE_LABELS.store
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
@@ -88,7 +105,7 @@ export default function OrgPublicPage() {
           {org.name.charAt(0)}
         </div>
         <h1 className="text-2xl font-bold text-[#1A1A2E]">{org.name}</h1>
-        <p className="text-sm text-gray-400 mt-1">{typeLabels[org.type] || org.type}</p>
+        <p className="text-sm text-gray-400 mt-1">{L.typeName}</p>
         {org.location && (
           <p className="text-sm text-gray-500 mt-1">📍 {org.location}</p>
         )}
@@ -107,7 +124,7 @@ export default function OrgPublicPage() {
           <div className="text-2xl font-bold text-[#1A1A2E]">
             {aggregate?.active_member_count || members.length}
           </div>
-          <div className="text-xs text-gray-400 mt-1">スタッフ</div>
+          <div className="text-xs text-gray-400 mt-1">{L.count}</div>
         </div>
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
           <div className="text-2xl font-bold text-[#C4A35A]">
@@ -123,12 +140,12 @@ export default function OrgPublicPage() {
         </div>
       </div>
 
-      {/* スタッフ一覧 */}
+      {/* メンバー一覧 */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6">
-        <h2 className="text-sm font-bold text-[#1A1A2E] mb-4">スタッフ</h2>
+        <h2 className="text-sm font-bold text-[#1A1A2E] mb-4">{L.members}</h2>
 
         {members.length === 0 ? (
-          <p className="text-gray-400 text-sm text-center py-4">スタッフ情報はまだありません</p>
+          <p className="text-gray-400 text-sm text-center py-4">{L.empty}</p>
         ) : (
           <div className="space-y-3">
             {members.map(m => (
