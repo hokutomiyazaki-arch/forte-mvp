@@ -87,18 +87,42 @@ function LoginForm() {
       }
     }
 
+    // onAuthStateChange を先に登録（OAuth完了後のSIGNED_INを確実にキャッチ）
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, session: any) => {
+      console.log('[onAuthStateChange] event:', event, 'session:', session ? 'EXISTS' : 'NULL', 'cancelled:', cancelled)
+
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user && !cancelled) {
+        cancelled = true
+        console.log('[onAuthStateChange] SIGNED_IN → redirect /explore')
+        window.location.href = '/explore'
+      }
+    })
+
     async function init() {
-      // sb-keysが0ならセッション確認不要 → 即フォーム表示
-      const sbKeys = Object.keys(localStorage).filter(k => k.startsWith('sb-'))
-      if (sbKeys.length === 0) {
-        console.log('[login/init] no sb-keys → skip getSession, show form')
-        if (!cancelled) setReady(true)
-        return
+      const hash = window.location.hash
+      const hasOAuthTokens = hash.includes('access_token') || hash.includes('refresh_token')
+      const urlSearchParams = new URLSearchParams(window.location.search)
+      const hasAuthCode = urlSearchParams.has('code')
+
+      // OAuth直後はトークンがURLにあるがlocalStorageにはまだない
+      // この場合はgetSession()をスキップしてはいけない
+      if (!hasOAuthTokens && !hasAuthCode) {
+        const sbKeys = Object.keys(localStorage).filter(k => k.startsWith('sb-'))
+        if (sbKeys.length === 0) {
+          console.log('[login/init] no sb-keys, no oauth → show form')
+          if (!cancelled) setReady(true)
+          return
+        }
       }
 
+      // OAuth直後 or sb-keysがある場合: セッション確認
+      console.log('[login/init] checking session (oauth:', hasOAuthTokens || hasAuthCode, ')')
+
       try {
+        // OAuth後は処理に少し時間がかかるので5秒に延長
+        const timeoutMs = (hasOAuthTokens || hasAuthCode) ? 5000 : 3000
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('session_timeout')), 3000)
+          setTimeout(() => reject(new Error('session_timeout')), timeoutMs)
         )
         const sessionPromise = supabase.auth.getSession()
 
@@ -111,7 +135,7 @@ function LoginForm() {
           session = null
         }
 
-        console.log('[login/init] session:', session ? 'EXISTS' : 'NULL', '| sb-keys:', sbKeys.length)
+        console.log('[login/init] session:', session ? 'EXISTS' : 'NULL')
         if (session) {
           console.log('[login/init] user:', session.user.email)
         }
@@ -130,16 +154,6 @@ function LoginForm() {
       if (!cancelled) setReady(true)
     }
     init()
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, session: any) => {
-      console.log('[onAuthStateChange] event:', event, 'session:', session ? 'EXISTS' : 'NULL', 'cancelled:', cancelled)
-
-      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user && !cancelled) {
-        cancelled = true
-        console.log('[onAuthStateChange] SIGNED_IN → redirect /explore')
-        window.location.href = '/explore'
-      }
-    })
 
     return () => { cancelled = true; subscription.unsubscribe() }
   }, [])
