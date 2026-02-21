@@ -46,7 +46,7 @@ function MyCardContent() {
   const [rewards, setRewards] = useState<RewardWithPro[]>([])
   const [voteHistory, setVoteHistory] = useState<VoteHistory[]>([])
   const [dataLoading, setDataLoading] = useState(false)
-  const [tab, setTab] = useState<'rewards' | 'history'>('rewards')
+  const [tab, setTab] = useState<'rewards' | 'history' | 'bookmarked'>('rewards')
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [redeeming, setRedeeming] = useState(false)
   const [message, setMessage] = useState('')
@@ -55,6 +55,8 @@ function MyCardContent() {
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
   const [changingPassword, setChangingPassword] = useState(false)
   const [isPro, setIsPro] = useState(false)
+  const [bookmarkedPros, setBookmarkedPros] = useState<any[]>([])
+  const [bookmarkCount, setBookmarkCount] = useState(0)
   const [userEmail, setUserEmail] = useState('')
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [timedOut, setTimedOut] = useState(false)
@@ -151,6 +153,29 @@ function MyCardContent() {
           ...v,
           pro_name: voteProMap.get(v.professional_id) || '不明',
         })))
+      }
+
+      // ブックマーク一覧取得
+      const { data: bookmarks } = await (supabase as any)
+        .from('bookmarks')
+        .select(`
+          id,
+          created_at,
+          professional_id,
+          professionals (
+            id,
+            name,
+            title,
+            photo_url,
+            prefecture,
+            area_description
+          )
+        `)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+      if (bookmarks) {
+        setBookmarkedPros(bookmarks)
+        setBookmarkCount(bookmarks.length)
       }
 
       console.log('[mycard] loadData complete')
@@ -563,26 +588,33 @@ function MyCardContent() {
 
       {/* タブ */}
       <div className="flex border-b border-gray-200 mb-6">
-        <button
-          onClick={() => setTab('rewards')}
-          className={`flex-1 py-3 text-sm font-medium border-b-2 transition ${
-            tab === 'rewards'
-              ? 'border-[#C4A35A] text-[#C4A35A]'
-              : 'border-transparent text-gray-400 hover:text-gray-600'
-          }`}
-        >
-          リワード ({activeRewards.length})
-        </button>
-        <button
-          onClick={() => setTab('history')}
-          className={`flex-1 py-3 text-sm font-medium border-b-2 transition ${
-            tab === 'history'
-              ? 'border-[#C4A35A] text-[#C4A35A]'
-              : 'border-transparent text-gray-400 hover:text-gray-600'
-          }`}
-        >
-          投票履歴 ({voteHistory.length})
-        </button>
+        {([
+          { key: 'rewards' as const, label: 'リワード', count: activeRewards.length },
+          { key: 'history' as const, label: '投票済み', count: voteHistory.length },
+          { key: 'bookmarked' as const, label: '気になる', count: bookmarkCount },
+        ]).map(t => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`flex-1 py-3 text-sm font-medium border-b-2 transition ${
+              tab === t.key
+                ? 'border-[#C4A35A] text-[#C4A35A]'
+                : 'border-transparent text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            {t.label}
+            {t.count > 0 && (
+              <span style={{
+                marginLeft: 4,
+                fontSize: 11,
+                fontWeight: 700,
+                color: tab === t.key ? '#C4A35A' : '#AAA',
+              }}>
+                {t.count}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
 
       {/* リワードタブ */}
@@ -718,6 +750,107 @@ function MyCardContent() {
                 </div>
               </a>
             ))
+          )}
+        </div>
+      )}
+
+      {/* 気になるタブ */}
+      {tab === 'bookmarked' && (
+        <div>
+          {bookmarkedPros.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '60px 20px', color: '#999' }}>
+              <div style={{ fontSize: 40, marginBottom: 16 }}>♡</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: '#666', marginBottom: 8 }}>
+                まだブックマークしたプロがいません
+              </div>
+              <div style={{ fontSize: 13, color: '#999', lineHeight: 1.8 }}>
+                プロのページで「♡ 気になる」を押すと<br />
+                ここに追加されます
+              </div>
+              <a href="/search" style={{
+                display: 'inline-block',
+                marginTop: 24,
+                padding: '12px 32px',
+                background: '#C4A35A',
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: 14,
+                textDecoration: 'none',
+                borderRadius: 8,
+              }}>
+                プロを探す →
+              </a>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {bookmarkedPros.map(bookmark => {
+                const bPro = bookmark.professionals
+                if (!bPro) return null
+                return (
+                  <a
+                    key={bookmark.id}
+                    href={`/card/${bPro.id}`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 16,
+                      padding: 16,
+                      background: '#fff',
+                      border: '1px solid #E8E4DC',
+                      borderRadius: 14,
+                      textDecoration: 'none',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    <div style={{
+                      width: 52, height: 52, borderRadius: '50%',
+                      background: '#F0EDE6', overflow: 'hidden', flexShrink: 0,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {bPro.photo_url ? (
+                        <img src={bPro.photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <span style={{ fontSize: 20, color: '#999' }}>
+                          {bPro.name?.charAt(0) || '?'}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E' }}>
+                        {bPro.name}
+                      </div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#C4A35A', marginTop: 2 }}>
+                        {bPro.title}
+                      </div>
+                      {(bPro.prefecture || bPro.area_description) && (
+                        <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+                          {[bPro.prefecture, bPro.area_description].filter(Boolean).join('・')}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={async (e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        await (supabase as any)
+                          .from('bookmarks')
+                          .delete()
+                          .eq('id', bookmark.id)
+                        setBookmarkedPros(prev => prev.filter(b => b.id !== bookmark.id))
+                        setBookmarkCount(prev => prev - 1)
+                      }}
+                      style={{
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        fontSize: 18, color: '#C4A35A', padding: 8, flexShrink: 0,
+                      }}
+                      title="ブックマーク解除"
+                    >
+                      ♥
+                    </button>
+                  </a>
+                )
+              })}
+            </div>
           )}
         </div>
       )}
