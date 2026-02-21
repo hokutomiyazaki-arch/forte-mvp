@@ -105,6 +105,14 @@ export default function DashboardPage() {
   const [selectedPhrases, setSelectedPhrases] = useState<Record<string, number>>({})
   const [shareModalVoice, setShareModalVoice] = useState<{ id: string; comment: string; created_at: string } | null>(null)
 
+  // NFC カード管理 state
+  const [nfcCard, setNfcCard] = useState<{ id: string; card_uid: string; status: string; linked_at: string | null } | null>(null)
+  const [nfcInput, setNfcInput] = useState('')
+  const [nfcLoading, setNfcLoading] = useState(false)
+  const [nfcError, setNfcError] = useState('')
+  const [nfcSuccess, setNfcSuccess] = useState('')
+  const [nfcLostCard, setNfcLostCard] = useState<string | null>(null) // 紛失報告したカードUID
+
   useEffect(() => {
     async function load() {
       const { data: { session } } = await supabase.auth.getSession()
@@ -211,6 +219,15 @@ export default function DashboardPage() {
       const { data: phrasesData } = await supabase
         .from('gratitude_phrases').select('*').order('sort_order') as any
       if (phrasesData) setVoicePhrases(phrasesData)
+
+      // NFCカード取得
+      const { data: nfcData } = await (supabase as any)
+        .from('nfc_cards')
+        .select('id, card_uid, status, linked_at')
+        .eq('professional_id', proData.id)
+        .eq('status', 'active')
+        .maybeSingle()
+      if (nfcData) setNfcCard(nfcData)
 
       setLoading(false)
     }
@@ -350,6 +367,88 @@ export default function DashboardPage() {
     await (supabase.from('qr_tokens') as any).insert({ professional_id: pro.id, token, expires_at: expiresAt })
     const voteUrl = `${window.location.origin}/vote/${pro.id}?token=${token}`
     setQrUrl(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(voteUrl)}`)
+  }
+
+  // NFC カード登録
+  async function linkNfcCard() {
+    if (!pro) return
+    const cardUid = nfcInput.trim().toUpperCase()
+    if (!cardUid) { setNfcError('カードIDを入力してください。'); return }
+
+    setNfcLoading(true)
+    setNfcError('')
+    setNfcSuccess('')
+
+    try {
+      // 1. card_uid が存在し、unlinked 状態であることを確認
+      const { data: card } = await (supabase as any)
+        .from('nfc_cards')
+        .select('id, status')
+        .eq('card_uid', cardUid)
+        .maybeSingle()
+
+      if (!card) { setNfcError('カードIDが見つかりません。カード裏面に印字されたIDを確認してください。'); setNfcLoading(false); return }
+      if (card.status !== 'unlinked') { setNfcError('このカードは既に使用されています。'); setNfcLoading(false); return }
+
+      // 2. プロに既存のアクティブカードがないことを確認
+      const { data: existing } = await (supabase as any)
+        .from('nfc_cards')
+        .select('id, card_uid')
+        .eq('professional_id', pro.id)
+        .eq('status', 'active')
+        .maybeSingle()
+
+      if (existing) { setNfcError(`既にカード（${existing.card_uid}）が登録されています。先に紛失報告してください。`); setNfcLoading(false); return }
+
+      // 3. カードをアクティブ化
+      const { error } = await (supabase as any)
+        .from('nfc_cards')
+        .update({
+          professional_id: pro.id,
+          status: 'active',
+          linked_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', card.id)
+
+      if (error) { setNfcError('カードの登録に失敗しました。'); setNfcLoading(false); return }
+
+      // 成功 → state更新
+      setNfcCard({ id: card.id, card_uid: cardUid, status: 'active', linked_at: new Date().toISOString() })
+      setNfcInput('')
+      setNfcSuccess('カードが登録されました ✓')
+      setNfcLostCard(null)
+      setTimeout(() => setNfcSuccess(''), 3000)
+    } catch {
+      setNfcError('エラーが発生しました。')
+    }
+    setNfcLoading(false)
+  }
+
+  // NFC カード紛失報告
+  async function reportNfcLost() {
+    if (!pro || !nfcCard) return
+    setNfcLoading(true)
+    setNfcError('')
+
+    try {
+      const { error } = await (supabase as any)
+        .from('nfc_cards')
+        .update({
+          status: 'lost',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('professional_id', pro.id)
+        .eq('status', 'active')
+
+      if (error) { setNfcError('紛失報告に失敗しました。'); setNfcLoading(false); return }
+
+      setNfcLostCard(nfcCard.card_uid)
+      setNfcCard(null)
+    } catch {
+      setNfcError('エラーが発生しました。')
+    }
+    setNfcLoading(false)
   }
 
   // 登録日数を計算
@@ -900,6 +999,100 @@ export default function DashboardPage() {
             </>
           )
         })()}
+      </div>
+
+      {/* NFC Card */}
+      <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
+        <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">NFCカード</h2>
+
+        {nfcCard ? (
+          // 状態B: カード登録済み
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <div style={{
+                width: 40, height: 40, borderRadius: '50%',
+                background: 'rgba(196,163,90,0.1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 18,
+              }}>
+                📇
+              </div>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E' }}>
+                  カードID: {nfcCard.card_uid}
+                </div>
+                <div style={{ fontSize: 12, color: '#888' }}>
+                  ステータス: 使用中 ✅
+                  {nfcCard.linked_at && (
+                    <span style={{ marginLeft: 12 }}>
+                      登録日: {new Date(nfcCard.linked_at).toLocaleDateString('ja-JP')}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={reportNfcLost}
+              disabled={nfcLoading}
+              style={{
+                fontSize: 13, fontWeight: 600,
+                color: '#EF4444', background: 'transparent',
+                border: '1px solid #FCA5A5', borderRadius: 8,
+                padding: '8px 16px', cursor: 'pointer',
+                opacity: nfcLoading ? 0.5 : 1,
+                transition: 'all 0.2s',
+              }}
+            >
+              {nfcLoading ? '処理中...' : '紛失を報告する'}
+            </button>
+          </div>
+        ) : (
+          // 状態A: カード未登録 / 状態C: 紛失報告後
+          <div>
+            {nfcLostCard && (
+              <p style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>
+                前のカード（{nfcLostCard}）は紛失として無効化されました。
+              </p>
+            )}
+            <p style={{ fontSize: 13, color: '#666', marginBottom: 12 }}>
+              カード裏面に印字されたIDを入力してください
+            </p>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                value={nfcInput}
+                onChange={(e) => { setNfcInput(e.target.value); setNfcError('') }}
+                placeholder="RP-001"
+                style={{
+                  padding: '10px 14px', fontSize: 14, fontWeight: 600,
+                  border: '1px solid #E5E7EB', borderRadius: 8,
+                  width: 160, fontFamily: "'Inter', sans-serif",
+                  letterSpacing: 1,
+                }}
+              />
+              <button
+                onClick={linkNfcCard}
+                disabled={nfcLoading || !nfcInput.trim()}
+                style={{
+                  padding: '10px 20px', fontSize: 14, fontWeight: 700,
+                  background: '#C4A35A', color: '#fff',
+                  border: 'none', borderRadius: 8, cursor: 'pointer',
+                  opacity: (nfcLoading || !nfcInput.trim()) ? 0.5 : 1,
+                  transition: 'all 0.2s',
+                }}
+              >
+                {nfcLoading ? '登録中...' : '登録する'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {nfcError && (
+          <p style={{ fontSize: 13, color: '#EF4444', marginTop: 12 }}>{nfcError}</p>
+        )}
+        {nfcSuccess && (
+          <p style={{ fontSize: 13, color: '#22C55E', marginTop: 12 }}>{nfcSuccess}</p>
+        )}
       </div>
 
       </>)}
