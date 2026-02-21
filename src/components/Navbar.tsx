@@ -13,6 +13,17 @@ export default function Navbar() {
     let cancelled = false
 
     async function checkSession() {
+      // sb-keysが0ならセッション確認不要 → 即「未ログイン」
+      const sbKeys = Object.keys(localStorage).filter(k => k.startsWith('sb-'))
+      if (sbKeys.length === 0) {
+        if (!cancelled) {
+          setUser(null)
+          setDebugInfo('no sb-keys → no session')
+          setLoaded(true)
+        }
+        return
+      }
+
       try {
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('timeout')), 3000)
@@ -23,7 +34,6 @@ export default function Navbar() {
 
         if (cancelled) return
 
-        const sbKeys = Object.keys(localStorage).filter(k => k.startsWith('sb-'))
         setDebugInfo(
           `session: ${data?.session ? 'YES (' + data.session.user.email + ')' : 'NO'} | ` +
           `sb-keys: ${sbKeys.length} | ` +
@@ -46,7 +56,6 @@ export default function Navbar() {
       } catch (e) {
         if (!cancelled) {
           setUser(null)
-          const sbKeys = Object.keys(localStorage).filter(k => k.startsWith('sb-'))
           setDebugInfo(`error: ${e instanceof Error ? e.message : 'unknown'} | sb-keys: ${sbKeys.length}`)
         }
       }

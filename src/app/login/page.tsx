@@ -88,6 +88,14 @@ function LoginForm() {
     }
 
     async function init() {
+      // sb-keysが0ならセッション確認不要 → 即フォーム表示
+      const sbKeys = Object.keys(localStorage).filter(k => k.startsWith('sb-'))
+      if (sbKeys.length === 0) {
+        console.log('[login/init] no sb-keys → skip getSession, show form')
+        if (!cancelled) setReady(true)
+        return
+      }
+
       try {
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('session_timeout')), 3000)
@@ -103,8 +111,7 @@ function LoginForm() {
           session = null
         }
 
-        console.log('[login/init] session:', session ? 'EXISTS' : 'NULL')
-        console.log('[login/init] sb-keys:', Object.keys(localStorage).filter(k => k.startsWith('sb-')))
+        console.log('[login/init] session:', session ? 'EXISTS' : 'NULL', '| sb-keys:', sbKeys.length)
         if (session) {
           console.log('[login/init] user:', session.user.email)
         }
