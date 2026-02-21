@@ -97,6 +97,9 @@ export default function CardPage() {
   const [activeTab, setActiveTab] = useState<'strengths' | 'certs' | 'voices'>('strengths')
   const [animated, setAnimated] = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
+  const [isBookmarked, setIsBookmarked] = useState(false)
+  const [bookmarkLoading, setBookmarkLoading] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -138,13 +141,47 @@ export default function CardPage() {
         .eq('professional_id', id).eq('status', 'confirmed') as any
       setTotalVotes(count || 0)
 
-      // 感謝フレーズ
+      // セッション取得 + ブックマーク状態チェック
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user) {
+        setCurrentUserId(session.user.id)
+        const { data: bookmark } = await (supabase as any)
+          .from('bookmarks')
+          .select('id')
+          .eq('user_id', session.user.id)
+          .eq('professional_id', id)
+          .maybeSingle()
+        setIsBookmarked(!!bookmark)
+      }
+
       setLoading(false)
       // バーアニメーション開始を少し遅延
       setTimeout(() => setAnimated(true), 100)
     }
     load()
   }, [id])
+
+  const handleBookmarkToggle = async () => {
+    if (!currentUserId) {
+      window.location.href = `/login?redirect=/card/${id}`
+      return
+    }
+    setBookmarkLoading(true)
+    if (isBookmarked) {
+      await (supabase as any)
+        .from('bookmarks')
+        .delete()
+        .eq('user_id', currentUserId)
+        .eq('professional_id', id)
+      setIsBookmarked(false)
+    } else {
+      await (supabase as any)
+        .from('bookmarks')
+        .insert({ user_id: currentUserId, professional_id: id })
+      setIsBookmarked(true)
+    }
+    setBookmarkLoading(false)
+  }
 
   if (loading) return <div style={{ textAlign: 'center', padding: '64px 0', color: T.textMuted }}>読み込み中...</div>
   if (!pro) return <div style={{ textAlign: 'center', padding: '64px 0', color: T.textMuted }}>プロフィールが見つかりません</div>
@@ -166,7 +203,7 @@ export default function CardPage() {
 
       {/* ═══ ヘッダーカード ═══ */}
       <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 16, padding: 20, marginBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
           {pro.photo_url ? (
             <img src={pro.photo_url} alt={pro.name}
               style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
@@ -176,7 +213,36 @@ export default function CardPage() {
             </div>
           )}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 20, fontWeight: 900, color: T.dark }}>{pro.name}</div>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+              <div style={{ fontSize: 20, fontWeight: 900, color: T.dark }}>{pro.name}</div>
+              {/* ブックマークボタン — プロ自身は非表示 */}
+              {currentUserId !== pro?.user_id && (
+                <button
+                  onClick={handleBookmarkToggle}
+                  disabled={bookmarkLoading}
+                  style={{
+                    background: isBookmarked ? 'rgba(196,163,90,0.08)' : 'transparent',
+                    border: isBookmarked ? '1.5px solid #C4A35A' : '1.5px solid #D0CCC4',
+                    borderRadius: 10,
+                    padding: '6px 12px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    transition: 'all 0.2s ease',
+                    flexShrink: 0,
+                    opacity: bookmarkLoading ? 0.5 : 1,
+                  }}
+                >
+                  <span style={{ fontSize: 14, color: isBookmarked ? '#C4A35A' : '#999' }}>
+                    {isBookmarked ? '♥' : '♡'}
+                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: isBookmarked ? '#C4A35A' : '#999', fontFamily: T.font }}>
+                    気になる
+                  </span>
+                </button>
+              )}
+            </div>
             <div style={{ fontSize: 12, color: T.gold, fontWeight: 700, marginTop: 2 }}>{pro.title}</div>
             <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>
               {pro.prefecture && <span>{pro.prefecture}</span>}
