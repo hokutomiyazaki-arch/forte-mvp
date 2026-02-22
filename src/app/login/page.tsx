@@ -4,6 +4,18 @@ import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { Suspense } from 'react'
 
+const MAIL_LINKS: Record<string, { label: string; url: string }> = {
+  'gmail.com': { label: 'Gmailを開く', url: 'https://mail.google.com' },
+  'yahoo.co.jp': { label: 'Yahoo!メールを開く', url: 'https://mail.yahoo.co.jp' },
+  'icloud.com': { label: 'iCloudメールを開く', url: 'https://www.icloud.com/mail' },
+  'outlook.com': { label: 'Outlookを開く', url: 'https://outlook.live.com' },
+  'hotmail.com': { label: 'Outlookを開く', url: 'https://outlook.live.com' },
+  'docomo.ne.jp': { label: 'ドコモメールを開く', url: 'https://mail.smt.docomo.ne.jp' },
+  'softbank.ne.jp': { label: 'ソフトバンクメールを開く', url: 'https://webmail.softbank.jp' },
+  'ezweb.ne.jp': { label: 'auメールを開く', url: 'https://mail.ezweb.ne.jp' },
+  'au.com': { label: 'auメールを開く', url: 'https://mail.ezweb.ne.jp' },
+}
+
 function LoginForm() {
   const searchParams = useSearchParams()
   const initialRole = searchParams.get('role') || 'pro'
@@ -484,11 +496,25 @@ function LoginForm() {
   }
 
   if (emailSent) {
+    const domain = email.split('@')[1]
+    const mailLink = domain ? MAIL_LINKS[domain] : undefined
     return (
       <div className="max-w-md mx-auto text-center py-16">
         <div className="text-5xl mb-4">✉️</div>
         <h1 className="text-xl font-bold text-[#1A1A2E] mb-4">確認メールを送信しました</h1>
-        <p className="text-gray-500">メール内のリンクをクリックして登録を完了してください。</p>
+        <p className="text-gray-500 mb-6">メール内のリンクをクリックして登録を完了してください。</p>
+        {mailLink ? (
+          <a
+            href={mailLink.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block px-8 py-3 bg-[#1A1A2E] text-white font-medium rounded-xl hover:bg-[#2a2a4e] transition text-sm"
+          >
+            {mailLink.label} →
+          </a>
+        ) : (
+          <p className="text-sm text-gray-400">メールアプリを開いてください</p>
+        )}
       </div>
     )
   }
