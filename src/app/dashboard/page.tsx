@@ -93,7 +93,7 @@ export default function DashboardPage() {
   const [selectedProofIds, setSelectedProofIds] = useState<Set<string>>(new Set())
   const [customProofs, setCustomProofs] = useState<CustomProof[]>([])
   const [activeTab, setActiveTab] = useState('basic')
-  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices'>('profile')
+  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'org'>('profile')
   const [proofSaving, setProofSaving] = useState(false)
   const [proofSaved, setProofSaved] = useState(false)
   const [proofError, setProofError] = useState('')
@@ -125,6 +125,8 @@ export default function DashboardPage() {
   const [leavingOrg, setLeavingOrg] = useState<string | null>(null)
   const [credentialBadges, setCredentialBadges] = useState<{id: string; name: string; description: string | null; image_url: string | null; org_name: string; org_id: string}[]>([])
 
+  // 団体オーナー state
+  const [ownedOrg, setOwnedOrg] = useState<{id: string; name: string; type: string} | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -306,6 +308,19 @@ export default function DashboardPage() {
             org_id: m.organizations.id,
           }))
         )
+      }
+
+      // オーナー団体を取得
+      const { data: ownedOrgData } = await (supabase as any)
+        .from('organizations')
+        .select('id, name, type')
+        .eq('owner_id', u.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (ownedOrgData) {
+        setOwnedOrg(ownedOrgData)
       }
 
       setLoading(false)
@@ -988,6 +1003,7 @@ export default function DashboardPage() {
           { key: 'proofs' as const, label: '強み設定' },
           { key: 'rewards' as const, label: 'リワード設定' },
           { key: 'voices' as const, label: 'Voices' },
+          ...(ownedOrg ? [{ key: 'org' as const, label: '🏢 団体管理' }] : []),
         ]).map(tab => (
           <button
             key={tab.key}
@@ -997,13 +1013,17 @@ export default function DashboardPage() {
               padding: '10px 14px',
               fontSize: 13,
               fontWeight: dashboardTab === tab.key ? 700 : 600,
-              color: dashboardTab === tab.key ? '#1A1A2E' : '#9CA3AF',
-              background: 'transparent',
+              color: tab.key === 'org'
+                ? (dashboardTab === 'org' ? '#C4A35A' : '#B8963E')
+                : (dashboardTab === tab.key ? '#1A1A2E' : '#9CA3AF'),
+              background: tab.key === 'org' && dashboardTab === 'org' ? 'rgba(196,163,90,0.06)' : 'transparent',
               border: 'none',
-              borderBottom: dashboardTab === tab.key ? '2px solid #C4A35A' : '2px solid transparent',
+              borderBottom: dashboardTab === tab.key
+                ? (tab.key === 'org' ? '2px solid #C4A35A' : '2px solid #C4A35A')
+                : '2px solid transparent',
               cursor: 'pointer',
               whiteSpace: 'nowrap' as const,
-              transition: 'color 0.2s, border-color 0.2s',
+              transition: 'color 0.2s, border-color 0.2s, background 0.2s',
             }}
           >
             {tab.label}
@@ -1891,6 +1911,116 @@ export default function DashboardPage() {
         />
       )}
 
+      </>)}
+
+      {/* ═══ Tab: 団体管理 ═══ */}
+      {dashboardTab === 'org' && ownedOrg && (<>
+        <div style={{
+          background: 'linear-gradient(135deg, #1A1A2E 0%, #2D2D4E 100%)',
+          borderRadius: 16,
+          padding: 24,
+          marginBottom: 16,
+          color: '#fff',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: 12,
+              background: 'rgba(196,163,90,0.2)',
+              border: '1.5px solid rgba(196,163,90,0.4)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 20, fontWeight: 'bold', color: '#C4A35A',
+            }}>
+              {ownedOrg.name.charAt(0)}
+            </div>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 800 }}>{ownedOrg.name}</div>
+              <div style={{ fontSize: 11, color: '#C4A35A', fontWeight: 600, marginTop: 2 }}>
+                {ownedOrg.type === 'store' ? '店舗オーナー' : ownedOrg.type === 'credential' ? '資格発行団体オーナー' : '教育団体オーナー'}
+              </div>
+            </div>
+          </div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', lineHeight: 1.6 }}>
+            団体のメンバー管理、バッジ管理、公開ページの確認ができます。
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <button
+            onClick={() => window.location.href = '/org/dashboard'}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 14,
+              background: '#fff', border: '1px solid #E5E7EB', borderRadius: 14,
+              padding: '16px 18px', cursor: 'pointer', transition: 'border-color 0.2s',
+              textAlign: 'left', width: '100%',
+            }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = '#C4A35A'}
+            onMouseLeave={e => e.currentTarget.style.borderColor = '#E5E7EB'}
+          >
+            <span style={{ fontSize: 24 }}>📊</span>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E' }}>ダッシュボード</div>
+              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>メンバー一覧・プルーフ集計</div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => window.location.href = '/org/dashboard/invite'}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 14,
+              background: '#fff', border: '1px solid #E5E7EB', borderRadius: 14,
+              padding: '16px 18px', cursor: 'pointer', transition: 'border-color 0.2s',
+              textAlign: 'left', width: '100%',
+            }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = '#C4A35A'}
+            onMouseLeave={e => e.currentTarget.style.borderColor = '#E5E7EB'}
+          >
+            <span style={{ fontSize: 24 }}>✉️</span>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E' }}>
+                {ownedOrg.type === 'store' ? 'メンバー招待' : ownedOrg.type === 'credential' ? '認定者追加' : '修了者追加'}
+              </div>
+              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>メールで招待を送信</div>
+            </div>
+          </button>
+
+          {ownedOrg.type !== 'store' && (
+            <button
+              onClick={() => window.location.href = '/org/dashboard/badges'}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 14,
+                background: '#fff', border: '1px solid #E5E7EB', borderRadius: 14,
+                padding: '16px 18px', cursor: 'pointer', transition: 'border-color 0.2s',
+                textAlign: 'left', width: '100%',
+              }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = '#C4A35A'}
+              onMouseLeave={e => e.currentTarget.style.borderColor = '#E5E7EB'}
+            >
+              <span style={{ fontSize: 24 }}>🎖️</span>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E' }}>バッジ管理</div>
+                <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>バッジの作成・取得URL管理</div>
+              </div>
+            </button>
+          )}
+
+          <button
+            onClick={() => window.location.href = `/org/${ownedOrg.id}`}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 14,
+              background: '#fff', border: '1px solid #E5E7EB', borderRadius: 14,
+              padding: '16px 18px', cursor: 'pointer', transition: 'border-color 0.2s',
+              textAlign: 'left', width: '100%',
+            }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = '#C4A35A'}
+            onMouseLeave={e => e.currentTarget.style.borderColor = '#E5E7EB'}
+          >
+            <span style={{ fontSize: 24 }}>🌐</span>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E' }}>公開ページ</div>
+              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>団体の公開プロフィールを確認</div>
+            </div>
+          </button>
+        </div>
       </>)}
 
       {/* Links */}
