@@ -205,19 +205,29 @@ export default function OrgDashboardPage() {
       </div>
 
       {/* アクションボタン */}
-      <div className="flex gap-3">
-        <button
-          onClick={() => window.location.href = '/org/dashboard/invite'}
-          className="flex-1 py-3 bg-[#1A1A2E] text-white font-medium rounded-xl hover:bg-[#2a2a4e] transition text-sm"
-        >
-          {L.invite}
-        </button>
-        <button
-          onClick={() => window.location.href = `/org/${org.id}`}
-          className="flex-1 py-3 bg-white text-[#1A1A2E] font-medium rounded-xl border border-gray-200 hover:border-[#C4A35A] transition text-sm"
-        >
-          {L.publicPage}
-        </button>
+      <div className="flex flex-col gap-3">
+        {org.type !== 'store' && (
+          <button
+            onClick={() => window.location.href = '/org/dashboard/badges'}
+            className="w-full py-3 bg-[#C4A35A] text-white font-medium rounded-xl hover:bg-[#b3944f] transition text-sm"
+          >
+            🎖️ バッジ管理
+          </button>
+        )}
+        <div className="flex gap-3">
+          <button
+            onClick={() => window.location.href = '/org/dashboard/invite'}
+            className="flex-1 py-3 bg-[#1A1A2E] text-white font-medium rounded-xl hover:bg-[#2a2a4e] transition text-sm"
+          >
+            {L.invite}
+          </button>
+          <button
+            onClick={() => window.location.href = `/org/${org.id}`}
+            className="flex-1 py-3 bg-white text-[#1A1A2E] font-medium rounded-xl border border-gray-200 hover:border-[#C4A35A] transition text-sm"
+          >
+            {L.publicPage}
+          </button>
+        </div>
       </div>
     </div>
   )
