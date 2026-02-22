@@ -32,6 +32,7 @@ export default function OrgPublicPage() {
   const [org, setOrg] = useState<any>(null)
   const [members, setMembers] = useState<any[]>([])
   const [aggregate, setAggregate] = useState<any>(null)
+  const [levelAggregates, setLevelAggregates] = useState<any[]>([])
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -73,6 +74,17 @@ export default function OrgPublicPage() {
         .maybeSingle()
 
       setAggregate(aggData)
+
+      // credential/education団体: レベル別集計
+      if (orgData.type === 'credential' || orgData.type === 'education') {
+        const { data: levelAggData } = await supabase
+          .from('org_level_aggregate')
+          .select('*')
+          .eq('organization_id', orgId)
+          .order('sort_order', { ascending: true })
+
+        setLevelAggregates(levelAggData || [])
+      }
     } catch (err: any) {
       setError(err.message || 'データの取得に失敗しました')
     }
@@ -139,6 +151,39 @@ export default function OrgPublicPage() {
           <div className="text-xs text-gray-400 mt-1">直近30日</div>
         </div>
       </div>
+
+      {/* レベル別セクション（credential/education団体のみ） */}
+      {(org.type === 'credential' || org.type === 'education') && levelAggregates.length > 0 && (
+        <div className="mb-6 space-y-3">
+          <h2 className="text-sm font-bold text-[#1A1A2E] mb-2">
+            {org.type === 'credential' ? '認定レベル' : '修了レベル'}
+          </h2>
+          {levelAggregates.map(la => (
+            <a
+              key={la.level_id}
+              href={`/org/${orgId}/level/${la.level_id}`}
+              className="block bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:border-[#C4A35A] transition"
+            >
+              <div className="flex items-center gap-4">
+                {la.image_url ? (
+                  <img src={la.image_url} alt={la.level_name} className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
+                ) : (
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#C4A35A] to-[#E8D5A0] flex items-center justify-center text-white text-lg font-bold flex-shrink-0">
+                    {la.level_name.charAt(0)}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold text-[#1A1A2E] truncate">{la.level_name}</div>
+                  <div className="text-xs text-gray-400 mt-1">
+                    {la.member_count}名 · {la.total_votes}プルーフ
+                  </div>
+                </div>
+                <span className="text-gray-300 text-sm">→</span>
+              </div>
+            </a>
+          ))}
+        </div>
+      )}
 
       {/* メンバー一覧 */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6">
