@@ -111,6 +111,7 @@ export default function CardPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [bookmarkCount, setBookmarkCount] = useState(0)
   const [orgs, setOrgs] = useState<{id: string; name: string; type: string}[]>([])
+  const [credentialBadges, setCredentialBadges] = useState<{id: string; name: string; description: string | null; image_url: string | null; org_name: string; org_id: string}[]>([])
 
   useEffect(() => {
     async function load() {
@@ -175,17 +176,39 @@ export default function CardPage() {
       // 所属団体を取得
       const { data: memberData } = await (supabase as any)
         .from('org_members')
-        .select('organization_id, organizations(id, name, type)')
+        .select('organization_id, credential_level_id, organizations(id, name, type)')
         .eq('professional_id', id)
         .eq('status', 'active')
 
       if (memberData) {
         setOrgs(memberData
-          .filter((m: any) => m.organizations)
+          .filter((m: any) => m.organizations && !m.credential_level_id)
           .map((m: any) => ({
             id: m.organizations.id,
             name: m.organizations.name,
             type: m.organizations.type,
+          }))
+        )
+      }
+
+      // credential_levels経由のバッジ取得
+      const { data: badgeMemberData } = await (supabase as any)
+        .from('org_members')
+        .select('credential_level_id, credential_levels(id, name, description, image_url), organizations(id, name)')
+        .eq('professional_id', id)
+        .eq('status', 'active')
+        .not('credential_level_id', 'is', null)
+
+      if (badgeMemberData) {
+        setCredentialBadges(badgeMemberData
+          .filter((m: any) => m.credential_levels && m.organizations)
+          .map((m: any) => ({
+            id: m.credential_levels.id,
+            name: m.credential_levels.name,
+            description: m.credential_levels.description,
+            image_url: m.credential_levels.image_url,
+            org_name: m.organizations.name,
+            org_id: m.organizations.id,
           }))
         )
       }
@@ -499,8 +522,49 @@ export default function CardPage() {
           <div style={{ fontSize: 10, fontWeight: 700, color: T.textMuted, letterSpacing: 2, textTransform: 'uppercase', fontFamily: T.fontMono, marginBottom: 10 }}>
             CERTIFICATIONS & BADGES
           </div>
-          {displayBadges.length > 0 ? (
+          {(displayBadges.length > 0 || credentialBadges.length > 0) ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {/* credential_levels経由のバッジ（新方式） */}
+              {credentialBadges.map((badge) => (
+                <a
+                  key={badge.id}
+                  href={`/org/${badge.org_id}`}
+                  style={{ textDecoration: 'none' }}
+                >
+                  <div
+                    style={{
+                      background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14,
+                      padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14,
+                      cursor: 'pointer', transition: 'border-color 0.2s, opacity 0.2s',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.borderColor = T.gold
+                      e.currentTarget.style.opacity = '0.85'
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.borderColor = T.cardBorder
+                      e.currentTarget.style.opacity = '1'
+                    }}
+                  >
+                    {badge.image_url ? (
+                      <img src={badge.image_url} alt={badge.name} style={{ width: 56, height: 56, borderRadius: 12, objectFit: 'cover' }} />
+                    ) : (
+                      <div style={{ width: 56, height: 56, borderRadius: 12, background: `linear-gradient(135deg, ${T.gold}, #D4B96A)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 20, fontWeight: 'bold' }}>
+                        {badge.name.charAt(0)}
+                      </div>
+                    )}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: 'bold', color: T.text }}>{badge.name}</div>
+                      <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>{badge.org_name}</div>
+                    </div>
+                    <svg style={{ width: 14, height: 14, color: T.textMuted, flexShrink: 0 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </a>
+              ))}
+
+              {/* pro.badges経由のバッジ（旧方式・互換性維持） */}
               {displayBadges.map((badge, i) => {
                 const badgeUrl = getBadgeUrl(badge.id)
                 const badgeContent = (
