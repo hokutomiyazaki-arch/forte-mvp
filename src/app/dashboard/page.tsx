@@ -527,60 +527,74 @@ export default function DashboardPage() {
     window.location.href = '/mycard'
   }
 
-  // 団体招待の承認/拒否
+  // 団体招待の承認/拒否（APIルート経由 — getSessionSafeのlocalStorage問題を回避）
   async function handleAcceptInvite(memberId: string, orgId: string) {
     setInviteProcessing(memberId)
-    const { error } = await (supabase as any)
-      .from('org_members')
-      .update({ status: 'active', accepted_at: new Date().toISOString() })
-      .eq('id', memberId)
+    try {
+      const res = await fetch('/api/org-accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memberId,
+          action: 'accept',
+          userId: user?.id,
+          userEmail: user?.email,
+          orgId,
+        }),
+      })
 
-    if (!error) {
-      const accepted = pendingInvites.find(i => i.id === memberId)
-      setPendingInvites(prev => prev.filter(i => i.id !== memberId))
+      if (res.ok) {
+        const accepted = pendingInvites.find(i => i.id === memberId)
+        setPendingInvites(prev => prev.filter(i => i.id !== memberId))
 
-      // 承認済みを所属団体リストに追加
-      if (accepted) {
-        setActiveOrgs(prev => [...prev, {
-          id: accepted.organization_id,
-          member_id: memberId,
-          org_name: accepted.org_name,
-          org_type: accepted.org_type,
-          accepted_at: new Date().toISOString(),
-        }])
+        if (accepted) {
+          setActiveOrgs(prev => [...prev, {
+            id: accepted.organization_id,
+            member_id: memberId,
+            org_name: accepted.org_name,
+            org_type: accepted.org_type,
+            accepted_at: new Date().toISOString(),
+          }])
 
-        // 承認完了メッセージを表示
-        const confirmLabels: Record<string, string> = {
-          store: '所属が確認されました',
-          credential: '認定が付与されました',
-          education: '修了が認定されました',
+          const confirmLabels: Record<string, string> = {
+            store: '所属が確認されました',
+            credential: '認定が付与されました',
+            education: '修了が認定されました',
+          }
+          setInviteAccepted(confirmLabels[accepted.org_type] || '承認されました')
+          setTimeout(() => setInviteAccepted(null), 3000)
         }
-        setInviteAccepted(confirmLabels[accepted.org_type] || '承認されました')
-        setTimeout(() => setInviteAccepted(null), 3000)
+      } else {
+        const data = await res.json()
+        console.error('[handleAcceptInvite] API error:', data.error)
       }
-
-      // org_invitationsのstatusも更新
-      if (user?.email) {
-        await (supabase as any)
-          .from('org_invitations')
-          .update({ status: 'accepted' })
-          .eq('organization_id', orgId)
-          .eq('invited_email', user.email.toLowerCase())
-          .eq('status', 'pending')
-      }
+    } catch (err) {
+      console.error('[handleAcceptInvite] fetch error:', err)
     }
     setInviteProcessing(null)
   }
 
   async function handleDeclineInvite(memberId: string) {
     setInviteProcessing(memberId)
-    const { error } = await (supabase as any)
-      .from('org_members')
-      .update({ status: 'removed', removed_at: new Date().toISOString() })
-      .eq('id', memberId)
+    try {
+      const res = await fetch('/api/org-accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memberId,
+          action: 'decline',
+          userId: user?.id,
+        }),
+      })
 
-    if (!error) {
-      setPendingInvites(prev => prev.filter(i => i.id !== memberId))
+      if (res.ok) {
+        setPendingInvites(prev => prev.filter(i => i.id !== memberId))
+      } else {
+        const data = await res.json()
+        console.error('[handleDeclineInvite] API error:', data.error)
+      }
+    } catch (err) {
+      console.error('[handleDeclineInvite] fetch error:', err)
     }
     setInviteProcessing(null)
   }
