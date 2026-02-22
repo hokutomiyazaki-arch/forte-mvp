@@ -123,6 +123,8 @@ export default function DashboardPage() {
   // 所属団体 state
   const [activeOrgs, setActiveOrgs] = useState<{id: string; member_id: string; org_name: string; org_type: string; accepted_at: string}[]>([])
   const [leavingOrg, setLeavingOrg] = useState<string | null>(null)
+  const [credentialBadges, setCredentialBadges] = useState<{id: string; name: string; description: string | null; image_url: string | null; org_name: string; org_id: string}[]>([])
+
 
   useEffect(() => {
     async function load() {
@@ -263,12 +265,13 @@ export default function DashboardPage() {
         })))
       }
 
-      // 所属団体（active）を取得
+      // 所属団体（active、credential_level_idなし＝純粋な所属）を取得
       const { data: activeMembers } = await (supabase as any)
         .from('org_members')
         .select('id, organization_id, accepted_at, organizations(id, name, type)')
         .eq('professional_id', proData.id)
         .eq('status', 'active')
+        .is('credential_level_id', null)
 
       if (activeMembers) {
         setActiveOrgs(activeMembers
@@ -279,6 +282,28 @@ export default function DashboardPage() {
             org_name: m.organizations.name,
             org_type: m.organizations.type,
             accepted_at: m.accepted_at,
+          }))
+        )
+      }
+
+      // credential_levels経由のバッジを取得
+      const { data: credBadgeData } = await (supabase as any)
+        .from('org_members')
+        .select('credential_level_id, credential_levels(id, name, description, image_url), organizations(id, name)')
+        .eq('professional_id', proData.id)
+        .eq('status', 'active')
+        .not('credential_level_id', 'is', null)
+
+      if (credBadgeData) {
+        setCredentialBadges(credBadgeData
+          .filter((m: any) => m.credential_levels && m.organizations)
+          .map((m: any) => ({
+            id: m.credential_levels.id,
+            name: m.credential_levels.name,
+            description: m.credential_levels.description,
+            image_url: m.credential_levels.image_url,
+            org_name: m.organizations.name,
+            org_id: m.organizations.id,
           }))
         )
       }
@@ -1057,7 +1082,7 @@ export default function DashboardPage() {
                       <div className="text-sm font-medium text-[#1A1A2E]">{o.org_name}</div>
                       {o.accepted_at && (
                         <div className="text-xs text-gray-400">
-                          {new Date(o.accepted_at).toLocaleDateString('ja-JP')} から所属
+                          {new Date(o.accepted_at).toLocaleDateString('ja-JP')} {o.org_type === 'credential' ? 'から認定' : o.org_type === 'education' ? 'から修了' : 'から所属'}
                         </div>
                       )}
                     </div>
@@ -1146,10 +1171,25 @@ export default function DashboardPage() {
       {/* Badges */}
       {(() => {
         const displayBadges = filterAndSortBadges(pro?.badges || [])
-        return displayBadges.length > 0 ? (
+        const hasBadges = displayBadges.length > 0 || credentialBadges.length > 0
+        return hasBadges ? (
           <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
             <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">取得バッジ</h2>
             <div className="flex flex-wrap justify-center gap-6">
+              {/* credential_levels経由のバッジ（新方式） */}
+              {credentialBadges.map((badge) => (
+                <a key={badge.id} href={`/org/${badge.org_id}`} className="flex flex-col items-center hover:opacity-70 transition">
+                  {badge.image_url ? (
+                    <img src={badge.image_url} alt={badge.name} className="w-16 h-16 rounded-xl object-cover" />
+                  ) : (
+                    <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-[#C4A35A] to-[#E8D5A0] flex items-center justify-center text-white text-lg font-bold">
+                      {badge.name.charAt(0)}
+                    </div>
+                  )}
+                  <span className="text-[10px] text-gray-400 mt-1">{badge.name}</span>
+                </a>
+              ))}
+              {/* pro.badges経由のバッジ（旧方式） */}
               {displayBadges.map((badge, i) => (
                 <div key={i} className="flex flex-col items-center">
                   <img src={badge.image_url} alt={badge.label} className="w-16 h-16" />
