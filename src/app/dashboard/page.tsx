@@ -1946,7 +1946,7 @@ export default function DashboardPage() {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <button
-            onClick={() => window.location.href = '/org/dashboard'}
+            onClick={() => window.open('/org/dashboard', '_blank')}
             style={{
               display: 'flex', alignItems: 'center', gap: 14,
               background: '#fff', border: '1px solid #E5E7EB', borderRadius: 14,
@@ -1964,7 +1964,7 @@ export default function DashboardPage() {
           </button>
 
           <button
-            onClick={() => window.location.href = '/org/dashboard/invite'}
+            onClick={() => window.open('/org/dashboard/invite', '_blank')}
             style={{
               display: 'flex', alignItems: 'center', gap: 14,
               background: '#fff', border: '1px solid #E5E7EB', borderRadius: 14,
@@ -1985,7 +1985,7 @@ export default function DashboardPage() {
 
           {ownedOrg.type !== 'store' && (
             <button
-              onClick={() => window.location.href = '/org/dashboard/badges'}
+              onClick={() => window.open('/org/dashboard/badges', '_blank')}
               style={{
                 display: 'flex', alignItems: 'center', gap: 14,
                 background: '#fff', border: '1px solid #E5E7EB', borderRadius: 14,
@@ -2004,7 +2004,7 @@ export default function DashboardPage() {
           )}
 
           <button
-            onClick={() => window.location.href = `/org/${ownedOrg.id}`}
+            onClick={() => window.open(`/org/${ownedOrg.id}`, '_blank')}
             style={{
               display: 'flex', alignItems: 'center', gap: 14,
               background: '#fff', border: '1px solid #E5E7EB', borderRadius: 14,
@@ -2022,6 +2022,8 @@ export default function DashboardPage() {
           </button>
         </div>
       </>)}
+
+      <div style={{ height: 16 }} />
 
       {/* Links */}
       <div className="flex gap-4">
