@@ -181,14 +181,20 @@ export default function CardPage() {
         .eq('status', 'active')
 
       if (memberData) {
-        setOrgs(memberData
+        const allOrgs = memberData
           .filter((m: any) => m.organizations && !m.credential_level_id)
           .map((m: any) => ({
             id: m.organizations.id,
             name: m.organizations.name,
             type: m.organizations.type,
           }))
-        )
+        // organization_id で重複排除
+        const seen = new Set<string>()
+        setOrgs(allOrgs.filter((o: any) => {
+          if (seen.has(o.id)) return false
+          seen.add(o.id)
+          return true
+        }))
       }
 
       // credential_levels経由のバッジ取得
