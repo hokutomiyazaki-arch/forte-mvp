@@ -546,80 +546,167 @@ function VoteForm() {
   // ── 投票完了画面 ──
   if (submitted) {
     const displayEmail = isLoggedIn ? sessionEmail : voterEmail
+    const emailDomain = (displayEmail || '').split('@')[1] || ''
+
+    const MAIL_LINKS: Record<string, { label: string; url: string }> = {
+      'gmail.com': { label: 'Gmailを開く', url: 'https://mail.google.com' },
+      'yahoo.co.jp': { label: 'Yahoo!メールを開く', url: 'https://mail.yahoo.co.jp' },
+      'icloud.com': { label: 'iCloudメールを開く', url: 'https://www.icloud.com/mail' },
+      'outlook.com': { label: 'Outlookを開く', url: 'https://outlook.live.com' },
+      'hotmail.com': { label: 'Outlookを開く', url: 'https://outlook.live.com' },
+      'docomo.ne.jp': { label: 'ドコモメールを開く', url: 'https://mail.smt.docomo.ne.jp' },
+      'softbank.ne.jp': { label: 'ソフトバンクメールを開く', url: 'https://webmail.softbank.jp' },
+      'ezweb.ne.jp': { label: 'auメールを開く', url: 'https://mail.ezweb.ne.jp' },
+      'au.com': { label: 'auメールを開く', url: 'https://mail.ezweb.ne.jp' },
+    }
+    const mailLink = MAIL_LINKS[emailDomain]
+
     return (
-      <div className="max-w-md mx-auto text-center py-12 px-4">
-        <div className="w-16 h-16 rounded-full bg-[#1A1A2E] flex items-center justify-center mx-auto mb-4">
-          <svg className="w-8 h-8 text-[#C4A35A]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-          </svg>
-        </div>
-        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2">確認メールを送信しました</h1>
-        <p className="text-gray-500 mb-4">
-          <span className="font-medium text-[#1A1A2E]">{displayEmail}</span> に確認メールを送信しました。<br />
-          メール内のリンクをクリックして、プルーフを確定してください。
-        </p>
+      <>
+        {/* ナビバー・フッターを非表示にする */}
+        <style>{`
+          nav, footer { display: none !important; }
+          main { padding: 0 !important; max-width: 100% !important; }
+        `}</style>
 
-        <div className="bg-[#FAFAF7] border border-[#C4A35A]/30 rounded-xl p-4 mb-4 text-left">
-          <p className="text-xs text-gray-500">
-            メールが届かない場合は、迷惑メールフォルダをご確認ください。
-          </p>
-        </div>
+        <div className="min-h-screen bg-[#FAFAF7] flex items-center justify-center px-4">
+          <div className="max-w-md w-full text-center">
+            {/* メールアイコン */}
+            <div className="text-6xl mb-6">✉️</div>
 
-        {resendMessage && (
-          <div className={`p-3 rounded-lg mb-4 text-sm ${
-            resendMessage.startsWith('再送信しました') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-          }`}>
-            {resendMessage}
-          </div>
-        )}
+            <h1 className="text-2xl font-bold text-[#1A1A2E] mb-3">
+              メールを確認してください
+            </h1>
 
-        {/* メール修正+再送信UI（未ログイン時のみ表示） */}
-        {!isLoggedIn && (
-          <>
-            {!showEmailFix ? (
-              <button
-                onClick={() => { setShowEmailFix(true); setFixEmail(voterEmail) }}
-                className="text-sm text-gray-400 underline mb-6 inline-block"
-              >
-                メールが届かない場合（アドレスを修正して再送信）
-              </button>
-            ) : (
-              <div className="bg-gray-50 rounded-xl p-4 mb-6 text-left">
-                <p className="text-sm font-medium text-[#1A1A2E] mb-2">メールアドレスを修正して再送信</p>
-                <input
-                  type="email"
-                  value={fixEmail}
-                  onChange={e => setFixEmail(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none mb-2"
-                  placeholder="正しいメールアドレス"
-                />
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleResend}
-                    disabled={resending || !fixEmail.trim()}
-                    className="flex-1 py-2 bg-[#C4A35A] text-white text-sm font-medium rounded-lg hover:bg-[#b3923f] transition disabled:opacity-50"
-                  >
-                    {resending ? '送信中...' : '再送信する'}
-                  </button>
-                  <button
-                    onClick={() => setShowEmailFix(false)}
-                    className="px-4 py-2 bg-gray-200 text-gray-600 text-sm rounded-lg hover:bg-gray-300 transition"
-                  >
-                    閉じる
-                  </button>
+            <p className="text-base text-gray-600 mb-6">
+              <span className="font-bold text-[#1A1A2E]">{displayEmail}</span><br />
+              宛に確認メールを送りました
+            </p>
+
+            {/* ステップ説明 */}
+            <div className="bg-white rounded-xl shadow-sm p-6 mb-6 text-left">
+              <div className="space-y-4">
+                <div className="flex items-start gap-4">
+                  <div className="w-8 h-8 rounded-full bg-[#1A1A2E] text-[#C4A35A] flex items-center justify-center flex-shrink-0 font-bold text-sm">1</div>
+                  <p className="text-base text-[#1A1A2E] pt-1">メールアプリを開く</p>
+                </div>
+                <div className="flex items-start gap-4">
+                  <div className="w-8 h-8 rounded-full bg-[#1A1A2E] text-[#C4A35A] flex items-center justify-center flex-shrink-0 font-bold text-sm">2</div>
+                  <p className="text-base text-[#1A1A2E] pt-1">REALPROOFからのメールを見つける</p>
+                </div>
+                <div className="flex items-start gap-4">
+                  <div className="w-8 h-8 rounded-full bg-[#1A1A2E] text-[#C4A35A] flex items-center justify-center flex-shrink-0 font-bold text-sm">3</div>
+                  <p className="text-base text-[#1A1A2E] pt-1">メール内のボタンを押す</p>
                 </div>
               </div>
-            )}
-          </>
-        )}
+            </div>
 
-        <a
-          href={`/card/${pro.id}`}
-          className="block w-full py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition mb-3"
-        >
-          {pro.name}さんのカードを見る
-        </a>
-      </div>
+            {/* メールアプリへの直接リンクボタン */}
+            {mailLink ? (
+              <a
+                href={mailLink.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block w-full py-4 bg-[#C4A35A] text-white text-lg font-bold rounded-xl hover:bg-[#b3923f] transition mb-6 shadow-lg"
+              >
+                {mailLink.label} →
+              </a>
+            ) : (
+              <p className="text-base text-gray-500 mb-6">メールアプリを開いてください</p>
+            )}
+
+            {/* メールが届かない場合 */}
+            <div className="bg-white rounded-xl p-4 mb-6 text-left text-sm text-gray-500 space-y-2">
+              <p className="font-medium text-[#1A1A2E]">メールが届かない場合:</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>迷惑メールフォルダを確認してください</li>
+              </ul>
+
+              {/* 未ログイン: メアド修正+再送信 */}
+              {!isLoggedIn && (
+                <>
+                  {!showEmailFix ? (
+                    <button
+                      onClick={() => { setShowEmailFix(true); setFixEmail(voterEmail) }}
+                      className="text-[#C4A35A] underline font-medium mt-2 inline-block"
+                    >
+                      メールを再送信する
+                    </button>
+                  ) : (
+                    <div className="mt-3 bg-[#FAFAF7] rounded-lg p-3">
+                      <p className="text-sm font-medium text-[#1A1A2E] mb-2">メールアドレスを修正して再送信</p>
+                      <input
+                        type="email"
+                        value={fixEmail}
+                        onChange={e => setFixEmail(e.target.value)}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none mb-2 text-base"
+                        placeholder="正しいメールアドレス"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleResend}
+                          disabled={resending || !fixEmail.trim()}
+                          className="flex-1 py-2 bg-[#C4A35A] text-white text-sm font-medium rounded-lg hover:bg-[#b3923f] transition disabled:opacity-50"
+                        >
+                          {resending ? '送信中...' : '再送信する'}
+                        </button>
+                        <button
+                          onClick={() => setShowEmailFix(false)}
+                          className="px-4 py-2 bg-gray-200 text-gray-600 text-sm rounded-lg hover:bg-gray-300 transition"
+                        >
+                          閉じる
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* ログイン済み: 再送信のみ */}
+              {isLoggedIn && (
+                <button
+                  onClick={async () => {
+                    setResending(true)
+                    setResendMessage('')
+                    try {
+                      await fetch('/api/send-confirmation', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          email: sessionEmail,
+                          proName: pro!.name,
+                          token: submittedToken,
+                        }),
+                      })
+                      setResendMessage('再送信しました。メールをご確認ください。')
+                    } catch {
+                      setResendMessage('再送信に失敗しました。')
+                    }
+                    setResending(false)
+                  }}
+                  disabled={resending}
+                  className="text-[#C4A35A] underline font-medium mt-2 inline-block disabled:opacity-50"
+                >
+                  {resending ? '送信中...' : 'メールを再送信する'}
+                </button>
+              )}
+
+              {resendMessage && (
+                <div className={`mt-2 p-2 rounded-lg text-sm ${
+                  resendMessage.includes('再送信しました') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                }`}>
+                  {resendMessage}
+                </div>
+              )}
+            </div>
+
+            {/* 警告メッセージ */}
+            <p className="text-red-500 font-bold text-base">
+              ※ メールを確認するまで投票は完了しません
+            </p>
+          </div>
+        </div>
+      </>
     )
   }
 
