@@ -276,7 +276,7 @@ export default function DashboardPage() {
         .is('credential_level_id', null)
 
       if (activeMembers) {
-        setActiveOrgs(activeMembers
+        const allOrgs = activeMembers
           .filter((m: any) => m.organizations)
           .map((m: any) => ({
             id: m.organizations.id,
@@ -285,7 +285,13 @@ export default function DashboardPage() {
             org_type: m.organizations.type,
             accepted_at: m.accepted_at,
           }))
-        )
+        // organization_id で重複排除（最初のレコードを採用）
+        const seen = new Set<string>()
+        setActiveOrgs(allOrgs.filter((o: any) => {
+          if (seen.has(o.id)) return false
+          seen.add(o.id)
+          return true
+        }))
       }
 
       // credential_levels経由のバッジを取得
@@ -1092,7 +1098,7 @@ export default function DashboardPage() {
             {activeOrgs.map(o => {
               const typeIcon = o.org_type === 'store' ? '🏪' : o.org_type === 'credential' ? '🎓' : '📚'
               return (
-                <div key={o.id} className="flex items-center justify-between py-2">
+                <div key={o.member_id} className="flex items-center justify-between py-2">
                   <a
                     href={`/org/${o.id}`}
                     className="flex items-center gap-3 hover:opacity-70 transition"
