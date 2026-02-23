@@ -562,15 +562,21 @@ export default function DashboardPage() {
   async function handleDeregister() {
     if (!pro || !user) return
     setDeregistering(true)
-    // リワード削除してからプロ削除
-    await (supabase as any).from('rewards').delete().eq('professional_id', pro.id)
-    const { error } = await (supabase as any).from('professionals').delete().eq('id', pro.id)
-    if (error) {
-      console.error('[handleDeregister] error:', error.message)
+    try {
+      // FK制約のある関連テーブルを先に削除
+      const tables = ['voice_shares', 'client_rewards', 'bookmarks', 'votes'] as const
+      for (const table of tables) {
+        const { error } = await (supabase as any).from(table).delete().eq('professional_id', pro.id)
+        if (error) throw new Error(`${table}: ${error.message}`)
+      }
+      const { error } = await (supabase as any).from('professionals').delete().eq('id', pro.id)
+      if (error) throw new Error(`professionals: ${error.message}`)
+      window.location.href = '/mycard'
+    } catch (e: any) {
+      console.error('[handleDeregister] error:', e.message)
+      alert('解除に失敗しました')
       setDeregistering(false)
-      return
     }
-    window.location.href = '/mycard'
   }
 
   // 団体招待の承認/拒否（APIルート経由 — getSessionSafeのlocalStorage問題を回避）
