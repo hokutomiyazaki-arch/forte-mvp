@@ -185,7 +185,7 @@ export default function Home() {
               </h1>
 
               <div className="flex flex-col items-center md:items-start">
-                <button style={{ opacity: heroLoaded?1:0, transition: 'opacity 0.6s ease-out 0.9s',
+                <button onClick={() => { window.location.href = '/login'; }} style={{ opacity: heroLoaded?1:0, transition: 'opacity 0.6s ease-out 0.9s',
                   backgroundColor: '#C4A35A', color: '#1A1A2E', fontWeight: 700, fontSize: '18px',
                   padding: '16px 5px', borderRadius: '8px', border: 'none', cursor: 'pointer',
                   width: '100%', maxWidth: '340px', fontFamily: "'Noto Sans JP', sans-serif",
@@ -427,7 +427,7 @@ export default function Home() {
                 宮崎 ほくと<br />
                 株式会社 Legrand chariot 代表取締役
               </div>
-              <a href="#" style={{ color: '#C4A35A', fontSize: '14px', textDecoration: 'none', fontWeight: 500 }}>
+              <a href="/login" style={{ color: '#C4A35A', fontSize: '14px', textDecoration: 'none', fontWeight: 500 }}>
                 ストーリーを見る →
               </a>
             </div>
@@ -442,7 +442,7 @@ export default function Home() {
             <h2 style={{ color: '#FAFAF7', fontSize: '22px', fontWeight: 700, marginBottom: '32px' }}>
               REALPROOFは、<br />今日から誰でも使えます。
             </h2>
-            <button style={{ backgroundColor: '#C4A35A', color: '#1A1A2E', fontWeight: 700, fontSize: '16px',
+            <button onClick={() => { window.location.href = '/login'; }} style={{ backgroundColor: '#C4A35A', color: '#1A1A2E', fontWeight: 700, fontSize: '16px',
               padding: '18px 32px', borderRadius: '8px', border: 'none', cursor: 'pointer',
               width: '100%', fontFamily: "'Noto Sans JP', sans-serif" }}>
               プロとして登録する →
@@ -476,7 +476,7 @@ export default function Home() {
             </div>
 
             <div className="flex justify-center">
-              <button style={{ backgroundColor: 'transparent', color: '#C4A35A', fontWeight: 700, fontSize: '16px',
+              <button onClick={() => { window.location.href = '/login'; }} style={{ backgroundColor: 'transparent', color: '#C4A35A', fontWeight: 700, fontSize: '16px',
                 padding: '16px 32px', borderRadius: '8px', border: '1.5px solid #C4A35A', cursor: 'pointer',
                 width: '100%', maxWidth: '340px', fontFamily: "'Noto Sans JP', sans-serif" }}>
                 Founding Memberに挑戦する →
