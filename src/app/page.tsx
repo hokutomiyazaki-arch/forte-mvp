@@ -263,7 +263,7 @@ export default function Home() {
                 color: '#1A1A2E',
                 fontWeight: 700,
                 fontSize: '18px',
-                padding: '16px 5px',
+                padding: '16px 32px',
                 borderRadius: '8px',
                 border: 'none',
                 cursor: 'pointer',
@@ -273,16 +273,7 @@ export default function Home() {
                 animation: heroLoaded ? 'pulseGlow 3s ease-in-out infinite' : 'none',
                 lineHeight: 1.2,
               }}>
-                <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 0, letterSpacing: 0 }}>
-                  <span>信頼を</span>
-                  <span style={{ margin: '0 -2px' }}>{'\u201C'}</span>
-                  <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', margin: 0, padding: 0, lineHeight: 1 }}>
-                    <span>証明</span>
-                    <span style={{ fontSize: '14px', fontWeight: 600, letterSpacing: '0.5px', lineHeight: 1, marginTop: '4px', opacity: 0.65 }}>プルーフ</span>
-                  </span>
-                  <span style={{ margin: '0 -2px' }}>{'\u201D'}</span>
-                  <span>に変える →</span>
-                </span>
+                信頼を資産に変える →
               </button>
             </div>
           </div>
@@ -358,7 +349,7 @@ export default function Home() {
               color: '#1A1A2E',
               fontWeight: 700,
               fontSize: '17px',
-              padding: '14px 5px',
+              padding: '14px 32px',
               borderRadius: '8px',
               border: 'none',
               cursor: 'pointer',
@@ -368,16 +359,7 @@ export default function Home() {
               animation: heroLoaded ? 'pulseGlow 3s ease-in-out infinite' : 'none',
               lineHeight: 1.2,
             }}>
-              <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 0, letterSpacing: 0 }}>
-                <span>信頼を</span>
-                <span style={{ margin: '0 -2px' }}>{'\u201C'}</span>
-                <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', margin: 0, padding: 0, lineHeight: 1 }}>
-                  <span>証明</span>
-                  <span style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '0.5px', lineHeight: 1, marginTop: '4px', opacity: 0.65 }}>プルーフ</span>
-                </span>
-                <span style={{ margin: '0 -2px' }}>{'\u201D'}</span>
-                <span>に変える →</span>
-              </span>
+              信頼を資産に変える →
             </button>
           </div>
         </div>
