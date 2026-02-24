@@ -158,7 +158,7 @@ export default function Home() {
 
       {/* ═══ S1: HERO ═══ */}
       <section className="min-h-screen flex flex-col justify-center relative"
-        style={{ background: 'linear-gradient(180deg, #1A1A2E 0%, #0F0F1E 100%)', padding: '24px 24px 48px' }}>
+        style={{ background: 'linear-gradient(180deg, #1A1A2E 0%, #0F0F1E 100%)', padding: '5px 24px 48px' }}>
         <div className="max-w-5xl mx-auto w-full">
           <div className="md:flex md:items-center md:gap-16">
             <div className="md:flex-1 text-center md:text-left">
