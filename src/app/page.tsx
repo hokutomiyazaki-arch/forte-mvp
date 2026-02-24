@@ -293,8 +293,8 @@ export default function Home() {
         </div>
 
         {/* ── SP コンテンツ ── */}
-        <div className="md:hidden relative flex flex-col justify-center"
-          style={{ zIndex: 1, minHeight: '100vh', paddingTop: '80px' }}>
+        <div className="md:hidden relative flex flex-col justify-end"
+          style={{ zIndex: 1, minHeight: '100vh' }}>
 
           {/* ゴールドラベル（画像の上、絶対位置で上部に配置） */}
           <div style={{
