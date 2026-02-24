@@ -299,7 +299,7 @@ export default function Home() {
           {/* ゴールドラベル（画像の上、絶対位置で上部に配置） */}
           <div style={{
             position: 'absolute',
-            top: '10px',
+            top: '40px',
             left: 0,
             right: 0,
             textAlign: 'center',
