@@ -191,7 +191,7 @@ export default function Home() {
 
       {/* ═══ S1: HERO ═══ */}
       <section className="min-h-screen flex flex-col justify-end relative"
-        style={{ padding: '0', overflow: 'hidden' }}>
+        style={{ padding: '0 0 48px', overflow: 'hidden' }}>
 
         {/* ── PC: フル幅背景画像 ── */}
         <div className="hidden md:block absolute inset-0" style={{ zIndex: 0 }}>
@@ -221,8 +221,9 @@ export default function Home() {
             style={{
               width: '100%',
               height: '100%',
-              objectFit: 'cover',
+              objectFit: 'contain',
               objectPosition: 'center top',
+              background: '#1A1A2E',
             }}
           />
           <div style={{
@@ -315,7 +316,7 @@ export default function Home() {
           {/* コピー + CTA（画像の下半分に重なる位置） */}
           <div style={{
             position: 'absolute',
-            top: '40%',
+            top: '50%',
             left: '24px',
             right: '24px',
             textAlign: 'center',
