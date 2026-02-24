@@ -123,31 +123,27 @@ export async function GET(request: NextRequest) {
       }, { onConflict: 'line_user_id' });
     }
 
-    // 5. Supabase セッション生成（Magic Link Token 方式）
+    // 5. 一時パスワードでセッション生成（signInWithPassword方式）
     const { data: userData } = await supabaseAdmin.auth.admin.getUserById(supabaseUid);
     const userEmail = userData.user?.email || '';
 
-    const { data: sessionData, error: sessionError } = await supabaseAdmin.auth.admin.generateLink({
-      type: 'magiclink',
-      email: userEmail,
+    // 一時パスワードをセット
+    const tempPassword = crypto.randomUUID();
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(supabaseUid, {
+      password: tempPassword,
     });
 
-    if (sessionError || !sessionData) {
-      console.error('Session generation failed:', sessionError);
+    if (updateError) {
+      console.error('Temp password set failed:', updateError);
       return NextResponse.redirect(new URL('/login?error=line_session_failed', request.url));
     }
 
-    // 6. リダイレクト
-    const redirectPath = '/dashboard';
-    const hashed_token = sessionData.properties?.hashed_token;
+    // 6. /auth/line-session にリダイレクト（クライアント側でsignInWithPassword）
+    const lineSessionUrl = new URL('/auth/line-session', request.url);
+    lineSessionUrl.searchParams.set('email', userEmail);
+    lineSessionUrl.searchParams.set('token', tempPassword);
 
-    // auth/callback 経由でセッションセット → 最終目的地へリダイレクト
-    const callbackUrl = new URL('/auth/callback', request.url);
-    callbackUrl.searchParams.set('token_hash', hashed_token || '');
-    callbackUrl.searchParams.set('type', 'magiclink');
-    callbackUrl.searchParams.set('next', redirectPath);
-
-    return NextResponse.redirect(callbackUrl);
+    return NextResponse.redirect(lineSessionUrl);
 
   } catch (err) {
     console.error('LINE callback error:', err);
