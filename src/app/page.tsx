@@ -220,9 +220,7 @@ export default function Home() {
             alt=""
             style={{
               width: '100%',
-              height: '100%',
-              objectFit: 'contain',
-              objectPosition: 'center top',
+              height: 'auto',
             }}
           />
           <div style={{
