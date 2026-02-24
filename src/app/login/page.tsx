@@ -111,6 +111,12 @@ function LoginForm() {
 
       if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user && !cancelled) {
         cancelled = true
+        const role = new URLSearchParams(window.location.search).get('role')
+        if (role === 'pro') {
+          console.log('[onAuthStateChange] SIGNED_IN (role=pro) → redirect /dashboard')
+          window.location.href = '/dashboard'
+          return
+        }
         // professionalsテーブルにレコードがあるか確認してリダイレクト先を決定
         const { data: pro } = await supabase
           .from('professionals')
