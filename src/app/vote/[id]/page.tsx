@@ -556,8 +556,8 @@ function VoteForm() {
       'hotmail.com': { label: 'Outlookを開く', url: 'https://outlook.live.com' },
       'docomo.ne.jp': { label: 'ドコモメールを開く', url: 'https://mail.smt.docomo.ne.jp' },
       'softbank.ne.jp': { label: 'ソフトバンクメールを開く', url: 'https://webmail.softbank.jp' },
-      'ezweb.ne.jp': { label: 'auメールを開く', url: 'https://mail.ezweb.ne.jp' },
-      'au.com': { label: 'auメールを開く', url: 'https://mail.ezweb.ne.jp' },
+      'ezweb.ne.jp': { label: 'auメールを開く', url: 'mailto:' },
+      'au.com': { label: 'auメールを開く', url: 'mailto:' },
     }
     const mailLink = MAIL_LINKS[emailDomain]
 
