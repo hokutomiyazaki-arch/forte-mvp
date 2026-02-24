@@ -147,15 +147,6 @@ export default function Home() {
 
   return (
     <div className="lp-root" style={{ fontFamily: "'Noto Sans JP', sans-serif", lineHeight: 1.8, overflowX: 'hidden' }}>
-      <style>{`
-        @keyframes pulseGlow { 0%,100%{box-shadow:0 0 0 0 rgba(196,163,90,0)} 50%{box-shadow:0 0 24px 4px rgba(196,163,90,0.2)} }
-        @keyframes fadeOutBubble { 0%,60%{opacity:1;transform:translateY(0)} 100%{opacity:0;transform:translateY(-10px)} }
-        .bubble-anim{animation:fadeOutBubble 3.5s ease-in-out infinite} .bubble-anim-2{animation-delay:.4s} .bubble-anim-3{animation-delay:.8s}
-        @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(6px)}} .scroll-bounce{animation:bounce 2s ease-in-out infinite}
-        *{box-sizing:border-box}
-        body > footer { display: none !important; }
-        .lp-root { width: 100vw; margin-left: calc(-50vw + 50%); margin-top: -2rem; }
-      `}</style>
 
       {/* ═══ S1: HERO ═══ */}
       <section className="min-h-screen flex flex-col justify-center relative"
