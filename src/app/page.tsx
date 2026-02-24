@@ -190,8 +190,8 @@ export default function Home() {
     <div className="lp-root" style={{ fontFamily: "'Noto Sans JP', sans-serif", lineHeight: 1.8, overflowX: 'hidden' }}>
 
       {/* ═══ S1: HERO ═══ */}
-      <section className="min-h-screen flex flex-col justify-end relative"
-        style={{ padding: '0 0 48px', overflow: 'hidden' }}>
+      <section className="min-h-[calc(100vw*16/9)] md:min-h-screen flex flex-col justify-end relative"
+        style={{ padding: '0', overflow: 'hidden' }}>
 
         {/* ── PC: フル幅背景画像 ── */}
         <div className="hidden md:block absolute inset-0" style={{ zIndex: 0 }}>
@@ -360,7 +360,7 @@ export default function Home() {
         </div>
 
         {/* スクロールインジケーター */}
-        <div className="scroll-bounce absolute bottom-8 left-1/2 -translate-x-1/2"
+        <div className="scroll-bounce absolute bottom-2 md:bottom-8 left-1/2 -translate-x-1/2"
           style={{ opacity: heroLoaded ? 0.35 : 0, transition: 'opacity 1s ease-out 1.5s', zIndex: 1 }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C4A35A" strokeWidth="1.5">
             <path d="M12 5v14M5 12l7 7 7-7"/>
