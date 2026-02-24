@@ -24,6 +24,10 @@ interface VoteHistory {
   result_category: string
   created_at: string
   pro_name?: string
+  pro_title?: string
+  pro_photo_url?: string
+  pro_prefecture?: string
+  pro_area?: string
 }
 
 function MyCardContent() {
@@ -140,20 +144,27 @@ function MyCardContent() {
         const voteProIds = Array.from(new Set(voteData.map((v: any) => v.professional_id)))
         const { data: voteProData } = await (supabase as any)
           .from('professionals')
-          .select('id, name')
+          .select('id, name, title, photo_url, prefecture, area_description')
           .in('id', voteProIds)
 
-        const voteProMap = new Map<string, string>()
+        const voteProMap = new Map<string, any>()
         if (voteProData) {
           for (const p of voteProData) {
-            voteProMap.set(p.id, p.name)
+            voteProMap.set(p.id, p)
           }
         }
 
-        setVoteHistory(voteData.map((v: any) => ({
-          ...v,
-          pro_name: voteProMap.get(v.professional_id) || '不明',
-        })))
+        setVoteHistory(voteData.map((v: any) => {
+          const p = voteProMap.get(v.professional_id)
+          return {
+            ...v,
+            pro_name: p?.name || '不明',
+            pro_title: p?.title || '',
+            pro_photo_url: p?.photo_url || '',
+            pro_prefecture: p?.prefecture || '',
+            pro_area: p?.area_description || '',
+          }
+        }))
       }
 
       // ブックマーク一覧取得
@@ -728,29 +739,70 @@ function MyCardContent() {
 
       {/* 投票履歴タブ */}
       {tab === 'history' && (
-        <div className="space-y-3">
+        <div>
           {voteHistory.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-gray-400 text-sm">まだ投票していません</p>
             </div>
           ) : (
-            voteHistory.map(v => (
-              <a
-                key={v.id}
-                href={`/card/${v.professional_id}`}
-                className="block p-4 border border-gray-200 rounded-lg hover:border-[#C4A35A] transition"
-              >
-                <div className="flex justify-between items-center">
-                  <div>
-                    <p className="font-medium text-[#1A1A2E]">{v.pro_name}</p>
-                    <p className="text-xs text-gray-400">{v.result_category}</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {voteHistory.map(v => (
+                <a
+                  key={v.id}
+                  href={`/card/${v.professional_id}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 16,
+                    padding: 16,
+                    background: '#fff',
+                    border: '1px solid #E8E4DC',
+                    borderRadius: 14,
+                    textDecoration: 'none',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <div style={{
+                    width: 52, height: 52, borderRadius: '50%',
+                    background: '#F0EDE6', overflow: 'hidden', flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {v.pro_photo_url ? (
+                      <img src={v.pro_photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <span style={{ fontSize: 20, color: '#999' }}>
+                        {v.pro_name?.charAt(0) || '?'}
+                      </span>
+                    )}
                   </div>
-                  <p className="text-xs text-gray-400">
-                    {new Date(v.created_at).toLocaleDateString('ja-JP')}
-                  </p>
-                </div>
-              </a>
-            ))
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E' }}>
+                      {v.pro_name}
+                    </div>
+                    {v.pro_title && (
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#C4A35A', marginTop: 2 }}>
+                        {v.pro_title}
+                      </div>
+                    )}
+                    {(v.pro_prefecture || v.pro_area) && (
+                      <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+                        {[v.pro_prefecture, v.pro_area].filter(Boolean).join('・')}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ flexShrink: 0, textAlign: 'right' }}>
+                    <div style={{ fontSize: 11, color: '#888' }}>
+                      {new Date(v.created_at).toLocaleDateString('ja-JP')}
+                    </div>
+                    {v.result_category && (
+                      <div style={{ fontSize: 10, color: '#C4A35A', marginTop: 2 }}>
+                        {v.result_category}
+                      </div>
+                    )}
+                  </div>
+                </a>
+              ))}
+            </div>
           )}
         </div>
       )}
