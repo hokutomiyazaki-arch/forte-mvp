@@ -159,56 +159,120 @@ export default function Home() {
 
       {/* ═══ S1: HERO ═══ */}
       <section className="min-h-screen flex flex-col justify-center relative"
-        style={{ backgroundColor: '#1A1A2E', padding: '5px 24px 48px' }}>
-        <div className="max-w-5xl mx-auto w-full">
-          <div className="md:flex md:items-center md:gap-16">
-            <div className="md:flex-1 text-center md:text-left">
-              <div style={{ opacity: heroLoaded?1:0, transform: heroLoaded?'translateY(0)':'translateY(12px)',
-                transition: 'all 0.6s ease-out 0.1s', color: '#C4A35A', fontSize: '16px', letterSpacing: '1.5px', fontWeight: 500, marginBottom: '24px' }}>
-                クライアントの信頼が資産に変わるデジタル名刺
-              </div>
+        style={{ padding: '60px 0 48px', overflow: 'hidden' }}>
 
-              <div className="md:hidden mb-8" style={{ opacity: heroLoaded?1:0, transform: heroLoaded?'translateY(0)':'translateY(24px)', transition: 'all 0.7s ease-out 0.3s' }}>
-                <img
-                  src="/images/hero_sp.png"
-                  alt="REALPROOFカードを持つ手"
-                  className="rounded-xl w-full"
-                  style={{ maxWidth: '360px', margin: '0 auto', display: 'block' }}
-                />
-              </div>
+        {/* ── PC: フル幅背景画像 ── */}
+        <div className="hidden md:block absolute inset-0" style={{ zIndex: 0 }}>
+          <img
+            src="/images/hero_pc.png"
+            alt=""
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              objectPosition: 'center center',
+            }}
+          />
+          {/* 左側にグラデーションオーバーレイ（テキスト可読性確保） */}
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'linear-gradient(90deg, rgba(26,26,46,0.92) 0%, rgba(26,26,46,0.75) 40%, rgba(26,26,46,0.15) 70%, transparent 100%)',
+          }} />
+        </div>
 
-              <h1 style={{ opacity: heroLoaded?1:0, transform: heroLoaded?'translateY(0)':'translateY(16px)', transition: 'all 0.6s ease-out 0.6s',
-                color: '#FAFAF7', fontSize: 'clamp(24px, 6vw, 34px)', fontWeight: 700, lineHeight: 1.5, marginBottom: '36px' }}>
-                「あなたに出会えてよかった」<br />
-                <span style={{ fontSize: 'clamp(20px, 5vw, 28px)', fontWeight: 400, opacity: 0.85 }}>
-                  ——でもその言葉、誰も知らない。
+        {/* ── SP: 背景グラデーション ── */}
+        <div className="md:hidden absolute inset-0" style={{
+          zIndex: 0,
+          background: 'linear-gradient(180deg, #1A1A2E 0%, #0F0F1E 100%)',
+        }} />
+
+        {/* ── コンテンツ ── */}
+        <div className="max-w-5xl mx-auto w-full relative" style={{ zIndex: 1, padding: '0 24px' }}>
+          {/* ラベル */}
+          <div style={{
+            opacity: heroLoaded ? 1 : 0,
+            transform: heroLoaded ? 'translateY(0)' : 'translateY(12px)',
+            transition: 'all 0.6s ease-out 0.1s',
+            color: '#C4A35A',
+            fontSize: '16px',
+            letterSpacing: '1.5px',
+            fontWeight: 500,
+            marginBottom: '24px',
+            textAlign: 'left',
+          }}>
+            クライアントの信頼が資産に変わるデジタル名刺
+          </div>
+
+          {/* SP画像（モバイルのみ） */}
+          <div className="md:hidden mb-8" style={{
+            opacity: heroLoaded ? 1 : 0,
+            transform: heroLoaded ? 'translateY(0)' : 'translateY(24px)',
+            transition: 'all 0.7s ease-out 0.3s',
+          }}>
+            <img
+              src="/images/hero_sp.png"
+              alt="REALPROOFカードを持つ手"
+              className="rounded-xl w-full"
+              style={{ maxWidth: '360px', margin: '0 auto', display: 'block' }}
+            />
+          </div>
+
+          {/* ヒーローコピー */}
+          <h1 style={{
+            opacity: heroLoaded ? 1 : 0,
+            transform: heroLoaded ? 'translateY(0)' : 'translateY(16px)',
+            transition: 'all 0.6s ease-out 0.6s',
+            color: '#FAFAF7',
+            fontSize: 'clamp(24px, 6vw, 34px)',
+            fontWeight: 700,
+            lineHeight: 1.5,
+            marginBottom: '36px',
+            textAlign: 'left',
+            maxWidth: '520px',
+          }}>
+            「あなたに出会えてよかった」<br />
+            <span style={{ fontSize: 'clamp(20px, 5vw, 28px)', fontWeight: 400, opacity: 0.85 }}>
+              ——でもその言葉、誰も知らない。
+            </span>
+          </h1>
+
+          {/* CTA */}
+          <div className="flex flex-col items-start">
+            <button onClick={() => { window.location.href = '/login'; }} style={{
+              opacity: heroLoaded ? 1 : 0,
+              transition: 'opacity 0.6s ease-out 0.9s',
+              backgroundColor: '#C4A35A',
+              color: '#1A1A2E',
+              fontWeight: 700,
+              fontSize: '18px',
+              padding: '16px 5px',
+              borderRadius: '8px',
+              border: 'none',
+              cursor: 'pointer',
+              width: '100%',
+              maxWidth: '340px',
+              fontFamily: "'Noto Sans JP', sans-serif",
+              animation: heroLoaded ? 'pulseGlow 3s ease-in-out infinite' : 'none',
+              lineHeight: 1.2,
+            }}>
+              <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 0, letterSpacing: 0 }}>
+                <span>信頼を</span>
+                <span style={{ margin: '0 -2px' }}>{'\u201C'}</span>
+                <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', margin: 0, padding: 0, lineHeight: 1 }}>
+                  <span>証明</span>
+                  <span style={{ fontSize: '14px', fontWeight: 600, letterSpacing: '0.5px', lineHeight: 1, marginTop: '4px', opacity: 0.65 }}>プルーフ</span>
                 </span>
-              </h1>
-
-              <div className="flex flex-col items-center md:items-start">
-                <button onClick={() => { window.location.href = '/login'; }} style={{ opacity: heroLoaded?1:0, transition: 'opacity 0.6s ease-out 0.9s',
-                  backgroundColor: '#C4A35A', color: '#1A1A2E', fontWeight: 700, fontSize: '18px',
-                  padding: '16px 5px', borderRadius: '8px', border: 'none', cursor: 'pointer',
-                  width: '100%', maxWidth: '340px', fontFamily: "'Noto Sans JP', sans-serif",
-                  animation: heroLoaded ? 'pulseGlow 3s ease-in-out infinite' : 'none',
-                  lineHeight: 1.2 }}>
-                  <span>信頼を{'\u201C'}証明{'\u201D'}に変える →</span>
-                  <span style={{ display: 'block', fontSize: '14px', fontWeight: 600, letterSpacing: '0.5px', lineHeight: 1, marginTop: '4px', opacity: 0.65 }}>プルーフ</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="hidden md:block md:flex-1" style={{ opacity: heroLoaded?1:0, transform: heroLoaded?'translateY(0) rotate(-2deg)':'translateY(30px) rotate(-2deg)', transition: 'all 0.8s ease-out 0.5s' }}>
-              <img
-                src="/images/hero_pc.png"
-                alt="REALPROOFカードを持つ手"
-                className="rounded-xl w-full"
-              />
-            </div>
+                <span style={{ margin: '0 -2px' }}>{'\u201D'}</span>
+                <span>に変える →</span>
+              </span>
+            </button>
           </div>
         </div>
+
+        {/* スクロールインジケーター */}
         <div className="scroll-bounce absolute bottom-8 left-1/2 -translate-x-1/2"
-          style={{ opacity: heroLoaded?0.35:0, transition: 'opacity 1s ease-out 1.5s' }}>
+          style={{ opacity: heroLoaded ? 0.35 : 0, transition: 'opacity 1s ease-out 1.5s', zIndex: 1 }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C4A35A" strokeWidth="1.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
         </div>
       </section>
@@ -427,7 +491,7 @@ export default function Home() {
                 宮崎 ほくと<br />
                 株式会社 Legrand chariot 代表取締役
               </div>
-              <a href="/login" style={{ color: '#C4A35A', fontSize: '14px', textDecoration: 'none', fontWeight: 500 }}>
+              <a href="/about" style={{ color: '#C4A35A', fontSize: '14px', textDecoration: 'none', fontWeight: 500 }}>
                 ストーリーを見る →
               </a>
             </div>
