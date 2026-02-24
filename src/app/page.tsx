@@ -294,8 +294,8 @@ export default function Home() {
         </div>
 
         {/* ── SP コンテンツ ── */}
-        <div className="md:hidden relative flex flex-col justify-end"
-          style={{ zIndex: 1, minHeight: '100vh', padding: '0 24px 200px' }}>
+        <div className="md:hidden absolute inset-0"
+          style={{ zIndex: 1 }}>
           {/* ゴールドラベル（上部固定） */}
           <div style={{
             position: 'absolute',
@@ -313,8 +313,14 @@ export default function Home() {
           }}>
             クライアントの信頼が資産に変わるデジタル名刺
           </div>
-          {/* コピー + CTA */}
-          <div style={{ textAlign: 'center' }}>
+          {/* コピー + CTA（画像の下半分に重なる位置） */}
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '24px',
+            right: '24px',
+            textAlign: 'center',
+          }}>
             <h1 style={{
               opacity: heroLoaded ? 1 : 0,
               transform: heroLoaded ? 'translateY(0)' : 'translateY(16px)',
