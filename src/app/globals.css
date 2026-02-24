@@ -12,4 +12,14 @@
 body {
   background-color: var(--forte-cream);
   color: var(--forte-dark);
+  font-family: 'Noto Sans JP', 'Inter', sans-serif;
+  font-weight: 500;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Navbar responsive */
+@media (max-width: 768px) {
+  .nav-links { gap: 12px !important; }
+  .nav-links a, .nav-links button { font-size: 11px !important; }
 }
