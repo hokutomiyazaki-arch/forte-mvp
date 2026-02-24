@@ -416,29 +416,33 @@ export default function CardPage() {
                 STRENGTH PROOFS
               </div>
 
-              {/* Top 3 — バーチャート（ラベル上段+バー下段で折り返し確保） */}
+              {/* Top 3 — バーチャート（票数でティア分け） */}
               {top3.length > 0 && (
-                <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: 18, marginBottom: 10 }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    {top3.map((v, i) => {
-                      const pct = (v.vote_count / maxVotes) * 100
-                      return (
-                        <div key={v.category} style={{ width: '100%' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, gap: 8 }}>
-                            <span style={{ fontSize: 14, fontWeight: 700, color: T.text, lineHeight: 1.5, overflowWrap: 'anywhere' as const, minWidth: 0 }}>{v.category}</span>
-                            <span style={{ fontSize: 16, fontWeight: 'bold', color: T.gold, fontFamily: T.fontMono, flexShrink: 0 }}>{v.vote_count}</span>
-                          </div>
-                          <div style={{ width: '100%', height: 8, background: '#F0EDE6', borderRadius: 99 }}>
-                            <div style={{
-                              height: 8, borderRadius: 99, background: getBarColor(i),
-                              width: animated ? `${pct}%` : '0%',
-                              transition: `width 1.2s ease ${i * 0.08}s`,
-                            }} />
-                          </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
+                  {top3.map((v, i) => {
+                    const pct = (v.vote_count / maxVotes) * 100
+                    const tier = v.vote_count > 30 ? 'elite' : v.vote_count > 10 ? 'strong' : 'normal'
+                    const cardBg = tier === 'normal' ? T.cardBg : '#1A1A2E'
+                    const cardBorder = tier === 'normal' ? T.cardBorder : '#2A2A3E'
+                    const labelColor = tier === 'elite' ? '#C4A35A' : tier === 'strong' ? '#FFFFFF' : T.text
+                    const countColor = tier === 'elite' ? '#C4A35A' : tier === 'strong' ? '#FFFFFF' : T.gold
+                    const barTrack = tier === 'normal' ? '#F0EDE6' : '#2A2A3E'
+                    return (
+                      <div key={v.category} style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 14, padding: 18 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, gap: 8 }}>
+                          <span style={{ fontSize: 14, fontWeight: 700, color: labelColor, lineHeight: 1.5, overflowWrap: 'anywhere' as const, minWidth: 0 }}>{v.category}</span>
+                          <span style={{ fontSize: 16, fontWeight: 'bold', color: countColor, fontFamily: T.fontMono, flexShrink: 0 }}>{v.vote_count}</span>
                         </div>
-                      )
-                    })}
-                  </div>
+                        <div style={{ width: '100%', height: 8, background: barTrack, borderRadius: 99 }}>
+                          <div style={{
+                            height: 8, borderRadius: 99, background: getBarColor(i),
+                            width: animated ? `${pct}%` : '0%',
+                            transition: `width 1.2s ease ${i * 0.08}s`,
+                          }} />
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
 
