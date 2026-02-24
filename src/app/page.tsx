@@ -95,19 +95,6 @@ function BarChart({ animated }: { animated: boolean }) {
   );
 }
 
-// ─── Mockup Placeholder ───
-function MockupPlaceholder({ label, aspect = "16/10", dark = false }: { label: string; aspect?: string; dark?: boolean }) {
-  return (
-    <div className="rounded-xl overflow-hidden flex items-center justify-center"
-      style={{ aspectRatio: aspect, background: dark ? 'linear-gradient(135deg, #1a1a2e 0%, #252540 100%)' : 'linear-gradient(135deg, #e8e6e0 0%, #d8d6d0 100%)',
-        border: `1px dashed ${dark ? 'rgba(196,163,90,0.3)' : 'rgba(26,26,46,0.15)'}` }}>
-      <div className="text-center px-4">
-        <div style={{ fontSize: '24px', marginBottom: '4px' }}>📷</div>
-        <div style={{ fontSize: '11px', color: dark ? '#C4A35A' : '#9A9A9A', fontWeight: 500 }}>{label}</div>
-      </div>
-    </div>
-  );
-}
 
 // ─── Pillar Icons (Gold line-art SVGs) ───
 const PillarIcons: Record<string, React.ReactNode> = {
@@ -181,7 +168,12 @@ export default function Home() {
               </div>
 
               <div className="md:hidden mb-8" style={{ opacity: heroLoaded?1:0, transform: heroLoaded?'translateY(0)':'translateY(24px)', transition: 'all 0.7s ease-out 0.3s' }}>
-                <MockupPlaceholder label="card_hero_reference.png" dark />
+                <img
+                  src="/images/hero_sp.png"
+                  alt="REALPROOFカードを持つ手"
+                  className="rounded-xl w-full"
+                  style={{ maxWidth: '360px', margin: '0 auto', display: 'block' }}
+                />
               </div>
 
               <h1 style={{ opacity: heroLoaded?1:0, transform: heroLoaded?'translateY(0)':'translateY(16px)', transition: 'all 0.6s ease-out 0.6s',
@@ -207,7 +199,11 @@ export default function Home() {
             </div>
 
             <div className="hidden md:block md:flex-1" style={{ opacity: heroLoaded?1:0, transform: heroLoaded?'translateY(0) rotate(-2deg)':'translateY(30px) rotate(-2deg)', transition: 'all 0.8s ease-out 0.5s' }}>
-              <MockupPlaceholder label="card_hero_reference.png" dark aspect="16/10" />
+              <img
+                src="/images/hero_pc.png"
+                alt="REALPROOFカードを持つ手"
+                className="rounded-xl w-full"
+              />
             </div>
           </div>
         </div>
@@ -224,14 +220,14 @@ export default function Home() {
             <div className="text-center mb-10">
               <h2 style={{ color: '#1A1A2E', fontSize: '22px', fontWeight: 700, marginBottom: '16px' }}>
                 積み上げた信頼こそがあなたの財産。<br />
-                「でもあなたはそれを蔑ろにしている」
+                「あなたはそれを蔑ろにしている」
               </h2>
               <p style={{ color: '#1A1A2E', fontSize: '15px', marginBottom: '8px' }}>
                 セッションのたびに届く感謝の言葉。<br />
                 紹介してくれるクライアント。信頼のサイン。
               </p>
               <p style={{ color: '#1A1A2E', fontSize: '15px', fontWeight: 700 }}>
-                でも今、それは空気中に消えている。
+                今、それは空気中に消えている。
               </p>
             </div>
           </Reveal>
@@ -397,10 +393,18 @@ export default function Home() {
               <div style={{ color: '#C4A35A', fontSize: '12px', letterSpacing: '3px', fontFamily: "'Inter', sans-serif", fontWeight: 500, marginBottom: '24px' }}>
                 FOUNDER&apos;S NOTE
               </div>
-              <div className="mx-auto mb-5" style={{ width: '72px', height: '72px', borderRadius: '50%', border: '1px solid #C4A35A',
-                background: 'linear-gradient(135deg, #2a2a3e, #1a1a2e)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: '#C4A35A', fontSize: '24px', fontWeight: 700 }}>
-                宮
+              <div className="mx-auto mb-5" style={{ width: '72px', height: '72px', borderRadius: '50%', border: '1px solid #C4A35A', overflow: 'hidden',
+                background: 'linear-gradient(135deg, #2a2a3e, #1a1a2e)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <img
+                  src="/images/founder.png"
+                  alt="宮崎ほくと"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  onError={(e) => {
+                    const el = e.currentTarget;
+                    el.style.display = 'none';
+                    if (el.parentElement) el.parentElement.innerHTML = '<span style="color:#C4A35A;font-size:24px;font-weight:700">宮</span>';
+                  }}
+                />
               </div>
 
               <h3 style={{ color: '#1A1A2E', fontSize: '18px', fontWeight: 700, marginBottom: '16px' }}>
@@ -501,9 +505,9 @@ export default function Home() {
 
 // ─── Data ───
 const howItWorksSteps = [
-  { num: '01', title: 'Tap', desc: 'セッションの後に\nカードをかざす', sub: '（またはQRを見せる）', icon: 'nfc', mockup: 'card_nfc_reference.png' },
+  { num: '01', title: 'Tap', desc: 'セッションの後に\nカードをかざす', sub: '（またはQRを見せる）', icon: 'nfc', mockup: '/images/nfc_tap.png' },
   { num: '02', title: 'Record', desc: 'クライアントが\n「何が良かったか」を選ぶ', sub: '', icon: 'check', mockup: null },
-  { num: '03', title: 'Save', desc: 'あなたの信頼として\n蓄積される', sub: '', icon: 'chart', mockup: 'card_table_reference.png' },
+  { num: '03', title: 'Save', desc: 'あなたの信頼として\n蓄積される', sub: '', icon: 'chart', mockup: null },
 ];
 
 const pillars = [
@@ -582,8 +586,12 @@ function StepCard({ step }: { step: typeof howItWorksSteps[number] }) {
       <div style={{ color: '#C4A35A', fontFamily: "'Inter', sans-serif", fontSize: '28px', fontWeight: 600, marginBottom: '8px' }}>{step.num}</div>
       <div className="flex justify-center mb-3">{icons[step.icon]}</div>
       {step.mockup && (
-        <div className="mb-3 mx-auto" style={{ maxWidth: '180px' }}>
-          <MockupPlaceholder label={step.mockup} aspect="4/3" dark={step.icon === 'nfc'} />
+        <div className="mb-3 mx-auto" style={{ maxWidth: '200px' }}>
+          <img
+            src={step.mockup}
+            alt={step.title}
+            className="rounded-lg w-full"
+          />
         </div>
       )}
       <div style={{ fontFamily: "'Inter', sans-serif", fontSize: '17px', fontWeight: 600, color: '#1A1A2E', marginBottom: '8px' }}>{step.title}</div>

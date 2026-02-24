@@ -3,8 +3,28 @@ import './globals.css'
 import Navbar from '@/components/Navbar'
 
 export const metadata: Metadata = {
-  title: 'REAL PROOF — 本物が輝く社会へ',
-  description: '強みが正当に評価され、蓄積され、検索される。人が人の価値を証明し合うプラットフォーム。',
+  title: 'REALPROOF — 強みが、あなたを定義する。',
+  description: 'クライアントの信頼が資産に変わるデジタル名刺。対面のプロフェッショナルのための強み証明プラットフォーム。',
+  openGraph: {
+    title: 'REALPROOF — 強みが、あなたを定義する。',
+    description: 'クライアントの信頼が資産に変わるデジタル名刺。対面のプロフェッショナルのための強み証明プラットフォーム。',
+    images: [
+      {
+        url: 'https://forte-mvp.vercel.app/images/hero_ogp.png',
+        width: 1200,
+        height: 630,
+        alt: 'REALPROOF',
+      },
+    ],
+    siteName: 'REALPROOF',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'REALPROOF — 強みが、あなたを定義する。',
+    description: 'クライアントの信頼が資産に変わるデジタル名刺。',
+    images: ['https://forte-mvp.vercel.app/images/hero_ogp.png'],
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
