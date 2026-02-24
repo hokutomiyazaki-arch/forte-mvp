@@ -213,25 +213,11 @@ export default function Home() {
           }} />
         </div>
 
-        {/* ── SP: フル幅背景画像 ── */}
-        <div className="md:hidden absolute inset-0" style={{ zIndex: 0 }}>
-          <img
-            src="/images/hero_sp.png"
-            alt=""
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              objectPosition: 'center top',
-            }}
-          />
-          {/* 下部にグラデーションオーバーレイ（テキスト可読性確保） */}
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'linear-gradient(180deg, transparent 30%, rgba(26,26,46,0.6) 55%, rgba(26,26,46,0.95) 75%, rgba(26,26,46,1) 100%)',
-          }} />
-        </div>
+        {/* ── SP: グラデーション背景のみ（画像はコンテンツ内にimgで配置） ── */}
+        <div className="md:hidden absolute inset-0" style={{
+          zIndex: 0,
+          background: 'linear-gradient(180deg, #1A1A2E 0%, #0F0F1E 100%)',
+        }} />
 
         {/* ── PC コンテンツ（左寄せ、垂直中央） ── */}
         <div className="hidden md:flex items-center absolute inset-0" style={{ zIndex: 1, padding: '0 24px' }}>
@@ -302,20 +288,48 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ── SP コンテンツ（下部に重ねる、センター揃え） ── */}
-        <div className="md:hidden relative text-center" style={{ zIndex: 1, padding: '0 24px', marginTop: 'auto' }}>
-          {/* ラベル */}
+        {/* ── SP コンテンツ（積み重ね: ラベル → 画像 → コピー → CTA） ── */}
+        <div className="md:hidden relative text-center" style={{
+          zIndex: 1,
+          padding: '80px 24px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          minHeight: '100vh',
+          justifyContent: 'center',
+        }}>
+          {/* ゴールドラベル（画像の上） */}
           <div style={{
             opacity: heroLoaded ? 1 : 0,
             transform: heroLoaded ? 'translateY(0)' : 'translateY(12px)',
             transition: 'all 0.6s ease-out 0.1s',
             color: '#C4A35A',
-            fontSize: '14px',
+            fontSize: '13px',
             letterSpacing: '1.5px',
             fontWeight: 500,
-            marginBottom: '16px',
+            marginBottom: '20px',
           }}>
             クライアントの信頼が資産に変わるデジタル名刺
+          </div>
+
+          {/* SP画像（小さめ、センター） */}
+          <div style={{
+            opacity: heroLoaded ? 1 : 0,
+            transform: heroLoaded ? 'translateY(0)' : 'translateY(24px)',
+            transition: 'all 0.7s ease-out 0.3s',
+            marginBottom: '28px',
+          }}>
+            <img
+              src="/images/hero_sp.png"
+              alt="REALPROOFカードを持つ手"
+              style={{
+                maxWidth: '280px',
+                width: '70vw',
+                borderRadius: '12px',
+                display: 'block',
+                margin: '0 auto',
+              }}
+            />
           </div>
 
           {/* ヒーローコピー */}
