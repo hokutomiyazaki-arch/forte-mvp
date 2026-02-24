@@ -193,7 +193,7 @@ export default function Home() {
                   animation: heroLoaded ? 'pulseGlow 3s ease-in-out infinite' : 'none',
                   lineHeight: 1.2 }}>
                   <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 0, letterSpacing: 0 }}>
-                    <span>信頼を</span><span style={{ margin: '0 -2px' }}>&quot;</span><span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', margin: 0, padding: 0, lineHeight: 1 }}><span>証明</span><span style={{ fontSize: '14px', fontWeight: 600, letterSpacing: '0.5px', lineHeight: 1, marginTop: '4px', opacity: 0.65 }}>プルーフ</span></span><span style={{ margin: '0 -2px' }}>&quot;</span><span>に変える →</span>
+                    <span>信頼を</span><span style={{ margin: '0 -1px' }}>{'\u201C'}</span><span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', margin: 0, padding: 0, lineHeight: 1 }}><span>証明</span><span style={{ fontSize: '14px', fontWeight: 600, letterSpacing: '0.5px', lineHeight: 1, marginTop: '4px', opacity: 0.65 }}>プルーフ</span></span><span style={{ margin: '0 -1px' }}>{'\u201D'}</span><span>に変える →</span>
                   </span>
                 </button>
               </div>
