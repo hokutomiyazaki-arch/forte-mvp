@@ -213,11 +213,24 @@ export default function Home() {
           }} />
         </div>
 
-        {/* ── SP: グラデーション背景のみ（画像はコンテンツ内にimgで配置） ── */}
-        <div className="md:hidden absolute inset-0" style={{
-          zIndex: 0,
-          background: 'linear-gradient(180deg, #1A1A2E 0%, #0F0F1E 100%)',
-        }} />
+        {/* ── SP: フル幅背景画像 ── */}
+        <div className="md:hidden absolute inset-0" style={{ zIndex: 0 }}>
+          <img
+            src="/images/hero_sp.png"
+            alt=""
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              objectPosition: 'center top',
+            }}
+          />
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'linear-gradient(180deg, transparent 40%, rgba(26,26,46,0.7) 60%, rgba(26,26,46,0.95) 80%, #1A1A2E 100%)',
+          }} />
+        </div>
 
         {/* ── PC コンテンツ（左寄せ、垂直中央） ── */}
         <div className="hidden md:flex items-center absolute inset-0" style={{ zIndex: 1, padding: '0 24px' }}>
@@ -279,13 +292,9 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ── SP コンテンツ（積み重ね: ラベル → 画像 → コピー → CTA） ── */}
-        <div className="md:hidden relative text-center flex flex-col items-center justify-center" style={{
-          zIndex: 1,
-          padding: '80px 24px 24px',
-          minHeight: '100vh',
-        }}>
-          {/* ゴールドラベル（画像の上） */}
+        {/* ── SP コンテンツ（下部にテキスト重ね） ── */}
+        <div className="md:hidden relative text-center flex flex-col items-center justify-end"
+          style={{ zIndex: 1, padding: '0 24px 32px', minHeight: '100vh' }}>
           <div style={{
             opacity: heroLoaded ? 1 : 0,
             transform: heroLoaded ? 'translateY(0)' : 'translateY(12px)',
@@ -294,32 +303,10 @@ export default function Home() {
             fontSize: '13px',
             letterSpacing: '1.5px',
             fontWeight: 500,
-            marginBottom: '20px',
+            marginBottom: '16px',
           }}>
             クライアントの信頼が資産に変わるデジタル名刺
           </div>
-
-          {/* SP画像（小さめ、センター） */}
-          <div style={{
-            opacity: heroLoaded ? 1 : 0,
-            transform: heroLoaded ? 'translateY(0)' : 'translateY(24px)',
-            transition: 'all 0.7s ease-out 0.3s',
-            marginBottom: '28px',
-          }}>
-            <img
-              src="/images/hero_sp.png"
-              alt="REALPROOFカードを持つ手"
-              style={{
-                maxWidth: '280px',
-                width: '70vw',
-                borderRadius: '12px',
-                display: 'block',
-                margin: '0 auto',
-              }}
-            />
-          </div>
-
-          {/* ヒーローコピー */}
           <h1 style={{
             opacity: heroLoaded ? 1 : 0,
             transform: heroLoaded ? 'translateY(0)' : 'translateY(16px)',
@@ -328,36 +315,31 @@ export default function Home() {
             fontSize: 'clamp(22px, 6vw, 30px)',
             fontWeight: 700,
             lineHeight: 1.5,
-            marginBottom: '28px',
+            marginBottom: '24px',
           }}>
             「あなたに出会えてよかった」<br />
             <span style={{ fontSize: 'clamp(17px, 4.5vw, 24px)', fontWeight: 400, opacity: 0.85 }}>
               ——でもその言葉、誰も知らない。
             </span>
           </h1>
-
-          {/* CTA */}
-          <div className="flex flex-col items-center">
-            <button onClick={() => { window.location.href = '/login'; }} style={{
-              opacity: heroLoaded ? 1 : 0,
-              transition: 'opacity 0.6s ease-out 0.9s',
-              backgroundColor: '#C4A35A',
-              color: '#1A1A2E',
-              fontWeight: 700,
-              fontSize: '17px',
-              padding: '14px 32px',
-              borderRadius: '8px',
-              border: 'none',
-              cursor: 'pointer',
-              width: '100%',
-              maxWidth: '300px',
-              fontFamily: "'Noto Sans JP', sans-serif",
-              animation: heroLoaded ? 'pulseGlow 3s ease-in-out infinite' : 'none',
-              lineHeight: 1.2,
-            }}>
-              信頼を資産に変える →
-            </button>
-          </div>
+          <button onClick={() => { window.location.href = '/login'; }} style={{
+            opacity: heroLoaded ? 1 : 0,
+            transition: 'opacity 0.6s ease-out 0.9s',
+            backgroundColor: '#C4A35A',
+            color: '#1A1A2E',
+            fontWeight: 700,
+            fontSize: '17px',
+            padding: '14px 32px',
+            borderRadius: '8px',
+            border: 'none',
+            cursor: 'pointer',
+            width: '100%',
+            maxWidth: '300px',
+            fontFamily: "'Noto Sans JP', sans-serif",
+            animation: heroLoaded ? 'pulseGlow 3s ease-in-out infinite' : 'none',
+          }}>
+            信頼を資産に変える →
+          </button>
         </div>
 
         {/* スクロールインジケーター */}
