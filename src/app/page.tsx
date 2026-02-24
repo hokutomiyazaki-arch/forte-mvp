@@ -356,7 +356,7 @@ export default function Home() {
                 信頼を資産に変える →
               </button>
             </div>
-            <div className="scroll-bounce" style={{ marginTop: '16px', opacity: heroLoaded ? 0.5 : 0, transition: 'opacity 1s ease-out 1.5s' }}>
+            <div className="scroll-bounce" style={{ marginTop: '16px', opacity: heroLoaded ? 0.5 : 0, transition: 'opacity 1s ease-out 1.5s', display: 'flex', justifyContent: 'center' }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C4A35A" strokeWidth="1.5">
                 <path d="M12 5v14M5 12l7 7 7-7"/>
               </svg>
