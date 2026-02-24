@@ -192,9 +192,8 @@ export default function Home() {
                   width: '100%', maxWidth: '340px', fontFamily: "'Noto Sans JP', sans-serif",
                   animation: heroLoaded ? 'pulseGlow 3s ease-in-out infinite' : 'none',
                   lineHeight: 1.2 }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 0, letterSpacing: 0 }}>
-                    <span>信頼を{'\u201C'}</span><span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', margin: 0, padding: 0, lineHeight: 1 }}><span>証明</span><span style={{ fontSize: '14px', fontWeight: 600, letterSpacing: '0.5px', lineHeight: 1, marginTop: '4px', opacity: 0.65 }}>プルーフ</span></span><span>{'\u201D'}に変える →</span>
-                  </span>
+                  <span>信頼を{'\u201C'}証明{'\u201D'}に変える →</span>
+                  <span style={{ display: 'block', fontSize: '14px', fontWeight: 600, letterSpacing: '0.5px', lineHeight: 1, marginTop: '4px', opacity: 0.65 }}>プルーフ</span>
                 </button>
               </div>
             </div>
