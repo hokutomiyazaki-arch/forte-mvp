@@ -280,14 +280,10 @@ export default function Home() {
         </div>
 
         {/* ── SP コンテンツ（積み重ね: ラベル → 画像 → コピー → CTA） ── */}
-        <div className="md:hidden relative text-center" style={{
+        <div className="md:hidden relative text-center flex flex-col items-center justify-center" style={{
           zIndex: 1,
           padding: '80px 24px 24px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
           minHeight: '100vh',
-          justifyContent: 'center',
         }}>
           {/* ゴールドラベル（画像の上） */}
           <div style={{
