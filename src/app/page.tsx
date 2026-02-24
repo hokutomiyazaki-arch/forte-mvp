@@ -213,22 +213,21 @@ export default function Home() {
           }} />
         </div>
 
-        {/* ── SP: フル幅背景画像（100vh全体） ── */}
-        <div className="md:hidden absolute inset-0" style={{ zIndex: 0 }}>
+        {/* ── SP: 背景画像（横幅100%、縦は画像の自然な高さ） ── */}
+        <div className="md:hidden absolute top-0 left-0 right-0" style={{ zIndex: 0 }}>
           <img
             src="/images/hero_sp.png"
             alt=""
             style={{
               width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              objectPosition: 'center top',
+              height: 'auto',
+              display: 'block',
             }}
           />
           <div style={{
             position: 'absolute',
             inset: 0,
-            background: 'linear-gradient(180deg, transparent 40%, rgba(26,26,46,0.75) 65%, rgba(26,26,46,0.95) 85%)',
+            background: 'linear-gradient(180deg, rgba(26,26,46,0.3) 0%, transparent 15%, transparent 50%, rgba(26,26,46,0.7) 70%, rgba(26,26,46,0.95) 90%)',
           }} />
         </div>
 
@@ -292,9 +291,10 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ── SP コンテンツ（画像の上に重ねる、下部寄せ） ── */}
-        <div className="md:hidden relative flex flex-col justify-end"
-          style={{ zIndex: 1, minHeight: '100vh', padding: '0 24px 40px' }}>
+        {/* ── SP コンテンツ（画像に重ねる） ── */}
+        <div className="md:hidden relative flex flex-col justify-between"
+          style={{ zIndex: 1, minHeight: '100vw', padding: '0 24px' }}>
+          {/* ゴールドラベル（上部） */}
           <div style={{
             opacity: heroLoaded ? 1 : 0,
             transform: heroLoaded ? 'translateY(0)' : 'translateY(12px)',
@@ -303,46 +303,48 @@ export default function Home() {
             fontSize: '13px',
             letterSpacing: '1.5px',
             fontWeight: 500,
-            marginBottom: '12px',
             textAlign: 'center',
+            paddingTop: '16px',
           }}>
             クライアントの信頼が資産に変わるデジタル名刺
           </div>
-          <h1 style={{
-            opacity: heroLoaded ? 1 : 0,
-            transform: heroLoaded ? 'translateY(0)' : 'translateY(16px)',
-            transition: 'all 0.6s ease-out 0.6s',
-            color: '#FAFAF7',
-            fontSize: 'clamp(22px, 6vw, 30px)',
-            fontWeight: 700,
-            lineHeight: 1.5,
-            marginBottom: '20px',
-            textAlign: 'center',
-          }}>
-            「あなたに出会えてよかった」<br />
-            <span style={{ fontSize: 'clamp(17px, 4.5vw, 24px)', fontWeight: 400, opacity: 0.85 }}>
-              ——でもその言葉、誰も知らない。
-            </span>
-          </h1>
-          <div style={{ display: 'flex', justifyContent: 'center' }}>
-            <button onClick={() => { window.location.href = '/login'; }} style={{
+          {/* コピー + CTA（下部） */}
+          <div style={{ paddingBottom: '24px', textAlign: 'center' }}>
+            <h1 style={{
               opacity: heroLoaded ? 1 : 0,
-              transition: 'opacity 0.6s ease-out 0.9s',
-              backgroundColor: '#C4A35A',
-              color: '#1A1A2E',
+              transform: heroLoaded ? 'translateY(0)' : 'translateY(16px)',
+              transition: 'all 0.6s ease-out 0.6s',
+              color: '#FAFAF7',
+              fontSize: 'clamp(22px, 6vw, 30px)',
               fontWeight: 700,
-              fontSize: '17px',
-              padding: '14px 32px',
-              borderRadius: '8px',
-              border: 'none',
-              cursor: 'pointer',
-              width: '100%',
-              maxWidth: '300px',
-              fontFamily: "'Noto Sans JP', sans-serif",
-              animation: heroLoaded ? 'pulseGlow 3s ease-in-out infinite' : 'none',
+              lineHeight: 1.5,
+              marginBottom: '20px',
             }}>
-              信頼を資産に変える →
-            </button>
+              「あなたに出会えてよかった」<br />
+              <span style={{ fontSize: 'clamp(17px, 4.5vw, 24px)', fontWeight: 400, opacity: 0.85 }}>
+                ——でもその言葉、誰も知らない。
+              </span>
+            </h1>
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <button onClick={() => { window.location.href = '/login'; }} style={{
+                opacity: heroLoaded ? 1 : 0,
+                transition: 'opacity 0.6s ease-out 0.9s',
+                backgroundColor: '#C4A35A',
+                color: '#1A1A2E',
+                fontWeight: 700,
+                fontSize: '17px',
+                padding: '14px 32px',
+                borderRadius: '8px',
+                border: 'none',
+                cursor: 'pointer',
+                width: '100%',
+                maxWidth: '300px',
+                fontFamily: "'Noto Sans JP', sans-serif",
+                animation: heroLoaded ? 'pulseGlow 3s ease-in-out infinite' : 'none',
+              }}>
+                信頼を資産に変える →
+              </button>
+            </div>
           </div>
         </div>
 
