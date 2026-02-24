@@ -316,7 +316,7 @@ export default function Home() {
           {/* コピー + CTA（画像の下半分に重なる位置） */}
           <div style={{
             position: 'absolute',
-            top: '50%',
+            bottom: '32px',
             left: '24px',
             right: '24px',
             textAlign: 'center',
