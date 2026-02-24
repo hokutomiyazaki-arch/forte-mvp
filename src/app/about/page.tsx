@@ -225,14 +225,14 @@ export default function AboutPage() {
                 background: '#FFFFFF',
                 border: '1px solid #E8E4DC',
                 margin: '0 auto 16px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 11,
-                color: '#888888',
+                overflow: 'hidden',
               }}
             >
-              [ 写真 ]
+              <img
+                src="/images/founder.png"
+                alt="宮崎ほくと"
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
             </div>
             <div style={{ fontSize: 18, fontWeight: 700, color: '#1A1A2E', marginBottom: 6 }}>
               宮崎 ほくと

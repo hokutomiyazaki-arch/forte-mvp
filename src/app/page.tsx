@@ -66,31 +66,72 @@ function Reveal({ children, className = "", style = {}, delay = 0 }: { children:
 
 // ─── Bar Chart ───
 function BarChart({ animated }: { animated: boolean }) {
-  const items = [
-    { label: '技術力', value: 92 },
-    { label: '共感力', value: 72 },
-    { label: '専門性', value: 85 },
-    { label: '信頼性', value: 88 },
-    { label: '受容力', value: 65 },
-    { label: '発信力', value: 58 },
+  const resultItems = [
+    { label: '痛みを取る技術がある', value: 12 },
+    { label: '動きを変える技術がある', value: 9 },
+    { label: '根本原因にアプローチできる', value: 8 },
+    { label: '身体の変化を実感させてくれる', value: 6 },
+    { label: '結果を出すのが早い', value: 5 },
   ];
+  const humanityItems = [
+    { label: '信頼できる人柄', value: 14 },
+  ];
+  const allItems = [...resultItems, ...humanityItems];
+  const maxValue = Math.max(...allItems.map(item => item.value));
   return (
-    <div className="space-y-5 w-full max-w-sm mx-auto">
-      {items.map((item, i) => (
-        <div key={i}>
-          <div className="flex justify-between mb-1.5">
-            <span style={{ color: '#FAFAF7', fontSize: '13px', fontWeight: 500 }}>{item.label}</span>
-            <span style={{ color: '#C4A35A', fontSize: '12px', fontFamily: "'Inter', sans-serif" }}>{animated ? item.value : 0}</span>
-          </div>
-          <div className="w-full rounded overflow-hidden" style={{ height: '24px', backgroundColor: '#2A2A3E' }}>
-            <div className="h-full rounded" style={{
-              width: animated ? `${item.value}%` : '0%',
-              backgroundColor: '#C4A35A',
-              transition: `width 1.2s ease-out ${0.15 * i}s`,
-            }} />
-          </div>
+    <div className="w-full max-w-md mx-auto">
+      {/* トッププルーフ */}
+      <div className="text-center mb-6">
+        <div style={{ display: 'inline-block', backgroundColor: '#1A1A2E', border: '1px solid rgba(196,163,90,0.3)', padding: '8px 16px', borderRadius: '8px' }}>
+          <span style={{ color: '#C4A35A', fontSize: '11px', fontFamily: "'Inter', sans-serif", fontWeight: 600, letterSpacing: '2px' }}>TOP PROOF</span>
+          <span style={{ color: '#FFFFFF', fontSize: '14px', fontWeight: 500, marginLeft: '12px' }}>信頼できる人柄</span>
         </div>
-      ))}
+      </div>
+
+      {/* 技術的強み */}
+      <div style={{ color: '#C4A35A', fontSize: '11px', fontFamily: "'Inter', sans-serif", fontWeight: 500, letterSpacing: '1px', marginBottom: '12px' }}>Result Proofs</div>
+      <div className="space-y-3 mb-6">
+        {resultItems.map((item, i) => (
+          <div key={i}>
+            <div className="flex justify-between mb-1">
+              <span style={{ color: '#FAFAF7', fontSize: '13px', fontWeight: 500 }}>{item.label}</span>
+              <span style={{ color: '#C4A35A', fontSize: '12px', fontFamily: "'Inter', sans-serif" }}>{animated ? item.value : 0}</span>
+            </div>
+            <div className="w-full rounded overflow-hidden" style={{ height: '22px', backgroundColor: '#2A2A3E' }}>
+              <div className="h-full rounded" style={{
+                width: animated ? `${(item.value / maxValue) * 100}%` : '0%',
+                backgroundColor: '#C4A35A',
+                transition: `width 1.2s ease-out ${0.15 * i}s`,
+              }} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 人間的強み */}
+      <div style={{ color: '#C4A35A', fontSize: '11px', fontFamily: "'Inter', sans-serif", fontWeight: 500, letterSpacing: '1px', marginBottom: '12px' }}>Humanity Proofs</div>
+      <div className="space-y-3">
+        {humanityItems.map((item, i) => (
+          <div key={i}>
+            <div className="flex justify-between mb-1">
+              <span style={{ color: '#FAFAF7', fontSize: '13px', fontWeight: 500 }}>{item.label}</span>
+              <span style={{ color: '#C4A35A', fontSize: '12px', fontFamily: "'Inter', sans-serif" }}>{animated ? item.value : 0}</span>
+            </div>
+            <div className="w-full rounded overflow-hidden" style={{ height: '22px', backgroundColor: '#2A2A3E' }}>
+              <div className="h-full rounded" style={{
+                width: animated ? `${(item.value / maxValue) * 100}%` : '0%',
+                backgroundColor: '#C4A35A',
+                transition: `width 1.2s ease-out ${0.15 * (resultItems.length + i)}s`,
+              }} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 注釈 */}
+      <p className="text-center" style={{ color: '#999999', fontSize: '12px', marginTop: '20px' }}>
+        ※ 投票項目はプロが自分で選べます（70項目から最大8つ）
+      </p>
     </div>
   );
 }
@@ -342,8 +383,8 @@ export default function Home() {
           <Reveal>
             <div className="text-center mb-10">
               <h2 style={{ color: '#1A1A2E', fontSize: '22px', fontWeight: 700, marginBottom: '16px' }}>
-                積み上げた信頼こそがあなたの財産。<br />
-                「あなたはそれを蔑ろにしている」
+                積み上げた信頼こそがあなたの資産。<br />
+                「あなたはそれを垂れ流している」
               </h2>
               <p style={{ color: '#1A1A2E', fontSize: '15px', marginBottom: '8px' }}>
                 セッションのたびに届く感謝の言葉。<br />
@@ -372,7 +413,7 @@ export default function Home() {
             <div className="text-center mb-10">
               <div style={{ color: '#C4A35A', fontSize: '12px', letterSpacing: '3px', fontFamily: "'Inter', sans-serif", fontWeight: 500, marginBottom: '12px' }}>HOW IT WORKS</div>
               <h2 style={{ color: '#1A1A2E', fontSize: '22px', fontWeight: 700 }}>
-                かざすだけ。30秒で、信頼が形に変わる。
+                かざすだけ。30秒で、信頼が資産に変わる。
               </h2>
             </div>
           </Reveal>
@@ -399,8 +440,8 @@ export default function Home() {
           <Reveal>
             <div className="text-center mb-10">
               <h2 style={{ color: '#FAFAF7', fontSize: '22px', fontWeight: 700 }}>
-                クライアントはあなたの強みを信頼している。<br />
-                磨く強みは、人それぞれ。
+                あなたの強みに人が集まる。<br />
+                磨いた強みがキャリアになる。
               </h2>
             </div>
           </Reveal>
@@ -431,13 +472,67 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ═══ S4.5: 口コミ比較 ═══ */}
+      <section style={{ ...sectionPad, backgroundColor: '#FAFAF7' }}>
+        <div className={inner}>
+          <Reveal>
+            <div className="text-center mb-10">
+              <h2 style={{ color: '#1A1A2E', fontSize: '22px', fontWeight: 700, marginBottom: '20px' }}>
+                誰でも書ける口コミに、信頼はない。
+              </h2>
+              <div style={{ color: '#1A1A2E', fontSize: '15px', lineHeight: 1.8, marginBottom: '8px' }}>
+                口コミサイトのレビューは、<br />
+                行ったことがない人でも書ける。<br />
+                星の数は操作できる。<br />
+                だから、プロも消費者も疑っている。
+              </div>
+              <div style={{ color: '#1A1A2E', fontSize: '15px', lineHeight: 1.8 }}>
+                REALPROOFの記録は、<br />
+                対面でカードをかざした人だけ。<br />
+                1人1回。30分に1プルーフまで。<br />
+                操作できない。だから信頼になる。
+              </div>
+            </div>
+          </Reveal>
+          <Reveal delay={0.2}>
+            <div className="overflow-x-auto">
+              <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: '14px' }}>
+                <thead>
+                  <tr>
+                    <th style={{ padding: '12px 16px', textAlign: 'left', color: '#9A9A9A', fontWeight: 500, fontSize: '13px', borderBottom: '1px solid #E8E4DC' }}></th>
+                    <th style={{ padding: '12px 16px', textAlign: 'center', color: '#9A9A9A', fontWeight: 500, fontSize: '13px', borderBottom: '1px solid #E8E4DC' }}>口コミサイト</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'center', color: '#C4A35A', fontWeight: 700, fontSize: '13px', borderBottom: '2px solid #C4A35A', backgroundColor: 'rgba(196,163,90,0.06)', borderRadius: '8px 8px 0 0' }}>REALPROOF</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    ['誰が書ける？', '誰でも', '対面クライアントだけ'],
+                    ['回数制限', '何回でも', '1人1回'],
+                    ['匿名投稿', 'できる', 'できない'],
+                    ['操作・自作', '可能', '不可能'],
+                    ['蓄積先', 'プラットフォーム', 'プロ個人に紐づく'],
+                    ['退会したら', '消える', '一生消えない'],
+                  ].map(([label, review, rp], i) => (
+                    <tr key={i}>
+                      <td style={{ padding: '12px 16px', color: '#1A1A2E', fontWeight: 500, borderBottom: '1px solid #F0EDE6', fontSize: '13px' }}>{label}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'center', color: '#9A9A9A', borderBottom: '1px solid #F0EDE6' }}>{review}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'center', color: '#1A1A2E', fontWeight: 600, borderBottom: '1px solid #F0EDE6', backgroundColor: 'rgba(196,163,90,0.06)' }}>{rp}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
       {/* ═══ S5: 3本柱 ═══ */}
       <section style={{ ...sectionPad, backgroundColor: '#FAFAF7' }}>
         <div className={inner}>
           <Reveal>
             <div className="text-center mb-10">
               <div style={{ color: '#C4A35A', fontSize: '12px', letterSpacing: '3px', fontFamily: "'Inter', sans-serif", fontWeight: 500, marginBottom: '12px' }}>WHY REALPROOF</div>
-              <h2 style={{ color: '#1A1A2E', fontSize: '22px', fontWeight: 700 }}>プルーフが信頼に変わる、3つの理由。</h2>
+              <h2 style={{ color: '#1A1A2E', fontSize: '22px', fontWeight: 700 }}>プルーフが信頼を資産に変える、3つの理由。</h2>
             </div>
           </Reveal>
           <Reveal delay={0.15}>
@@ -493,8 +588,8 @@ export default function Home() {
             </div>
           </Reveal>
           <Reveal delay={0.15}>
-            <div className="hidden md:grid md:grid-cols-3 md:gap-6">
-              {voices.map((v, i) => <VoiceCard key={i} voice={v} />)}
+            <div className="hidden md:flex md:flex-wrap md:justify-center md:gap-6">
+              {voices.map((v, i) => <div key={i} style={{ width: 'calc(33.333% - 16px)' }}><VoiceCard voice={v} /></div>)}
             </div>
             <div className="md:hidden">
               <SwipeSlider darkDots>{voices.map((v, i) => <VoiceCard key={i} voice={v} />)}</SwipeSlider>
@@ -531,13 +626,12 @@ export default function Home() {
               </div>
 
               <h3 style={{ color: '#1A1A2E', fontSize: '18px', fontWeight: 700, marginBottom: '16px' }}>
-                「強みを磨く人」が<br />輝く世界をつくる。
+                「強みを磨く人」が<br />一番輝く世界をつくる。
               </h3>
 
               <p style={{ color: '#1A1A2E', fontSize: '15px', marginBottom: '20px', maxWidth: '420px', marginLeft: 'auto', marginRight: 'auto' }}>
                 15年間、騎手として、トレーナーとして、治療家として<br />
-                技術の現場に立ち続けてきました。<br />
-                気づいたことがある。<br />
+                技術の現場に立ち続けて気づいたことがある。<br />
                 真摯にスキルを磨く職人よりも、<br />
                 SNS、営業、マーケティングに精を出した人ばかりが目立つ。<br />
                 故に、努力の方向性を間違えている人が多い。
@@ -581,7 +675,7 @@ export default function Home() {
             <div className="text-center">
               <div style={{ color: '#C4A35A', fontSize: '12px', letterSpacing: '3px', fontFamily: "'Inter', sans-serif", fontWeight: 500, marginBottom: '12px' }}>FOUNDING MEMBER</div>
               <h2 style={{ color: '#FAFAF7', fontSize: '22px', fontWeight: 700, marginBottom: '20px' }}>
-                最初の仲間だけの特権。<br />ただし、条件がある。
+                最初の仲間だけの特権。<br />70,000人のネットワークに参加。<br />ただし、条件がある。
               </h2>
               <p style={{ color: '#FAFAF7', fontSize: '15px', marginBottom: '28px' }}>
                 クライアントから5票以上を集めた人だけが、<br className="hidden md:inline" />
@@ -590,7 +684,7 @@ export default function Home() {
             </div>
 
             <div className="max-w-sm mx-auto mb-8">
-              {['永久にFounding Memberバッジが表示される', 'プラットフォーム改善に直接関われる', '一緒にREALPROOFの文化を作る'].map((item, i) => (
+              {['70,000人のメルマガでREALPROOFの思想とFoundingメンバーを拡散', '新しい時代の始まりを肌で体感', '一緒にREALPROOFの文化を作る', 'プラットフォーム改善に直接関われる', '永久にFounding Memberバッジが表示される'].map((item, i) => (
                 <div key={i} className="flex items-start gap-3 mb-3">
                   <span style={{ color: '#C4A35A', fontSize: '14px', marginTop: '2px', flexShrink: 0 }}>✦</span>
                   <span style={{ color: '#FAFAF7', fontSize: '15px' }}>{item}</span>
@@ -658,9 +752,11 @@ const benefits = [
 ];
 
 const voices = [
-  { role: '整体師', text: '「技術には自信があるのに、うまく伝えられない。SNSが得意な人ばかり目立っている気がする。」' },
-  { role: 'ヨガインストラクター', text: '「生徒さんは来てくれる。でも、自分の何が良いのか、正直よくわからない。」' },
-  { role: 'パーソナルトレーナー', text: '「結果を出しても、それが自分の実績として残らない。店の看板で終わる。」' },
+  { role: '整体師', text: '「ゴッドハンドに憧れたはずが、気づけばSNSとチラシ作りに追われている。こんなハズじゃなかった。」' },
+  { role: 'ピラティスインストラクター', text: '「生徒さんは来てくれる。でも自分の何が求められているのか、正直わからない。」' },
+  { role: 'パーソナルトレーナー', text: '「結果を出しても、ポジションは変わらない。実績が残らないから、技術を磨く気力も薄れていく。」' },
+  { role: 'ボディワーカー', text: '「本質的な身体改善を学び続けている。クライアントには伝わるけど、世間の認知度はゼロ。SNSではキャッチーなものしか届かない。」' },
+  { role: 'エステオーナー', text: '「新しい技術を導入しても、結局ホットペッパーの広告費と立地で判断される。技術の価値が届いていない。」' },
 ];
 
 // ─── Sub Components ───
