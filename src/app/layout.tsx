@@ -1,6 +1,16 @@
 import type { Metadata } from 'next'
 import './globals.css'
-import Navbar from '@/components/Navbar'
+import dynamic from 'next/dynamic'
+
+const Navbar = dynamic(() => import('@/components/Navbar'), {
+  ssr: false,
+  loading: () => (
+    <nav className="bg-[#1A1A2E] text-white px-6 py-3 flex items-center justify-between">
+      <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 16, fontWeight: 800, color: '#FAFAF7', letterSpacing: '2px' }}>REALPROOF</span>
+      <div style={{ width: 200 }} />
+    </nav>
+  ),
+})
 
 export const metadata: Metadata = {
   title: 'REALPROOF — 強みが、あなたを定義する。',
