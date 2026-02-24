@@ -176,6 +176,22 @@ function VoteForm() {
         .maybeSingle()
       if (proData) setPro(proData)
 
+      // 強み未設定チェック → 準備中ページにリダイレクト
+      if (proData) {
+        const proofsList: string[] = proData.selected_proofs || []
+        if (proofsList.length === 0) {
+          // プロに通知メールを送信（バックグラウンド）
+          fetch('/api/nfc-notify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ professional_id: proId }),
+          }).catch(() => {})
+          // 準備中ページへリダイレクト
+          window.location.href = `/vote/preparing/${proId}`
+          return
+        }
+      }
+
       if (proData) {
         // 強みプルーフ: プロが選んだ proof_items を取得
         const selectedProofs: string[] = proData.selected_proofs || []
