@@ -213,21 +213,22 @@ export default function Home() {
           }} />
         </div>
 
-        {/* ── SP: 背景画像（横幅100%、縦は画像の自然な高さ） ── */}
-        <div className="md:hidden absolute top-0 left-0 right-0" style={{ zIndex: 0 }}>
+        {/* ── SP: フル幅背景画像 ── */}
+        <div className="md:hidden absolute inset-0" style={{ zIndex: 0 }}>
           <img
             src="/images/hero_sp.png"
             alt=""
             style={{
               width: '100%',
-              height: 'auto',
-              display: 'block',
+              height: '100%',
+              objectFit: 'cover',
+              objectPosition: 'center 30%',
             }}
           />
           <div style={{
             position: 'absolute',
             inset: 0,
-            background: 'linear-gradient(180deg, rgba(26,26,46,0.3) 0%, transparent 15%, transparent 50%, rgba(26,26,46,0.7) 70%, rgba(26,26,46,0.95) 90%)',
+            background: 'linear-gradient(180deg, rgba(26,26,46,0.4) 0%, transparent 20%, transparent 45%, rgba(26,26,46,0.8) 70%, rgba(26,26,46,0.98) 90%)',
           }} />
         </div>
 
@@ -291,10 +292,10 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ── SP コンテンツ（画像に重ねる） ── */}
+        {/* ── SP コンテンツ ── */}
         <div className="md:hidden relative flex flex-col justify-between"
-          style={{ zIndex: 1, minHeight: '100vw', padding: '0 24px' }}>
-          {/* ゴールドラベル（上部） */}
+          style={{ zIndex: 1, minHeight: '100vh', padding: '16px 24px 32px' }}>
+          {/* ゴールドラベル（上部、画像の上に重なる） */}
           <div style={{
             opacity: heroLoaded ? 1 : 0,
             transform: heroLoaded ? 'translateY(0)' : 'translateY(12px)',
@@ -304,12 +305,14 @@ export default function Home() {
             letterSpacing: '1.5px',
             fontWeight: 500,
             textAlign: 'center',
-            paddingTop: '16px',
+            paddingTop: '8px',
           }}>
             クライアントの信頼が資産に変わるデジタル名刺
           </div>
-          {/* コピー + CTA（下部） */}
-          <div style={{ paddingBottom: '24px', textAlign: 'center' }}>
+          {/* 中央スペーサー（画像を見せる領域） */}
+          <div style={{ flex: 1 }} />
+          {/* コピー + CTA（下部、画像の上に重なる） */}
+          <div style={{ textAlign: 'center' }}>
             <h1 style={{
               opacity: heroLoaded ? 1 : 0,
               transform: heroLoaded ? 'translateY(0)' : 'translateY(16px)',
@@ -325,7 +328,7 @@ export default function Home() {
                 ——でもその言葉、誰も知らない。
               </span>
             </h1>
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <div className="flex justify-center">
               <button onClick={() => { window.location.href = '/login'; }} style={{
                 opacity: heroLoaded ? 1 : 0,
                 transition: 'opacity 0.6s ease-out 0.9s',
