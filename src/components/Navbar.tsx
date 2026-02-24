@@ -127,7 +127,9 @@ export default function Navbar() {
       </a>
       <div className="nav-links flex gap-4 text-sm items-center">
         <a href="/explore" className="hover:text-[#C4A35A] transition">プロを探す</a>
-        {loaded && (user ? (
+        {!loaded ? (
+          <div style={{ width: '80px' }} />
+        ) : user ? (
           <>
             {isPro && <a href="/dashboard" className="hover:text-[#C4A35A] transition">ダッシュボード</a>}
             <a href="/mycard" className="hover:text-[#C4A35A] transition">リワード</a>
@@ -135,7 +137,7 @@ export default function Navbar() {
           </>
         ) : (
           <a href="/login" className="hover:text-[#C4A35A] transition">ログイン</a>
-        ))}
+        )}
       </div>
     </nav>
     {/* DEBUG: ?debug=1 の時のみ表示 */}
