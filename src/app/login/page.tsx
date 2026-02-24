@@ -18,7 +18,7 @@ const MAIL_LINKS: Record<string, { label: string; url: string }> = {
 
 function LoginForm() {
   const searchParams = useSearchParams()
-  const initialRole = searchParams.get('role') || 'pro'
+  const initialRole = searchParams.get('role') || 'client'
   const redirectTo = searchParams.get('redirect') || ''
   const emailParam = searchParams.get('email') || ''
   const isCouponFlow = initialRole === 'client' && (redirectTo === '/coupons' || redirectTo === '/mycard')
@@ -106,13 +106,19 @@ function LoginForm() {
     }
 
     // onAuthStateChange を先に登録（OAuth完了後のSIGNED_INを確実にキャッチ）
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, session: any) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string, session: any) => {
       console.log('[onAuthStateChange] event:', event, 'session:', session ? 'EXISTS' : 'NULL', 'cancelled:', cancelled)
 
       if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user && !cancelled) {
         cancelled = true
-        console.log('[onAuthStateChange] SIGNED_IN → redirect /dashboard')
-        window.location.href = '/dashboard'
+        // professionalsテーブルにレコードがあるか確認してリダイレクト先を決定
+        const { data: pro } = await supabase
+          .from('professionals')
+          .select('id')
+          .eq('user_id', session.user.id)
+          .maybeSingle()
+        console.log('[onAuthStateChange] SIGNED_IN → redirect', pro ? '/dashboard' : '/mycard')
+        window.location.href = pro ? '/dashboard' : '/mycard'
       }
     })
 
@@ -649,15 +655,7 @@ function LoginForm() {
         </button>
       </div>
 
-      {/* Nickname for client */}
-      {isClient && (
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">ニックネーム</label>
-          <input value={nickname} onChange={e => setNickname(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
-            placeholder="表示名（任意）" />
-        </div>
-      )}
+      {/* Nickname for client - MVP: 非表示（professionalsに保存しようとする問題を回避） */}
 
       {/* Google Login */}
       <button onClick={handleGoogleLogin} disabled={googleLoading}
