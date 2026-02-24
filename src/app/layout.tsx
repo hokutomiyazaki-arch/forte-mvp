@@ -1,16 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
-import dynamic from 'next/dynamic'
-
-const Navbar = dynamic(() => import('@/components/Navbar'), {
-  ssr: false,
-  loading: () => (
-    <nav className="bg-[#1A1A2E] text-white px-6 py-3 flex items-center justify-between">
-      <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 16, fontWeight: 800, color: '#FAFAF7', letterSpacing: '2px' }}>REALPROOF</span>
-      <div style={{ width: 200 }} />
-    </nav>
-  ),
-})
+import Navbar from '@/components/Navbar'
 
 export const metadata: Metadata = {
   title: 'REALPROOF — 強みが、あなたを定義する。',
@@ -39,7 +29,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ja" suppressHydrationWarning>
+    <html lang="ja">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -48,7 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-screen" suppressHydrationWarning style={{ fontFamily: "'Noto Sans JP', 'Inter', sans-serif", fontWeight: 500, color: '#1A1A2E', WebkitFontSmoothing: 'antialiased', MozOsxFontSmoothing: 'grayscale' as any }}>
+      <body className="min-h-screen" style={{ fontFamily: "'Noto Sans JP', 'Inter', sans-serif", fontWeight: 500, color: '#1A1A2E', WebkitFontSmoothing: 'antialiased', MozOsxFontSmoothing: 'grayscale' as any }}>
         <Navbar />
         <main className="max-w-5xl mx-auto px-4 py-8">
           {children}
