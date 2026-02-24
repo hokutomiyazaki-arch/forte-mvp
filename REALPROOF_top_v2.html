@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REAL PROOF — 本物が輝く社会へ。</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --dark: #1A1A2E;
+    --gold: #C4A35A;
+    --cream: #FAFAF7;
+    --white: #FFFFFF;
+    --text-dark: #1A1A2E;
+    --text-body: #444;
+    --text-muted: #888;
+    --border-light: #E8E4DC;
+    --gold-bg: rgba(196,163,90,0.08);
+    --gold-border: rgba(196,163,90,0.25);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Noto Sans JP', 'DM Sans', sans-serif;
+    background: var(--cream);
+    color: var(--text-dark);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  /* ===== NAV ===== */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 40px;
+    background: var(--dark);
+  }
+  .nav-logo {
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: 2px;
+    color: var(--cream);
+  }
+  .nav-links { display: flex; gap: 24px; }
+  .nav-links a {
+    font-size: 12px;
+    color: rgba(250,250,247,0.7);
+    text-decoration: none;
+    letter-spacing: 0.5px;
+    transition: color 0.3s;
+  }
+  .nav-links a:hover { color: var(--cream); }
+
+  /* ===== SECTIONS ===== */
+  section {
+    padding: 100px 24px;
+    text-align: center;
+  }
+  .inner {
+    max-width: 780px;
+    margin: 0 auto;
+  }
+
+  /* ===== HERO ===== */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding-top: 60px;
+    background: var(--cream);
+  }
+  .hero-brand {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 42px;
+    font-weight: 700;
+    letter-spacing: 5px;
+    color: var(--text-dark);
+    margin-bottom: 8px;
+    opacity: 0;
+    animation: fadeUp 0.7s ease forwards 0.1s;
+  }
+  .hero-tagline {
+    font-size: 13px;
+    color: var(--gold);
+    letter-spacing: 3px;
+    margin-bottom: 52px;
+    opacity: 0;
+    animation: fadeUp 0.7s ease forwards 0.25s;
+  }
+  .hero-headline {
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1.8;
+    color: var(--text-dark);
+    margin-bottom: 28px;
+    opacity: 0;
+    animation: fadeUp 0.7s ease forwards 0.4s;
+  }
+  .hero-headline em {
+    font-style: normal;
+    color: var(--gold);
+  }
+  .hero-conflict {
+    font-size: 14px;
+    line-height: 2;
+    color: var(--text-body);
+    margin-bottom: 20px;
+    opacity: 0;
+    animation: fadeUp 0.7s ease forwards 0.55s;
+  }
+  .hero-solution {
+    font-size: 14px;
+    line-height: 2;
+    color: var(--text-body);
+    margin-bottom: 36px;
+    opacity: 0;
+    animation: fadeUp 0.7s ease forwards 0.65s;
+  }
+  .hero-cta-wrap {
+    margin-bottom: 40px;
+    opacity: 0;
+    animation: fadeUp 0.7s ease forwards 0.75s;
+  }
+  .hero-footer-text {
+    font-size: 13px;
+    line-height: 2;
+    color: var(--text-muted);
+    opacity: 0;
+    animation: fadeUp 0.7s ease forwards 0.85s;
+  }
+
+  /* ===== BUTTONS ===== */
+  .btn-gold {
+    display: inline-block;
+    padding: 16px 48px;
+    background: var(--gold);
+    color: var(--white);
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 1px;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  .btn-gold:hover {
+    background: #b5963f;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(196,163,90,0.25);
+  }
+  .btn-outline {
+    display: inline-block;
+    padding: 14px 36px;
+    background: transparent;
+    color: var(--text-dark);
+    font-weight: 500;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+    text-decoration: none;
+    border: 1px solid var(--border-light);
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  .btn-outline:hover {
+    border-color: var(--gold);
+    color: var(--gold);
+  }
+  .btn-dark {
+    display: inline-block;
+    padding: 16px 48px;
+    background: var(--dark);
+    color: var(--cream);
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 1px;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  .btn-dark:hover {
+    background: #2a2a4a;
+    transform: translateY(-1px);
+  }
+
+  /* ===== DIVIDER ===== */
+  .section-divider {
+    width: 48px;
+    height: 1px;
+    background: var(--border-light);
+    margin: 0 auto 100px;
+  }
+  .section-divider.gold {
+    background: var(--gold-border);
+  }
+
+  /* ===== HOW IT WORKS ===== */
+  .how-it-works { background: var(--cream); }
+  .section-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .section-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-dark);
+    line-height: 1.6;
+    margin-bottom: 56px;
+  }
+  .how-steps {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    flex-wrap: wrap;
+    text-align: center;
+  }
+  .how-step {
+    flex: 1;
+    min-width: 220px;
+    max-width: 260px;
+  }
+  .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px; height: 40px;
+    border: 1.5px solid var(--gold);
+    border-radius: 50%;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--gold);
+    margin-bottom: 18px;
+  }
+  .step-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-dark);
+    margin-bottom: 6px;
+  }
+  .step-who {
+    font-size: 11px;
+    color: var(--gold);
+    letter-spacing: 1px;
+    margin-bottom: 14px;
+  }
+  .step-desc {
+    font-size: 13px;
+    line-height: 1.9;
+    color: var(--text-body);
+  }
+  .step-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: var(--gold);
+    min-width: 32px;
+    padding-top: 20px;
+  }
+
+  /* ===== COMPARISON TABLE ===== */
+  .comparison { background: var(--cream); }
+  .comp-table {
+    width: 100%;
+    max-width: 720px;
+    margin: 0 auto;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .comp-table thead th {
+    padding: 16px 10px;
+    font-weight: 700;
+    text-align: center;
+    border-bottom: 2px solid #ddd;
+    font-size: 13px;
+    color: var(--text-dark);
+  }
+  .comp-table thead th:last-child {
+    color: var(--gold);
+    border-bottom-color: var(--gold);
+  }
+  .comp-table td {
+    padding: 13px 10px;
+    text-align: center;
+    border-bottom: 1px solid #eee;
+    color: var(--text-body);
+  }
+  .comp-table td:first-child {
+    font-weight: 600;
+    color: var(--text-dark);
+    text-align: left;
+    font-size: 12px;
+  }
+  .comp-table td:last-child {
+    color: var(--text-dark);
+    font-weight: 600;
+    background: var(--gold-bg);
+  }
+  .comp-table tr:last-child td { border-bottom: none; }
+
+  /* ===== 3 PILLARS ===== */
+  .pillars { background: var(--cream); }
+  .pillar-cards {
+    display: flex;
+    gap: 28px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .pillar-card {
+    flex: 1;
+    min-width: 220px;
+    max-width: 260px;
+    text-align: center;
+    padding: 36px 24px;
+    border: 1px solid var(--border-light);
+    background: var(--white);
+    transition: all 0.3s;
+  }
+  .pillar-card:hover {
+    border-color: var(--gold);
+    box-shadow: 0 4px 20px rgba(196,163,90,0.1);
+    transform: translateY(-3px);
+  }
+  .pillar-label {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: var(--gold);
+    margin-bottom: 14px;
+  }
+  .pillar-heading {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-dark);
+    margin-bottom: 14px;
+  }
+  .pillar-desc {
+    font-size: 13px;
+    line-height: 1.9;
+    color: var(--text-body);
+  }
+
+  /* ===== VOICES ===== */
+  .voices { background: var(--cream); }
+  .voices-sub {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 48px;
+  }
+  .voice-cards {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 48px;
+  }
+  .voice-card {
+    flex: 1;
+    min-width: 220px;
+    max-width: 260px;
+    padding: 28px 22px;
+    border: 1px solid var(--border-light);
+    background: var(--white);
+    text-align: left;
+  }
+  .voice-role {
+    font-size: 11px;
+    color: var(--gold);
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+    font-weight: 500;
+  }
+  .voice-quote {
+    font-size: 13px;
+    line-height: 1.9;
+    color: var(--text-body);
+  }
+  .voices-bridge {
+    font-size: 14px;
+    color: var(--text-dark);
+    font-weight: 500;
+    margin-bottom: 56px;
+  }
+  .voices-mock-label {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-dark);
+    margin-bottom: 24px;
+  }
+  .mock-placeholder {
+    max-width: 480px;
+    margin: 0 auto 24px;
+    padding: 48px 24px;
+    border: 2px dashed var(--border-light);
+    background: var(--white);
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+  .voices-close {
+    font-size: 14px;
+    color: var(--text-body);
+  }
+
+  /* ===== FOUNDER ===== */
+  .founder {
+    background: var(--cream);
+    border-top: 1px solid var(--border-light);
+  }
+  .founder-grid {
+    display: flex;
+    gap: 48px;
+    align-items: flex-start;
+    text-align: left;
+    max-width: 680px;
+    margin: 0 auto;
+  }
+  .founder-photo {
+    width: 160px;
+    min-width: 160px;
+    height: 200px;
+    background: var(--white);
+    border: 1px solid var(--border-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+  .founder-content { flex: 1; }
+  .founder-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    font-style: italic;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+  }
+  .founder-quote {
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.7;
+    color: var(--text-dark);
+    margin-bottom: 20px;
+  }
+  .founder-text {
+    font-size: 13px;
+    line-height: 1.9;
+    color: var(--text-body);
+    margin-bottom: 20px;
+  }
+  .founder-link {
+    font-size: 13px;
+    color: var(--gold);
+    text-decoration: none;
+    letter-spacing: 0.5px;
+    font-weight: 500;
+    transition: opacity 0.3s;
+  }
+  .founder-link:hover { opacity: 0.7; }
+
+  /* ===== FOUNDING MEMBER + CTA ===== */
+  .final-cta {
+    background: var(--cream);
+    padding-bottom: 60px;
+  }
+
+  /* Everyone CTA */
+  .everyone-cta {
+    margin-bottom: 80px;
+    text-align: center;
+  }
+  .everyone-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-dark);
+    margin-bottom: 24px;
+  }
+
+  /* FM section */
+  .fm-box {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 48px 40px;
+    border: 1px solid var(--gold-border);
+    background: var(--white);
+    text-align: center;
+  }
+  .fm-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .fm-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-dark);
+    margin-bottom: 20px;
+  }
+  .fm-condition {
+    font-size: 13px;
+    line-height: 1.9;
+    color: var(--text-body);
+    margin-bottom: 28px;
+  }
+  .fm-perks {
+    list-style: none;
+    margin-bottom: 32px;
+    text-align: left;
+    display: inline-block;
+  }
+  .fm-perks li {
+    font-size: 13px;
+    color: var(--text-body);
+    line-height: 2;
+    padding-left: 20px;
+    position: relative;
+  }
+  .fm-perks li::before {
+    content: '◆';
+    position: absolute;
+    left: 0;
+    color: var(--gold);
+    font-size: 10px;
+  }
+  .fm-remaining {
+    display: block;
+    margin-top: 16px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  /* ===== FOOTER ===== */
+  footer {
+    padding: 40px 24px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    border-top: 1px solid var(--border-light);
+  }
+  footer a {
+    color: var(--text-muted);
+    text-decoration: underline;
+  }
+
+  /* ===== ANIMATIONS ===== */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .reveal {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: all 0.6s ease;
+  }
+  .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* ===== RESPONSIVE ===== */
+  @media (max-width: 768px) {
+    nav { padding: 12px 20px; }
+    .nav-links { gap: 14px; }
+    .nav-links a { font-size: 11px; }
+    section { padding: 72px 20px; }
+    .hero-brand { font-size: 28px; letter-spacing: 3px; }
+    .hero-headline { font-size: 20px; }
+    .how-steps { flex-direction: column; align-items: center; }
+    .step-arrow { transform: rotate(90deg); padding: 0; min-width: auto; }
+    .pillar-cards { flex-direction: column; align-items: center; }
+    .voice-cards { flex-direction: column; align-items: center; }
+    .comp-table { font-size: 11px; }
+    .comp-table th, .comp-table td { padding: 10px 6px; }
+    .founder-grid { flex-direction: column; align-items: center; text-align: center; }
+    .founder-photo { width: 120px; min-width: 120px; height: 150px; }
+    .founder-content { text-align: center; }
+    .fm-box { padding: 36px 24px; }
+    .fm-perks { text-align: left; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">REAL PROOF</div>
+  <div class="nav-links">
+    <a href="#">プロを探す</a>
+    <a href="#">ダッシュボード</a>
+    <a href="#">リワード</a>
+    <a href="#">ログアウト</a>
+  </div>
+</nav>
+
+<!-- ================================ -->
+<!-- SECTION 1: HERO                  -->
+<!-- ================================ -->
+<section class="hero">
+  <div class="inner">
+    <div class="hero-brand">REAL PROOF</div>
+    <div class="hero-tagline">本物が輝く社会へ。</div>
+
+    <h1 class="hero-headline">
+      あなたの強みを一番知っているのは、<br>
+      <em>あなたのクライアントだ。</em>
+    </h1>
+
+    <p class="hero-conflict">
+      なのに、選ばれる基準は★の数、フォロワー数、広告費。<br>
+      どれも、あなたの本当の強みを映していない。
+    </p>
+
+    <p class="hero-solution">
+      REAL PROOFは、実際にあなたのセッションを受けたクライアントだけが<br>
+      「何が強いか」を投票で証明するプラットフォーム。
+    </p>
+
+    <div class="hero-cta-wrap">
+      <a href="#" class="btn-gold">強みを証明する →</a>
+    </div>
+
+    <p class="hero-footer-text">
+      集客に困っていなくても。SNSが苦手でも。実績がゼロでも。<br>
+      クライアントの声が、あなたの最強の武器になる。
+    </p>
+  </div>
+</section>
+
+<div class="section-divider gold"></div>
+
+<!-- ================================ -->
+<!-- SECTION 2: HOW IT WORKS          -->
+<!-- ================================ -->
+<section class="how-it-works reveal">
+  <div class="inner">
+    <div class="section-label">How It Works</div>
+    <h2 class="section-title">強みを集める。強みで選ぶ。強みを育てる。</h2>
+    <div class="how-steps">
+      <div class="how-step">
+        <div class="step-num">1</div>
+        <div class="step-title">強みを集める</div>
+        <div class="step-who">— プロが主語</div>
+        <p class="step-desc">セッション後、クライアントがQRコードかNFCカードから投票。「結果を出してくれた」「説明がわかりやすかった」「空間が心地よかった」── あなたの強みを、クライアントの本音が教えてくれる。</p>
+      </div>
+      <div class="step-arrow">→</div>
+      <div class="how-step">
+        <div class="step-num">2</div>
+        <div class="step-title">強みで選ぶ</div>
+        <div class="step-who">— クライアントが主語</div>
+        <p class="step-desc">「姿勢改善が得意な人」「メンタルケアに強い人」── クライアントは★ではなく、強みでプロを選ぶ。広告費を払う必要はない。あなたの強みが、集客になる。</p>
+      </div>
+      <div class="step-arrow">→</div>
+      <div class="how-step">
+        <div class="step-num">3</div>
+        <div class="step-title">強みを育てる</div>
+        <div class="step-who">— プロが主語</div>
+        <p class="step-desc">投票は蓄積される。辞めても、独立しても、消えない。続けるほどあなただけの「強みの証明」が育っていく。資格では見えない成長が、クライアントの声で見える。最初の1票から始まる。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ================================ -->
+<!-- SECTION 3: COMPARISON TABLE      -->
+<!-- ================================ -->
+<section class="comparison reveal">
+  <div class="inner">
+    <h2 class="section-title">★で選ぶ時代は終わった。</h2>
+    <table class="comp-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>ホットペッパー</th>
+          <th>Google</th>
+          <th>REAL PROOF</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>誰が評価</td>
+          <td>匿名の誰か</td>
+          <td>匿名の誰か</td>
+          <td>認証済みクライアント</td>
+        </tr>
+        <tr>
+          <td>紐づき</td>
+          <td>店舗のみ</td>
+          <td>店舗のみ</td>
+          <td>個人＋店舗</td>
+        </tr>
+        <tr>
+          <td>評価の軸</td>
+          <td>★5（一次元）</td>
+          <td>★5（一次元）</td>
+          <td>多次元（結果×人柄）</td>
+        </tr>
+        <tr>
+          <td>検索順</td>
+          <td>広告費順</td>
+          <td>アルゴリズム</td>
+          <td>強み順</td>
+        </tr>
+        <tr>
+          <td>不正対策</td>
+          <td>なし</td>
+          <td>なし</td>
+          <td>対面認証（QR+NFC）</td>
+        </tr>
+        <tr>
+          <td>独立時</td>
+          <td>リセット</td>
+          <td>リセット</td>
+          <td>持ち運べる</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ================================ -->
+<!-- SECTION 4: 3 PILLARS             -->
+<!-- ================================ -->
+<section class="pillars reveal">
+  <div class="inner">
+    <h2 class="section-title">REAL PROOFが他と違う、3つの理由。</h2>
+    <div class="pillar-cards">
+      <div class="pillar-card">
+        <div class="pillar-label">蓄積</div>
+        <div class="pillar-heading">辞めても、消えない。</div>
+        <p class="pillar-desc">あなたの実績は店ではなく個人に紐づく。独立しても、転職しても、あなたの強みの証明は一生あなたのもの。</p>
+      </div>
+      <div class="pillar-card">
+        <div class="pillar-label">多次元</div>
+        <div class="pillar-heading">★じゃ、わからない。</div>
+        <p class="pillar-desc">「★4.5」で何がわかる？ REAL PROOFは「痛み改善が得意」「メンタルに強い」── 本当の強みが見える。</p>
+      </div>
+      <div class="pillar-card">
+        <div class="pillar-label">信頼性</div>
+        <div class="pillar-heading">嘘が、つけない。</div>
+        <p class="pillar-desc">投票できるのは対面でサービスを受けた人だけ。匿名だから忖度もない。届くのは本音だけ。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ================================ -->
+<!-- SECTION 5: VOICES                -->
+<!-- ================================ -->
+<section class="voices reveal">
+  <div class="inner">
+    <h2 class="section-title">この悩み、あなただけじゃない。</h2>
+
+    <div class="voice-cards">
+      <div class="voice-card">
+        <div class="voice-role">整体師</div>
+        <p class="voice-quote">「技術には自信がある。でも新規のお客さんに、それをどう伝えればいいかわからない。」</p>
+      </div>
+      <div class="voice-card">
+        <div class="voice-role">ヨガインストラクター</div>
+        <p class="voice-quote">「SNSを頑張っても、本当に届いてほしい人に届かない。」</p>
+      </div>
+      <div class="voice-card">
+        <div class="voice-role">パーソナルトレーナー</div>
+        <p class="voice-quote">「ホットペッパーの★は広告費で決まる。実力で選ばれたい。」</p>
+      </div>
+    </div>
+
+    <p class="voices-bridge">REAL PROOFは、この問題を解決するために生まれました。</p>
+
+    <div style="margin-top: 48px;">
+      <p class="voices-mock-label">あなたに届く投票は、こんな感じ。</p>
+      <div class="mock-placeholder">[ 投票UIモック画像 ]</div>
+      <p class="voices-close">1つひとつの投票が、あなたの強みを形にする。</p>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ================================ -->
+<!-- SECTION 6: FOUNDER'S NOTE        -->
+<!-- ================================ -->
+<section class="founder reveal">
+  <div class="inner">
+    <div class="founder-grid">
+      <div class="founder-photo">[ 創業者写真 ]</div>
+      <div class="founder-content">
+        <div class="founder-label">── Founder's Note</div>
+        <h2 class="founder-quote">「マーケティングで選ばれる時代は、<br>もう終わりにしたい。」</h2>
+        <p class="founder-text">
+          15年間、技術職の現場に立ち続けてきた創業者が、<br>
+          なぜ「強みの証明」にこだわるのか。
+        </p>
+        <a href="/about" class="founder-link">ストーリーを読む →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider gold"></div>
+
+<!-- ================================ -->
+<!-- SECTION 7: FOUNDING MEMBER + CTA -->
+<!-- ================================ -->
+<section class="final-cta reveal">
+  <div class="inner">
+
+    <!-- 全員向け -->
+    <div class="everyone-cta">
+      <h2 class="everyone-title">REAL PROOFは、今日から誰でも使えます。</h2>
+      <a href="#" class="btn-dark">プロとして登録する →</a>
+    </div>
+
+    <!-- Founding Member -->
+    <div class="fm-box">
+      <div class="fm-label">Founding Member</div>
+      <h3 class="fm-title">最初の50名だけの特権。ただし、条件がある。</h3>
+      <p class="fm-condition">
+        30日以内に、クライアントから5票以上を集めること。<br>
+        使った人だけが、Founding Memberになれる。
+      </p>
+      <ul class="fm-perks">
+        <li>永久の Founding Member バッジ</li>
+        <li>プラットフォームの進化に直接関与</li>
+        <li>月1回のフィードバックで、一緒にREAL PROOFを作る</li>
+      </ul>
+      <a href="#" class="btn-gold">Founding Memberに挑戦する →</a>
+      <span class="fm-remaining">残り○名</span>
+    </div>
+
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <a href="#">特定商取引法に基づく表記</a>
+  <br><br>
+  &copy; 2026 REAL PROOF ｜ 株式会社Legrand chariot
+</footer>
+
+<script>
+const reveals = document.querySelectorAll('.reveal');
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) entry.target.classList.add('visible');
+  });
+}, { threshold: 0.12 });
+reveals.forEach(el => observer.observe(el));
+</script>
+
+</body>
+</html>
