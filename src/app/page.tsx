@@ -159,7 +159,7 @@ export default function Home() {
 
       {/* ═══ S1: HERO ═══ */}
       <section className="min-h-screen flex flex-col justify-center relative"
-        style={{ background: 'linear-gradient(180deg, #1A1A2E 0%, #0F0F1E 100%)', padding: '5px 24px 48px' }}>
+        style={{ backgroundColor: '#1A1A2E', padding: '5px 24px 48px' }}>
         <div className="max-w-5xl mx-auto w-full">
           <div className="md:flex md:items-center md:gap-16">
             <div className="md:flex-1 text-center md:text-left">
@@ -453,7 +453,7 @@ export default function Home() {
       </section>
 
       {/* ═══ S10: FOUNDING MEMBER ═══ */}
-      <section style={{ background: 'linear-gradient(180deg, #1A1A2E 0%, #1f1f35 100%)', padding: '80px 24px' }}>
+      <section style={{ backgroundColor: '#1A1A2E', padding: '80px 24px' }}>
         <div className={inner}>
           <Reveal>
             <div className="text-center">
