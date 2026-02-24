@@ -24,6 +24,9 @@ export async function GET(request: NextRequest) {
     case 'pro_login':
       context = { type: 'pro_login' };
       break;
+    case 'client_login':
+      context = { type: 'client_login' };
+      break;
     default:
       return NextResponse.json({ error: 'Invalid context' }, { status: 400 });
   }

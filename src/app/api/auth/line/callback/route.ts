@@ -111,6 +111,14 @@ export async function GET(request: NextRequest) {
             line_display_name: profile.displayName,
           }, { onConflict: 'user_id' });
         }
+
+        // clients テーブルに初期レコード作成（client_login の場合）
+        if (context.type === 'client_login') {
+          await supabaseAdmin.from('clients').upsert({
+            user_id: supabaseUid,
+            nickname: profile.displayName,
+          }, { onConflict: 'user_id' });
+        }
       }
 
       // LINE連携マッピングを保存
@@ -139,9 +147,13 @@ export async function GET(request: NextRequest) {
     }
 
     // 6. /auth/line-session にリダイレクト（クライアント側でsignInWithPassword）
+    // context.type に応じてリダイレクト先を決定
+    const redirectPath = context.type === 'client_login' ? '/mycard' : '/dashboard';
+
     const lineSessionUrl = new URL('/auth/line-session', request.url);
     lineSessionUrl.searchParams.set('email', userEmail);
     lineSessionUrl.searchParams.set('token', tempPassword);
+    lineSessionUrl.searchParams.set('next', redirectPath);
 
     return NextResponse.redirect(lineSessionUrl);
 

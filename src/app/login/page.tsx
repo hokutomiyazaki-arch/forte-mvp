@@ -684,7 +684,7 @@ function LoginForm() {
       {/* LINE Login */}
       <button
         onClick={() => {
-          window.location.href = '/api/auth/line?context=pro_login'
+          window.location.href = `/api/auth/line?context=${isClient ? 'client_login' : 'pro_login'}`
         }}
         className="w-full py-3 mb-3 rounded-lg hover:opacity-90 transition flex items-center justify-center gap-2 text-sm font-bold text-white"
         style={{ backgroundColor: '#06C755' }}

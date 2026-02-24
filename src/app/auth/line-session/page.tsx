@@ -12,6 +12,7 @@ export default function LineSessionPage() {
       const params = new URLSearchParams(window.location.search)
       const email = params.get('email')
       const token = params.get('token')
+      const next = params.get('next') || '/dashboard'
 
       if (!email || !token) {
         setError('認証パラメータが不足しています')
@@ -37,7 +38,7 @@ export default function LineSessionPage() {
           setStatus('ログイン成功！リダイレクト中...')
           // URLからトークンを消す（履歴に残さない）
           window.history.replaceState(null, '', '/auth/line-session')
-          window.location.href = '/dashboard'
+          window.location.href = next
         } else {
           setError('セッションの取得に失敗しました')
         }

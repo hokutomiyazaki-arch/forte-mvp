@@ -12,7 +12,8 @@ const LINE_PROFILE_URL = 'https://api.line.me/v2/profile';
 export type LineAuthContext =
   | { type: 'vote'; professional_id: string; qr_token: string }
   | { type: 'pro_register' }
-  | { type: 'pro_login' };
+  | { type: 'pro_login' }
+  | { type: 'client_login' };
 
 // State の暗号化/復号化
 export function encryptState(context: LineAuthContext): string {
