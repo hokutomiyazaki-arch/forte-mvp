@@ -295,7 +295,7 @@ export default function Home() {
 
         {/* ── SP コンテンツ ── */}
         <div className="md:hidden relative flex flex-col justify-end"
-          style={{ zIndex: 1, minHeight: '100vh', padding: '0 24px 80px' }}>
+          style={{ zIndex: 1, minHeight: '100vh', padding: '0 24px 200px' }}>
           {/* ゴールドラベル（上部固定） */}
           <div style={{
             position: 'absolute',
