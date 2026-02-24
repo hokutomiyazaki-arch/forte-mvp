@@ -214,14 +214,14 @@ export default function Home() {
         </div>
 
         {/* ── SP: フル幅背景画像 ── */}
-        <div className="md:hidden absolute inset-0" style={{ zIndex: 0 }}>
+        <div className="md:hidden absolute inset-0" style={{ zIndex: 0, backgroundColor: '#1A1A2E' }}>
           <img
             src="/images/hero_sp.png"
             alt=""
             style={{
               width: '100%',
               height: '100%',
-              objectFit: 'cover',
+              objectFit: 'contain',
               objectPosition: 'center top',
             }}
           />
