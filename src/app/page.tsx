@@ -397,7 +397,8 @@ export default function Home() {
           <Reveal>
             <div className="text-center mb-10">
               <h2 style={{ color: '#1A1A2E', fontSize: '22px', fontWeight: 700, marginBottom: '16px' }}>
-                積み上げた信頼こそがあなたの資産。
+                積み上げた信頼こそがあなたの資産。<br />
+                「あなたはそれを大切にしていない」
               </h2>
               <p style={{ color: '#1A1A2E', fontSize: '15px', marginBottom: '8px' }}>
                 セッションのたびに届く感謝の言葉。<br />
