@@ -497,8 +497,8 @@ export default function Home() {
 // ─── Data ───
 const howItWorksSteps = [
   { num: '01', title: 'Tap', desc: 'セッションの後に\nカードをかざす', sub: '（またはQRを見せる）', icon: 'nfc', mockup: '/images/nfc_tap.png' },
-  { num: '02', title: 'Record', desc: 'クライアントが\n「何が良かったか」を選ぶ', sub: '', icon: 'check', mockup: null },
-  { num: '03', title: 'Save', desc: 'あなたの信頼として\n蓄積される', sub: '', icon: 'chart', mockup: null },
+  { num: '02', title: 'Record', desc: 'クライアントが\n「何が良かったか」を選ぶ', sub: '', icon: 'check', mockup: '/images/record.png' },
+  { num: '03', title: 'Save', desc: 'あなたの信頼として\n蓄積される', sub: '', icon: 'chart', mockup: '/images/save.png' },
 ];
 
 const pillars = [
