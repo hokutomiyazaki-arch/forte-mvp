@@ -149,8 +149,8 @@ export default function Home() {
     <div className="lp-root" style={{ fontFamily: "'Noto Sans JP', sans-serif", lineHeight: 1.8, overflowX: 'hidden' }}>
 
       {/* ═══ S1: HERO ═══ */}
-      <section className="min-h-screen flex flex-col justify-center relative"
-        style={{ padding: '60px 0 48px', overflow: 'hidden' }}>
+      <section className="min-h-screen flex flex-col justify-end relative"
+        style={{ padding: '0 0 48px', overflow: 'hidden' }}>
 
         {/* ── PC: フル幅背景画像 ── */}
         <div className="hidden md:block absolute inset-0" style={{ zIndex: 0 }}>
@@ -172,41 +172,109 @@ export default function Home() {
           }} />
         </div>
 
-        {/* ── SP: 背景グラデーション ── */}
-        <div className="md:hidden absolute inset-0" style={{
-          zIndex: 0,
-          background: 'linear-gradient(180deg, #1A1A2E 0%, #0F0F1E 100%)',
-        }} />
+        {/* ── SP: フル幅背景画像 ── */}
+        <div className="md:hidden absolute inset-0" style={{ zIndex: 0 }}>
+          <img
+            src="/images/hero_sp.png"
+            alt=""
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              objectPosition: 'center top',
+            }}
+          />
+          {/* 下部にグラデーションオーバーレイ（テキスト可読性確保） */}
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'linear-gradient(180deg, transparent 30%, rgba(26,26,46,0.6) 55%, rgba(26,26,46,0.95) 75%, rgba(26,26,46,1) 100%)',
+          }} />
+        </div>
 
-        {/* ── コンテンツ ── */}
-        <div className="max-w-5xl mx-auto w-full relative" style={{ zIndex: 1, padding: '0 24px' }}>
+        {/* ── PC コンテンツ（左寄せ、垂直中央） ── */}
+        <div className="hidden md:flex items-center absolute inset-0" style={{ zIndex: 1, padding: '0 24px' }}>
+          <div className="max-w-5xl mx-auto w-full">
+            {/* ラベル */}
+            <div style={{
+              opacity: heroLoaded ? 1 : 0,
+              transform: heroLoaded ? 'translateY(0)' : 'translateY(12px)',
+              transition: 'all 0.6s ease-out 0.1s',
+              color: '#C4A35A',
+              fontSize: '16px',
+              letterSpacing: '1.5px',
+              fontWeight: 500,
+              marginBottom: '24px',
+            }}>
+              クライアントの信頼が資産に変わるデジタル名刺
+            </div>
+
+            {/* ヒーローコピー */}
+            <h1 style={{
+              opacity: heroLoaded ? 1 : 0,
+              transform: heroLoaded ? 'translateY(0)' : 'translateY(16px)',
+              transition: 'all 0.6s ease-out 0.6s',
+              color: '#FAFAF7',
+              fontSize: 'clamp(28px, 4vw, 38px)',
+              fontWeight: 700,
+              lineHeight: 1.5,
+              marginBottom: '36px',
+              maxWidth: '520px',
+            }}>
+              「あなたに出会えてよかった」<br />
+              <span style={{ fontSize: 'clamp(22px, 3vw, 30px)', fontWeight: 400, opacity: 0.85 }}>
+                ——でもその言葉、誰も知らない。
+              </span>
+            </h1>
+
+            {/* CTA */}
+            <div>
+              <button onClick={() => { window.location.href = '/login'; }} style={{
+                opacity: heroLoaded ? 1 : 0,
+                transition: 'opacity 0.6s ease-out 0.9s',
+                backgroundColor: '#C4A35A',
+                color: '#1A1A2E',
+                fontWeight: 700,
+                fontSize: '18px',
+                padding: '16px 5px',
+                borderRadius: '8px',
+                border: 'none',
+                cursor: 'pointer',
+                width: '100%',
+                maxWidth: '340px',
+                fontFamily: "'Noto Sans JP', sans-serif",
+                animation: heroLoaded ? 'pulseGlow 3s ease-in-out infinite' : 'none',
+                lineHeight: 1.2,
+              }}>
+                <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 0, letterSpacing: 0 }}>
+                  <span>信頼を</span>
+                  <span style={{ margin: '0 -2px' }}>{'\u201C'}</span>
+                  <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', margin: 0, padding: 0, lineHeight: 1 }}>
+                    <span>証明</span>
+                    <span style={{ fontSize: '14px', fontWeight: 600, letterSpacing: '0.5px', lineHeight: 1, marginTop: '4px', opacity: 0.65 }}>プルーフ</span>
+                  </span>
+                  <span style={{ margin: '0 -2px' }}>{'\u201D'}</span>
+                  <span>に変える →</span>
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ── SP コンテンツ（下部に重ねる、センター揃え） ── */}
+        <div className="md:hidden relative text-center" style={{ zIndex: 1, padding: '0 24px', marginTop: 'auto' }}>
           {/* ラベル */}
           <div style={{
             opacity: heroLoaded ? 1 : 0,
             transform: heroLoaded ? 'translateY(0)' : 'translateY(12px)',
             transition: 'all 0.6s ease-out 0.1s',
             color: '#C4A35A',
-            fontSize: '16px',
+            fontSize: '14px',
             letterSpacing: '1.5px',
             fontWeight: 500,
-            marginBottom: '24px',
-            textAlign: 'left',
+            marginBottom: '16px',
           }}>
             クライアントの信頼が資産に変わるデジタル名刺
-          </div>
-
-          {/* SP画像（モバイルのみ） */}
-          <div className="md:hidden mb-8" style={{
-            opacity: heroLoaded ? 1 : 0,
-            transform: heroLoaded ? 'translateY(0)' : 'translateY(24px)',
-            transition: 'all 0.7s ease-out 0.3s',
-          }}>
-            <img
-              src="/images/hero_sp.png"
-              alt="REALPROOFカードを持つ手"
-              className="rounded-xl w-full"
-              style={{ maxWidth: '360px', margin: '0 auto', display: 'block' }}
-            />
           </div>
 
           {/* ヒーローコピー */}
@@ -215,34 +283,32 @@ export default function Home() {
             transform: heroLoaded ? 'translateY(0)' : 'translateY(16px)',
             transition: 'all 0.6s ease-out 0.6s',
             color: '#FAFAF7',
-            fontSize: 'clamp(24px, 6vw, 34px)',
+            fontSize: 'clamp(22px, 6vw, 30px)',
             fontWeight: 700,
             lineHeight: 1.5,
-            marginBottom: '36px',
-            textAlign: 'left',
-            maxWidth: '520px',
+            marginBottom: '28px',
           }}>
             「あなたに出会えてよかった」<br />
-            <span style={{ fontSize: 'clamp(20px, 5vw, 28px)', fontWeight: 400, opacity: 0.85 }}>
+            <span style={{ fontSize: 'clamp(17px, 4.5vw, 24px)', fontWeight: 400, opacity: 0.85 }}>
               ——でもその言葉、誰も知らない。
             </span>
           </h1>
 
           {/* CTA */}
-          <div className="flex flex-col items-start">
+          <div className="flex flex-col items-center">
             <button onClick={() => { window.location.href = '/login'; }} style={{
               opacity: heroLoaded ? 1 : 0,
               transition: 'opacity 0.6s ease-out 0.9s',
               backgroundColor: '#C4A35A',
               color: '#1A1A2E',
               fontWeight: 700,
-              fontSize: '18px',
-              padding: '16px 5px',
+              fontSize: '17px',
+              padding: '14px 5px',
               borderRadius: '8px',
               border: 'none',
               cursor: 'pointer',
               width: '100%',
-              maxWidth: '340px',
+              maxWidth: '300px',
               fontFamily: "'Noto Sans JP', sans-serif",
               animation: heroLoaded ? 'pulseGlow 3s ease-in-out infinite' : 'none',
               lineHeight: 1.2,
@@ -252,7 +318,7 @@ export default function Home() {
                 <span style={{ margin: '0 -2px' }}>{'\u201C'}</span>
                 <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', margin: 0, padding: 0, lineHeight: 1 }}>
                   <span>証明</span>
-                  <span style={{ fontSize: '14px', fontWeight: 600, letterSpacing: '0.5px', lineHeight: 1, marginTop: '4px', opacity: 0.65 }}>プルーフ</span>
+                  <span style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '0.5px', lineHeight: 1, marginTop: '4px', opacity: 0.65 }}>プルーフ</span>
                 </span>
                 <span style={{ margin: '0 -2px' }}>{'\u201D'}</span>
                 <span>に変える →</span>
@@ -264,7 +330,9 @@ export default function Home() {
         {/* スクロールインジケーター */}
         <div className="scroll-bounce absolute bottom-8 left-1/2 -translate-x-1/2"
           style={{ opacity: heroLoaded ? 0.35 : 0, transition: 'opacity 1s ease-out 1.5s', zIndex: 1 }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C4A35A" strokeWidth="1.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C4A35A" strokeWidth="1.5">
+            <path d="M12 5v14M5 12l7 7 7-7"/>
+          </svg>
         </div>
       </section>
 
