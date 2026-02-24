@@ -29,7 +29,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ja">
+    <html lang="ja" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -38,7 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-screen" style={{ fontFamily: "'Noto Sans JP', 'Inter', sans-serif", fontWeight: 500, color: '#1A1A2E', WebkitFontSmoothing: 'antialiased', MozOsxFontSmoothing: 'grayscale' as any }}>
+      <body className="min-h-screen" suppressHydrationWarning style={{ fontFamily: "'Noto Sans JP', 'Inter', sans-serif", fontWeight: 500, color: '#1A1A2E', WebkitFontSmoothing: 'antialiased', MozOsxFontSmoothing: 'grayscale' as any }}>
         <Navbar />
         <main className="max-w-5xl mx-auto px-4 py-8">
           {children}
