@@ -29,18 +29,7 @@ export default function AuthCallback() {
       window.location.href = '/login?error=timeout'
     }, 15000)
 
-    // リダイレクト先URLを構築するヘルパー
-    function buildRedirectUrl() {
-      const params = new URLSearchParams(window.location.search)
-      const role = params.get('role') || 'pro'
-      const nickname = params.get('nickname') || ''
-      const redirectParams = new URLSearchParams()
-      redirectParams.set('role', role)
-      if (nickname) redirectParams.set('nickname', nickname)
-      return '/login?' + redirectParams.toString()
-    }
-
-    // セッション確定 → localStorage永続化 → リダイレクト
+    // セッション確定 → localStorage永続化 → プロ判定 → リダイレクト
     async function handleSessionConfirmed(session: any) {
       if (redirecting) return
       redirecting = true
@@ -64,7 +53,7 @@ export default function AuthCallback() {
             (k: string) => k.startsWith('sb-') && k.endsWith('-auth-token')
           ) || 'sb-' + (window.location.hostname.split('.')[0] || 'app') + '-auth-token'
 
-          const payload = JSON.parse(atob(session.access_token.split('.')[1]))
+          const jwtPayload = JSON.parse(atob(session.access_token.split('.')[1]))
           const sessionData = {
             access_token: session.access_token,
             refresh_token: session.refresh_token,
@@ -72,12 +61,12 @@ export default function AuthCallback() {
             expires_in: session.expires_in || 3600,
             token_type: 'bearer',
             user: {
-              id: payload.sub,
-              email: payload.email,
-              app_metadata: payload.app_metadata || {},
-              user_metadata: payload.user_metadata || {},
-              aud: payload.aud,
-              role: payload.role,
+              id: jwtPayload.sub,
+              email: jwtPayload.email,
+              app_metadata: jwtPayload.app_metadata || {},
+              user_metadata: jwtPayload.user_metadata || {},
+              aud: jwtPayload.aud,
+              role: jwtPayload.role,
             }
           }
           localStorage.setItem(storageKey, JSON.stringify(sessionData))
@@ -104,12 +93,78 @@ export default function AuthCallback() {
       }
 
       console.log('[auth/callback] localStorage confirmed:', confirmed)
-      setDebugInfo(`callback: persisted=${confirmed} → redirecting...`)
+      setDebugInfo(`callback: persisted=${confirmed} → determining redirect...`)
 
-      // 3. リダイレクト
-      const url = buildRedirectUrl()
-      console.log('[auth/callback] redirecting to:', url)
-      window.location.href = url
+      // 3. URLパラメータから redirect 先を確認
+      const params = new URLSearchParams(window.location.search)
+      const redirect = params.get('redirect')
+
+      if (redirect) {
+        // 明示的なリダイレクト先がある場合はそこに遷移
+        console.log('[auth/callback] redirecting to explicit redirect:', redirect)
+        window.location.href = redirect
+        return
+      }
+
+      // 4. professionals テーブルでプロ判定してリダイレクト先を決定
+      const userId = session.user?.id
+      const role = params.get('role') || 'pro'
+
+      if (userId) {
+        try {
+          const { data: pro } = await supabase
+            .from('professionals')
+            .select('id')
+            .eq('user_id', userId)
+            .maybeSingle()
+
+          if (pro) {
+            console.log('[auth/callback] → /dashboard (existing pro)')
+            window.location.href = '/dashboard'
+            return
+          }
+
+          // クライアントとしてログインした場合
+          if (role === 'client') {
+            const { data: clientData } = await supabase
+              .from('clients')
+              .select('id')
+              .eq('user_id', userId)
+              .maybeSingle()
+
+            if (clientData) {
+              console.log('[auth/callback] → /mycard (existing client)')
+              window.location.href = '/mycard'
+              return
+            }
+
+            // 新規クライアント: clients テーブルに登録
+            const nickname = params.get('nickname') ||
+              session.user?.user_metadata?.full_name ||
+              session.user?.email?.split('@')[0] || 'ユーザー'
+            await supabase.from('clients').upsert({
+              user_id: userId,
+              nickname: nickname,
+            }, { onConflict: 'user_id' })
+
+            console.log('[auth/callback] → /mycard (new client)')
+            window.location.href = '/mycard'
+            return
+          }
+
+          // role=pro だがprofessionalsにいない → 新規プロ
+          console.log('[auth/callback] → /dashboard (new pro)')
+          window.location.href = '/dashboard'
+        } catch (dbErr) {
+          console.error('[auth/callback] DB query failed:', dbErr)
+          // DB失敗時はroleで判断
+          window.location.href = role === 'client' ? '/mycard' : '/dashboard'
+        }
+      } else {
+        // userId取得できない場合のフォールバック
+        console.log('[auth/callback] no userId, redirecting by role:', role)
+        window.location.href = role === 'client' ? '/mycard' : '/dashboard'
+      }
     }
 
     // onAuthStateChange でセッション検知

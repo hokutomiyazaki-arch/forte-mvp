@@ -4,6 +4,7 @@ import { useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { Professional, getRewardLabel } from '@/lib/types'
+import { buildLineAuthUrlClient } from '@/lib/line-auth-client'
 import { Suspense } from 'react'
 // AuthMethodSelector は login ページで使用。投票ページはフォーム内のためインライン実装
 
@@ -354,10 +355,15 @@ function VoteForm() {
       return
     }
     setError('')
-    // sessionStorageではなくstateパラメータで投票データを渡す
+    // クライアントサイドでLINE認証URLを生成（iOS Universal Link対応）
     const voteData = buildVoteData()
-    const voteDataParam = encodeURIComponent(JSON.stringify(voteData))
-    window.location.href = `/api/auth/line?context=vote&professional_id=${proId}&qr_token=${qrToken || ''}&vote_data=${voteDataParam}`
+    const lineUrl = buildLineAuthUrlClient({
+      type: 'vote',
+      professional_id: proId,
+      qr_token: qrToken || '',
+      vote_data: voteData,
+    })
+    window.location.href = lineUrl
   }
 
   // ── Google認証で投票 ──

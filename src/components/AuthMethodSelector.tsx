@@ -2,6 +2,7 @@
 'use client';
 
 import { useState } from 'react';
+import { buildLineAuthUrlClient } from '@/lib/line-auth-client';
 
 interface AuthMethodSelectorProps {
   // 投票用 or プロ登録/ログイン用
@@ -39,13 +40,10 @@ export default function AuthMethodSelector({
   const [password, setPassword] = useState('');
   const [showEmailForm, setShowEmailForm] = useState(false);
 
-  // LINE認証開始
+  // LINE認証開始（クライアントサイドでURL生成 → iOS Universal Link対応）
   const handleLineAuth = () => {
-    if (mode === 'vote' && professionalId && qrToken) {
-      // 投票データをsessionStorageに保存してからリダイレクト
-      window.location.href = `/api/auth/line?context=vote&professional_id=${professionalId}&qr_token=${qrToken}`;
-    } else if (mode === 'pro_auth') {
-      window.location.href = '/api/auth/line?context=pro_login';
+    if (mode === 'pro_auth') {
+      window.location.href = buildLineAuthUrlClient({ type: 'pro_login' });
     }
   };
 

@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { clearAllAuthStorage } from '@/lib/auth-helper'
+import { buildLineAuthUrlClient } from '@/lib/line-auth-client'
 import { Suspense } from 'react'
 
 const MAIL_LINKS: Record<string, { label: string; url: string }> = {
@@ -472,7 +473,8 @@ function LoginForm() {
   async function handleGoogleLogin() {
     setError('')
     setGoogleLoading(true)
-    const redirectUrl = window.location.origin + '/login?role=' + role
+    // auth/callback 経由でセッション確定後にリダイレクト（"/"には絶対に飛ばさない）
+    const redirectUrl = window.location.origin + '/auth/callback?role=' + role
       + (redirectTo ? '&redirect=' + encodeURIComponent(redirectTo) : '')
       + (isClient && nickname ? '&nickname=' + encodeURIComponent(nickname) : '')
     const { error: err } = await supabase.auth.signInWithOAuth({
@@ -735,7 +737,7 @@ function LoginForm() {
       {/* LINE Login */}
       <button
         onClick={() => {
-          window.location.href = `/api/auth/line?context=${isClient ? 'client_login' : 'pro_login'}`
+          window.location.href = buildLineAuthUrlClient({ type: isClient ? 'client_login' : 'pro_login' })
         }}
         className="w-full py-3 mb-3 rounded-lg hover:opacity-90 transition flex items-center justify-center gap-2 text-sm font-bold text-white"
         style={{ backgroundColor: '#06C755' }}
