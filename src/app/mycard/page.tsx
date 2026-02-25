@@ -553,7 +553,9 @@ function MyCardContent() {
         </button>
       </div>
       {userEmail && (
-        <p className="text-sm text-gray-400 mb-6">{userEmail}</p>
+        <p className="text-sm text-gray-400 mb-6 truncate max-w-[300px]">
+          {userEmail.startsWith('line_') && userEmail.endsWith('@line.realproof.jp') ? 'LINE連携済み' : userEmail}
+        </p>
       )}
 
       {/* 設定パネル */}

@@ -896,8 +896,12 @@ export default function DashboardPage() {
           {user?.email && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">登録メールアドレス</label>
-              <input value={user.email} readOnly disabled
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed" />
+              {user.email.startsWith('line_') && user.email.endsWith('@line.realproof.jp') ? (
+                <p className="px-4 py-2 text-sm text-green-600 font-medium">LINE連携済み</p>
+              ) : (
+                <input value={user.email} readOnly disabled
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed truncate" />
+              )}
             </div>
           )}
 
@@ -1000,7 +1004,9 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-2xl font-bold text-[#1A1A2E]">ダッシュボード</h1>
           {user?.email && (
-            <p className="text-sm text-gray-400 mt-1">{user.email}</p>
+            <p className="text-sm text-gray-400 mt-1 truncate max-w-[260px]">
+              {user.email.startsWith('line_') && user.email.endsWith('@line.realproof.jp') ? 'LINE連携済み' : user.email}
+            </p>
           )}
         </div>
         <button onClick={() => setEditing(true)} className="text-sm text-[#C4A35A] hover:underline">
