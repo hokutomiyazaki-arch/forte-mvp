@@ -2,16 +2,19 @@ import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 
-// サーバーサイドなのでService Role Keyを使用
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// サーバーサイドなのでService Role Keyを使用（遅延初期化）
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { card_uid: string } }
 ) {
+  const supabase = getSupabase()
   const { card_uid } = params
 
   try {
