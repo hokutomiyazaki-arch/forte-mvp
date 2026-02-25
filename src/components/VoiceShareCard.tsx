@@ -3,15 +3,7 @@
 import { useState } from 'react'
 import html2canvas from 'html2canvas'
 import { createClient } from '@/lib/supabase'
-
-// ═══ Color schemes ═══
-const cardColors = [
-  { id: 'cream', label: 'クリーム', bg: 'linear-gradient(170deg, #FAF8F4 0%, #F3EFE7 100%)', border: '#E8E4DC', text: '#1A1A2E', sub: '#888888', gold: '#C4A35A' },
-  { id: 'white', label: 'ホワイト', bg: '#FFFFFF', border: '#E8E4DC', text: '#1A1A2E', sub: '#888888', gold: '#C4A35A' },
-  { id: 'dark', label: 'ダーク', bg: '#1A1A2E', border: '#2A2A3E', text: '#FFFFFF', sub: '#AAAAAA', gold: '#C4A35A' },
-  { id: 'navy', label: 'ネイビー', bg: '#1B2838', border: '#2A3848', text: '#FFFFFF', sub: '#AAAAAA', gold: '#C4A35A' },
-  { id: 'sage', label: 'セージ', bg: '#E8EDE4', border: '#D0D8CC', text: '#2D3A2D', sub: '#6B756B', gold: '#8B7B3A' },
-]
+import { VoiceCardTheme, hexToRgba } from '@/lib/voiceCardThemes'
 
 // ═══ Props ═══
 interface VoiceShareModalProps {
@@ -28,20 +20,25 @@ interface VoiceShareModalProps {
   proAreaDescription: string | null
   totalProofs: number
   topStrengths: { label: string; count: number }[]
+  theme: VoiceCardTheme
+  showProof: boolean
+  showProInfo: boolean
 }
 
 // ═══ シェアプレビューモーダル ═══
 export default function VoiceShareModal({
   isOpen, onClose, voice, phraseId, phraseText,
   proId, proName, proTitle, proPhotoUrl,
+  totalProofs, topStrengths,
+  theme, showProof, showProInfo,
 }: VoiceShareModalProps) {
   const [saving, setSaving] = useState(false)
-  const [selectedColor, setSelectedColor] = useState('cream')
   const supabase = createClient()
 
   if (!isOpen) return null
 
-  const colorScheme = cardColors.find(c => c.id === selectedColor) || cardColors[0]
+  // トッププルーフ: 最も票数が多い項目
+  const topProof = topStrengths.length > 0 ? topStrengths[0] : null
 
   const handleShare = async () => {
     setSaving(true)
@@ -112,7 +109,7 @@ export default function VoiceShareModal({
           vote_id: voice.id,
           professional_id: proId,
           phrase_id: phraseId,
-          include_profile: false,
+          include_profile: showProInfo,
           hash,
         })
         setSaving(false)
@@ -137,7 +134,7 @@ export default function VoiceShareModal({
       vote_id: voice.id,
       professional_id: proId,
       phrase_id: phraseId,
-      include_profile: false,
+      include_profile: showProInfo,
       hash,
     })
     setSaving(false)
@@ -156,75 +153,27 @@ export default function VoiceShareModal({
         onClick={e => e.stopPropagation()}
         style={{ maxWidth: 380, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}
       >
-        {/* カラーピッカー */}
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#ccc', marginBottom: 8, fontFamily: "'Inter', sans-serif" }}>
-            カードの色
-          </div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            {cardColors.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => setSelectedColor(c.id)}
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: '50%',
-                  background: c.bg,
-                  border: selectedColor === c.id
-                    ? '3px solid #C4A35A'
-                    : '2px solid #555',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  padding: 0,
-                }}
-              />
-            ))}
-          </div>
-        </div>
-
         {/* カードプレビュー */}
         <div style={{ display: 'flex', justifyContent: 'center', padding: '0 0 0' }}>
           <div id="voice-card-for-export" style={{
-            background: colorScheme.bg,
-            border: `1px solid ${colorScheme.border}`,
+            background: `linear-gradient(170deg, ${theme.bg} 0%, ${theme.bg2} 100%)`,
             borderRadius: 18,
             padding: '32px 26px',
             width: 340,
-            fontFamily: "'Inter', sans-serif",
+            fontFamily: "'Inter', 'Noto Sans JP', sans-serif",
             display: 'flex',
             flexDirection: 'column',
             position: 'relative',
             overflow: 'hidden',
           }}>
-            {/* THANK YOU header */}
-            <div style={{ textAlign: 'center', marginBottom: 20 }}>
-              <div style={{
-                fontSize: 22,
-                fontWeight: 800,
-                color: colorScheme.text,
-                letterSpacing: 1,
-              }}>
-                THANK YOU
-              </div>
-              <div style={{
-                fontSize: 12,
-                fontWeight: 700,
-                color: colorScheme.sub,
-                marginTop: 4,
-              }}>
-                クライアントからの嬉しいコメント!!
-              </div>
-            </div>
-
             {/* 引用符 */}
-            <div style={{ fontSize: 48, color: `${colorScheme.gold}4D`, fontFamily: 'Georgia, serif', lineHeight: 1 }}>&ldquo;</div>
+            <div style={{ fontSize: 56, color: hexToRgba(theme.accent, 0.22), fontFamily: 'Georgia, serif', lineHeight: 1 }}>&ldquo;</div>
 
             {/* コメント */}
             <div style={{
-              color: colorScheme.text,
-              fontSize: 20,
-              fontWeight: 700,
+              color: theme.text,
+              fontSize: 16,
+              fontWeight: 600,
               lineHeight: 1.9,
               marginTop: 8,
               marginBottom: 16,
@@ -233,58 +182,78 @@ export default function VoiceShareModal({
             </div>
 
             {/* 区切り線 */}
-            <div style={{ height: 1, background: `${colorScheme.gold}4D`, margin: '4px 0 12px' }} />
+            <div style={{ height: 1, background: hexToRgba(theme.accent, 0.12), margin: '4px 0 12px' }} />
 
             {/* 感謝フレーズ */}
             <div style={{
-              color: colorScheme.gold, fontSize: 11, fontStyle: 'italic', fontWeight: 700,
+              color: theme.accent, fontSize: 12, fontWeight: 500,
               marginBottom: 20,
             }}>
               ── {phraseText}
             </div>
 
-            {/* プロ情報 */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
-              {proPhotoUrl ? (
-                <img src={proPhotoUrl} alt={proName}
-                  style={{
-                    width: 56, height: 56, borderRadius: '50%', objectFit: 'cover',
-                    border: '2px solid rgba(0,0,0,0.08)', flexShrink: 0,
-                  }} />
-              ) : (
-                <div style={{
-                  width: 56, height: 56, borderRadius: '50%',
-                  background: colorScheme.text === '#FFFFFF' ? '#333' : '#1A1A2E',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#fff', fontSize: 22, fontWeight: 'bold', flexShrink: 0,
-                }}>
-                  {proName.charAt(0)}
+            {/* プロ情報 (showProInfo ON時のみ) */}
+            {showProInfo && (
+              <>
+                <div style={{ height: 1, background: hexToRgba(theme.accent, 0.12), margin: '0 0 14px' }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+                  {proPhotoUrl ? (
+                    <img src={proPhotoUrl} alt={proName}
+                      style={{
+                        width: 48, height: 48, borderRadius: '50%', objectFit: 'cover',
+                        border: `2px solid ${hexToRgba(theme.accent, 0.2)}`, flexShrink: 0,
+                      }} />
+                  ) : (
+                    <div style={{
+                      width: 48, height: 48, borderRadius: '50%',
+                      background: hexToRgba(theme.accent, 0.15),
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: theme.accent, fontSize: 20, fontWeight: 'bold', flexShrink: 0,
+                    }}>
+                      {proName.charAt(0)}
+                    </div>
+                  )}
+                  <div>
+                    <div style={{
+                      fontSize: 13, fontWeight: 600, color: theme.text,
+                    }}>
+                      {proName}
+                    </div>
+                    <div style={{
+                      fontSize: 10, fontWeight: 500, color: theme.sub,
+                      marginTop: 2,
+                    }}>
+                      {proTitle}
+                    </div>
+                  </div>
                 </div>
-              )}
-              <div>
-                <div style={{
-                  fontSize: 15, fontWeight: 800, color: colorScheme.text,
-                  fontFamily: "'Inter', sans-serif",
-                }}>
-                  {proName}
-                </div>
-                <div style={{
-                  fontSize: 11, fontWeight: 600, color: colorScheme.gold,
-                  fontFamily: "'Inter', sans-serif",
-                  marginTop: 2,
-                }}>
-                  {proTitle}
-                </div>
-              </div>
-            </div>
+              </>
+            )}
 
-            {/* Logo */}
-            <div style={{ fontFamily: "'Inter', sans-serif" }}>
-              <span style={{ fontWeight: 400, letterSpacing: 2, color: colorScheme.text, fontSize: 13 }}>
-                REAL
+            {/* トッププルーフバッジ (showProof ON + データあり) */}
+            {showProof && topProof && (
+              <div style={{
+                background: hexToRgba(theme.accent, 0.08),
+                border: `1px solid ${hexToRgba(theme.accent, 0.2)}`,
+                borderRadius: 8,
+                padding: '8px 12px',
+                marginBottom: 16,
+                textAlign: 'center',
+              }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: theme.accent }}>
+                  ◆ {topProof.count}人が「{topProof.label}」と証明
+                </span>
+              </div>
+            )}
+
+            {/* 区切り線 + フッター */}
+            <div style={{ height: 1, background: hexToRgba(theme.accent, 0.12), margin: '0 0 12px' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 9, color: theme.sub }}>
+                強みが、あなたを定義する。
               </span>
-              <span style={{ fontWeight: 800, letterSpacing: 2, color: colorScheme.text, fontSize: 13 }}>
-                PROOF
+              <span style={{ fontSize: 9, color: theme.sub, fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>
+                realproof.jp
               </span>
             </div>
           </div>
