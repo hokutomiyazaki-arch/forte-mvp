@@ -66,8 +66,8 @@ export default function AuthMethodSelector({
     }
   };
 
-  const defaultLineText = mode === 'vote' ? 'LINEで送信する' : 'LINEで登録 / ログイン';
-  const defaultGoogleText = mode === 'vote' ? 'Googleで送信する' : 'Googleで登録 / ログイン';
+  const defaultLineText = mode === 'vote' ? 'LINE連携で投票する' : 'LINEで登録 / ログイン';
+  const defaultGoogleText = mode === 'vote' ? 'Google連携で投票する' : 'Googleで登録 / ログイン';
   const defaultEmailText = mode === 'vote' ? '送信する' : '登録する';
 
   return (

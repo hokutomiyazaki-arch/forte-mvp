@@ -8,9 +8,21 @@ const LINE_AUTH_URL = 'https://access.line.me/oauth2/v2.1/authorize';
 const LINE_TOKEN_URL = 'https://api.line.me/oauth2/v2.1/token';
 const LINE_PROFILE_URL = 'https://api.line.me/v2/profile';
 
+// 投票データ型（LINE/Google認証時にstateパラメータで受け渡す）
+export type VoteData = {
+  selected_proof_ids: string[] | null;
+  selected_personality_ids: string[] | null;
+  comment: string | null;
+  vote_type: string;
+  professional_id: string;
+  session_count: string;
+  selected_reward_id?: string | null;
+  qr_token?: string | null;
+};
+
 // コンテキスト型定義
 export type LineAuthContext =
-  | { type: 'vote'; professional_id: string; qr_token: string }
+  | { type: 'vote'; professional_id: string; qr_token: string; vote_data: VoteData }
   | { type: 'pro_register' }
   | { type: 'pro_login' }
   | { type: 'client_login' };

@@ -12,10 +12,16 @@ export async function GET(request: NextRequest) {
     case 'vote': {
       const professional_id = searchParams.get('professional_id');
       const qr_token = searchParams.get('qr_token');
-      if (!professional_id || !qr_token) {
-        return NextResponse.json({ error: 'Missing professional_id or qr_token' }, { status: 400 });
+      const vote_data_str = searchParams.get('vote_data');
+      if (!professional_id || !qr_token || !vote_data_str) {
+        return NextResponse.json({ error: 'Missing professional_id, qr_token or vote_data' }, { status: 400 });
       }
-      context = { type: 'vote', professional_id, qr_token };
+      try {
+        const vote_data = JSON.parse(decodeURIComponent(vote_data_str));
+        context = { type: 'vote', professional_id, qr_token, vote_data };
+      } catch {
+        return NextResponse.json({ error: 'Invalid vote_data' }, { status: 400 });
+      }
       break;
     }
     case 'pro_register':

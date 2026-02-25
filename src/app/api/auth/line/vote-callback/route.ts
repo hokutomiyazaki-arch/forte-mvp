@@ -93,19 +93,64 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 6. 投票確認ページへリダイレクト
-    // sessionStorageから投票データを取得してDBに保存する
-    const confirmUrl = new URL(`/vote/${context.professional_id}/confirm`, request.url);
-    confirmUrl.searchParams.set('auth_method', 'line');
-    confirmUrl.searchParams.set('auth_provider_id', profile.userId);
-    confirmUrl.searchParams.set('auth_display_name', profile.displayName);
-    if (lineEmail) {
-      confirmUrl.searchParams.set('client_email', lineEmail);
-    }
-    confirmUrl.searchParams.set('professional_id', context.professional_id);
-    confirmUrl.searchParams.set('qr_token', context.qr_token);
+    // 6. stateから投票データを取得して直接DBに保存
+    const voteData = context.vote_data;
+    const voter_email = lineEmail || `line_${profile.userId}@line.realproof.jp`;
 
-    return NextResponse.redirect(confirmUrl);
+    const { data: insertedVote, error: voteError } = await supabaseAdmin
+      .from('votes')
+      .insert({
+        professional_id: context.professional_id,
+        voter_email: voter_email,
+        client_user_id: null,
+        session_count: voteData.session_count || 'first',
+        vote_type: voteData.vote_type || 'proof',
+        selected_proof_ids: voteData.selected_proof_ids || null,
+        selected_personality_ids: voteData.selected_personality_ids || null,
+        selected_reward_id: voteData.selected_reward_id || null,
+        comment: voteData.comment || null,
+        qr_token: context.qr_token || null,
+        status: 'confirmed',
+        auth_method: 'line',
+        auth_provider_id: profile.userId,
+        auth_display_name: profile.displayName,
+      })
+      .select()
+      .maybeSingle();
+
+    if (voteError) {
+      console.error('Vote insert error:', voteError);
+      const errorType = voteError.code === '23505' ? 'already_voted' : 'vote_save_failed';
+      return NextResponse.redirect(
+        new URL(`/vote/${context.professional_id}?token=${context.qr_token}&error=${errorType}`, request.url)
+      );
+    }
+
+    // リワード選択がある場合、client_rewardsに保存
+    if (voteData.selected_reward_id && insertedVote) {
+      await supabaseAdmin.from('client_rewards').insert({
+        vote_id: insertedVote.id,
+        reward_id: voteData.selected_reward_id,
+        professional_id: context.professional_id,
+        client_email: voter_email,
+        status: 'pending',
+      });
+    }
+
+    // vote_emails にメアドを保存（分析用）
+    if (lineEmail) {
+      await supabaseAdmin.from('vote_emails').insert({
+        email: lineEmail,
+        professional_id: context.professional_id,
+        source: 'vote',
+      }); // 重複エラーは無視（insertはエラーを返すだけで例外にならない）
+    }
+
+    // 投票完了ページへリダイレクト
+    const hasReward = voteData.selected_reward_id ? '1' : '0';
+    return NextResponse.redirect(
+      new URL(`/vote-confirmed?proId=${context.professional_id}&reward=${hasReward}`, request.url)
+    );
 
   } catch (err) {
     console.error('LINE vote callback error:', err);
