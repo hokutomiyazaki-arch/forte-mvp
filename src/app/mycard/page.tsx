@@ -67,6 +67,7 @@ function MyCardContent() {
   const [timedOut, setTimedOut] = useState(false)
   const [isPasswordReset, setIsPasswordReset] = useState(false)
   const [resetLinkError, setResetLinkError] = useState(false)
+  const [isLineUser, setIsLineUser] = useState(false)
   const passwordSectionRef = useRef<HTMLDivElement>(null)
 
   // データ取得（セッション確立後に呼ぶ）
@@ -217,6 +218,10 @@ function MyCardContent() {
       if (session && user) {
         const email = user.email || ''
         setUserEmail(email)
+        // LINE認証ユーザー判定
+        const lineUser = (email.startsWith('line_') && email.endsWith('@line.realproof.jp')) || !!user.user_metadata?.line_user_id
+        setIsLineUser(lineUser)
+        if (lineUser) setIsPasswordReset(false) // LINEユーザーにはパスワードリセット不要
         setAuthMode('ready')
         await loadData(email, user.id)
       } else {
@@ -533,7 +538,7 @@ function MyCardContent() {
 
   return (
     <div className="max-w-lg mx-auto px-4 py-8">
-      {isPasswordReset && (
+      {isPasswordReset && !isLineUser && (
         <div className="bg-[#C4A35A]/10 border border-[#C4A35A] rounded-lg p-4 mb-4 text-center">
           <p className="text-sm font-bold text-[#1A1A2E]">パスワードを再設定してください</p>
           <p className="text-xs text-gray-500 mt-1">下のパスワード変更欄から新しいパスワードを設定できます</p>
@@ -561,6 +566,13 @@ function MyCardContent() {
       {/* 設定パネル */}
       {showSettings && (
         <div ref={passwordSectionRef} className="bg-white border border-gray-200 rounded-xl p-5 mb-6 shadow-sm">
+          {isLineUser ? (
+            <div className="text-center">
+              <p className="text-sm text-green-600 font-medium mb-1">LINE連携済み</p>
+              <p className="text-xs text-gray-500">LINEアカウントでログインしています</p>
+            </div>
+          ) : (
+          <>
           <h2 className="text-sm font-bold text-[#1A1A2E] mb-4">パスワード変更</h2>
           <form onSubmit={handlePasswordChange} className="space-y-3">
             <input
@@ -589,6 +601,8 @@ function MyCardContent() {
               {changingPassword ? '変更中...' : 'パスワードを変更'}
             </button>
           </form>
+          </>
+          )}
         </div>
       )}
 
