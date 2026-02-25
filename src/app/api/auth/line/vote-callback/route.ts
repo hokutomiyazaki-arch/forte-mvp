@@ -146,11 +146,106 @@ export async function GET(request: NextRequest) {
       }); // 重複エラーは無視（insertはエラーを返すだけで例外にならない）
     }
 
-    // 投票完了ページへリダイレクト
-    const hasReward = voteData.selected_reward_id ? '1' : '0';
-    return NextResponse.redirect(
-      new URL(`/vote-confirmed?proId=${context.professional_id}&reward=${hasReward}`, request.url)
-    );
+    // 7. クライアントセッションを作成（LINE投票後もログイン状態にする）
+    const voteId = insertedVote?.id || '';
+    const confirmPath = `/vote-confirmed?pro=${context.professional_id}&vote_id=${voteId}`;
+
+    // line_auth_mappings から既存ユーザーを確認
+    const { data: existingMapping } = await supabaseAdmin
+      .from('line_auth_mappings')
+      .select('supabase_uid')
+      .eq('line_user_id', profile.userId)
+      .maybeSingle();
+
+    let supabaseUid: string | null = null;
+
+    if (existingMapping?.supabase_uid) {
+      supabaseUid = existingMapping.supabase_uid;
+      // LINE情報を更新
+      await supabaseAdmin.from('line_auth_mappings').update({
+        line_display_name: profile.displayName,
+        line_picture_url: profile.pictureUrl,
+        line_email: lineEmail,
+        updated_at: new Date().toISOString(),
+      }).eq('line_user_id', profile.userId);
+    } else {
+      // 新規クライアントユーザー作成
+      const clientEmail = lineEmail || `line_${profile.userId}@line.realproof.jp`;
+      const clientPassword = crypto.randomUUID();
+
+      // メールで既存ユーザーを確認
+      let existingUserId: string | null = null;
+      if (lineEmail) {
+        const { data: users } = await supabaseAdmin.auth.admin.listUsers();
+        const userList = users?.users || [];
+        const found = userList.find((u: any) => u.email === lineEmail);
+        if (found) existingUserId = found.id;
+      }
+
+      if (existingUserId) {
+        supabaseUid = existingUserId;
+      } else {
+        const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+          email: clientEmail,
+          password: clientPassword,
+          email_confirm: true,
+          user_metadata: {
+            line_user_id: profile.userId,
+            display_name: profile.displayName,
+            avatar_url: profile.pictureUrl,
+          },
+        });
+        if (!createError && newUser.user) {
+          supabaseUid = newUser.user.id;
+        }
+      }
+
+      if (supabaseUid) {
+        // clients テーブルに保存
+        await supabaseAdmin.from('clients').upsert({
+          user_id: supabaseUid,
+          nickname: profile.displayName,
+        }, { onConflict: 'user_id' });
+
+        // line_auth_mappings に保存
+        await supabaseAdmin.from('line_auth_mappings').upsert({
+          line_user_id: profile.userId,
+          line_display_name: profile.displayName,
+          line_email: lineEmail,
+          line_picture_url: profile.pictureUrl,
+          supabase_uid: supabaseUid,
+        }, { onConflict: 'line_user_id' });
+      }
+    }
+
+    // セッション作成 → line-session 経由で vote-confirmed にリダイレクト
+    if (supabaseUid) {
+      // 投票の client_user_id を更新
+      if (insertedVote?.id) {
+        await supabaseAdmin.from('votes').update({
+          client_user_id: supabaseUid,
+        }).eq('id', insertedVote.id);
+      }
+
+      const { data: userData } = await supabaseAdmin.auth.admin.getUserById(supabaseUid);
+      const userEmail = userData.user?.email || '';
+
+      const tempPassword = crypto.randomUUID();
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(supabaseUid, {
+        password: tempPassword,
+      });
+
+      if (!updateError) {
+        const lineSessionUrl = new URL('/auth/line-session', request.url);
+        lineSessionUrl.searchParams.set('email', userEmail);
+        lineSessionUrl.searchParams.set('token', tempPassword);
+        lineSessionUrl.searchParams.set('next', confirmPath);
+        return NextResponse.redirect(lineSessionUrl);
+      }
+    }
+
+    // セッション作成に失敗してもvote-confirmedには遷移させる
+    return NextResponse.redirect(new URL(confirmPath, request.url));
 
   } catch (err) {
     console.error('LINE vote callback error:', err);
