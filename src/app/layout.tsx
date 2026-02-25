@@ -3,6 +3,9 @@ import './globals.css'
 import Navbar from '@/components/Navbar'
 import { AuthProvider } from '@/contexts/AuthContext'
 
+// 全ページをダイナミックレンダリングにする（env変数がビルド時に不在のため）
+export const dynamic = 'force-dynamic'
+
 export const metadata: Metadata = {
   title: 'REALPROOF — 強みが、あなたを定義する。',
   description: 'クライアントの信頼が資産に変わるデジタル名刺。対面のプロフェッショナルのための強み証明プラットフォーム。',

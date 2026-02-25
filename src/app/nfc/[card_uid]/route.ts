@@ -2,6 +2,8 @@ import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 
+export const dynamic = 'force-dynamic'
+
 // サーバーサイドなのでService Role Keyを使用（遅延初期化）
 function getSupabase() {
   return createClient(

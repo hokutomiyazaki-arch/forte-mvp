@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { decryptState, exchangeCodeForToken, getLineProfile, extractEmailFromIdToken } from '@/lib/line-auth';
 
+export const dynamic = 'force-dynamic'
+
 // Supabase Admin Client（サーバーサイド専用・遅延初期化）
 function getSupabaseAdmin() {
   return createClient(

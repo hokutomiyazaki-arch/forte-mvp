@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+export const dynamic = 'force-dynamic'
+
 // MVP: クーポンメール送信API
 // 本番ではResend/SendGrid等を使うが、MVPではSupabaseのメール機能 or console.logで代替
 export async function POST(req: NextRequest) {

@@ -1,46 +1,230 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
-import Cropper from 'react-easy-crop';
-import type { Area, Point } from 'react-easy-crop';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 
 interface ImageCropperProps {
-  imageSrc: string;           // アップロードされた画像のdata URL
-  onCropComplete: (croppedBlob: Blob) => void;  // トリミング後のBlobを親に渡す
-  onCancel: () => void;       // キャンセル
-  cropShape?: 'round' | 'rect';  // 円形 or 四角形（デフォルト: round）
-  aspectRatio?: number;       // アスペクト比（デフォルト: 1 = 正方形）
+  imageSrc: string;
+  onCropComplete: (croppedBlob: Blob) => void;
+  onCancel: () => void;
+  cropShape?: 'round' | 'rect';
+  aspectRatio?: number;
 }
 
 export default function ImageCropper({
   imageSrc,
   onCropComplete,
   onCancel,
-  cropShape = 'round',
-  aspectRatio = 1,
 }: ImageCropperProps) {
-  const [crop, setCrop] = useState<Point>({ x: 0, y: 0 });
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const imageRef = useRef<HTMLImageElement | null>(null);
+
   const [zoom, setZoom] = useState(1);
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isProcessing, setIsProcessing] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
 
-  const onCropChange = useCallback((crop: Point) => setCrop(crop), []);
-  const onZoomChange = useCallback((zoom: number) => setZoom(zoom), []);
+  // 画像を読み込み
+  useEffect(() => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      imageRef.current = img;
+      setImageLoaded(true);
+    };
+    img.src = imageSrc;
+  }, [imageSrc]);
 
-  const onCropCompleteHandler = useCallback(
-    (_croppedArea: Area, croppedAreaPixels: Area) => {
-      setCroppedAreaPixels(croppedAreaPixels);
-    },
-    []
-  );
+  // キャンバスに描画
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    const img = imageRef.current;
+    if (!canvas || !container || !img) return;
 
+    const rect = container.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.scale(dpr, dpr);
+
+    const cw = rect.width;
+    const ch = rect.height;
+
+    // 背景を黒に
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, cw, ch);
+
+    // 円形クロップ領域のサイズ（画面幅の80%、最大300px）
+    const cropSize = Math.min(cw * 0.8, ch * 0.6, 300);
+    const cropCenterX = cw / 2;
+    const cropCenterY = ch / 2;
+
+    // 画像をクロップ領域にフィットさせる
+    const imgAspect = img.width / img.height;
+    let drawW: number, drawH: number;
+    if (imgAspect > 1) {
+      // 横長画像
+      drawH = cropSize * zoom;
+      drawW = drawH * imgAspect;
+    } else {
+      // 縦長画像
+      drawW = cropSize * zoom;
+      drawH = drawW / imgAspect;
+    }
+
+    const drawX = cropCenterX - drawW / 2 + offset.x;
+    const drawY = cropCenterY - drawH / 2 + offset.y;
+
+    // 画像を描画
+    ctx.drawImage(img, drawX, drawY, drawW, drawH);
+
+    // 半透明オーバーレイ（円の外側を暗くする）
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(0, 0, cw, ch);
+
+    // 円形の穴を開ける（クリア）
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cropCenterX, cropCenterY, cropSize / 2, 0, Math.PI * 2);
+    ctx.clip();
+
+    // 円内に画像を再描画
+    ctx.drawImage(img, drawX, drawY, drawW, drawH);
+    ctx.restore();
+
+    // 円形ガイド線
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cropCenterX, cropCenterY, cropSize / 2, 0, Math.PI * 2);
+    ctx.stroke();
+  }, [zoom, offset, imageLoaded]);
+
+  // 描画の更新
+  useEffect(() => {
+    if (imageLoaded) {
+      requestAnimationFrame(draw);
+    }
+  }, [draw, imageLoaded]);
+
+  // リサイズ対応
+  useEffect(() => {
+    const handleResize = () => {
+      if (imageLoaded) draw();
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [draw, imageLoaded]);
+
+  // マウスドラッグ
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    setOffset({
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y,
+    });
+  };
+
+  const handleMouseUp = () => setIsDragging(false);
+
+  // タッチドラッグ
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      setIsDragging(true);
+      setDragStart({
+        x: e.touches[0].clientX - offset.x,
+        y: e.touches[0].clientY - offset.y,
+      });
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging || e.touches.length !== 1) return;
+    e.preventDefault();
+    setOffset({
+      x: e.touches[0].clientX - dragStart.x,
+      y: e.touches[0].clientY - dragStart.y,
+    });
+  };
+
+  const handleTouchEnd = () => setIsDragging(false);
+
+  // 確定：クロップ領域をcanvasで切り出してBlobを返す
   const handleConfirm = async () => {
-    if (!croppedAreaPixels) return;
+    const img = imageRef.current;
+    const container = containerRef.current;
+    if (!img || !container) return;
     setIsProcessing(true);
 
     try {
-      const croppedBlob = await getCroppedImg(imageSrc, croppedAreaPixels);
-      onCropComplete(croppedBlob);
+      const rect = container.getBoundingClientRect();
+      const cw = rect.width;
+      const ch = rect.height;
+      const cropSize = Math.min(cw * 0.8, ch * 0.6, 300);
+      const cropCenterX = cw / 2;
+      const cropCenterY = ch / 2;
+
+      const imgAspect = img.width / img.height;
+      let drawW: number, drawH: number;
+      if (imgAspect > 1) {
+        drawH = cropSize * zoom;
+        drawW = drawH * imgAspect;
+      } else {
+        drawW = cropSize * zoom;
+        drawH = drawW / imgAspect;
+      }
+
+      const drawX = cropCenterX - drawW / 2 + offset.x;
+      const drawY = cropCenterY - drawH / 2 + offset.y;
+
+      // 円の左上座標（画面座標）
+      const cropLeft = cropCenterX - cropSize / 2;
+      const cropTop = cropCenterY - cropSize / 2;
+
+      // 画像のソース座標に変換
+      const scaleX = img.width / drawW;
+      const scaleY = img.height / drawH;
+      const srcX = (cropLeft - drawX) * scaleX;
+      const srcY = (cropTop - drawY) * scaleY;
+      const srcW = cropSize * scaleX;
+      const srcH = cropSize * scaleY;
+
+      // 出力用canvas（400x400）
+      const outputSize = 400;
+      const outCanvas = document.createElement('canvas');
+      outCanvas.width = outputSize;
+      outCanvas.height = outputSize;
+      const outCtx = outCanvas.getContext('2d');
+      if (!outCtx) throw new Error('Canvas context not available');
+
+      outCtx.drawImage(
+        img,
+        srcX, srcY, srcW, srcH,
+        0, 0, outputSize, outputSize,
+      );
+
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        outCanvas.toBlob(
+          (b) => b ? resolve(b) : reject(new Error('toBlob failed')),
+          'image/jpeg',
+          0.9,
+        );
+      });
+
+      onCropComplete(blob);
     } catch (e) {
       console.error('Crop error:', e);
       alert('画像の処理に失敗しました。もう一度お試しください。');
@@ -54,23 +238,46 @@ export default function ImageCropper({
       position: 'fixed',
       inset: 0,
       zIndex: 9999,
-      background: 'rgba(0,0,0,0.85)',
+      background: '#000',
       display: 'flex',
       flexDirection: 'column',
     }}>
       {/* クロッパーエリア */}
-      <div style={{ position: 'relative', flex: 1 }}>
-        <Cropper
-          image={imageSrc}
-          crop={crop}
-          zoom={zoom}
-          aspect={aspectRatio}
-          cropShape={cropShape}
-          showGrid={false}
-          onCropChange={onCropChange}
-          onZoomChange={onZoomChange}
-          onCropComplete={onCropCompleteHandler}
+      <div
+        ref={containerRef}
+        style={{
+          position: 'relative',
+          flex: 1,
+          cursor: isDragging ? 'grabbing' : 'grab',
+          touchAction: 'none',
+          userSelect: 'none',
+          overflow: 'hidden',
+        }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        <canvas
+          ref={canvasRef}
+          style={{ display: 'block', width: '100%', height: '100%' }}
         />
+        {!imageLoaded && (
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#888',
+            fontSize: 14,
+          }}>
+            画像を読み込み中...
+          </div>
+        )}
       </div>
 
       {/* コントロールエリア */}
@@ -123,7 +330,7 @@ export default function ImageCropper({
           </button>
           <button
             onClick={handleConfirm}
-            disabled={isProcessing}
+            disabled={isProcessing || !imageLoaded}
             style={{
               flex: 1,
               padding: '14px',
@@ -133,8 +340,8 @@ export default function ImageCropper({
               color: '#1A1A2E',
               fontSize: 14,
               fontWeight: 700,
-              cursor: isProcessing ? 'not-allowed' : 'pointer',
-              opacity: isProcessing ? 0.6 : 1,
+              cursor: (isProcessing || !imageLoaded) ? 'not-allowed' : 'pointer',
+              opacity: (isProcessing || !imageLoaded) ? 0.6 : 1,
               fontFamily: "'Noto Sans JP', sans-serif",
             }}
           >
@@ -144,55 +351,4 @@ export default function ImageCropper({
       </div>
     </div>
   );
-}
-
-// ============================================
-// Canvas APIでトリミング処理
-// ============================================
-async function getCroppedImg(
-  imageSrc: string,
-  pixelCrop: Area,
-  outputSize: number = 400  // 出力サイズ（正方形、px）
-): Promise<Blob> {
-  const image = await createImage(imageSrc);
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-
-  if (!ctx) throw new Error('Canvas context not available');
-
-  canvas.width = outputSize;
-  canvas.height = outputSize;
-
-  ctx.drawImage(
-    image,
-    pixelCrop.x,
-    pixelCrop.y,
-    pixelCrop.width,
-    pixelCrop.height,
-    0,
-    0,
-    outputSize,
-    outputSize,
-  );
-
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (blob) resolve(blob);
-        else reject(new Error('Canvas toBlob failed'));
-      },
-      'image/jpeg',
-      0.9  // JPEG品質90%（ファイルサイズ削減）
-    );
-  });
-}
-
-function createImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.addEventListener('load', () => resolve(image));
-    image.addEventListener('error', (error) => reject(error));
-    image.setAttribute('crossOrigin', 'anonymous');
-    image.src = url;
-  });
 }
