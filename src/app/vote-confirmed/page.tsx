@@ -243,16 +243,6 @@ function ConfirmedContent() {
           </div>
         )}
 
-        {/* マイカードリンク（ログイン済み） */}
-        {loggedIn && !isDifferentAccount && (
-          <a
-            href="/mycard"
-            className="block w-full py-3 bg-[#C4A35A] text-white font-medium rounded-lg hover:bg-[#b3923f] transition mb-3"
-          >
-            リワードコレクションを見る
-          </a>
-        )}
-
         <div className="my-6 border-t border-gray-200" />
 
         {/* プロのカードを見るボタン */}

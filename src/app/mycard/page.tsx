@@ -82,7 +82,7 @@ function MyCardContent() {
         .from('professionals').select('id').eq('user_id', userId).maybeSingle()
       setIsPro(!!proCheck)
 
-      // client_rewards を取得（active + used）
+      // client_rewards を取得（active + used）— emailベース
       const { data: clientRewards, error: crError } = await (supabase as any)
         .from('client_rewards')
         .select('id, reward_id, professional_id, status')
@@ -91,8 +91,30 @@ function MyCardContent() {
         .order('created_at', { ascending: false })
       console.log('[mycard] client_rewards:', { count: clientRewards?.length, error: crError?.message })
 
-      if (clientRewards && clientRewards.length > 0) {
-        const rewardIds = Array.from(new Set(clientRewards.map((cr: any) => cr.reward_id)))
+      // LINE/OAuth用フォールバック: votes.client_user_id 経由でリワードを取得
+      let fallbackRewards: any[] = []
+      if ((!clientRewards || clientRewards.length === 0) && userId) {
+        const { data: userVotes } = await (supabase as any)
+          .from('votes')
+          .select('id, selected_reward_id')
+          .eq('client_user_id', userId)
+          .not('selected_reward_id', 'is', null)
+        if (userVotes && userVotes.length > 0) {
+          const voteIds = userVotes.map((v: any) => v.id)
+          const { data: crByVote } = await (supabase as any)
+            .from('client_rewards')
+            .select('id, reward_id, professional_id, status')
+            .in('vote_id', voteIds)
+            .in('status', ['active', 'used'])
+            .order('created_at', { ascending: false })
+          if (crByVote) fallbackRewards = crByVote
+          console.log('[mycard] fallback client_rewards by userId:', { count: crByVote?.length })
+        }
+      }
+      const allClientRewards = (clientRewards && clientRewards.length > 0) ? clientRewards : fallbackRewards
+
+      if (allClientRewards && allClientRewards.length > 0) {
+        const rewardIds = Array.from(new Set(allClientRewards.map((cr: any) => cr.reward_id)))
         const { data: rewardData } = await (supabase as any)
           .from('rewards')
           .select('id, reward_type, title, content')
@@ -105,7 +127,7 @@ function MyCardContent() {
           }
         }
 
-        const proIds = Array.from(new Set(clientRewards.map((cr: any) => cr.professional_id)))
+        const proIds = Array.from(new Set(allClientRewards.map((cr: any) => cr.professional_id)))
         const { data: proData } = await (supabase as any)
           .from('professionals')
           .select('id, name')
@@ -118,7 +140,7 @@ function MyCardContent() {
           }
         }
 
-        const merged: RewardWithPro[] = clientRewards.map((cr: any) => {
+        const merged: RewardWithPro[] = allClientRewards.map((cr: any) => {
           const reward = rewardMap.get(cr.reward_id)
           return {
             id: cr.id,
@@ -134,12 +156,24 @@ function MyCardContent() {
         setRewards(merged)
       }
 
-      // 投票履歴取得
-      const { data: voteData } = await (supabase as any)
+      // 投票履歴取得（emailベース + client_user_idフォールバック）
+      let voteData: any[] | null = null
+      const { data: voteByEmail } = await (supabase as any)
         .from('votes')
         .select('id, professional_id, result_category, created_at')
         .eq('voter_email', email)
         .order('created_at', { ascending: false })
+      voteData = voteByEmail
+
+      // フォールバック: client_user_id で取得
+      if ((!voteData || voteData.length === 0) && userId) {
+        const { data: voteByUserId } = await (supabase as any)
+          .from('votes')
+          .select('id, professional_id, result_category, created_at')
+          .eq('client_user_id', userId)
+          .order('created_at', { ascending: false })
+        if (voteByUserId && voteByUserId.length > 0) voteData = voteByUserId
+      }
 
       if (voteData && voteData.length > 0) {
         const voteProIds = Array.from(new Set(voteData.map((v: any) => v.professional_id)))

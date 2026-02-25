@@ -78,7 +78,10 @@ export default function Navbar() {
               }
             } catch (_) {}
             setUser(fallbackUser)
-            setIsPro(true) // sb-keysがある → プロの可能性が高い、ダッシュボードリンク表示
+            // タイムアウト時はプロ判定せず、リワードリンクのみ表示
+            // （プロ判定はDB確認が必要なため、仮定しない）
+            setIsPro(false)
+            setIsClient(true)
             setDebugInfo(`timeout → assume logged-in (${fallbackUser.email}) | sb-keys: ${sbKeys.length}`)
           } else {
             setUser(null)

@@ -127,13 +127,14 @@ export async function GET(request: NextRequest) {
     }
 
     // リワード選択がある場合、client_rewardsに保存
+    // LINE認証は本人確認済みなので status: 'active'（email確認不要）
     if (voteData.selected_reward_id && insertedVote) {
       await supabaseAdmin.from('client_rewards').insert({
         vote_id: insertedVote.id,
         reward_id: voteData.selected_reward_id,
         professional_id: context.professional_id,
         client_email: voter_email,
-        status: 'pending',
+        status: 'active',
       });
     }
 
