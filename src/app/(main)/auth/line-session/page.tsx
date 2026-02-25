@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
+import { clearAllAuthStorage } from '@/lib/auth-helper'
 
 export default function LineSessionPage() {
   const [error, setError] = useState('')
@@ -22,6 +23,9 @@ export default function LineSessionPage() {
       try {
         const supabase = createClient() as any
         setStatus('セッションを作成中...')
+
+        // 古いセッションをクリア（古いRefresh Tokenとの競合を防ぐ）
+        clearAllAuthStorage()
 
         const { data, error: signInError } = await supabase.auth.signInWithPassword({
           email: email,

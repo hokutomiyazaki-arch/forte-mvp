@@ -104,13 +104,17 @@ function LoginForm() {
       // LINE認証エラーチェック
       const lineError = new URLSearchParams(window.location.search).get('error')
       if (lineError) {
+        // エラー発生時に古いセッションをクリア（次回の認証と競合しないように）
+        clearAllAuthStorage()
+
         const lineErrorMessages: Record<string, string> = {
           'line_cancelled': 'LINE認証がキャンセルされました',
           'line_missing_params': 'LINE認証パラメータが不足しています',
           'line_expired': '認証の有効期限が切れました。もう一度お試しください。',
           'line_signup_failed': 'LINE認証での登録に失敗しました',
-          'line_session_failed': 'セッションの生成に失敗しました',
+          'line_session_failed': 'セッションの生成に失敗しました。もう一度LINEログインをお試しください。',
           'line_callback_failed': 'LINE認証に失敗しました。もう一度お試しください。',
+          'session_timeout': 'セッションがタイムアウトしました。もう一度お試しください。',
         }
         if (lineErrorMessages[lineError]) {
           setError(lineErrorMessages[lineError])

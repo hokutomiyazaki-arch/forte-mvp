@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import { clearAllAuthStorage } from '@/lib/auth-helper'
 import { getRewardLabel } from '@/lib/types'
 import RewardContent from '@/components/RewardContent'
 import { Suspense } from 'react'
@@ -83,6 +84,9 @@ function VoteProcessingContent() {
       // 2. セッション作成（バックグラウンド、失敗してもOK）
       if (email && token) {
         try {
+          // 古いセッションをクリア（古いRefresh Tokenとの競合を防ぐ）
+          clearAllAuthStorage()
+
           const { data, error } = await supabase.auth.signInWithPassword({
             email, password: token,
           })
