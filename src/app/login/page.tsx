@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import { clearAllAuthStorage } from '@/lib/auth-helper'
 import { Suspense } from 'react'
 
 const MAIL_LINKS: Record<string, { label: string; url: string }> = {
@@ -63,7 +64,14 @@ function LoginForm() {
     // ========== redirect専用パス: getSession → リダイレクトのみ ==========
     if (redirect) {
       console.log('[login] redirect mode, checking session...')
+      const redirectTimeout = setTimeout(() => {
+        console.log('[login] redirect mode timeout → clearing and going to mycard')
+        clearAllAuthStorage()
+        const em = urlParams.get('email') || ''
+        window.location.replace('/mycard' + (em ? '?email=' + encodeURIComponent(em) : ''))
+      }, 5000)
       supabase.auth.getSession().then(({ data: { session } }: any) => {
+        clearTimeout(redirectTimeout)
         console.log('[login] redirect mode, session:', !!session)
         if (session) {
           console.log('[login] redirecting to:', redirect)
@@ -272,8 +280,10 @@ function LoginForm() {
           const { data } = await Promise.race([sessionPromise, timeoutPromise]) as any
           session = data?.session || null
         } catch (e) {
-          console.log('[init] getSession timeout')
-          setLoginDebug(`timeout → show form`)
+          console.log('[init] getSession timeout → clearing stale session data')
+          // タイムアウト = セッションデータが壊れている可能性
+          clearAllAuthStorage()
+          setLoginDebug(`timeout → cleared stale data → show form`)
           session = null
         }
 
@@ -288,10 +298,19 @@ function LoginForm() {
           window.location.href = '/dashboard'
           return
         }
-        setLoginDebug(`no session | sb-keys: ${sbKeys.length}`)
+
+        // sb-keysがあるがセッションが無い = 古いデータが残留
+        if (!session && sbKeys.length > 0) {
+          console.log('[login/init] stale sb-keys detected, clearing...')
+          clearAllAuthStorage()
+          setLoginDebug(`stale keys cleared | showing form`)
+        } else {
+          setLoginDebug(`no session | sb-keys: ${sbKeys.length}`)
+        }
       } catch (e) {
         console.error('[init] session check error:', e)
-        setLoginDebug(`error: ${e instanceof Error ? e.message : 'unknown'}`)
+        clearAllAuthStorage()
+        setLoginDebug(`error: ${e instanceof Error ? e.message : 'unknown'} → cleared`)
       }
       if (!cancelled) setReady(true)
     }

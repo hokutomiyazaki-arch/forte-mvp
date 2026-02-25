@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { getSessionSafe } from '@/lib/auth-helper'
+import { getSessionSafe, signOutAndClear } from '@/lib/auth-helper'
 import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYPES, getRewardType } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import ForteChart from '@/components/ForteChart'
@@ -2050,14 +2050,7 @@ export default function DashboardPage() {
             カードを見る
           </a>
         )}
-        <button onClick={async () => {
-          try { await supabase.auth.signOut({ scope: 'local' }) } catch (e) { console.error('signOut error:', e) }
-          try {
-            Object.keys(localStorage).forEach(key => { if (key.startsWith('sb-') || key.includes('supabase')) localStorage.removeItem(key) })
-            Object.keys(sessionStorage).forEach(key => { if (key.startsWith('sb-') || key.includes('supabase')) sessionStorage.removeItem(key) })
-          } catch (e) { console.error('storage clear error:', e) }
-          window.location.href = '/'
-        }}
+        <button onClick={() => signOutAndClear('/')}
           className="px-6 py-3 text-gray-500 hover:text-red-500 transition">
           ログアウト
         </button>

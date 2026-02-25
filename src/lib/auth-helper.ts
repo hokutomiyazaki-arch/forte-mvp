@@ -1,6 +1,52 @@
 import { createClient } from './supabase'
 
 /**
+ * 全ストレージからSupabase関連データを完全クリアする。
+ * signOut前でも後でも呼べる安全な関数。
+ */
+export function clearAllAuthStorage() {
+  try {
+    const keysToRemove: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && (
+        key.startsWith('sb-') ||
+        key.startsWith('supabase') ||
+        key.includes('auth-token') ||
+        key.includes('session')
+      )) {
+        keysToRemove.push(key)
+      }
+    }
+    keysToRemove.forEach(key => localStorage.removeItem(key))
+  } catch (e) {
+    console.warn('[auth-helper] localStorage clear failed:', e)
+  }
+  try {
+    sessionStorage.clear()
+  } catch (e) {
+    console.warn('[auth-helper] sessionStorage clear failed:', e)
+  }
+}
+
+/**
+ * 完全なログアウト処理。
+ * 1. Supabase signOut
+ * 2. localStorage/sessionStorage から全Supabase関連データ削除
+ * 3. キャッシュ無効化付きリダイレクト
+ */
+export async function signOutAndClear(redirectTo: string = '/') {
+  try {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+  } catch (e) {
+    console.warn('[auth-helper] signOut failed:', e)
+  }
+  clearAllAuthStorage()
+  window.location.href = redirectTo + (redirectTo.includes('?') ? '&' : '?') + 't=' + Date.now()
+}
+
+/**
  * モバイルで getSession() がハングする問題の回避策。
  * localStorageから直接セッションを読み、getSession()はフォールバック。
  */

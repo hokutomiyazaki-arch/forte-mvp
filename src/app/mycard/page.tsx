@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { getSessionSafe } from '@/lib/auth-helper'
+import { getSessionSafe, signOutAndClear, clearAllAuthStorage } from '@/lib/auth-helper'
 import { getRewardLabel } from '@/lib/types'
 import RewardContent from '@/components/RewardContent'
 import { Suspense } from 'react'
@@ -1078,12 +1078,7 @@ function MyCardContent() {
               alert('アカウント削除に失敗しました。もう一度お試しください。')
               return
             }
-            try { await supabase.auth.signOut({ scope: 'local' }) } catch (e) { console.error('signOut error:', e) }
-            try {
-              Object.keys(localStorage).forEach(key => { if (key.startsWith('sb-') || key.includes('supabase')) localStorage.removeItem(key) })
-              Object.keys(sessionStorage).forEach(key => { if (key.startsWith('sb-') || key.includes('supabase')) sessionStorage.removeItem(key) })
-            } catch (e) { console.error('storage clear error:', e) }
-            window.location.href = '/'
+            await signOutAndClear('/')
           }}
           className="text-sm text-red-400 hover:text-red-600 transition"
         >

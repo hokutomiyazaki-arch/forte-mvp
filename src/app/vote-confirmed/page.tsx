@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { getSessionSafe } from '@/lib/auth-helper'
+import { getSessionSafe, signOutAndClear } from '@/lib/auth-helper'
 import { getRewardLabel, REWARD_TYPES } from '@/lib/types'
 import RewardContent from '@/components/RewardContent'
 import { Suspense } from 'react'
@@ -240,14 +240,7 @@ function ConfirmedContent() {
               </p>
             </div>
             <button
-              onClick={async () => {
-                try { await (supabase as any).auth.signOut({ scope: 'local' }) } catch (e) { console.error('signOut error:', e) }
-                try {
-                  Object.keys(localStorage).forEach(key => { if (key.startsWith('sb-') || key.includes('supabase')) localStorage.removeItem(key) })
-                  Object.keys(sessionStorage).forEach(key => { if (key.startsWith('sb-') || key.includes('supabase')) sessionStorage.removeItem(key) })
-                } catch (e) { console.error('storage clear error:', e) }
-                window.location.href = `/mycard?email=${encodeURIComponent(voterEmail)}`
-              }}
+              onClick={() => signOutAndClear(`/mycard?email=${encodeURIComponent(voterEmail)}`)}
               className="inline-block w-full py-3 bg-[#1A1A2E] text-white text-sm font-bold rounded-lg hover:bg-[#2a2a4e] transition"
             >
               ログアウトしてアカウントを切り替える

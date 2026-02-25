@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
+import { getSessionSafe, signOutAndClear } from '@/lib/auth-helper'
+
 export default function Navbar() {
   const supabase = createClient() as any
   const [user, setUser] = useState<any>(null)
@@ -30,63 +32,52 @@ export default function Navbar() {
       }
 
       try {
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('timeout')), 1500)
-        )
-        const sessionPromise = supabase.auth.getSession()
-
-        const { data } = await Promise.race([sessionPromise, timeoutPromise]) as any
+        // getSessionSafe で統一（モバイルでのハング防止）
+        const { session, user: sessionUser, source } = await getSessionSafe()
 
         if (cancelled) return
 
-        setDebugInfo(
-          `session: ${data?.session ? 'YES (' + data.session.user.email + ')' : 'NO'} | ` +
-          `sb-keys: ${sbKeys.length} | ` +
-          `expires: ${data?.session?.expires_at ? new Date(data.session.expires_at * 1000).toLocaleTimeString() : 'N/A'}`
-        )
+        if (sessionUser) {
+          setUser(sessionUser)
+          setDebugInfo(
+            `session: YES (${sessionUser.email}) | source: ${source} | sb-keys: ${sbKeys.length}`
+          )
 
-        const u = data?.session?.user || null
-        setUser(u)
-
-        if (u) {
-          const [{ data: proData }, { data: clientData }] = await Promise.all([
-            supabase.from('professionals').select('id').eq('user_id', u.id).maybeSingle(),
-            supabase.from('clients').select('id').eq('user_id', u.id).maybeSingle(),
-          ])
-          if (!cancelled) {
-            setIsPro(!!proData)
-            setIsClient(!!clientData)
+          // セッションをクライアントにセット（localStorageから読んだ場合）
+          if (source === 'localStorage' && session?.access_token && session?.refresh_token) {
+            try {
+              await supabase.auth.setSession({
+                access_token: session.access_token,
+                refresh_token: session.refresh_token,
+              })
+            } catch (_) {}
           }
+
+          // プロ/クライアント判定
+          try {
+            const [{ data: proData }, { data: clientData }] = await Promise.all([
+              supabase.from('professionals').select('id').eq('user_id', sessionUser.id).maybeSingle(),
+              supabase.from('clients').select('id').eq('user_id', sessionUser.id).maybeSingle(),
+            ])
+            if (!cancelled) {
+              setIsPro(!!proData)
+              setIsClient(!!clientData)
+            }
+          } catch (_) {
+            // DB問い合わせ失敗時はプロ判定せず
+            if (!cancelled) {
+              setIsPro(false)
+              setIsClient(true)
+            }
+          }
+        } else {
+          setUser(null)
+          setDebugInfo(`no session | sb-keys: ${sbKeys.length}`)
         }
       } catch (e) {
         if (!cancelled) {
-          // タイムアウトだがsb-keysがある → ログイン状態と仮定
-          if (sbKeys.length > 0) {
-            // localStorageからauth-tokenを直接パースしてユーザー情報を取得
-            let fallbackUser: any = { email: 'loading...' }
-            try {
-              const authKey = sbKeys.find(k => k.includes('auth-token'))
-              if (authKey) {
-                const raw = localStorage.getItem(authKey)
-                if (raw) {
-                  const parsed = JSON.parse(raw)
-                  const userObj = parsed?.user || parsed?.currentSession?.user
-                  if (userObj?.email) {
-                    fallbackUser = userObj
-                  }
-                }
-              }
-            } catch (_) {}
-            setUser(fallbackUser)
-            // タイムアウト時はプロ判定せず、リワードリンクのみ表示
-            // （プロ判定はDB確認が必要なため、仮定しない）
-            setIsPro(false)
-            setIsClient(true)
-            setDebugInfo(`timeout → assume logged-in (${fallbackUser.email}) | sb-keys: ${sbKeys.length}`)
-          } else {
-            setUser(null)
-            setDebugInfo(`error: ${e instanceof Error ? e.message : 'unknown'} | sb-keys: ${sbKeys.length}`)
-          }
+          setUser(null)
+          setDebugInfo(`error: ${e instanceof Error ? e.message : 'unknown'} | sb-keys: ${sbKeys.length}`)
         }
       }
       if (!cancelled) setLoaded(true)
@@ -95,26 +86,6 @@ export default function Navbar() {
     checkSession()
     return () => { cancelled = true }
   }, [])
-
-  async function handleLogout() {
-    try {
-      await supabase.auth.signOut({ scope: 'local' })
-    } catch (e) {
-      console.error('signOut error:', e)
-    }
-    // ブラウザストレージを完全クリア
-    try {
-      Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('sb-') || key.includes('supabase')) localStorage.removeItem(key)
-      })
-      Object.keys(sessionStorage).forEach(key => {
-        if (key.startsWith('sb-') || key.includes('supabase')) sessionStorage.removeItem(key)
-      })
-    } catch (e) {
-      console.error('storage clear error:', e)
-    }
-    window.location.href = '/'
-  }
 
   return (
     <>
@@ -130,7 +101,7 @@ export default function Navbar() {
           <>
             {isPro && <a href="/dashboard" className="hover:text-[#C4A35A] transition">ダッシュボード</a>}
             <a href="/mycard" className="hover:text-[#C4A35A] transition">リワード</a>
-            <button onClick={handleLogout} className="hover:text-[#C4A35A] transition">ログアウト</button>
+            <button onClick={() => signOutAndClear('/')} className="hover:text-[#C4A35A] transition">ログアウト</button>
           </>
         ) : (
           <a href="/login" className="hover:text-[#C4A35A] transition">ログイン</a>

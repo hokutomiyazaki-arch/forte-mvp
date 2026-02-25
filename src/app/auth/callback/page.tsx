@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
+import { clearAllAuthStorage } from '@/lib/auth-helper'
 
 export default function AuthCallback() {
   const [debugInfo, setDebugInfo] = useState('callback: loading...')
@@ -10,11 +11,21 @@ export default function AuthCallback() {
     setShowDebug(new URLSearchParams(window.location.search).has('debug'))
     const supabase = createClient() as any
 
+    // 古いセッションをクリア（新しいOAuthセッションと競合しないように）
+    clearAllAuthStorage()
+
     // デバッグ: URL状態を表示
     setDebugInfo(
       `callback: hash=${window.location.hash.substring(0, 50)} | ` +
       `search=${window.location.search.substring(0, 50)}`
     )
+
+    // 10秒絶対タイムアウト: これ以上待たずにログインページにリダイレクト
+    const absoluteTimeout = setTimeout(() => {
+      console.log('[auth/callback] absolute timeout (10s) → redirect to login')
+      setDebugInfo('callback: absolute timeout → /login')
+      window.location.href = '/login?error=timeout'
+    }, 10000)
 
     // Supabase client library automatically picks up the tokens from the URL hash
     // We just need to wait for the session to be established
@@ -22,6 +33,7 @@ export default function AuthCallback() {
       console.log('[auth/callback] onAuthStateChange:', event, !!session)
       setDebugInfo(`callback: event=${event} session=${session ? 'YES' : 'NO'}`)
       if (event === 'SIGNED_IN' && session) {
+        clearTimeout(absoluteTimeout)
         // Get role/nickname from URL search params
         const params = new URLSearchParams(window.location.search)
         const role = params.get('role') || 'pro'
@@ -50,6 +62,7 @@ export default function AuthCallback() {
         setDebugInfo(`callback: getSession=${session ? 'YES' : 'NO'}`)
 
         if (session) {
+          clearTimeout(absoluteTimeout)
           const params = new URLSearchParams(window.location.search)
           const role = params.get('role') || 'pro'
           const nickname = params.get('nickname') || ''
@@ -66,11 +79,16 @@ export default function AuthCallback() {
         setDebugInfo(`callback: getSession timeout, waiting for onAuthStateChange...`)
       }
     }, 1000)
+
+    return () => clearTimeout(absoluteTimeout)
   }, [])
 
   return (
-    <div className="text-center py-16 text-gray-400">
-      認証中...
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAFAF7] px-6">
+      <div className="max-w-sm w-full text-center">
+        <div className="animate-spin w-8 h-8 border-4 border-[#C4A35A] border-t-transparent rounded-full mx-auto mb-4"></div>
+        <p className="text-gray-500 text-sm">認証中...</p>
+      </div>
       {/* DEBUG: ?debug=1 の時のみ表示 */}
       {showDebug && (
         <div className="fixed bottom-6 left-0 right-0 bg-blue-600 text-white text-xs p-1 z-[9999] text-center">
