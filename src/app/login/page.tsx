@@ -3,7 +3,6 @@ import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { clearAllAuthStorage } from '@/lib/auth-helper'
-import { buildLineAuthUrlClient } from '@/lib/line-auth-client'
 import { Suspense } from 'react'
 
 const MAIL_LINKS: Record<string, { label: string; url: string }> = {
@@ -20,7 +19,7 @@ const MAIL_LINKS: Record<string, { label: string; url: string }> = {
 
 function LoginForm() {
   const searchParams = useSearchParams()
-  const initialRole = searchParams.get('role') || 'client'
+  const initialRole = searchParams.get('role') || 'pro'
   const redirectTo = searchParams.get('redirect') || ''
   const emailParam = searchParams.get('email') || ''
   const isCouponFlow = initialRole === 'client' && (redirectTo === '/coupons' || redirectTo === '/mycard')
@@ -737,7 +736,7 @@ function LoginForm() {
       {/* LINE Login */}
       <button
         onClick={() => {
-          window.location.href = buildLineAuthUrlClient({ type: isClient ? 'client_login' : 'pro_login' })
+          window.location.href = `/api/auth/line?context=${isClient ? 'client_login' : 'pro_login'}`
         }}
         className="w-full py-3 mb-3 rounded-lg hover:opacity-90 transition flex items-center justify-center gap-2 text-sm font-bold text-white"
         style={{ backgroundColor: '#06C755' }}
