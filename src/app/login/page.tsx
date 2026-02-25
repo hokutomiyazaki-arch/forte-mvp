@@ -131,12 +131,44 @@ function LoginForm() {
       }
     }
 
+    // セッションをlocalStorageに確実に永続化するヘルパー
+    async function ensureSessionPersisted(session: any) {
+      // setSession でlocalStorage書き込みを保証
+      try {
+        await supabase.auth.setSession({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+        })
+      } catch (e) {
+        console.warn('[login] setSession failed:', e)
+      }
+      // localStorage確認（最大1秒ポーリング）
+      for (let i = 0; i < 10; i++) {
+        const sbKeys = Object.keys(localStorage).filter(
+          (k: string) => k.startsWith('sb-') && k.includes('auth-token')
+        )
+        if (sbKeys.length > 0) {
+          const stored = localStorage.getItem(sbKeys[0])
+          if (stored && stored.includes('access_token')) {
+            console.log('[login] session persisted to localStorage')
+            return
+          }
+        }
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+      console.warn('[login] session persistence check timed out')
+    }
+
     // onAuthStateChange を先に登録（OAuth完了後のSIGNED_INを確実にキャッチ）
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string, session: any) => {
       console.log('[onAuthStateChange] event:', event, 'session:', session ? 'EXISTS' : 'NULL', 'cancelled:', cancelled)
 
       if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user && !cancelled) {
         cancelled = true
+
+        // セッションがlocalStorageに書き込まれるのを待つ
+        await ensureSessionPersisted(session)
+
         const role = new URLSearchParams(window.location.search).get('role')
         if (role === 'pro') {
           console.log('[onAuthStateChange] SIGNED_IN (role=pro) → redirect /dashboard')

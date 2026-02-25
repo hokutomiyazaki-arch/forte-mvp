@@ -10,6 +10,7 @@ export default function AuthCallback() {
   useEffect(() => {
     setShowDebug(new URLSearchParams(window.location.search).has('debug'))
     const supabase = createClient() as any
+    let redirecting = false
 
     // 古いセッションをクリア（新しいOAuthセッションと競合しないように）
     clearAllAuthStorage()
@@ -20,39 +21,112 @@ export default function AuthCallback() {
       `search=${window.location.search.substring(0, 50)}`
     )
 
-    // 10秒絶対タイムアウト: これ以上待たずにログインページにリダイレクト
+    // 15秒絶対タイムアウト
     const absoluteTimeout = setTimeout(() => {
-      console.log('[auth/callback] absolute timeout (10s) → redirect to login')
+      if (redirecting) return
+      console.log('[auth/callback] absolute timeout (15s) → redirect to login')
       setDebugInfo('callback: absolute timeout → /login')
       window.location.href = '/login?error=timeout'
-    }, 10000)
+    }, 15000)
 
-    // Supabase client library automatically picks up the tokens from the URL hash
-    // We just need to wait for the session to be established
+    // リダイレクト先URLを構築するヘルパー
+    function buildRedirectUrl() {
+      const params = new URLSearchParams(window.location.search)
+      const role = params.get('role') || 'pro'
+      const nickname = params.get('nickname') || ''
+      const redirectParams = new URLSearchParams()
+      redirectParams.set('role', role)
+      if (nickname) redirectParams.set('nickname', nickname)
+      return '/login?' + redirectParams.toString()
+    }
+
+    // セッション確定 → localStorage永続化 → リダイレクト
+    async function handleSessionConfirmed(session: any) {
+      if (redirecting) return
+      redirecting = true
+      clearTimeout(absoluteTimeout)
+
+      console.log('[auth/callback] session confirmed, persisting to localStorage...')
+      setDebugInfo('callback: session confirmed, persisting...')
+
+      // 1. setSession で localStorage に確実に書き込む
+      try {
+        await supabase.auth.setSession({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+        })
+        console.log('[auth/callback] setSession completed')
+      } catch (e) {
+        console.warn('[auth/callback] setSession failed, trying manual write:', e)
+        // フォールバック: 手動でlocalStorageに書き込む
+        try {
+          const storageKey = Object.keys(localStorage).find(
+            (k: string) => k.startsWith('sb-') && k.endsWith('-auth-token')
+          ) || 'sb-' + (window.location.hostname.split('.')[0] || 'app') + '-auth-token'
+
+          const payload = JSON.parse(atob(session.access_token.split('.')[1]))
+          const sessionData = {
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+            expires_at: session.expires_at || Math.floor(Date.now() / 1000) + 3600,
+            expires_in: session.expires_in || 3600,
+            token_type: 'bearer',
+            user: {
+              id: payload.sub,
+              email: payload.email,
+              app_metadata: payload.app_metadata || {},
+              user_metadata: payload.user_metadata || {},
+              aud: payload.aud,
+              role: payload.role,
+            }
+          }
+          localStorage.setItem(storageKey, JSON.stringify(sessionData))
+          console.log('[auth/callback] manual localStorage write done, key:', storageKey)
+        } catch (e2) {
+          console.warn('[auth/callback] manual write also failed:', e2)
+        }
+      }
+
+      // 2. localStorage に書き込まれたか確認（最大2秒ポーリング）
+      let confirmed = false
+      for (let i = 0; i < 20; i++) {
+        const sbKeys = Object.keys(localStorage).filter(
+          (k: string) => k.startsWith('sb-') && k.includes('auth-token')
+        )
+        if (sbKeys.length > 0) {
+          const stored = localStorage.getItem(sbKeys[0])
+          if (stored && stored.includes('access_token')) {
+            confirmed = true
+            break
+          }
+        }
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+
+      console.log('[auth/callback] localStorage confirmed:', confirmed)
+      setDebugInfo(`callback: persisted=${confirmed} → redirecting...`)
+
+      // 3. リダイレクト
+      const url = buildRedirectUrl()
+      console.log('[auth/callback] redirecting to:', url)
+      window.location.href = url
+    }
+
+    // onAuthStateChange でセッション検知
     supabase.auth.onAuthStateChange((event: string, session: any) => {
       console.log('[auth/callback] onAuthStateChange:', event, !!session)
       setDebugInfo(`callback: event=${event} session=${session ? 'YES' : 'NO'}`)
       if (event === 'SIGNED_IN' && session) {
-        clearTimeout(absoluteTimeout)
-        // Get role/nickname from URL search params
-        const params = new URLSearchParams(window.location.search)
-        const role = params.get('role') || 'pro'
-        const nickname = params.get('nickname') || ''
-
-        const redirectParams = new URLSearchParams()
-        redirectParams.set('role', role)
-        if (nickname) redirectParams.set('nickname', nickname)
-
-        setDebugInfo(`callback: SIGNED_IN → redirecting to /login?${redirectParams.toString()}`)
-        window.location.href = '/login?' + redirectParams.toString()
+        handleSessionConfirmed(session)
       }
     })
 
-    // Also check if session already exists (with timeout)
+    // getSession フォールバック（1秒後）
     setTimeout(async () => {
+      if (redirecting) return
       try {
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('timeout')), 3000)
+          setTimeout(() => reject(new Error('timeout')), 5000)
         )
         const sessionPromise = supabase.auth.getSession()
         const { data } = await Promise.race([sessionPromise, timeoutPromise]) as any
@@ -62,21 +136,11 @@ export default function AuthCallback() {
         setDebugInfo(`callback: getSession=${session ? 'YES' : 'NO'}`)
 
         if (session) {
-          clearTimeout(absoluteTimeout)
-          const params = new URLSearchParams(window.location.search)
-          const role = params.get('role') || 'pro'
-          const nickname = params.get('nickname') || ''
-
-          const redirectParams = new URLSearchParams()
-          redirectParams.set('role', role)
-          if (nickname) redirectParams.set('nickname', nickname)
-
-          setDebugInfo(`callback: session found → redirecting to /login?${redirectParams.toString()}`)
-          window.location.href = '/login?' + redirectParams.toString()
+          handleSessionConfirmed(session)
         }
       } catch (e) {
         console.log('[auth/callback] getSession timeout - waiting for onAuthStateChange')
-        setDebugInfo(`callback: getSession timeout, waiting for onAuthStateChange...`)
+        setDebugInfo('callback: getSession timeout, waiting...')
       }
     }, 1000)
 
