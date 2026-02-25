@@ -28,14 +28,25 @@ export type LineAuthContext =
   | { type: 'client_login' };
 
 // State の暗号化/復号化
+// iOS Safari が base64url 文字を二重エンコードして LINE 側で 400 になる問題を回避するため hex を使用
 export function encryptState(context: LineAuthContext): string {
   const nonce = crypto.randomBytes(8).toString('hex');
   const payload = JSON.stringify({ ...context, nonce, ts: Date.now() });
-  return Buffer.from(payload).toString('base64url');
+  const hex = Buffer.from(payload).toString('hex');
+  console.log('[line-auth] encryptState: payload length =', payload.length, 'hex length =', hex.length);
+  return hex;
 }
 
 export function decryptState(state: string): LineAuthContext & { nonce: string; ts: number } {
-  const payload = Buffer.from(state, 'base64url').toString();
+  // hex デコード（新方式）、base64url フォールバック（旧方式の state が残っている場合）
+  let payload: string;
+  try {
+    payload = Buffer.from(state, 'hex').toString();
+    JSON.parse(payload); // hex として有効か確認
+  } catch {
+    // hex でパースできない場合は base64url にフォールバック
+    payload = Buffer.from(state, 'base64url').toString();
+  }
   return JSON.parse(payload);
 }
 
