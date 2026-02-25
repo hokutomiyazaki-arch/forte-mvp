@@ -2,8 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { getSessionSafe } from '@/lib/auth-helper'
-import { getRewardLabel, REWARD_TYPES } from '@/lib/types'
+import { getRewardLabel } from '@/lib/types'
 import RewardContent from '@/components/RewardContent'
 import { Suspense } from 'react'
 import RelatedPros from '@/components/RelatedPros'
@@ -14,71 +13,55 @@ interface RewardInfo {
   title: string
 }
 
-// リワードタイプのアイコン
 function getRewardIcon(rewardType: string): string {
   const icons: Record<string, string> = {
-    coupon: '🎟️',
-    secret: '🤫',
-    selfcare: '🧘',
-    book: '📚',
-    spot: '📍',
-    media: '🎬',
-    surprise: '🎁',
-    freeform: '✨',
+    coupon: '🎟️', secret: '🤫', selfcare: '🧘', book: '📚',
+    spot: '📍', media: '🎬', surprise: '🎁', freeform: '✨',
   }
   return icons[rewardType] || '🎁'
 }
 
-function ConfirmedContent() {
+type Phase = 'processing' | 'confirmed'
+
+function VoteProcessingContent() {
   const searchParams = useSearchParams()
-  const proId = searchParams.get('pro') || searchParams.get('proId') || ''
+  const email = searchParams.get('email') || ''
+  const token = searchParams.get('token') || ''
+  const proId = searchParams.get('pro') || ''
   const voteId = searchParams.get('vote_id') || ''
   const rewardParam = searchParams.get('reward') || ''
-  const authMethodParam = searchParams.get('auth_method') || ''
-  const supabase = createClient()
+  const authMethodParam = searchParams.get('auth_method') || 'line'
 
+  const supabase = createClient() as any
+
+  const [phase, setPhase] = useState<Phase>('processing')
   const [proName, setProName] = useState('')
   const [proPrefecture, setProPrefecture] = useState('')
   const [loggedIn, setLoggedIn] = useState(false)
-  const [sessionEmail, setSessionEmail] = useState('')
-  const [voterEmail, setVoterEmail] = useState('')
-  const [authMethod, setAuthMethod] = useState(authMethodParam)
   const [reward, setReward] = useState<RewardInfo | null>(null)
-  const [loading, setLoading] = useState(true)
   const [shareCopied, setShareCopied] = useState(false)
 
-  // PWA インストール
+  // PWA
   const [installPrompt, setInstallPrompt] = useState<any>(null)
   const [isIOS, setIsIOS] = useState(false)
   const [showIOSGuide, setShowIOSGuide] = useState(false)
 
   useEffect(() => {
-    // iOS判定
     const ios = /iPad|iPhone|iPod/.test(navigator.userAgent)
     setIsIOS(ios)
-
-    // Android: beforeinstallprompt イベント
-    const handler = (e: Event) => {
-      e.preventDefault()
-      setInstallPrompt(e)
-    }
+    const handler = (e: Event) => { e.preventDefault(); setInstallPrompt(e) }
     window.addEventListener('beforeinstallprompt', handler)
     return () => window.removeEventListener('beforeinstallprompt', handler)
   }, [])
 
   const handleInstall = async () => {
-    if (installPrompt) {
-      installPrompt.prompt()
-    } else if (isIOS) {
-      setShowIOSGuide(true)
-    }
+    if (installPrompt) installPrompt.prompt()
+    else if (isIOS) setShowIOSGuide(true)
   }
 
-  // クエリパラメータからリワードをデコード（DB不要、RLS不要）
   function decodeRewardParam(): RewardInfo | null {
     if (!rewardParam) return null
     try {
-      // base64url → base64 変換してからデコード（ブラウザ互換）
       const base64 = rewardParam.replace(/-/g, '+').replace(/_/g, '/')
       const json = decodeURIComponent(escape(atob(base64)))
       const data = JSON.parse(json)
@@ -87,100 +70,74 @@ function ConfirmedContent() {
         content: data.content || '',
         title: data.title || '',
       }
-    } catch (e) {
-      console.warn('[vote-confirmed] reward param decode failed:', e)
+    } catch {
       return null
     }
   }
 
   useEffect(() => {
-    async function load() {
-      // セッション確認
-      const { session, user: sessionUser, source } = await getSessionSafe()
-      if (sessionUser) {
-        setLoggedIn(true)
-        setSessionEmail(sessionUser.email || '')
-        // モバイル対策: localStorageから取得したセッションをSupabaseクライアントにセット
-        if (source === 'localStorage' && session?.access_token && session?.refresh_token) {
-          try {
-            await (supabase as any).auth.setSession({
-              access_token: session.access_token,
-              refresh_token: session.refresh_token,
-            })
-          } catch (e) {
-            console.warn('[vote-confirmed] setSession failed:', e)
+    async function process() {
+      // 1. リワードを即座にデコード（DB不要）
+      const r = decodeRewardParam()
+      if (r) setReward(r)
+
+      // 2. セッション作成（バックグラウンド）
+      if (email && token) {
+        try {
+          const { data, error } = await supabase.auth.signInWithPassword({
+            email, password: token,
+          })
+          if (!error && data?.session) {
+            setLoggedIn(true)
+            console.log('[vote-processing] session created')
+          } else {
+            console.warn('[vote-processing] signIn failed:', error?.message)
           }
+        } catch (e) {
+          console.warn('[vote-processing] session creation failed:', e)
         }
       }
 
-      // プロ名・都道府県取得（publicsテーブルなのでRLS問題なし）
+      // 3. プロ情報取得
       if (proId) {
-        const { data: proData } = await (supabase as any)
-          .from('professionals')
-          .select('name, prefecture')
-          .eq('id', proId)
-          .maybeSingle()
-        if (proData) {
-          setProName(proData.name)
-          setProPrefecture(proData.prefecture || '')
-        }
-      }
-
-      // リワード: クエリパラメータから優先取得（DB不要でモバイルでも確実）
-      const paramReward = decodeRewardParam()
-      if (paramReward) {
-        setReward(paramReward)
-        console.log('[vote-confirmed] reward loaded from query param')
-      }
-
-      // auth_method がパラメータにあればそれを使う
-      if (authMethodParam) {
-        setAuthMethod(authMethodParam)
-      }
-
-      // フォールバック: DBから取得（PCやパラメータなしの場合）
-      if (voteId && !paramReward) {
-        const { data: vote } = await (supabase as any)
-          .from('votes')
-          .select('voter_email, selected_reward_id, professional_id, auth_method')
-          .eq('id', voteId)
-          .maybeSingle()
-
-        if (vote) {
-          setVoterEmail(vote.voter_email || '')
-          if (!authMethodParam) setAuthMethod(vote.auth_method || '')
-
-          if (vote.selected_reward_id) {
-            const { data: rewardData } = await (supabase as any)
-              .from('rewards')
-              .select('reward_type, content, title')
-              .eq('id', vote.selected_reward_id)
-              .maybeSingle()
-
-            if (rewardData) {
-              setReward({
-                reward_type: rewardData.reward_type || '',
-                content: rewardData.content || '',
-                title: rewardData.title || '',
-              })
-            }
+        try {
+          const { data: proData } = await supabase
+            .from('professionals')
+            .select('name, prefecture')
+            .eq('id', proId)
+            .maybeSingle()
+          if (proData) {
+            setProName(proData.name || '')
+            setProPrefecture(proData.prefecture || '')
           }
-        }
+        } catch {}
       }
 
-      setLoading(false)
-    }
-    load()
-  }, [proId, voteId])
+      // 4. URLからセンシティブなパラメータを消す
+      window.history.replaceState(null, '', `/vote-processing?pro=${proId}&vote_id=${voteId}`)
 
-  if (loading) {
-    return <div className="text-center py-16 text-gray-500">読み込み中...</div>
+      // 5. 確認画面に遷移
+      setPhase('confirmed')
+    }
+    process()
+  }, [])
+
+  // ========== 処理中フェーズ ==========
+  if (phase === 'processing') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAFAF7] px-6">
+        <div className="max-w-sm w-full text-center">
+          <div className="w-20 h-20 rounded-full bg-[#C4A35A]/10 flex items-center justify-center mx-auto mb-6">
+            <div className="animate-spin w-10 h-10 border-4 border-[#C4A35A] border-t-transparent rounded-full"></div>
+          </div>
+          <h1 className="text-xl font-bold text-[#1A1A2E] mb-2">投票を処理中...</h1>
+          <p className="text-sm text-gray-500">少々お待ちください</p>
+        </div>
+      </div>
+    )
   }
 
-  // LINE/Google認証の場合はアカウント一致チェックをスキップ
-  const isOAuthVote = authMethod === 'line' || authMethod === 'google'
-  const isDifferentAccount = !isOAuthVote && loggedIn && voterEmail && sessionEmail && sessionEmail !== voterEmail
-
+  // ========== 確認済みフェーズ ==========
   return (
     <div className="min-h-screen bg-[#FAFAF7]">
       <div className="max-w-md mx-auto text-center py-12 px-4">
@@ -196,7 +153,7 @@ function ConfirmedContent() {
         </p>
 
         {/* リワード表示 */}
-        {reward && !isDifferentAccount && (
+        {reward && (
           <div className="bg-white border-2 border-dashed border-[#C4A35A] rounded-xl p-6 mb-6 text-left">
             <p className="text-sm font-bold text-[#C4A35A] mb-4 text-center">
               こちらがリワードです
@@ -225,33 +182,6 @@ function ConfirmedContent() {
                 <span>コレクションに保存しました</span>
               </div>
             )}
-          </div>
-        )}
-
-        {/* 別アカウント警告 — メール認証の場合のみ表示 */}
-        {reward && isDifferentAccount && (
-          <div className="bg-white border-2 border-dashed border-[#C4A35A] rounded-xl p-6 mb-6">
-            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
-              <p className="text-sm text-orange-700 font-medium mb-1">
-                別のアカウントでログイン中です
-              </p>
-              <p className="text-xs text-orange-600">
-                リワードを受け取るには {voterEmail} でログインしてください
-              </p>
-            </div>
-            <button
-              onClick={async () => {
-                try { await (supabase as any).auth.signOut({ scope: 'local' }) } catch (e) { console.error('signOut error:', e) }
-                try {
-                  Object.keys(localStorage).forEach(key => { if (key.startsWith('sb-') || key.includes('supabase')) localStorage.removeItem(key) })
-                  Object.keys(sessionStorage).forEach(key => { if (key.startsWith('sb-') || key.includes('supabase')) sessionStorage.removeItem(key) })
-                } catch (e) { console.error('storage clear error:', e) }
-                window.location.href = `/mycard?email=${encodeURIComponent(voterEmail)}`
-              }}
-              className="inline-block w-full py-3 bg-[#1A1A2E] text-white text-sm font-bold rounded-lg hover:bg-[#2a2a4e] transition"
-            >
-              ログアウトしてアカウントを切り替える
-            </button>
           </div>
         )}
 
@@ -347,10 +277,20 @@ function ConfirmedContent() {
   )
 }
 
-export default function VoteConfirmedPage() {
+export default function VoteProcessingPage() {
   return (
-    <Suspense fallback={<div className="text-center py-16">読み込み中...</div>}>
-      <ConfirmedContent />
+    <Suspense fallback={
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAFAF7] px-6">
+        <div className="max-w-sm w-full text-center">
+          <div className="w-20 h-20 rounded-full bg-[#C4A35A]/10 flex items-center justify-center mx-auto mb-6">
+            <div className="animate-spin w-10 h-10 border-4 border-[#C4A35A] border-t-transparent rounded-full"></div>
+          </div>
+          <h1 className="text-xl font-bold text-[#1A1A2E] mb-2">投票を処理中...</h1>
+          <p className="text-sm text-gray-500">少々お待ちください</p>
+        </div>
+      </div>
+    }>
+      <VoteProcessingContent />
     </Suspense>
   )
 }

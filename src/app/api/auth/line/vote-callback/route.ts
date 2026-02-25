@@ -241,7 +241,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // セッション作成 → line-session 経由で vote-confirmed にリダイレクト
+    // セッション作成 → vote-processing で一体化（リダイレクト1回で完結）
     if (supabaseUid) {
       // 投票の client_user_id を更新
       if (insertedVote?.id) {
@@ -259,15 +259,21 @@ export async function GET(request: NextRequest) {
       });
 
       if (!updateError) {
-        const lineSessionUrl = new URL('/auth/line-session', request.url);
-        lineSessionUrl.searchParams.set('email', userEmail);
-        lineSessionUrl.searchParams.set('token', tempPassword);
-        lineSessionUrl.searchParams.set('next', confirmPath);
-        return NextResponse.redirect(lineSessionUrl);
+        // vote-processing に直接リダイレクト（セッション作成+確認画面を一体化）
+        const processingUrl = new URL('/vote-processing', request.url);
+        processingUrl.searchParams.set('email', userEmail);
+        processingUrl.searchParams.set('token', tempPassword);
+        processingUrl.searchParams.set('pro', context.professional_id);
+        processingUrl.searchParams.set('vote_id', voteId);
+        processingUrl.searchParams.set('auth_method', 'line');
+        if (rewardParam) {
+          processingUrl.searchParams.set('reward', rewardParam);
+        }
+        return NextResponse.redirect(processingUrl);
       }
     }
 
-    // セッション作成に失敗してもvote-confirmedには遷移させる
+    // セッション作成に失敗してもvote-confirmedには遷移させる（フォールバック）
     return NextResponse.redirect(new URL(confirmPath, request.url));
 
   } catch (err) {

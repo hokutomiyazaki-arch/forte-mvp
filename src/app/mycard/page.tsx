@@ -82,18 +82,49 @@ function MyCardContent() {
         .from('professionals').select('id').eq('user_id', userId).maybeSingle()
       setIsPro(!!proCheck)
 
-      // client_rewards を取得（active + used）— emailベース
+      // LINE認証ユーザー判定 + LINE userId抽出
+      const isLine = email.startsWith('line_') && email.endsWith('@line.realproof.jp')
+      const lineUserId = isLine ? email.replace('line_', '').replace('@line.realproof.jp', '') : null
+      console.log('[mycard] isLine:', isLine, 'lineUserId:', lineUserId)
+
+      // client_rewards を取得 — 複数方法で検索
+      let allClientRewards: any[] = []
+
+      // 方法1: client_email ベース
       const { data: clientRewards, error: crError } = await (supabase as any)
         .from('client_rewards')
         .select('id, reward_id, professional_id, status')
         .eq('client_email', email)
         .in('status', ['active', 'used'])
         .order('created_at', { ascending: false })
-      console.log('[mycard] client_rewards:', { count: clientRewards?.length, error: crError?.message })
+      console.log('[mycard] client_rewards by email:', { count: clientRewards?.length, error: crError?.message })
 
-      // LINE/OAuth用フォールバック: votes.client_user_id 経由でリワードを取得
-      let fallbackRewards: any[] = []
-      if ((!clientRewards || clientRewards.length === 0) && userId) {
+      if (clientRewards && clientRewards.length > 0) {
+        allClientRewards = clientRewards
+      }
+
+      // 方法2: LINE認証の場合 auth_provider_id → votes → client_rewards
+      if (allClientRewards.length === 0 && lineUserId) {
+        const { data: lineVotes } = await (supabase as any)
+          .from('votes')
+          .select('id')
+          .eq('auth_provider_id', lineUserId)
+          .eq('auth_method', 'line')
+        if (lineVotes && lineVotes.length > 0) {
+          const voteIds = lineVotes.map((v: any) => v.id)
+          const { data: crByVote } = await (supabase as any)
+            .from('client_rewards')
+            .select('id, reward_id, professional_id, status')
+            .in('vote_id', voteIds)
+            .in('status', ['active', 'used'])
+            .order('created_at', { ascending: false })
+          if (crByVote && crByVote.length > 0) allClientRewards = crByVote
+          console.log('[mycard] client_rewards by auth_provider_id:', { count: crByVote?.length })
+        }
+      }
+
+      // 方法3: client_user_id ベースフォールバック
+      if (allClientRewards.length === 0 && userId) {
         const { data: userVotes } = await (supabase as any)
           .from('votes')
           .select('id, selected_reward_id')
@@ -107,11 +138,10 @@ function MyCardContent() {
             .in('vote_id', voteIds)
             .in('status', ['active', 'used'])
             .order('created_at', { ascending: false })
-          if (crByVote) fallbackRewards = crByVote
-          console.log('[mycard] fallback client_rewards by userId:', { count: crByVote?.length })
+          if (crByVote && crByVote.length > 0) allClientRewards = crByVote
+          console.log('[mycard] client_rewards by client_user_id:', { count: crByVote?.length })
         }
       }
-      const allClientRewards = (clientRewards && clientRewards.length > 0) ? clientRewards : fallbackRewards
 
       if (allClientRewards && allClientRewards.length > 0) {
         const rewardIds = Array.from(new Set(allClientRewards.map((cr: any) => cr.reward_id)))
@@ -156,16 +186,29 @@ function MyCardContent() {
         setRewards(merged)
       }
 
-      // 投票履歴取得（emailベース + client_user_idフォールバック）
+      // 投票履歴取得（複数方法で検索）
       let voteData: any[] | null = null
+
+      // 方法1: voter_email ベース
       const { data: voteByEmail } = await (supabase as any)
         .from('votes')
         .select('id, professional_id, result_category, created_at')
         .eq('voter_email', email)
         .order('created_at', { ascending: false })
-      voteData = voteByEmail
+      if (voteByEmail && voteByEmail.length > 0) voteData = voteByEmail
 
-      // フォールバック: client_user_id で取得
+      // 方法2: LINE認証の場合 auth_provider_id ベース
+      if ((!voteData || voteData.length === 0) && lineUserId) {
+        const { data: voteByLine } = await (supabase as any)
+          .from('votes')
+          .select('id, professional_id, result_category, created_at')
+          .eq('auth_provider_id', lineUserId)
+          .eq('auth_method', 'line')
+          .order('created_at', { ascending: false })
+        if (voteByLine && voteByLine.length > 0) voteData = voteByLine
+      }
+
+      // 方法3: client_user_id ベースフォールバック
       if ((!voteData || voteData.length === 0) && userId) {
         const { data: voteByUserId } = await (supabase as any)
           .from('votes')
@@ -562,7 +605,7 @@ function MyCardContent() {
     )
   }
 
-  // ========== データ取得中 ==========
+  // ========== データ取得中: スケルトンUI ==========
   if (dataLoading) {
     if (timedOut) {
       return (
@@ -577,7 +620,33 @@ function MyCardContent() {
         </div>
       )
     }
-    return <div className="text-center py-16 text-gray-400">読み込み中...</div>
+    return (
+      <div className="max-w-lg mx-auto px-4 py-8">
+        <div className="flex items-center justify-between mb-6">
+          <div className="h-8 w-28 bg-gray-200 rounded animate-pulse"></div>
+          <div className="h-8 w-8 bg-gray-200 rounded animate-pulse"></div>
+        </div>
+        <div className="h-4 w-40 bg-gray-100 rounded animate-pulse mb-6"></div>
+        {/* タブスケルトン */}
+        <div className="flex border-b border-gray-200 mb-6">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="flex-1 py-3 flex justify-center">
+              <div className="h-4 w-16 bg-gray-200 rounded animate-pulse"></div>
+            </div>
+          ))}
+        </div>
+        {/* カードスケルトン */}
+        <div className="space-y-4">
+          {[1, 2].map(i => (
+            <div key={i} className="bg-white border border-gray-200 rounded-xl p-5 animate-pulse">
+              <div className="h-4 w-32 bg-gray-200 rounded mb-3 mx-auto"></div>
+              <div className="h-8 w-full bg-gray-100 rounded mb-3"></div>
+              <div className="h-10 w-full bg-gray-200 rounded"></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
   }
 
   // ========== 通常のmycard表示 ==========
