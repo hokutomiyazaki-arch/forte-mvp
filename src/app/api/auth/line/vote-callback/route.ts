@@ -178,17 +178,22 @@ export async function GET(request: NextRequest) {
       confirmPath += `&reward=${rewardParam}`;
     }
 
+    console.log('[vote-callback] Step 8: session creation start, lineUserId:', profile.userId);
+
     // line_auth_mappings から既存ユーザーを確認
-    const { data: existingMapping } = await supabaseAdmin
+    const { data: existingMapping, error: mappingError } = await supabaseAdmin
       .from('line_auth_mappings')
       .select('supabase_uid')
       .eq('line_user_id', profile.userId)
       .maybeSingle();
 
+    console.log('[vote-callback] existingMapping:', existingMapping?.supabase_uid || 'NONE', 'error:', mappingError?.message || 'none');
+
     let supabaseUid: string | null = null;
 
     if (existingMapping?.supabase_uid) {
       supabaseUid = existingMapping.supabase_uid;
+      console.log('[vote-callback] existing user found:', supabaseUid);
       // LINE情報を更新
       await supabaseAdmin.from('line_auth_mappings').update({
         line_display_name: profile.displayName,
@@ -199,7 +204,7 @@ export async function GET(request: NextRequest) {
     } else {
       // 新規クライアントユーザー作成
       const clientEmail = lineEmail || `line_${profile.userId}@line.realproof.jp`;
-      const clientPassword = crypto.randomUUID();
+      console.log('[vote-callback] creating new user, email:', clientEmail);
 
       // メールで既存ユーザーを確認
       let existingUserId: string | null = null;
@@ -207,12 +212,16 @@ export async function GET(request: NextRequest) {
         const { data: users } = await supabaseAdmin.auth.admin.listUsers();
         const userList = users?.users || [];
         const found = userList.find((u: any) => u.email === lineEmail);
-        if (found) existingUserId = found.id;
+        if (found) {
+          existingUserId = found.id;
+          console.log('[vote-callback] found existing user by email:', existingUserId);
+        }
       }
 
       if (existingUserId) {
         supabaseUid = existingUserId;
       } else {
+        const clientPassword = crypto.randomUUID();
         const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
           email: clientEmail,
           password: clientPassword,
@@ -225,6 +234,9 @@ export async function GET(request: NextRequest) {
         });
         if (!createError && newUser.user) {
           supabaseUid = newUser.user.id;
+          console.log('[vote-callback] new user created:', supabaseUid);
+        } else {
+          console.error('[vote-callback] user creation FAILED:', createError?.message);
         }
       }
 
@@ -243,6 +255,7 @@ export async function GET(request: NextRequest) {
           line_picture_url: profile.pictureUrl,
           supabase_uid: supabaseUid,
         }, { onConflict: 'line_user_id' });
+        console.log('[vote-callback] clients + mapping saved');
       }
     }
 
@@ -257,6 +270,7 @@ export async function GET(request: NextRequest) {
 
       const { data: userData } = await supabaseAdmin.auth.admin.getUserById(supabaseUid);
       const userEmail = userData.user?.email || '';
+      console.log('[vote-callback] creating temp session for:', userEmail);
 
       const tempPassword = crypto.randomUUID();
       const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(supabaseUid, {
@@ -274,11 +288,17 @@ export async function GET(request: NextRequest) {
         if (rewardParam) {
           processingUrl.searchParams.set('reward', rewardParam);
         }
+        console.log('[vote-callback] → /vote-processing (session will be created client-side)');
         return NextResponse.redirect(processingUrl);
+      } else {
+        console.error('[vote-callback] password update FAILED:', updateError.message);
       }
+    } else {
+      console.error('[vote-callback] supabaseUid is NULL - no session will be created');
     }
 
     // セッション作成に失敗してもvote-confirmedには遷移させる（フォールバック）
+    console.log('[vote-callback] → /vote-confirmed (FALLBACK - no session)');
     return NextResponse.redirect(new URL(confirmPath, request.url));
 
   } catch (err) {

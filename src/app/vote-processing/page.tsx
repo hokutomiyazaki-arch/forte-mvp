@@ -6,6 +6,7 @@ import { getRewardLabel } from '@/lib/types'
 import RewardContent from '@/components/RewardContent'
 import { Suspense } from 'react'
 import RelatedPros from '@/components/RelatedPros'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface RewardInfo {
   reward_type: string
@@ -33,6 +34,7 @@ function VoteProcessingContent() {
   const authMethodParam = searchParams.get('auth_method') || 'line'
 
   const supabase = createClient() as any
+  const { refreshAuth } = useAuth()
 
   const [phase, setPhase] = useState<Phase>('processing')
   const [proName, setProName] = useState('')
@@ -89,7 +91,10 @@ function VoteProcessingContent() {
           })
           if (!error && data?.session) {
             setLoggedIn(true)
-            console.log('[vote-processing] session created')
+            console.log('[vote-processing] session created, refreshing AuthProvider...')
+            // AuthProvider（Navbar）にセッション変更を通知
+            await refreshAuth()
+            console.log('[vote-processing] AuthProvider refreshed')
           } else {
             console.warn('[vote-processing] signIn failed:', error?.message)
           }
