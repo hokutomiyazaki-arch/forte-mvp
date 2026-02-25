@@ -52,7 +52,7 @@ export default function VoiceShareModal({
 
     const canvas = await html2canvas(el, {
       scale: 2,
-      backgroundColor: null,
+      backgroundColor: theme.bg,
       useCORS: true,
       width: el.offsetWidth,
       height: el.offsetHeight,
