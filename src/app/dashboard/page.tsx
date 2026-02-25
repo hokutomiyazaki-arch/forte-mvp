@@ -1,7 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { getSessionSafe, signOutAndClear } from '@/lib/auth-helper'
+import { signOutAndClear } from '@/lib/auth-helper'
+import { useAuth } from '@/contexts/AuthContext'
 import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYPES, getRewardType } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import ForteChart from '@/components/ForteChart'
@@ -128,10 +129,14 @@ export default function DashboardPage() {
   // 団体オーナー state
   const [ownedOrg, setOwnedOrg] = useState<{id: string; name: string; type: string} | null>(null)
 
+  const { user: authUser, isLoaded: authLoaded } = useAuth()
+
   useEffect(() => {
+    if (!authLoaded) return
+    if (!authUser) { window.location.href = '/login?role=pro'; return }
+
     async function load() {
-      const { session, user: u } = await getSessionSafe()
-      if (!session || !u) { window.location.href = '/login?role=pro'; return }
+      const u = authUser
       setUser(u)
       const emailIdentity = u.identities?.find((i: any) => i.provider === 'email')
       setHasEmailIdentity(!!emailIdentity)
@@ -332,7 +337,7 @@ export default function DashboardPage() {
       setLoading(false)
     }
     load()
-  }, [])
+  }, [authLoaded, authUser])
 
   function addCustomForte(type: 'result' | 'personality') {
     const prefix = type === 'result' ? 'cr_' : 'cp_'

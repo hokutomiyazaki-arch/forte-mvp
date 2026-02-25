@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
-import { getSessionSafe } from '@/lib/auth-helper'
+import { useAuth } from '@/contexts/AuthContext'
 
 const ORG_TYPE_LABELS: Record<string, { typeName: string; member: string; members: string; invite: string; count: string; perMember: string; emptyTitle: string; emptyDesc: string; publicPage: string }> = {
   store: {
@@ -47,18 +47,16 @@ export default function OrgDashboardPage() {
   const [aggregate, setAggregate] = useState<any>(null)
   const [error, setError] = useState('')
 
+  const { user: authUser, isLoaded: authLoaded } = useAuth()
+
   useEffect(() => {
-    load()
-  }, [])
+    if (!authLoaded) return
+    if (!authUser) { window.location.href = '/login?role=pro'; return }
+    load(authUser)
+  }, [authLoaded, authUser])
 
-  async function load() {
+  async function load(user: any) {
     try {
-      const { user } = await getSessionSafe()
-      if (!user) {
-        window.location.href = '/login?role=pro'
-        return
-      }
-
       // オーナーの団体を取得
       const { data: orgData, error: orgError } = await supabase
         .from('organizations')

@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
-import { getSessionSafe } from '@/lib/auth-helper'
+import { useAuth } from '@/contexts/AuthContext'
 
 export default function BadgeClaimPage({ params }: { params: { claim_token: string } }) {
   const supabase = createClient() as any
@@ -15,9 +15,12 @@ export default function BadgeClaimPage({ params }: { params: { claim_token: stri
   const [claimed, setClaimed] = useState(false)
   const [error, setError] = useState('')
 
+  const { user: authUser, isLoaded: authLoaded } = useAuth()
+
   useEffect(() => {
+    if (!authLoaded) return
     load()
-  }, [])
+  }, [authLoaded])
 
   async function load() {
     try {
@@ -44,8 +47,8 @@ export default function BadgeClaimPage({ params }: { params: { claim_token: stri
       setLevel(levelData)
       setOrg(levelData.organizations)
 
-      // ログインチェック
-      const { user: sessionUser } = await getSessionSafe()
+      // ログインチェック（AuthProviderから）
+      const sessionUser = authUser
       if (!sessionUser) {
         setLoading(false)
         return

@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { getSessionSafe } from '@/lib/auth-helper'
+import { useAuth } from '@/contexts/AuthContext'
 import { Professional, getRewardLabel } from '@/lib/types'
 import { Suspense } from 'react'
 // AuthMethodSelector は login ページで使用。投票ページはフォーム内のためインライン実装
@@ -89,6 +89,7 @@ function VoteForm() {
   const proId = params.id as string
   const qrToken = searchParams.get('token')
   const supabase = createClient()
+  const { user: authUser, isLoaded: authLoaded } = useAuth()
 
   // 基本 state
   const [pro, setPro] = useState<Professional | null>(null)
@@ -228,8 +229,8 @@ function VoteForm() {
         .order('sort_order')
       if (persItems) setPersonalityItems(persItems)
 
-      // セッション確認（ログイン済みユーザーのメール自動取得）
-      const { user: sessionUser } = await getSessionSafe()
+      // セッション確認（AuthProviderから取得）
+      const sessionUser = authUser
       if (sessionUser?.email) {
         setSessionEmail(sessionUser.email)
         setIsLoggedIn(true)
@@ -260,7 +261,7 @@ function VoteForm() {
       setLoading(false)
     }
     load()
-  }, [proId])
+  }, [proId, authLoaded, authUser])
 
   // ── 強みプルーフ選択 ──
   function toggleProofId(id: string) {

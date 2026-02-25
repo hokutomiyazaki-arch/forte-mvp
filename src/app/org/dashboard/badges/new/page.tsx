@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
-import { getSessionSafe } from '@/lib/auth-helper'
+import { useAuth } from '@/contexts/AuthContext'
 
 export default function NewBadgePage() {
   const supabase = createClient() as any
@@ -15,18 +15,16 @@ export default function NewBadgePage() {
   const [error, setError] = useState('')
   const [existingCount, setExistingCount] = useState(0)
 
+  const { user: authUser, isLoaded: authLoaded } = useAuth()
+
   useEffect(() => {
-    load()
-  }, [])
+    if (!authLoaded) return
+    if (!authUser) { window.location.href = '/login?role=pro'; return }
+    load(authUser)
+  }, [authLoaded, authUser])
 
-  async function load() {
+  async function load(user: any) {
     try {
-      const { user } = await getSessionSafe()
-      if (!user) {
-        window.location.href = '/login?role=pro'
-        return
-      }
-
       const { data: orgData, error: orgError } = await supabase
         .from('organizations')
         .select('*')

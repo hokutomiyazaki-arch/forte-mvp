@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
-import { getSessionSafe } from '@/lib/auth-helper'
+import { useAuth } from '@/contexts/AuthContext'
 
 const ORG_TYPE_LABELS: Record<string, { invite: string; inviteDesc: string }> = {
   store: {
@@ -28,18 +28,16 @@ export default function OrgInvitePage() {
   const [error, setError] = useState('')
   const [invitations, setInvitations] = useState<any[]>([])
 
+  const { user: authUser, isLoaded: authLoaded } = useAuth()
+
   useEffect(() => {
-    load()
-  }, [])
+    if (!authLoaded) return
+    if (!authUser) { window.location.href = '/login?role=pro'; return }
+    load(authUser)
+  }, [authLoaded, authUser])
 
-  async function load() {
+  async function load(user: any) {
     try {
-      const { user } = await getSessionSafe()
-      if (!user) {
-        window.location.href = '/login?role=pro'
-        return
-      }
-
       const { data: orgData, error: orgError } = await supabase
         .from('organizations')
         .select('*')

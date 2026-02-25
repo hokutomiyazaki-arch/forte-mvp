@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { getSessionSafe } from '@/lib/auth-helper'
+import { useAuth } from '@/contexts/AuthContext'
 import { Professional, Vote } from '@/lib/types'
 
 const ADMIN_EMAILS = ['info@functionalneurotraining.com']
@@ -19,13 +19,16 @@ export default function AdminPage() {
   const [badgeLabel, setBadgeLabel] = useState('')
   const [badgeUrl, setBadgeUrl] = useState('')
 
+  const { user: authUser, isLoaded: authLoaded } = useAuth()
+
   useEffect(() => {
+    if (!authLoaded) return
+    if (!authUser || !ADMIN_EMAILS.includes(authUser.email || '')) {
+      setLoading(false)
+      return
+    }
+
     async function load() {
-      const { user } = await getSessionSafe()
-      if (!user || !ADMIN_EMAILS.includes(user.email || '')) {
-        setLoading(false)
-        return
-      }
       setAuthorized(true)
 
       // Pros with vote count
@@ -55,7 +58,7 @@ export default function AdminPage() {
       setLoading(false)
     }
     load()
-  }, [])
+  }, [authLoaded, authUser])
 
   async function addBadge() {
     if (!selectedPro || !badgeLabel) return

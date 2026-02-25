@@ -2,7 +2,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { getSessionSafe } from '@/lib/auth-helper'
+import { useAuth } from '@/contexts/AuthContext'
 
 const BADGE_CODES: Record<string, { id: string; label: string; image_url: string }> = {
   'FNT-BASIC': { id: 'fnt-basic', label: 'FNT Basic 認定', image_url: '/badges/fnt-basic.png' },
@@ -20,15 +20,17 @@ function ClaimForm() {
   const supabase = createClient() as any
 
   const [status, setStatus] = useState<'loading' | 'no-login' | 'no-pro' | 'invalid' | 'already' | 'success' | 'error'>('loading')
+  const { user: authUser, isLoaded: authLoaded } = useAuth()
 
   useEffect(() => {
+    if (!authLoaded) return
     if (!badge) { setStatus('invalid'); return }
     claimBadge()
-  }, [])
+  }, [authLoaded])
 
   async function claimBadge() {
-    const { session, user: sessionUser } = await getSessionSafe()
-    if (!session || !sessionUser) { setStatus('no-login'); return }
+    if (!authUser) { setStatus('no-login'); return }
+    const sessionUser = authUser
 
     const { data: pro } = await supabase
       .from('professionals').select('id, badges').eq('user_id', sessionUser.id).maybeSingle()

@@ -2,7 +2,8 @@
 import { useEffect, useState, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { getSessionSafe, signOutAndClear, clearAllAuthStorage } from '@/lib/auth-helper'
+import { signOutAndClear, clearAllAuthStorage } from '@/lib/auth-helper'
+import { useAuth } from '@/contexts/AuthContext'
 import { getRewardLabel } from '@/lib/types'
 import RewardContent from '@/components/RewardContent'
 import { Suspense } from 'react'
@@ -34,6 +35,7 @@ function MyCardContent() {
   const searchParams = useSearchParams()
   const emailParam = searchParams.get('email') || ''
   const supabase = createClient()
+  const { user: authUser, session: authSession, isLoaded: authLoaded, refreshAuth } = useAuth()
 
   // 認証状態: 'loading' | 'auth' | 'ready'
   const [authMode, setAuthMode] = useState<'loading' | 'auth' | 'ready'>('loading')
@@ -276,8 +278,10 @@ function MyCardContent() {
     setDataLoading(false)
   }
 
-  // 初回: セッション確認
+  // 初回: セッション確認（AuthProviderから取得、setSessionもProvider側で完了済み）
   useEffect(() => {
+    if (!authLoaded) return
+
     async function checkSession() {
       const hash = window.location.hash
       if (hash.includes('error=access_denied') || hash.includes('otp_expired')) {
@@ -288,33 +292,16 @@ function MyCardContent() {
         setIsPasswordReset(true)
         setShowSettings(true)
       }
-      console.log('[mycard] checkSession start')
-      const { session, user, source } = await getSessionSafe()
-      console.log('[mycard] session:', user?.email || 'none', 'source:', source)
 
-      if (session && user) {
-        // モバイル対策: getSessionSafe()で取得したトークンをSupabaseクライアントに明示的にセット
-        // これがないとクライアントが内部でgetSession()を呼び、モバイルでハングする
-        if (source === 'localStorage' && session.access_token && session.refresh_token) {
-          try {
-            await supabase.auth.setSession({
-              access_token: session.access_token,
-              refresh_token: session.refresh_token,
-            })
-            console.log('[mycard] session set from localStorage')
-          } catch (e) {
-            console.warn('[mycard] setSession failed:', e)
-          }
-        }
-
-        const email = user.email || ''
+      if (authSession && authUser) {
+        const email = authUser.email || ''
         setUserEmail(email)
         // LINE認証ユーザー判定
-        const lineUser = (email.startsWith('line_') && email.endsWith('@line.realproof.jp')) || !!user.user_metadata?.line_user_id
+        const lineUser = (email.startsWith('line_') && email.endsWith('@line.realproof.jp')) || !!authUser.user_metadata?.line_user_id
         setIsLineUser(lineUser)
         if (lineUser) setIsPasswordReset(false) // LINEユーザーにはパスワードリセット不要
         setAuthMode('ready')
-        await loadData(email, user.id)
+        await loadData(email, authUser.id)
       } else {
         // 未ログイン: インラインフォーム表示
         setAuthMode('auth')
@@ -325,7 +312,7 @@ function MyCardContent() {
       }
     }
     checkSession()
-  }, [])
+  }, [authLoaded, authUser])
 
   // パスワードリセット着地時にスクロール
   useEffect(() => {
@@ -402,6 +389,8 @@ function MyCardContent() {
           } catch (_) {}
 
           setAuthMode('ready')
+          // AuthProviderを更新（Navbarにもセッション反映）
+          await refreshAuth()
           await loadData(email, user.id)
         } else {
           // メール確認が必要
@@ -420,6 +409,8 @@ function MyCardContent() {
           const email = user.email || ''
           setUserEmail(email)
           setAuthMode('ready')
+          // AuthProviderを更新（Navbarにもセッション反映）
+          await refreshAuth()
           await loadData(email, user.id)
         }
       }

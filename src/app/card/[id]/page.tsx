@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { getSessionSafe } from '@/lib/auth-helper'
+import { useAuth } from '@/contexts/AuthContext'
 import { Professional, VoteSummary, Vote } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import { COLORS, FONTS } from '@/lib/design-tokens'
@@ -97,6 +97,7 @@ export default function CardPage() {
   const params = useParams()
   const id = params.id as string
   const supabase = createClient()
+  const { user: authUser, isLoaded: authLoaded } = useAuth()
   const [pro, setPro] = useState<Professional | null>(null)
   const [votes, setVotes] = useState<VoteSummary[]>([])
   const [personalityVotes, setPersonalityVotes] = useState<{ category: string; vote_count: number }[]>([])
@@ -160,8 +161,8 @@ export default function CardPage() {
         .eq('professional_id', id)
       setBookmarkCount(bmCount || 0)
 
-      // セッション取得 + ブックマーク状態チェック
-      const { user: sessionUser } = await getSessionSafe()
+      // セッション取得 + ブックマーク状態チェック（AuthProviderから）
+      const sessionUser = authUser
       if (sessionUser) {
         setCurrentUserId(sessionUser.id)
         const { data: bookmark } = await (supabase as any)
@@ -224,7 +225,7 @@ export default function CardPage() {
       setTimeout(() => setAnimated(true), 100)
     }
     load()
-  }, [id])
+  }, [id, authLoaded, authUser])
 
   const handleBookmarkToggle = async () => {
     if (!currentUserId) {

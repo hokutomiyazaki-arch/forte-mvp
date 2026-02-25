@@ -2,7 +2,8 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { getSessionSafe, signOutAndClear } from '@/lib/auth-helper'
+import { signOutAndClear } from '@/lib/auth-helper'
+import { useAuth } from '@/contexts/AuthContext'
 import { getRewardLabel, REWARD_TYPES } from '@/lib/types'
 import RewardContent from '@/components/RewardContent'
 import { Suspense } from 'react'
@@ -93,24 +94,16 @@ function ConfirmedContent() {
     }
   }
 
+  const { user: authUser, isLoaded: authLoaded } = useAuth()
+
   useEffect(() => {
+    if (!authLoaded) return
+
     async function load() {
-      // セッション確認
-      const { session, user: sessionUser, source } = await getSessionSafe()
-      if (sessionUser) {
+      // セッション確認（AuthProviderから取得、setSessionもProvider側で済み）
+      if (authUser) {
         setLoggedIn(true)
-        setSessionEmail(sessionUser.email || '')
-        // モバイル対策: localStorageから取得したセッションをSupabaseクライアントにセット
-        if (source === 'localStorage' && session?.access_token && session?.refresh_token) {
-          try {
-            await (supabase as any).auth.setSession({
-              access_token: session.access_token,
-              refresh_token: session.refresh_token,
-            })
-          } catch (e) {
-            console.warn('[vote-confirmed] setSession failed:', e)
-          }
-        }
+        setSessionEmail(authUser.email || '')
       }
 
       // プロ名・都道府県取得（publicsテーブルなのでRLS問題なし）
@@ -171,7 +164,7 @@ function ConfirmedContent() {
       setLoading(false)
     }
     load()
-  }, [proId, voteId])
+  }, [proId, voteId, authLoaded, authUser])
 
   if (loading) {
     return <div className="text-center py-16 text-gray-500">読み込み中...</div>

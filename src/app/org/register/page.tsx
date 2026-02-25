@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { getSessionSafe } from '@/lib/auth-helper'
+import { useAuth } from '@/contexts/AuthContext'
 
 const ORG_TYPES = [
   { key: 'store', label: '店舗', desc: '整体院・ヨガスタジオ・サロン等', icon: '🏪' },
@@ -21,13 +21,15 @@ export default function OrgRegisterPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
+  const { user: authUser } = useAuth()
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
     setSubmitting(true)
 
     try {
-      const { user } = await getSessionSafe()
+      const user = authUser
       if (!user) {
         window.location.href = '/login?role=pro'
         return
