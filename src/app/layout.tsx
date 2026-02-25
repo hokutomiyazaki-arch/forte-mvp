@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import './globals.css'
-import Navbar from '@/components/Navbar'
 import { AuthProvider } from '@/contexts/AuthContext'
 
 // 全ページをダイナミックレンダリングにする（env変数がビルド時に不在のため）
@@ -48,16 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="min-h-screen">
         <AuthProvider>
-          <Navbar />
-          <main className="max-w-5xl mx-auto px-4 py-8">
-            {children}
-          </main>
-          <footer className="text-center py-8 text-sm text-gray-500 space-y-2">
-            <div>
-              <a href="/legal" className="hover:text-[#C4A35A] transition">特定商取引法に基づく表記</a>
-            </div>
-            <div>© 2026 REAL PROOF｜株式会社Legrand chariot</div>
-          </footer>
+          {children}
         </AuthProvider>
       </body>
     </html>
