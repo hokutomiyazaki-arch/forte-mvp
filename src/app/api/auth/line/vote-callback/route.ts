@@ -147,9 +147,31 @@ export async function GET(request: NextRequest) {
       }); // 重複エラーは無視（insertはエラーを返すだけで例外にならない）
     }
 
-    // 7. クライアントセッションを作成（LINE投票後もログイン状態にする）
+    // 7. リワード情報をサーバーサイドで取得（モバイルでRLS不要にするため）
+    let rewardParam = '';
+    if (voteData.selected_reward_id) {
+      const { data: rewardData } = await supabaseAdmin
+        .from('rewards')
+        .select('reward_type, content, title')
+        .eq('id', voteData.selected_reward_id)
+        .maybeSingle();
+      if (rewardData) {
+        const rewardJson = JSON.stringify({
+          reward_type: rewardData.reward_type || '',
+          content: rewardData.content || '',
+          title: rewardData.title || '',
+        });
+        // base64url エンコード
+        rewardParam = Buffer.from(rewardJson).toString('base64url');
+      }
+    }
+
+    // 8. クライアントセッションを作成（LINE投票後もログイン状態にする）
     const voteId = insertedVote?.id || '';
-    const confirmPath = `/vote-confirmed?pro=${context.professional_id}&vote_id=${voteId}`;
+    let confirmPath = `/vote-confirmed?pro=${context.professional_id}&vote_id=${voteId}&auth_method=line`;
+    if (rewardParam) {
+      confirmPath += `&reward=${rewardParam}`;
+    }
 
     // line_auth_mappings から既存ユーザーを確認
     const { data: existingMapping } = await supabaseAdmin

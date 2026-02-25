@@ -32,6 +32,8 @@ function ConfirmedContent() {
   const searchParams = useSearchParams()
   const proId = searchParams.get('pro') || searchParams.get('proId') || ''
   const voteId = searchParams.get('vote_id') || ''
+  const rewardParam = searchParams.get('reward') || ''
+  const authMethodParam = searchParams.get('auth_method') || ''
   const supabase = createClient()
 
   const [proName, setProName] = useState('')
@@ -39,7 +41,7 @@ function ConfirmedContent() {
   const [loggedIn, setLoggedIn] = useState(false)
   const [sessionEmail, setSessionEmail] = useState('')
   const [voterEmail, setVoterEmail] = useState('')
-  const [authMethod, setAuthMethod] = useState('')
+  const [authMethod, setAuthMethod] = useState(authMethodParam)
   const [reward, setReward] = useState<RewardInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [shareCopied, setShareCopied] = useState(false)
@@ -71,16 +73,46 @@ function ConfirmedContent() {
     }
   }
 
+  // クエリパラメータからリワードをデコード（DB不要、RLS不要）
+  function decodeRewardParam(): RewardInfo | null {
+    if (!rewardParam) return null
+    try {
+      // base64url → base64 変換してからデコード（ブラウザ互換）
+      const base64 = rewardParam.replace(/-/g, '+').replace(/_/g, '/')
+      const json = decodeURIComponent(escape(atob(base64)))
+      const data = JSON.parse(json)
+      return {
+        reward_type: data.reward_type || '',
+        content: data.content || '',
+        title: data.title || '',
+      }
+    } catch (e) {
+      console.warn('[vote-confirmed] reward param decode failed:', e)
+      return null
+    }
+  }
+
   useEffect(() => {
     async function load() {
       // セッション確認
-      const { session, user: sessionUser } = await getSessionSafe()
+      const { session, user: sessionUser, source } = await getSessionSafe()
       if (sessionUser) {
         setLoggedIn(true)
         setSessionEmail(sessionUser.email || '')
+        // モバイル対策: localStorageから取得したセッションをSupabaseクライアントにセット
+        if (source === 'localStorage' && session?.access_token && session?.refresh_token) {
+          try {
+            await (supabase as any).auth.setSession({
+              access_token: session.access_token,
+              refresh_token: session.refresh_token,
+            })
+          } catch (e) {
+            console.warn('[vote-confirmed] setSession failed:', e)
+          }
+        }
       }
 
-      // プロ名・都道府県取得
+      // プロ名・都道府県取得（publicsテーブルなのでRLS問題なし）
       if (proId) {
         const { data: proData } = await (supabase as any)
           .from('professionals')
@@ -93,8 +125,20 @@ function ConfirmedContent() {
         }
       }
 
-      // vote_id ベースでDBからリワード情報を取得
-      if (voteId) {
+      // リワード: クエリパラメータから優先取得（DB不要でモバイルでも確実）
+      const paramReward = decodeRewardParam()
+      if (paramReward) {
+        setReward(paramReward)
+        console.log('[vote-confirmed] reward loaded from query param')
+      }
+
+      // auth_method がパラメータにあればそれを使う
+      if (authMethodParam) {
+        setAuthMethod(authMethodParam)
+      }
+
+      // フォールバック: DBから取得（PCやパラメータなしの場合）
+      if (voteId && !paramReward) {
         const { data: vote } = await (supabase as any)
           .from('votes')
           .select('voter_email, selected_reward_id, professional_id, auth_method')
@@ -103,7 +147,7 @@ function ConfirmedContent() {
 
         if (vote) {
           setVoterEmail(vote.voter_email || '')
-          setAuthMethod(vote.auth_method || '')
+          if (!authMethodParam) setAuthMethod(vote.auth_method || '')
 
           if (vote.selected_reward_id) {
             const { data: rewardData } = await (supabase as any)

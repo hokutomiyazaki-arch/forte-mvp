@@ -73,7 +73,7 @@ function MyCardContent() {
   // データ取得（セッション確立後に呼ぶ）
   async function loadData(email: string, userId: string) {
     setDataLoading(true)
-    timerRef.current = setTimeout(() => setTimedOut(true), 5000)
+    timerRef.current = setTimeout(() => setTimedOut(true), 10000)
     try {
       console.log('[mycard] loadData start, email:', email, 'userId:', userId)
 
@@ -246,10 +246,24 @@ function MyCardContent() {
         setShowSettings(true)
       }
       console.log('[mycard] checkSession start')
-      const { session, user } = await getSessionSafe()
-      console.log('[mycard] session:', user?.email || 'none')
+      const { session, user, source } = await getSessionSafe()
+      console.log('[mycard] session:', user?.email || 'none', 'source:', source)
 
       if (session && user) {
+        // モバイル対策: getSessionSafe()で取得したトークンをSupabaseクライアントに明示的にセット
+        // これがないとクライアントが内部でgetSession()を呼び、モバイルでハングする
+        if (source === 'localStorage' && session.access_token && session.refresh_token) {
+          try {
+            await supabase.auth.setSession({
+              access_token: session.access_token,
+              refresh_token: session.refresh_token,
+            })
+            console.log('[mycard] session set from localStorage')
+          } catch (e) {
+            console.warn('[mycard] setSession failed:', e)
+          }
+        }
+
         const email = user.email || ''
         setUserEmail(email)
         // LINE認証ユーザー判定
