@@ -7,6 +7,7 @@ import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYP
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import ForteChart from '@/components/ForteChart'
 import VoiceShareModal from '@/components/VoiceShareCard'
+import ImageCropper from '@/components/ImageCropper'
 import { PREFECTURES } from '@/lib/prefectures'
 
 // バッジ階層: FNTはBDCの上位資格。同レベルのFNTを持っていたらBDCは非表示
@@ -68,6 +69,7 @@ export default function DashboardPage() {
   const [qrRefreshed, setQrRefreshed] = useState(false)
   const [editing, setEditing] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   const [form, setForm] = useState({
@@ -856,6 +858,29 @@ export default function DashboardPage() {
     }
   }
 
+  // クロッパー確定後：トリミング済み画像をSupabase Storageにアップロード
+  async function handleCropComplete(croppedBlob: Blob) {
+    setCropImageSrc(null)
+    if (!user) return
+    setUploading(true)
+    try {
+      const file = new File([croppedBlob], `profile-${Date.now()}.jpg`, { type: 'image/jpeg' })
+      const path = `${user.id}/avatar.jpg`
+      const { error } = await (supabase.storage.from('avatars') as any).upload(path, file, { upsert: true })
+      if (!error) {
+        const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
+        setForm(prev => ({...prev, photo_url: urlData.publicUrl + '?t=' + Date.now()}))
+      } else {
+        console.error('Upload error:', error)
+        alert('アップロードに失敗しました')
+      }
+    } catch (e) {
+      console.error('Upload error:', e)
+      alert('アップロードに失敗しました')
+    }
+    setUploading(false)
+  }
+
   if (loading) return <div className="text-center py-16 text-gray-400">読み込み中...</div>
 
   if (editing) {
@@ -881,18 +906,21 @@ export default function DashboardPage() {
             </div>
             <label className={`text-sm text-[#C4A35A] hover:underline ${uploading ? 'pointer-events-none opacity-50' : 'cursor-pointer'}`}>
               {uploading ? 'アップロード中...' : '写真を変更'}
-              <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+              <input type="file" accept="image/*" className="hidden" onChange={(e) => {
                 const file = e.target.files?.[0]
-                if (!file || !user) return
-                setUploading(true)
-                const ext = file.name.split('.').pop()
-                const path = `${user.id}/avatar.${ext}`
-                const { error } = await (supabase.storage.from('avatars') as any).upload(path, file, { upsert: true })
-                if (!error) {
-                  const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
-                  setForm({...form, photo_url: urlData.publicUrl + '?t=' + Date.now()})
+                if (!file) return
+                if (file.size > 5 * 1024 * 1024) {
+                  alert('画像サイズは5MB以下にしてください')
+                  return
                 }
-                setUploading(false)
+                if (!file.type.startsWith('image/')) {
+                  alert('画像ファイルを選択してください')
+                  return
+                }
+                const reader = new FileReader()
+                reader.onload = () => setCropImageSrc(reader.result as string)
+                reader.readAsDataURL(file)
+                e.target.value = ''
               }} />
             </label>
           </div>
@@ -994,6 +1022,16 @@ export default function DashboardPage() {
           </button>
         </form>
 
+        {/* プロフィール写真クロッパー */}
+        {cropImageSrc && (
+          <ImageCropper
+            imageSrc={cropImageSrc}
+            onCropComplete={handleCropComplete}
+            onCancel={() => setCropImageSrc(null)}
+            cropShape="round"
+            aspectRatio={1}
+          />
+        )}
       </div>
     )
   }
