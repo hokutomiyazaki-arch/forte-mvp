@@ -259,7 +259,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // セッション作成 → vote-processing で一体化（リダイレクト1回で完結）
+    // セッション作成 → generateLink 方式（updateUserById 廃止）
     if (supabaseUid) {
       // 投票の client_user_id を更新
       if (insertedVote?.id) {
@@ -269,29 +269,28 @@ export async function GET(request: NextRequest) {
       }
 
       const { data: userData } = await supabaseAdmin.auth.admin.getUserById(supabaseUid);
-      const userEmail = userData.user?.email || '';
-      console.log('[vote-callback] creating temp session for:', userEmail);
+      let userEmail = userData?.user?.email;
 
-      const tempPassword = crypto.randomUUID();
-      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(supabaseUid, {
-        password: tempPassword,
+      if (!userEmail) {
+        userEmail = lineEmail || `line_${profile.userId}@line.realproof.jp`;
+      }
+
+      console.log('[vote-callback] creating session via generateLink for:', userEmail);
+
+      const origin = new URL(request.url).origin;
+      const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'magiclink',
+        email: userEmail,
+        options: {
+          redirectTo: `${origin}/auth/callback?redirect=${encodeURIComponent(confirmPath)}`
+        }
       });
 
-      if (!updateError) {
-        // vote-processing に直接リダイレクト（セッション作成+確認画面を一体化）
-        const processingUrl = new URL('/vote-processing', request.url);
-        processingUrl.searchParams.set('email', userEmail);
-        processingUrl.searchParams.set('token', tempPassword);
-        processingUrl.searchParams.set('pro', context.professional_id);
-        processingUrl.searchParams.set('vote_id', voteId);
-        processingUrl.searchParams.set('auth_method', 'line');
-        if (rewardParam) {
-          processingUrl.searchParams.set('reward', rewardParam);
-        }
-        console.log('[vote-callback] → /vote-processing (session will be created client-side)');
-        return NextResponse.redirect(processingUrl);
+      if (!linkError && linkData?.properties?.action_link) {
+        console.log('[vote-callback] → action_link redirect (session via Supabase verification)');
+        return NextResponse.redirect(linkData.properties.action_link);
       } else {
-        console.error('[vote-callback] password update FAILED:', updateError.message);
+        console.error('[vote-callback] generateLink FAILED:', linkError?.message);
       }
     } else {
       console.error('[vote-callback] supabaseUid is NULL - no session will be created');

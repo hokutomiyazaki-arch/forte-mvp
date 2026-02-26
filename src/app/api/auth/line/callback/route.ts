@@ -136,31 +136,47 @@ export async function GET(request: NextRequest) {
       }, { onConflict: 'line_user_id' });
     }
 
-    // 5. 一時パスワードでセッション生成（signInWithPassword方式）
-    const { data: userData } = await supabaseAdmin.auth.admin.getUserById(supabaseUid);
-    const userEmail = userData.user?.email || '';
+    // 5. generateLink でセッション作成（updateUserById 廃止）
+    // ユーザーのメールを取得
+    const { data: userData, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(supabaseUid);
+    let userEmail = userData?.user?.email;
 
-    // 一時パスワードをセット
-    const tempPassword = crypto.randomUUID();
-    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(supabaseUid, {
-      password: tempPassword,
-    });
+    console.log('[line/callback] getUserById:', supabaseUid, 'email:', userEmail || 'NONE', 'error:', getUserError?.message || 'none');
 
-    if (updateError) {
-      console.error('Temp password set failed:', updateError);
-      return NextResponse.redirect(new URL('/login?error=line_session_failed', request.url));
+    // getUserById が失敗した場合、既知のメールを使用
+    if (!userEmail) {
+      userEmail = lineEmail || `line_${profile.userId}@line.realproof.jp`;
+      console.log('[line/callback] fallback email:', userEmail);
     }
 
-    // 6. /auth/line-session にリダイレクト（クライアント側でsignInWithPassword）
-    // context.type に応じてリダイレクト先を決定
+    // 6. generateLink でマジックリンクを生成
+    const origin = new URL(request.url).origin;
     const redirectPath = context.type === 'client_login' ? '/mycard' : '/dashboard';
 
-    const lineSessionUrl = new URL('/auth/line-session', request.url);
-    lineSessionUrl.searchParams.set('email', userEmail);
-    lineSessionUrl.searchParams.set('token', tempPassword);
-    lineSessionUrl.searchParams.set('next', redirectPath);
+    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'magiclink',
+      email: userEmail,
+      options: {
+        redirectTo: `${origin}/auth/callback?redirect=${encodeURIComponent(redirectPath)}`
+      }
+    });
 
-    return NextResponse.redirect(lineSessionUrl);
+    if (linkError || !linkData?.properties?.action_link) {
+      console.error('[line/callback] generateLink failed:', linkError?.message);
+
+      // generateLink も失敗 → ユーザーが壊れている可能性
+      // マッピングを削除して新規作成を促す
+      await supabaseAdmin.from('line_auth_mappings').delete().eq('supabase_uid', supabaseUid);
+      console.error('[line/callback] cleaned up broken mapping for:', supabaseUid);
+
+      return NextResponse.redirect(new URL('/login?error=line_session_failed&retry=1', request.url));
+    }
+
+    console.log('[line/callback] generateLink success → redirecting to action_link');
+
+    // Supabase の検証URLにリダイレクト
+    // → トークン検証後 /auth/callback?redirect=xxx#access_token=... にリダイレクト
+    return NextResponse.redirect(linkData.properties.action_link);
 
   } catch (err) {
     console.error('LINE callback error:', err);
