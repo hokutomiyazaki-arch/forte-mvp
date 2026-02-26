@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
     const lineEmail = extractEmailFromIdToken(tokenData.id_token);
 
     // 4. 重複投票チェック（LINE userId で）
-    const { data: existingVote } = await supabaseAdmin
+    const { data: existingVote, error: dupCheckError1 } = await supabaseAdmin
       .from('votes')
       .select('id')
       .eq('auth_provider_id', profile.userId)
@@ -63,7 +63,10 @@ export async function GET(request: NextRequest) {
       .eq('professional_id', context.professional_id)
       .maybeSingle();
 
+    console.log('[vote-callback] duplicate check by LINE userId:', { data: existingVote, error: dupCheckError1?.message || null, auth_provider_id: profile.userId, professional_id: context.professional_id });
+
     if (existingVote) {
+      console.log('[vote-callback] BLOCKED: already_voted (by LINE userId)');
       return NextResponse.redirect(
         new URL(`/vote/${context.professional_id}?token=${context.qr_token}&error=already_voted`, request.url)
       );
@@ -71,14 +74,17 @@ export async function GET(request: NextRequest) {
 
     // メールでも重複チェック（LINEからメール取得できた場合）
     if (lineEmail) {
-      const { data: emailVote } = await supabaseAdmin
+      const { data: emailVote, error: dupCheckError2 } = await supabaseAdmin
         .from('votes')
         .select('id')
         .eq('voter_email', lineEmail)
         .eq('professional_id', context.professional_id)
         .maybeSingle();
 
+      console.log('[vote-callback] duplicate check by email:', { data: emailVote, error: dupCheckError2?.message || null, email: lineEmail, professional_id: context.professional_id });
+
       if (emailVote) {
+        console.log('[vote-callback] BLOCKED: already_voted (by email)');
         return NextResponse.redirect(
           new URL(`/vote/${context.professional_id}?token=${context.qr_token}&error=already_voted`, request.url)
         );
@@ -102,6 +108,8 @@ export async function GET(request: NextRequest) {
     const voteData = context.vote_data;
     const voter_email = lineEmail || `line_${profile.userId}@line.realproof.jp`;
 
+    console.log('[vote-callback] attempting INSERT with:', { voter_email, professional_id: context.professional_id, auth_provider_id: profile.userId, vote_type: voteData?.vote_type });
+
     const { data: insertedVote, error: voteError } = await supabaseAdmin
       .from('votes')
       .insert({
@@ -123,8 +131,10 @@ export async function GET(request: NextRequest) {
       .select()
       .maybeSingle();
 
+    console.log('[vote-callback] INSERT result:', { data: insertedVote?.id || null, error: voteError?.message || null, code: voteError?.code || null });
+
     if (voteError) {
-      console.error('Vote insert error:', voteError);
+      console.error('[vote-callback] Vote INSERT error:', { code: voteError.code, message: voteError.message, details: (voteError as any).details, hint: (voteError as any).hint });
       const errorType = voteError.code === '23505' ? 'already_voted' : 'vote_save_failed';
       return NextResponse.redirect(
         new URL(`/vote/${context.professional_id}?token=${context.qr_token}&error=${errorType}`, request.url)
