@@ -1,59 +1,56 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 
 export default function LineSessionPage() {
+  const searchParams = useSearchParams()
+  const [status, setStatus] = useState('セッションを設定中...')
   const [error, setError] = useState('')
-  const [status, setStatus] = useState('LINE認証を完了しています...')
 
   useEffect(() => {
-    async function createSession() {
-      const params = new URLSearchParams(window.location.search)
-      const tokenHash = params.get('token_hash')
-      const next = params.get('next') || '/dashboard'
+    const accessToken = searchParams.get('access_token')
+    const refreshToken = searchParams.get('refresh_token')
+    const redirect = searchParams.get('redirect') || '/dashboard'
 
-      console.log('[line-session] token_hash:', tokenHash ? 'present' : 'missing', 'next:', next)
+    console.log('[line-session] access_token:', accessToken ? 'present' : 'missing', 'refresh_token:', refreshToken ? 'present' : 'missing', 'redirect:', redirect)
 
-      if (!tokenHash) {
-        setError('認証パラメータが不足しています')
-        return
-      }
+    if (!accessToken || !refreshToken) {
+      setError('認証情報が見つかりません')
+      setTimeout(() => { window.location.href = '/login?error=line_session_failed' }, 2000)
+      return
+    }
 
+    const setSession = async () => {
       try {
-        const supabase = createClient() as any
-        setStatus('セッションを作成中...')
-
-        // verifyOtp で hashed_token を検証してセッションを作成
-        const { data, error: verifyError } = await supabase.auth.verifyOtp({
-          token_hash: tokenHash,
-          type: 'magiclink',
+        const supabase = createClient()
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
         })
 
-        console.log('[line-session] verifyOtp result:', data?.session ? 'SESSION OK' : 'NO SESSION', 'error:', verifyError?.message || 'none')
-
-        if (verifyError) {
-          console.error('[line-session] verifyOtp error:', verifyError)
-          setError('セッションの作成に失敗しました。もう一度LINEログインをお試しください。')
+        if (sessionError) {
+          console.error('[line-session] setSession error:', sessionError.message)
+          setError('セッション設定に失敗しました')
+          setTimeout(() => { window.location.href = '/login?error=line_session_failed' }, 2000)
           return
         }
 
-        if (data?.session) {
-          setStatus('ログイン成功！リダイレクト中...')
-          // URLからトークンを消す（履歴に残さない）
-          window.history.replaceState(null, '', '/auth/line-session')
-          window.location.href = next
-        } else {
-          setError('セッションの取得に失敗しました')
-        }
+        console.log('[line-session] session set successfully, redirecting to:', redirect)
+        setStatus('ログイン成功！リダイレクト中...')
+        // URLからトークンを消す（履歴に残さない）
+        window.history.replaceState(null, '', '/auth/line-session')
+        window.location.href = redirect
       } catch (err) {
         console.error('[line-session] unexpected error:', err)
         setError('予期しないエラーが発生しました')
+        setTimeout(() => { window.location.href = '/login?error=line_session_failed' }, 2000)
       }
     }
 
-    createSession()
-  }, [])
+    setSession()
+  }, [searchParams])
 
   if (error) {
     return (

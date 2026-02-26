@@ -54,6 +54,8 @@ export async function GET(request: NextRequest) {
       .maybeSingle();
 
     let supabaseUid: string;
+    const email = lineEmail || `line_${profile.userId}@line.realproof.jp`;
+    const linePassword = `line_${profile.userId}_${process.env.LINE_CHANNEL_SECRET}`;
 
     // 既存マッピングがある場合、ユーザーの存在を確認
     let mappingValid = false;
@@ -82,75 +84,58 @@ export async function GET(request: NextRequest) {
     if (!mappingValid) {
       // ---- 新規ユーザー: 登録 ----
 
-      // メールアドレスの決定（LINEから取得 or 仮メール生成）
-      const email = lineEmail || `line_${profile.userId}@line.realproof.jp`;
-      const password = crypto.randomUUID(); // ランダムパスワード（LINE認証では使わない）
+      // 新規Supabase Authユーザー作成
+      const { data: newUser, error: signUpError } = await supabaseAdmin.auth.admin.createUser({
+        email: email,
+        password: linePassword,
+        email_confirm: true,
+        user_metadata: {
+          line_user_id: profile.userId,
+          display_name: profile.displayName,
+          avatar_url: profile.pictureUrl,
+        },
+      });
 
-      // メールで既存ユーザーを確認（Google/Email で既に登録済みの場合）
-      let existingUserId: string | null = null;
-      if (lineEmail) {
-        const { data: users } = await supabaseAdmin.auth.admin.listUsers();
-        const userList = users?.users || [];
-        const found = userList.find((u: any) => u.email === lineEmail);
-        if (found) existingUserId = found.id;
-      }
-
-      if (existingUserId) {
-        // 既存ユーザーにLINE連携を追加
-        supabaseUid = existingUserId;
-      } else {
-        // 新規Supabase Authユーザー作成
-        const { data: newUser, error: signUpError } = await supabaseAdmin.auth.admin.createUser({
-          email: email,
-          password: password,
-          email_confirm: true, // メール確認不要にする
-          user_metadata: {
-            line_user_id: profile.userId,
-            display_name: profile.displayName,
-            avatar_url: profile.pictureUrl,
-          },
-        });
-
-        if (signUpError || !newUser.user) {
-          if (signUpError?.code === 'email_exists') {
-            console.log('[line/callback] email_exists, using generateLink to get user:', email);
-            const { data: linkData } = await supabaseAdmin.auth.admin.generateLink({
-              type: 'magiclink',
-              email: email,
-            });
-            if (linkData?.user?.id) {
-              supabaseUid = linkData.user.id;
-              console.log('[line/callback] found user via generateLink:', supabaseUid);
-            } else {
-              console.error('[line/callback] generateLink could not find user for:', email);
-              return NextResponse.redirect(new URL('/login?error=line_signup_failed', request.url));
-            }
+      if (signUpError || !newUser?.user) {
+        if (signUpError?.code === 'email_exists') {
+          // メールが既に存在 → generateLink で ID を取得
+          console.log('[line/callback] email_exists, using generateLink to get user:', email);
+          const { data: linkData } = await supabaseAdmin.auth.admin.generateLink({
+            type: 'magiclink',
+            email: email,
+          });
+          if (linkData?.user?.id) {
+            supabaseUid = linkData.user.id;
+            console.log('[line/callback] found user via generateLink:', supabaseUid);
           } else {
-            console.error('Supabase user creation failed:', signUpError);
+            console.error('[line/callback] generateLink could not find user for:', email);
             return NextResponse.redirect(new URL('/login?error=line_signup_failed', request.url));
           }
         } else {
-          supabaseUid = newUser.user.id;
+          console.error('Supabase user creation failed:', signUpError);
+          return NextResponse.redirect(new URL('/login?error=line_signup_failed', request.url));
         }
+      } else {
+        supabaseUid = newUser.user.id;
+      }
 
-        // professionals テーブルに初期レコード作成（pro_register の場合）
-        if (context.type === 'pro_register') {
-          await supabaseAdmin.from('professionals').upsert({
-            user_id: supabaseUid,
-            display_name: profile.displayName,
-            avatar_url: profile.pictureUrl || null,
-            line_user_id: profile.userId,
-            line_display_name: profile.displayName,
-          }, { onConflict: 'user_id' });
-        }
+      // professionals テーブルに初期レコード作成（pro_register の場合）
+      if (context.type === 'pro_register') {
+        await supabaseAdmin.from('professionals').upsert({
+          user_id: supabaseUid,
+          display_name: profile.displayName,
+          avatar_url: profile.pictureUrl || null,
+          line_user_id: profile.userId,
+          line_display_name: profile.displayName,
+        }, { onConflict: 'user_id' });
+      }
 
-        // clients テーブルに初期レコード作成（client_login の場合）
-        if (context.type === 'client_login') {
-          await supabaseAdmin.from('clients').upsert({
-            user_id: supabaseUid,
-            nickname: profile.displayName,
-          }, { onConflict: 'user_id' });
-        }
+      // clients テーブルに初期レコード作成（client_login の場合）
+      if (context.type === 'client_login') {
+        await supabaseAdmin.from('clients').upsert({
+          user_id: supabaseUid,
+          nickname: profile.displayName,
+        }, { onConflict: 'user_id' });
       }
 
       // LINE連携マッピングを保存
@@ -163,37 +148,70 @@ export async function GET(request: NextRequest) {
       }, { onConflict: 'line_user_id' });
     }
 
-    // 5. generateLink で action_link を取得し、redirect_to を書き換える
-    const { data: userData, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(supabaseUid);
-    let userEmail = userData?.user?.email;
+    // --- パスワード設定 ---
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(supabaseUid, {
+      password: linePassword,
+      email_confirm: true,
+    });
 
-    console.log('[line/callback] getUserById:', supabaseUid, 'email:', userEmail || 'NONE', 'error:', getUserError?.message || 'none');
+    if (updateError) {
+      console.error('[line/callback] updateUserById failed:', updateError.message);
+      // updateUserById が失敗した場合、ユーザーを削除して再作成
+      console.log('[line/callback] deleting and recreating user');
+      await supabaseAdmin.auth.admin.deleteUser(supabaseUid);
+      await supabaseAdmin.from('line_auth_mappings').delete().eq('line_user_id', profile.userId);
 
-    if (!userEmail) {
-      userEmail = lineEmail || `line_${profile.userId}@line.realproof.jp`;
-      console.log('[line/callback] fallback email:', userEmail);
+      const { data: recreatedUser, error: recreateError } = await supabaseAdmin.auth.admin.createUser({
+        email: email,
+        password: linePassword,
+        email_confirm: true,
+      });
+
+      if (recreateError || !recreatedUser?.user) {
+        console.error('[line/callback] recreate failed:', recreateError?.message);
+        return NextResponse.redirect(new URL('/login?error=line_signup_failed', request.url));
+      }
+      supabaseUid = recreatedUser.user.id;
+
+      // マッピング再保存
+      await supabaseAdmin.from('line_auth_mappings').upsert({
+        line_user_id: profile.userId,
+        line_display_name: profile.displayName,
+        line_email: lineEmail,
+        line_picture_url: profile.pictureUrl,
+        supabase_uid: supabaseUid,
+      }, { onConflict: 'line_user_id' });
     }
 
+    // --- signInWithPassword でセッション取得 ---
+    const supabaseAuth = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    );
+
+    const { data: signInData, error: signInError } = await supabaseAuth.auth.signInWithPassword({
+      email: email,
+      password: linePassword,
+    });
+
+    if (signInError || !signInData?.session) {
+      console.error('[line/callback] signInWithPassword failed:', signInError?.message);
+      return NextResponse.redirect(new URL('/login?error=line_signin_failed', request.url));
+    }
+
+    console.log('[line/callback] signInWithPassword success, session obtained');
+
+    // --- トークンをクライアントに渡す ---
     const origin = new URL(request.url).origin;
     const redirectPath = context.type === 'client_login' ? '/mycard' : '/dashboard';
 
-    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-      type: 'magiclink',
-      email: userEmail,
-      options: {
-        redirectTo: `${origin}/auth/callback?redirect=${encodeURIComponent(redirectPath)}`
-      }
-    });
+    const sessionUrl = new URL('/auth/line-session', origin);
+    sessionUrl.searchParams.set('access_token', signInData.session.access_token);
+    sessionUrl.searchParams.set('refresh_token', signInData.session.refresh_token);
+    sessionUrl.searchParams.set('redirect', redirectPath);
 
-    if (linkError || !linkData?.properties?.action_link) {
-      console.error('[line/callback] generateLink failed:', linkError?.message);
-      await supabaseAdmin.from('line_auth_mappings').delete().eq('supabase_uid', supabaseUid);
-      return NextResponse.redirect(new URL('/login?error=line_session_failed&retry=1', request.url));
-    }
-
-    console.log('[line/callback] generateLink success → redirecting to action_link');
-
-    return NextResponse.redirect(linkData.properties.action_link);
+    console.log('[line/callback] redirecting to line-session with tokens');
+    return NextResponse.redirect(sessionUrl.toString());
 
   } catch (err) {
     console.error('LINE callback error:', err);
