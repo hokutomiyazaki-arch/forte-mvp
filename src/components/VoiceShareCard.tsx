@@ -3,10 +3,26 @@
 import { useState, useRef, useCallback } from 'react'
 import html2canvas from 'html2canvas'
 import { createClient } from '@/lib/supabase'
+import { REALPROOF_LOGO_BASE64 } from '@/lib/logoBase64'
 import {
   VoiceCardTheme, hexToRgba,
   VOICE_CARD_PRESETS, resolveTheme, buildCustomTheme,
 } from '@/lib/voiceCardThemes'
+
+// ライト背景かどうかを判定
+function isLightBackground(bgColor: string): boolean {
+  // グラデーションの場合は最初の色で判定
+  const color = bgColor.includes('gradient')
+    ? bgColor.match(/#[0-9A-Fa-f]{6}/)?.[0] || '#FAF8F4'
+    : bgColor;
+
+  const hex = color.replace('#', '');
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.5;
+}
 
 // ═══ Props ═══
 interface VoiceShareModalProps {
@@ -72,13 +88,7 @@ export default function VoiceShareModal({
   const topProof = topStrengths.length > 0 ? topStrengths[0] : null
 
   // テーマの明るさ判定（ロゴ・ボーダー色の分岐用）
-  const isLightBg = (() => {
-    const hex = theme.bg
-    const r = parseInt(hex.slice(1, 3), 16)
-    const g = parseInt(hex.slice(3, 5), 16)
-    const b = parseInt(hex.slice(5, 7), 16)
-    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.55
-  })()
+  const isLightBg = isLightBackground(theme.bg)
 
   // ── テーマ操作 ──
   function buildThemePayload(overrides?: { proof?: boolean; info?: boolean; custom?: boolean; bg?: string; text?: string; accent?: string; presetName?: string }) {
