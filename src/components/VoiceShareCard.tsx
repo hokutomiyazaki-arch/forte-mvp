@@ -70,8 +70,8 @@ export default function VoiceShareModal({
   // ── シェア中 ──
   const [saving, setSaving] = useState(false)
 
-  // ── エクスポートサイズ ──
-  const [exportSize, setExportSize] = useState<'story' | 'feed'>('story')
+  // ── エクスポートモード ──
+  const [exportMode, setExportMode] = useState<'stories' | 'feed'>('stories')
 
   // ── debounce timer ──
   const saveTimer = useRef<NodeJS.Timeout | null>(null)
@@ -133,7 +133,7 @@ export default function VoiceShareModal({
     if (!el) { setSaving(false); return }
 
     const w = 1080
-    const h = exportSize === 'story' ? 1920 : 1350
+    const h = exportMode === 'stories' ? 1920 : 1350
 
     const canvas = await html2canvas(el, {
       scale: 1,
@@ -193,8 +193,8 @@ export default function VoiceShareModal({
   }
 
   // エクスポートキャンバスの高さ
-  const exportH = exportSize === 'story' ? 1920 : 1350
-  const exportPadV = exportSize === 'story' ? 120 : 80
+  const exportH = exportMode === 'stories' ? 1920 : 1350
+  const exportPadV = exportMode === 'stories' ? 120 : 80
 
   // ═══ Render ═══
   return (
@@ -212,19 +212,41 @@ export default function VoiceShareModal({
       >
         {/* ═══ 1. カードプレビュー（表示用、キャプチャ対象ではない）═══ */}
         <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <div style={{ padding: 24, backgroundColor: '#FFFFFF' }}>
+          <div style={{
+            padding: exportMode === 'feed' ? 24 : 0,
+            backgroundColor: exportMode === 'feed' ? '#FFFFFF' : 'transparent',
+          }}>
           <div style={{
             background: `linear-gradient(170deg, ${theme.bg} 0%, ${theme.bg2} 100%)`,
-            borderRadius: 18,
-            padding: '32px 26px',
+            borderRadius: exportMode === 'feed' ? 18 : 0,
+            padding: exportMode === 'stories' ? '60px 30px 40px' : '32px 26px',
             width: 340,
-            border: isLightBg ? '2px solid rgba(0,0,0,0.08)' : '2px solid rgba(255,255,255,0.12)',
+            border: exportMode === 'feed'
+              ? (isLightBg ? '2px solid rgba(0,0,0,0.08)' : '2px solid rgba(255,255,255,0.12)')
+              : 'none',
             fontFamily: "'Inter', 'Noto Sans JP', sans-serif",
             display: 'flex',
             flexDirection: 'column',
             position: 'relative',
             overflow: 'hidden',
+            ...(exportMode === 'stories' ? { aspectRatio: '9 / 16', justifyContent: 'center' } : {}),
           }}>
+            {/* ストーリーズ上部ロゴ（プレビュー用プレースホルダー） */}
+            {exportMode === 'stories' && (
+              <div style={{ textAlign: 'center', marginBottom: 24 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={REALPROOF_LOGO_BASE64}
+                  alt="REALPROOF"
+                  style={{
+                    height: 32,
+                    objectFit: 'contain',
+                    filter: isLightBg ? 'none' : 'brightness(2)',
+                  }}
+                />
+              </div>
+            )}
+
             {/* 引用符 */}
             <div style={{ fontSize: 56, color: hexToRgba(theme.accent, 0.22), fontFamily: 'Georgia, serif', lineHeight: 1 }}>&ldquo;</div>
 
@@ -250,6 +272,7 @@ export default function VoiceShareModal({
                 <div style={{ height: 1, background: hexToRgba(theme.accent, 0.12), margin: '0 0 14px' }} />
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
                   {proPhotoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={proPhotoUrl} alt={proName}
                       style={{
                         width: 48, height: 48, borderRadius: '50%', objectFit: 'cover',
@@ -422,12 +445,12 @@ export default function VoiceShareModal({
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             {([
-              { key: 'story' as const, label: 'ストーリーズ（9:16）' },
+              { key: 'stories' as const, label: 'ストーリーズ（9:16）' },
               { key: 'feed' as const, label: 'フィード（4:5）' },
             ]).map(({ key, label }) => (
               <button
                 key={key}
-                onClick={() => setExportSize(key)}
+                onClick={() => setExportMode(key)}
                 style={{
                   flex: 1,
                   padding: '10px 12px',
@@ -435,13 +458,13 @@ export default function VoiceShareModal({
                   fontWeight: 600,
                   fontFamily: "'Inter', 'Noto Sans JP', sans-serif",
                   borderRadius: 8,
-                  border: exportSize === key
+                  border: exportMode === key
                     ? '1px solid #C4A35A'
                     : '1px solid rgba(255,255,255,0.15)',
-                  background: exportSize === key
+                  background: exportMode === key
                     ? 'rgba(196,163,90,0.15)'
                     : 'transparent',
-                  color: exportSize === key ? '#C4A35A' : '#BBBBBB',
+                  color: exportMode === key ? '#C4A35A' : '#BBBBBB',
                   cursor: 'pointer',
                   transition: 'all 0.15s',
                 }}
