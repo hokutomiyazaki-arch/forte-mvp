@@ -68,6 +68,15 @@ export default function VoiceShareModal({
   // トッププルーフ
   const topProof = topStrengths.length > 0 ? topStrengths[0] : null
 
+  // テーマの明るさ判定（ボーダー色の分岐用）
+  const isLightBg = (() => {
+    const hex = theme.bg
+    const r = parseInt(hex.slice(1, 3), 16)
+    const g = parseInt(hex.slice(3, 5), 16)
+    const b = parseInt(hex.slice(5, 7), 16)
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.5
+  })()
+
   // ── テーマ操作 ──
   function buildThemePayload(overrides?: { proof?: boolean; info?: boolean; custom?: boolean; bg?: string; text?: string; accent?: string; presetName?: string }) {
     const proof = overrides?.proof ?? showProof
@@ -118,7 +127,7 @@ export default function VoiceShareModal({
 
     const canvas = await html2canvas(el, {
       scale: 2,
-      backgroundColor: theme.bg,
+      backgroundColor: '#FFFFFF',
       useCORS: true,
       width: el.offsetWidth,
       height: el.offsetHeight,
@@ -192,11 +201,13 @@ export default function VoiceShareModal({
       >
         {/* ═══ 1. カードプレビュー ═══ */}
         <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <div id="voice-card-for-export" style={{
+          <div id="voice-card-for-export" style={{ padding: 24, backgroundColor: '#FFFFFF' }}>
+          <div style={{
             background: `linear-gradient(170deg, ${theme.bg} 0%, ${theme.bg2} 100%)`,
             borderRadius: 18,
             padding: '32px 26px',
             width: 340,
+            border: isLightBg ? '2px solid rgba(0,0,0,0.08)' : '2px solid rgba(255,255,255,0.12)',
             fontFamily: "'Inter', 'Noto Sans JP', sans-serif",
             display: 'flex',
             flexDirection: 'column',
@@ -271,11 +282,12 @@ export default function VoiceShareModal({
               <span style={{ fontSize: 9, color: theme.sub, fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>realproof.jp</span>
             </div>
           </div>
+          </div>
         </div>
 
         {/* ═══ 2. フレーズ選択 ═══ */}
         <div style={{ maxWidth: 340, margin: '16px auto 0' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#A0A0A0', marginBottom: 8, fontFamily: "'Inter', sans-serif", letterSpacing: 1 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#F0ECE4', marginBottom: 8, fontFamily: "'Inter', sans-serif", letterSpacing: 1 }}>
             PHRASE
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -283,9 +295,9 @@ export default function VoiceShareModal({
               <button key={p.id}
                 onClick={() => setCurrentPhraseId(p.id)}
                 style={{
-                  background: currentPhraseId === p.id ? '#C4A35A' : '#F5F5F0',
-                  color: currentPhraseId === p.id ? '#fff' : '#555',
-                  border: currentPhraseId === p.id ? '1px solid #C4A35A' : '1px solid #E8E4DC',
+                  background: currentPhraseId === p.id ? '#C4A35A' : 'transparent',
+                  color: currentPhraseId === p.id ? '#fff' : '#BBBBBB',
+                  border: currentPhraseId === p.id ? '1px solid #C4A35A' : '1px solid rgba(255,255,255,0.15)',
                   borderRadius: 8, padding: '8px 12px',
                   fontSize: 12, cursor: 'pointer', textAlign: 'left' as const,
                   transition: 'all 0.15s',
@@ -299,14 +311,14 @@ export default function VoiceShareModal({
 
         {/* ═══ 3. カラーテーマ ═══ */}
         <div style={{ maxWidth: 340, margin: '16px auto 0' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#A0A0A0', marginBottom: 8, fontFamily: "'Inter', sans-serif", letterSpacing: 1 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#F0ECE4', marginBottom: 8, fontFamily: "'Inter', sans-serif", letterSpacing: 1 }}>
             THEME
           </div>
 
           {/* プリセット */}
           {(['Light', 'Dark', 'Vibrant'] as const).map((group, gi) => (
             <div key={group} style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#A0A0A0', marginBottom: 4, fontFamily: "'Inter', sans-serif" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#999999', marginBottom: 4, fontFamily: "'Inter', sans-serif" }}>
                 {group}
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -321,7 +333,7 @@ export default function VoiceShareModal({
                       style={{
                         width: 36, height: 36, borderRadius: 8,
                         background: `linear-gradient(135deg, ${preset.bg} 0%, ${preset.bg2} 100%)`,
-                        border: isSelected ? '3px solid #C4A35A' : '2px solid #ddd',
+                        border: isSelected ? '3px solid #C4A35A' : '2px solid rgba(255,255,255,0.2)',
                         boxShadow: isSelected ? '0 0 0 2px rgba(196,163,90,0.3)' : 'none',
                         cursor: 'pointer', padding: 0, transition: 'all 0.2s',
                       }}
@@ -333,8 +345,8 @@ export default function VoiceShareModal({
           ))}
 
           {/* カスタムカラー */}
-          <div style={{ marginTop: 8, borderTop: '1px solid #eee', paddingTop: 10 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#A0A0A0', marginBottom: 8, fontFamily: "'Inter', sans-serif" }}>
+          <div style={{ marginTop: 8, borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 10 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#999999', marginBottom: 8, fontFamily: "'Inter', sans-serif" }}>
               CUSTOM
             </div>
             <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
@@ -357,7 +369,7 @@ export default function VoiceShareModal({
                     }}
                     style={{ width: 28, height: 28, border: 'none', borderRadius: 6, cursor: 'pointer', padding: 0 }}
                   />
-                  <span style={{ fontSize: 10, color: '#555', fontWeight: 500 }}>{label}</span>
+                  <span style={{ fontSize: 10, color: '#999999', fontWeight: 500 }}>{label}</span>
                 </label>
               ))}
             </div>
@@ -367,11 +379,11 @@ export default function VoiceShareModal({
         {/* ═══ 4. トグル ═══ */}
         <div style={{ maxWidth: 340, margin: '14px auto 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
           {([
-            { label: 'トッププルーフ表示', value: showProof, toggle: handleToggleProof },
-            { label: 'プロ情報表示', value: showProInfo, toggle: handleToggleProInfo },
+            { label: 'プルーフを表示', value: showProof, toggle: handleToggleProof },
+            { label: 'プロ情報を表示', value: showProInfo, toggle: handleToggleProInfo },
           ] as const).map(({ label, value, toggle }) => (
             <label key={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
-              <span style={{ fontSize: 12, fontWeight: 500, color: '#333' }}>{label}</span>
+              <span style={{ fontSize: 12, fontWeight: 500, color: '#F0ECE4' }}>{label}</span>
               <div
                 onClick={() => toggle(!value)}
                 style={{
