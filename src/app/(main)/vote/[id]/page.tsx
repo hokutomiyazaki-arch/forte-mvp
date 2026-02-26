@@ -137,7 +137,9 @@ function VoteForm() {
     async function load() {
       // LINE/Google認証からのエラーハンドリング
       const authError = searchParams.get('error')
+      console.log('[vote] URL error param:', authError || 'NONE')
       if (authError === 'already_voted') {
+        console.log('[vote] alreadyVoted set via URL param error=already_voted')
         setAlreadyVoted(true)
       } else if (authError === 'self_vote') {
         setError('ご自身のプルーフには投票できません')
@@ -233,29 +235,33 @@ function VoteForm() {
 
       // セッション確認（AuthProviderから取得）
       const sessionUser = authUser
+      console.log('[vote] session check:', { email: sessionUser?.email || 'NONE', id: sessionUser?.id || 'NONE' })
       if (sessionUser?.email) {
         setSessionEmail(sessionUser.email)
         setIsLoggedIn(true)
         // ログイン済みならセッションメールで重複投票チェック
-        const { data: existing } = await (supabase as any)
+        const { data: existing, error: voteCheckError } = await (supabase as any)
           .from('votes')
           .select('id')
           .eq('professional_id', proId)
           .eq('voter_email', sessionUser.email)
           .maybeSingle()
+        console.log('[vote] already voted check (session):', { data: existing, error: voteCheckError, email: sessionUser.email, proId })
         if (existing) setAlreadyVoted(true)
       } else {
         // 未ログイン: ローカルストレージからメアド復元
         const savedEmail = localStorage.getItem('proof_voter_email')
+        console.log('[vote] localStorage email:', savedEmail || 'NONE')
         if (savedEmail) {
           setVoterEmail(savedEmail)
           // 既に投票済みかチェック
-          const { data: existing } = await (supabase as any)
+          const { data: existing, error: voteCheckError } = await (supabase as any)
             .from('votes')
             .select('id')
             .eq('professional_id', proId)
             .eq('voter_email', savedEmail)
             .maybeSingle()
+          console.log('[vote] already voted check (localStorage):', { data: existing, error: voteCheckError, email: savedEmail, proId })
           if (existing) setAlreadyVoted(true)
         }
       }
