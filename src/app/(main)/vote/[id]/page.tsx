@@ -474,6 +474,7 @@ function VoteForm() {
     console.log('[handleSubmit] proof IDs:', { uuidProofIds, customProofIds, proofIdsToSend })
 
     // 投票INSERT
+    console.log('[handleSubmit] submitting vote:', { proId, email, sessionCount, voteType, proofIdsToSend, qrToken, isLoggedIn })
     const { data: voteData, error: voteError } = await (supabase as any).from('votes').insert({
       professional_id: proId,
       voter_email: email,
@@ -487,6 +488,8 @@ function VoteForm() {
       qr_token: qrToken,
       status: 'pending',
     }).select().single()
+
+    console.log('[handleSubmit] Vote INSERT result:', { data: voteData, error: voteError })
 
     if (voteError) {
       console.error('[handleSubmit] Vote INSERT error:', {
