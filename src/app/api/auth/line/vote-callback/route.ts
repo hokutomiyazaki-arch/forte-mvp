@@ -276,35 +276,37 @@ export async function GET(request: NextRequest) {
       console.log('profile.userId:', profile.userId);
       console.log('lineEmail:', lineEmail);
       console.log('supabaseUid:', supabaseUid);
-      console.log('userEmail for generateLink:', userEmail);
+      console.log('userEmail:', userEmail);
 
-      const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-        type: 'magiclink',
-        email: userEmail,
-      });
+      // 一時パスワードをセットして signInWithPassword で使う
+      const tempPassword = crypto.randomUUID();
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+        supabaseUid,
+        { password: tempPassword }
+      );
 
-      console.log('[vote-callback] generateLink result:', linkError ? linkError.message : 'success');
+      if (!updateError) {
+        console.log('[vote-callback] Password updated for:', userEmail);
 
-      if (!linkError && linkData) {
-        const actionLink = linkData.properties?.action_link;
-        if (actionLink) {
-          // ★ action_link に直接リダイレクト（Supabase正規フロー）
-          // Supabase がセッション作成後 /auth/callback にリダイレクト → vote-confirmed へ
-          const origin = new URL(request.url).origin;
-          let voteConfirmedPath = `/vote-confirmed?pro=${context.professional_id}&vote_id=${voteId}&auth_method=line`;
-          if (rewardParam) {
-            voteConfirmedPath += `&reward=${rewardParam}`;
-          }
-          const redirectUrl = new URL(actionLink);
-          redirectUrl.searchParams.set('redirect_to', `${origin}/auth/callback?redirect=${encodeURIComponent(voteConfirmedPath)}`);
+        const credentials = Buffer.from(JSON.stringify({
+          email: userEmail,
+          password: tempPassword
+        })).toString('base64url');
 
-          console.log('[vote-callback] → Supabase action_link → /auth/callback → /vote-confirmed');
-          return NextResponse.redirect(redirectUrl.toString());
-        } else {
-          console.error('[vote-callback] No action_link in generateLink response');
+        // 投票完了ページのURL
+        let voteConfirmedPath = `/vote-confirmed?pro=${context.professional_id}&vote_id=${voteId}&auth_method=line`;
+        if (rewardParam) {
+          voteConfirmedPath += `&reward=${rewardParam}`;
         }
+
+        const lineSessionUrl = new URL('/auth/line-session', request.url);
+        lineSessionUrl.searchParams.set('credentials', credentials);
+        lineSessionUrl.searchParams.set('next', voteConfirmedPath);
+
+        console.log('[vote-callback] → /auth/line-session → /vote-confirmed');
+        return NextResponse.redirect(lineSessionUrl);
       } else {
-        console.error('[vote-callback] generateLink FAILED:', linkError?.message);
+        console.error('[vote-callback] Password update FAILED:', updateError.message);
       }
     } else {
       console.error('[vote-callback] supabaseUid is NULL - no session will be created');
