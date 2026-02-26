@@ -113,15 +113,16 @@ export async function GET(request: NextRequest) {
 
         if (signUpError || !newUser.user) {
           if (signUpError?.code === 'email_exists') {
-            // メールが既に存在 → そのユーザーを使う
-            console.log('[line/callback] email already exists, finding user by email:', email);
-            const { data: allUsers } = await supabaseAdmin.auth.admin.listUsers();
-            const existingUser = allUsers?.users?.find((u: any) => u.email === email);
-            if (existingUser) {
-              supabaseUid = existingUser.id;
-              console.log('[line/callback] found existing user by email:', supabaseUid);
+            console.log('[line/callback] email_exists, using generateLink to get user:', email);
+            const { data: linkData } = await supabaseAdmin.auth.admin.generateLink({
+              type: 'magiclink',
+              email: email,
+            });
+            if (linkData?.user?.id) {
+              supabaseUid = linkData.user.id;
+              console.log('[line/callback] found user via generateLink:', supabaseUid);
             } else {
-              console.error('[line/callback] email_exists but user not found in listUsers');
+              console.error('[line/callback] generateLink could not find user for:', email);
               return NextResponse.redirect(new URL('/login?error=line_signup_failed', request.url));
             }
           } else {
