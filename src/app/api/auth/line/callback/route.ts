@@ -136,51 +136,47 @@ export async function GET(request: NextRequest) {
       }, { onConflict: 'line_user_id' });
     }
 
-    // 5. セッション作成: signInWithPassword 方式（signOut→clear→signInで確実に動く）
-    // メールアドレスは既に分かっている。getUserById で取り直す必要なし。
-    let userEmail: string = '';
-    if (existingMapping?.supabase_uid) {
-      const { data: userData } = await supabaseAdmin.auth.admin.getUserById(existingMapping.supabase_uid);
-      userEmail = userData.user?.email || lineEmail || `line_${profile.userId}@line.realproof.jp`;
-    } else {
+    // 5. generateLink でセッション作成（updateUserById 廃止）
+    // ユーザーのメールを取得
+    const { data: userData, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(supabaseUid);
+    let userEmail = userData?.user?.email;
+
+    console.log('[line/callback] getUserById:', supabaseUid, 'email:', userEmail || 'NONE', 'error:', getUserError?.message || 'none');
+
+    // getUserById が失敗した場合、既知のメールを使用
+    if (!userEmail) {
       userEmail = lineEmail || `line_${profile.userId}@line.realproof.jp`;
+      console.log('[line/callback] fallback email:', userEmail);
     }
 
-    console.log('=== LINE Callback Debug ===');
-    console.log('profile.userId:', profile.userId);
-    console.log('lineEmail:', lineEmail);
-    console.log('existingMapping:', existingMapping ? 'found' : 'not found');
-    console.log('supabaseUid:', supabaseUid);
-    console.log('userEmail:', userEmail);
+    // 6. generateLink でマジックリンクを生成
+    const origin = new URL(request.url).origin;
+    const redirectPath = context.type === 'client_login' ? '/mycard' : '/dashboard';
 
-    // 一時パスワードをセットして signInWithPassword で使う
-    const tempPassword = crypto.randomUUID();
-    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-      supabaseUid,
-      { password: tempPassword }
-    );
-
-    if (updateError) {
-      console.error('Password update failed:', updateError);
-      return NextResponse.redirect(new URL('/login?error=line_password_update_failed', request.url));
-    }
-
-    console.log('Password updated for:', userEmail);
-
-    // 6. email+password を Base64url エンコードしてURLに付与
-    const credentials = Buffer.from(JSON.stringify({
+    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'magiclink',
       email: userEmail,
-      password: tempPassword
-    })).toString('base64url');
+      options: {
+        redirectTo: `${origin}/auth/callback?redirect=${encodeURIComponent(redirectPath)}`
+      }
+    });
 
-    const nextPath = context.type === 'client_login' ? '/mycard' : '/dashboard';
+    if (linkError || !linkData?.properties?.action_link) {
+      console.error('[line/callback] generateLink failed:', linkError?.message);
 
-    const lineSessionUrl = new URL('/auth/line-session', request.url);
-    lineSessionUrl.searchParams.set('credentials', credentials);
-    lineSessionUrl.searchParams.set('next', nextPath);
+      // generateLink も失敗 → ユーザーが壊れている可能性
+      // マッピングを削除して新規作成を促す
+      await supabaseAdmin.from('line_auth_mappings').delete().eq('supabase_uid', supabaseUid);
+      console.error('[line/callback] cleaned up broken mapping for:', supabaseUid);
 
-    console.log('Redirecting to line-session with credentials');
-    return NextResponse.redirect(lineSessionUrl);
+      return NextResponse.redirect(new URL('/login?error=line_session_failed&retry=1', request.url));
+    }
+
+    console.log('[line/callback] generateLink success → redirecting to action_link');
+
+    // Supabase の検証URLにリダイレクト
+    // → トークン検証後 /auth/callback?redirect=xxx#access_token=... にリダイレクト
+    return NextResponse.redirect(linkData.properties.action_link);
 
   } catch (err) {
     console.error('LINE callback error:', err);

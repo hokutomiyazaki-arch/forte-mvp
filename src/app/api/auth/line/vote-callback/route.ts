@@ -259,7 +259,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // セッション作成 → vote-processing で一体化（リダイレクト1回で完結）
+    // セッション作成 → generateLink 方式（updateUserById 廃止）
     if (supabaseUid) {
       // 投票の client_user_id を更新
       if (insertedVote?.id) {
@@ -268,45 +268,29 @@ export async function GET(request: NextRequest) {
         }).eq('id', insertedVote.id);
       }
 
-      // メールアドレスは既に分かっている。getUserById で取り直す必要なし。
       const { data: userData } = await supabaseAdmin.auth.admin.getUserById(supabaseUid);
-      const userEmail = userData.user?.email || lineEmail || `line_${profile.userId}@line.realproof.jp`;
+      let userEmail = userData?.user?.email;
 
-      console.log('=== LINE Vote-Callback Debug ===');
-      console.log('profile.userId:', profile.userId);
-      console.log('lineEmail:', lineEmail);
-      console.log('supabaseUid:', supabaseUid);
-      console.log('userEmail:', userEmail);
+      if (!userEmail) {
+        userEmail = lineEmail || `line_${profile.userId}@line.realproof.jp`;
+      }
 
-      // 一時パスワードをセットして signInWithPassword で使う
-      const tempPassword = crypto.randomUUID();
-      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-        supabaseUid,
-        { password: tempPassword }
-      );
+      console.log('[vote-callback] creating session via generateLink for:', userEmail);
 
-      if (!updateError) {
-        console.log('[vote-callback] Password updated for:', userEmail);
-
-        const credentials = Buffer.from(JSON.stringify({
-          email: userEmail,
-          password: tempPassword
-        })).toString('base64url');
-
-        // 投票完了ページのURL
-        let voteConfirmedPath = `/vote-confirmed?pro=${context.professional_id}&vote_id=${voteId}&auth_method=line`;
-        if (rewardParam) {
-          voteConfirmedPath += `&reward=${rewardParam}`;
+      const origin = new URL(request.url).origin;
+      const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'magiclink',
+        email: userEmail,
+        options: {
+          redirectTo: `${origin}/auth/callback?redirect=${encodeURIComponent(confirmPath)}`
         }
+      });
 
-        const lineSessionUrl = new URL('/auth/line-session', request.url);
-        lineSessionUrl.searchParams.set('credentials', credentials);
-        lineSessionUrl.searchParams.set('next', voteConfirmedPath);
-
-        console.log('[vote-callback] → /auth/line-session → /vote-confirmed');
-        return NextResponse.redirect(lineSessionUrl);
+      if (!linkError && linkData?.properties?.action_link) {
+        console.log('[vote-callback] → action_link redirect (session via Supabase verification)');
+        return NextResponse.redirect(linkData.properties.action_link);
       } else {
-        console.error('[vote-callback] Password update FAILED:', updateError.message);
+        console.error('[vote-callback] generateLink FAILED:', linkError?.message);
       }
     } else {
       console.error('[vote-callback] supabaseUid is NULL - no session will be created');
