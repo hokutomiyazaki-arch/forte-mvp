@@ -276,21 +276,24 @@ export default function VoiceShareModal({
             overflow: 'hidden',
             ...(exportMode === 'stories' ? { aspectRatio: '9 / 16', justifyContent: 'center' } : {}),
           }}>
-            {/* ストーリーズ上部ロゴ（プレビュー用プレースホルダー） */}
-            {exportMode === 'stories' && (
-              <div style={{ textAlign: 'center', marginBottom: 24 }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={REALPROOF_LOGO_BASE64}
-                  alt="REALPROOF"
-                  style={{
-                    height: 32,
-                    objectFit: 'contain',
-                    filter: isLightBg ? 'none' : 'brightness(2)',
-                  }}
-                />
+            {/* カード上部ロゴ + サブテキスト */}
+            <div style={{ textAlign: 'center', marginBottom: 20 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={REALPROOF_LOGO_BASE64}
+                alt="REALPROOF"
+                style={{
+                  width: '80%',
+                  maxWidth: 280,
+                  height: 'auto',
+                  objectFit: 'contain',
+                  filter: isLightBg ? 'none' : 'brightness(2)',
+                }}
+              />
+              <div style={{ fontSize: 11, color: theme.sub, marginTop: 6 }}>
+                クライアントのリアルな声を紹介
               </div>
-            )}
+            </div>
 
             {/* 引用符 */}
             <div style={{ fontSize: 56, color: hexToRgba(theme.accent, 0.22), fontFamily: 'Georgia, serif', lineHeight: 1 }}>&ldquo;</div>
@@ -584,18 +587,24 @@ export default function VoiceShareModal({
             boxSizing: 'border-box' as const,
           }}
         >
-          {/* ロゴ */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={REALPROOF_LOGO_BASE64}
-            alt="REALPROOF"
-            style={{
-              height: 48,
-              objectFit: 'contain',
-              marginBottom: 48,
-              filter: isLightBg ? 'none' : 'brightness(2)',
-            }}
-          />
+          {/* ロゴ + サブテキスト */}
+          <div style={{ textAlign: 'center', marginBottom: 48 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={REALPROOF_LOGO_BASE64}
+              alt="REALPROOF"
+              style={{
+                width: '80%',
+                maxWidth: 600,
+                height: 'auto',
+                objectFit: 'contain',
+                filter: isLightBg ? 'none' : 'brightness(2)',
+              }}
+            />
+            <div style={{ fontSize: 28, color: theme.sub, marginTop: 16 }}>
+              クライアントのリアルな声を紹介
+            </div>
+          </div>
 
           {/* コンテンツエリア */}
           <div style={{ width: '100%', maxWidth: 900 }}>
