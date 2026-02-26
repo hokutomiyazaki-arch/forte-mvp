@@ -268,45 +268,30 @@ export async function GET(request: NextRequest) {
         }).eq('id', insertedVote.id);
       }
 
-      // メールアドレスは既に分かっている。getUserById で取り直す必要なし。
       const { data: userData } = await supabaseAdmin.auth.admin.getUserById(supabaseUid);
-      const userEmail = userData.user?.email || lineEmail || `line_${profile.userId}@line.realproof.jp`;
+      const userEmail = userData.user?.email || '';
+      console.log('[vote-callback] creating temp session for:', userEmail);
 
-      console.log('=== LINE Vote-Callback Debug ===');
-      console.log('profile.userId:', profile.userId);
-      console.log('lineEmail:', lineEmail);
-      console.log('supabaseUid:', supabaseUid);
-      console.log('userEmail:', userEmail);
-
-      // 一時パスワードをセットして signInWithPassword で使う
       const tempPassword = crypto.randomUUID();
-      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-        supabaseUid,
-        { password: tempPassword }
-      );
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(supabaseUid, {
+        password: tempPassword,
+      });
 
       if (!updateError) {
-        console.log('[vote-callback] Password updated for:', userEmail);
-
-        const credentials = Buffer.from(JSON.stringify({
-          email: userEmail,
-          password: tempPassword
-        })).toString('base64url');
-
-        // 投票完了ページのURL
-        let voteConfirmedPath = `/vote-confirmed?pro=${context.professional_id}&vote_id=${voteId}&auth_method=line`;
+        // vote-processing に直接リダイレクト（セッション作成+確認画面を一体化）
+        const processingUrl = new URL('/vote-processing', request.url);
+        processingUrl.searchParams.set('email', userEmail);
+        processingUrl.searchParams.set('token', tempPassword);
+        processingUrl.searchParams.set('pro', context.professional_id);
+        processingUrl.searchParams.set('vote_id', voteId);
+        processingUrl.searchParams.set('auth_method', 'line');
         if (rewardParam) {
-          voteConfirmedPath += `&reward=${rewardParam}`;
+          processingUrl.searchParams.set('reward', rewardParam);
         }
-
-        const lineSessionUrl = new URL('/auth/line-session', request.url);
-        lineSessionUrl.searchParams.set('credentials', credentials);
-        lineSessionUrl.searchParams.set('next', voteConfirmedPath);
-
-        console.log('[vote-callback] → /auth/line-session → /vote-confirmed');
-        return NextResponse.redirect(lineSessionUrl);
+        console.log('[vote-callback] → /vote-processing (session will be created client-side)');
+        return NextResponse.redirect(processingUrl);
       } else {
-        console.error('[vote-callback] Password update FAILED:', updateError.message);
+        console.error('[vote-callback] password update FAILED:', updateError.message);
       }
     } else {
       console.error('[vote-callback] supabaseUid is NULL - no session will be created');

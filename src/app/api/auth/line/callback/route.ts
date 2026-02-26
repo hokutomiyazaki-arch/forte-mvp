@@ -136,50 +136,30 @@ export async function GET(request: NextRequest) {
       }, { onConflict: 'line_user_id' });
     }
 
-    // 5. セッション作成: signInWithPassword 方式（signOut→clear→signInで確実に動く）
-    // メールアドレスは既に分かっている。getUserById で取り直す必要なし。
-    let userEmail: string = '';
-    if (existingMapping?.supabase_uid) {
-      const { data: userData } = await supabaseAdmin.auth.admin.getUserById(existingMapping.supabase_uid);
-      userEmail = userData.user?.email || lineEmail || `line_${profile.userId}@line.realproof.jp`;
-    } else {
-      userEmail = lineEmail || `line_${profile.userId}@line.realproof.jp`;
-    }
+    // 5. 一時パスワードでセッション生成（signInWithPassword方式）
+    const { data: userData } = await supabaseAdmin.auth.admin.getUserById(supabaseUid);
+    const userEmail = userData.user?.email || '';
 
-    console.log('=== LINE Callback Debug ===');
-    console.log('profile.userId:', profile.userId);
-    console.log('lineEmail:', lineEmail);
-    console.log('existingMapping:', existingMapping ? 'found' : 'not found');
-    console.log('supabaseUid:', supabaseUid);
-    console.log('userEmail:', userEmail);
-
-    // 一時パスワードをセットして signInWithPassword で使う
+    // 一時パスワードをセット
     const tempPassword = crypto.randomUUID();
-    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-      supabaseUid,
-      { password: tempPassword }
-    );
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(supabaseUid, {
+      password: tempPassword,
+    });
 
     if (updateError) {
-      console.error('Password update failed:', updateError);
-      return NextResponse.redirect(new URL('/login?error=line_password_update_failed', request.url));
+      console.error('Temp password set failed:', updateError);
+      return NextResponse.redirect(new URL('/login?error=line_session_failed', request.url));
     }
 
-    console.log('Password updated for:', userEmail);
-
-    // 6. email+password を Base64url エンコードしてURLに付与
-    const credentials = Buffer.from(JSON.stringify({
-      email: userEmail,
-      password: tempPassword
-    })).toString('base64url');
-
-    const nextPath = context.type === 'client_login' ? '/mycard' : '/dashboard';
+    // 6. /auth/line-session にリダイレクト（クライアント側でsignInWithPassword）
+    // context.type に応じてリダイレクト先を決定
+    const redirectPath = context.type === 'client_login' ? '/mycard' : '/dashboard';
 
     const lineSessionUrl = new URL('/auth/line-session', request.url);
-    lineSessionUrl.searchParams.set('credentials', credentials);
-    lineSessionUrl.searchParams.set('next', nextPath);
+    lineSessionUrl.searchParams.set('email', userEmail);
+    lineSessionUrl.searchParams.set('token', tempPassword);
+    lineSessionUrl.searchParams.set('next', redirectPath);
 
-    console.log('Redirecting to line-session with credentials');
     return NextResponse.redirect(lineSessionUrl);
 
   } catch (err) {
