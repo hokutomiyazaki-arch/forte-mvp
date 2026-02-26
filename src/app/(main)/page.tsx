@@ -179,6 +179,15 @@ export default function Home() {
   const [chartRef, chartVisible] = useScrollReveal();
 
   useEffect(() => {
+    // Supabase action_link からのリダイレクト検知
+    // URLハッシュに access_token があれば /auth/callback に転送
+    if (typeof window !== 'undefined' && window.location.hash.includes('access_token')) {
+      console.log('[top] detected access_token in hash, redirecting to /auth/callback');
+      window.location.href = '/auth/callback' + window.location.hash;
+    }
+  }, []);
+
+  useEffect(() => {
     const t = setTimeout(() => setHeroLoaded(true), 200);
     return () => clearTimeout(t);
   }, []);
