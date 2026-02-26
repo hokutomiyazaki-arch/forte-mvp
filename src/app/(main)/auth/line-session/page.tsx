@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { clearAllAuthStorage } from '@/lib/auth-helper'
 
 export default function LineSessionPage() {
   const [error, setError] = useState('')
@@ -11,11 +10,12 @@ export default function LineSessionPage() {
   useEffect(() => {
     async function createSession() {
       const params = new URLSearchParams(window.location.search)
-      const email = params.get('email')
-      const token = params.get('token')
+      const tokenHash = params.get('token_hash')
       const next = params.get('next') || '/dashboard'
 
-      if (!email || !token) {
+      console.log('[line-session] token_hash:', tokenHash ? 'present' : 'missing', 'next:', next)
+
+      if (!tokenHash) {
         setError('認証パラメータが不足しています')
         return
       }
@@ -24,17 +24,17 @@ export default function LineSessionPage() {
         const supabase = createClient() as any
         setStatus('セッションを作成中...')
 
-        // 古いセッションをクリア（古いRefresh Tokenとの競合を防ぐ）
-        clearAllAuthStorage()
-
-        const { data, error: signInError } = await supabase.auth.signInWithPassword({
-          email: email,
-          password: token,
+        // verifyOtp で hashed_token を検証してセッションを作成
+        const { data, error: verifyError } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: 'magiclink',
         })
 
-        if (signInError) {
-          console.error('LINE session signIn error:', signInError)
-          setError('セッションの作成に失敗しました。もう一度お試しください。')
+        console.log('[line-session] verifyOtp result:', data?.session ? 'SESSION OK' : 'NO SESSION', 'error:', verifyError?.message || 'none')
+
+        if (verifyError) {
+          console.error('[line-session] verifyOtp error:', verifyError)
+          setError('セッションの作成に失敗しました。もう一度LINEログインをお試しください。')
           return
         }
 
@@ -47,7 +47,7 @@ export default function LineSessionPage() {
           setError('セッションの取得に失敗しました')
         }
       } catch (err) {
-        console.error('LINE session error:', err)
+        console.error('[line-session] unexpected error:', err)
         setError('予期しないエラーが発生しました')
       }
     }

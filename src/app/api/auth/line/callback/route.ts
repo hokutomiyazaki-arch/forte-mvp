@@ -136,47 +136,39 @@ export async function GET(request: NextRequest) {
       }, { onConflict: 'line_user_id' });
     }
 
-    // 5. generateLink でセッション作成（updateUserById 廃止）
-    // ユーザーのメールを取得
+    // 5. generateLink で hashed_token を取得（action_link は使わない）
     const { data: userData, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(supabaseUid);
     let userEmail = userData?.user?.email;
 
     console.log('[line/callback] getUserById:', supabaseUid, 'email:', userEmail || 'NONE', 'error:', getUserError?.message || 'none');
 
-    // getUserById が失敗した場合、既知のメールを使用
     if (!userEmail) {
       userEmail = lineEmail || `line_${profile.userId}@line.realproof.jp`;
       console.log('[line/callback] fallback email:', userEmail);
     }
 
-    // 6. generateLink でマジックリンクを生成
     const origin = new URL(request.url).origin;
     const redirectPath = context.type === 'client_login' ? '/mycard' : '/dashboard';
 
     const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
       type: 'magiclink',
       email: userEmail,
-      options: {
-        redirectTo: `${origin}/auth/callback?redirect=${encodeURIComponent(redirectPath)}`
-      }
     });
 
-    if (linkError || !linkData?.properties?.action_link) {
+    if (linkError || !linkData?.properties?.hashed_token) {
       console.error('[line/callback] generateLink failed:', linkError?.message);
-
-      // generateLink も失敗 → ユーザーが壊れている可能性
-      // マッピングを削除して新規作成を促す
       await supabaseAdmin.from('line_auth_mappings').delete().eq('supabase_uid', supabaseUid);
-      console.error('[line/callback] cleaned up broken mapping for:', supabaseUid);
-
       return NextResponse.redirect(new URL('/login?error=line_session_failed&retry=1', request.url));
     }
 
-    console.log('[line/callback] generateLink success → redirecting to action_link');
+    console.log('[line/callback] generateLink success, hashed_token obtained');
 
-    // Supabase の検証URLにリダイレクト
-    // → トークン検証後 /auth/callback?redirect=xxx#access_token=... にリダイレクト
-    return NextResponse.redirect(linkData.properties.action_link);
+    // 6. /auth/line-session にリダイレクト（クライアント側で verifyOtp）
+    const lineSessionUrl = new URL('/auth/line-session', origin);
+    lineSessionUrl.searchParams.set('token_hash', linkData.properties.hashed_token);
+    lineSessionUrl.searchParams.set('next', redirectPath);
+
+    return NextResponse.redirect(lineSessionUrl);
 
   } catch (err) {
     console.error('LINE callback error:', err);
