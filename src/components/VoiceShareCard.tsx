@@ -333,7 +333,16 @@ export default function VoiceShareModal({
             <div style={{ height: 1, background: hexToRgba(theme.accent, 0.12), margin: '0 0 12px' }} />
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: 9, color: theme.sub }}>強みが、あなたを定義する。</span>
-              <span style={{ fontSize: 9, color: theme.sub, fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>realproof.jp</span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={REALPROOF_LOGO_BASE64}
+                alt="REALPROOF"
+                style={{
+                  height: 22,
+                  objectFit: 'contain',
+                  filter: isLightBg ? 'none' : 'brightness(2)',
+                }}
+              />
             </div>
           </div>
           </div>
@@ -551,14 +560,13 @@ export default function VoiceShareModal({
           {/* ロゴ */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/images/realproof-logo-gold.png"
+            src={REALPROOF_LOGO_BASE64}
             alt="REALPROOF"
-            crossOrigin="anonymous"
             style={{
               height: 48,
               objectFit: 'contain',
               marginBottom: 48,
-              filter: isLightBg ? 'brightness(0.15)' : 'none',
+              filter: isLightBg ? 'none' : 'brightness(2)',
             }}
           />
 
