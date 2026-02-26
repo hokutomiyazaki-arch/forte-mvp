@@ -150,25 +150,50 @@ export default function VoiceShareModal({
     const el = document.getElementById('voice-card-for-export')
     if (!el) { setSaving(false); return }
 
-    const w = 1080
-    const h = exportMode === 'stories' ? 1920 : 1350
+    // モードに応じたスケール計算
+    const targetWidth = exportMode === 'stories' ? 1080 : 680
+    const scale = targetWidth / el.offsetWidth
 
     const canvas = await html2canvas(el, {
-      scale: 1,
-      backgroundColor: theme.bg,
+      scale,
+      backgroundColor: null,
       useCORS: true,
-      width: w,
-      height: h,
-      x: 0, y: 0, scrollX: 0, scrollY: 0,
-      windowWidth: w,
-      windowHeight: h,
+      width: el.offsetWidth,
+      height: el.offsetHeight,
     })
+
+    // ストーリーズモード: 角丸なし → canvasそのまま
+    // フィードモード: 角丸マスク適用
+    let finalCanvas = canvas
+
+    if (exportMode === 'feed') {
+      finalCanvas = document.createElement('canvas')
+      finalCanvas.width = canvas.width
+      finalCanvas.height = canvas.height
+      const ctx = finalCanvas.getContext('2d')
+      if (ctx) {
+        const radius = 36 * (scale / 2)
+        ctx.beginPath()
+        ctx.moveTo(radius, 0)
+        ctx.lineTo(canvas.width - radius, 0)
+        ctx.quadraticCurveTo(canvas.width, 0, canvas.width, radius)
+        ctx.lineTo(canvas.width, canvas.height - radius)
+        ctx.quadraticCurveTo(canvas.width, canvas.height, canvas.width - radius, canvas.height)
+        ctx.lineTo(radius, canvas.height)
+        ctx.quadraticCurveTo(0, canvas.height, 0, canvas.height - radius)
+        ctx.lineTo(0, radius)
+        ctx.quadraticCurveTo(0, 0, radius, 0)
+        ctx.closePath()
+        ctx.clip()
+        ctx.drawImage(canvas, 0, 0)
+      }
+    }
 
     const blob = await new Promise<Blob>((resolve) => {
-      canvas.toBlob((b) => resolve(b!), 'image/png')
+      finalCanvas.toBlob((b) => resolve(b!), 'image/png')
     })
 
-    const file = new File([blob], 'realproof-voice.png', { type: 'image/png' })
+    const file = new File([blob], `realproof-voice-${exportMode}.png`, { type: 'image/png' })
 
     // Web Share API
     if (navigator.share && navigator.canShare?.({ files: [file] })) {
@@ -194,10 +219,12 @@ export default function VoiceShareModal({
     }
 
     // フォールバック: ダウンロード
-    const link = document.createElement('a')
-    link.download = `realproof-voice-${Date.now()}.png`
-    link.href = canvas.toDataURL('image/png')
-    link.click()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `realproof-voice-${exportMode}.png`
+    a.click()
+    URL.revokeObjectURL(url)
 
     const hash = crypto.randomUUID().replace(/-/g, '').slice(0, 12)
     await (supabase as any).from('voice_shares').insert({
