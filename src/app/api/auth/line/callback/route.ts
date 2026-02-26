@@ -201,17 +201,46 @@ export async function GET(request: NextRequest) {
 
     console.log('[line/callback] signInWithPassword success, session obtained');
 
-    // --- トークンをクライアントに渡す ---
-    const origin = new URL(request.url).origin;
+    // --- localStorage直書き方式でセッション確立 ---
+    const session = signInData.session;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\./)?.[1] || '';
+    const storageKey = `sb-${projectRef}-auth-token`;
+
+    const sessionJSON = JSON.stringify({
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+      token_type: session.token_type || 'bearer',
+      expires_in: session.expires_in,
+      expires_at: session.expires_at,
+      user: session.user,
+    });
+
+    const sessionBase64 = Buffer.from(sessionJSON).toString('base64');
     const redirectPath = context.type === 'client_login' ? '/mycard' : '/dashboard';
 
-    const sessionUrl = new URL('/auth/line-session', origin);
-    sessionUrl.searchParams.set('access_token', signInData.session.access_token);
-    sessionUrl.searchParams.set('refresh_token', signInData.session.refresh_token);
-    sessionUrl.searchParams.set('redirect', redirectPath);
+    console.log('[line/callback] writing session to localStorage via HTML page, redirect:', redirectPath);
 
-    console.log('[line/callback] redirecting to line-session with tokens');
-    return NextResponse.redirect(sessionUrl.toString());
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>ログイン中...</title></head>
+<body style="background:#1A1A2E;color:#fff;display:flex;justify-content:center;align-items:center;min-height:100vh;font-family:sans-serif;">
+<p>ログイン中...</p>
+<script>
+try {
+  var sessionData = atob('${sessionBase64}');
+  localStorage.setItem('${storageKey}', sessionData);
+  console.log('[line-auth] session written to localStorage successfully');
+  window.location.replace('${redirectPath}');
+} catch(e) {
+  console.error('[line-auth] failed:', e);
+  window.location.replace('/login?error=line_session_failed');
+}
+</script>
+</body></html>`;
+
+    return new Response(html, {
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    });
 
   } catch (err) {
     console.error('LINE callback error:', err);
