@@ -277,17 +277,18 @@ export async function GET(request: NextRequest) {
 
       console.log('[vote-callback] creating session via action_link for:', userEmail);
 
+      const origin = new URL(request.url).origin;
       const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
         type: 'magiclink',
         email: userEmail,
+        options: {
+          redirectTo: `${origin}/auth/callback?redirect=${encodeURIComponent(confirmPath)}`
+        }
       });
 
       if (!linkError && linkData?.properties?.action_link) {
-        const origin = new URL(request.url).origin;
-        const actionUrl = new URL(linkData.properties.action_link);
-        actionUrl.searchParams.set('redirect_to', `${origin}/auth/callback?redirect=${encodeURIComponent(confirmPath)}`);
-        console.log('[vote-callback] → modified action_link redirect');
-        return NextResponse.redirect(actionUrl.toString());
+        console.log('[vote-callback] → action_link redirect');
+        return NextResponse.redirect(linkData.properties.action_link);
       } else {
         console.error('[vote-callback] generateLink FAILED:', linkError?.message);
       }

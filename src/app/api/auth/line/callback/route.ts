@@ -153,6 +153,9 @@ export async function GET(request: NextRequest) {
     const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
       type: 'magiclink',
       email: userEmail,
+      options: {
+        redirectTo: `${origin}/auth/callback?redirect=${encodeURIComponent(redirectPath)}`
+      }
     });
 
     if (linkError || !linkData?.properties?.action_link) {
@@ -161,14 +164,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/login?error=line_session_failed&retry=1', request.url));
     }
 
-    // action_link の redirect_to を自サイトに書き換え
-    const actionUrl = new URL(linkData.properties.action_link);
-    actionUrl.searchParams.set('redirect_to', `${origin}/auth/callback?redirect=${encodeURIComponent(redirectPath)}`);
+    console.log('[line/callback] generateLink success → redirecting to action_link');
 
-    console.log('[line/callback] generateLink success → redirecting to modified action_link');
-    console.log('[line/callback] redirect_to:', actionUrl.searchParams.get('redirect_to'));
-
-    return NextResponse.redirect(actionUrl.toString());
+    return NextResponse.redirect(linkData.properties.action_link);
 
   } catch (err) {
     console.error('LINE callback error:', err);
