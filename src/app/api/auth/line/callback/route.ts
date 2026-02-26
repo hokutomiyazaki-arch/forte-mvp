@@ -136,7 +136,7 @@ export async function GET(request: NextRequest) {
       }, { onConflict: 'line_user_id' });
     }
 
-    // 5. generateLink で hashed_token を取得（action_link は使わない）
+    // 5. generateLink で action_link を取得し、redirect_to を書き換える
     const { data: userData, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(supabaseUid);
     let userEmail = userData?.user?.email;
 
@@ -155,20 +155,20 @@ export async function GET(request: NextRequest) {
       email: userEmail,
     });
 
-    if (linkError || !linkData?.properties?.hashed_token) {
+    if (linkError || !linkData?.properties?.action_link) {
       console.error('[line/callback] generateLink failed:', linkError?.message);
       await supabaseAdmin.from('line_auth_mappings').delete().eq('supabase_uid', supabaseUid);
       return NextResponse.redirect(new URL('/login?error=line_session_failed&retry=1', request.url));
     }
 
-    console.log('[line/callback] generateLink success, hashed_token obtained');
+    // action_link の redirect_to を自サイトに書き換え
+    const actionUrl = new URL(linkData.properties.action_link);
+    actionUrl.searchParams.set('redirect_to', `${origin}/auth/callback?redirect=${encodeURIComponent(redirectPath)}`);
 
-    // 6. /auth/line-session にリダイレクト（クライアント側で verifyOtp）
-    const lineSessionUrl = new URL('/auth/line-session', origin);
-    lineSessionUrl.searchParams.set('token_hash', linkData.properties.hashed_token);
-    lineSessionUrl.searchParams.set('next', redirectPath);
+    console.log('[line/callback] generateLink success → redirecting to modified action_link');
+    console.log('[line/callback] redirect_to:', actionUrl.searchParams.get('redirect_to'));
 
-    return NextResponse.redirect(lineSessionUrl);
+    return NextResponse.redirect(actionUrl.toString());
 
   } catch (err) {
     console.error('LINE callback error:', err);
