@@ -24,6 +24,24 @@ function isLightBackground(bgColor: string): boolean {
   return luminance > 0.5;
 }
 
+// コメント文字数に応じた動的フォントサイズ
+function getCommentFontSize(text: string, mode: 'stories' | 'feed'): number {
+  const len = text.length;
+  if (mode === 'stories') {
+    if (len <= 20) return 28;
+    if (len <= 40) return 24;
+    if (len <= 80) return 20;
+    if (len <= 120) return 17;
+    return 15;
+  } else {
+    if (len <= 20) return 22;
+    if (len <= 40) return 19;
+    if (len <= 80) return 16;
+    if (len <= 120) return 14;
+    return 13;
+  }
+}
+
 // ═══ Props ═══
 interface VoiceShareModalProps {
   isOpen: boolean
@@ -252,8 +270,10 @@ export default function VoiceShareModal({
 
             {/* コメント */}
             <div style={{
-              color: theme.text, fontSize: 16, fontWeight: 600,
-              lineHeight: 1.9, marginTop: 8, marginBottom: 16,
+              color: theme.text,
+              fontSize: getCommentFontSize(voice.comment, exportMode),
+              fontWeight: 600,
+              lineHeight: 1.8, marginTop: 8, marginBottom: 16,
             }}>
               {voice.comment}
             </div>
@@ -555,7 +575,7 @@ export default function VoiceShareModal({
 
             {/* コメント */}
             <div style={{
-              fontSize: 48,
+              fontSize: getCommentFontSize(voice.comment, exportMode) * 3,
               fontWeight: 600,
               color: theme.text,
               lineHeight: 1.85,
