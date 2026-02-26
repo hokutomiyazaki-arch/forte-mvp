@@ -259,7 +259,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // セッション作成 → generateLink 方式（updateUserById 廃止）
+    // セッション作成 → hashed_token + verifyOtp 方式
     if (supabaseUid) {
       // 投票の client_user_id を更新
       if (insertedVote?.id) {
@@ -275,20 +275,20 @@ export async function GET(request: NextRequest) {
         userEmail = lineEmail || `line_${profile.userId}@line.realproof.jp`;
       }
 
-      console.log('[vote-callback] creating session via generateLink for:', userEmail);
+      console.log('[vote-callback] creating session via hashed_token for:', userEmail);
 
-      const origin = new URL(request.url).origin;
       const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
         type: 'magiclink',
         email: userEmail,
-        options: {
-          redirectTo: `${origin}/auth/callback?redirect=${encodeURIComponent(confirmPath)}`
-        }
       });
 
-      if (!linkError && linkData?.properties?.action_link) {
-        console.log('[vote-callback] → action_link redirect (session via Supabase verification)');
-        return NextResponse.redirect(linkData.properties.action_link);
+      if (!linkError && linkData?.properties?.hashed_token) {
+        const origin = new URL(request.url).origin;
+        const processingUrl = new URL('/auth/line-session', origin);
+        processingUrl.searchParams.set('token_hash', linkData.properties.hashed_token);
+        processingUrl.searchParams.set('next', confirmPath);
+        console.log('[vote-callback] → /auth/line-session (verifyOtp client-side)');
+        return NextResponse.redirect(processingUrl);
       } else {
         console.error('[vote-callback] generateLink FAILED:', linkError?.message);
       }
