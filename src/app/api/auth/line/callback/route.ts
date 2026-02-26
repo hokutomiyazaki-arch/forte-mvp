@@ -137,13 +137,30 @@ export async function GET(request: NextRequest) {
     }
 
     // 5. generateLink でマジックリンクトークンを生成（signInWithPassword廃止）
-    const { data: userData } = await supabaseAdmin.auth.admin.getUserById(supabaseUid);
-    const userEmail = userData.user?.email || '';
+    // メールアドレスは既に分かっている。getUserById で取り直す必要なし。
+    let userEmail: string = '';
+    if (existingMapping?.supabase_uid) {
+      // 既存ユーザー: auth.users から取得、フォールバックあり
+      const { data: userData } = await supabaseAdmin.auth.admin.getUserById(existingMapping.supabase_uid);
+      userEmail = userData.user?.email || lineEmail || `line_${profile.userId}@line.realproof.jp`;
+    } else {
+      // 新規ユーザー: 作成時に使ったメールをそのまま使う
+      userEmail = lineEmail || `line_${profile.userId}@line.realproof.jp`;
+    }
+
+    console.log('=== LINE Callback Debug ===');
+    console.log('profile.userId:', profile.userId);
+    console.log('lineEmail:', lineEmail);
+    console.log('existingMapping:', existingMapping ? 'found' : 'not found');
+    console.log('supabaseUid:', supabaseUid);
+    console.log('userEmail for generateLink:', userEmail);
 
     const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
       type: 'magiclink',
       email: userEmail,
     });
+
+    console.log('generateLink result:', linkError ? linkError.message : 'success');
 
     if (linkError || !linkData?.properties?.hashed_token) {
       console.error('generateLink failed:', linkError);

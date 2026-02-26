@@ -268,14 +268,22 @@ export async function GET(request: NextRequest) {
         }).eq('id', insertedVote.id);
       }
 
+      // メールアドレスは既に分かっている。getUserById で取り直す必要なし。
       const { data: userData } = await supabaseAdmin.auth.admin.getUserById(supabaseUid);
-      const userEmail = userData.user?.email || '';
-      console.log('[vote-callback] generating magiclink for:', userEmail);
+      const userEmail = userData.user?.email || lineEmail || `line_${profile.userId}@line.realproof.jp`;
+
+      console.log('=== LINE Vote-Callback Debug ===');
+      console.log('profile.userId:', profile.userId);
+      console.log('lineEmail:', lineEmail);
+      console.log('supabaseUid:', supabaseUid);
+      console.log('userEmail for generateLink:', userEmail);
 
       const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
         type: 'magiclink',
         email: userEmail,
       });
+
+      console.log('[vote-callback] generateLink result:', linkError ? linkError.message : 'success');
 
       if (!linkError && linkData?.properties?.hashed_token) {
         const tokenHash = linkData.properties.hashed_token;
