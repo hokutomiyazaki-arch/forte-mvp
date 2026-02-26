@@ -42,6 +42,15 @@ function getCommentFontSize(text: string, mode: 'stories' | 'feed'): number {
   }
 }
 
+// カード形状定義
+const CARD_SHAPES = [
+  { id: 'square', label: '🔲', borderRadius: 0, hasTail: false, hasNotch: false, hasStamp: false },
+  { id: 'round', label: '🔳', borderRadius: 24, hasTail: false, hasNotch: false, hasStamp: false },
+  { id: 'bubble', label: '💬', borderRadius: 24, hasTail: true, hasNotch: false, hasStamp: false },
+  { id: 'ticket', label: '🏷', borderRadius: 12, hasTail: false, hasNotch: true, hasStamp: false },
+  { id: 'stamp', label: '⭐', borderRadius: 0, hasTail: false, hasNotch: false, hasStamp: true },
+] as const
+
 // ═══ Props ═══
 interface VoiceShareModalProps {
   isOpen: boolean
@@ -94,6 +103,9 @@ export default function VoiceShareModal({
   // ── ストーリーズ背景色 ──
   const [storyBg, setStoryBg] = useState<'#FFFFFF' | '#111111'>('#FFFFFF')
 
+  // ── カード形状（ストーリーズのみ） ──
+  const [cardShape, setCardShape] = useState<string>('round')
+
   // ── debounce timer ──
   const saveTimer = useRef<NodeJS.Timeout | null>(null)
 
@@ -110,6 +122,13 @@ export default function VoiceShareModal({
 
   // テーマの明るさ判定（ロゴ・ボーダー色の分岐用）
   const isLightBg = isLightBackground(theme.bg)
+
+  // 現在のカード形状
+  const currentShape = CARD_SHAPES.find(s => s.id === cardShape) || CARD_SHAPES[1]
+  // プレビュー用 borderRadius（ストーリーズ: 形状依存 / フィード: 18固定）
+  const previewRadius = exportMode === 'stories' ? currentShape.borderRadius : 18
+  // エクスポート用 borderRadius（スケールアップ）
+  const exportRadius = exportMode === 'stories' ? currentShape.borderRadius * 2 : 36
 
   // ── テーマ操作 ──
   function buildThemePayload(overrides?: { proof?: boolean; info?: boolean; custom?: boolean; bg?: string; text?: string; accent?: string; presetName?: string }) {
@@ -270,18 +289,30 @@ export default function VoiceShareModal({
             padding: 24,
             backgroundColor: '#FFFFFF',
           }}>
+            {/* stamp: 外枠 dashed ボーダー */}
+            <div style={exportMode === 'stories' && currentShape.hasStamp ? {
+              border: `3px dashed ${theme.accent}`,
+              padding: 6,
+              width: exportMode === 'stories' ? '100%' : 340,
+              boxSizing: 'border-box' as const,
+            } : {
+              width: exportMode === 'stories' ? '100%' : 340,
+            }}>
+            {/* ticket: 切り欠き用ラッパー */}
+            <div style={{ position: 'relative' }}>
             {/* カード本体（両モード共通デザイン） */}
             <div style={{
               background: `linear-gradient(170deg, ${theme.bg} 0%, ${theme.bg2} 100%)`,
-              borderRadius: 18,
+              borderRadius: previewRadius,
               padding: '32px 26px',
-              width: exportMode === 'stories' ? '100%' : 340,
+              width: '100%',
               border: isLightBg ? '2px solid rgba(0,0,0,0.08)' : '2px solid rgba(255,255,255,0.12)',
               fontFamily: "'Inter', 'Noto Sans JP', sans-serif",
               display: 'flex',
               flexDirection: 'column',
               position: 'relative',
               overflow: 'hidden',
+              boxSizing: 'border-box' as const,
             }}>
               {/* カード上部ロゴ + サブテキスト */}
               <div style={{ textAlign: 'center', marginBottom: 20 }}>
@@ -382,6 +413,31 @@ export default function VoiceShareModal({
                 />
               </div>
             </div>
+            {/* ticket: 切り欠き（左右の半円） */}
+            {exportMode === 'stories' && currentShape.hasNotch && (
+              <>
+                <div style={{
+                  position: 'absolute', left: -10, top: '50%', transform: 'translateY(-50%)',
+                  width: 20, height: 20, borderRadius: '50%', background: storyBg,
+                }} />
+                <div style={{
+                  position: 'absolute', right: -10, top: '50%', transform: 'translateY(-50%)',
+                  width: 20, height: 20, borderRadius: '50%', background: storyBg,
+                }} />
+              </>
+            )}
+            </div>{/* /ticket wrapper */}
+            {/* bubble: 吹き出しの三角 */}
+            {exportMode === 'stories' && currentShape.hasTail && (
+              <div style={{
+                width: 0, height: 0,
+                borderLeft: '12px solid transparent',
+                borderRight: '12px solid transparent',
+                borderTop: `16px solid ${theme.bg}`,
+                margin: '0 auto',
+              }} />
+            )}
+            </div>{/* /stamp wrapper */}
           </div>
         </div>
 
@@ -475,6 +531,37 @@ export default function VoiceShareModal({
             </div>
           </div>
         </div>
+
+        {/* ═══ 3.5 カード形状（ストーリーズのみ）═══ */}
+        {exportMode === 'stories' && (
+          <div style={{ maxWidth: 340, margin: '14px auto 0' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#F0ECE4', marginBottom: 8, fontFamily: "'Inter', sans-serif", letterSpacing: 1 }}>
+              SHAPE
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {CARD_SHAPES.map(shape => (
+                <button
+                  key={shape.id}
+                  onClick={() => setCardShape(shape.id)}
+                  style={{
+                    width: 44, height: 44,
+                    fontSize: 20,
+                    borderRadius: 8,
+                    border: cardShape === shape.id ? '2px solid #C4A35A' : '1px solid rgba(255,255,255,0.15)',
+                    background: cardShape === shape.id ? 'rgba(196,163,90,0.15)' : 'transparent',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {shape.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ═══ 4. トグル ═══ */}
         <div style={{ maxWidth: 340, margin: '14px auto 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -630,11 +717,22 @@ export default function VoiceShareModal({
             display: 'inline-block',
           }}
         >
+          {/* stamp: 外枠 dashed ボーダー（エクスポート） */}
+          <div style={exportMode === 'stories' && currentShape.hasStamp ? {
+            border: `6px dashed ${theme.accent}`,
+            padding: 12,
+            width: '100%',
+            boxSizing: 'border-box' as const,
+          } : {
+            width: exportMode === 'stories' ? '100%' : 1080,
+          }}>
+          {/* ticket: 切り欠き用ラッパー（エクスポート） */}
+          <div style={{ position: 'relative' }}>
           {/* カード本体（共通） */}
           <div style={{
-            width: exportMode === 'stories' ? '100%' : 1080,
+            width: '100%',
             background: `linear-gradient(170deg, ${theme.bg} 0%, ${theme.bg2} 100%)`,
-            borderRadius: 36,
+            borderRadius: exportRadius,
             padding: '64px 52px',
             fontFamily: "'Inter', 'Noto Sans JP', sans-serif",
             boxSizing: 'border-box' as const,
@@ -779,6 +877,31 @@ export default function VoiceShareModal({
               </span>
             </div>
           </div>
+          {/* ticket: 切り欠き（エクスポート用） */}
+          {exportMode === 'stories' && currentShape.hasNotch && (
+            <>
+              <div style={{
+                position: 'absolute', left: -20, top: '50%', transform: 'translateY(-50%)',
+                width: 40, height: 40, borderRadius: '50%', background: storyBg,
+              }} />
+              <div style={{
+                position: 'absolute', right: -20, top: '50%', transform: 'translateY(-50%)',
+                width: 40, height: 40, borderRadius: '50%', background: storyBg,
+              }} />
+            </>
+          )}
+          </div>{/* /ticket wrapper */}
+          {/* bubble: 吹き出し三角（エクスポート用） */}
+          {exportMode === 'stories' && currentShape.hasTail && (
+            <div style={{
+              width: 0, height: 0,
+              borderLeft: '24px solid transparent',
+              borderRight: '24px solid transparent',
+              borderTop: `32px solid ${theme.bg}`,
+              margin: '0 auto',
+            }} />
+          )}
+          </div>{/* /stamp wrapper */}
         </div>
       </div>
     </div>
