@@ -285,19 +285,24 @@ export async function GET(request: NextRequest) {
 
       console.log('[vote-callback] generateLink result:', linkError ? linkError.message : 'success');
 
-      if (!linkError && linkData?.properties?.hashed_token) {
-        const tokenHash = linkData.properties.hashed_token;
-        // vote-processing に直接リダイレクト（セッション作成+確認画面を一体化）
-        const processingUrl = new URL('/vote-processing', request.url);
-        processingUrl.searchParams.set('token_hash', tokenHash);
-        processingUrl.searchParams.set('pro', context.professional_id);
-        processingUrl.searchParams.set('vote_id', voteId);
-        processingUrl.searchParams.set('auth_method', 'line');
-        if (rewardParam) {
-          processingUrl.searchParams.set('reward', rewardParam);
+      if (!linkError && linkData) {
+        const actionLink = linkData.properties?.action_link;
+        if (actionLink) {
+          // ★ action_link に直接リダイレクト（Supabase正規フロー）
+          // Supabase がセッション作成後 /auth/callback にリダイレクト → vote-confirmed へ
+          const origin = new URL(request.url).origin;
+          let voteConfirmedPath = `/vote-confirmed?pro=${context.professional_id}&vote_id=${voteId}&auth_method=line`;
+          if (rewardParam) {
+            voteConfirmedPath += `&reward=${rewardParam}`;
+          }
+          const redirectUrl = new URL(actionLink);
+          redirectUrl.searchParams.set('redirect_to', `${origin}/auth/callback?redirect=${encodeURIComponent(voteConfirmedPath)}`);
+
+          console.log('[vote-callback] → Supabase action_link → /auth/callback → /vote-confirmed');
+          return NextResponse.redirect(redirectUrl.toString());
+        } else {
+          console.error('[vote-callback] No action_link in generateLink response');
         }
-        console.log('[vote-callback] → /vote-processing (session will be created client-side via verifyOtp)');
-        return NextResponse.redirect(processingUrl);
       } else {
         console.error('[vote-callback] generateLink FAILED:', linkError?.message);
       }

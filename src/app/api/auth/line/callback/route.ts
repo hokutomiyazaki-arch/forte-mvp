@@ -162,22 +162,30 @@ export async function GET(request: NextRequest) {
 
     console.log('generateLink result:', linkError ? linkError.message : 'success');
 
-    if (linkError || !linkData?.properties?.hashed_token) {
+    if (linkError || !linkData) {
       console.error('generateLink failed:', linkError);
       return NextResponse.redirect(new URL('/login?error=line_session_failed', request.url));
     }
 
-    const tokenHash = linkData.properties.hashed_token;
+    // ★ action_link に直接リダイレクト（Supabase正規フロー）
+    const actionLink = linkData.properties?.action_link;
+    if (!actionLink) {
+      console.error('No action_link in generateLink response');
+      console.log('linkData:', JSON.stringify(linkData));
+      return NextResponse.redirect(new URL('/login?error=line_no_action_link', request.url));
+    }
 
-    // 6. /auth/line-session にリダイレクト（クライアント側でverifyOtp）
-    // context.type に応じてリダイレクト先を決定
+    console.log('action_link obtained:', actionLink.substring(0, 80) + '...');
+
+    // 6. Supabase action_link に redirect_to を追加
+    // Supabase が検証後に /auth/callback にリダイレクトし、セッションを自動作成する
     const redirectPath = context.type === 'client_login' ? '/mycard' : '/dashboard';
+    const origin = new URL(request.url).origin;
+    const redirectUrl = new URL(actionLink);
+    redirectUrl.searchParams.set('redirect_to', `${origin}/auth/callback?redirect=${redirectPath}`);
 
-    const lineSessionUrl = new URL('/auth/line-session', request.url);
-    lineSessionUrl.searchParams.set('token_hash', tokenHash);
-    lineSessionUrl.searchParams.set('next', redirectPath);
-
-    return NextResponse.redirect(lineSessionUrl);
+    console.log('Redirecting to Supabase action_link');
+    return NextResponse.redirect(redirectUrl.toString());
 
   } catch (err) {
     console.error('LINE callback error:', err);
