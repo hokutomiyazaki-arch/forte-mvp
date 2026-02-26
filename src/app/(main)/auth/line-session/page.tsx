@@ -11,11 +11,10 @@ export default function LineSessionPage() {
   useEffect(() => {
     async function createSession() {
       const params = new URLSearchParams(window.location.search)
-      const email = params.get('email')
-      const token = params.get('token')
+      const tokenHash = params.get('token_hash')
       const next = params.get('next') || '/dashboard'
 
-      if (!email || !token) {
+      if (!tokenHash) {
         setError('認証パラメータが不足しています')
         return
       }
@@ -27,13 +26,13 @@ export default function LineSessionPage() {
         // 古いセッションをクリア（古いRefresh Tokenとの競合を防ぐ）
         clearAllAuthStorage()
 
-        const { data, error: signInError } = await supabase.auth.signInWithPassword({
-          email: email,
-          password: token,
+        const { data, error: verifyError } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: 'magiclink',
         })
 
-        if (signInError) {
-          console.error('LINE session signIn error:', signInError)
+        if (verifyError) {
+          console.error('LINE session verifyOtp error:', verifyError)
           setError('セッションの作成に失敗しました。もう一度お試しください。')
           return
         }

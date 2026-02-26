@@ -26,8 +26,7 @@ type Phase = 'processing' | 'confirmed'
 
 function VoteProcessingContent() {
   const searchParams = useSearchParams()
-  const email = searchParams.get('email') || ''
-  const token = searchParams.get('token') || ''
+  const tokenHash = searchParams.get('token_hash') || ''
   const proId = searchParams.get('pro') || ''
   const voteId = searchParams.get('vote_id') || ''
   const rewardParam = searchParams.get('reward') || ''
@@ -82,20 +81,20 @@ function VoteProcessingContent() {
       if (r) setReward(r)
 
       // 2. セッション作成（バックグラウンド、失敗してもOK）
-      if (email && token) {
+      if (tokenHash) {
         try {
           // 古いセッションをクリア（古いRefresh Tokenとの競合を防ぐ）
           clearAllAuthStorage()
 
-          const { data, error } = await supabase.auth.signInWithPassword({
-            email, password: token,
+          const { data, error } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash, type: 'magiclink',
           })
           if (!error && data?.session) {
-            console.log('[vote-processing] session created, refreshing AuthProvider...')
+            console.log('[vote-processing] session created via verifyOtp, refreshing AuthProvider...')
             await refreshAuth()
             console.log('[vote-processing] AuthProvider refreshed')
           } else {
-            console.warn('[vote-processing] signIn failed:', error?.message)
+            console.warn('[vote-processing] verifyOtp failed:', error?.message)
           }
         } catch (e) {
           console.warn('[vote-processing] session creation failed:', e)

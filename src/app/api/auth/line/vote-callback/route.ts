@@ -270,28 +270,28 @@ export async function GET(request: NextRequest) {
 
       const { data: userData } = await supabaseAdmin.auth.admin.getUserById(supabaseUid);
       const userEmail = userData.user?.email || '';
-      console.log('[vote-callback] creating temp session for:', userEmail);
+      console.log('[vote-callback] generating magiclink for:', userEmail);
 
-      const tempPassword = crypto.randomUUID();
-      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(supabaseUid, {
-        password: tempPassword,
+      const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'magiclink',
+        email: userEmail,
       });
 
-      if (!updateError) {
+      if (!linkError && linkData?.properties?.hashed_token) {
+        const tokenHash = linkData.properties.hashed_token;
         // vote-processing に直接リダイレクト（セッション作成+確認画面を一体化）
         const processingUrl = new URL('/vote-processing', request.url);
-        processingUrl.searchParams.set('email', userEmail);
-        processingUrl.searchParams.set('token', tempPassword);
+        processingUrl.searchParams.set('token_hash', tokenHash);
         processingUrl.searchParams.set('pro', context.professional_id);
         processingUrl.searchParams.set('vote_id', voteId);
         processingUrl.searchParams.set('auth_method', 'line');
         if (rewardParam) {
           processingUrl.searchParams.set('reward', rewardParam);
         }
-        console.log('[vote-callback] → /vote-processing (session will be created client-side)');
+        console.log('[vote-callback] → /vote-processing (session will be created client-side via verifyOtp)');
         return NextResponse.redirect(processingUrl);
       } else {
-        console.error('[vote-callback] password update FAILED:', updateError.message);
+        console.error('[vote-callback] generateLink FAILED:', linkError?.message);
       }
     } else {
       console.error('[vote-callback] supabaseUid is NULL - no session will be created');

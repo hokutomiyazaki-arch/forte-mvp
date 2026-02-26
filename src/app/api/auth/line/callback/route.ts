@@ -136,28 +136,28 @@ export async function GET(request: NextRequest) {
       }, { onConflict: 'line_user_id' });
     }
 
-    // 5. 一時パスワードでセッション生成（signInWithPassword方式）
+    // 5. generateLink でマジックリンクトークンを生成（signInWithPassword廃止）
     const { data: userData } = await supabaseAdmin.auth.admin.getUserById(supabaseUid);
     const userEmail = userData.user?.email || '';
 
-    // 一時パスワードをセット
-    const tempPassword = crypto.randomUUID();
-    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(supabaseUid, {
-      password: tempPassword,
+    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'magiclink',
+      email: userEmail,
     });
 
-    if (updateError) {
-      console.error('Temp password set failed:', updateError);
+    if (linkError || !linkData?.properties?.hashed_token) {
+      console.error('generateLink failed:', linkError);
       return NextResponse.redirect(new URL('/login?error=line_session_failed', request.url));
     }
 
-    // 6. /auth/line-session にリダイレクト（クライアント側でsignInWithPassword）
+    const tokenHash = linkData.properties.hashed_token;
+
+    // 6. /auth/line-session にリダイレクト（クライアント側でverifyOtp）
     // context.type に応じてリダイレクト先を決定
     const redirectPath = context.type === 'client_login' ? '/mycard' : '/dashboard';
 
     const lineSessionUrl = new URL('/auth/line-session', request.url);
-    lineSessionUrl.searchParams.set('email', userEmail);
-    lineSessionUrl.searchParams.set('token', tempPassword);
+    lineSessionUrl.searchParams.set('token_hash', tokenHash);
     lineSessionUrl.searchParams.set('next', redirectPath);
 
     return NextResponse.redirect(lineSessionUrl);
