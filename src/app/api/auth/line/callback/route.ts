@@ -112,11 +112,25 @@ export async function GET(request: NextRequest) {
         });
 
         if (signUpError || !newUser.user) {
-          console.error('Supabase user creation failed:', signUpError);
-          return NextResponse.redirect(new URL('/login?error=line_signup_failed', request.url));
+          if (signUpError?.code === 'email_exists') {
+            // メールが既に存在 → そのユーザーを使う
+            console.log('[line/callback] email already exists, finding user by email:', email);
+            const { data: allUsers } = await supabaseAdmin.auth.admin.listUsers();
+            const existingUser = allUsers?.users?.find((u: any) => u.email === email);
+            if (existingUser) {
+              supabaseUid = existingUser.id;
+              console.log('[line/callback] found existing user by email:', supabaseUid);
+            } else {
+              console.error('[line/callback] email_exists but user not found in listUsers');
+              return NextResponse.redirect(new URL('/login?error=line_signup_failed', request.url));
+            }
+          } else {
+            console.error('Supabase user creation failed:', signUpError);
+            return NextResponse.redirect(new URL('/login?error=line_signup_failed', request.url));
+          }
+        } else {
+          supabaseUid = newUser.user.id;
         }
-
-        supabaseUid = newUser.user.id;
 
         // professionals テーブルに初期レコード作成（pro_register の場合）
         if (context.type === 'pro_register') {
