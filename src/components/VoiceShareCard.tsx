@@ -54,6 +54,9 @@ export default function VoiceShareModal({
   // ── シェア中 ──
   const [saving, setSaving] = useState(false)
 
+  // ── エクスポートサイズ ──
+  const [exportSize, setExportSize] = useState<'story' | 'feed'>('story')
+
   // ── debounce timer ──
   const saveTimer = useRef<NodeJS.Timeout | null>(null)
 
@@ -68,13 +71,13 @@ export default function VoiceShareModal({
   // トッププルーフ
   const topProof = topStrengths.length > 0 ? topStrengths[0] : null
 
-  // テーマの明るさ判定（ボーダー色の分岐用）
+  // テーマの明るさ判定（ロゴ・ボーダー色の分岐用）
   const isLightBg = (() => {
     const hex = theme.bg
     const r = parseInt(hex.slice(1, 3), 16)
     const g = parseInt(hex.slice(3, 5), 16)
     const b = parseInt(hex.slice(5, 7), 16)
-    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.5
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.55
   })()
 
   // ── テーマ操作 ──
@@ -113,31 +116,25 @@ export default function VoiceShareModal({
     saveTheme(buildThemePayload({ info: val }))
   }
 
-  // ── シェア / ダウンロード ──
+  // ── シェア / ダウンロード（フルブリードエクスポート）──
   const handleShare = async () => {
     setSaving(true)
     const el = document.getElementById('voice-card-for-export')
     if (!el) { setSaving(false); return }
 
-    // キャプチャ前にスタイル調整
-    const originalStyle = el.style.cssText
-    el.style.margin = '0'
-    el.style.boxShadow = 'none'
-    el.style.borderRadius = '0'
+    const w = 1080
+    const h = exportSize === 'story' ? 1920 : 1350
 
     const canvas = await html2canvas(el, {
-      scale: 2,
-      backgroundColor: '#FFFFFF',
+      scale: 1,
+      backgroundColor: theme.bg,
       useCORS: true,
-      width: el.offsetWidth,
-      height: el.offsetHeight,
+      width: w,
+      height: h,
       x: 0, y: 0, scrollX: 0, scrollY: 0,
-      windowWidth: el.offsetWidth,
-      windowHeight: el.offsetHeight,
+      windowWidth: w,
+      windowHeight: h,
     })
-
-    // スタイルを元に戻す
-    el.style.cssText = originalStyle
 
     const blob = await new Promise<Blob>((resolve) => {
       canvas.toBlob((b) => resolve(b!), 'image/png')
@@ -185,6 +182,10 @@ export default function VoiceShareModal({
     setSaving(false)
   }
 
+  // エクスポートキャンバスの高さ
+  const exportH = exportSize === 'story' ? 1920 : 1350
+  const exportPadV = exportSize === 'story' ? 120 : 80
+
   // ═══ Render ═══
   return (
     <div
@@ -199,9 +200,9 @@ export default function VoiceShareModal({
         onClick={e => e.stopPropagation()}
         style={{ maxWidth: 380, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}
       >
-        {/* ═══ 1. カードプレビュー ═══ */}
+        {/* ═══ 1. カードプレビュー（表示用、キャプチャ対象ではない）═══ */}
         <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <div id="voice-card-for-export" style={{ padding: 24, backgroundColor: '#FFFFFF' }}>
+          <div style={{ padding: 24, backgroundColor: '#FFFFFF' }}>
           <div style={{
             background: `linear-gradient(170deg, ${theme.bg} 0%, ${theme.bg2} 100%)`,
             borderRadius: 18,
@@ -404,7 +405,44 @@ export default function VoiceShareModal({
           ))}
         </div>
 
-        {/* ═══ 5. シェアボタン ═══ */}
+        {/* ═══ 5. サイズ選択 ═══ */}
+        <div style={{ maxWidth: 340, margin: '14px auto 0' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#F0ECE4', marginBottom: 8, fontFamily: "'Inter', sans-serif", letterSpacing: 1 }}>
+            SIZE
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {([
+              { key: 'story' as const, label: 'ストーリーズ（9:16）' },
+              { key: 'feed' as const, label: 'フィード（4:5）' },
+            ]).map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setExportSize(key)}
+                style={{
+                  flex: 1,
+                  padding: '10px 12px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  fontFamily: "'Inter', 'Noto Sans JP', sans-serif",
+                  borderRadius: 8,
+                  border: exportSize === key
+                    ? '1px solid #C4A35A'
+                    : '1px solid rgba(255,255,255,0.15)',
+                  background: exportSize === key
+                    ? 'rgba(196,163,90,0.15)'
+                    : 'transparent',
+                  color: exportSize === key ? '#C4A35A' : '#BBBBBB',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ═══ 6. シェアボタン ═══ */}
         <button
           onClick={handleShare}
           disabled={saving}
@@ -424,7 +462,7 @@ export default function VoiceShareModal({
           {saving ? 'シェア中...' : 'この声をシェアする'}
         </button>
 
-        {/* ═══ 6. 戻るボタン ═══ */}
+        {/* ═══ 7. 戻るボタン ═══ */}
         <button
           onClick={onClose}
           style={{
@@ -438,6 +476,162 @@ export default function VoiceShareModal({
         >
           戻る
         </button>
+      </div>
+
+      {/* ════════ エクスポート用キャンバス（画面外に隠す）════════ */}
+      <div style={{ position: 'fixed', left: -9999, top: 0, pointerEvents: 'none' }}>
+        <div
+          id="voice-card-for-export"
+          style={{
+            width: 1080,
+            height: exportH,
+            background: `linear-gradient(170deg, ${theme.bg} 0%, ${theme.bg2} 100%)`,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: `${exportPadV}px 80px`,
+            fontFamily: "'Inter', 'Noto Sans JP', sans-serif",
+            boxSizing: 'border-box' as const,
+          }}
+        >
+          {/* ロゴ */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/images/realproof-logo-gold.png"
+            alt="REALPROOF"
+            crossOrigin="anonymous"
+            style={{
+              height: 48,
+              objectFit: 'contain',
+              marginBottom: 48,
+              filter: isLightBg ? 'brightness(0.15)' : 'none',
+            }}
+          />
+
+          {/* コンテンツエリア */}
+          <div style={{ width: '100%', maxWidth: 900 }}>
+            {/* 引用符 */}
+            <div style={{
+              fontSize: 120,
+              lineHeight: 1,
+              color: hexToRgba(theme.accent, 0.22),
+              fontFamily: "Georgia, 'Times New Roman', serif",
+              marginBottom: -20,
+            }}>{"\u201C"}</div>
+
+            {/* コメント */}
+            <div style={{
+              fontSize: 48,
+              fontWeight: 600,
+              color: theme.text,
+              lineHeight: 1.85,
+              marginBottom: 40,
+              letterSpacing: 0.5,
+            }}>
+              {voice.comment}
+            </div>
+
+            {/* 感謝フレーズ */}
+            <div style={{
+              fontSize: 32,
+              color: theme.accent,
+              fontWeight: 500,
+              marginBottom: 40,
+              letterSpacing: 1,
+            }}>
+              ── {currentPhraseText}
+            </div>
+
+            {/* プロ情報 */}
+            {showProInfo && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 28,
+                paddingTop: 32,
+                borderTop: `2px solid ${hexToRgba(theme.accent, 0.15)}`,
+                marginBottom: 32,
+              }}>
+                {proPhotoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={proPhotoUrl}
+                    alt={proName}
+                    crossOrigin="anonymous"
+                    style={{
+                      width: 100,
+                      height: 100,
+                      borderRadius: '50%',
+                      objectFit: 'cover',
+                      border: `3px solid ${hexToRgba(theme.accent, 0.25)}`,
+                      flexShrink: 0,
+                    }}
+                  />
+                ) : (
+                  <div style={{
+                    width: 100,
+                    height: 100,
+                    borderRadius: '50%',
+                    background: hexToRgba(theme.accent, 0.18),
+                    border: `3px solid ${hexToRgba(theme.accent, 0.3)}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 42,
+                    color: theme.accent,
+                    fontWeight: 700,
+                    flexShrink: 0,
+                  }}>
+                    {proName.charAt(0)}
+                  </div>
+                )}
+                <div>
+                  <div style={{ fontSize: 32, fontWeight: 600, color: theme.text }}>{proName}</div>
+                  <div style={{ fontSize: 24, fontWeight: 500, color: theme.sub, marginTop: 6 }}>{proTitle}</div>
+                </div>
+              </div>
+            )}
+
+            {/* トッププルーフバッジ */}
+            {showProof && topProof && (
+              <div style={{
+                background: hexToRgba(theme.accent, 0.08),
+                border: `2px solid ${hexToRgba(theme.accent, 0.2)}`,
+                borderRadius: 16,
+                padding: '20px 28px',
+                marginBottom: 32,
+                textAlign: 'center',
+              }}>
+                <span style={{ fontSize: 28, fontWeight: 600, color: theme.accent }}>
+                  ◆ {topProof.count}人が「{topProof.label}」と証明
+                </span>
+              </div>
+            )}
+
+            {/* フッター */}
+            <div style={{
+              borderTop: `2px solid ${hexToRgba(theme.accent, 0.12)}`,
+              paddingTop: 24,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}>
+              <span style={{ fontSize: 22, color: theme.sub, letterSpacing: 1 }}>
+                強みが、あなたを定義する。
+              </span>
+              <span style={{
+                fontSize: 22,
+                color: theme.sub,
+                fontFamily: "'Inter', sans-serif",
+                fontWeight: 600,
+                letterSpacing: 1,
+              }}>
+                realproof.jp
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )
