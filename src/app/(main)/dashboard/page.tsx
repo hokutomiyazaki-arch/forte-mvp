@@ -7,7 +7,6 @@ import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYP
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import ForteChart from '@/components/ForteChart'
 import VoiceShareModal from '@/components/VoiceShareCard'
-import { VOICE_CARD_PRESETS, resolveTheme, buildCustomTheme, VoiceCardTheme } from '@/lib/voiceCardThemes'
 import ImageCropper from '@/components/ImageCropper'
 import { PREFECTURES } from '@/lib/prefectures'
 
@@ -111,16 +110,8 @@ export default function DashboardPage() {
   const [selectedPhrases, setSelectedPhrases] = useState<Record<string, number>>({})
   const [shareModalVoice, setShareModalVoice] = useState<{ id: string; comment: string; created_at: string } | null>(null)
 
-  // Voice カードテーマ state
-  const [voiceTheme, setVoiceTheme] = useState<VoiceCardTheme>(VOICE_CARD_PRESETS[0])
-  const [voicePresetIdx, setVoicePresetIdx] = useState(0)
-  const [voiceIsCustom, setVoiceIsCustom] = useState(false)
-  const [voiceShowProof, setVoiceShowProof] = useState(true)
-  const [voiceShowProInfo, setVoiceShowProInfo] = useState(true)
-  const [customBg, setCustomBg] = useState('#FAF8F4')
-  const [customText, setCustomText] = useState('#1A1A2E')
-  const [customAccent, setCustomAccent] = useState('#C4A35A')
-  const [themeSaveTimer, setThemeSaveTimer] = useState<NodeJS.Timeout | null>(null)
+  // Voice カードテーマ: DB生データをそのまま保持（モーダル内で解決）
+  const [savedVoiceThemeData, setSavedVoiceThemeData] = useState<any>(null)
 
   // NFC カード管理 state
   const [nfcCard, setNfcCard] = useState<{ id: string; card_uid: string; status: string; linked_at: string | null } | null>(null)
@@ -247,21 +238,8 @@ export default function DashboardPage() {
         setCustomProofs(proData.custom_proofs || [])
       }
 
-      // Voice カードテーマ復元
-      const savedTheme = proData.voice_card_theme
-      if (savedTheme) {
-        const { theme: restored, isCustom, presetIndex } = resolveTheme(savedTheme)
-        setVoiceTheme(restored)
-        setVoiceIsCustom(isCustom)
-        setVoicePresetIdx(presetIndex)
-        setVoiceShowProof(savedTheme.showProof !== false)
-        setVoiceShowProInfo(savedTheme.showProInfo !== false)
-        if (isCustom) {
-          setCustomBg(savedTheme.bg || '#FAF8F4')
-          setCustomText(savedTheme.text || '#1A1A2E')
-          setCustomAccent(savedTheme.accent || '#C4A35A')
-        }
-      }
+      // Voice カードテーマ: 生データを保持（モーダル内で解決する）
+      setSavedVoiceThemeData(proData.voice_card_theme || null)
 
       // Voices: コメント付き確定投票を取得
       const { data: voiceData } = await supabase
@@ -1062,51 +1040,6 @@ export default function DashboardPage() {
         )}
       </div>
     )
-  }
-
-  // Voice テーマ保存（debounce 500ms）
-  function saveVoiceTheme(themeData: any) {
-    if (!pro) return
-    if (themeSaveTimer) clearTimeout(themeSaveTimer)
-    const timer = setTimeout(async () => {
-      await (supabase as any)
-        .from('professionals')
-        .update({ voice_card_theme: themeData })
-        .eq('id', pro.id)
-    }, 500)
-    setThemeSaveTimer(timer)
-  }
-
-  function selectPreset(idx: number) {
-    const preset = VOICE_CARD_PRESETS[idx]
-    setVoiceTheme(preset)
-    setVoicePresetIdx(idx)
-    setVoiceIsCustom(false)
-    saveVoiceTheme({ type: 'preset', preset: preset.name, showProof: voiceShowProof, showProInfo: voiceShowProInfo })
-  }
-
-  function updateCustomColor(bg: string, text: string, accent: string) {
-    const t = buildCustomTheme(bg, text, accent)
-    setVoiceTheme(t)
-    setVoiceIsCustom(true)
-    setVoicePresetIdx(-1)
-    saveVoiceTheme({ type: 'custom', bg, text, accent, showProof: voiceShowProof, showProInfo: voiceShowProInfo })
-  }
-
-  function toggleShowProof(val: boolean) {
-    setVoiceShowProof(val)
-    const base = voiceIsCustom
-      ? { type: 'custom', bg: customBg, text: customText, accent: customAccent }
-      : { type: 'preset', preset: voiceTheme.name }
-    saveVoiceTheme({ ...base, showProof: val, showProInfo: voiceShowProInfo })
-  }
-
-  function toggleShowProInfo(val: boolean) {
-    setVoiceShowProInfo(val)
-    const base = voiceIsCustom
-      ? { type: 'custom', bg: customBg, text: customText, accent: customAccent }
-      : { type: 'preset', preset: voiceTheme.name }
-    saveVoiceTheme({ ...base, showProof: voiceShowProof, showProInfo: val })
   }
 
   const topForte = votes.length > 0 ?
@@ -1928,115 +1861,6 @@ export default function DashboardPage() {
       {/* ═══ Tab: Voices ═══ */}
       {dashboardTab === 'voices' && (<>
 
-      {/* Voice カードテーマ設定 */}
-      <div className="bg-white rounded-xl p-6 shadow-sm mb-4">
-        <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">
-          <span style={{ fontSize: 10, fontWeight: 700, color: '#A0A0A0', letterSpacing: 2, textTransform: 'uppercase' as const, fontFamily: "'Inter', sans-serif", display: 'block', marginBottom: 4 }}>
-            CARD THEME
-          </span>
-          シェアカードの設定
-        </h2>
-
-        {/* プリセット選択 */}
-        {(['Light', 'Dark', 'Vibrant'] as const).map((group, gi) => (
-          <div key={group} style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#A0A0A0', marginBottom: 6, fontFamily: "'Inter', sans-serif" }}>
-              {group}
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {VOICE_CARD_PRESETS.slice(gi * 5, gi * 5 + 5).map((preset, i) => {
-                const idx = gi * 5 + i
-                const isSelected = !voiceIsCustom && voicePresetIdx === idx
-                return (
-                  <button
-                    key={preset.name}
-                    onClick={() => selectPreset(idx)}
-                    title={preset.name}
-                    style={{
-                      width: 40, height: 40, borderRadius: 10,
-                      background: `linear-gradient(135deg, ${preset.bg} 0%, ${preset.bg2} 100%)`,
-                      border: isSelected ? '3px solid #C4A35A' : '2px solid #ddd',
-                      boxShadow: isSelected ? '0 0 0 2px rgba(196,163,90,0.3)' : 'none',
-                      cursor: 'pointer', padding: 0, transition: 'all 0.2s',
-                    }}
-                  />
-                )
-              })}
-            </div>
-          </div>
-        ))}
-
-        {/* カスタムカラーピッカー */}
-        <div style={{ marginTop: 16, borderTop: '1px solid #eee', paddingTop: 16 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#A0A0A0', marginBottom: 10, fontFamily: "'Inter', sans-serif" }}>
-            CUSTOM COLORS
-          </div>
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            {([
-              { label: '背景色', value: customBg, setter: setCustomBg },
-              { label: '文字色', value: customText, setter: setCustomText },
-              { label: 'アクセント', value: customAccent, setter: setCustomAccent },
-            ] as const).map(({ label, value, setter }) => (
-              <label key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                <input
-                  type="color"
-                  value={value}
-                  onChange={e => {
-                    const v = e.target.value
-                    setter(v)
-                    const bg = label === '背景色' ? v : customBg
-                    const text = label === '文字色' ? v : customText
-                    const accent = label === 'アクセント' ? v : customAccent
-                    updateCustomColor(bg, text, accent)
-                  }}
-                  style={{ width: 32, height: 32, border: 'none', borderRadius: 6, cursor: 'pointer', padding: 0 }}
-                />
-                <span style={{ fontSize: 11, color: '#555', fontWeight: 500 }}>{label}</span>
-              </label>
-            ))}
-          </div>
-          {voiceIsCustom && (
-            <button
-              onClick={() => selectPreset(0)}
-              style={{
-                marginTop: 8, fontSize: 11, color: '#C4A35A', background: 'none',
-                border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0,
-              }}
-            >
-              プリセットに戻す
-            </button>
-          )}
-        </div>
-
-        {/* トグルスイッチ */}
-        <div style={{ marginTop: 16, borderTop: '1px solid #eee', paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {([
-            { label: 'トッププルーフを表示', value: voiceShowProof, toggle: toggleShowProof },
-            { label: 'プロ情報を表示', value: voiceShowProInfo, toggle: toggleShowProInfo },
-          ] as const).map(({ label, value, toggle }) => (
-            <label key={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
-              <span style={{ fontSize: 13, fontWeight: 500, color: '#333' }}>{label}</span>
-              <div
-                onClick={() => toggle(!value)}
-                style={{
-                  width: 44, height: 24, borderRadius: 12,
-                  background: value ? '#C4A35A' : '#ccc',
-                  position: 'relative', transition: 'background 0.2s', cursor: 'pointer',
-                }}
-              >
-                <div style={{
-                  width: 20, height: 20, borderRadius: '50%', background: '#fff',
-                  position: 'absolute', top: 2,
-                  left: value ? 22 : 2,
-                  transition: 'left 0.2s',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                }} />
-              </div>
-            </label>
-          ))}
-        </div>
-      </div>
-
       {/* Voices */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
         <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">
@@ -2139,21 +1963,18 @@ export default function DashboardPage() {
           onClose={() => setShareModalVoice(null)}
           voice={shareModalVoice}
           phraseId={selectedPhrases[shareModalVoice.id] || voicePhrases.find(p => p.is_default)?.id || 1}
-          phraseText={
-            voicePhrases.find(p => p.id === selectedPhrases[shareModalVoice.id])?.text
-            || voicePhrases.find(p => p.is_default)?.text || ''
-          }
+          phrases={voicePhrases}
           proId={pro.id}
           proName={pro.name}
           proTitle={pro.title}
           proPhotoUrl={pro.photo_url}
-          proPrefecture={pro.prefecture}
-          proAreaDescription={pro.area_description}
           totalProofs={totalVotes}
           topStrengths={votes.sort((a, b) => b.vote_count - a.vote_count).slice(0, 3).map(v => ({ label: v.category, count: v.vote_count }))}
-          theme={voiceTheme}
-          showProof={voiceShowProof}
-          showProInfo={voiceShowProInfo}
+          savedThemeData={savedVoiceThemeData}
+          onSaveTheme={(data: any) => {
+            setSavedVoiceThemeData(data);
+            (supabase as any).from('professionals').update({ voice_card_theme: data }).eq('id', pro.id)
+          }}
         />
       )}
 
