@@ -55,19 +55,31 @@ export async function GET(request: NextRequest) {
 
     let supabaseUid: string;
 
+    // 既存マッピングがある場合、ユーザーの存在を確認
+    let mappingValid = false;
     if (existingMapping?.supabase_uid) {
-      // ---- 既存ユーザー: ログイン ----
-      supabaseUid = existingMapping.supabase_uid;
+      const { data: checkUser, error: checkError } = await supabaseAdmin.auth.admin.getUserById(existingMapping.supabase_uid);
+      if (checkUser?.user && !checkError) {
+        // ---- 既存ユーザー確認済み: ログイン ----
+        supabaseUid = existingMapping.supabase_uid;
+        mappingValid = true;
+        console.log('[line/callback] existing user verified:', supabaseUid);
 
-      // LINE情報を更新
-      await supabaseAdmin.from('line_auth_mappings').update({
-        line_display_name: profile.displayName,
-        line_picture_url: profile.pictureUrl,
-        line_email: lineEmail,
-        updated_at: new Date().toISOString(),
-      }).eq('line_user_id', profile.userId);
+        // LINE情報を更新
+        await supabaseAdmin.from('line_auth_mappings').update({
+          line_display_name: profile.displayName,
+          line_picture_url: profile.pictureUrl,
+          line_email: lineEmail,
+          updated_at: new Date().toISOString(),
+        }).eq('line_user_id', profile.userId);
+      } else {
+        // ユーザーが存在しない → マッピングを削除して新規作成へ
+        console.log('[line/callback] mapping points to deleted user:', existingMapping.supabase_uid, '→ cleaning up');
+        await supabaseAdmin.from('line_auth_mappings').delete().eq('line_user_id', profile.userId);
+      }
+    }
 
-    } else {
+    if (!mappingValid) {
       // ---- 新規ユーザー: 登録 ----
 
       // メールアドレスの決定（LINEから取得 or 仮メール生成）
