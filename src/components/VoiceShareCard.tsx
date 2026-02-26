@@ -91,6 +91,9 @@ export default function VoiceShareModal({
   // ── エクスポートモード ──
   const [exportMode, setExportMode] = useState<'stories' | 'feed'>('stories')
 
+  // ── ストーリーズ背景色 ──
+  const [storyBg, setStoryBg] = useState<'#FFFFFF' | '#111111'>('#FFFFFF')
+
   // ── debounce timer ──
   const saveTimer = useRef<NodeJS.Timeout | null>(null)
 
@@ -237,10 +240,6 @@ export default function VoiceShareModal({
     setSaving(false)
   }
 
-  // エクスポートキャンバスの高さ
-  const exportH = exportMode === 'stories' ? 1920 : 1350
-  const exportPadV = exportMode === 'stories' ? 120 : 80
-
   // ═══ Render ═══
   return (
     <div
@@ -257,124 +256,132 @@ export default function VoiceShareModal({
       >
         {/* ═══ 1. カードプレビュー（表示用、キャプチャ対象ではない）═══ */}
         <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <div style={{
-            padding: exportMode === 'feed' ? 24 : 0,
-            backgroundColor: exportMode === 'feed' ? '#FFFFFF' : 'transparent',
-          }}>
-          <div style={{
-            background: `linear-gradient(170deg, ${theme.bg} 0%, ${theme.bg2} 100%)`,
-            borderRadius: exportMode === 'feed' ? 18 : 0,
-            padding: exportMode === 'stories' ? '60px 30px 40px' : '32px 26px',
+          {/* ストーリーズ: 9:16背景フレーム / フィード: 白パディング */}
+          <div style={exportMode === 'stories' ? {
             width: 340,
-            border: exportMode === 'feed'
-              ? (isLightBg ? '2px solid rgba(0,0,0,0.08)' : '2px solid rgba(255,255,255,0.12)')
-              : 'none',
-            fontFamily: "'Inter', 'Noto Sans JP', sans-serif",
+            aspectRatio: '9 / 16',
+            background: storyBg,
             display: 'flex',
-            flexDirection: 'column',
-            position: 'relative',
-            overflow: 'hidden',
-            ...(exportMode === 'stories' ? { aspectRatio: '9 / 16', justifyContent: 'center' } : {}),
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '0 20px',
+            boxSizing: 'border-box' as const,
+          } : {
+            padding: 24,
+            backgroundColor: '#FFFFFF',
           }}>
-            {/* カード上部ロゴ + サブテキスト */}
-            <div style={{ textAlign: 'center', marginBottom: 20 }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={REALPROOF_LOGO_BASE64}
-                alt="REALPROOF"
-                style={{
-                  width: '80%',
-                  maxWidth: 280,
-                  height: 'auto',
-                  objectFit: 'contain',
-                  filter: isLightBg ? 'none' : 'brightness(2)',
-                }}
-              />
-              <div style={{ fontSize: 11, color: theme.sub, marginTop: 6 }}>
-                クライアントのリアルな声を紹介
-              </div>
-            </div>
-
-            {/* 引用符 */}
-            <div style={{ fontSize: 56, color: hexToRgba(theme.accent, 0.22), fontFamily: 'Georgia, serif', lineHeight: 1 }}>&ldquo;</div>
-
-            {/* コメント */}
+            {/* カード本体（両モード共通デザイン） */}
             <div style={{
-              color: theme.text,
-              fontSize: getCommentFontSize(voice.comment, exportMode),
-              fontWeight: 600,
-              lineHeight: 1.8, marginTop: 8, marginBottom: 16,
+              background: `linear-gradient(170deg, ${theme.bg} 0%, ${theme.bg2} 100%)`,
+              borderRadius: 18,
+              padding: '32px 26px',
+              width: exportMode === 'stories' ? '100%' : 340,
+              border: isLightBg ? '2px solid rgba(0,0,0,0.08)' : '2px solid rgba(255,255,255,0.12)',
+              fontFamily: "'Inter', 'Noto Sans JP', sans-serif",
+              display: 'flex',
+              flexDirection: 'column',
+              position: 'relative',
+              overflow: 'hidden',
             }}>
-              {voice.comment}
-            </div>
-
-            {/* 区切り線 */}
-            <div style={{ height: 1, background: hexToRgba(theme.accent, 0.12), margin: '4px 0 12px' }} />
-
-            {/* 感謝フレーズ */}
-            <div style={{ color: theme.accent, fontSize: 12, fontWeight: 500, marginBottom: 20 }}>
-              ── {currentPhraseText}
-            </div>
-
-            {/* プロ情報 */}
-            {showProInfo && (
-              <>
-                <div style={{ height: 1, background: hexToRgba(theme.accent, 0.12), margin: '0 0 14px' }} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
-                  {proPhotoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={proPhotoUrl} alt={proName}
-                      style={{
-                        width: 48, height: 48, borderRadius: '50%', objectFit: 'cover',
-                        border: `2px solid ${hexToRgba(theme.accent, 0.2)}`, flexShrink: 0,
-                      }} />
-                  ) : (
-                    <div style={{
-                      width: 48, height: 48, borderRadius: '50%',
-                      background: hexToRgba(theme.accent, 0.15),
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: theme.accent, fontSize: 20, fontWeight: 'bold', flexShrink: 0,
-                    }}>
-                      {proName.charAt(0)}
-                    </div>
-                  )}
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: theme.text }}>{proName}</div>
-                    <div style={{ fontSize: 10, fontWeight: 500, color: theme.sub, marginTop: 2 }}>{proTitle}</div>
-                  </div>
+              {/* カード上部ロゴ + サブテキスト */}
+              <div style={{ textAlign: 'center', marginBottom: 20 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={REALPROOF_LOGO_BASE64}
+                  alt="REALPROOF"
+                  style={{
+                    width: '80%',
+                    maxWidth: 280,
+                    height: 'auto',
+                    objectFit: 'contain',
+                    filter: isLightBg ? 'none' : 'brightness(2)',
+                  }}
+                />
+                <div style={{ fontSize: 11, color: theme.sub, marginTop: 6 }}>
+                  クライアントのリアルな声を紹介
                 </div>
-              </>
-            )}
-
-            {/* トッププルーフバッジ */}
-            {showProof && topProof && (
-              <div style={{
-                background: hexToRgba(theme.accent, 0.08),
-                border: `1px solid ${hexToRgba(theme.accent, 0.2)}`,
-                borderRadius: 8, padding: '8px 12px', marginBottom: 16, textAlign: 'center',
-              }}>
-                <span style={{ fontSize: 11, fontWeight: 600, color: theme.accent }}>
-                  ◆ {topProof.count}人が「{topProof.label}」と証明
-                </span>
               </div>
-            )}
 
-            {/* フッター */}
-            <div style={{ height: 1, background: hexToRgba(theme.accent, 0.12), margin: '0 0 12px' }} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 9, color: theme.sub }}>強みが、あなたを定義する。</span>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={REALPROOF_LOGO_BASE64}
-                alt="REALPROOF"
-                style={{
-                  height: 22,
-                  objectFit: 'contain',
-                  filter: isLightBg ? 'none' : 'brightness(2)',
-                }}
-              />
+              {/* 引用符 */}
+              <div style={{ fontSize: 56, color: hexToRgba(theme.accent, 0.22), fontFamily: 'Georgia, serif', lineHeight: 1 }}>&ldquo;</div>
+
+              {/* コメント */}
+              <div style={{
+                color: theme.text,
+                fontSize: getCommentFontSize(voice.comment, exportMode),
+                fontWeight: 600,
+                lineHeight: 1.8, marginTop: 8, marginBottom: 16,
+              }}>
+                {voice.comment}
+              </div>
+
+              {/* 区切り線 */}
+              <div style={{ height: 1, background: hexToRgba(theme.accent, 0.12), margin: '4px 0 12px' }} />
+
+              {/* 感謝フレーズ */}
+              <div style={{ color: theme.accent, fontSize: 12, fontWeight: 500, marginBottom: 20 }}>
+                ── {currentPhraseText}
+              </div>
+
+              {/* プロ情報 */}
+              {showProInfo && (
+                <>
+                  <div style={{ height: 1, background: hexToRgba(theme.accent, 0.12), margin: '0 0 14px' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+                    {proPhotoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={proPhotoUrl} alt={proName}
+                        style={{
+                          width: 48, height: 48, borderRadius: '50%', objectFit: 'cover',
+                          border: `2px solid ${hexToRgba(theme.accent, 0.2)}`, flexShrink: 0,
+                        }} />
+                    ) : (
+                      <div style={{
+                        width: 48, height: 48, borderRadius: '50%',
+                        background: hexToRgba(theme.accent, 0.15),
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: theme.accent, fontSize: 20, fontWeight: 'bold', flexShrink: 0,
+                      }}>
+                        {proName.charAt(0)}
+                      </div>
+                    )}
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: theme.text }}>{proName}</div>
+                      <div style={{ fontSize: 10, fontWeight: 500, color: theme.sub, marginTop: 2 }}>{proTitle}</div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* トッププルーフバッジ */}
+              {showProof && topProof && (
+                <div style={{
+                  background: hexToRgba(theme.accent, 0.08),
+                  border: `1px solid ${hexToRgba(theme.accent, 0.2)}`,
+                  borderRadius: 8, padding: '8px 12px', marginBottom: 16, textAlign: 'center',
+                }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: theme.accent }}>
+                    ◆ {topProof.count}人が「{topProof.label}」と証明
+                  </span>
+                </div>
+              )}
+
+              {/* フッター */}
+              <div style={{ height: 1, background: hexToRgba(theme.accent, 0.12), margin: '0 0 12px' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 9, color: theme.sub }}>強みが、あなたを定義する。</span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={REALPROOF_LOGO_BASE64}
+                  alt="REALPROOF"
+                  style={{
+                    height: 22,
+                    objectFit: 'contain',
+                    filter: isLightBg ? 'none' : 'brightness(2)',
+                  }}
+                />
+              </div>
             </div>
-          </div>
           </div>
         </div>
 
@@ -532,6 +539,40 @@ export default function VoiceShareModal({
               </button>
             ))}
           </div>
+
+          {/* ストーリーズ背景色の白黒切替 */}
+          {exportMode === 'stories' && (
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              {([
+                { key: '#FFFFFF' as const, label: '☀️ 白背景' },
+                { key: '#111111' as const, label: '🌙 黒背景' },
+              ]).map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => setStoryBg(key)}
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    fontFamily: "'Inter', 'Noto Sans JP', sans-serif",
+                    borderRadius: 8,
+                    border: storyBg === key
+                      ? '1px solid #C4A35A'
+                      : '1px solid rgba(255,255,255,0.15)',
+                    background: storyBg === key
+                      ? 'rgba(196,163,90,0.15)'
+                      : 'transparent',
+                    color: storyBg === key ? '#C4A35A' : '#BBBBBB',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* ═══ 6. シェアボタン ═══ */}
@@ -574,40 +615,50 @@ export default function VoiceShareModal({
       <div style={{ position: 'fixed', left: -9999, top: 0, pointerEvents: 'none' }}>
         <div
           id="voice-card-for-export"
-          style={{
+          style={exportMode === 'stories' ? {
+            /* ストーリーズ: 背景フレーム 1080×1920 */
             width: 1080,
-            height: exportH,
-            background: `linear-gradient(170deg, ${theme.bg} 0%, ${theme.bg2} 100%)`,
+            height: 1920,
+            background: storyBg,
             display: 'flex',
-            flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: `${exportPadV}px 80px`,
-            fontFamily: "'Inter', 'Noto Sans JP', sans-serif",
+            padding: '0 60px',
             boxSizing: 'border-box' as const,
+          } : {
+            /* フィード: カードのみ */
+            display: 'inline-block',
           }}
         >
-          {/* ロゴ + サブテキスト */}
-          <div style={{ textAlign: 'center', marginBottom: 48 }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={REALPROOF_LOGO_BASE64}
-              alt="REALPROOF"
-              style={{
-                width: '80%',
-                maxWidth: 600,
-                height: 'auto',
-                objectFit: 'contain',
-                filter: isLightBg ? 'none' : 'brightness(2)',
-              }}
-            />
-            <div style={{ fontSize: 28, color: theme.sub, marginTop: 16 }}>
-              クライアントのリアルな声を紹介
+          {/* カード本体（共通） */}
+          <div style={{
+            width: exportMode === 'stories' ? '100%' : 1080,
+            background: `linear-gradient(170deg, ${theme.bg} 0%, ${theme.bg2} 100%)`,
+            borderRadius: 36,
+            padding: '64px 52px',
+            fontFamily: "'Inter', 'Noto Sans JP', sans-serif",
+            boxSizing: 'border-box' as const,
+            border: isLightBg ? '4px solid rgba(0,0,0,0.08)' : '4px solid rgba(255,255,255,0.12)',
+          }}>
+            {/* ロゴ + サブテキスト */}
+            <div style={{ textAlign: 'center', marginBottom: 48 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={REALPROOF_LOGO_BASE64}
+                alt="REALPROOF"
+                style={{
+                  width: '80%',
+                  maxWidth: 600,
+                  height: 'auto',
+                  objectFit: 'contain',
+                  filter: isLightBg ? 'none' : 'brightness(2)',
+                }}
+              />
+              <div style={{ fontSize: 28, color: theme.sub, marginTop: 16 }}>
+                クライアントのリアルな声を紹介
+              </div>
             </div>
-          </div>
 
-          {/* コンテンツエリア */}
-          <div style={{ width: '100%', maxWidth: 900 }}>
             {/* 引用符 */}
             <div style={{
               fontSize: 120,
