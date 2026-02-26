@@ -8,20 +8,30 @@ export default function AuthCallback() {
   const [showDebug, setShowDebug] = useState(false)
 
   useEffect(() => {
-    setShowDebug(new URLSearchParams(window.location.search).has('debug'))
+    const params = new URLSearchParams(window.location.search)
+    setShowDebug(params.has('debug'))
     const supabase = createClient() as any
     let redirecting = false
 
-    // 古いセッションをクリア（新しいOAuthセッションと競合しないように）
-    clearAllAuthStorage()
-
     // デバッグ: URL状態を表示
+    console.log('[auth/callback] full URL:', window.location.href)
+    console.log('[auth/callback] hash:', window.location.hash.substring(0, 100))
+    console.log('[auth/callback] search:', window.location.search)
+    console.log('[auth/callback] redirect param:', params.get('redirect'))
+    console.log('[auth/callback] next param:', params.get('next'))
     setDebugInfo(
       `callback: hash=${window.location.hash.substring(0, 50)} | ` +
-      `search=${window.location.search.substring(0, 50)}`
+      `search=${window.location.search.substring(0, 80)}`
     )
 
-    // 15秒絶対タイムアウト
+    // redirect先を決定（redirect > next > null）
+    const explicitRedirect = params.get('redirect') || params.get('next') || null
+
+    // 古いセッションをクリア（新しいOAuthセッションと競合しないように）
+    // ※ hash fragment のトークンは Supabase SDK が内部で処理するので影響しない
+    clearAllAuthStorage()
+
+    // 15秒絶対タイムアウト → /login（絶対に / には行かない）
     const absoluteTimeout = setTimeout(() => {
       if (redirecting) return
       console.log('[auth/callback] absolute timeout (15s) → redirect to login')
@@ -29,13 +39,23 @@ export default function AuthCallback() {
       window.location.href = '/login?error=timeout'
     }, 15000)
 
+    // リダイレクト実行（/ には絶対に行かないガード付き）
+    function safeRedirect(path: string) {
+      if (!path || path === '/') {
+        console.warn('[auth/callback] blocked redirect to /, going to /dashboard instead')
+        path = '/dashboard'
+      }
+      console.log('[auth/callback] → redirecting to:', path)
+      window.location.href = path
+    }
+
     // セッション確定 → localStorage永続化 → プロ判定 → リダイレクト
     async function handleSessionConfirmed(session: any) {
       if (redirecting) return
       redirecting = true
       clearTimeout(absoluteTimeout)
 
-      console.log('[auth/callback] session confirmed, persisting to localStorage...')
+      console.log('[auth/callback] session confirmed, user:', session.user?.id, 'email:', session.user?.email)
       setDebugInfo('callback: session confirmed, persisting...')
 
       // 1. setSession で localStorage に確実に書き込む
@@ -95,14 +115,10 @@ export default function AuthCallback() {
       console.log('[auth/callback] localStorage confirmed:', confirmed)
       setDebugInfo(`callback: persisted=${confirmed} → determining redirect...`)
 
-      // 3. URLパラメータから redirect 先を確認
-      const params = new URLSearchParams(window.location.search)
-      const redirect = params.get('redirect')
-
-      if (redirect) {
-        // 明示的なリダイレクト先がある場合はそこに遷移
-        console.log('[auth/callback] redirecting to explicit redirect:', redirect)
-        window.location.href = redirect
+      // 3. 明示的なリダイレクト先がある場合はそこに遷移
+      if (explicitRedirect) {
+        console.log('[auth/callback] using explicit redirect:', explicitRedirect)
+        safeRedirect(decodeURIComponent(explicitRedirect))
         return
       }
 
@@ -120,7 +136,7 @@ export default function AuthCallback() {
 
           if (pro) {
             console.log('[auth/callback] → /dashboard (existing pro)')
-            window.location.href = '/dashboard'
+            safeRedirect('/dashboard')
             return
           }
 
@@ -134,7 +150,7 @@ export default function AuthCallback() {
 
             if (clientData) {
               console.log('[auth/callback] → /mycard (existing client)')
-              window.location.href = '/mycard'
+              safeRedirect('/mycard')
               return
             }
 
@@ -148,58 +164,68 @@ export default function AuthCallback() {
             }, { onConflict: 'user_id' })
 
             console.log('[auth/callback] → /mycard (new client)')
-            window.location.href = '/mycard'
+            safeRedirect('/mycard')
             return
           }
 
           // role=pro だがprofessionalsにいない → 新規プロ
           console.log('[auth/callback] → /dashboard (new pro)')
-          window.location.href = '/dashboard'
+          safeRedirect('/dashboard')
         } catch (dbErr) {
           console.error('[auth/callback] DB query failed:', dbErr)
           // DB失敗時はroleで判断
-          window.location.href = role === 'client' ? '/mycard' : '/dashboard'
+          safeRedirect(role === 'client' ? '/mycard' : '/dashboard')
         }
       } else {
         // userId取得できない場合のフォールバック
         console.log('[auth/callback] no userId, redirecting by role:', role)
-        window.location.href = role === 'client' ? '/mycard' : '/dashboard'
+        safeRedirect(role === 'client' ? '/mycard' : '/dashboard')
       }
     }
 
     // onAuthStateChange でセッション検知
-    supabase.auth.onAuthStateChange((event: string, session: any) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, session: any) => {
       console.log('[auth/callback] onAuthStateChange:', event, !!session)
       setDebugInfo(`callback: event=${event} session=${session ? 'YES' : 'NO'}`)
-      if (event === 'SIGNED_IN' && session) {
+      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
         handleSessionConfirmed(session)
       }
     })
 
-    // getSession フォールバック（1秒後）
-    setTimeout(async () => {
-      if (redirecting) return
-      try {
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('timeout')), 5000)
-        )
-        const sessionPromise = supabase.auth.getSession()
-        const { data } = await Promise.race([sessionPromise, timeoutPromise]) as any
-        const session = data?.session
+    // getSession リトライ（500ms間隔、最大10秒）
+    async function retryGetSession() {
+      for (let i = 0; i < 20; i++) {
+        if (redirecting) return
+        await new Promise(resolve => setTimeout(resolve, 500))
+        if (redirecting) return
 
-        console.log('[auth/callback] getSession check:', session ? 'EXISTS' : 'NULL')
-        setDebugInfo(`callback: getSession=${session ? 'YES' : 'NO'}`)
+        try {
+          const { data } = await supabase.auth.getSession()
+          const session = data?.session
+          console.log(`[auth/callback] getSession retry ${i + 1}/20:`, session ? 'EXISTS' : 'NULL')
+          setDebugInfo(`callback: getSession retry ${i + 1}/20 = ${session ? 'YES' : 'NO'}`)
 
-        if (session) {
-          handleSessionConfirmed(session)
+          if (session) {
+            handleSessionConfirmed(session)
+            return
+          }
+        } catch (e) {
+          console.warn(`[auth/callback] getSession retry ${i + 1} error:`, e)
         }
-      } catch (e) {
-        console.log('[auth/callback] getSession timeout - waiting for onAuthStateChange')
-        setDebugInfo('callback: getSession timeout, waiting...')
       }
-    }, 1000)
+      // 10秒待ってもセッションなし
+      if (!redirecting) {
+        console.error('[auth/callback] Session timeout after 10s retries')
+        safeRedirect('/login?error=session_timeout')
+      }
+    }
 
-    return () => clearTimeout(absoluteTimeout)
+    retryGetSession()
+
+    return () => {
+      clearTimeout(absoluteTimeout)
+      subscription?.unsubscribe()
+    }
   }, [])
 
   return (
