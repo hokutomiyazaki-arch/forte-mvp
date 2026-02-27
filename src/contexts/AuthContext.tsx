@@ -55,16 +55,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(sessionUser)
       setSession(sess)
 
-      // モバイル対策: localStorageから読んだセッションをSupabaseクライアントにセット
-      // これを一元化することで、各ページでのコピペを排除
-      if (source === 'localStorage' && sess?.access_token && sess?.refresh_token) {
-        try {
-          await supabase.auth.setSession({
-            access_token: sess.access_token,
-            refresh_token: sess.refresh_token,
-          })
-        } catch (_) {}
-      }
+      // Note: setSession() は使わない。内部でrefresh tokenの検証を実行し、
+      // LINE認証のサーバー作成トークンが "Invalid Refresh Token" で失敗→sb-*キー削除を引き起こす。
+      // Supabase client は persistSession: true でlocalStorageを自動読み取りするので不要。
 
       // プロ/クライアント判定（2クエリを1回だけ実行）
       try {
