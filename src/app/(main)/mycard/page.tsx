@@ -773,7 +773,15 @@ function MyCardContent() {
       )}
 
       {/* タブ */}
-      <div className="flex border-b border-gray-200 mb-6" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+      <div style={{
+        display: 'flex',
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        borderBottom: '1px solid #E5E7EB',
+        marginBottom: 24,
+        scrollbarWidth: 'none',
+        gap: 0,
+      }}>
         {([
           { key: 'rewards' as const, label: 'リワード', count: activeRewards.length },
           { key: 'history' as const, label: 'プルーフ済み', count: voteHistory.length },
@@ -784,23 +792,23 @@ function MyCardContent() {
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`flex-1 py-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${
-              tab === t.key
-                ? 'border-[#C4A35A] text-[#C4A35A]'
-                : 'border-transparent text-gray-400 hover:text-gray-600'
-            }`}
-            style={{ minWidth: 0 }}
+            style={{
+              flex: '0 0 auto',
+              padding: '12px 14px',
+              fontSize: 13,
+              fontWeight: tab === t.key ? 700 : 500,
+              color: tab === t.key ? '#C4A35A' : '#9CA3AF',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: tab === t.key ? '2px solid #C4A35A' : '2px solid transparent',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              transition: 'color 0.2s, border-color 0.2s',
+            }}
           >
             {t.label}
-            {t.count > 0 && (
-              <span style={{
-                marginLeft: 4,
-                fontSize: 11,
-                fontWeight: 700,
-                color: tab === t.key ? '#C4A35A' : '#AAA',
-              }}>
-                {t.count}
-              </span>
+            {t.count !== undefined && t.count > 0 && (
+              <span style={{ marginLeft: 4, fontSize: 11, fontWeight: 700 }}>{t.count}</span>
             )}
           </button>
         ))}
