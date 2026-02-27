@@ -58,7 +58,7 @@ export default function MyProofPage() {
   const params = useParams()
   const userId = params.userId as string
   const supabase = createClient()
-  const { user: authUser } = useAuth()
+  const { user: authUser, isPro } = useAuth()
 
   const [userName, setUserName] = useState('')
   const [userPhoto, setUserPhoto] = useState('')
@@ -166,6 +166,18 @@ export default function MyProofPage() {
   return (
     <div style={{ background: '#FAF8F4', minHeight: '80vh', padding: '32px 16px' }}>
       <div style={{ maxWidth: 480, margin: '0 auto' }}>
+        {/* マイページに戻るボタン（オーナーのみ） */}
+        {isOwner && (
+          <div style={{ marginBottom: 16 }}>
+            <a href={isPro ? '/dashboard?tab=myproof' : '/mycard?tab=myproof'}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                fontSize: 14, color: '#666', textDecoration: 'none',
+              }}>
+              ← マイページに戻る
+            </a>
+          </div>
+        )}
         {/* ヘッダー */}
         <div style={{ textAlign: 'center' as const, marginBottom: 32 }}>
           {userPhoto ? (
