@@ -495,6 +495,12 @@ function LoginForm() {
     setError('')
     setSubmitting(true)
 
+    // Googleユーザーでパスワード未入力の場合はGoogle OAuthにリダイレクト
+    if (emailCheckResult?.provider === 'google' && !password) {
+      handleGoogleLogin()
+      return
+    }
+
     try {
       if (mode === 'signup') {
         const signUpOptions: any = { data: { role } }
@@ -781,15 +787,21 @@ function LoginForm() {
       {/* Email/Password */}
       <form onSubmit={handleEmailAuth} className="space-y-4">
         <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
+          onBlur={() => email && email.includes('@') && checkEmail(email)}
           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
           placeholder="メールアドレス" />
         <div>
-          <input type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6}
+          <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+            {...(emailCheckResult?.provider === 'google' ? {} : { required: true, minLength: 6 })}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
             placeholder="パスワード" />
-          {mode === 'signup' && (
+          {emailCheckResult?.provider === 'google' ? (
+            <p className="text-xs text-gray-400 mt-1">
+              バックアップ用に設定しておけます。
+            </p>
+          ) : mode === 'signup' ? (
             <p className="text-xs text-gray-400 mt-1">6文字以上で設定してください</p>
-          )}
+          ) : null}
         </div>
 
         {error && <p className="text-red-500 text-sm">{error}</p>}
