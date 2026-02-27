@@ -206,7 +206,7 @@ export default function MyProofPage() {
       <div style={{ maxWidth: 480, margin: '0 auto' }}>
         {/* マイページに戻るボタン */}
         <div style={{ marginBottom: 16 }}>
-          <a href={isOwner ? (isPro ? '/dashboard?tab=myproof' : '/mycard?tab=myproof') : '/mycard'}
+          <a href={isOwner ? (isPro ? '/dashboard' : '/mycard') : '/mycard'}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
               fontSize: 14, color: '#666', textDecoration: 'none',

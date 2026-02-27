@@ -462,7 +462,7 @@ export default function MyProofEditPage() {
           {saving ? '保存中...' : '保存する'}
         </button>
         <a
-          href={`/myproof/${authUser.id}`}
+          href="/dashboard?tab=myproof"
           style={{
             flex: 1, padding: '14px 0', fontSize: 15, fontWeight: 700,
             background: '#fff', color: '#1A1A2E', textAlign: 'center' as const,
