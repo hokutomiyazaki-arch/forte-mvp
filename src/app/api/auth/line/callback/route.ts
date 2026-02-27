@@ -183,64 +183,34 @@ export async function GET(request: NextRequest) {
       }, { onConflict: 'line_user_id' });
     }
 
-    // --- signInWithPassword でセッション取得 ---
-    const supabaseAuth = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    );
+    // --- クライアント側 signInWithPassword 方式 ---
+    // サーバーでセッションを作ってlocalStorage直書きすると、
+    // Supabase JS初期化時の_recoverAndRefresh()がrefresh tokenを検証→失敗→sb-*削除。
+    // 代わりにクライアント側でsignInWithPasswordを呼ばせる。
 
-    const { data: signInData, error: signInError } = await supabaseAuth.auth.signInWithPassword({
-      email: email,
-      password: linePassword,
+    // セキュリティ: LINE_CHANNEL_SECRETを含むパスワードを直接渡さず、ランダムな一時パスワードを使用
+    const tempPassword = crypto.randomUUID();
+
+    // 一時パスワードを設定
+    await supabaseAdmin.auth.admin.updateUserById(supabaseUid, {
+      password: tempPassword,
+      email_confirm: true,
     });
 
-    if (signInError || !signInData?.session) {
-      console.error('[line/callback] signInWithPassword failed:', signInError?.message);
-      return NextResponse.redirect(new URL('/login?error=line_signin_failed', request.url));
-    }
-
-    console.log('[line/callback] signInWithPassword success, session obtained');
-
-    // --- localStorage直書き方式でセッション確立 ---
-    const session = signInData.session;
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\./)?.[1] || '';
-    const storageKey = `sb-${projectRef}-auth-token`;
-
-    const sessionJSON = JSON.stringify({
-      access_token: session.access_token,
-      refresh_token: session.refresh_token,
-      token_type: session.token_type || 'bearer',
-      expires_in: session.expires_in,
-      expires_at: session.expires_at,
-      user: session.user,
-    });
-
-    const sessionBase64 = Buffer.from(sessionJSON).toString('base64');
     const redirectPath = context.type === 'client_login' ? '/mycard' : '/dashboard';
 
-    console.log('[line/callback] writing session to localStorage via HTML page, redirect:', redirectPath);
+    // クライアント側のline-sessionページにリダイレクト
+    const authData = Buffer.from(JSON.stringify({
+      email: email,
+      password: tempPassword,
+      redirect: redirectPath,
+    })).toString('base64url');
 
-    const html = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>ログイン中...</title></head>
-<body style="background:#1A1A2E;color:#fff;display:flex;justify-content:center;align-items:center;min-height:100vh;font-family:sans-serif;">
-<p>ログイン中...</p>
-<script>
-try {
-  var sessionData = atob('${sessionBase64}');
-  localStorage.setItem('${storageKey}', sessionData);
-  console.log('[line-auth] session written to localStorage successfully');
-  window.location.replace('${redirectPath}');
-} catch(e) {
-  console.error('[line-auth] failed:', e);
-  window.location.replace('/login?error=line_session_failed');
-}
-</script>
-</body></html>`;
+    console.log('[line/callback] redirecting to client-side signIn, redirect:', redirectPath);
 
-    return new Response(html, {
-      headers: { 'Content-Type': 'text/html; charset=utf-8' },
-    });
+    return NextResponse.redirect(
+      new URL(`/auth/line-session?d=${authData}`, request.url)
+    );
 
   } catch (err) {
     console.error('LINE callback error:', err);

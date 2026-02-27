@@ -1,47 +1,59 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 
-export default function LineSessionPage() {
+function LineSessionContent() {
   const searchParams = useSearchParams()
-  const [status, setStatus] = useState('セッションを設定中...')
+  const [status, setStatus] = useState('ログイン中...')
   const [error, setError] = useState('')
 
   useEffect(() => {
-    const accessToken = searchParams.get('access_token')
-    const refreshToken = searchParams.get('refresh_token')
-    const redirect = searchParams.get('redirect') || '/dashboard'
+    const encoded = searchParams.get('d')
 
-    console.log('[line-session] access_token:', accessToken ? 'present' : 'missing', 'refresh_token:', refreshToken ? 'present' : 'missing', 'redirect:', redirect)
-
-    if (!accessToken || !refreshToken) {
+    if (!encoded) {
       setError('認証情報が見つかりません')
       setTimeout(() => { window.location.href = '/login?error=line_session_failed' }, 2000)
       return
     }
 
-    const setSession = async () => {
+    const doSignIn = async () => {
       try {
-        const supabase = createClient()
-        const { error: sessionError } = await supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken,
-        })
+        // base64url デコード
+        const jsonStr = atob(encoded.replace(/-/g, '+').replace(/_/g, '/'))
+        const { email, password, redirect } = JSON.parse(jsonStr)
 
-        if (sessionError) {
-          console.error('[line-session] setSession error:', sessionError.message)
-          setError('セッション設定に失敗しました')
+        if (!email || !password) {
+          setError('認証情報が不正です')
           setTimeout(() => { window.location.href = '/login?error=line_session_failed' }, 2000)
           return
         }
 
-        console.log('[line-session] session set successfully, redirecting to:', redirect)
+        console.log('[line-session] starting client-side signInWithPassword for:', email)
+
+        // クライアント側で signInWithPassword を実行
+        // これにより Supabase JS が自分で管理できるセッションが作成される
+        // サーバー側で作ったセッションと違い、refresh tokenが正常に動作する
+        const supabase = createClient()
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
+
+        if (signInError || !data?.session) {
+          console.error('[line-session] signInWithPassword failed:', signInError?.message)
+          setError('ログインに失敗しました')
+          setTimeout(() => { window.location.href = '/login?error=line_signin_failed' }, 2000)
+          return
+        }
+
+        console.log('[line-session] signInWithPassword success, redirecting to:', redirect || '/dashboard')
         setStatus('ログイン成功！リダイレクト中...')
-        // URLからトークンを消す（履歴に残さない）
+
+        // URLから認証情報を消す（履歴に残さない）
         window.history.replaceState(null, '', '/auth/line-session')
-        window.location.href = redirect
+        window.location.href = redirect || '/dashboard'
       } catch (err) {
         console.error('[line-session] unexpected error:', err)
         setError('予期しないエラーが発生しました')
@@ -49,7 +61,7 @@ export default function LineSessionPage() {
       }
     }
 
-    setSession()
+    doSignIn()
   }, [searchParams])
 
   if (error) {
@@ -78,5 +90,21 @@ export default function LineSessionPage() {
         <p className="text-gray-500 text-sm">{status}</p>
       </div>
     </div>
+  )
+}
+
+export default function LineSessionPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAFAF7] px-6">
+        <div className="max-w-sm w-full text-center">
+          <p className="text-sm font-bold tracking-widest text-[#C4A35A] mb-8">REAL PROOF</p>
+          <div className="animate-spin w-8 h-8 border-4 border-[#C4A35A] border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-gray-500 text-sm">ログイン中...</p>
+        </div>
+      </div>
+    }>
+      <LineSessionContent />
+    </Suspense>
   )
 }

@@ -272,69 +272,26 @@ export async function GET(request: NextRequest) {
       }
 
       const voteEmail = lineEmail || `line_${profile.userId}@line.realproof.jp`;
-      const linePassword = `line_${profile.userId}_${process.env.LINE_CHANNEL_SECRET}`;
 
-      // パスワード設定
+      // --- クライアント側 signInWithPassword 方式 ---
+      // ランダムな一時パスワードでクライアント側signInにリダイレクト
+      const tempPassword = crypto.randomUUID();
       const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(supabaseUid, {
-        password: linePassword,
+        password: tempPassword,
         email_confirm: true,
       });
 
-      if (updateError) {
-        console.error('[vote-callback] updateUserById failed:', updateError.message);
-      }
-
-      // signInWithPassword でセッション取得
-      const supabaseAuth = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      );
-
-      const { data: signInData, error: signInError } = await supabaseAuth.auth.signInWithPassword({
+      const authData = Buffer.from(JSON.stringify({
         email: voteEmail,
-        password: linePassword,
-      });
+        password: tempPassword,
+        redirect: confirmPath,
+      })).toString('base64url');
 
-      if (!signInError && signInData?.session) {
-        const session = signInData.session;
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-        const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\./)?.[1] || '';
-        const storageKey = `sb-${projectRef}-auth-token`;
+      console.log('[vote-callback] redirecting to client-side signIn, redirect:', confirmPath);
 
-        const sessionJSON = JSON.stringify({
-          access_token: session.access_token,
-          refresh_token: session.refresh_token,
-          token_type: session.token_type || 'bearer',
-          expires_in: session.expires_in,
-          expires_at: session.expires_at,
-          user: session.user,
-        });
-
-        const sessionBase64 = Buffer.from(sessionJSON).toString('base64');
-
-        const html = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>ログイン中...</title></head>
-<body style="background:#1A1A2E;color:#fff;display:flex;justify-content:center;align-items:center;min-height:100vh;font-family:sans-serif;">
-<p>ログイン中...</p>
-<script>
-try {
-  var sessionData = atob('${sessionBase64}');
-  localStorage.setItem('${storageKey}', sessionData);
-  // session written to localStorage
-  window.location.replace('${confirmPath}');
-} catch(e) {
-  console.error('[line-auth] failed:', e);
-  window.location.replace('${confirmPath}');
-}
-</script>
-</body></html>`;
-
-        return new Response(html, {
-          headers: { 'Content-Type': 'text/html; charset=utf-8' },
-        });
-      } else {
-        console.error('[vote-callback] signInWithPassword FAILED:', signInError?.message);
-      }
+      return NextResponse.redirect(
+        new URL(`/auth/line-session?d=${authData}`, request.url)
+      );
     } else {
       console.error('[vote-callback] supabaseUid is NULL - no session will be created');
     }
