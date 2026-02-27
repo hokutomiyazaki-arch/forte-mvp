@@ -71,6 +71,14 @@ function MyCardContent() {
   const [resetLinkError, setResetLinkError] = useState(false)
   const [isLineUser, setIsLineUser] = useState(false)
   const passwordSectionRef = useRef<HTMLDivElement>(null)
+  const [myProofQrUrl, setMyProofQrUrl] = useState('')
+
+  function generateMyProofQR() {
+    if (!authUser?.id) return
+    const url = `${window.location.origin}/myproof/${authUser.id}`
+    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`
+    setMyProofQrUrl(qrApiUrl)
+  }
 
   // データ取得（セッション確立後に呼ぶ）
   async function loadData(email: string, userId: string) {
@@ -662,6 +670,31 @@ function MyCardContent() {
 
   return (
     <div className="max-w-lg mx-auto px-4 py-8">
+      {/* マイプルーフ QRコード */}
+      <div style={{
+        background: '#fff', borderRadius: 12, padding: 24,
+        boxShadow: '0 1px 3px rgba(0,0,0,0.08)', marginBottom: 24,
+        textAlign: 'center' as const,
+      }}>
+        <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A1A2E', marginBottom: 8 }}>
+          マイプルーフ QRコード
+        </h2>
+        <p style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>
+          あなたがプルーフしたものを見せましょう
+        </p>
+        {myProofQrUrl ? (
+          <img src={myProofQrUrl} alt="My Proof QR" style={{ margin: '0 auto 12px', maxWidth: 200, display: 'block' }} />
+        ) : (
+          <button onClick={generateMyProofQR} style={{
+            padding: '12px 24px', fontSize: 14, fontWeight: 700,
+            background: '#C4A35A', color: '#fff',
+            border: 'none', borderRadius: 8, cursor: 'pointer',
+          }}>
+            QRコードを発行する
+          </button>
+        )}
+      </div>
+
       {isPasswordReset && !isLineUser && (
         <div className="bg-[#C4A35A]/10 border border-[#C4A35A] rounded-lg p-4 mb-4 text-center">
           <p className="text-sm font-bold text-[#1A1A2E]">パスワードを再設定してください</p>
