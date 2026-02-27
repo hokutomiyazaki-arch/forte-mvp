@@ -96,7 +96,7 @@ export default function DashboardPage() {
   const [selectedProofIds, setSelectedProofIds] = useState<Set<string>>(new Set())
   const [customProofs, setCustomProofs] = useState<CustomProof[]>([])
   const [activeTab, setActiveTab] = useState('basic')
-  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'org'>('profile')
+  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'myproof' | 'card' | 'org'>('profile')
   const [proofSaving, setProofSaving] = useState(false)
   const [proofSaved, setProofSaved] = useState(false)
   const [proofError, setProofError] = useState('')
@@ -1063,13 +1063,64 @@ export default function DashboardPage() {
         </button>
       </div>
 
+      {/* QRコード（タブの上に配置） */}
+      <div className="bg-white rounded-xl p-6 shadow-sm mb-6 text-center">
+        <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">24時間限定 プルーフ用QRコード</h2>
+        {(() => {
+          const proofsReady = selectedProofIds.size === 9
+
+          if (!proofsReady) {
+            return (
+              <div className="py-4">
+                <p className="text-sm text-[#9CA3AF] mb-3">
+                  QRコードを発行するには、プルーフ設定を完了してください：
+                </p>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-center gap-2 text-sm">
+                    <span className="text-red-400">✗</span>
+                    <span className="text-[#1A1A2E]">プルーフ設定（{selectedProofIds.size} / 9 選択中）</span>
+                  </div>
+                </div>
+              </div>
+            )
+          }
+
+          return (
+            <>
+              <p className="text-sm text-gray-500 mb-4">クライアントに見せてプルーフを贈ってもらいましょう</p>
+              {qrUrl ? (
+                <>
+                  <img src={qrUrl} alt="QR Code" className="mx-auto mb-4" />
+                  <button
+                    onClick={async () => {
+                      await generateQR()
+                      setQrRefreshed(true)
+                      setTimeout(() => setQrRefreshed(false), 2000)
+                    }}
+                    className="text-sm text-[#9CA3AF] hover:text-[#C4A35A] transition-colors"
+                  >
+                    {qrRefreshed ? '更新しました ✓' : 'QRコードを更新する'}
+                  </button>
+                </>
+              ) : (
+                <button onClick={generateQR} className="px-6 py-3 bg-[#C4A35A] text-white rounded-lg hover:bg-[#b3944f] transition">
+                  24時間限定QRコードを発行する
+                </button>
+              )}
+            </>
+          )
+        })()}
+      </div>
+
       {/* ダッシュボードタブ */}
       <div style={{ display: 'flex', overflowX: 'auto', gap: 0, marginBottom: 24, borderBottom: '1px solid #E5E7EB', scrollbarWidth: 'none' as any }}>
         {([
           { key: 'profile' as const, label: 'プロフィール' },
           { key: 'proofs' as const, label: '強み設定' },
-          { key: 'rewards' as const, label: 'リワード設定' },
+          { key: 'rewards' as const, label: 'リワード' },
           { key: 'voices' as const, label: 'Voices' },
+          { key: 'myproof' as const, label: 'マイプルーフ' },
+          { key: 'card' as const, label: 'カード管理' },
           ...(ownedOrg ? [{ key: 'org' as const, label: '🏢 団体管理' }] : []),
         ]).map(tab => (
           <button
@@ -1328,61 +1379,38 @@ export default function DashboardPage() {
         <ForteChart votes={votes} personalityVotes={personalityVotes} professional={pro} />
       </div>
 
-      {/* QR Code */}
-      <div className="bg-white rounded-xl p-6 shadow-sm mb-8 text-center">
-        <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">24時間限定 プルーフ用QRコード</h2>
-        {(() => {
-          const proofsReady = selectedProofIds.size === 9
+      </>)}
 
-          if (!proofsReady) {
-            return (
-              <div className="py-4">
-                <p className="text-sm text-[#9CA3AF] mb-3">
-                  QRコードを発行するには、プルーフ設定を完了してください：
-                </p>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-center gap-2 text-sm">
-                    <span className="text-red-400">✗</span>
-                    <span className="text-[#1A1A2E]">プルーフ設定（{selectedProofIds.size} / 9 選択中）</span>
-                  </div>
-                </div>
-              </div>
-            )
-          }
-
-          return (
-            <>
-              <p className="text-sm text-gray-500 mb-4">クライアントに見せてプルーフを贈ってもらいましょう</p>
-              {qrUrl ? (
-                <>
-                  <img src={qrUrl} alt="QR Code" className="mx-auto mb-4" />
-                  <button
-                    onClick={async () => {
-                      await generateQR()
-                      setQrRefreshed(true)
-                      setTimeout(() => setQrRefreshed(false), 2000)
-                    }}
-                    className="text-sm text-[#9CA3AF] hover:text-[#C4A35A] transition-colors"
-                  >
-                    {qrRefreshed ? '更新しました ✓' : 'QRコードを更新する'}
-                  </button>
-                </>
-              ) : (
-                <button onClick={generateQR} className="px-6 py-3 bg-[#C4A35A] text-white rounded-lg hover:bg-[#b3944f] transition">
-                  24時間限定QRコードを発行する
-                </button>
-              )}
-            </>
-          )
-        })()}
+      {/* ═══ Tab: マイプルーフ ═══ */}
+      {dashboardTab === 'myproof' && (
+      <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
+        <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">マイプルーフ</h2>
+        <p className="text-sm text-gray-500 mb-4">あなたがプルーフするものを管理できます。</p>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <a href={`/myproof/${user?.id}`} style={{
+            padding: '10px 20px', fontSize: 14, fontWeight: 600,
+            background: '#1A1A2E', color: '#C4A35A',
+            borderRadius: 8, textDecoration: 'none',
+          }}>
+            公開ページを見る
+          </a>
+          <a href="/myproof/edit" style={{
+            padding: '10px 20px', fontSize: 14, fontWeight: 600,
+            background: '#C4A35A', color: '#fff',
+            borderRadius: 8, textDecoration: 'none',
+          }}>
+            編集する
+          </a>
+        </div>
       </div>
+      )}
 
-      {/* NFC Card */}
+      {/* ═══ Tab: カード管理 ═══ */}
+      {dashboardTab === 'card' && (<>
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
         <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">プルーフカード</h2>
 
         {nfcCard ? (
-          // 状態B: カード登録済み
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
               <div style={{
@@ -1423,7 +1451,6 @@ export default function DashboardPage() {
             </button>
           </div>
         ) : (
-          // 状態A: カード未登録 / 状態C: 紛失報告後
           <div>
             {nfcLostCard && (
               <p style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>
@@ -1433,7 +1460,7 @@ export default function DashboardPage() {
             <p style={{ fontSize: 13, color: '#666', marginBottom: 12 }}>
               カード裏面に印字されたIDを入力してください
             </p>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' as const }}>
               <input
                 type="text"
                 value={nfcInput}
@@ -1470,7 +1497,6 @@ export default function DashboardPage() {
           <p style={{ fontSize: 13, color: '#22C55E', marginTop: 12 }}>{nfcSuccess}</p>
         )}
       </div>
-
       </>)}
 
       {/* ═══ Tab: 強み設定 ═══ */}
