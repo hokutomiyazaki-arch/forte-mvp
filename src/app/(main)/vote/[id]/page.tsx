@@ -487,7 +487,7 @@ function VoteForm() {
       comment: comment.trim() || null,
       qr_token: qrToken,
       status: 'pending',
-    }).select().single()
+    }).select().maybeSingle()
 
     console.log('[handleSubmit] Vote INSERT result:', { data: voteData, error: voteError })
 
@@ -535,7 +535,7 @@ function VoteForm() {
       .from('vote_confirmations')
       .insert({ vote_id: voteData.id })
       .select()
-      .single()
+      .maybeSingle()
 
     if (confirmError) {
       console.error('[handleSubmit] vote_confirmations INSERT error:', confirmError)
