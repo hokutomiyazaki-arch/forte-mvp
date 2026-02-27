@@ -51,8 +51,6 @@ function LineSessionContent() {
         console.log('[line-session] signInWithPassword success, redirecting to:', redirect || '/dashboard')
         setStatus('ログイン成功！リダイレクト中...')
 
-        // URLから認証情報を消す（履歴に残さない）
-        window.history.replaceState(null, '', '/auth/line-session')
         window.location.href = redirect || '/dashboard'
       } catch (err) {
         console.error('[line-session] unexpected error:', err)
