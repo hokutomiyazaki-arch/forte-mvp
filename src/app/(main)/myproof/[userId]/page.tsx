@@ -218,7 +218,7 @@ export default function MyProofPage() {
           <p style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', marginBottom: 14 }}>
             シェアする
           </p>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
             {/* LINE */}
             <button
               onClick={() => {
@@ -227,10 +227,10 @@ export default function MyProofPage() {
                 window.open(shareUrl, '_blank')
               }}
               style={{
-                width: 48, height: 48, borderRadius: '50%',
+                width: 44, height: 44, borderRadius: '50%',
                 background: '#06C755', border: 'none', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: '#fff', fontSize: 18, fontWeight: 700,
+                color: '#fff', fontSize: 16, fontWeight: 700,
               }}
               title="LINEでシェア"
             >
@@ -246,14 +246,52 @@ export default function MyProofPage() {
                 window.open(`https://twitter.com/intent/tweet?text=${text}&url=${url}`, '_blank')
               }}
               style={{
-                width: 48, height: 48, borderRadius: '50%',
+                width: 44, height: 44, borderRadius: '50%',
                 background: '#000', border: 'none', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: '#fff', fontSize: 18, fontWeight: 700,
+                color: '#fff', fontSize: 16, fontWeight: 700,
               }}
               title="Xでシェア"
             >
               𝕏
+            </button>
+
+            {/* Instagram */}
+            <button
+              onClick={async () => {
+                const baseUrl = `${window.location.origin}/myproof/${userId}`
+                const url = baseUrl + '?utm_source=instagram&utm_medium=share&utm_campaign=myproof'
+                await navigator.clipboard.writeText(url)
+                alert('URLをコピーしました。Instagramのストーリーズやプロフィールに貼り付けてください。')
+              }}
+              style={{
+                width: 44, height: 44, borderRadius: '50%',
+                background: 'linear-gradient(135deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)',
+                border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#fff', fontSize: 16, fontWeight: 700,
+              }}
+              title="Instagramでシェア"
+            >
+              IG
+            </button>
+
+            {/* Facebook */}
+            <button
+              onClick={() => {
+                const baseUrl = `${window.location.origin}/myproof/${userId}`
+                const url = encodeURIComponent(baseUrl + '?utm_source=facebook&utm_medium=share&utm_campaign=myproof')
+                window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}`, '_blank')
+              }}
+              style={{
+                width: 44, height: 44, borderRadius: '50%',
+                background: '#1877F2', border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#fff', fontSize: 16, fontWeight: 700,
+              }}
+              title="Facebookでシェア"
+            >
+              f
             </button>
 
             {/* URLコピー */}
@@ -265,10 +303,10 @@ export default function MyProofPage() {
                 setTimeout(() => setShareCopied(false), 2000)
               }}
               style={{
-                width: 48, height: 48, borderRadius: '50%',
+                width: 44, height: 44, borderRadius: '50%',
                 background: '#C4A35A', border: 'none', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: '#fff', fontSize: 16, fontWeight: 700,
+                color: '#fff', fontSize: 14, fontWeight: 700,
               }}
               title="URLをコピー"
             >
