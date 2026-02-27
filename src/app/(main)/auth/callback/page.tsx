@@ -12,9 +12,6 @@ export default function AuthCallback() {
     const supabase = createClient() as any
     let redirecting = false
 
-    // 古いセッションをクリア（新しいOAuthセッションと競合しないように）
-    clearAllAuthStorage()
-
     // デバッグ: URL状態を表示
     setDebugInfo(
       `callback: hash=${window.location.hash.substring(0, 50)} | ` +
@@ -34,6 +31,9 @@ export default function AuthCallback() {
       if (redirecting) return
       redirecting = true
       clearTimeout(absoluteTimeout)
+
+      // セッション確定後に古いストレージをクリアしてから新セッションを書き込む
+      clearAllAuthStorage()
 
       console.log('[auth/callback] session confirmed, persisting to localStorage...')
       setDebugInfo('callback: session confirmed, persisting...')
