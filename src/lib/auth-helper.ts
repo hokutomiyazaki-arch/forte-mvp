@@ -1,5 +1,23 @@
 import { createClient } from './supabase'
 
+// Supabase JSが勝手にクリアできないバックアップキー
+// Supabase JSはrefresh token失敗時に sb-* キーを削除するため、
+// 別キーにバックアップしておく
+export const AUTH_BACKUP_KEY = 'realproof-auth-backup'
+
+/**
+ * セッションデータをバックアップキーに保存する。
+ * localStorage直書き時に、sb-*キーと同時に呼ぶ。
+ */
+export function saveSessionBackup(sessionData: any) {
+  try {
+    const data = typeof sessionData === 'string' ? sessionData : JSON.stringify(sessionData)
+    localStorage.setItem(AUTH_BACKUP_KEY, data)
+  } catch (e) {
+    console.warn('[auth-helper] backup save failed:', e)
+  }
+}
+
 /**
  * 全ストレージからSupabase関連データを完全クリアする。
  * signOut前でも後でも呼べる安全な関数。
@@ -13,7 +31,8 @@ export function clearAllAuthStorage() {
         key.startsWith('sb-') ||
         key.startsWith('supabase') ||
         key.includes('auth-token') ||
-        key.includes('session')
+        key.includes('session') ||
+        key === AUTH_BACKUP_KEY
       )) {
         keysToRemove.push(key)
       }
@@ -58,7 +77,6 @@ export async function getSessionSafe() {
       const raw = localStorage.getItem(keys[0])
       if (raw) {
         const parsed = JSON.parse(raw)
-        // access_token が存在すればセッションとして扱う
         if (parsed?.access_token && parsed?.user) {
           return {
             session: {
@@ -76,7 +94,55 @@ export async function getSessionSafe() {
     console.warn('[auth-helper] localStorage read failed:', e)
   }
 
-  // localStorageになければ getSession() を2秒タイムアウトで試行
+  // sb-*キーがない場合、バックアップキーから読む
+  // （Supabase JSがrefresh失敗でsb-*を消した場合のフォールバック）
+  try {
+    const backup = localStorage.getItem(AUTH_BACKUP_KEY)
+    if (backup) {
+      const parsed = JSON.parse(backup)
+      if (parsed?.access_token && parsed?.user) {
+        console.log('[auth-helper] restored session from backup key')
+        // sb-*キーも復元する（次回のSupabase操作のため）
+        try {
+          const supabaseUrl = parsed?.user?.aud
+            ? undefined
+            : undefined
+          const existingSbKeys = Object.keys(localStorage).filter(k => k.startsWith('sb-') && k.endsWith('-auth-token'))
+          if (existingSbKeys.length === 0) {
+            // sb-*キーが消えているので復元
+            const hostname = window.location.hostname
+            const projectRef = hostname.includes('realproof') ? 'eikzqzaqnydtpqjxbfu' : hostname.split('.')[0]
+            const restoreKey = `sb-${projectRef}-auth-token`
+            localStorage.setItem(restoreKey, backup)
+            console.log('[auth-helper] restored sb-* key from backup')
+          }
+        } catch (_) {}
+
+        return {
+          session: {
+            access_token: parsed.access_token,
+            refresh_token: parsed.refresh_token,
+            user: parsed.user,
+          },
+          user: parsed.user,
+          source: 'backup' as const,
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[auth-helper] backup read failed:', e)
+  }
+
+  // どちらもなければ getSession() を2秒タイムアウトで試行
+  // ただし localStorage に何もなければネットワーク確認も不要
+  try {
+    const hasAnySbKeys = Object.keys(localStorage).some(k => k.startsWith('sb-'))
+    if (!hasAnySbKeys) {
+      // sb-*もbackupもない → 完全未ログイン。getSession()の2秒タイムアウトを待つ必要なし
+      return { session: null, user: null, source: 'none' as const }
+    }
+  } catch (_) {}
+
   try {
     const supabase = createClient()
     const result = await Promise.race([

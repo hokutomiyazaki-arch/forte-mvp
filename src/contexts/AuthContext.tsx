@@ -37,19 +37,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkAuth = useCallback(async () => {
     const supabase = createClient() as any
 
-    // sb-keysがなければセッション確認不要 → 即「未ログイン」
-    const sbKeys = Object.keys(localStorage).filter((k: string) => k.startsWith('sb-'))
-    if (sbKeys.length === 0) {
-      setUser(null)
-      setSession(null)
-      setIsPro(false)
-      setIsClient(false)
-      setIsLoaded(true)
-      return
-    }
-
     try {
-      // getSessionSafe で統一（モバイルでのハング防止）
+      // getSessionSafe で統一（localStorage → backup → getSession の順で試行）
+      // sb-keysチェックのearly returnは削除: Supabase JSがrefresh失敗でsb-*を消す場合があり、
+      // backupキーからの復元を阻害していた
       const { session: sess, user: sessionUser, source } = await getSessionSafe()
 
       if (!sessionUser) {
