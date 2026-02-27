@@ -56,6 +56,7 @@ export default function MyProofPage() {
   const [myProofs, setMyProofs] = useState<MyProofItem[]>([])
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
+  const [shareCopied, setShareCopied] = useState(false)
 
   const isOwner = authUser?.id === userId
 
@@ -199,6 +200,78 @@ export default function MyProofPage() {
             <p style={{ fontSize: 14 }}>まだプルーフが登録されていません</p>
           </div>
         )}
+
+        {/* シェアボタン */}
+        <div style={{
+          background: '#fff', borderRadius: 12, border: '1px solid #E8E4DC',
+          padding: 20, marginTop: 24, textAlign: 'center' as const,
+        }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', marginBottom: 14 }}>
+            シェアする
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
+            {/* LINE */}
+            <button
+              onClick={() => {
+                const baseUrl = `${window.location.origin}/myproof/${userId}`
+                const shareUrl = `https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(baseUrl + '?utm_source=line&utm_medium=share&utm_campaign=myproof')}`
+                window.open(shareUrl, '_blank')
+              }}
+              style={{
+                width: 48, height: 48, borderRadius: '50%',
+                background: '#06C755', border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#fff', fontSize: 18, fontWeight: 700,
+              }}
+              title="LINEでシェア"
+            >
+              L
+            </button>
+
+            {/* X (Twitter) */}
+            <button
+              onClick={() => {
+                const baseUrl = `${window.location.origin}/myproof/${userId}`
+                const text = encodeURIComponent('私がプルーフするもの #REALPROOF')
+                const url = encodeURIComponent(baseUrl + '?utm_source=twitter&utm_medium=share&utm_campaign=myproof')
+                window.open(`https://twitter.com/intent/tweet?text=${text}&url=${url}`, '_blank')
+              }}
+              style={{
+                width: 48, height: 48, borderRadius: '50%',
+                background: '#000', border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#fff', fontSize: 18, fontWeight: 700,
+              }}
+              title="Xでシェア"
+            >
+              𝕏
+            </button>
+
+            {/* URLコピー */}
+            <button
+              onClick={async () => {
+                const baseUrl = `${window.location.origin}/myproof/${userId}`
+                await navigator.clipboard.writeText(baseUrl + '?utm_source=clipboard&utm_medium=share&utm_campaign=myproof')
+                setShareCopied(true)
+                setTimeout(() => setShareCopied(false), 2000)
+              }}
+              style={{
+                width: 48, height: 48, borderRadius: '50%',
+                background: '#C4A35A', border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#fff', fontSize: 16, fontWeight: 700,
+              }}
+              title="URLをコピー"
+            >
+              {shareCopied ? '✓' : '🔗'}
+            </button>
+          </div>
+          {shareCopied && (
+            <p style={{ fontSize: 12, color: '#C4A35A', marginTop: 8 }}>
+              URLをコピーしました
+            </p>
+          )}
+        </div>
 
         {/* 編集ボタン（自分のページのみ） */}
         {isOwner && (
