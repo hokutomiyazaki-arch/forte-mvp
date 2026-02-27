@@ -471,6 +471,7 @@ function VoteForm() {
       voter_email: email,
       client_user_id: null,
       session_count: sessionCount,
+      vote_weight: sessionCount === 'first' ? 0.5 : 1.0,
       vote_type: voteType,
       selected_proof_ids: proofIdsToSend,
       selected_personality_ids: selectedPersonalityIds.size > 0 ? Array.from(selectedPersonalityIds) : null,
