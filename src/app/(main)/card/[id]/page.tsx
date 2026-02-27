@@ -315,18 +315,17 @@ export default function CardPage() {
               {pro.area_description && <span> · {pro.area_description}</span>}
               {pro.is_online_available && <span style={{ marginLeft: 6, color: T.gold }}>● オンライン対応</span>}
             </div>
-            {(pro as any).founding_member_status === 'achieved' && (
+            {((pro as any).founding_member_status === 'achieved' || (pro as any).is_founding_member) && (
               <span style={{
                 display: 'inline-block', marginTop: 6,
-                fontFamily: "'Inter', sans-serif",
-                fontSize: 10, fontWeight: 700, letterSpacing: 2,
-                textTransform: 'uppercase' as const,
+                padding: '4px 10px',
+                fontSize: 11, fontWeight: 700,
                 color: '#C4A35A',
-                background: 'rgba(196,163,90,0.12)',
-                border: '1px solid rgba(196,163,90,0.3)',
-                borderRadius: 4, padding: '4px 10px',
+                background: 'rgba(196,163,90,0.08)',
+                border: '1px solid rgba(196,163,90,0.2)',
+                borderRadius: 20,
               }}>
-                FOUNDING MEMBER
+                Founding Member
               </span>
             )}
             {orgs.length > 0 && (
