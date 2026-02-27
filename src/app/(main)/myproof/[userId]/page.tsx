@@ -157,8 +157,11 @@ export default function MyProofPage() {
 
   if (notFound) {
     return (
-      <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ minHeight: '60vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
         <p style={{ color: '#888' }}>ユーザーが見つかりません</p>
+        <a href="/mycard" style={{ fontSize: 14, color: '#C4A35A', textDecoration: 'none' }}>
+          ← マイページに戻る
+        </a>
       </div>
     )
   }
@@ -166,18 +169,16 @@ export default function MyProofPage() {
   return (
     <div style={{ background: '#FAF8F4', minHeight: '80vh', padding: '32px 16px' }}>
       <div style={{ maxWidth: 480, margin: '0 auto' }}>
-        {/* マイページに戻るボタン（オーナーのみ） */}
-        {isOwner && (
-          <div style={{ marginBottom: 16 }}>
-            <a href={isPro ? '/dashboard?tab=myproof' : '/mycard?tab=myproof'}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                fontSize: 14, color: '#666', textDecoration: 'none',
-              }}>
-              ← マイページに戻る
-            </a>
-          </div>
-        )}
+        {/* マイページに戻るボタン */}
+        <div style={{ marginBottom: 16 }}>
+          <a href={isOwner ? (isPro ? '/dashboard?tab=myproof' : '/mycard?tab=myproof') : '/mycard'}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              fontSize: 14, color: '#666', textDecoration: 'none',
+            }}>
+            ← マイページに戻る
+          </a>
+        </div>
         {/* ヘッダー */}
         <div style={{ textAlign: 'center' as const, marginBottom: 32 }}>
           {userPhoto ? (
