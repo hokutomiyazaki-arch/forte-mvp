@@ -14,11 +14,24 @@ interface VotedPro {
 
 interface ThingItem {
   id?: string
+  category: string
   title: string
   comment: string
   photo_url: string
   uploading: boolean
 }
+
+const PROOF_THING_CATEGORIES = [
+  { value: 'book', label: '信頼する本' },
+  { value: 'restaurant', label: '信頼するレストラン' },
+  { value: 'cafe', label: '信頼するカフェ' },
+  { value: 'product', label: '信頼するプロダクト' },
+  { value: 'place', label: '信頼する場所' },
+  { value: 'movie', label: '信頼する映画・作品' },
+  { value: 'music', label: '信頼する音楽' },
+  { value: 'podcast', label: '信頼するPodcast' },
+  { value: 'other', label: '自由記述' },
+]
 
 export default function MyProofEditPage() {
   const supabase = createClient()
@@ -87,8 +100,10 @@ export default function MyProofEditPage() {
     const idMap = new Map<string, string>()
     const thingItems: ThingItem[] = existingThings.map((t: any) => {
       idMap.set(t.title + t.photo_url, t.id)
+      const matchedCat = PROOF_THING_CATEGORIES.find(c => t.title?.startsWith(c.label))
       return {
         id: t.id,
+        category: matchedCat?.value || 'other',
         title: t.title || '',
         comment: t.comment || '',
         photo_url: t.photo_url || '',
@@ -109,11 +124,23 @@ export default function MyProofEditPage() {
 
   function addThing() {
     if (things.length >= 3) return
-    setThings(prev => [...prev, { title: '', comment: '', photo_url: '', uploading: false }])
+    setThings(prev => [...prev, { category: '', title: '', comment: '', photo_url: '', uploading: false }])
   }
 
   function updateThing(index: number, field: keyof ThingItem, value: string) {
     setThings(prev => prev.map((t, i) => i === index ? { ...t, [field]: value } : t))
+  }
+
+  function handleCategoryChange(index: number, value: string) {
+    const cat = PROOF_THING_CATEGORIES.find(c => c.value === value)
+    setThings(prev => prev.map((t, i) => {
+      if (i !== index) return t
+      return {
+        ...t,
+        category: value,
+        title: value === 'other' ? '' : (cat?.label || ''),
+      }
+    }))
   }
 
   function removeThing(index: number) {
@@ -350,12 +377,29 @@ export default function MyProofEditPage() {
               )}
             </div>
 
+            {/* カテゴリ選択 */}
+            <select
+              value={thing.category}
+              onChange={e => handleCategoryChange(i, e.target.value)}
+              style={{
+                width: '100%', padding: '10px 12px', fontSize: 14,
+                border: '1px solid #ddd', borderRadius: 6, marginBottom: 8,
+                boxSizing: 'border-box' as const, background: '#fff',
+                color: thing.category ? '#1A1A2E' : '#999',
+              }}
+            >
+              <option value="" disabled>カテゴリを選択</option>
+              {PROOF_THING_CATEGORIES.map(c => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
+            </select>
+
             {/* タイトル */}
             <input
               type="text"
               value={thing.title}
               onChange={e => updateThing(i, 'title', e.target.value)}
-              placeholder="タイトル（必須・100文字以内）"
+              placeholder={thing.category === 'other' ? 'タイトル（自由記述・必須）' : 'タイトル（編集可・必須）'}
               maxLength={100}
               style={{
                 width: '100%', padding: '10px 12px', fontSize: 14,
