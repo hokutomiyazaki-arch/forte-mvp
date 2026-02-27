@@ -446,7 +446,6 @@ export default function DashboardPage() {
       photo_url: form.photo_url || null,
       custom_result_fortes: validResultFortes,
       custom_personality_fortes: validPersonalityFortes,
-      is_founding_member: true,
     }
 
     const isNew = !pro
