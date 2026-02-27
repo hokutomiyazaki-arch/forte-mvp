@@ -87,11 +87,13 @@ export default function MyProofEditPage() {
     if (uniqueProIds.length > 0) {
       const { data: prosData } = await (supabase as any)
         .from('professionals')
-        .select('id, display_name, photo_url, specialty')
+        .select('id, display_name, name, title, photo_url, specialty')
         .in('id', uniqueProIds)
 
       setVotedPros((prosData || []).map((p: any) => ({
         ...p,
+        display_name: p.display_name || p.name || 'プロ',
+        specialty: p.title || p.specialty || '',
         selected: selectedProIds.has(p.id),
       })))
     }
@@ -275,7 +277,7 @@ export default function MyProofEditPage() {
       {votedPros.length > 0 && (
         <div style={{ marginBottom: 32 }}>
           <h2 style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E', marginBottom: 12 }}>
-            プルーフしたプロ
+            私がプルーフするプロ
           </h2>
           <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
             {votedPros.map(pro => (
