@@ -19,9 +19,11 @@ body {
 }
 
 /* Navbar responsive */
-@media (max-width: 768px) {
-  .nav-links { gap: 12px !important; }
-  .nav-links a, .nav-links button { font-size: 11px !important; }
+@media (max-width: 639px) {
+  .hidden-mobile { display: none !important; }
+}
+@media (min-width: 640px) {
+  .show-mobile-only { display: none !important; }
 }
 
 /* LP animations */
