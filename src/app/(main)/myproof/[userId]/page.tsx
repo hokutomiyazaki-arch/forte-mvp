@@ -63,6 +63,7 @@ export default function MyProofPage() {
   const [userName, setUserName] = useState('')
   const [userPhoto, setUserPhoto] = useState('')
   const [myProofs, setMyProofs] = useState<MyProofItem[]>([])
+  const [votedPros, setVotedPros] = useState<{ id: string; display_name: string; photo_url: string | null }[]>([])
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
@@ -144,6 +145,40 @@ export default function MyProofPage() {
       setMyProofs([])
     }
 
+    // オーナーの場合: 投票済みプロを取得
+    if (authUser?.id === userId) {
+      const email = authUser.email || ''
+      const lineUserId = authUser.user_metadata?.line_user_id || ''
+      let votePros: any[] = []
+
+      const { data: voteByEmail } = await (supabase as any)
+        .from('votes')
+        .select('professional_id')
+        .eq('voter_email', email)
+      if (voteByEmail) votePros = [...votePros, ...voteByEmail]
+
+      if (lineUserId) {
+        const { data: voteByLine } = await (supabase as any)
+          .from('votes')
+          .select('professional_id')
+          .eq('auth_provider_id', lineUserId)
+        if (voteByLine) votePros = [...votePros, ...voteByLine]
+      }
+
+      const uniqueProIds = Array.from(new Set(votePros.map((v: any) => v.professional_id)))
+      // my_proofsに既に追加済みのプロを除外
+      const existingProIds = new Set((proofs || []).filter((p: any) => p.type === 'pro').map((p: any) => p.target_pro_id))
+      const newProIds = uniqueProIds.filter(id => !existingProIds.has(id))
+
+      if (newProIds.length > 0) {
+        const { data: prosData } = await (supabase as any)
+          .from('professionals')
+          .select('id, display_name, photo_url')
+          .in('id', newProIds)
+        setVotedPros(prosData || [])
+      }
+    }
+
     setLoading(false)
   }
 
@@ -220,6 +255,46 @@ export default function MyProofPage() {
         ) : (
           <div style={{ textAlign: 'center' as const, padding: '40px 0', color: '#999' }}>
             <p style={{ fontSize: 14 }}>まだプルーフが登録されていません</p>
+          </div>
+        )}
+
+        {/* 投票したプロ（オーナーのみ表示） */}
+        {isOwner && votedPros.length > 0 && (
+          <div style={{ marginBottom: 32 }}>
+            <h2 style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E', marginBottom: 8 }}>
+              投票したプロ
+            </h2>
+            <p style={{ fontSize: 12, color: '#888', marginBottom: 16 }}>
+              マイプルーフに追加できます
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              {votedPros.map(pro => (
+                <div key={pro.id} style={{
+                  background: '#fff', borderRadius: 12, border: '1px dashed #C4A35A',
+                  padding: '16px 12px', textAlign: 'center' as const,
+                }}>
+                  <div style={{
+                    width: 60, height: 60, borderRadius: '50%', overflow: 'hidden',
+                    margin: '0 auto 8px', background: '#F0EDE6',
+                  }}>
+                    {pro.photo_url
+                      ? <img src={pro.photo_url} alt={pro.display_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#AAA', fontSize: 20 }}>👤</div>
+                    }
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#2D2D2D', marginBottom: 8 }}>
+                    {pro.display_name}
+                  </div>
+                  <a href="/myproof/edit" style={{
+                    display: 'inline-block', fontSize: 11, fontWeight: 600,
+                    padding: '4px 12px', borderRadius: 16,
+                    background: '#C4A35A', color: '#fff', textDecoration: 'none',
+                  }}>
+                    追加する
+                  </a>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
