@@ -9,7 +9,7 @@ export function createClient() {
   client = supaCreateClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       flowType: 'implicit',
-      autoRefreshToken: true,
+      autoRefreshToken: false,  // LINE認証: サーバー側で作成したrefresh tokenをクライアント側で自動リフレッシュすると失敗→sb-*キー削除→セッション消失を防ぐ
       persistSession: true,
       detectSessionInUrl: true,
     }
