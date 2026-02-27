@@ -214,6 +214,15 @@ export async function GET(request: NextRequest) {
 
   } catch (err) {
     console.error('LINE callback error:', err);
+
+    // 二重コールバック対策: invalid_grant は並列リクエストの片方が成功している可能性が高い
+    // ダッシュボードにリダイレクトし、セッションがあればそのまま表示される
+    const errMsg = err instanceof Error ? err.message : String(err);
+    if (errMsg.includes('invalid_grant') || errMsg.includes('invalid authorization code')) {
+      console.log('[line/callback] invalid_grant detected (likely duplicate callback), redirecting to dashboard');
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+
     return NextResponse.redirect(new URL('/login?error=line_callback_failed', request.url));
   }
 }

@@ -301,6 +301,13 @@ export async function GET(request: NextRequest) {
 
   } catch (err) {
     console.error('LINE vote callback error:', err);
+
+    const errMsg = err instanceof Error ? err.message : String(err);
+    if (errMsg.includes('invalid_grant') || errMsg.includes('invalid authorization code')) {
+      console.log('[line/vote-callback] invalid_grant detected (likely duplicate callback), redirecting to home');
+      return NextResponse.redirect(new URL('/', request.url));
+    }
+
     return NextResponse.redirect(new URL('/?error=line_vote_failed', request.url));
   }
 }
