@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { signOutAndClear } from '@/lib/auth-helper'
+import { signOutAndClear, getSessionSafe } from '@/lib/auth-helper'
 import { useAuth } from '@/contexts/AuthContext'
 import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYPES, getRewardType } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
@@ -388,9 +388,9 @@ export default function DashboardPage() {
     setFormError('')
     if (!user) { setSaving(false); return }
 
-    // セッションリフレッシュ（投票フローで作られた古いセッション対策）
-    const { data: { session }, error: refreshError } = await supabase.auth.refreshSession()
-    if (refreshError || !session) {
+    // セッション確認（refreshSessionはモバイルでハングするためgetSessionSafeを使用）
+    const { session } = await getSessionSafe()
+    if (!session) {
       setFormError('セッションの有効期限が切れています。再ログインしてください。')
       setSaving(false)
       return
@@ -1006,10 +1006,11 @@ export default function DashboardPage() {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none" placeholder="you@example.com" />
             <p className="text-xs text-gray-400 mt-1">カードページに「このプロに相談する」ボタンが表示されます（ログインメールとは別に設定できます）</p>
           </div>
-          {/* パスワード設定 */}
+          {/* パスワード設定（LINEユーザーは任意） */}
+          {!isLineUser && (
           <div className="border-t pt-4">
             <label className="block text-sm font-bold text-[#1A1A2E] mb-2">
-              {pro ? 'パスワード変更（変更しない場合は空欄）' : (hasEmailIdentity || isLineUser) ? 'パスワード変更（変更しない場合は空欄）' : 'パスワード設定 *'}
+              {pro ? 'パスワード変更（変更しない場合は空欄）' : hasEmailIdentity ? 'パスワード変更（変更しない場合は空欄）' : 'パスワード設定 *'}
             </label>
             <div className="space-y-2">
               <input
@@ -1019,7 +1020,7 @@ export default function DashboardPage() {
                 minLength={6}
                 required={!pro && !hasEmailIdentity && !isLineUser}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
-                placeholder={pro ? '新しいパスワード（6文字以上）' : (hasEmailIdentity || isLineUser) ? '新しいパスワード（6文字以上）' : 'パスワード（6文字以上）'}
+                placeholder={pro ? '新しいパスワード（6文字以上）' : hasEmailIdentity ? '新しいパスワード（6文字以上）' : 'パスワード（6文字以上）'}
               />
               <input
                 type="password"
@@ -1028,10 +1029,11 @@ export default function DashboardPage() {
                 minLength={6}
                 required={!pro && !hasEmailIdentity && !isLineUser}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
-                placeholder={pro ? '新しいパスワード（確認）' : (hasEmailIdentity || isLineUser) ? '新しいパスワード（確認）' : 'パスワード（確認）'}
+                placeholder={pro ? '新しいパスワード（確認）' : hasEmailIdentity ? '新しいパスワード（確認）' : 'パスワード（確認）'}
               />
             </div>
           </div>
+          )}
 
           {formError && <p className="text-red-500 text-sm">{formError}</p>}
           <button type="submit" disabled={uploading || saving}
