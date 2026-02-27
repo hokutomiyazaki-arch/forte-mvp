@@ -137,9 +137,7 @@ function VoteForm() {
     async function load() {
       // LINE/Google認証からのエラーハンドリング
       const authError = searchParams.get('error')
-      console.log('[vote] URL error param:', authError || 'NONE')
       if (authError === 'already_voted') {
-        console.log('[vote] alreadyVoted set via URL param error=already_voted')
         setAlreadyVoted(true)
       } else if (authError === 'self_vote') {
         setError('ご自身のプルーフには投票できません')
@@ -235,7 +233,6 @@ function VoteForm() {
 
       // セッション確認（AuthProviderから取得）
       const sessionUser = authUser
-      console.log('[vote] session check:', { email: sessionUser?.email || 'NONE', id: sessionUser?.id || 'NONE' })
       if (sessionUser?.email) {
         setSessionEmail(sessionUser.email)
         setIsLoggedIn(true)
@@ -246,12 +243,10 @@ function VoteForm() {
           .eq('professional_id', proId)
           .eq('voter_email', sessionUser.email)
           .maybeSingle()
-        console.log('[vote] already voted check (session):', { data: existing, error: voteCheckError, email: sessionUser.email, proId })
         if (existing) setAlreadyVoted(true)
       } else {
         // 未ログイン: ローカルストレージからメアド復元
         const savedEmail = localStorage.getItem('proof_voter_email')
-        console.log('[vote] localStorage email:', savedEmail || 'NONE')
         if (savedEmail) {
           setVoterEmail(savedEmail)
           // 既に投票済みかチェック
@@ -261,7 +256,6 @@ function VoteForm() {
             .eq('professional_id', proId)
             .eq('voter_email', savedEmail)
             .maybeSingle()
-          console.log('[vote] already voted check (localStorage):', { data: existing, error: voteCheckError, email: savedEmail, proId })
           if (existing) setAlreadyVoted(true)
         }
       }
@@ -471,10 +465,7 @@ function VoteForm() {
     // selected_proof_ids: UUID と カスタムID を両方 TEXT[] として送信
     const proofIdsToSend = isHopeful ? null : (hasProofs ? allSelectedProofIds : null)
 
-    console.log('[handleSubmit] proof IDs:', { uuidProofIds, customProofIds, proofIdsToSend })
-
     // 投票INSERT
-    console.log('[handleSubmit] submitting vote:', { proId, email, sessionCount, voteType, proofIdsToSend, qrToken, isLoggedIn })
     const { data: voteData, error: voteError } = await (supabase as any).from('votes').insert({
       professional_id: proId,
       voter_email: email,
@@ -488,8 +479,6 @@ function VoteForm() {
       qr_token: qrToken,
       status: 'pending',
     }).select().maybeSingle()
-
-    console.log('[handleSubmit] Vote INSERT result:', { data: voteData, error: voteError })
 
     if (voteError) {
       console.error('[handleSubmit] Vote INSERT error:', {
@@ -517,8 +506,6 @@ function VoteForm() {
       }
       return
     }
-
-    console.log('[handleSubmit] Vote INSERT OK - vote_id:', voteData.id)
 
     // メアドをPROOFリストに保存
     const { error: emailInsertError } = await (supabase as any).from('vote_emails').insert({
@@ -572,7 +559,7 @@ function VoteForm() {
         if (!emailRes.ok) {
           console.error('[handleSubmit] send-confirmation API error:', emailRes.status, await emailRes.text())
         } else {
-          console.log('[handleSubmit] Confirmation email sent OK')
+          // Confirmation email sent OK
         }
       } catch (err) {
         console.error('[handleSubmit] Confirmation email send failed:', err)

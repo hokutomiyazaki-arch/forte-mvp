@@ -63,10 +63,7 @@ export async function GET(request: NextRequest) {
       .eq('professional_id', context.professional_id)
       .maybeSingle();
 
-    console.log('[vote-callback] duplicate check by LINE userId:', { data: existingVote, error: dupCheckError1?.message || null, auth_provider_id: profile.userId, professional_id: context.professional_id });
-
     if (existingVote) {
-      console.log('[vote-callback] BLOCKED: already_voted (by LINE userId)');
       return NextResponse.redirect(
         new URL(`/vote/${context.professional_id}?token=${context.qr_token}&error=already_voted`, request.url)
       );
@@ -81,10 +78,7 @@ export async function GET(request: NextRequest) {
         .eq('professional_id', context.professional_id)
         .maybeSingle();
 
-      console.log('[vote-callback] duplicate check by email:', { data: emailVote, error: dupCheckError2?.message || null, email: lineEmail, professional_id: context.professional_id });
-
       if (emailVote) {
-        console.log('[vote-callback] BLOCKED: already_voted (by email)');
         return NextResponse.redirect(
           new URL(`/vote/${context.professional_id}?token=${context.qr_token}&error=already_voted`, request.url)
         );
@@ -108,8 +102,6 @@ export async function GET(request: NextRequest) {
     const voteData = context.vote_data;
     const voter_email = lineEmail || `line_${profile.userId}@line.realproof.jp`;
 
-    console.log('[vote-callback] attempting INSERT with:', { voter_email, professional_id: context.professional_id, auth_provider_id: profile.userId, vote_type: voteData?.vote_type });
-
     const { data: insertedVote, error: voteError } = await supabaseAdmin
       .from('votes')
       .insert({
@@ -130,8 +122,6 @@ export async function GET(request: NextRequest) {
       })
       .select()
       .maybeSingle();
-
-    console.log('[vote-callback] INSERT result:', { data: insertedVote?.id || null, error: voteError?.message || null, code: voteError?.code || null });
 
     if (voteError) {
       console.error('[vote-callback] Vote INSERT error:', { code: voteError.code, message: voteError.message, details: (voteError as any).details, hint: (voteError as any).hint });
@@ -188,16 +178,12 @@ export async function GET(request: NextRequest) {
       confirmPath += `&reward=${rewardParam}`;
     }
 
-    console.log('[vote-callback] Step 8: session creation start, lineUserId:', profile.userId);
-
     // line_auth_mappings から既存ユーザーを確認
     const { data: existingMapping, error: mappingError } = await supabaseAdmin
       .from('line_auth_mappings')
       .select('supabase_uid')
       .eq('line_user_id', profile.userId)
       .maybeSingle();
-
-    console.log('[vote-callback] existingMapping:', existingMapping?.supabase_uid || 'NONE', 'error:', mappingError?.message || 'none');
 
     let supabaseUid: string | null = null;
 
@@ -209,7 +195,6 @@ export async function GET(request: NextRequest) {
         // ---- 既存ユーザー確認済み ----
         supabaseUid = existingMapping.supabase_uid;
         mappingValid = true;
-        console.log('[vote-callback] existing user verified:', supabaseUid);
         // LINE情報を更新
         await supabaseAdmin.from('line_auth_mappings').update({
           line_display_name: profile.displayName,
@@ -219,7 +204,6 @@ export async function GET(request: NextRequest) {
         }).eq('line_user_id', profile.userId);
       } else {
         // ユーザーが存在しない → マッピングを削除して新規作成へ
-        console.log('[vote-callback] mapping points to deleted user:', existingMapping.supabase_uid, '→ cleaning up');
         await supabaseAdmin.from('line_auth_mappings').delete().eq('line_user_id', profile.userId);
       }
     }
@@ -227,7 +211,6 @@ export async function GET(request: NextRequest) {
     if (!mappingValid) {
       // 新規クライアントユーザー作成
       const clientEmail = lineEmail || `line_${profile.userId}@line.realproof.jp`;
-      console.log('[vote-callback] creating new user, email:', clientEmail);
 
       // メールで既存ユーザーを確認
       let existingUserId: string | null = null;
@@ -237,7 +220,6 @@ export async function GET(request: NextRequest) {
         const found = userList.find((u: any) => u.email === lineEmail);
         if (found) {
           existingUserId = found.id;
-          console.log('[vote-callback] found existing user by email:', existingUserId);
         }
       }
 
@@ -257,7 +239,6 @@ export async function GET(request: NextRequest) {
         });
         if (!createError && newUser.user) {
           supabaseUid = newUser.user.id;
-          console.log('[vote-callback] new user created:', supabaseUid);
         } else {
           console.error('[vote-callback] user creation FAILED:', createError?.message);
         }
@@ -278,7 +259,6 @@ export async function GET(request: NextRequest) {
           line_picture_url: profile.pictureUrl,
           supabase_uid: supabaseUid,
         }, { onConflict: 'line_user_id' });
-        console.log('[vote-callback] clients + mapping saved');
       }
     }
 
@@ -316,8 +296,6 @@ export async function GET(request: NextRequest) {
       });
 
       if (!signInError && signInData?.session) {
-        console.log('[vote-callback] signInWithPassword success');
-
         const session = signInData.session;
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
         const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\./)?.[1] || '';
@@ -334,8 +312,6 @@ export async function GET(request: NextRequest) {
 
         const sessionBase64 = Buffer.from(sessionJSON).toString('base64');
 
-        console.log('[vote-callback] writing session to localStorage via HTML page, redirect:', confirmPath);
-
         const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>ログイン中...</title></head>
 <body style="background:#1A1A2E;color:#fff;display:flex;justify-content:center;align-items:center;min-height:100vh;font-family:sans-serif;">
@@ -344,7 +320,7 @@ export async function GET(request: NextRequest) {
 try {
   var sessionData = atob('${sessionBase64}');
   localStorage.setItem('${storageKey}', sessionData);
-  console.log('[line-auth] session written to localStorage successfully');
+  // session written to localStorage
   window.location.replace('${confirmPath}');
 } catch(e) {
   console.error('[line-auth] failed:', e);
@@ -364,7 +340,6 @@ try {
     }
 
     // セッション作成に失敗してもvote-confirmedには遷移させる（フォールバック）
-    console.log('[vote-callback] → /vote-confirmed (FALLBACK - no session)');
     return NextResponse.redirect(new URL(confirmPath, request.url));
 
   } catch (err) {
