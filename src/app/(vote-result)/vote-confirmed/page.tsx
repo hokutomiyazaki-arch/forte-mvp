@@ -301,14 +301,41 @@ function ConfirmedContent() {
             </div>
           )}
 
-          {/* Android: インストールボタン */}
-          {(isAndroid || installPrompt) && !isIOS && (
+          {/* Android: PWAインストール可能な場合 */}
+          {installPrompt && !isIOS && (
             <button
               onClick={handleInstall}
               className="mt-6 w-full py-4 rounded-xl font-bold text-lg text-white bg-[#1A1A2E]"
             >
               📲 ホーム画面に追加する
             </button>
+          )}
+
+          {/* Android: beforeinstallpromptが発火しない場合は手動手順 */}
+          {isAndroid && !installPrompt && !isIOS && (
+            <div className="mt-6 p-5 rounded-xl bg-[#F5F5F0] space-y-4">
+              <p className="text-lg font-bold text-center text-[#1A1A2E]">
+                ホーム画面への追加方法
+              </p>
+              <div className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-9 h-9 rounded-full bg-[#1A1A2E] flex items-center justify-center flex-shrink-0">
+                    <span className="text-white font-bold">①</span>
+                  </div>
+                  <p className="text-lg text-[#1A1A2E]">
+                    右上の <span className="inline-block mx-1 px-2 py-1 bg-white rounded border text-xl">⋮</span> メニューをタップ
+                  </p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="w-9 h-9 rounded-full bg-[#1A1A2E] flex items-center justify-center flex-shrink-0">
+                    <span className="text-white font-bold">②</span>
+                  </div>
+                  <p className="text-lg text-[#1A1A2E]">
+                    「ホーム画面に追加」をタップ
+                  </p>
+                </div>
+              </div>
+            </div>
           )}
         </div>
 
