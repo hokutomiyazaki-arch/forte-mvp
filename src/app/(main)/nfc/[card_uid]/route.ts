@@ -48,13 +48,21 @@ export async function GET(
       )
     }
 
-    // 2. プロの強み登録チェック
+    // 2. プロの情報取得（card_mode含む）
     const { data: pro } = await supabase
       .from('professionals')
-      .select('selected_proofs, display_name, name, contact_email, user_id, last_nfc_notify_at')
+      .select('selected_proofs, display_name, name, contact_email, user_id, last_nfc_notify_at, card_mode')
       .eq('id', card.professional_id)
       .maybeSingle()
 
+    // 2.5 card_mode が 'general' ならマイプルーフへリダイレクト
+    if (pro && pro.card_mode === 'general' && pro.user_id) {
+      return NextResponse.redirect(
+        new URL(`/myproof/${pro.user_id}`, request.url)
+      )
+    }
+
+    // 3. プロモード: 強み登録チェック
     const selectedProofs = pro?.selected_proofs || []
     if (!pro || selectedProofs.length === 0) {
       // 強み未登録 → 準備中ページにリダイレクト + プロに通知メール
@@ -136,13 +144,13 @@ export async function GET(
       )
     }
 
-    // 3. 既存トークンを削除してから新規作成（既存QR生成と同じパターン）
+    // 4. 既存トークンを削除してから新規作成（既存QR生成と同じパターン）
     await supabase
       .from('qr_tokens')
       .delete()
       .eq('professional_id', card.professional_id)
 
-    // 4. 24時間有効のワンタイムトークンを生成
+    // 5. 24時間有効のワンタイムトークンを生成
     const token = randomBytes(16).toString('hex')
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
 
@@ -161,7 +169,7 @@ export async function GET(
       )
     }
 
-    // 5. 既存の投票ページにリダイレクト（/vote/{professional_id}?token={token}）
+    // 6. 既存の投票ページにリダイレクト（/vote/{professional_id}?token={token}）
     return NextResponse.redirect(
       new URL(`/vote/${card.professional_id}?token=${token}`, request.url)
     )
