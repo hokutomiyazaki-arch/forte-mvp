@@ -1096,12 +1096,12 @@ export default function DashboardPage() {
             return (
               <div className="py-4">
                 <p className="text-sm text-[#9CA3AF] mb-3">
-                  QRコードを発行するには、プルーフ設定を完了してください：
+                  QRコードを発行するには、強み設定を完了してください：
                 </p>
                 <div className="space-y-2">
                   <div className="flex items-center justify-center gap-2 text-sm">
                     <span className="text-red-400">✗</span>
-                    <span className="text-[#1A1A2E]">プルーフ設定（{selectedProofIds.size} / 9 選択中）</span>
+                    <span className="text-[#1A1A2E]">強み設定（{selectedProofIds.size} / 9 選択中）</span>
                   </div>
                 </div>
               </div>
@@ -1529,9 +1529,9 @@ export default function DashboardPage() {
       {/* ═══ Tab: 強み設定 ═══ */}
       {dashboardTab === 'proofs' && (<>
 
-      {/* プルーフ設定 */}
+      {/* 強み設定 */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
-        <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">プルーフ設定</h2>
+        <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">強み設定</h2>
         <p className="text-sm text-[#9CA3AF] mb-4">
           クライアントに投票してもらう「強み項目」を選んでください
         </p>
@@ -1720,7 +1720,7 @@ export default function DashboardPage() {
                   : 'bg-[#1A1A2E] text-[#C4A35A] hover:bg-[#2a2a4e]'
               } disabled:opacity-50 disabled:cursor-not-allowed`}
             >
-              {proofSaving ? '保存中...' : proofSaved ? '保存しました' : 'プルーフ設定を保存'}
+              {proofSaving ? '保存中...' : proofSaved ? '保存しました' : '強み設定を保存'}
             </button>
 
             {/* 選択一覧 */}
