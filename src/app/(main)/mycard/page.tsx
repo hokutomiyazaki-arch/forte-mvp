@@ -1172,30 +1172,6 @@ function MyCardContent() {
         )}
       </div>
 
-      {/* アカウント削除 */}
-      <div className="mt-12 text-center">
-        <button
-          onClick={async () => {
-            if (!window.confirm('本当にアカウントを削除しますか？この操作は取り消せません。')) return
-            try {
-              const { error } = await (supabase as any).rpc('delete_user_account')
-              if (error) {
-                console.error('[delete_user_account] error:', error.message)
-                alert('アカウント削除に失敗しました。もう一度お試しください。')
-                return
-              }
-            } catch (e) {
-              console.error('[delete_user_account] exception:', e)
-              alert('アカウント削除に失敗しました。もう一度お試しください。')
-              return
-            }
-            await signOutAndClear('/')
-          }}
-          className="text-sm text-red-400 hover:text-red-600 transition"
-        >
-          アカウントを削除する
-        </button>
-      </div>
     </div>
   )
 }

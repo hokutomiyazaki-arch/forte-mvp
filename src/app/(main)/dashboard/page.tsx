@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { signOutAndClear, getSessionSafe } from '@/lib/auth-helper'
+import { signOutAndClear, getSessionSafe, clearAllAuthStorage } from '@/lib/auth-helper'
 import { useAuth } from '@/contexts/AuthContext'
 import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYPES, getRewardType } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
@@ -1400,6 +1400,32 @@ export default function DashboardPage() {
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
         <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">プルーフチャート</h2>
         <ForteChart votes={votes} personalityVotes={personalityVotes} professional={pro} />
+      </div>
+
+      {/* ── 危険な操作 ── */}
+      <div className="mt-12 pt-8 border-t border-red-100">
+        <h3 className="text-sm font-medium text-red-500 mb-4">危険な操作</h3>
+        <button
+          onClick={async () => {
+            if (!window.confirm('本当にアカウントを削除しますか？この操作は取り消せません。すべてのプルーフデータが失われます。')) return
+            try {
+              const { error } = await (supabase as any).rpc('delete_user_account')
+              if (error) {
+                console.error('[delete_user_account] error:', error.message)
+                alert('アカウント削除に失敗しました。もう一度お試しください。')
+                return
+              }
+              clearAllAuthStorage()
+              window.location.href = '/'
+            } catch (e) {
+              console.error('[delete_user_account] exception:', e)
+              alert('アカウント削除に失敗しました。もう一度お試しください。')
+            }
+          }}
+          className="text-sm text-red-400 hover:text-red-600 underline transition"
+        >
+          アカウントを削除する
+        </button>
       </div>
 
       </>)}
