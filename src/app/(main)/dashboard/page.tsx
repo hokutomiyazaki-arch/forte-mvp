@@ -2184,38 +2184,6 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      {/* プロ登録解除 */}
-      <div className="mt-6 text-center">
-        {confirmingDeregister ? (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-            <p className="text-sm text-red-600 font-medium mb-3">
-              本当にプロ登録を解除しますか？プロフィールやプルーフデータが削除されます。この操作は取り消せません。
-            </p>
-            <div className="flex gap-2 justify-center">
-              <button
-                onClick={handleDeregister}
-                disabled={deregistering}
-                className="px-4 py-2 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600 transition disabled:opacity-50"
-              >
-                {deregistering ? '処理中...' : '解除する'}
-              </button>
-              <button
-                onClick={() => setConfirmingDeregister(false)}
-                className="px-4 py-2 bg-gray-100 text-gray-600 text-sm rounded-lg hover:bg-gray-200 transition"
-              >
-                キャンセル
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button
-            onClick={() => setConfirmingDeregister(true)}
-            className="text-sm text-red-400 hover:text-red-600 transition"
-          >
-            プロ登録を解除する
-          </button>
-        )}
-      </div>
     </div>
   )
 }
