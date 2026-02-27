@@ -1530,7 +1530,7 @@ export default function DashboardPage() {
                 type="text"
                 value={nfcInput}
                 onChange={(e) => { setNfcInput(e.target.value); setNfcError('') }}
-                placeholder="RP-XXXXX"
+                placeholder="XXXXX"
                 style={{
                   padding: '10px 14px', fontSize: 14, fontWeight: 600,
                   border: '1px solid #E5E7EB', borderRadius: 8,
