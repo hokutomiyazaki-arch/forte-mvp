@@ -51,7 +51,38 @@ export async function GET(request: NextRequest) {
     const authUrl = buildLineAuthUrl(context);
     console.log('Generated LINE Auth URL length:', authUrl.length);
     console.log('Generated LINE Auth URL:', authUrl);
-    return NextResponse.redirect(authUrl);
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LINE認証中...</title>
+  <style>
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background: #1A1A2E;
+      color: #C4A35A;
+      font-family: sans-serif;
+    }
+  </style>
+</head>
+<body>
+  <p>LINE認証ページに移動中...</p>
+  <script>
+    window.location.replace("${authUrl}");
+  </script>
+  <noscript>
+    <a href="${authUrl}">こちらをクリックしてLINEログインへ進んでください</a>
+  </noscript>
+</body>
+</html>`;
+    return new NextResponse(html, {
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    });
   } catch (error) {
     console.error('LINE auth URL build error:', error);
     return NextResponse.json({ error: 'Failed to build auth URL' }, { status: 500 });
