@@ -498,8 +498,10 @@ export default function DashboardPage() {
   // NFC カード登録
   async function linkNfcCard() {
     if (!pro) return
-    const cardUid = nfcInput.trim().toUpperCase()
-    if (!cardUid) { setNfcError('カードIDを入力してください。'); return }
+    const rawInput = nfcInput.trim().toUpperCase()
+    if (!rawInput) { setNfcError('カードIDを入力してください。'); return }
+    // R- プレフィックスを付与（既に含まれている場合はそのまま）
+    const cardUid = rawInput.startsWith('R-') ? rawInput : 'R-' + rawInput
 
     setNfcLoading(true)
     setNfcError('')
@@ -1483,18 +1485,21 @@ export default function DashboardPage() {
               カード裏面記載のRから始まる番号を入力してください
             </p>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' as const }}>
-              <input
-                type="text"
-                value={nfcInput}
-                onChange={(e) => { setNfcInput(e.target.value); setNfcError('') }}
-                placeholder="R-XXXXX"
-                style={{
-                  padding: '10px 14px', fontSize: 14, fontWeight: 600,
-                  border: '1px solid #E5E7EB', borderRadius: 8,
-                  width: 160, fontFamily: "'Inter', sans-serif",
-                  letterSpacing: 1,
-                }}
-              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', fontFamily: "'Inter', sans-serif" }}>R-</span>
+                <input
+                  type="text"
+                  value={nfcInput}
+                  onChange={(e) => { setNfcInput(e.target.value); setNfcError('') }}
+                  placeholder="XXXXX"
+                  style={{
+                    padding: '10px 14px', fontSize: 14, fontWeight: 600,
+                    border: '1px solid #E5E7EB', borderRadius: 8,
+                    width: 140, fontFamily: "'Inter', sans-serif",
+                    letterSpacing: 2,
+                  }}
+                />
+              </div>
               <button
                 onClick={linkNfcCard}
                 disabled={nfcLoading || !nfcInput.trim()}
