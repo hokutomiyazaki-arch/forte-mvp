@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
+import ImageCropper from '@/components/ImageCropper'
 
 interface VotedPro {
   id: string
@@ -29,6 +30,8 @@ export default function MyProofEditPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
+  const [cropTargetIndex, setCropTargetIndex] = useState<number | null>(null)
 
   useEffect(() => {
     if (!isLoaded || !authUser) return
@@ -115,6 +118,24 @@ export default function MyProofEditPage() {
 
   function removeThing(index: number) {
     setThings(prev => prev.filter((_, i) => i !== index))
+  }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>, index: number) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) { setMessage('エラー: 5MB以下の画像を選択してください'); return }
+    setCropTargetIndex(index)
+    const reader = new FileReader()
+    reader.onload = () => setCropImageSrc(reader.result as string)
+    reader.readAsDataURL(file)
+  }
+
+  async function handleCropComplete(croppedBlob: Blob) {
+    setCropImageSrc(null)
+    if (cropTargetIndex === null) return
+    const file = new File([croppedBlob], `cropped-${Date.now()}.jpg`, { type: 'image/jpeg' })
+    await uploadPhoto(file, cropTargetIndex)
+    setCropTargetIndex(null)
   }
 
   async function uploadPhoto(file: File, index: number) {
@@ -290,14 +311,19 @@ export default function MyProofEditPage() {
             {/* 写真 */}
             <div style={{ marginBottom: 12 }}>
               {thing.photo_url ? (
-                <div style={{ position: 'relative' as const }}>
-                  <img src={thing.photo_url} alt="" style={{
-                    width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 8,
-                  }} />
+                <div style={{ position: 'relative' as const, display: 'flex', justifyContent: 'center' }}>
+                  <div style={{
+                    width: 120, height: 120, borderRadius: '50%', overflow: 'hidden',
+                    background: '#F0EDE6',
+                  }}>
+                    <img src={thing.photo_url} alt="" style={{
+                      width: '100%', height: '100%', objectFit: 'cover',
+                    }} />
+                  </div>
                   <button
                     onClick={() => updateThing(i, 'photo_url', '')}
                     style={{
-                      position: 'absolute' as const, top: 8, right: 8,
+                      position: 'absolute' as const, top: 0, right: 'calc(50% - 72px)',
                       width: 28, height: 28, borderRadius: '50%',
                       background: 'rgba(0,0,0,0.5)', color: '#fff',
                       border: 'none', cursor: 'pointer', fontSize: 14,
@@ -308,19 +334,17 @@ export default function MyProofEditPage() {
                 <label style={{
                   display: 'flex', flexDirection: 'column' as const,
                   alignItems: 'center', justifyContent: 'center',
-                  padding: 24, borderRadius: 8,
+                  width: 120, height: 120, borderRadius: '50%',
                   border: '2px dashed #ccc', cursor: 'pointer',
-                  color: '#888', fontSize: 13,
+                  color: '#888', fontSize: 13, margin: '0 auto',
+                  background: '#F9F8F5',
                 }}>
-                  {thing.uploading ? 'アップロード中...' : '📷 写真を選択（2MB以下）'}
+                  {thing.uploading ? '...' : '📷'}
                   <input
                     type="file"
                     accept="image/*"
                     style={{ display: 'none' }}
-                    onChange={e => {
-                      const file = e.target.files?.[0]
-                      if (file) uploadPhoto(file, i)
-                    }}
+                    onChange={e => handleFileSelect(e, i)}
                   />
                 </label>
               )}
@@ -403,6 +427,17 @@ export default function MyProofEditPage() {
           戻る
         </a>
       </div>
+
+      {/* ImageCropper モーダル */}
+      {cropImageSrc && (
+        <ImageCropper
+          imageSrc={cropImageSrc}
+          onCropComplete={handleCropComplete}
+          onCancel={() => { setCropImageSrc(null); setCropTargetIndex(null) }}
+          cropShape="round"
+          aspectRatio={1}
+        />
+      )}
     </div>
   )
 }

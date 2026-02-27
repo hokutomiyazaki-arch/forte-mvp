@@ -18,29 +18,38 @@ interface MyProofItem {
 
 function ProofCard({ item }: { item: MyProofItem }) {
   const photoSrc = item.type === 'pro'
-    ? (item.pro_photo_url || '/default-avatar.png')
-    : (item.photo_url || '/default-avatar.png')
+    ? (item.pro_photo_url || '')
+    : (item.photo_url || '')
 
   return (
     <div style={{
       background: '#fff', borderRadius: 12,
       border: '1px solid #E8E4DC',
-      overflow: 'hidden',
+      padding: '16px 12px',
+      textAlign: 'center' as const,
     }}>
-      <div style={{ width: '100%', aspectRatio: '1', overflow: 'hidden' }}>
-        <img src={photoSrc} alt={item.title}
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      <div style={{
+        width: 100, height: 100,
+        borderRadius: '50%',
+        overflow: 'hidden',
+        margin: '0 auto 8px',
+        background: '#F0EDE6',
+      }}>
+        {photoSrc
+          ? <img src={photoSrc} alt={item.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#AAA', fontSize: 24 }}>
+              {item.type === 'pro' ? '👤' : '📷'}
+            </div>
+        }
       </div>
-      <div style={{ padding: '12px 14px' }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: '#2D2D2D' }}>
-          {item.title}
+      <div style={{ fontSize: 14, fontWeight: 700, color: '#2D2D2D' }}>
+        {item.title}
+      </div>
+      {item.comment && (
+        <div style={{ fontSize: 12, color: '#6B6B6B', marginTop: 4 }}>
+          {item.comment}
         </div>
-        {item.comment && (
-          <div style={{ fontSize: 12, color: '#6B6B6B', marginTop: 4 }}>
-            {item.comment}
-          </div>
-        )}
-      </div>
+      )}
     </div>
   )
 }
