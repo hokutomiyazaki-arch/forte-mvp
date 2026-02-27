@@ -742,7 +742,7 @@ function MyCardContent() {
       <div className="flex border-b border-gray-200 mb-6">
         {([
           { key: 'rewards' as const, label: 'リワード', count: activeRewards.length },
-          { key: 'history' as const, label: '投票済み', count: voteHistory.length },
+          { key: 'history' as const, label: 'プルーフ済み', count: voteHistory.length },
           { key: 'bookmarked' as const, label: '気になる', count: bookmarkCount },
         ]).map(t => (
           <button

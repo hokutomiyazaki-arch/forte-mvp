@@ -712,7 +712,7 @@ function LoginForm() {
     <div className="max-w-md mx-auto">
       <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2 text-center">REAL PROOF</h1>
       <p className="text-sm text-gray-500 mb-6 text-center">
-        {isClient ? 'クライアントとしてログイン' : 'プロとしてログイン'}
+        {isClient ? '一般としてログイン' : 'プロとしてログイン'}
       </p>
 
       {/* Role Toggle */}
@@ -731,7 +731,7 @@ function LoginForm() {
             isClient ? 'bg-[#C4A35A] text-white shadow' : 'text-gray-600'
           }`}
         >
-          クライアントとして
+          一般として
         </button>
       </div>
 

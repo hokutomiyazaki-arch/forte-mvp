@@ -143,7 +143,7 @@ function VoteProcessingContent() {
             <div className="w-20 h-20 rounded-full bg-[#C4A35A]/10 flex items-center justify-center mx-auto mb-6">
               <div className="animate-spin w-10 h-10 border-4 border-[#C4A35A] border-t-transparent rounded-full" />
             </div>
-            <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2">投票を処理中...</h1>
+            <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2">プルーフを処理中...</h1>
             <p className="text-lg text-[#666666]">少々お待ちください</p>
           </div>
         </div>
@@ -381,7 +381,7 @@ export default function VoteProcessingPage() {
             <div className="w-20 h-20 rounded-full bg-[#C4A35A]/10 flex items-center justify-center mx-auto mb-6">
               <div className="animate-spin w-10 h-10 border-4 border-[#C4A35A] border-t-transparent rounded-full" />
             </div>
-            <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2">投票を処理中...</h1>
+            <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2">プルーフを処理中...</h1>
             <p className="text-lg text-[#666666]">少々お待ちください</p>
           </div>
         </div>

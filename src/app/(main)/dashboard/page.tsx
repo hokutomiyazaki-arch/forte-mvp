@@ -1330,7 +1330,7 @@ export default function DashboardPage() {
 
       {/* QR Code */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8 text-center">
-        <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">24時間限定 投票用QRコード</h2>
+        <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">24時間限定 プルーフ用QRコード</h2>
         {(() => {
           const proofsReady = selectedProofIds.size === 9
 
@@ -1379,7 +1379,7 @@ export default function DashboardPage() {
 
       {/* NFC Card */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
-        <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">NFCカード</h2>
+        <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">プルーフカード</h2>
 
         {nfcCard ? (
           // 状態B: カード登録済み
