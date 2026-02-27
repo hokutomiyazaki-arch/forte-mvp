@@ -8,6 +8,7 @@ import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels
 import ForteChart from '@/components/ForteChart'
 import VoiceShareModal from '@/components/VoiceShareCard'
 import ImageCropper from '@/components/ImageCropper'
+import CardModeSwitch from '@/components/CardModeSwitch'
 import { PREFECTURES } from '@/lib/prefectures'
 
 // バッジ階層: FNTはBDCの上位資格。同レベルのFNTを持っていたらBDCは非表示
@@ -1496,6 +1497,10 @@ export default function DashboardPage() {
         {nfcSuccess && (
           <p style={{ fontSize: 13, color: '#22C55E', marginTop: 12 }}>{nfcSuccess}</p>
         )}
+      </div>
+
+      <div style={{ marginTop: 16 }}>
+        <CardModeSwitch />
       </div>
       </>)}
 

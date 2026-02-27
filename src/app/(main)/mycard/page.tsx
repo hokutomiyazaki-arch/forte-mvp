@@ -6,6 +6,7 @@ import { signOutAndClear, clearAllAuthStorage } from '@/lib/auth-helper'
 import { useAuth } from '@/contexts/AuthContext'
 import { getRewardLabel } from '@/lib/types'
 import RewardContent from '@/components/RewardContent'
+import CardModeSwitch from '@/components/CardModeSwitch'
 import { Suspense } from 'react'
 
 interface RewardWithPro {
@@ -1122,14 +1123,7 @@ function MyCardContent() {
       {/* カード管理タブ */}
       {tab === 'card' && (
         <div>
-          <div style={{ textAlign: 'center', padding: '16px 0' }}>
-            <p style={{ fontSize: 14, color: '#666', marginBottom: 16 }}>
-              NFCカードを登録して、タップするだけでマイプルーフを共有できます。
-            </p>
-            <p style={{ fontSize: 13, color: '#999', marginBottom: 8 }}>
-              カード管理機能は次のアップデートで追加予定です。
-            </p>
-          </div>
+          <CardModeSwitch />
         </div>
       )}
 
