@@ -408,9 +408,9 @@ export default function MyProofPage() {
           )}
         </div>
 
-        {/* 編集ボタン（自分のページのみ） */}
+        {/* 編集ボタン + シェアカード作成（自分のページのみ） */}
         {isOwner && (
-          <div style={{ textAlign: 'center' as const, marginTop: 16 }}>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 16 }}>
             <a href="/myproof/edit" style={{
               display: 'inline-block',
               padding: '12px 32px', fontSize: 14, fontWeight: 700,
@@ -418,6 +418,14 @@ export default function MyProofPage() {
               borderRadius: 8, textDecoration: 'none',
             }}>
               編集する
+            </a>
+            <a href={`/myproof/${userId}/share`} style={{
+              display: 'inline-block',
+              padding: '12px 32px', fontSize: 14, fontWeight: 700,
+              background: '#C4A35A', color: '#fff',
+              borderRadius: 8, textDecoration: 'none',
+            }}>
+              カードを作成
             </a>
           </div>
         )}
