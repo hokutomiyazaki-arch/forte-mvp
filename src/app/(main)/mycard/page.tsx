@@ -53,7 +53,7 @@ function MyCardContent() {
   const [rewards, setRewards] = useState<RewardWithPro[]>([])
   const [voteHistory, setVoteHistory] = useState<VoteHistory[]>([])
   const [dataLoading, setDataLoading] = useState(false)
-  const [tab, setTab] = useState<'rewards' | 'history' | 'bookmarked'>('rewards')
+  const [tab, setTab] = useState<'rewards' | 'history' | 'bookmarked' | 'myproof' | 'card'>('rewards')
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [redeeming, setRedeeming] = useState(false)
   const [message, setMessage] = useState('')
@@ -772,20 +772,23 @@ function MyCardContent() {
       )}
 
       {/* タブ */}
-      <div className="flex border-b border-gray-200 mb-6">
+      <div className="flex border-b border-gray-200 mb-6" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         {([
           { key: 'rewards' as const, label: 'リワード', count: activeRewards.length },
           { key: 'history' as const, label: 'プルーフ済み', count: voteHistory.length },
           { key: 'bookmarked' as const, label: '気になる', count: bookmarkCount },
+          { key: 'myproof' as const, label: 'マイプルーフ', count: 0 },
+          { key: 'card' as const, label: 'カード管理', count: 0 },
         ]).map(t => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`flex-1 py-3 text-sm font-medium border-b-2 transition ${
+            className={`flex-1 py-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${
               tab === t.key
                 ? 'border-[#C4A35A] text-[#C4A35A]'
                 : 'border-transparent text-gray-400 hover:text-gray-600'
             }`}
+            style={{ minWidth: 0 }}
           >
             {t.label}
             {t.count > 0 && (
@@ -1078,6 +1081,55 @@ function MyCardContent() {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* マイプルーフタブ */}
+      {tab === 'myproof' && (
+        <div>
+          <div style={{ textAlign: 'center', padding: '16px 0' }}>
+            <p style={{ fontSize: 14, color: '#666', marginBottom: 16 }}>
+              あなたがプルーフしたプロや、お気に入りのものを公開ページで表示できます。
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
+              <a
+                href={`/myproof/${authUser?.id}`}
+                style={{
+                  display: 'inline-block', padding: '12px 32px',
+                  fontSize: 14, fontWeight: 700,
+                  background: '#1A1A2E', color: '#C4A35A',
+                  borderRadius: 8, textDecoration: 'none',
+                }}
+              >
+                マイプルーフを見る
+              </a>
+              <a
+                href="/myproof/edit"
+                style={{
+                  display: 'inline-block', padding: '12px 32px',
+                  fontSize: 14, fontWeight: 700,
+                  background: '#C4A35A', color: '#fff',
+                  borderRadius: 8, textDecoration: 'none',
+                }}
+              >
+                マイプルーフを編集する
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* カード管理タブ */}
+      {tab === 'card' && (
+        <div>
+          <div style={{ textAlign: 'center', padding: '16px 0' }}>
+            <p style={{ fontSize: 14, color: '#666', marginBottom: 16 }}>
+              NFCカードを登録して、タップするだけでマイプルーフを共有できます。
+            </p>
+            <p style={{ fontSize: 13, color: '#999', marginBottom: 8 }}>
+              カード管理機能は次のアップデートで追加予定です。
+            </p>
+          </div>
         </div>
       )}
 
