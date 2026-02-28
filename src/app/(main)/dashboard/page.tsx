@@ -1402,32 +1402,6 @@ export default function DashboardPage() {
         <ForteChart votes={votes} personalityVotes={personalityVotes} professional={pro} />
       </div>
 
-      {/* ── 危険な操作 ── */}
-      <div className="mt-12 pt-8 border-t border-red-100">
-        <h3 className="text-sm font-medium text-red-500 mb-4">危険な操作</h3>
-        <button
-          onClick={async () => {
-            if (!window.confirm('本当にアカウントを削除しますか？この操作は取り消せません。すべてのプルーフデータが失われます。')) return
-            try {
-              const { error } = await (supabase as any).rpc('delete_user_account')
-              if (error) {
-                console.error('[delete_user_account] error:', error.message)
-                alert('アカウント削除に失敗しました。もう一度お試しください。')
-                return
-              }
-              clearAllAuthStorage()
-              window.location.href = '/'
-            } catch (e) {
-              console.error('[delete_user_account] exception:', e)
-              alert('アカウント削除に失敗しました。もう一度お試しください。')
-            }
-          }}
-          className="text-sm text-red-400 hover:text-red-600 underline transition"
-        >
-          アカウントを削除する
-        </button>
-      </div>
-
       </>)}
 
       {/* ═══ Tab: マイプルーフ ═══ */}
