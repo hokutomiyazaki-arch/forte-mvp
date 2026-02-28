@@ -1,4 +1,5 @@
 // src/app/api/auth/line/callback/route.ts
+// Fix 8: パスワードを完全排除。generateLink + verifyOtp 方式。
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { decryptState, exchangeCodeForToken, getLineProfile, extractEmailFromIdToken } from '@/lib/line-auth';
@@ -46,6 +47,8 @@ export async function GET(request: NextRequest) {
     const profile = await getLineProfile(tokenData.access_token);
     const lineEmail = extractEmailFromIdToken(tokenData.id_token);
 
+    console.log('=== LINE Auth Debug (Fix 8: OTP方式) ===');
+
     // 4. 既存のLINE連携を確認
     const { data: existingMapping } = await supabaseAdmin
       .from('line_auth_mappings')
@@ -55,7 +58,6 @@ export async function GET(request: NextRequest) {
 
     let supabaseUid: string;
     const email = lineEmail || `line_${profile.userId}@line.realproof.jp`;
-    const linePassword = `line_${profile.userId}_${process.env.LINE_CHANNEL_SECRET}`;
 
     // 既存マッピングがある場合、ユーザーの存在を確認
     let mappingValid = false;
@@ -83,11 +85,11 @@ export async function GET(request: NextRequest) {
 
     if (!mappingValid) {
       // ---- 新規ユーザー: 登録 ----
-
-      // 新規Supabase Authユーザー作成
+      // パスワードはダミー（使わないがcreateUserに必須）
+      const dummyPassword = crypto.randomUUID();
       const { data: newUser, error: signUpError } = await supabaseAdmin.auth.admin.createUser({
         email: email,
-        password: linePassword,
+        password: dummyPassword,
         email_confirm: true,
         user_metadata: {
           line_user_id: profile.userId,
@@ -148,42 +150,43 @@ export async function GET(request: NextRequest) {
       }, { onConflict: 'line_user_id' });
     }
 
-    // === パスワード更新（1回だけ）→ クライアント側 signInWithPassword ===
-    // 重要: updateUserByIdは1回だけ呼ぶ。複数回呼ぶとSupabaseで失敗する。
-    const tempPassword = crypto.randomUUID();
-    console.log('[line/callback] setting temp password for user:', supabaseUid);
+    // === OTPベースのセッション作成（パスワード不要！）===
+    // generateLink → token_hash → クライアント側 verifyOtp
+    // updateUserById を一切呼ばないので「User not found」エラーが発生しない
+    console.log('[line/callback] generating magic link for:', email);
 
-    const { error: pwError } = await supabaseAdmin.auth.admin.updateUserById(supabaseUid, {
-      password: tempPassword,
-      email_confirm: true,
+    const { data: magicLinkData, error: magicLinkError } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'magiclink',
+      email: email,
     });
 
-    if (pwError) {
-      console.error('[line/callback] CRITICAL: password update failed:', pwError.message);
+    if (magicLinkError || !magicLinkData?.properties?.hashed_token) {
+      console.error('[line/callback] CRITICAL: generateLink failed:', magicLinkError?.message);
       return NextResponse.redirect(new URL('/login?error=line_signin_failed', request.url));
     }
 
-    console.log('[line/callback] temp password set successfully');
+    const tokenHash = magicLinkData.properties.hashed_token;
+    console.log('[line/callback] magic link generated successfully, token_hash length:', tokenHash.length);
 
     const redirectPath = context.type === 'client_login' ? '/mycard' : '/dashboard';
 
-    const authData = Buffer.from(JSON.stringify({
-      email: email,
-      password: tempPassword,
+    // token_hash をクライアントに渡す（パスワードは一切含まない）
+    const params = new URLSearchParams({
+      token_hash: tokenHash,
+      type: 'magiclink',
       redirect: redirectPath,
-    })).toString('base64url');
+    });
 
-    console.log('[line/callback] redirecting to client-side signIn, redirect:', redirectPath);
+    console.log('[line/callback] redirecting to line-session (OTP mode), redirect:', redirectPath);
 
     return NextResponse.redirect(
-      new URL(`/auth/line-session?d=${authData}`, request.url)
+      new URL(`/auth/line-session?${params.toString()}`, request.url)
     );
 
   } catch (err) {
     console.error('LINE callback error:', err);
 
     // 二重コールバック対策: invalid_grant は並列リクエストの片方が成功している可能性が高い
-    // ダッシュボードにリダイレクトし、セッションがあればそのまま表示される
     const errMsg = err instanceof Error ? err.message : String(err);
     if (errMsg.includes('invalid_grant') || errMsg.includes('invalid authorization code')) {
       console.log('[line/callback] invalid_grant detected (likely duplicate callback), redirecting to dashboard');

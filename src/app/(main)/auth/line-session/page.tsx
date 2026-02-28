@@ -10,9 +10,13 @@ function LineSessionContent() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    const encoded = searchParams.get('d')
+    // === Fix 8: OTP方式（新）とパスワード方式（旧/vote-callback）の両対応 ===
+    const tokenHash = searchParams.get('token_hash')
+    const otpType = searchParams.get('type')
+    const redirect = searchParams.get('redirect')
+    const encoded = searchParams.get('d') // 旧方式（vote-callback用）
 
-    if (!encoded) {
+    if (!tokenHash && !encoded) {
       setError('認証情報が見つかりません')
       setTimeout(() => { window.location.href = '/login?error=line_session_failed' }, 2000)
       return
@@ -20,38 +24,61 @@ function LineSessionContent() {
 
     const doSignIn = async () => {
       try {
-        // base64url デコード
-        const jsonStr = atob(encoded.replace(/-/g, '+').replace(/_/g, '/'))
-        const { email, password, redirect } = JSON.parse(jsonStr)
-
-        if (!email || !password) {
-          setError('認証情報が不正です')
-          setTimeout(() => { window.location.href = '/login?error=line_session_failed' }, 2000)
-          return
-        }
-
-        console.log('[line-session] starting client-side signInWithPassword for:', email)
-
-        // クライアント側で signInWithPassword を実行
-        // これにより Supabase JS が自分で管理できるセッションが作成される
-        // サーバー側で作ったセッションと違い、refresh tokenが正常に動作する
         const supabase = createClient()
-        const { data, error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        })
 
-        if (signInError || !data?.session) {
-          console.error('[line-session] signInWithPassword failed:', signInError?.message)
-          setError('ログインに失敗しました')
-          setTimeout(() => { window.location.href = '/login?error=line_signin_failed' }, 2000)
-          return
+        if (tokenHash && otpType) {
+          // === 新方式: verifyOtp（パスワード不要）===
+          console.log('[line-session] starting verifyOtp (Fix 8 OTP mode)')
+
+          const { data, error: verifyError } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: otpType as 'magiclink',
+          })
+
+          if (verifyError || !data?.session) {
+            console.error('[line-session] verifyOtp failed:', verifyError?.message)
+            setError('ログインに失敗しました')
+            setTimeout(() => { window.location.href = '/login?error=line_signin_failed' }, 2000)
+            return
+          }
+
+          console.log('[line-session] verifyOtp success, redirecting to:', redirect || '/dashboard')
+          setStatus('ログイン成功！リダイレクト中...')
+          window.location.href = redirect || '/dashboard'
+
+        } else if (encoded) {
+          // === 旧方式: signInWithPassword（vote-callback互換）===
+          console.log('[line-session] starting signInWithPassword (legacy mode)')
+
+          const decoded = JSON.parse(
+            Buffer.from ?
+              Buffer.from(encoded, 'base64url').toString('utf-8') :
+              atob(encoded.replace(/-/g, '+').replace(/_/g, '/'))
+          )
+          const { email, password, redirect: legacyRedirect } = decoded
+
+          if (!email || !password) {
+            setError('認証情報が不正です')
+            setTimeout(() => { window.location.href = '/login?error=line_session_failed' }, 2000)
+            return
+          }
+
+          const { data, error: signInError } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+          })
+
+          if (signInError || !data?.session) {
+            console.error('[line-session] signInWithPassword failed:', signInError?.message)
+            setError('ログインに失敗しました')
+            setTimeout(() => { window.location.href = '/login?error=line_signin_failed' }, 2000)
+            return
+          }
+
+          console.log('[line-session] signInWithPassword success, redirecting to:', legacyRedirect || '/dashboard')
+          setStatus('ログイン成功！リダイレクト中...')
+          window.location.href = legacyRedirect || '/dashboard'
         }
-
-        console.log('[line-session] signInWithPassword success, redirecting to:', redirect || '/dashboard')
-        setStatus('ログイン成功！リダイレクト中...')
-
-        window.location.href = redirect || '/dashboard'
       } catch (err) {
         console.error('[line-session] unexpected error:', err)
         setError('予期しないエラーが発生しました')
@@ -60,7 +87,7 @@ function LineSessionContent() {
     }
 
     doSignIn()
-  }, [searchParams])
+  }, []) // 依存配列を空に（searchParamsの変更で再発火しない）
 
   if (error) {
     return (
