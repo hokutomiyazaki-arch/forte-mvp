@@ -2,8 +2,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { signOutAndClear, clearAllAuthStorage } from '@/lib/auth-helper'
-import { useAuth } from '@/contexts/AuthContext'
+import { useUser, useClerk } from '@clerk/nextjs'
 import { getRewardLabel } from '@/lib/types'
 import RewardContent from '@/components/RewardContent'
 import CardModeSwitch from '@/components/CardModeSwitch'
@@ -36,7 +35,9 @@ function MyCardContent() {
   const searchParams = useSearchParams()
   const emailParam = searchParams.get('email') || ''
   const supabase = createClient()
-  const { user: authUser, session: authSession, isLoaded: authLoaded, refreshAuth } = useAuth()
+  const { user: clerkUser, isLoaded: authLoaded, isSignedIn } = useUser()
+  const { signOut } = useClerk()
+  const authUser = clerkUser ? { id: clerkUser.id, email: clerkUser.primaryEmailAddress?.emailAddress, user_metadata: {} as Record<string, any> } : null
 
   // 認証状態: 'loading' | 'auth' | 'ready'
   const [authMode, setAuthMode] = useState<'loading' | 'auth' | 'ready'>('loading')
@@ -309,11 +310,11 @@ function MyCardContent() {
         setShowSettings(true)
       }
 
-      if (authSession && authUser) {
+      if (isSignedIn && authUser) {
         const email = authUser.email || ''
         setUserEmail(email)
         // LINE認証ユーザー判定
-        const lineUser = (email.startsWith('line_') && email.endsWith('@line.realproof.jp')) || !!authUser.user_metadata?.line_user_id
+        const lineUser = (email.startsWith('line_') && email.endsWith('@line.realproof.jp'))
         setIsLineUser(lineUser)
         if (lineUser) setIsPasswordReset(false) // LINEユーザーにはパスワードリセット不要
         setAuthMode('ready')
@@ -356,92 +357,9 @@ function MyCardContent() {
     setCheckingEmail(false)
   }
 
-  // インラインログイン/新規登録
-  async function handleAuth(e: React.FormEvent) {
-    e.preventDefault()
-    setAuthError('')
-    setAuthSubmitting(true)
-
-    try {
-      if (authFormMode === 'signup') {
-        const { data, error } = await supabase.auth.signUp({
-          email: authEmail,
-          password: authPassword,
-          options: { data: { role: 'client' } },
-        })
-        if (error) throw error
-
-        // 既存ユーザー検知: identities が空 = このメールは既に登録済み
-        if (data.user && (!data.user.identities || data.user.identities.length === 0)) {
-          setAuthError('このメールアドレスは既に登録されています。ログインしてください。')
-          setAuthFormMode('login')
-          setAuthSubmitting(false)
-          return
-        }
-
-        // Supabaseの設定によってはメール確認が必要
-        if (data.session) {
-          // メール確認不要: そのままセッション確立
-          const user = data.session.user
-          const email = user.email || ''
-          setUserEmail(email)
-
-          // clients テーブルにupsert
-          try {
-            const nn = user.user_metadata?.full_name || email.split('@')[0] || 'ユーザー'
-            await (supabase as any).from('clients').upsert({
-              user_id: user.id,
-              nickname: nn,
-            }, { onConflict: 'user_id' })
-          } catch (_) {}
-
-          // ウェルカムメール送信
-          try {
-            await fetch('/api/welcome-email', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email, isGoogle: false }),
-            })
-          } catch (_) {}
-
-          setAuthMode('ready')
-          // AuthProviderを更新（Navbarにもセッション反映）
-          await refreshAuth()
-          await loadData(email, user.id)
-        } else {
-          // メール確認が必要
-          setAuthEmailSent(true)
-        }
-      } else {
-        // ログイン
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: authEmail,
-          password: authPassword,
-        })
-        if (error) throw error
-
-        if (data.session?.user) {
-          const user = data.session.user
-          const email = user.email || ''
-          setUserEmail(email)
-          setAuthMode('ready')
-          // AuthProviderを更新（Navbarにもセッション反映）
-          await refreshAuth()
-          await loadData(email, user.id)
-        }
-      }
-    } catch (err: any) {
-      const msg = err.message || ''
-      if (msg.includes('Invalid login credentials')) {
-        setAuthError('メールアドレスまたはパスワードが正しくありません')
-      } else if (msg.includes('User already registered')) {
-        setAuthError('このメールアドレスは既に登録されています。ログインしてください。')
-        setAuthFormMode('login')
-      } else {
-        setAuthError(msg || 'エラーが発生しました')
-      }
-    }
-    setAuthSubmitting(false)
+  // Clerk handles authentication — redirect to sign-in page
+  function handleAuthRedirect() {
+    window.location.href = '/sign-in?redirect_url=/mycard'
   }
 
   // リワード使用/削除
@@ -470,7 +388,7 @@ function MyCardContent() {
     setConfirmingId(null)
   }
 
-  // パスワード変更
+  // パスワード変更 — Clerk handles password management via user profile
   async function handlePasswordChange(e: React.FormEvent) {
     e.preventDefault()
     setChangingPassword(true)
@@ -487,17 +405,16 @@ function MyCardContent() {
       return
     }
 
-    const { error: updateError } = await (supabase as any).auth.updateUser({
-      password: newPassword,
-    })
-
-    if (updateError) {
+    try {
+      if (clerkUser) {
+        await clerkUser.updatePassword({ newPassword, currentPassword: '' })
+        setMessage('パスワードを変更しました。')
+        setNewPassword('')
+        setNewPasswordConfirm('')
+        setShowSettings(false)
+      }
+    } catch {
       setMessage('エラー：パスワードの変更に失敗しました。')
-    } else {
-      setMessage('パスワードを変更しました。')
-      setNewPassword('')
-      setNewPasswordConfirm('')
-      setShowSettings(false)
     }
     setChangingPassword(false)
   }
@@ -543,7 +460,7 @@ function MyCardContent() {
     )
   }
 
-  // ========== インラインログインフォーム ==========
+  // ========== 未ログイン: Clerkログインページへリダイレクト ==========
   if (authMode === 'auth') {
     return (
       <div className="max-w-md mx-auto px-4 py-12">
@@ -557,90 +474,12 @@ function MyCardContent() {
           <p className="text-sm text-gray-500">リワードや投票履歴を確認できます</p>
         </div>
 
-        {/* LINEログインボタン */}
         <button
-          onClick={() => {
-            window.location.href = '/api/auth/line?context=client_login'
-          }}
-          className="w-full py-3 mb-3 rounded-lg hover:opacity-90 transition flex items-center justify-center gap-2 text-sm font-bold text-white"
-          style={{ backgroundColor: '#06C755' }}
+          onClick={handleAuthRedirect}
+          className="w-full py-3 bg-[#C4A35A] text-white font-medium rounded-lg hover:bg-[#b3923f] transition"
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
-            <path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63h2.386c.349 0 .63.285.63.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63.349 0 .631.285.631.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.281.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314" />
-          </svg>
-          LINEでログイン
+          ログイン / 新規登録
         </button>
-
-        {/* Googleログインボタン */}
-        <button
-          onClick={async () => {
-            const supabaseClient = createClient()
-            await supabaseClient.auth.signInWithOAuth({
-              provider: 'google',
-              options: {
-                redirectTo: `${window.location.origin}/auth/callback?redirect=/mycard`,
-              },
-            })
-          }}
-          className="w-full py-3 mb-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition flex items-center justify-center gap-2 text-sm font-bold text-[#1A1A2E]"
-        >
-          <svg className="w-5 h-5" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-          Googleでログイン
-        </button>
-
-        <div className="text-center text-sm text-gray-400 mb-4">または</div>
-
-        {/* 新規登録/ログイン切替 */}
-        <div className="flex mb-6 text-sm">
-          <button
-            onClick={() => { setAuthFormMode('signup'); setAuthError('') }}
-            className={`flex-1 py-2 border-b-2 transition ${authFormMode === 'signup' ? 'border-[#C4A35A] text-[#1A1A2E] font-medium' : 'border-transparent text-gray-400'}`}
-          >
-            新規登録
-          </button>
-          <button
-            onClick={() => { setAuthFormMode('login'); setAuthError('') }}
-            className={`flex-1 py-2 border-b-2 transition ${authFormMode === 'login' ? 'border-[#C4A35A] text-[#1A1A2E] font-medium' : 'border-transparent text-gray-400'}`}
-          >
-            ログイン
-          </button>
-        </div>
-
-        {checkingEmail && (
-          <p className="text-xs text-gray-400 text-center mb-4">アカウント確認中...</p>
-        )}
-
-        <form onSubmit={handleAuth} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">メールアドレス</label>
-            {emailParam ? (
-              <>
-                <input type="email" value={authEmail} readOnly
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-700" />
-                <p className="text-xs text-green-600 mt-1">投票時のメールアドレスが入力されています</p>
-              </>
-            ) : (
-              <input type="email" value={authEmail} onChange={e => setAuthEmail(e.target.value)} required
-                onBlur={() => authEmail && authEmail.includes('@') && checkExistingEmail(authEmail)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
-                placeholder="メールアドレス" />
-            )}
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">パスワード</label>
-            <input type="password" value={authPassword} onChange={e => setAuthPassword(e.target.value)} required minLength={6}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
-              placeholder="パスワード" />
-            <p className="text-xs text-gray-400 mt-1">6文字以上で設定してください</p>
-          </div>
-
-          {authError && <p className="text-red-500 text-sm">{authError}</p>}
-
-          <button type="submit" disabled={authSubmitting}
-            className="w-full py-3 bg-[#C4A35A] text-white font-medium rounded-lg hover:bg-[#b3923f] transition disabled:opacity-50">
-            {authSubmitting ? '処理中...' : authFormMode === 'signup' ? 'アカウント作成' : 'ログイン'}
-          </button>
-        </form>
       </div>
     )
   }
@@ -765,10 +604,9 @@ function MyCardContent() {
                 onClick={async () => {
                   if (!nickname.trim()) return
                   setSavingNickname(true)
-                  const { data: { user } } = await supabase.auth.getUser()
-                  if (user) {
+                  if (authUser) {
                     await (supabase as any).from('clients').upsert({
-                      user_id: user.id,
+                      user_id: authUser.id,
                       nickname: nickname.trim(),
                     }, { onConflict: 'user_id' })
                     setMessage('ニックネームを保存しました')
@@ -833,7 +671,7 @@ function MyCardContent() {
                     alert('アカウント削除に失敗しました。')
                     return
                   }
-                  clearAllAuthStorage()
+                  await signOut()
                   window.location.href = '/'
                 } catch (e) {
                   alert('アカウント削除に失敗しました。')

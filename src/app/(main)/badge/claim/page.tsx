@@ -2,7 +2,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { useAuth } from '@/contexts/AuthContext'
+import { useUser } from '@clerk/nextjs'
 
 const BADGE_CODES: Record<string, { id: string; label: string; image_url: string }> = {
   'FNT-BASIC': { id: 'fnt-basic', label: 'FNT Basic 認定', image_url: '/badges/fnt-basic.png' },
@@ -20,7 +20,8 @@ function ClaimForm() {
   const supabase = createClient() as any
 
   const [status, setStatus] = useState<'loading' | 'no-login' | 'no-pro' | 'invalid' | 'already' | 'success' | 'error'>('loading')
-  const { user: authUser, isLoaded: authLoaded } = useAuth()
+  const { user: clerkUser, isLoaded: authLoaded } = useUser()
+  const authUser = clerkUser ? { id: clerkUser.id } : null
 
   useEffect(() => {
     if (!authLoaded) return

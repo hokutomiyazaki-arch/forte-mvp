@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
-import { AuthProvider } from '@/contexts/AuthContext'
+import { ClerkProvider } from '@clerk/nextjs'
+import { jaJP } from '@clerk/localizations'
 
 // 全ページをダイナミックレンダリングにする（env変数がビルド時に不在のため）
 export const dynamic = 'force-dynamic'
@@ -32,24 +33,24 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ja">
-      <head>
-        <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#1A1A2E" />
-        <link rel="icon" href="/icon-192.svg" type="image/svg+xml" />
-        <link rel="apple-touch-icon" href="/icon-192.svg" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+JP:wght@400;500;600;700;800;900&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body className="min-h-screen">
-        <AuthProvider>
+    <ClerkProvider localization={jaJP}>
+      <html lang="ja">
+        <head>
+          <link rel="manifest" href="/manifest.json" />
+          <meta name="theme-color" content="#1A1A2E" />
+          <link rel="icon" href="/icon-192.svg" type="image/svg+xml" />
+          <link rel="apple-touch-icon" href="/icon-192.svg" />
+          <link rel="preconnect" href="https://fonts.googleapis.com" />
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+          <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+JP:wght@400;500;600;700;800;900&display=swap"
+            rel="stylesheet"
+          />
+        </head>
+        <body className="min-h-screen">
           {children}
-        </AuthProvider>
-      </body>
-    </html>
+        </body>
+      </html>
+    </ClerkProvider>
   )
 }

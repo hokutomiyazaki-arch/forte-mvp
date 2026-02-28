@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { useAuth } from '@/contexts/AuthContext'
+import { useUser } from '@clerk/nextjs'
 
 const ORG_TYPES = [
   { key: 'store', label: '店舗', desc: '整体院・ヨガスタジオ・サロン等', icon: '🏪' },
@@ -21,7 +21,8 @@ export default function OrgRegisterPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
-  const { user: authUser } = useAuth()
+  const { user: clerkUser } = useUser()
+  const authUser = clerkUser ? { id: clerkUser.id } : null
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()

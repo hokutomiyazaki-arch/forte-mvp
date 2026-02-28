@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
-import { useAuth } from '@/contexts/AuthContext'
+import { useUser } from '@clerk/nextjs'
 
 export default function NewBadgePage() {
   const supabase = createClient() as any
@@ -15,7 +15,8 @@ export default function NewBadgePage() {
   const [error, setError] = useState('')
   const [existingCount, setExistingCount] = useState(0)
 
-  const { user: authUser, isLoaded: authLoaded } = useAuth()
+  const { user: clerkUser, isLoaded: authLoaded } = useUser()
+  const authUser = clerkUser ? { id: clerkUser.id } : null
 
   useEffect(() => {
     if (!authLoaded) return

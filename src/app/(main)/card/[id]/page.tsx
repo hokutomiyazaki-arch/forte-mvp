@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { useAuth } from '@/contexts/AuthContext'
+import { useUser } from '@clerk/nextjs'
 import { Professional, VoteSummary, Vote } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import { COLORS, FONTS } from '@/lib/design-tokens'
@@ -97,7 +97,8 @@ export default function CardPage() {
   const params = useParams()
   const id = params.id as string
   const supabase = createClient()
-  const { user: authUser, isLoaded: authLoaded } = useAuth()
+  const { user: clerkUser, isLoaded: authLoaded } = useUser()
+  const authUser = clerkUser ? { id: clerkUser.id } : null
   const [pro, setPro] = useState<Professional | null>(null)
   const [votes, setVotes] = useState<VoteSummary[]>([])
   const [personalityVotes, setPersonalityVotes] = useState<{ category: string; vote_count: number }[]>([])

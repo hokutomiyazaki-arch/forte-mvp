@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { useAuth } from '@/contexts/AuthContext'
+import { useUser } from '@clerk/nextjs'
 
 interface MyProofItem {
   id: string
@@ -58,7 +58,9 @@ export default function MyProofPage() {
   const params = useParams()
   const userId = params.userId as string
   const supabase = createClient()
-  const { user: authUser, isPro } = useAuth()
+  const { user: clerkUser } = useUser()
+  const authUser = clerkUser ? { id: clerkUser.id, email: clerkUser.primaryEmailAddress?.emailAddress || '' } : null
+  const isPro = false // determined by checking role
 
   const [userName, setUserName] = useState('')
   const [userPhoto, setUserPhoto] = useState('')
@@ -148,7 +150,7 @@ export default function MyProofPage() {
     // オーナーの場合: 投票済みプロを取得
     if (authUser?.id === userId) {
       const email = authUser.email || ''
-      const lineUserId = authUser.user_metadata?.line_user_id || ''
+      const lineUserId = '' // LINE auth removed with Clerk migration
       let votePros: any[] = []
 
       const { data: voteByEmail } = await (supabase as any)

@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
-import { useAuth } from '@/contexts/AuthContext'
+import { useUser } from '@clerk/nextjs'
 
 const ORG_TYPE_LABELS: Record<string, { invite: string; inviteDesc: string }> = {
   store: {
@@ -28,7 +28,8 @@ export default function OrgInvitePage() {
   const [error, setError] = useState('')
   const [invitations, setInvitations] = useState<any[]>([])
 
-  const { user: authUser, isLoaded: authLoaded } = useAuth()
+  const { user: clerkUser, isLoaded: authLoaded } = useUser()
+  const authUser = clerkUser ? { id: clerkUser.id } : null
 
   useEffect(() => {
     if (!authLoaded) return

@@ -1,7 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { useAuth } from '@/contexts/AuthContext'
+import { useUser } from '@clerk/nextjs'
+import { uploadFile } from '@/lib/db'
 import ImageCropper from '@/components/ImageCropper'
 
 interface VotedPro {
@@ -35,7 +36,8 @@ const PROOF_THING_CATEGORIES = [
 
 export default function MyProofEditPage() {
   const supabase = createClient()
-  const { user: authUser, session, isLoaded } = useAuth()
+  const { user: clerkUser, isLoaded } = useUser()
+  const authUser = clerkUser ? { id: clerkUser.id, email: clerkUser.primaryEmailAddress?.emailAddress || '' } : null
 
   const [votedPros, setVotedPros] = useState<VotedPro[]>([])
   const [things, setThings] = useState<ThingItem[]>([])
@@ -56,7 +58,7 @@ export default function MyProofEditPage() {
     setLoading(true)
 
     const email = authUser.email || ''
-    const lineUserId = authUser.user_metadata?.line_user_id || ''
+    const lineUserId = '' // LINE auth removed with Clerk migration
 
     let votePros: any[] = []
     const { data: voteByEmail } = await (supabase as any)
@@ -177,16 +179,15 @@ export default function MyProofEditPage() {
 
     const fileExt = file.name.split('.').pop()
     const fileName = `${authUser.id}/${Date.now()}.${fileExt}`
-    const { error } = await (supabase.storage.from('my-proof-images') as any).upload(fileName, file, { cacheControl: '3600', upsert: false })
+    const result = await uploadFile('my-proof-images', fileName, file)
 
-    if (error) {
+    if (result.error) {
       setMessage('エラー: 画像のアップロードに失敗しました')
       setThings(prev => prev.map((t, i) => i === index ? { ...t, uploading: false } : t))
       return
     }
 
-    const { data } = supabase.storage.from('my-proof-images').getPublicUrl(fileName)
-    setThings(prev => prev.map((t, i) => i === index ? { ...t, photo_url: data.publicUrl, uploading: false } : t))
+    setThings(prev => prev.map((t, i) => i === index ? { ...t, photo_url: result.publicUrl || '', uploading: false } : t))
   }
 
   async function handleSave() {

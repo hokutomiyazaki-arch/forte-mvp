@@ -1,13 +1,12 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase'
-import { useAuth } from '@/contexts/AuthContext'
+import { useUser } from '@clerk/nextjs'
+import { db } from '@/lib/db'
 import { Professional, Vote } from '@/lib/types'
 
 const ADMIN_EMAILS = ['info@functionalneurotraining.com']
 
 export default function AdminPage() {
-  const supabase = createClient() as any
   const [authorized, setAuthorized] = useState(false)
   const [pros, setPros] = useState<(Professional & { total_votes: number })[]>([])
   const [recentVotes, setRecentVotes] = useState<(Vote & { professionals: { name: string } })[]>([])
@@ -19,11 +18,12 @@ export default function AdminPage() {
   const [badgeLabel, setBadgeLabel] = useState('')
   const [badgeUrl, setBadgeUrl] = useState('')
 
-  const { user: authUser, isLoaded: authLoaded } = useAuth()
+  const { user: clerkUser, isLoaded: authLoaded } = useUser()
 
   useEffect(() => {
     if (!authLoaded) return
-    if (!authUser || !ADMIN_EMAILS.includes(authUser.email || '')) {
+    const email = clerkUser?.primaryEmailAddress?.emailAddress || ''
+    if (!clerkUser || !ADMIN_EMAILS.includes(email)) {
       setLoading(false)
       return
     }
@@ -32,46 +32,53 @@ export default function AdminPage() {
       setAuthorized(true)
 
       // Pros with vote count
-      const { data: proData } = await supabase.from('professionals').select('*').order('created_at') as { data: any[] | null } as { data: any[] | null }
+      const { data: proData } = await db.select('professionals', {
+        select: '*', order: { column: 'created_at' }
+      })
       if (proData) {
         const prosWithVotes: any[] = []
         for (const p of proData) {
-          const { count } = await supabase.from('votes').select('*', { count: 'exact', head: true }).eq('professional_id', p.id)
-          prosWithVotes.push({ ...p, total_votes: count || 0 })
+          const result = await db.select('votes', {
+            select: '*', options: { count: 'exact', head: true },
+            eq: { professional_id: p.id }
+          })
+          prosWithVotes.push({ ...p, total_votes: result.count || 0 })
         }
         prosWithVotes.sort((a, b) => b.total_votes - a.total_votes)
         setPros(prosWithVotes)
       }
 
       // Recent votes
-      const { data: voteData } = await supabase
-        .from('votes').select('*, professionals(name)')
-        .order('created_at', { ascending: false }).limit(30)
+      const { data: voteData } = await db.select('votes', {
+        select: '*, professionals(name)',
+        order: { column: 'created_at', options: { ascending: false } },
+        limit: 30
+      })
       if (voteData) setRecentVotes(voteData as any)
 
       // Stats
-      const { count: pc } = await supabase.from('professionals').select('*', { count: 'exact', head: true })
-      const { count: cc } = await supabase.from('clients').select('*', { count: 'exact', head: true })
-      const { count: vc } = await supabase.from('votes').select('*', { count: 'exact', head: true })
-      setStats({ totalPros: pc || 0, totalClients: cc || 0, totalVotes: vc || 0 })
+      const pc = await db.select('professionals', { select: '*', options: { count: 'exact', head: true } })
+      const cc = await db.select('clients', { select: '*', options: { count: 'exact', head: true } })
+      const vc = await db.select('votes', { select: '*', options: { count: 'exact', head: true } })
+      setStats({ totalPros: pc.count || 0, totalClients: cc.count || 0, totalVotes: vc.count || 0 })
 
       setLoading(false)
     }
     load()
-  }, [authLoaded, authUser])
+  }, [authLoaded, clerkUser])
 
   async function addBadge() {
     if (!selectedPro || !badgeLabel) return
     const pro = pros.find(p => p.id === selectedPro)
     if (!pro) return
     const badges = [...(pro.badges || []), { id: crypto.randomUUID(), label: badgeLabel, image_url: badgeUrl }]
-    await (supabase.from('professionals') as any).update({ badges }).eq('id', selectedPro)
+    await db.update('professionals', { badges }, { id: selectedPro })
     alert('バッジを追加しました')
     window.location.reload()
   }
 
   async function toggleFounding(proId: string, current: boolean) {
-    await supabase.from('professionals').update({ is_founding_member: !current }).eq('id', proId)
+    await db.update('professionals', { is_founding_member: !current }, { id: proId })
     window.location.reload()
   }
 

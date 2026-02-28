@@ -1,18 +1,29 @@
 import { createClient as supaCreateClient } from '@supabase/supabase-js'
 
-let client: ReturnType<typeof supaCreateClient> | null = null
-
-export function createClient() {
-  if (client) return client
+// サーバーサイド専用のSupabaseクライアント
+// service_role keyを使うので、RLSをバイパスする
+export function getSupabaseAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  client = supaCreateClient(supabaseUrl, supabaseAnonKey, {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+  return supaCreateClient(supabaseUrl, serviceRoleKey, {
     auth: {
-      flowType: 'implicit',
-      autoRefreshToken: true,  // Client-side signInWithPassword creates proper refresh tokens
-      persistSession: true,
-      detectSessionInUrl: true,
-    }
+      autoRefreshToken: false,
+      persistSession: false,
+    },
   })
-  return client
+}
+
+// 旧互換: 他ファイルでimportしてる場合のために残す
+// サーバーサイドではservice_role keyを使う
+// クライアントサイドでは /api/db プロキシを使う
+export function createClient(): any {
+  // クライアントサイド（ブラウザ）で呼ばれた場合はプロキシを返す
+  if (typeof window !== 'undefined') {
+    // Dynamic import to avoid bundling server code on client
+    const { createClientComponentClient } = require('@/lib/supabase-client')
+    return createClientComponentClient()
+  }
+  // サーバーサイドではそのままadminクライアントを返す
+  return getSupabaseAdmin()
 }

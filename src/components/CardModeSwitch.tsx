@@ -1,11 +1,12 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
-import { useAuth } from '@/contexts/AuthContext'
+import { useUser } from '@clerk/nextjs'
 
 export default function CardModeSwitch() {
   const supabase = createClient()
-  const { user: authUser, isPro } = useAuth()
+  const { user, isLoaded } = useUser()
+  const authUser = user ? { id: user.id } : null
 
   const [cardMode, setCardMode] = useState<'pro' | 'general'>('pro')
   const [originalMode, setOriginalMode] = useState<'pro' | 'general'>('pro')

@@ -2,11 +2,9 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { clearAllAuthStorage } from '@/lib/auth-helper'
 import { getRewardLabel } from '@/lib/types'
 import RewardContent from '@/components/RewardContent'
 import { Suspense } from 'react'
-import { useAuth } from '@/contexts/AuthContext'
 
 interface RewardInfo {
   reward_type: string
@@ -33,7 +31,6 @@ function VoteProcessingContent() {
   const rewardParam = searchParams.get('reward') || ''
 
   const supabase = createClient() as any
-  const { refreshAuth } = useAuth()
 
   const [phase, setPhase] = useState<Phase>('processing')
   const [proName, setProName] = useState('')
@@ -81,26 +78,7 @@ function VoteProcessingContent() {
       const r = decodeRewardParam()
       if (r) setReward(r)
 
-      // 2. セッション作成（バックグラウンド、失敗してもOK）
-      if (email && token) {
-        try {
-          // 古いセッションをクリア（古いRefresh Tokenとの競合を防ぐ）
-          clearAllAuthStorage()
-
-          const { data, error } = await supabase.auth.signInWithPassword({
-            email, password: token,
-          })
-          if (!error && data?.session) {
-            console.log('[vote-processing] session created, refreshing AuthProvider...')
-            await refreshAuth()
-            console.log('[vote-processing] AuthProvider refreshed')
-          } else {
-            console.warn('[vote-processing] signIn failed:', error?.message)
-          }
-        } catch (e) {
-          console.warn('[vote-processing] session creation failed:', e)
-        }
-      }
+      // 2. Clerk handles authentication — no Supabase session creation needed
 
       // 3. プロ情報取得
       if (proId) {

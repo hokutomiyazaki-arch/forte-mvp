@@ -1,8 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase'
-import { signOutAndClear, getSessionSafe, clearAllAuthStorage } from '@/lib/auth-helper'
-import { useAuth } from '@/contexts/AuthContext'
+import { useUser, useClerk } from '@clerk/nextjs'
+import { db, uploadFile } from '@/lib/db'
 import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYPES, getRewardType } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import ForteChart from '@/components/ForteChart'
@@ -59,7 +58,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 const CATEGORY_KEYS = Object.keys(CATEGORY_LABELS)
 
 export default function DashboardPage() {
-  const supabase = createClient()
+  const { signOut } = useClerk()
   const [user, setUser] = useState<any>(null)
   const [pro, setPro] = useState<Professional | null>(null)
   const [votes, setVotes] = useState<VoteSummary[]>([])
@@ -137,27 +136,28 @@ export default function DashboardPage() {
   // 団体オーナー state
   const [ownedOrg, setOwnedOrg] = useState<{id: string; name: string; type: string} | null>(null)
 
-  const { user: authUser, isLoaded: authLoaded } = useAuth()
+  const { user: clerkUser, isLoaded: authLoaded } = useUser()
 
   useEffect(() => {
     if (!authLoaded) return
-    if (!authUser) { window.location.href = '/login?role=pro'; return }
+    if (!clerkUser) { window.location.href = '/sign-in'; return }
 
     async function load() {
-      const u = authUser
+      const u = { id: clerkUser!.id, email: clerkUser!.primaryEmailAddress?.emailAddress || '' }
       setUser(u)
-      const emailIdentity = u.identities?.find((i: any) => i.provider === 'email')
-      setHasEmailIdentity(!!emailIdentity)
+      setHasEmailIdentity(true)
 
       // プルーフ項目マスタ取得（プロの有無にかかわらず必要）
-      const { data: piData } = await supabase
-        .from('proof_items').select('*').order('sort_order') as any
+      const { data: piData } = await db.select('proof_items', {
+        select: '*', order: { column: 'sort_order' }
+      })
       if (piData) {
         setProofItems(piData)
       }
 
-      const { data: rawProData } = await (supabase
-        .from('professionals').select('*').eq('user_id', u.id).maybeSingle()) as any
+      const { data: rawProData } = await db.select('professionals', {
+        select: '*', eq: { user_id: u.id }, maybeSingle: true
+      })
       const proData = rawProData as any
 
       if (!proData) {
@@ -181,11 +181,10 @@ export default function DashboardPage() {
       setCustomPersonalityFortes(proData.custom_personality_fortes || [])
 
       // リワード取得
-      const { data: rewardData } = await (supabase as any)
-        .from('rewards')
-        .select('*')
-        .eq('professional_id', proData.id)
-        .order('sort_order')
+      const { data: rewardData } = await db.select('rewards', {
+        select: '*', eq: { professional_id: proData.id },
+        order: { column: 'sort_order' }
+      })
       if (rewardData) {
         setRewards(rewardData.map((r: any) => ({
           id: r.id,
@@ -196,7 +195,9 @@ export default function DashboardPage() {
       }
 
       // vote_summary: proof_id → ラベル変換
-      const { data: rawVoteData } = await supabase.from('vote_summary').select('*').eq('professional_id', proData.id) as any
+      const { data: rawVoteData } = await db.select('vote_summary', {
+        select: '*', eq: { professional_id: proData.id }
+      })
       if (rawVoteData && piData) {
         const labeledVotes = resolveProofLabels(rawVoteData, piData, proData.custom_proofs || [])
         setVotes(labeledVotes)
@@ -212,24 +213,29 @@ export default function DashboardPage() {
       }
 
       // personality_summary: personality_id → ラベル変換
-      const { data: rawPersData } = await supabase.from('personality_summary').select('*').eq('professional_id', proData.id) as any
+      const { data: rawPersData } = await db.select('personality_summary', {
+        select: '*', eq: { professional_id: proData.id }
+      })
       if (rawPersData) {
-        const { data: persItems } = await supabase.from('personality_items').select('id, label') as any
+        const { data: persItems } = await db.select('personality_items', { select: 'id, label' })
         if (persItems) {
           const labeledPers = resolvePersonalityLabels(rawPersData, persItems)
           setPersonalityVotes(labeledPers)
         }
       }
 
-      const { count } = await supabase.from('votes').select('*', { count: 'exact', head: true }).eq('professional_id', proData.id).eq('status', 'confirmed') as any
-      setTotalVotes(count || 0)
+      const voteCountResult = await db.select('votes', {
+        select: '*', options: { count: 'exact', head: true },
+        eq: { professional_id: proData.id, status: 'confirmed' }
+      })
+      setTotalVotes(voteCountResult.count || 0)
 
       // ブックマーク数取得
-      const { count: bmCount } = await (supabase as any)
-        .from('bookmarks')
-        .select('*', { count: 'exact', head: true })
-        .eq('professional_id', proData.id)
-      setBookmarkCount(bmCount || 0)
+      const bmCountResult = await db.select('bookmarks', {
+        select: '*', options: { count: 'exact', head: true },
+        eq: { professional_id: proData.id }
+      })
+      setBookmarkCount(bmCountResult.count || 0)
 
       // プルーフ選択状態を復元（マスタは上で取得済み）
       if (piData) {
@@ -245,33 +251,34 @@ export default function DashboardPage() {
       setSavedVoiceThemeData(proData.voice_card_theme || null)
 
       // Voices: コメント付き確定投票を取得
-      const { data: voiceData } = await supabase
-        .from('votes').select('id, comment, created_at')
-        .eq('professional_id', proData.id).eq('status', 'confirmed')
-        .not('comment', 'is', null).neq('comment', '')
-        .order('created_at', { ascending: false }) as any
+      const { data: voiceData } = await db.select('votes', {
+        select: 'id, comment, created_at',
+        eq: { professional_id: proData.id, status: 'confirmed' },
+        not: [{ column: 'comment', operator: 'is', value: null }],
+        neq: { comment: '' },
+        order: { column: 'created_at', options: { ascending: false } }
+      })
       if (voiceData) setVoiceComments(voiceData)
 
       // 感謝フレーズ
-      const { data: phrasesData } = await supabase
-        .from('gratitude_phrases').select('*').order('sort_order') as any
+      const { data: phrasesData } = await db.select('gratitude_phrases', {
+        select: '*', order: { column: 'sort_order' }
+      })
       if (phrasesData) setVoicePhrases(phrasesData)
 
       // NFCカード取得
-      const { data: nfcData } = await (supabase as any)
-        .from('nfc_cards')
-        .select('id, card_uid, status, linked_at')
-        .eq('professional_id', proData.id)
-        .eq('status', 'active')
-        .maybeSingle()
+      const { data: nfcData } = await db.select('nfc_cards', {
+        select: 'id, card_uid, status, linked_at',
+        eq: { professional_id: proData.id, status: 'active' },
+        maybeSingle: true
+      })
       if (nfcData) setNfcCard(nfcData)
 
       // 団体からの招待を取得
-      const { data: memberInvites } = await (supabase as any)
-        .from('org_members')
-        .select('id, organization_id, invited_at, organizations(name, type)')
-        .eq('professional_id', proData.id)
-        .eq('status', 'pending')
+      const { data: memberInvites } = await db.select('org_members', {
+        select: 'id, organization_id, invited_at, organizations(name, type)',
+        eq: { professional_id: proData.id, status: 'pending' }
+      })
 
       if (memberInvites) {
         setPendingInvites(memberInvites.map((m: any) => ({
@@ -284,12 +291,11 @@ export default function DashboardPage() {
       }
 
       // 所属団体（active、credential_level_idなし＝純粋な所属）を取得
-      const { data: activeMembers } = await (supabase as any)
-        .from('org_members')
-        .select('id, organization_id, accepted_at, organizations(id, name, type)')
-        .eq('professional_id', proData.id)
-        .eq('status', 'active')
-        .is('credential_level_id', null)
+      const { data: activeMembers } = await db.select('org_members', {
+        select: 'id, organization_id, accepted_at, organizations(id, name, type)',
+        eq: { professional_id: proData.id, status: 'active' },
+        is: { credential_level_id: null }
+      })
 
       if (activeMembers) {
         const allOrgs = activeMembers
@@ -311,12 +317,11 @@ export default function DashboardPage() {
       }
 
       // credential_levels経由のバッジを取得
-      const { data: credBadgeData } = await (supabase as any)
-        .from('org_members')
-        .select('credential_level_id, credential_levels(id, name, description, image_url), organizations(id, name)')
-        .eq('professional_id', proData.id)
-        .eq('status', 'active')
-        .not('credential_level_id', 'is', null)
+      const { data: credBadgeData } = await db.select('org_members', {
+        select: 'credential_level_id, credential_levels(id, name, description, image_url), organizations(id, name)',
+        eq: { professional_id: proData.id, status: 'active' },
+        not: [{ column: 'credential_level_id', operator: 'is', value: null }]
+      })
 
       if (credBadgeData) {
         setCredentialBadges(credBadgeData
@@ -333,13 +338,13 @@ export default function DashboardPage() {
       }
 
       // オーナー団体を取得
-      const { data: ownedOrgData } = await (supabase as any)
-        .from('organizations')
-        .select('id, name, type')
-        .eq('owner_id', u.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+      const { data: ownedOrgData } = await db.select('organizations', {
+        select: 'id, name, type',
+        eq: { owner_id: u.id },
+        order: { column: 'created_at', options: { ascending: false } },
+        limit: 1,
+        maybeSingle: true
+      })
 
       if (ownedOrgData) {
         setOwnedOrg(ownedOrgData)
@@ -348,7 +353,7 @@ export default function DashboardPage() {
       setLoading(false)
     }
     load()
-  }, [authLoaded, authUser])
+  }, [authLoaded, clerkUser])
 
   function addCustomForte(type: 'result' | 'personality') {
     const prefix = type === 'result' ? 'cr_' : 'cp_'
@@ -388,14 +393,6 @@ export default function DashboardPage() {
     setFormError('')
     if (!user) { setSaving(false); return }
 
-    // セッション確認（refreshSessionはモバイルでハングするためgetSessionSafeを使用）
-    const { session } = await getSessionSafe()
-    if (!session) {
-      setFormError('セッションの有効期限が切れています。再ログインしてください。')
-      setSaving(false)
-      return
-    }
-
     const urlPattern = /https?:\/\/|www\./i
     if (form.name.length > 20) {
       setFormError('名前は20文字以内で入力してください')
@@ -413,25 +410,7 @@ export default function DashboardPage() {
       return
     }
 
-    // パスワード設定/変更
-    if (newPassword || newPasswordConfirm) {
-      if (newPassword.length < 6) {
-        setFormError('パスワードは6文字以上で入力してください')
-        setSaving(false)
-        return
-      }
-      if (newPassword !== newPasswordConfirm) {
-        setFormError('パスワードが一致しません')
-        setSaving(false)
-        return
-      }
-    }
-    // 新規プロ登録時はパスワード必須（email identityがある場合は任意、LINEユーザーも任意）
-    if (!pro && !hasEmailIdentity && !isLineUser && !newPassword) {
-      setFormError('パスワードを設定してください')
-      setSaving(false)
-      return
-    }
+    // パスワードはClerkで管理
 
     const validResultFortes = customResultFortes.filter(f => f.label.trim())
     const validPersonalityFortes = customPersonalityFortes.filter(f => f.label.trim())
@@ -454,10 +433,10 @@ export default function DashboardPage() {
     console.log('[handleSave] user.id:', user.id)
     console.log('[handleSave] pro:', pro)
     console.log('[handleSave] upsertRecord:', JSON.stringify(upsertRecord))
-    const { data: savedData, error: saveError } = await (supabase.from('professionals') as any)
-      .upsert(upsertRecord, { onConflict: 'user_id' })
-      .select()
-      .maybeSingle()
+    const { data: savedData, error: saveError } = await db.upsert(
+      'professionals', upsertRecord, { onConflict: 'user_id' },
+      { select: '*', maybeSingle: true }
+    )
 
     if (saveError) {
       console.error('[handleSave] upsert pro error:', saveError.message, 'code:', (saveError as any).code, 'details:', (saveError as any).details)
@@ -473,11 +452,7 @@ export default function DashboardPage() {
       if (isNew) console.log('[handleSave] new pro created, id:', savedData.id)
     }
 
-    // パスワード設定/変更
-    if (newPassword && newPassword.length > 0) {
-      const { error: pwError } = await (supabase as any).auth.updateUser({ password: newPassword })
-      if (pwError) console.error('[handleSave] password update error:', pwError.message)
-    }
+    // パスワードはClerkで管理するため、ここでは何もしない
 
     setSaving(false)
     setEditing(false)
@@ -486,10 +461,10 @@ export default function DashboardPage() {
   async function generateQR() {
     if (!pro) return
     // 既存トークンを削除
-    await (supabase.from('qr_tokens') as any).delete().eq('professional_id', pro.id)
+    await db.delete('qr_tokens', { professional_id: pro.id })
     const token = crypto.randomUUID()
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-    await (supabase.from('qr_tokens') as any).insert({ professional_id: pro.id, token, expires_at: expiresAt })
+    await db.insert('qr_tokens', { professional_id: pro.id, token, expires_at: expiresAt })
     const voteUrl = `${window.location.origin}/vote/${pro.id}?token=${token}`
     setQrUrl(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(voteUrl)}`)
   }
@@ -506,35 +481,27 @@ export default function DashboardPage() {
 
     try {
       // 1. card_uid が存在し、unlinked 状態であることを確認
-      const { data: card } = await (supabase as any)
-        .from('nfc_cards')
-        .select('id, status')
-        .eq('card_uid', cardUid)
-        .maybeSingle()
+      const { data: card } = await db.select('nfc_cards', {
+        select: 'id, status', eq: { card_uid: cardUid }, maybeSingle: true
+      })
 
       if (!card) { setNfcError('カードIDが見つかりません。カード裏面に印字されたIDを確認してください。'); setNfcLoading(false); return }
       if (card.status !== 'unlinked') { setNfcError('このカードは既に使用されています。'); setNfcLoading(false); return }
 
       // 2. プロに既存のアクティブカードがないことを確認
-      const { data: existing } = await (supabase as any)
-        .from('nfc_cards')
-        .select('id, card_uid')
-        .eq('professional_id', pro.id)
-        .eq('status', 'active')
-        .maybeSingle()
+      const { data: existing } = await db.select('nfc_cards', {
+        select: 'id, card_uid', eq: { professional_id: pro.id, status: 'active' }, maybeSingle: true
+      })
 
       if (existing) { setNfcError(`既にカード（${existing.card_uid}）が登録されています。先に紛失報告してください。`); setNfcLoading(false); return }
 
       // 3. カードをアクティブ化
-      const { error } = await (supabase as any)
-        .from('nfc_cards')
-        .update({
-          professional_id: pro.id,
-          status: 'active',
-          linked_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', card.id)
+      const { error } = await db.update('nfc_cards', {
+        professional_id: pro.id,
+        status: 'active',
+        linked_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, { id: card.id })
 
       if (error) { setNfcError('カードの登録に失敗しました。'); setNfcLoading(false); return }
 
@@ -557,14 +524,10 @@ export default function DashboardPage() {
     setNfcError('')
 
     try {
-      const { error } = await (supabase as any)
-        .from('nfc_cards')
-        .update({
-          status: 'lost',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('professional_id', pro.id)
-        .eq('status', 'active')
+      const { error } = await db.update('nfc_cards', {
+        status: 'lost',
+        updated_at: new Date().toISOString(),
+      }, { professional_id: pro.id, status: 'active' })
 
       if (error) { setNfcError('紛失報告に失敗しました。'); setNfcLoading(false); return }
 
@@ -590,11 +553,11 @@ export default function DashboardPage() {
     try {
       // FK制約のある関連テーブルを先に削除
       const tables = ['voice_shares', 'client_rewards', 'bookmarks', 'votes'] as const
-      for (const table of tables) {
-        const { error } = await (supabase as any).from(table).delete().eq('professional_id', pro.id)
-        if (error) throw new Error(`${table}: ${error.message}`)
+      for (const t of tables) {
+        const { error } = await db.delete(t, { professional_id: pro.id })
+        if (error) throw new Error(`${t}: ${error.message}`)
       }
-      const { error } = await (supabase as any).from('professionals').delete().eq('id', pro.id)
+      const { error } = await db.delete('professionals', { id: pro.id })
       if (error) throw new Error(`professionals: ${error.message}`)
       window.location.href = '/mycard'
     } catch (e: any) {
@@ -604,7 +567,7 @@ export default function DashboardPage() {
     }
   }
 
-  // 団体招待の承認/拒否（APIルート経由 — getSessionSafeのlocalStorage問題を回避）
+  // 団体招待の承認/拒否（APIルート経由）
   async function handleAcceptInvite(memberId: string, orgId: string) {
     setInviteProcessing(memberId)
     try {
@@ -680,10 +643,10 @@ export default function DashboardPage() {
   async function handleLeaveOrg(memberId: string) {
     if (!confirm('この団体から離脱しますか？')) return
     setLeavingOrg(memberId)
-    const { error } = await (supabase as any)
-      .from('org_members')
-      .update({ status: 'removed', removed_at: new Date().toISOString() })
-      .eq('id', memberId)
+    const { error } = await db.update('org_members',
+      { status: 'removed', removed_at: new Date().toISOString() },
+      { id: memberId }
+    )
 
     if (!error) {
       setActiveOrgs(prev => prev.filter(o => o.member_id !== memberId))
@@ -731,12 +694,10 @@ export default function DashboardPage() {
     const filteredCustom = customProofs.filter(c => c.label.trim())
 
     // selectedProofIds には regular + custom 両方の ID が含まれる
-    const { error } = await (supabase.from('professionals') as any)
-      .update({
-        selected_proofs: Array.from(selectedProofIds),
-        custom_proofs: filteredCustom,
-      })
-      .eq('id', pro.id)
+    const { error } = await db.update('professionals', {
+      selected_proofs: Array.from(selectedProofIds),
+      custom_proofs: filteredCustom,
+    }, { id: pro.id })
 
     if (error) {
       setProofError('保存に失敗しました。もう一度お試しください。')
@@ -754,7 +715,7 @@ export default function DashboardPage() {
     setRewardError('')
 
     // 既存リワードを削除
-    const { error: delError } = await (supabase as any).from('rewards').delete().eq('professional_id', pro.id)
+    const { error: delError } = await db.delete('rewards', { professional_id: pro.id })
     if (delError) {
       console.error('[handleSaveRewards] delete error:', delError.message)
       setRewardError('保存に失敗しました。もう一度お試しください。')
@@ -765,7 +726,7 @@ export default function DashboardPage() {
     // 有効なリワードのみ保存
     const validRewards = rewards.filter(r => r.reward_type && r.content.trim())
     if (validRewards.length > 0) {
-      const { error: insertError } = await (supabase as any).from('rewards').insert(
+      const { error: insertError } = await db.insert('rewards',
         validRewards.map((r, idx) => ({
           professional_id: pro.id,
           reward_type: r.reward_type,
@@ -824,19 +785,18 @@ export default function DashboardPage() {
     }
 
     // votes テーブルから該当 proof_id を除去（常に実行）
-    const { data: affectedVotes } = await (supabase as any)
-      .from('votes')
-      .select('id, selected_proof_ids')
-      .eq('professional_id', pro.id)
-      .contains('selected_proof_ids', [cp.id])
+    const { data: affectedVotes } = await db.select('votes', {
+      select: 'id, selected_proof_ids',
+      eq: { professional_id: pro.id },
+      contains: { selected_proof_ids: [cp.id] }
+    })
 
     if (affectedVotes && affectedVotes.length > 0) {
       for (const vote of affectedVotes) {
         const updatedIds = (vote.selected_proof_ids || []).filter((id: string) => id !== cp.id)
-        const { error: voteError } = await (supabase as any)
-          .from('votes')
-          .update({ selected_proof_ids: updatedIds })
-          .eq('id', vote.id)
+        const { error: voteError } = await db.update('votes',
+          { selected_proof_ids: updatedIds }, { id: vote.id }
+        )
         if (voteError) console.error('votes update error:', voteError)
       }
     }
@@ -861,13 +821,10 @@ export default function DashboardPage() {
     setCustomProofs(updatedCustomProofs)
 
     // professionals テーブルに即座に永続化
-    const { error } = await (supabase as any)
-      .from('professionals')
-      .update({
-        custom_proofs: updatedCustomProofs.filter(c => c.label.trim()),
-        selected_proofs: updatedSelectedIds,
-      })
-      .eq('id', pro.id)
+    const { error } = await db.update('professionals', {
+      custom_proofs: updatedCustomProofs.filter(c => c.label.trim()),
+      selected_proofs: updatedSelectedIds,
+    }, { id: pro.id })
 
     if (error) {
       alert('削除の保存に失敗しました。もう一度お試しください。')
@@ -884,12 +841,11 @@ export default function DashboardPage() {
     try {
       const file = new File([croppedBlob], `profile-${Date.now()}.jpg`, { type: 'image/jpeg' })
       const path = `${user.id}/avatar.jpg`
-      const { error } = await (supabase.storage.from('avatars') as any).upload(path, file, { upsert: true })
-      if (!error) {
-        const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
-        setForm(prev => ({...prev, photo_url: urlData.publicUrl + '?t=' + Date.now()}))
+      const result = await uploadFile('avatars', path, file, { upsert: true })
+      if (result.publicUrl) {
+        setForm(prev => ({...prev, photo_url: result.publicUrl + '?t=' + Date.now()}))
       } else {
-        console.error('Upload error:', error)
+        console.error('Upload error:', result.error)
         alert('アップロードに失敗しました')
       }
     } catch (e) {
@@ -1006,34 +962,7 @@ export default function DashboardPage() {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none" placeholder="you@example.com" />
             <p className="text-xs text-gray-400 mt-1">カードページに「このプロに相談する」ボタンが表示されます（ログインメールとは別に設定できます）</p>
           </div>
-          {/* パスワード設定（LINEユーザーは任意） */}
-          {!isLineUser && (
-          <div className="border-t pt-4">
-            <label className="block text-sm font-bold text-[#1A1A2E] mb-2">
-              {pro ? 'パスワード変更（変更しない場合は空欄）' : hasEmailIdentity ? 'パスワード変更（変更しない場合は空欄）' : 'パスワード設定 *'}
-            </label>
-            <div className="space-y-2">
-              <input
-                type="password"
-                value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
-                minLength={6}
-                required={!pro && !hasEmailIdentity && !isLineUser}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
-                placeholder={pro ? '新しいパスワード（6文字以上）' : hasEmailIdentity ? '新しいパスワード（6文字以上）' : 'パスワード（6文字以上）'}
-              />
-              <input
-                type="password"
-                value={newPasswordConfirm}
-                onChange={e => setNewPasswordConfirm(e.target.value)}
-                minLength={6}
-                required={!pro && !hasEmailIdentity && !isLineUser}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
-                placeholder={pro ? '新しいパスワード（確認）' : hasEmailIdentity ? '新しいパスワード（確認）' : 'パスワード（確認）'}
-              />
-            </div>
-          </div>
-          )}
+          {/* パスワードはClerkで管理 */}
 
           {formError && <p className="text-red-500 text-sm">{formError}</p>}
           <button type="submit" disabled={uploading || saving}
@@ -2042,7 +1971,7 @@ export default function DashboardPage() {
           savedThemeData={savedVoiceThemeData}
           onSaveTheme={(data: any) => {
             setSavedVoiceThemeData(data);
-            (supabase as any).from('professionals').update({ voice_card_theme: data }).eq('id', pro.id)
+            db.update('professionals', { voice_card_theme: data }, { id: pro.id })
           }}
         />
       )}
@@ -2168,7 +2097,7 @@ export default function DashboardPage() {
             カードを見る
           </a>
         )}
-        <button onClick={() => signOutAndClear('/')}
+        <button onClick={() => signOut({ redirectUrl: '/' })}
           className="px-6 py-3 text-gray-500 hover:text-red-500 transition">
           ログアウト
         </button>
