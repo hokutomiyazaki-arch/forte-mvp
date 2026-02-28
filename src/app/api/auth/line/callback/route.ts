@@ -67,11 +67,6 @@ export async function GET(request: NextRequest) {
         mappingValid = true;
         console.log('[line/callback] existing user verified:', supabaseUid);
 
-        // パスワードを毎回リセット（vote-callbackによるランダム上書き対策）
-        await supabaseAdmin.auth.admin.updateUserById(supabaseUid, {
-          password: linePassword,
-        });
-
         // LINE情報を更新
         await supabaseAdmin.from('line_auth_mappings').update({
           line_display_name: profile.displayName,
@@ -112,11 +107,6 @@ export async function GET(request: NextRequest) {
           if (linkData?.user?.id) {
             supabaseUid = linkData.user.id;
             console.log('[line/callback] found user via generateLink:', supabaseUid);
-
-            // パスワードをLINEパスワードに更新
-            await supabaseAdmin.auth.admin.updateUserById(supabaseUid, {
-              password: linePassword,
-            });
           } else {
             console.error('[line/callback] generateLink could not find user for:', email);
             return NextResponse.redirect(new URL('/login?error=line_signup_failed', request.url));
@@ -158,58 +148,25 @@ export async function GET(request: NextRequest) {
       }, { onConflict: 'line_user_id' });
     }
 
-    // --- パスワード設定 ---
-    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(supabaseUid, {
-      password: linePassword,
-      email_confirm: true,
-    });
-
-    if (updateError) {
-      console.error('[line/callback] updateUserById failed:', updateError.message);
-      // updateUserById が失敗した場合、ユーザーを削除して再作成
-      console.log('[line/callback] deleting and recreating user');
-      await supabaseAdmin.auth.admin.deleteUser(supabaseUid);
-      await supabaseAdmin.from('line_auth_mappings').delete().eq('line_user_id', profile.userId);
-
-      const { data: recreatedUser, error: recreateError } = await supabaseAdmin.auth.admin.createUser({
-        email: email,
-        password: linePassword,
-        email_confirm: true,
-      });
-
-      if (recreateError || !recreatedUser?.user) {
-        console.error('[line/callback] recreate failed:', recreateError?.message);
-        return NextResponse.redirect(new URL('/login?error=line_signup_failed', request.url));
-      }
-      supabaseUid = recreatedUser.user.id;
-
-      // マッピング再保存
-      await supabaseAdmin.from('line_auth_mappings').upsert({
-        line_user_id: profile.userId,
-        line_display_name: profile.displayName,
-        line_email: lineEmail,
-        line_picture_url: profile.pictureUrl,
-        supabase_uid: supabaseUid,
-      }, { onConflict: 'line_user_id' });
-    }
-
-    // --- クライアント側 signInWithPassword 方式 ---
-    // サーバーでセッションを作ってlocalStorage直書きすると、
-    // Supabase JS初期化時の_recoverAndRefresh()がrefresh tokenを検証→失敗→sb-*削除。
-    // 代わりにクライアント側でsignInWithPasswordを呼ばせる。
-
-    // セキュリティ: LINE_CHANNEL_SECRETを含むパスワードを直接渡さず、ランダムな一時パスワードを使用
+    // === パスワード更新（1回だけ）→ クライアント側 signInWithPassword ===
+    // 重要: updateUserByIdは1回だけ呼ぶ。複数回呼ぶとSupabaseで失敗する。
     const tempPassword = crypto.randomUUID();
+    console.log('[line/callback] setting temp password for user:', supabaseUid);
 
-    // 一時パスワードを設定
-    await supabaseAdmin.auth.admin.updateUserById(supabaseUid, {
+    const { error: pwError } = await supabaseAdmin.auth.admin.updateUserById(supabaseUid, {
       password: tempPassword,
       email_confirm: true,
     });
 
+    if (pwError) {
+      console.error('[line/callback] CRITICAL: password update failed:', pwError.message);
+      return NextResponse.redirect(new URL('/login?error=line_signin_failed', request.url));
+    }
+
+    console.log('[line/callback] temp password set successfully');
+
     const redirectPath = context.type === 'client_login' ? '/mycard' : '/dashboard';
 
-    // クライアント側のline-sessionページにリダイレクト
     const authData = Buffer.from(JSON.stringify({
       email: email,
       password: tempPassword,
