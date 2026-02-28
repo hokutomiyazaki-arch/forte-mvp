@@ -150,38 +150,111 @@ export async function GET(request: NextRequest) {
       }, { onConflict: 'line_user_id' });
     }
 
-    // === OTPベースのセッション作成（パスワード不要！）===
-    // generateLink → token_hash → クライアント側 verifyOtp
-    // updateUserById を一切呼ばないので「User not found」エラーが発生しない
-    console.log('[line/callback] generating magic link for:', email);
+    // === Fix 8.1: サーバー側 action_link 消費方式 ===
+    // generateLink → action_link をサーバーがfetch → セッショントークン取得 → クライアントに渡す
+    // updateUserById を一切呼ばない。verifyOtp もクライアントで呼ばない。
+    console.log('[line/callback] Fix 8.1: generating magic link for:', email);
+
+    const redirectPath = context.type === 'client_login' ? '/mycard' : '/dashboard';
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || new URL(request.url).origin;
 
     const { data: magicLinkData, error: magicLinkError } = await supabaseAdmin.auth.admin.generateLink({
       type: 'magiclink',
       email: email,
     });
 
-    if (magicLinkError || !magicLinkData?.properties?.hashed_token) {
+    if (magicLinkError || !magicLinkData?.properties?.action_link) {
       console.error('[line/callback] CRITICAL: generateLink failed:', magicLinkError?.message);
       return NextResponse.redirect(new URL('/login?error=line_signin_failed', request.url));
     }
 
-    const tokenHash = magicLinkData.properties.hashed_token;
-    console.log('[line/callback] magic link generated successfully, token_hash length:', tokenHash.length);
+    const actionLink = magicLinkData.properties.action_link;
+    console.log('[line/callback] action_link generated, consuming server-side...');
 
-    const redirectPath = context.type === 'client_login' ? '/mycard' : '/dashboard';
+    // action_link をサーバー側でGETして消費（ブラウザがメールのリンクをクリックするのと同じ）
+    // redirect: 'manual' でリダイレクトをキャッチ
+    try {
+      const verifyResponse = await fetch(actionLink, {
+        method: 'GET',
+        redirect: 'manual',
+        headers: {
+          'User-Agent': 'REALPROOF-Server/1.0',
+        },
+      });
 
-    // token_hash をクライアントに渡す（パスワードは一切含まない）
-    const params = new URLSearchParams({
-      token_hash: tokenHash,
-      type: 'magiclink',
-      redirect: redirectPath,
-    });
+      const locationHeader = verifyResponse.headers.get('location');
+      console.log('[line/callback] verify response status:', verifyResponse.status);
+      console.log('[line/callback] location header present:', !!locationHeader);
 
-    console.log('[line/callback] redirecting to line-session (OTP mode), redirect:', redirectPath);
+      if (locationHeader) {
+        // Supabase はリダイレクト先にセッション情報を含める
+        // PKCE: ?code=xxx  /  Implicit: #access_token=xxx&refresh_token=xxx
+        const redirectUrl = new URL(locationHeader);
 
-    return NextResponse.redirect(
-      new URL(`/auth/line-session?${params.toString()}`, request.url)
-    );
+        // PKCE mode: code パラメータ
+        const pkceCode = redirectUrl.searchParams.get('code');
+        if (pkceCode) {
+          console.log('[line/callback] PKCE code received, passing to client');
+          const params = new URLSearchParams({
+            code: pkceCode,
+            redirect: redirectPath,
+            mode: 'pkce',
+          });
+          return NextResponse.redirect(
+            new URL(`/auth/line-session?${params.toString()}`, request.url)
+          );
+        }
+
+        // Implicit mode: hash fragment にトークン
+        const fragment = redirectUrl.hash;
+        if (fragment && fragment.includes('access_token')) {
+          console.log('[line/callback] implicit flow tokens received');
+          // hash fragment ごとクライアントに転送
+          return NextResponse.redirect(
+            new URL(`/auth/line-session?redirect=${encodeURIComponent(redirectPath)}&mode=implicit${fragment}`, request.url)
+          );
+        }
+
+        // どちらでもない場合 — エラーパラメータをチェック
+        const errorParam = redirectUrl.searchParams.get('error');
+        const errorDescription = redirectUrl.searchParams.get('error_description');
+        if (errorParam) {
+          console.error('[line/callback] verify redirect contained error:', errorParam, errorDescription);
+          return NextResponse.redirect(new URL('/login?error=line_signin_failed', request.url));
+        }
+
+        // redirect先にトークン情報がない場合 → redirect先のURL全体をクライアントに渡す
+        console.log('[line/callback] no tokens in redirect, forwarding full location');
+        console.log('[line/callback] location:', locationHeader);
+
+        // フォールバック: action_link のリダイレクト先をそのままクライアントに
+        return NextResponse.redirect(locationHeader);
+      }
+
+      // リダイレクトなしの場合 → JSON レスポンスかもしれない
+      if (verifyResponse.ok) {
+        const body = await verifyResponse.json().catch(() => null);
+        if (body?.access_token && body?.refresh_token) {
+          console.log('[line/callback] JSON response with tokens');
+          const params = new URLSearchParams({
+            access_token: body.access_token,
+            refresh_token: body.refresh_token,
+            redirect: redirectPath,
+            mode: 'direct',
+          });
+          return NextResponse.redirect(
+            new URL(`/auth/line-session?${params.toString()}`, request.url)
+          );
+        }
+      }
+
+      console.error('[line/callback] unexpected verify response:', verifyResponse.status);
+      return NextResponse.redirect(new URL('/login?error=line_signin_failed', request.url));
+
+    } catch (fetchErr) {
+      console.error('[line/callback] action_link fetch error:', fetchErr);
+      return NextResponse.redirect(new URL('/login?error=line_signin_failed', request.url));
+    }
 
   } catch (err) {
     console.error('LINE callback error:', err);

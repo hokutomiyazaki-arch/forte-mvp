@@ -10,50 +10,110 @@ function LineSessionContent() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    // === Fix 8: OTP方式（新）とパスワード方式（旧/vote-callback）の両対応 ===
-    const tokenHash = searchParams.get('token_hash')
-    const otpType = searchParams.get('type')
+    const mode = searchParams.get('mode')
     const redirect = searchParams.get('redirect')
     const encoded = searchParams.get('d') // 旧方式（vote-callback用）
-
-    if (!tokenHash && !encoded) {
-      setError('認証情報が見つかりません')
-      setTimeout(() => { window.location.href = '/login?error=line_session_failed' }, 2000)
-      return
-    }
 
     const doSignIn = async () => {
       try {
         const supabase = createClient()
 
-        if (tokenHash && otpType) {
-          // === 新方式: verifyOtp（パスワード不要）===
-          console.log('[line-session] starting verifyOtp (Fix 8 OTP mode)')
+        // === Fix 8.1 PKCE mode ===
+        if (mode === 'pkce') {
+          const code = searchParams.get('code')
+          if (!code) {
+            setError('認証コードが見つかりません')
+            setTimeout(() => { window.location.href = '/login?error=line_session_failed' }, 2000)
+            return
+          }
 
-          const { data, error: verifyError } = await supabase.auth.verifyOtp({
-            token_hash: tokenHash,
-            type: otpType as 'magiclink',
-          })
+          console.log('[line-session] Fix 8.1: exchangeCodeForSession (PKCE mode)')
+          const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
 
-          if (verifyError || !data?.session) {
-            console.error('[line-session] verifyOtp failed:', verifyError?.message)
+          if (exchangeError || !data?.session) {
+            console.error('[line-session] exchangeCodeForSession failed:', exchangeError?.message)
             setError('ログインに失敗しました')
             setTimeout(() => { window.location.href = '/login?error=line_signin_failed' }, 2000)
             return
           }
 
-          console.log('[line-session] verifyOtp success, redirecting to:', redirect || '/dashboard')
+          console.log('[line-session] PKCE session created, redirecting to:', redirect || '/dashboard')
           setStatus('ログイン成功！リダイレクト中...')
           window.location.href = redirect || '/dashboard'
+          return
+        }
 
-        } else if (encoded) {
-          // === 旧方式: signInWithPassword（vote-callback互換）===
+        // === Fix 8.1 Implicit mode (hash fragment) ===
+        if (mode === 'implicit') {
+          const hash = window.location.hash.substring(1)
+          const hashParams = new URLSearchParams(hash)
+          const accessToken = hashParams.get('access_token')
+          const refreshToken = hashParams.get('refresh_token')
+
+          if (!accessToken || !refreshToken) {
+            console.error('[line-session] implicit mode but no tokens in hash')
+            setError('認証情報が見つかりません')
+            setTimeout(() => { window.location.href = '/login?error=line_session_failed' }, 2000)
+            return
+          }
+
+          console.log('[line-session] Fix 8.1: setSession (implicit mode)')
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          })
+
+          if (sessionError) {
+            console.error('[line-session] setSession failed:', sessionError.message)
+            setError('ログインに失敗しました')
+            setTimeout(() => { window.location.href = '/login?error=line_signin_failed' }, 2000)
+            return
+          }
+
+          console.log('[line-session] implicit session set, redirecting to:', redirect || '/dashboard')
+          setStatus('ログイン成功！リダイレクト中...')
+          window.location.href = redirect || '/dashboard'
+          return
+        }
+
+        // === Fix 8.1 Direct mode (tokens in query params) ===
+        if (mode === 'direct') {
+          const accessToken = searchParams.get('access_token')
+          const refreshToken = searchParams.get('refresh_token')
+
+          if (!accessToken || !refreshToken) {
+            setError('認証情報が見つかりません')
+            setTimeout(() => { window.location.href = '/login?error=line_session_failed' }, 2000)
+            return
+          }
+
+          console.log('[line-session] Fix 8.1: setSession (direct mode)')
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          })
+
+          if (sessionError) {
+            console.error('[line-session] setSession failed:', sessionError.message)
+            setError('ログインに失敗しました')
+            setTimeout(() => { window.location.href = '/login?error=line_signin_failed' }, 2000)
+            return
+          }
+
+          console.log('[line-session] direct session set, redirecting to:', redirect || '/dashboard')
+          setStatus('ログイン成功！リダイレクト中...')
+          window.location.href = redirect || '/dashboard'
+          return
+        }
+
+        // === 旧方式: signInWithPassword（vote-callback互換）===
+        if (encoded) {
           console.log('[line-session] starting signInWithPassword (legacy mode)')
 
           const decoded = JSON.parse(
-            Buffer.from ?
-              Buffer.from(encoded, 'base64url').toString('utf-8') :
-              atob(encoded.replace(/-/g, '+').replace(/_/g, '/'))
+            typeof Buffer !== 'undefined'
+              ? Buffer.from(encoded, 'base64url').toString('utf-8')
+              : atob(encoded.replace(/-/g, '+').replace(/_/g, '/'))
           )
           const { email, password, redirect: legacyRedirect } = decoded
 
@@ -78,7 +138,14 @@ function LineSessionContent() {
           console.log('[line-session] signInWithPassword success, redirecting to:', legacyRedirect || '/dashboard')
           setStatus('ログイン成功！リダイレクト中...')
           window.location.href = legacyRedirect || '/dashboard'
+          return
         }
+
+        // === どのモードにも該当しない ===
+        console.error('[line-session] no valid auth mode detected. mode:', mode, 'encoded:', !!encoded)
+        setError('認証情報が見つかりません')
+        setTimeout(() => { window.location.href = '/login?error=line_session_failed' }, 2000)
+
       } catch (err) {
         console.error('[line-session] unexpected error:', err)
         setError('予期しないエラーが発生しました')
