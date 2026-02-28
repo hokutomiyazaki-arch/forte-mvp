@@ -67,6 +67,11 @@ export async function GET(request: NextRequest) {
         mappingValid = true;
         console.log('[line/callback] existing user verified:', supabaseUid);
 
+        // パスワードを毎回リセット（vote-callbackによるランダム上書き対策）
+        await supabaseAdmin.auth.admin.updateUserById(supabaseUid, {
+          password: linePassword,
+        });
+
         // LINE情報を更新
         await supabaseAdmin.from('line_auth_mappings').update({
           line_display_name: profile.displayName,
@@ -107,6 +112,11 @@ export async function GET(request: NextRequest) {
           if (linkData?.user?.id) {
             supabaseUid = linkData.user.id;
             console.log('[line/callback] found user via generateLink:', supabaseUid);
+
+            // パスワードをLINEパスワードに更新
+            await supabaseAdmin.auth.admin.updateUserById(supabaseUid, {
+              password: linePassword,
+            });
           } else {
             console.error('[line/callback] generateLink could not find user for:', email);
             return NextResponse.redirect(new URL('/login?error=line_signup_failed', request.url));
