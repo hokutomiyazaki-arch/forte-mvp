@@ -81,13 +81,13 @@ export default function CardModeSwitch() {
       </h3>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
-        {/* プロモード */}
+        {/* プロモード — プロ登録者のみ表示 */}
+        {hasPro && (
         <label style={{
           display: 'flex', alignItems: 'flex-start', gap: 12,
           padding: '12px 16px', borderRadius: 8,
           border: cardMode === 'pro' ? '2px solid #C4A35A' : '1px solid #E8E4DC',
-          cursor: hasPro ? 'pointer' : 'default',
-          opacity: hasPro ? 1 : 0.5,
+          cursor: 'pointer',
           background: cardMode === 'pro' ? 'rgba(196,163,90,0.04)' : '#fff',
         }}>
           <input
@@ -95,8 +95,7 @@ export default function CardModeSwitch() {
             name="cardMode"
             value="pro"
             checked={cardMode === 'pro'}
-            onChange={() => hasPro && setCardMode('pro')}
-            disabled={!hasPro}
+            onChange={() => setCardMode('pro')}
             style={{ accentColor: '#C4A35A', marginTop: 2 }}
           />
           <div>
@@ -106,13 +105,9 @@ export default function CardModeSwitch() {
             <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>
               タップ → クライアントの投票画面
             </div>
-            {!hasPro && (
-              <div style={{ fontSize: 11, color: '#e74c3c', marginTop: 4 }}>
-                先にプロ登録してください
-              </div>
-            )}
           </div>
         </label>
+        )}
 
         {/* 一般モード */}
         <label style={{

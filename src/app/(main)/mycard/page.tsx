@@ -73,6 +73,8 @@ function MyCardContent() {
   const [isLineUser, setIsLineUser] = useState(false)
   const passwordSectionRef = useRef<HTMLDivElement>(null)
   const [myProofQrUrl, setMyProofQrUrl] = useState('')
+  const [nickname, setNickname] = useState('')
+  const [savingNickname, setSavingNickname] = useState(false)
 
   function generateMyProofQR() {
     if (!authUser?.id) return
@@ -92,6 +94,11 @@ function MyCardContent() {
       const { data: proCheck } = await (supabase as any)
         .from('professionals').select('id').eq('user_id', userId).maybeSingle()
       setIsPro(!!proCheck)
+
+      // ニックネーム取得
+      const { data: clientData } = await (supabase as any)
+        .from('clients').select('nickname').eq('user_id', userId).maybeSingle()
+      if (clientData?.nickname) setNickname(clientData.nickname)
 
       // LINE認証ユーザー判定 + LINE userId抽出
       const isLine = email.startsWith('line_') && email.endsWith('@line.realproof.jp')
@@ -740,44 +747,103 @@ function MyCardContent() {
 
       {/* 設定パネル */}
       {showSettings && (
-        <div ref={passwordSectionRef} className="bg-white border border-gray-200 rounded-xl p-5 mb-6 shadow-sm">
+        <div ref={passwordSectionRef} className="bg-white border border-gray-200 rounded-xl p-5 mb-6 shadow-sm space-y-6">
+
+          {/* ニックネーム編集 */}
+          <div>
+            <h2 className="text-sm font-bold text-[#1A1A2E] mb-3">ニックネーム</h2>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={nickname}
+                onChange={e => setNickname(e.target.value)}
+                maxLength={20}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
+                placeholder="ニックネームを入力"
+              />
+              <button
+                onClick={async () => {
+                  if (!nickname.trim()) return
+                  setSavingNickname(true)
+                  const { data: { user } } = await supabase.auth.getUser()
+                  if (user) {
+                    await (supabase as any).from('clients').upsert({
+                      user_id: user.id,
+                      nickname: nickname.trim(),
+                    }, { onConflict: 'user_id' })
+                    setMessage('ニックネームを保存しました')
+                  }
+                  setSavingNickname(false)
+                }}
+                disabled={savingNickname}
+                className="px-4 py-2 bg-[#1A1A2E] text-white text-sm font-medium rounded-lg hover:bg-[#2a2a4e] transition disabled:opacity-50"
+              >
+                {savingNickname ? '...' : '保存'}
+              </button>
+            </div>
+          </div>
+
+          {/* パスワード変更 */}
           {isLineUser ? (
             <div className="text-center">
               <p className="text-sm text-green-600 font-medium mb-1">LINE連携済み</p>
               <p className="text-xs text-gray-500">LINEアカウントでログインしています</p>
             </div>
           ) : (
-          <>
-          <h2 className="text-sm font-bold text-[#1A1A2E] mb-4">パスワード変更</h2>
-          <form onSubmit={handlePasswordChange} className="space-y-3">
-            <input
-              type="password"
-              value={newPassword}
-              onChange={e => setNewPassword(e.target.value)}
-              required
-              minLength={6}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
-              placeholder="新しいパスワード（6文字以上）"
-            />
-            <input
-              type="password"
-              value={newPasswordConfirm}
-              onChange={e => setNewPasswordConfirm(e.target.value)}
-              required
-              minLength={6}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
-              placeholder="新しいパスワード（確認）"
-            />
-            <button
-              type="submit"
-              disabled={changingPassword}
-              className="w-full py-2 bg-[#1A1A2E] text-white text-sm font-medium rounded-lg hover:bg-[#2a2a4e] transition disabled:opacity-50"
-            >
-              {changingPassword ? '変更中...' : 'パスワードを変更'}
-            </button>
-          </form>
-          </>
+          <div>
+            <h2 className="text-sm font-bold text-[#1A1A2E] mb-3">パスワード変更</h2>
+            <form onSubmit={handlePasswordChange} className="space-y-3">
+              <input
+                type="password"
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                required
+                minLength={6}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
+                placeholder="新しいパスワード（6文字以上）"
+              />
+              <input
+                type="password"
+                value={newPasswordConfirm}
+                onChange={e => setNewPasswordConfirm(e.target.value)}
+                required
+                minLength={6}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
+                placeholder="新しいパスワード（確認）"
+              />
+              <button
+                type="submit"
+                disabled={changingPassword}
+                className="w-full py-2 bg-[#1A1A2E] text-white text-sm font-medium rounded-lg hover:bg-[#2a2a4e] transition disabled:opacity-50"
+              >
+                {changingPassword ? '変更中...' : 'パスワードを変更'}
+              </button>
+            </form>
+          </div>
           )}
+
+          {/* アカウント削除 */}
+          <div className="pt-4 border-t border-gray-100">
+            <button
+              onClick={async () => {
+                if (!window.confirm('本当にアカウントを削除しますか？この操作は取り消せません。')) return
+                try {
+                  const { error } = await (supabase as any).rpc('delete_user_account')
+                  if (error) {
+                    alert('アカウント削除に失敗しました。')
+                    return
+                  }
+                  clearAllAuthStorage()
+                  window.location.href = '/'
+                } catch (e) {
+                  alert('アカウント削除に失敗しました。')
+                }
+              }}
+              className="text-xs text-red-400 hover:text-red-600 transition"
+            >
+              アカウントを削除する
+            </button>
+          </div>
         </div>
       )}
 
