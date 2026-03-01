@@ -167,6 +167,7 @@ export default function DashboardPage() {
         }
         setUserRole(roleData.role)
         setWasProfessional(!!roleData.proDeactivated)
+        console.log('[DASHBOARD DEBUG] roleData:', JSON.stringify(roleData))
         // clientユーザーはマイプルーフタブをデフォルトに
         if (roleData.role === 'client') {
           setDashboardTab('myproof')
@@ -189,8 +190,9 @@ export default function DashboardPage() {
         if (data.proofItems) setProofItems(data.proofItems)
 
         const proData = data.professional
+        console.log('[DASHBOARD DEBUG] proData:', proData ? 'exists' : 'null', 'deactivated_at:', proData?.deactivated_at, 'clientProfile:', !!data.clientProfile, 'myProofQrToken:', !!data.myProofQrToken)
         if (!proData) {
-          // clientユーザー or 新規プロ
+          // clientユーザー or deactivated pro
           if (data.myProofQrToken) setMyProofQrToken(data.myProofQrToken)
           if (data.clientProfile) {
             setClientProfile(data.clientProfile)
@@ -1013,33 +1015,8 @@ export default function DashboardPage() {
     )
   }
 
-  // deactivated状態の表示
-  if (pro?.deactivated_at) {
-    return (
-      <div className="max-w-3xl mx-auto">
-        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-6">ダッシュボード</h1>
-        <div className="bg-white rounded-xl p-8 shadow-sm text-center">
-          <div className="text-4xl mb-4">⏸️</div>
-          <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">プロ登録を解除中です</h2>
-          <p className="text-sm text-gray-500 mb-2">
-            プロフィールページは非公開になっています。
-          </p>
-          <p className="text-sm text-gray-500 mb-6">
-            プルーフデータは保持されています。いつでも復活できます。
-          </p>
-          <button
-            onClick={handleReactivate}
-            className="px-6 py-3 bg-[#C4A35A] text-white rounded-lg hover:bg-[#b3944f] transition font-medium"
-          >
-            プロとして再登録する
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  // ═══ clientユーザー用ダッシュボード ═══
-  if (userRole === 'client' && !pro) {
+  // ═══ clientユーザー用ダッシュボード（deactivated proも含む） ═══
+  if (userRole === 'client') {
     return (
       <div className="max-w-3xl mx-auto">
         <div className="flex items-center justify-between mb-4">
@@ -1388,11 +1365,7 @@ export default function DashboardPage() {
 
       {/* ダッシュボードタブ */}
       <div style={{ display: 'flex', overflowX: 'auto', gap: 0, marginBottom: 24, borderBottom: '1px solid #E5E7EB', scrollbarWidth: 'none' as any }}>
-        {(userRole === 'client' ? [
-          { key: 'profile' as const, label: 'マイページ' },
-          { key: 'myproof' as const, label: 'マイプルーフ' },
-          ...(ownedOrg ? [{ key: 'org' as const, label: '🏢 団体管理' }] : []),
-        ] : [
+        {([
           { key: 'profile' as const, label: 'プロフィール' },
           { key: 'proofs' as const, label: '強み設定' },
           { key: 'rewards' as const, label: 'リワード' },

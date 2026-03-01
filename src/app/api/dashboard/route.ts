@@ -26,10 +26,14 @@ export async function GET() {
       supabase.from('proof_items').select('*').order('sort_order'),
     ])
 
-    const proData = proResult.data
+    const proDataRaw = proResult.data
     const proofItems = proofItemsResult.data || []
 
-    // プロ未登録の場合、クライアント向けデータを返す
+    // deactivated proはclientとして扱う（proDataをnullにする）
+    const isDeactivatedPro = !!(proDataRaw && proDataRaw.deactivated_at)
+    const proData = isDeactivatedPro ? null : proDataRaw
+
+    // プロ未登録 or deactivated proの場合、クライアント向けデータを返す
     if (!proData) {
       // クライアントでもマイプルーフQRトークンとプロフィールは必要
       const [myProofCardResult, clientResult, ownedOrgResult] = await Promise.all([
