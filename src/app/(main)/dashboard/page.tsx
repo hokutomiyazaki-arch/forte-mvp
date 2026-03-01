@@ -107,6 +107,7 @@ export default function DashboardPage() {
   const [proofError, setProofError] = useState('')
   const [customProofVoteCounts, setCustomProofVoteCounts] = useState<Map<string, number>>(new Map())
   const [myProofQrToken, setMyProofQrToken] = useState<string | null>(null)
+  const [showMyProofQR, setShowMyProofQR] = useState(false)
 
   // Voices用 state
   const [voiceComments, setVoiceComments] = useState<{ id: string; comment: string; created_at: string }[]>([])
@@ -1050,24 +1051,53 @@ export default function DashboardPage() {
       <div className="bg-white rounded-xl p-6 shadow-sm mb-6 text-center">
         {dashboardTab === 'myproof' ? (
           <>
-            <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">マイプルーフ QRコード</h2>
-            <p className="text-xs text-gray-400 mb-4">スキャンするとあなたのマイプルーフページが開きます（期限なし）</p>
+            <h2 className="text-base font-bold text-[#1A1A2E] mb-1">マイプルーフ QRコード</h2>
+            <p className="text-xs text-gray-500 mb-4">
+              スキャンするとあなたのマイプルーフページが開きます（期限なし）
+            </p>
             {myProofQrToken ? (
               <>
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`${window.location.origin}/myproof/p/${myProofQrToken}`)}`}
-                  alt="マイプルーフ QR"
-                  className="mx-auto mb-4"
-                  style={{ width: 200, height: 200 }}
-                />
-                <p className="text-xs text-gray-400 break-all mb-2">
-                  {window.location.origin}/myproof/p/{myProofQrToken}
-                </p>
+                {showMyProofQR ? (
+                  <>
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`${window.location.origin}/myproof/p/${myProofQrToken}`)}`}
+                      alt="マイプルーフ QR"
+                      className="mx-auto mb-4"
+                      style={{ width: 200, height: 200 }}
+                    />
+                    <button
+                      onClick={() => setShowMyProofQR(false)}
+                      className="text-sm text-gray-400 hover:text-gray-600 mb-3"
+                    >
+                      QRコードを非表示にする
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => setShowMyProofQR(true)}
+                    className="bg-[#1A1A2E] text-white rounded-lg px-6 py-3 text-sm font-semibold mb-3"
+                  >
+                    QRコードを表示する
+                  </button>
+                )}
+                <div className="flex items-center justify-center gap-2 mt-3">
+                  <code className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded">
+                    realproof.jp/myproof/p/{myProofQrToken.slice(0, 8)}...
+                  </code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/myproof/p/${myProofQrToken}`)
+                    }}
+                    className="text-xs text-[#C4A35A]"
+                  >
+                    コピー
+                  </button>
+                </div>
                 <a
                   href={`/myproof/p/${myProofQrToken}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-block text-sm font-medium"
+                  className="inline-block text-sm font-medium mt-2"
                   style={{ color: '#C4A35A' }}
                 >
                   マイプルーフを見る →
