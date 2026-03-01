@@ -407,75 +407,77 @@ export default function MyProofTab() {
         )}
       </div>
 
-      {/* カスタム追加フォーム */}
+      {/* カスタム追加モーダル */}
       {showCustomForm && (
-        <div className="bg-white rounded-xl p-6 shadow-sm mb-6">
-          <h3 className="text-sm font-bold text-[#1A1A2E] mb-3">おすすめを追加</h3>
-          <div className="space-y-3">
-            {/* カテゴリ選択ピル */}
-            <div>
-              <p className="text-xs text-gray-500 mb-1">カテゴリ</p>
-              <div className="flex flex-wrap gap-2">
-                {CATEGORIES.filter(c => c.key !== 'professional').map((cat) => (
-                  <button
-                    key={cat.key}
-                    onClick={() => setNewItemCategory(cat.key as CategoryKey)}
-                    className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                      newItemCategory === cat.key
-                        ? 'text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                    style={newItemCategory === cat.key ? { backgroundColor: cat.color } : {}}
-                  >
-                    {cat.icon} {getCategoryShortLabel(cat)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <input
-              type="text"
-              value={customTitle}
-              onChange={e => setCustomTitle(e.target.value)}
-              maxLength={100}
-              placeholder="タイトル（例: 〇〇の腸活サプリ）"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#C4A35A] outline-none"
-            />
-            <textarea
-              value={customDesc}
-              onChange={e => setCustomDesc(e.target.value)}
-              placeholder="おすすめ理由（任意）"
-              rows={2}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#C4A35A] outline-none resize-none"
-            />
-            <div>
-              <label className="text-xs text-gray-500">写真（任意）</label>
-              {customPhotoUrl ? (
-                <div className="mt-1 flex items-center gap-2">
-                  <img src={customPhotoUrl} alt="" className="w-12 h-12 rounded-full object-cover" />
-                  <button onClick={() => setCustomPhotoUrl('')} className="text-xs text-red-400">削除</button>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full max-h-[80vh] overflow-y-auto">
+            <h3 className="text-lg font-bold text-[#1A1A2E] mb-4">おすすめを追加</h3>
+            <div className="space-y-3">
+              {/* カテゴリ選択ピル */}
+              <div>
+                <p className="text-xs text-gray-500 mb-1">カテゴリ</p>
+                <div className="flex flex-wrap gap-2">
+                  {CATEGORIES.filter(c => c.key !== 'professional').map((cat) => (
+                    <button
+                      key={cat.key}
+                      onClick={() => setNewItemCategory(cat.key as CategoryKey)}
+                      className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                        newItemCategory === cat.key
+                          ? 'text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                      style={newItemCategory === cat.key ? { backgroundColor: cat.color } : {}}
+                    >
+                      {cat.icon} {getCategoryShortLabel(cat)}
+                    </button>
+                  ))}
                 </div>
-              ) : (
-                <label className="block mt-1 text-sm text-[#C4A35A] cursor-pointer hover:underline">
-                  {uploadingPhoto ? 'アップロード中...' : '写真を選択'}
-                  <input type="file" accept="image/*" onChange={handleCustomPhotoUpload} className="hidden" />
-                </label>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => { setShowCustomForm(false); setCustomTitle(''); setCustomDesc(''); setCustomPhotoUrl(''); setNewItemCategory('other') }}
-                className="px-4 py-2 text-sm border border-gray-300 rounded-lg"
-              >
-                キャンセル
-              </button>
-              <button
-                onClick={addCustom}
-                disabled={addingItem || !customTitle.trim()}
-                className="px-4 py-2 text-sm bg-[#C4A35A] text-white rounded-lg hover:bg-[#b3944f] disabled:opacity-50"
-              >
-                {addingItem ? '追加中...' : '追加する'}
-              </button>
+              </div>
+
+              <input
+                type="text"
+                value={customTitle}
+                onChange={e => setCustomTitle(e.target.value)}
+                maxLength={100}
+                placeholder="タイトル（例: 〇〇の腸活サプリ）"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#C4A35A] outline-none"
+              />
+              <textarea
+                value={customDesc}
+                onChange={e => setCustomDesc(e.target.value)}
+                placeholder="おすすめ理由（任意）"
+                rows={2}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#C4A35A] outline-none resize-none"
+              />
+              <div>
+                <label className="text-xs text-gray-500">写真（任意）</label>
+                {customPhotoUrl ? (
+                  <div className="mt-1 flex items-center gap-2">
+                    <img src={customPhotoUrl} alt="" className="w-12 h-12 rounded-full object-cover" />
+                    <button onClick={() => setCustomPhotoUrl('')} className="text-xs text-red-400">削除</button>
+                  </div>
+                ) : (
+                  <label className="block mt-1 text-sm text-[#C4A35A] cursor-pointer hover:underline">
+                    {uploadingPhoto ? 'アップロード中...' : '写真を選択'}
+                    <input type="file" accept="image/*" onChange={handleCustomPhotoUpload} className="hidden" />
+                  </label>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setShowCustomForm(false); setCustomTitle(''); setCustomDesc(''); setCustomPhotoUrl(''); setNewItemCategory('other') }}
+                  className="flex-1 py-2 text-sm border border-gray-300 rounded-lg"
+                >
+                  キャンセル
+                </button>
+                <button
+                  onClick={addCustom}
+                  disabled={addingItem || !customTitle.trim()}
+                  className="flex-1 py-2 text-sm bg-[#C4A35A] text-white rounded-lg hover:bg-[#b3944f] disabled:opacity-50"
+                >
+                  {addingItem ? '追加中...' : '追加する'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
