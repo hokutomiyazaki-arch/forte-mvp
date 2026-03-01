@@ -99,6 +99,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
     return NextResponse.json({
       card: { ...card, theme: card.theme || 'dark' },
       owner: { name: ownerName, photo_url: ownerPhoto },
+      owner_user_id: card.user_id,
       items: itemsWithCategory,
     })
   } catch (err: any) {
