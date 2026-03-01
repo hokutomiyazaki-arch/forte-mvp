@@ -24,6 +24,7 @@ export interface Professional {
   custom_proofs: { id: string; label: string }[] | null
   is_founding_member: boolean
   badges: Badge[]
+  deactivated_at: string | null
   created_at: string
   updated_at: string
 }

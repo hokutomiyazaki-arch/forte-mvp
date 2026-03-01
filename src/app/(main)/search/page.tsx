@@ -33,7 +33,7 @@ export default function SearchPage() {
       const [prosRes, voteRes, proofRes] = await Promise.all([
         (supabase as any).from('professionals')
           .select('id, name, title, photo_url, prefecture, area_description, is_online_available, is_founding_member')
-          .not('name', 'is', null).neq('name', ''),
+          .not('name', 'is', null).neq('name', '').is('deactivated_at', null),
         (supabase as any).from('vote_summary')
           .select('professional_id, proof_id, vote_count')
           .order('vote_count', { ascending: false }),

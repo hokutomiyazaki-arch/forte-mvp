@@ -176,6 +176,11 @@ function VoteForm() {
         .select('*')
         .eq('id', proId)
         .maybeSingle()
+      if (proData?.deactivated_at) {
+        setError('このプロは現在プルーフを受け付けていません')
+        setLoading(false)
+        return
+      }
       if (proData) setPro(proData)
 
       // 強み未設定チェック → 準備中ページにリダイレクト

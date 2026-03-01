@@ -119,6 +119,11 @@ export default function CardPage() {
     async function load() {
       const { data: proData } = await supabase
         .from('professionals').select('*').eq('id', id).maybeSingle() as any
+      if (proData?.deactivated_at) {
+        setPro({ ...proData, _deactivated: true } as any)
+        setLoading(false)
+        return
+      }
       if (proData) setPro(proData)
 
       const { data: rawVoteData } = await supabase
@@ -252,6 +257,7 @@ export default function CardPage() {
 
   if (loading) return <div style={{ textAlign: 'center', padding: '64px 0', color: T.textMuted }}>読み込み中...</div>
   if (!pro) return <div style={{ textAlign: 'center', padding: '64px 0', color: T.textMuted }}>プロフィールが見つかりません</div>
+  if ((pro as any)._deactivated) return <div style={{ textAlign: 'center', padding: '80px 0', color: T.textMuted }}><p style={{ fontSize: 14 }}>このプロフィールは現在非公開です</p></div>
 
   const displayBadges = filterAndSortBadges(pro.badges || [])
   const sortedVotes = [...votes].sort((a, b) => b.vote_count - a.vote_count)

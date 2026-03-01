@@ -86,6 +86,8 @@ export default function DashboardPage() {
   const [rewardError, setRewardError] = useState('')
   const [confirmingDeregister, setConfirmingDeregister] = useState(false)
   const [deregistering, setDeregistering] = useState(false)
+  const [showDeactivateModal, setShowDeactivateModal] = useState(false)
+  const [deactivating, setDeactivating] = useState(false)
   const [formError, setFormError] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
@@ -740,6 +742,42 @@ export default function DashboardPage() {
     setUploading(false)
   }
 
+  // プロ登録解除
+  async function handleDeactivate() {
+    setDeactivating(true)
+    try {
+      const res = await fetch('/api/professional/deactivate', { method: 'POST' })
+      if (!res.ok) {
+        const data = await res.json()
+        alert(data.error || '解除に失敗しました')
+        setDeactivating(false)
+        return
+      }
+      setShowDeactivateModal(false)
+      window.location.reload()
+    } catch (e) {
+      console.error('[handleDeactivate] error:', e)
+      alert('解除に失敗しました')
+      setDeactivating(false)
+    }
+  }
+
+  // プロ登録復活
+  async function handleReactivate() {
+    try {
+      const res = await fetch('/api/professional/reactivate', { method: 'POST' })
+      if (!res.ok) {
+        const data = await res.json()
+        alert(data.error || '復活に失敗しました')
+        return
+      }
+      window.location.reload()
+    } catch (e) {
+      console.error('[handleReactivate] error:', e)
+      alert('復活に失敗しました')
+    }
+  }
+
   if (loading) return (
     <div className="max-w-2xl mx-auto px-4 py-8">
       {/* プロフィールスケルトン */}
@@ -893,6 +931,42 @@ export default function DashboardPage() {
           </button>
         </form>
 
+        {/* プロ登録解除リンク */}
+        {pro && !pro.deactivated_at && (
+          <div className="mt-8 pt-6 border-t border-gray-200">
+            <button
+              onClick={() => setShowDeactivateModal(true)}
+              className="text-red-500 text-sm hover:text-red-700 underline"
+            >
+              プロ登録を解除する
+            </button>
+          </div>
+        )}
+
+        {/* 解除確認モーダル */}
+        {showDeactivateModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full">
+              <h3 className="text-lg font-bold mb-4">プロ登録を解除しますか？</h3>
+              <ul className="text-sm text-gray-600 space-y-2 mb-6">
+                <li>・あなたのプロフィールページは非公開になります</li>
+                <li>・集めたプルーフデータは保持されます</li>
+                <li>・再度プロとして登録することで復活できます</li>
+              </ul>
+              <div className="flex gap-3 justify-end">
+                <button onClick={() => setShowDeactivateModal(false)}
+                  className="px-4 py-2 text-sm border rounded">
+                  キャンセル
+                </button>
+                <button onClick={handleDeactivate} disabled={deactivating}
+                  className="px-4 py-2 text-sm bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50">
+                  {deactivating ? '解除中...' : '解除する'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* プロフィール写真クロッパー */}
         {cropImageSrc && (
           <ImageCropper
@@ -903,6 +977,31 @@ export default function DashboardPage() {
             aspectRatio={1}
           />
         )}
+      </div>
+    )
+  }
+
+  // deactivated状態の表示
+  if (pro?.deactivated_at) {
+    return (
+      <div className="max-w-3xl mx-auto">
+        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-6">ダッシュボード</h1>
+        <div className="bg-white rounded-xl p-8 shadow-sm text-center">
+          <div className="text-4xl mb-4">⏸️</div>
+          <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">プロ登録を解除中です</h2>
+          <p className="text-sm text-gray-500 mb-2">
+            プロフィールページは非公開になっています。
+          </p>
+          <p className="text-sm text-gray-500 mb-6">
+            プルーフデータは保持されています。いつでも復活できます。
+          </p>
+          <button
+            onClick={handleReactivate}
+            className="px-6 py-3 bg-[#C4A35A] text-white rounded-lg hover:bg-[#b3944f] transition font-medium"
+          >
+            プロとして再登録する
+          </button>
+        </div>
       </div>
     )
   }
