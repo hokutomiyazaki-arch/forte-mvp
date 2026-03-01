@@ -90,10 +90,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
       })
     }
 
+    // categoryデフォルト適用
+    const itemsWithCategory = enrichedItems.map((item: any) => ({
+      ...item,
+      category: item.category || (item.item_type === 'professional' ? 'professional' : 'other'),
+    }))
+
     return NextResponse.json({
-      card,
+      card: { ...card, theme: card.theme || 'dark' },
       owner: { name: ownerName, photo_url: ownerPhoto },
-      items: enrichedItems,
+      items: itemsWithCategory,
     })
   } catch (err: any) {
     console.error('[api/myproof/public/[token]] error:', err)

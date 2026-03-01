@@ -16,11 +16,15 @@ export async function PUT(request: Request) {
     }
 
     const supabase = getSupabaseAdmin()
-    const { tagline } = await request.json()
+    const { tagline, theme } = await request.json()
+
+    const updateData: Record<string, any> = { updated_at: new Date().toISOString() }
+    if (tagline !== undefined) updateData.tagline = tagline
+    if (theme !== undefined) updateData.theme = theme
 
     const { error } = await supabase
       .from('my_proof_cards')
-      .update({ tagline, updated_at: new Date().toISOString() })
+      .update(updateData)
       .eq('user_id', userId)
 
     if (error) {

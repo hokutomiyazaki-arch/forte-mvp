@@ -17,7 +17,7 @@ export async function POST(request: Request) {
 
     const supabase = getSupabaseAdmin()
     const body = await request.json()
-    const { item_type, professional_id, title, description, photo_url } = body
+    const { item_type, professional_id, title, description, photo_url, category } = body
 
     // アイテム数上限チェック（10個）
     const { count } = await supabase
@@ -78,6 +78,7 @@ export async function POST(request: Request) {
         title: item_type === 'custom' ? title : null,
         description: item_type === 'custom' ? (description || null) : null,
         photo_url: item_type === 'custom' ? (photo_url || null) : null,
+        category: category || (item_type === 'professional' ? 'professional' : 'other'),
         sort_order: nextOrder,
       })
       .select()
