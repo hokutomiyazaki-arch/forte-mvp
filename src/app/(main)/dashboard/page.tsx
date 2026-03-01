@@ -759,7 +759,7 @@ export default function DashboardPage() {
     setUploading(false)
   }
 
-  // プロ登録解除
+  // プロ登録解除 → /mycard にリダイレクト
   async function handleDeactivate() {
     setDeactivating(true)
     try {
@@ -771,7 +771,7 @@ export default function DashboardPage() {
         return
       }
       setShowDeactivateModal(false)
-      window.location.reload()
+      window.location.href = '/mycard'
     } catch (e) {
       console.error('[handleDeactivate] error:', e)
       alert('解除に失敗しました')
