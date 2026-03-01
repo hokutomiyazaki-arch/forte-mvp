@@ -281,22 +281,6 @@ export default function MyProofPublicPage() {
 
         {/* キャプチャ対象エリア */}
         <div id="myproof-card-for-export" style={{ background: t.bg, padding: '0 0 16px' }}>
-          {/* ★ REALPROOFロゴ（最上部に大きく） */}
-          <div style={{
-            textAlign: 'center',
-            padding: '24px 0 20px',
-            background: '#1A1A2E',
-            borderRadius: '12px 12px 0 0',
-            marginBottom: 24,
-          }}>
-            <img
-              src="/images/realproof-logo-gold.png"
-              alt="REALPROOF"
-              style={{ height: 40, objectFit: 'contain' }}
-              crossOrigin="anonymous"
-            />
-          </div>
-
           {/* ヘッダー */}
           <div style={{ textAlign: 'center', marginBottom: 32 }}>
             {/* オーナー写真（丸） */}
@@ -343,135 +327,84 @@ export default function MyProofPublicPage() {
                   {cat.icon} {cat.label}
                 </div>
 
-                {/* アイテムカード — 2つ以上なら2列グリッド */}
-                <div style={{
-                  display: catItems.length >= 2 ? 'grid' : 'block',
-                  gridTemplateColumns: catItems.length >= 2 ? '1fr 1fr' : '1fr',
-                  gap: 10,
-                }}>
-                  {catItems.map(item => {
-                    const photoUrl = item.item_type === 'professional' ? item.pro_photo_url : item.photo_url
-                    const isPro = item.item_type === 'professional'
-                    const isGrid = catItems.length >= 2
+                {/* アイテムカード */}
+                {catItems.map(item => {
+                  const photoUrl = item.item_type === 'professional' ? item.pro_photo_url : item.photo_url
+                  const isPro = item.item_type === 'professional'
 
-                    return (
-                      <div key={item.id} style={{
-                        background: t.cardBg, border: `1px solid ${t.cardBorder}`,
-                        borderRadius: 12, padding: isGrid ? 12 : 16,
-                      }}>
-                        {isGrid ? (
-                          /* 2列時: 縦配置（写真上・テキスト下） */
-                          <div style={{ textAlign: 'center' }}>
-                            <div style={{
-                              width: 44, height: 44, borderRadius: '50%',
-                              background: isPro
-                                ? (t.isLight ? `${t.accent}15` : 'rgba(255,255,255,0.08)')
-                                : (t.isLight ? '#f5f5f5' : 'rgba(255,255,255,0.04)'),
-                              border: isPro
-                                ? `1.5px solid ${t.accent}`
-                                : `1.5px solid ${t.cardBorder}`,
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              margin: '0 auto 8px', overflow: 'hidden',
-                            }}>
-                              {photoUrl ? (
-                                <img src={photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              ) : (
-                                <span style={{ fontSize: 20 }}>
-                                  {isPro ? '👤' : cat.icon}
-                                </span>
-                              )}
-                            </div>
-                            <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.3 }}>
-                              {isPro ? item.pro_name : item.title}
-                            </div>
-                            {isPro && item.pro_title && (
-                              <div style={{ fontSize: 12, color: t.subtext, marginTop: 2 }}>
-                                {item.pro_title}
-                              </div>
-                            )}
-                            {isPro && (
-                              <div style={{ fontSize: 11, color: t.accent, marginTop: 4 }}>
-                                プルーフ {item.pro_vote_count || 0}票
-                              </div>
-                            )}
-                            {isPro && item.professional_id && (
-                              <Link
-                                href={`/card/${item.professional_id}`}
-                                style={{ color: t.accent, fontSize: 14, textDecoration: 'none', display: 'inline-block', marginTop: 4 }}
-                              >
-                                →
-                              </Link>
-                            )}
-                            {/* おすすめ理由（URL自動ボタン対応） */}
-                            {item.description && (
-                              <div style={{ marginTop: 6, paddingLeft: 0 }}>
-                                {renderDescription(item.description, t)}
-                              </div>
-                            )}
+                  return (
+                    <div key={item.id} style={{
+                      background: t.cardBg, border: `1px solid ${t.cardBorder}`,
+                      borderRadius: 12, padding: 16, marginBottom: 10,
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        {/* 丸写真 */}
+                        <div style={{
+                          width: 48, height: 48, borderRadius: '50%',
+                          background: isPro
+                            ? (t.isLight ? `${t.accent}15` : 'rgba(255,255,255,0.08)')
+                            : (t.isLight ? '#f5f5f5' : 'rgba(255,255,255,0.04)'),
+                          border: isPro
+                            ? `1.5px solid ${t.accent}`
+                            : `1.5px solid ${t.cardBorder}`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          flexShrink: 0, overflow: 'hidden',
+                        }}>
+                          {photoUrl ? (
+                            <img src={photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : (
+                            <span style={{ fontSize: 20 }}>
+                              {isPro ? '👤' : cat.icon}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* テキスト部分 */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 15, fontWeight: 600 }}>
+                            {isPro ? item.pro_name : item.title}
                           </div>
-                        ) : (
-                          /* 1列時: 横配置（従来通り） */
-                          <>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                              <div style={{
-                                width: 48, height: 48, borderRadius: '50%',
-                                background: isPro
-                                  ? (t.isLight ? `${t.accent}15` : 'rgba(255,255,255,0.08)')
-                                  : (t.isLight ? '#f5f5f5' : 'rgba(255,255,255,0.04)'),
-                                border: isPro
-                                  ? `1.5px solid ${t.accent}`
-                                  : `1.5px solid ${t.cardBorder}`,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                flexShrink: 0, overflow: 'hidden',
-                              }}>
-                                {photoUrl ? (
-                                  <img src={photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                ) : (
-                                  <span style={{ fontSize: 20 }}>
-                                    {isPro ? '👤' : cat.icon}
-                                  </span>
-                                )}
-                              </div>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontSize: 15, fontWeight: 600 }}>
-                                  {isPro ? item.pro_name : item.title}
-                                </div>
-                                {isPro && item.pro_title && (
-                                  <div style={{ fontSize: 12, color: t.subtext, marginTop: 2 }}>
-                                    {item.pro_title}
-                                  </div>
-                                )}
-                                {isPro && (
-                                  <div style={{ fontSize: 11, color: t.accent, marginTop: 4 }}>
-                                    プルーフ {item.pro_vote_count || 0}票
-                                  </div>
-                                )}
-                              </div>
-                              {isPro && item.professional_id && (
-                                <Link
-                                  href={`/card/${item.professional_id}`}
-                                  style={{ color: t.accent, fontSize: 18, textDecoration: 'none', flexShrink: 0 }}
-                                >
-                                  →
-                                </Link>
-                              )}
+                          {isPro && item.pro_title && (
+                            <div style={{ fontSize: 12, color: t.subtext, marginTop: 2 }}>
+                              {item.pro_title}
                             </div>
-                            {/* おすすめ理由（URL自動ボタン対応） */}
-                            {item.description && (
-                              <div style={{ marginTop: 10, paddingLeft: 60 }}>
-                                {renderDescription(item.description, t)}
-                              </div>
-                            )}
-                          </>
+                          )}
+                          {isPro && (
+                            <div style={{ fontSize: 11, color: t.accent, marginTop: 4 }}>
+                              プルーフ {item.pro_vote_count || 0}票
+                            </div>
+                          )}
+                        </div>
+
+                        {/* プロの場合は → リンク */}
+                        {isPro && item.professional_id && (
+                          <Link
+                            href={`/card/${item.professional_id}`}
+                            style={{ color: t.accent, fontSize: 18, textDecoration: 'none', flexShrink: 0 }}
+                          >
+                            →
+                          </Link>
                         )}
                       </div>
-                    )
-                  })}
-                </div>
+
+                      {/* おすすめ理由（URL自動ボタン対応） */}
+                      {item.description && (
+                        <div style={{ marginTop: 10, paddingLeft: 60 }}>
+                          {renderDescription(item.description, t)}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )
           })}
 
+          {/* フッターロゴ（キャプチャに含める） */}
+          <div style={{ textAlign: 'center', marginTop: 24 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: 3, color: t.subtextMuted }}>REALPROOF</div>
+            <div style={{ fontSize: 11, color: t.subtextMuted, marginTop: 4 }}>強みが、あなたを定義する。</div>
+          </div>
         </div>
         {/* キャプチャ対象ここまで */}
 
