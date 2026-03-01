@@ -8,7 +8,7 @@ export default function SignInPage() {
       <Navbar />
       <div className="flex flex-col items-center justify-center pt-20 pb-12 px-4">
         <SignIn
-          fallbackRedirectUrl="/dashboard"
+          fallbackRedirectUrl="/auth-redirect"
           appearance={{
             elements: {
               rootBox: 'mx-auto',

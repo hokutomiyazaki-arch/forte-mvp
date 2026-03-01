@@ -584,6 +584,36 @@ function MyCardContent() {
             </button>
           </div>
 
+          {/* プロ登録再開（deactivated proのみ表示） */}
+          {proDeactivated && (
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <p className="text-sm text-gray-600 mb-2">
+                プロ登録を再開しますか？
+              </p>
+              <p className="text-xs text-gray-400 mb-3">
+                以前のプルーフデータはそのまま残っています。
+              </p>
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await fetch('/api/professional/reactivate', { method: 'POST' })
+                    if (res.ok) {
+                      window.location.href = '/dashboard'
+                    } else {
+                      alert('復活に失敗しました')
+                    }
+                  } catch (e) {
+                    console.error('[mycard] reactivate error:', e)
+                    alert('復活に失敗しました')
+                  }
+                }}
+                className="px-4 py-2 bg-[#1A1A2E] text-white rounded-lg text-sm hover:opacity-90"
+              >
+                プロ登録を再開する →
+              </button>
+            </div>
+          )}
+
           {/* パスワード変更 */}
           {isLineUser ? (
             <div className="text-center">

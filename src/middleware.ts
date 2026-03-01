@@ -9,6 +9,7 @@ const isProtectedRoute = createRouteMatcher([
   '/org/dashboard(.*)',
   '/org/register(.*)',
   '/onboarding(.*)',
+  '/auth-redirect(.*)',
 ])
 
 export default clerkMiddleware(async (auth, req) => {
