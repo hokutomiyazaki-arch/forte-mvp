@@ -26,11 +26,11 @@ export default function CardModeSwitch() {
 
     const { data: proData } = await (supabase as any)
       .from('professionals')
-      .select('id, card_mode')
+      .select('id, card_mode, is_active')
       .eq('user_id', authUser.id)
       .maybeSingle()
 
-    if (proData) {
+    if (proData && proData.is_active !== false) {
       setHasPro(true)
       const mode = proData.card_mode || 'pro'
       setCardMode(mode)
@@ -71,6 +71,31 @@ export default function CardModeSwitch() {
   }
 
   const hasChanged = cardMode !== originalMode
+
+  if (!hasPro) {
+    return (
+      <div style={{
+        background: '#fff', borderRadius: 12,
+        border: '1px solid #E8E4DC', padding: 20,
+      }}>
+        <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E', marginBottom: 12 }}>
+          NFCカード設定
+        </h3>
+        <div style={{
+          padding: '12px 16px', borderRadius: 8,
+          background: 'rgba(196,163,90,0.04)',
+          border: '1px solid #E8E4DC',
+        }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>
+            マイプルーフモード
+          </div>
+          <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
+            NFCカードをタップすると、あなたのマイプルーフページが開きます
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div style={{
