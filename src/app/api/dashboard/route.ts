@@ -69,6 +69,7 @@ export async function GET() {
       activeMembersResult,
       credBadgeResult,
       ownedOrgResult,
+      myProofCardResult,
     ] = await Promise.all([
       // リワード
       supabase.from('rewards').select('*').eq('professional_id', proId).order('sort_order'),
@@ -117,6 +118,11 @@ export async function GET() {
         .eq('owner_id', userId)
         .order('created_at', { ascending: false })
         .limit(1)
+        .maybeSingle(),
+      // マイプルーフカード（QRトークン用）
+      supabase.from('my_proof_cards')
+        .select('qr_token')
+        .eq('user_id', userId)
         .maybeSingle(),
     ])
 
@@ -181,6 +187,7 @@ export async function GET() {
       activeOrgs,
       credentialBadges,
       ownedOrg: ownedOrgResult.data || null,
+      myProofQrToken: myProofCardResult.data?.qr_token || null,
     })
   } catch (err: any) {
     console.error('[api/dashboard] error:', err)
