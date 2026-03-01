@@ -45,8 +45,8 @@ export async function GET() {
       votesByLine,
       votesByUserId,
     ] = await Promise.all([
-      // プロ確認
-      supabase.from('professionals').select('id').eq('user_id', userId).maybeSingle(),
+      // プロ確認（deactivated_atも取得してactive判定に使う）
+      supabase.from('professionals').select('id, deactivated_at').eq('user_id', userId).maybeSingle(),
       // ニックネーム
       supabase.from('clients').select('nickname').eq('user_id', userId).maybeSingle(),
       // ブックマーク
@@ -196,8 +196,11 @@ export async function GET() {
       })
     }
 
+    // active pro = レコードあり かつ deactivated_at IS NULL
+    const isActivePro = !!(proCheck.data && !proCheck.data.deactivated_at)
+
     return NextResponse.json({
-      isPro: !!proCheck.data,
+      isPro: isActivePro,
       nickname: clientData.data?.nickname || '',
       email,
       isLine,

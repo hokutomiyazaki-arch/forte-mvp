@@ -18,7 +18,8 @@ export async function PUT(request: Request) {
     const supabase = getSupabaseAdmin()
     const { tagline, theme } = await request.json()
 
-    const updateData: Record<string, any> = { updated_at: new Date().toISOString() }
+    // is_public: true を常にセット（既存カードのis_public=false/null対策）
+    const updateData: Record<string, any> = { updated_at: new Date().toISOString(), is_public: true }
     if (tagline !== undefined) updateData.tagline = tagline
     if (theme !== undefined) updateData.theme = theme
 

@@ -28,10 +28,17 @@ export async function GET() {
       const qr_token = crypto.randomUUID().replace(/-/g, '').slice(0, 12)
       const { data: newCard } = await supabase
         .from('my_proof_cards')
-        .insert({ user_id: userId, qr_token })
+        .insert({ user_id: userId, qr_token, is_public: true })
         .select()
         .maybeSingle()
       card = newCard
+    } else if (!card.is_public) {
+      // 既存カードのis_publicがfalse/nullの場合、trueに更新
+      await supabase
+        .from('my_proof_cards')
+        .update({ is_public: true })
+        .eq('user_id', userId)
+      card = { ...card, is_public: true }
     }
 
     // アイテム取得

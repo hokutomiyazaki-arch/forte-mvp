@@ -89,6 +89,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    // カードのis_publicをtrueに（既存カードのis_public=false/null対策）
+    await supabase
+      .from('my_proof_cards')
+      .update({ is_public: true })
+      .eq('user_id', userId)
+
     return NextResponse.json({ item: data })
   } catch (err: any) {
     console.error('[api/myproof/items] error:', err)
