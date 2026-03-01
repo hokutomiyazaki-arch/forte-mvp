@@ -76,7 +76,7 @@ export async function POST(request: Request) {
         item_type,
         professional_id: item_type === 'professional' ? professional_id : null,
         title: item_type === 'custom' ? title : null,
-        description: item_type === 'custom' ? (description || null) : null,
+        description: description || null,
         photo_url: item_type === 'custom' ? (photo_url || null) : null,
         category: category || (item_type === 'professional' ? 'professional' : 'other'),
         sort_order: nextOrder,
