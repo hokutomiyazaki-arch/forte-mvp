@@ -489,10 +489,13 @@ export default function MyProofTab() {
               <textarea
                 value={customDesc}
                 onChange={e => setCustomDesc(e.target.value)}
-                placeholder="おすすめ理由（任意）"
+                placeholder="おすすめ理由（任意）例: めちゃくちゃ美味しい！"
                 rows={2}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#C4A35A] outline-none resize-none"
               />
+              <p className="text-[10px] text-gray-400 mt-1">
+                💡 URLを入れるとリンクボタンが自動で表示されます
+              </p>
               <div>
                 <label className="text-xs text-gray-500">写真（任意）</label>
                 <div className="mt-1 flex items-center gap-3">
@@ -594,8 +597,11 @@ export default function MyProofTab() {
               onChange={e => setProDesc(e.target.value)}
               placeholder="例: 根本から改善してくれる施術が素晴らしい"
               rows={3}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#C4A35A] outline-none resize-none mb-3"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#C4A35A] outline-none resize-none"
             />
+            <p className="text-[10px] text-gray-400 mt-1 mb-3">
+              💡 URLを入れるとリンクボタンが自動で表示されます
+            </p>
             <div className="flex gap-2">
               <button
                 onClick={() => { setProDescModal(null); setProDesc('') }}
