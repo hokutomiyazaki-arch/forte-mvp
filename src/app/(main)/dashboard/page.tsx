@@ -106,6 +106,7 @@ export default function DashboardPage() {
   const [proofSaved, setProofSaved] = useState(false)
   const [proofError, setProofError] = useState('')
   const [customProofVoteCounts, setCustomProofVoteCounts] = useState<Map<string, number>>(new Map())
+  const [myProofQrToken, setMyProofQrToken] = useState<string | null>(null)
 
   // Voices用 state
   const [voiceComments, setVoiceComments] = useState<{ id: string; comment: string; created_at: string }[]>([])
@@ -250,6 +251,7 @@ export default function DashboardPage() {
         if (data.activeOrgs) setActiveOrgs(data.activeOrgs)
         if (data.credentialBadges) setCredentialBadges(data.credentialBadges)
         if (data.ownedOrg) setOwnedOrg(data.ownedOrg)
+        if (data.myProofQrToken) setMyProofQrToken(data.myProofQrToken)
       } catch (err) {
         console.error('[dashboard] load error:', err)
       }
@@ -1044,53 +1046,86 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      {/* QRコード（タブの上に配置） */}
+      {/* QRコード（タブの上に配置） — タブに応じて切替 */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-6 text-center">
-        <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">24時間限定 プルーフ用QRコード</h2>
-        {(() => {
-          const proofsReady = selectedProofIds.size === 9
-
-          if (!proofsReady) {
-            return (
-              <div className="py-4">
-                <p className="text-sm text-[#9CA3AF] mb-3">
-                  QRコードを発行するには、強み設定を完了してください：
+        {dashboardTab === 'myproof' ? (
+          <>
+            <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">マイプルーフ QRコード</h2>
+            <p className="text-xs text-gray-400 mb-4">スキャンするとあなたのマイプルーフページが開きます（期限なし）</p>
+            {myProofQrToken ? (
+              <>
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`${window.location.origin}/myproof/p/${myProofQrToken}`)}`}
+                  alt="マイプルーフ QR"
+                  className="mx-auto mb-4"
+                  style={{ width: 200, height: 200 }}
+                />
+                <p className="text-xs text-gray-400 break-all mb-2">
+                  {window.location.origin}/myproof/p/{myProofQrToken}
                 </p>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-center gap-2 text-sm">
-                    <span className="text-red-400">✗</span>
-                    <span className="text-[#1A1A2E]">強み設定（{selectedProofIds.size} / 9 選択中）</span>
-                  </div>
-                </div>
-              </div>
-            )
-          }
+                <a
+                  href={`/myproof/p/${myProofQrToken}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block text-sm font-medium"
+                  style={{ color: '#C4A35A' }}
+                >
+                  カードを見る →
+                </a>
+              </>
+            ) : (
+              <p className="text-sm text-gray-400">マイプルーフタブでアイテムを追加するとQRコードが生成されます</p>
+            )}
+          </>
+        ) : (
+          <>
+            <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">24時間限定 プルーフ用QRコード</h2>
+            {(() => {
+              const proofsReady = selectedProofIds.size === 9
 
-          return (
-            <>
-              <p className="text-sm text-gray-500 mb-4">クライアントに見せてプルーフを贈ってもらいましょう</p>
-              {qrUrl ? (
+              if (!proofsReady) {
+                return (
+                  <div className="py-4">
+                    <p className="text-sm text-[#9CA3AF] mb-3">
+                      QRコードを発行するには、強み設定を完了してください：
+                    </p>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-center gap-2 text-sm">
+                        <span className="text-red-400">✗</span>
+                        <span className="text-[#1A1A2E]">強み設定（{selectedProofIds.size} / 9 選択中）</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              }
+
+              return (
                 <>
-                  <img src={qrUrl} alt="QR Code" className="mx-auto mb-4" />
-                  <button
-                    onClick={async () => {
-                      await generateQR()
-                      setQrRefreshed(true)
-                      setTimeout(() => setQrRefreshed(false), 2000)
-                    }}
-                    className="text-sm text-[#9CA3AF] hover:text-[#C4A35A] transition-colors"
-                  >
-                    {qrRefreshed ? '更新しました ✓' : 'QRコードを更新する'}
-                  </button>
+                  <p className="text-sm text-gray-500 mb-4">クライアントに見せてプルーフを贈ってもらいましょう</p>
+                  {qrUrl ? (
+                    <>
+                      <img src={qrUrl} alt="QR Code" className="mx-auto mb-4" />
+                      <button
+                        onClick={async () => {
+                          await generateQR()
+                          setQrRefreshed(true)
+                          setTimeout(() => setQrRefreshed(false), 2000)
+                        }}
+                        className="text-sm text-[#9CA3AF] hover:text-[#C4A35A] transition-colors"
+                      >
+                        {qrRefreshed ? '更新しました ✓' : 'QRコードを更新する'}
+                      </button>
+                    </>
+                  ) : (
+                    <button onClick={generateQR} className="px-6 py-3 bg-[#C4A35A] text-white rounded-lg hover:bg-[#b3944f] transition">
+                      24時間限定QRコードを発行する
+                    </button>
+                  )}
                 </>
-              ) : (
-                <button onClick={generateQR} className="px-6 py-3 bg-[#C4A35A] text-white rounded-lg hover:bg-[#b3944f] transition">
-                  24時間限定QRコードを発行する
-                </button>
-              )}
-            </>
-          )
-        })()}
+              )
+            })()}
+          </>
+        )}
       </div>
 
       {/* ダッシュボードタブ */}
