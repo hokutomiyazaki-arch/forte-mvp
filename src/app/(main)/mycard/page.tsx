@@ -430,7 +430,7 @@ function MyCardContent() {
         <p className="text-gray-500 mb-6">
           もう一度パスワードリセットをお試しください
         </p>
-        <a href="/login" className="px-6 py-3 bg-[#1A1A2E] text-white rounded-lg font-medium">
+        <a href="/sign-in" className="px-6 py-3 bg-[#1A1A2E] text-white rounded-lg font-medium">
           ログインページへ
         </a>
       </div>

@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
             <div style="padding:24px;background:#fff;border:1px solid #eee;">
               ${bodyHtml}
               <div style="text-align:center;margin:24px 0;">
-                <a href="${appUrl}/login"
+                <a href="${appUrl}/sign-in"
                    style="display:inline-block;background:#1A1A2E;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:14px;">
                   ログインする
                 </a>
