@@ -9,6 +9,14 @@ export const dynamic = 'force-dynamic'
 export const metadata: Metadata = {
   title: 'REALPROOF — 強みが、あなたを定義する。',
   description: 'クライアントの信頼が資産に変わるデジタル名刺。対面のプロフェッショナルのための強み証明プラットフォーム。',
+  icons: {
+    icon: [
+      { url: '/icon-32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icon-16.png', sizes: '16x16', type: 'image/png' },
+    ],
+    shortcut: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
+  },
   openGraph: {
     title: 'REALPROOF — 強みが、あなたを定義する。',
     description: 'クライアントの信頼が資産に変わるデジタル名刺。対面のプロフェッショナルのための強み証明プラットフォーム。',
@@ -40,10 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <html lang="ja">
         <head>
-          <link rel="manifest" href="/manifest.json" />
           <meta name="theme-color" content="#1A1A2E" />
-          <link rel="icon" href="/icon-192.svg" type="image/svg+xml" />
-          <link rel="apple-touch-icon" href="/icon-192.svg" />
           <link rel="preconnect" href="https://fonts.googleapis.com" />
           <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
           <link
