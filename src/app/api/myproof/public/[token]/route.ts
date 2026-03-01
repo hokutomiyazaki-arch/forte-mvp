@@ -102,7 +102,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
       owner_user_id: card.user_id,
       items: itemsWithCategory,
     })
-    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate')
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+    response.headers.set('CDN-Cache-Control', 'no-store')
+    response.headers.set('Vercel-CDN-Cache-Control', 'no-store')
     return response
   } catch (err: any) {
     console.error('[api/myproof/public/[token]] error:', err)

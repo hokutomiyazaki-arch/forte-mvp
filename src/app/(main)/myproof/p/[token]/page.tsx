@@ -49,7 +49,7 @@ export default function MyProofPublicPage() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch(`/api/myproof/public/${token}`, { cache: 'no-store' })
+        const res = await fetch(`/api/myproof/public/${token}?t=${Date.now()}`, { cache: 'no-store' })
         if (!res.ok) {
           setNotFound(true)
           setLoading(false)
