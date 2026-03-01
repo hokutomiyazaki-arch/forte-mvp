@@ -49,6 +49,9 @@ export default function Navbar() {
                 appearance={{
                   elements: {
                     avatarBox: 'w-8 h-8',
+                    userButtonPopoverActionButton__manageAccount: {
+                      display: 'none',
+                    },
                   }
                 }}
               />

@@ -45,6 +45,41 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       localization={jaJP}
       signInFallbackRedirectUrl="/dashboard"
       signUpFallbackRedirectUrl="/dashboard"
+      appearance={{
+        variables: {
+          colorPrimary: '#1A1A2E',
+          colorText: '#1A1A2E',
+          colorTextSecondary: '#666',
+          colorBackground: '#FFFFFF',
+          colorInputBackground: '#FFFFFF',
+          colorInputText: '#1A1A2E',
+          borderRadius: '8px',
+          fontFamily: "'Noto Sans JP', 'Inter', sans-serif",
+        },
+        elements: {
+          // Powered by Clerk フッター非表示
+          footer: { display: 'none' },
+          footerAction: { display: 'none' },
+          // カード全体
+          card: {
+            boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+            border: '1px solid #E8E4DC',
+          },
+          // プライマリボタン
+          formButtonPrimary: {
+            backgroundColor: '#1A1A2E',
+            '&:hover': { backgroundColor: '#2a2a4e' },
+          },
+          // ソーシャルボタン
+          socialButtonsBlockButton: {
+            borderColor: '#E8E4DC',
+          },
+          // "Secured by Clerk" バッジ非表示（Development モードで有効）
+          badge: { display: 'none' },
+          // internal footer links
+          footerActionLink: { display: 'none' },
+        },
+      }}
     >
       <html lang="ja">
         <head>
