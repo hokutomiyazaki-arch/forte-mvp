@@ -110,6 +110,7 @@ function MyCardContent() {
       const data = await res.json()
 
       setIsPro(data.isPro)
+      if (data.proDeactivated) setProDeactivated(true)
       if (data.nickname) setNickname(data.nickname)
       setUserEmail(data.email)
       setIsLineUser(data.isLine)

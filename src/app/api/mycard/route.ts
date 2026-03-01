@@ -198,9 +198,11 @@ export async function GET() {
 
     // active pro = レコードあり かつ deactivated_at IS NULL
     const isActivePro = !!(proCheck.data && !proCheck.data.deactivated_at)
+    const isDeactivatedPro = !!(proCheck.data && proCheck.data.deactivated_at)
 
     return NextResponse.json({
       isPro: isActivePro,
+      proDeactivated: isDeactivatedPro,
       nickname: clientData.data?.nickname || '',
       email,
       isLine,
