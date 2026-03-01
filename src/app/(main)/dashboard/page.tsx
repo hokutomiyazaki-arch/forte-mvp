@@ -102,6 +102,11 @@ export default function DashboardPage() {
   const [customProofs, setCustomProofs] = useState<CustomProof[]>([])
   const [activeTab, setActiveTab] = useState('basic')
   const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'myproof' | 'card' | 'org'>('profile')
+  const [userRole, setUserRole] = useState<'professional' | 'client' | null>(null)
+  const [wasProfessional, setWasProfessional] = useState(false)
+  const [clientProfile, setClientProfile] = useState<{ nickname: string | null; photo_url: string | null; date_of_birth: string | null } | null>(null)
+  const [clientNickname, setClientNickname] = useState('')
+  const [savingClientProfile, setSavingClientProfile] = useState(false)
   const [proofSaving, setProofSaving] = useState(false)
   const [proofSaved, setProofSaved] = useState(false)
   const [proofError, setProofError] = useState('')
@@ -152,7 +157,7 @@ export default function DashboardPage() {
       setUser(u)
       setHasEmailIdentity(true)
 
-      // ロールチェック: DBにレコードなし → /onboarding, clientのみ → /mycard
+      // ロールチェック: DBにレコードなし → /onboarding
       try {
         const roleRes = await fetch('/api/user/role')
         const roleData = await roleRes.json()
@@ -160,9 +165,11 @@ export default function DashboardPage() {
           window.location.href = '/onboarding'
           return
         }
-        if (roleData.role === 'client' && !roleData.proDeactivated) {
-          window.location.href = '/mycard'
-          return
+        setUserRole(roleData.role)
+        setWasProfessional(!!roleData.proDeactivated)
+        // clientユーザーはマイプルーフタブをデフォルトに
+        if (roleData.role === 'client') {
+          setDashboardTab('myproof')
         }
       } catch (e) {
         console.error('[dashboard] role check error:', e)
@@ -183,8 +190,13 @@ export default function DashboardPage() {
 
         const proData = data.professional
         if (!proData) {
-          // 新規プロ → プロフィール作成フォームを表示
-          setEditing(true)
+          // clientユーザー or 新規プロ
+          if (data.myProofQrToken) setMyProofQrToken(data.myProofQrToken)
+          if (data.clientProfile) {
+            setClientProfile(data.clientProfile)
+            setClientNickname(data.clientProfile.nickname || '')
+          }
+          if (data.ownedOrg) setOwnedOrg(data.ownedOrg)
           setLoading(false)
           return
         }
@@ -1026,6 +1038,222 @@ export default function DashboardPage() {
     )
   }
 
+  // ═══ clientユーザー用ダッシュボード ═══
+  if (userRole === 'client' && !pro) {
+    return (
+      <div className="max-w-3xl mx-auto">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-2xl font-bold text-[#1A1A2E]">ダッシュボード</h1>
+            {user?.email && (
+              <p className="text-sm text-gray-400 mt-1 truncate max-w-[260px]">
+                {user.email.startsWith('line_') && user.email.endsWith('@line.realproof.jp') ? 'LINE連携済み' : user.email}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* マイプルーフ QRコード（マイプルーフタブ時のみ） */}
+        {dashboardTab === 'myproof' && (
+          <div className="bg-white rounded-xl p-6 shadow-sm mb-6 text-center">
+            <h2 className="text-base font-bold text-[#1A1A2E] mb-1">マイプルーフ QRコード</h2>
+            <p className="text-xs text-gray-500 mb-4">
+              スキャンするとあなたのマイプルーフページが開きます（期限なし）
+            </p>
+            {myProofQrToken ? (
+              <>
+                {showMyProofQR ? (
+                  <>
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`${window.location.origin}/myproof/p/${myProofQrToken}`)}`}
+                      alt="マイプルーフ QR"
+                      className="mx-auto mb-4"
+                      style={{ width: 200, height: 200 }}
+                    />
+                    <button
+                      onClick={() => setShowMyProofQR(false)}
+                      className="text-sm text-gray-400 hover:text-gray-600 mb-3"
+                    >
+                      QRコードを非表示にする
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => setShowMyProofQR(true)}
+                    className="bg-[#1A1A2E] text-white rounded-lg px-6 py-3 text-sm font-semibold mb-3"
+                  >
+                    QRコードを表示する
+                  </button>
+                )}
+                <div className="flex items-center justify-center gap-2 mt-3">
+                  <code className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded">
+                    realproof.jp/myproof/p/{myProofQrToken.slice(0, 8)}...
+                  </code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/myproof/p/${myProofQrToken}`)
+                    }}
+                    className="text-xs text-[#C4A35A]"
+                  >
+                    コピー
+                  </button>
+                </div>
+                <a
+                  href={`/myproof/p/${myProofQrToken}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block text-sm font-medium mt-2"
+                  style={{ color: '#C4A35A' }}
+                >
+                  マイプルーフを見る →
+                </a>
+              </>
+            ) : (
+              <p className="text-sm text-gray-400">マイプルーフタブでアイテムを追加するとQRコードが生成されます</p>
+            )}
+          </div>
+        )}
+
+        {/* タブ */}
+        <div style={{ display: 'flex', overflowX: 'auto', gap: 0, marginBottom: 24, borderBottom: '1px solid #E5E7EB', scrollbarWidth: 'none' as any }}>
+          {([
+            { key: 'profile' as const, label: 'マイページ' },
+            { key: 'myproof' as const, label: 'マイプルーフ' },
+            ...(ownedOrg ? [{ key: 'org' as const, label: '🏢 団体管理' }] : []),
+          ]).map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setDashboardTab(tab.key)}
+              style={{
+                flex: '0 0 auto',
+                padding: '10px 14px',
+                fontSize: 13,
+                fontWeight: dashboardTab === tab.key ? 700 : 600,
+                color: dashboardTab === tab.key ? '#1A1A2E' : '#9CA3AF',
+                background: 'transparent',
+                border: 'none',
+                borderBottom: dashboardTab === tab.key
+                  ? '2px solid #C4A35A'
+                  : '2px solid transparent',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap' as const,
+                transition: 'color 0.2s, border-color 0.2s',
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* マイページタブ */}
+        {dashboardTab === 'profile' && (
+          <div className="bg-white rounded-xl p-6 shadow-sm mb-6">
+            <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">プロフィール</h2>
+
+            {/* アバター */}
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-100 flex-shrink-0">
+                {clientProfile?.photo_url ? (
+                  <img src={clientProfile.photo_url} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-gray-400 text-xl">
+                    {(clientNickname || user?.email || 'U').charAt(0).toUpperCase()}
+                  </div>
+                )}
+              </div>
+              <div>
+                <p className="font-medium text-[#1A1A2E]">{clientNickname || 'ユーザー'}</p>
+                <p className="text-xs text-gray-400">
+                  {user?.email?.startsWith('line_') && user?.email?.endsWith('@line.realproof.jp') ? 'LINE連携済み' : user?.email}
+                </p>
+              </div>
+            </div>
+
+            {/* ニックネーム編集 */}
+            <div className="mb-4">
+              <label className="text-sm text-gray-600">表示名</label>
+              <div className="flex gap-2 mt-1">
+                <input
+                  type="text"
+                  value={clientNickname}
+                  onChange={e => setClientNickname(e.target.value)}
+                  maxLength={50}
+                  placeholder="表示名を入力"
+                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#C4A35A] outline-none"
+                />
+                <button
+                  onClick={async () => {
+                    setSavingClientProfile(true)
+                    try {
+                      await fetch('/api/client/profile', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ nickname: clientNickname }),
+                      })
+                    } catch (e) {
+                      console.error('[dashboard] save nickname error:', e)
+                    }
+                    setSavingClientProfile(false)
+                  }}
+                  disabled={savingClientProfile}
+                  className="px-4 py-2 bg-[#1A1A2E] text-white text-sm rounded-lg hover:bg-[#2a2a4e] disabled:opacity-50"
+                >
+                  {savingClientProfile ? '...' : '保存'}
+                </button>
+              </div>
+            </div>
+
+            {/* プロ登録導線（修正5/6用） */}
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <p className="text-sm font-semibold text-gray-700 mb-2">
+                {wasProfessional ? 'プロ登録を再開しますか？' : 'プロとして活動されていますか？'}
+              </p>
+              <p className="text-xs text-gray-500 mb-4">
+                {wasProfessional
+                  ? '以前のプルーフデータはそのまま残っています。'
+                  : 'REALPROOFにプロ登録すると、クライアントからの強みの投票を集めることができます。'
+                }
+              </p>
+              {wasProfessional ? (
+                <button
+                  onClick={handleReactivate}
+                  className="inline-block bg-[#1A1A2E] text-white rounded-lg px-6 py-3 text-sm font-semibold hover:opacity-90 transition"
+                >
+                  プロ登録を再開する →
+                </button>
+              ) : (
+                <a
+                  href="/onboarding?role=professional"
+                  className="inline-block bg-[#1A1A2E] text-white rounded-lg px-6 py-3 text-sm font-semibold hover:opacity-90 transition"
+                >
+                  プロとして登録する →
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* マイプルーフタブ */}
+        {dashboardTab === 'myproof' && <MyProofTab />}
+
+        {/* 団体管理タブ（オーナーのみ） */}
+        {dashboardTab === 'org' && ownedOrg && (
+          <div className="bg-white rounded-xl p-6 shadow-sm mb-6">
+            <p className="text-sm text-gray-500">団体管理は <a href={`/org/${ownedOrg.id}/admin`} className="text-[#C4A35A] hover:underline">こちら</a> から</p>
+          </div>
+        )}
+
+        {/* ログアウト */}
+        <div className="mt-8 text-center">
+          <button onClick={() => signOut({ redirectUrl: '/' })}
+            className="text-sm text-gray-400 hover:text-red-500 transition">
+            ログアウト
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   const topForte = votes.length > 0 ?
     getResultForteLabel(votes.sort((a,b) => b.vote_count - a.vote_count)[0]?.category, pro) : '-'
 
@@ -1160,7 +1388,11 @@ export default function DashboardPage() {
 
       {/* ダッシュボードタブ */}
       <div style={{ display: 'flex', overflowX: 'auto', gap: 0, marginBottom: 24, borderBottom: '1px solid #E5E7EB', scrollbarWidth: 'none' as any }}>
-        {([
+        {(userRole === 'client' ? [
+          { key: 'profile' as const, label: 'マイページ' },
+          { key: 'myproof' as const, label: 'マイプルーフ' },
+          ...(ownedOrg ? [{ key: 'org' as const, label: '🏢 団体管理' }] : []),
+        ] : [
           { key: 'profile' as const, label: 'プロフィール' },
           { key: 'proofs' as const, label: '強み設定' },
           { key: 'rewards' as const, label: 'リワード' },

@@ -29,8 +29,15 @@ export async function GET() {
     const proData = proResult.data
     const proofItems = proofItemsResult.data || []
 
-    // プロ未登録の場合、マスターデータのみ返す
+    // プロ未登録の場合、クライアント向けデータを返す
     if (!proData) {
+      // クライアントでもマイプルーフQRトークンとプロフィールは必要
+      const [myProofCardResult, clientResult, ownedOrgResult] = await Promise.all([
+        supabase.from('my_proof_cards').select('qr_token').eq('user_id', userId).maybeSingle(),
+        supabase.from('clients').select('nickname, photo_url, date_of_birth').eq('user_id', userId).maybeSingle(),
+        supabase.from('organizations').select('id, name, type').eq('owner_id', userId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      ])
+
       return NextResponse.json({
         professional: null,
         proofItems,
@@ -46,7 +53,9 @@ export async function GET() {
         pendingInvites: [],
         activeOrgs: [],
         credentialBadges: [],
-        ownedOrg: null,
+        ownedOrg: ownedOrgResult.data || null,
+        myProofQrToken: myProofCardResult.data?.qr_token || null,
+        clientProfile: clientResult.data || null,
       })
     }
 
