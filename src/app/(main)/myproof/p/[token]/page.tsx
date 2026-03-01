@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useUser } from '@clerk/nextjs'
-import html2canvas from 'html2canvas'
+
 import { getTheme, CATEGORIES } from '@/lib/myproof-themes'
 
 interface Owner {
@@ -44,8 +44,6 @@ export default function MyProofPublicPage() {
   const [owner, setOwner] = useState<Owner | null>(null)
   const [items, setItems] = useState<MyProofItem[]>([])
   const [ownerUserId, setOwnerUserId] = useState<string | null>(null)
-  const [sharing, setSharing] = useState(false)
-  const [shareResult, setShareResult] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -72,124 +70,6 @@ export default function MyProofPublicPage() {
 
   const t = getTheme(card?.theme)
   const isOwner = !!(user?.id && ownerUserId && user.id === ownerUserId)
-
-  async function generateAndShare(format: 'stories' | 'feed') {
-    const el = document.getElementById('myproof-card-for-export')
-    if (!el) {
-      alert('カードの生成に失敗しました')
-      return
-    }
-
-    setSharing(true)
-    setShareResult('')
-    try {
-      const targetWidth = 1080
-      const targetHeight = format === 'stories' ? 1920 : 1350
-
-      const canvas = await html2canvas(el, {
-        scale: 2,
-        backgroundColor: null,
-        useCORS: true,
-        width: el.offsetWidth,
-        height: el.offsetHeight,
-      })
-
-      const finalCanvas = document.createElement('canvas')
-      finalCanvas.width = targetWidth
-      finalCanvas.height = targetHeight
-      const ctx = finalCanvas.getContext('2d')
-      if (!ctx) {
-        alert('画像の生成に失敗しました')
-        setSharing(false)
-        return
-      }
-
-      ctx.fillStyle = t.bg
-      ctx.fillRect(0, 0, targetWidth, targetHeight)
-
-      // ロゴ描画
-      const logoImg = new Image()
-      logoImg.src = '/images/realproof-logo-gold.png'
-      await new Promise<void>((resolve) => {
-        logoImg.onload = () => resolve()
-        logoImg.onerror = () => resolve()
-      })
-
-      let contentTop = 40
-      if (logoImg.naturalWidth > 0) {
-        const logoHeight = 40
-        const logoWidth = (logoImg.naturalWidth / logoImg.naturalHeight) * logoHeight
-        ctx.drawImage(logoImg, (targetWidth - logoWidth) / 2, 30, logoWidth, logoHeight)
-        contentTop = 90
-      } else {
-        // フォールバック: テキストロゴ
-        ctx.font = 'bold 28px Inter, sans-serif'
-        ctx.fillStyle = t.accent
-        ctx.textAlign = 'center'
-        ctx.fillText('REALPROOF', targetWidth / 2, 60)
-        contentTop = 90
-      }
-
-      // カードコンテンツをロゴの下に配置
-      const availableHeight = targetHeight - contentTop - 40
-      const scale = Math.min(
-        (targetWidth * 0.9) / canvas.width,
-        (availableHeight * 0.9) / canvas.height
-      )
-      const scaledWidth = canvas.width * scale
-      const scaledHeight = canvas.height * scale
-      const x = (targetWidth - scaledWidth) / 2
-      const y = contentTop + (availableHeight - scaledHeight) / 2
-      ctx.drawImage(canvas, x, y, scaledWidth, scaledHeight)
-
-      const dataUrl = finalCanvas.toDataURL('image/png')
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        finalCanvas.toBlob((b) => {
-          if (b) resolve(b)
-          else reject(new Error('Blob creation failed'))
-        }, 'image/png')
-      })
-
-      const fileName = format === 'stories'
-        ? 'realproof-myproof-stories.png'
-        : 'realproof-myproof-feed.png'
-      const file = new File([blob], fileName, { type: 'image/png' })
-
-      // モバイル: Web Share API
-      if (navigator.share && navigator.canShare?.({ files: [file] })) {
-        try {
-          await navigator.share({
-            files: [file],
-            title: 'REALPROOF - My Proof',
-            text: '強みが、あなたを定義する。',
-          })
-          setSharing(false)
-          return
-        } catch (e) {
-          if ((e as Error).name === 'AbortError') {
-            setSharing(false)
-            return
-          }
-          // Share失敗時はダウンロードにフォールバック
-        }
-      }
-
-      // PC: ダウンロード
-      const link = document.createElement('a')
-      link.download = fileName
-      link.href = dataUrl
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-
-      setShareResult(`${format === 'stories' ? 'ストーリーズ' : 'フィード'}用画像を保存しました`)
-      setTimeout(() => setShareResult(''), 3000)
-    } catch (e) {
-      console.error('[myproof share] error:', e)
-      alert('画像の生成中にエラーが発生しました。もう一度お試しください。')
-    }
-    setSharing(false)
-  }
 
   if (loading) {
     return (
@@ -280,7 +160,7 @@ export default function MyProofPublicPage() {
       <div style={{ maxWidth: 480, margin: '0 auto', padding: '32px 16px' }}>
 
         {/* キャプチャ対象エリア */}
-        <div id="myproof-card-for-export" style={{ background: t.bg, padding: '0 0 16px' }}>
+        <div style={{ background: t.bg, padding: '0 0 16px' }}>
           {/* ヘッダー */}
           <div style={{ textAlign: 'center', marginBottom: 32 }}>
             {/* オーナー写真（丸） */}
@@ -412,65 +292,127 @@ export default function MyProofPublicPage() {
         <div style={{ height: 1, background: t.divider, margin: '32px 0' }} />
 
         {isOwner ? (
-          /* 自分のカード → シェアボタン表示 */
+          /* ========================================
+             自分のカード → シェアボタン（Web Share API）
+             ======================================== */
           <div style={{ textAlign: 'center' }}>
             <p style={{ fontSize: 14, color: t.subtext, marginBottom: 16 }}>
               マイプルーフをシェアする
             </p>
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-              <button
-                onClick={() => generateAndShare('stories')}
-                disabled={sharing}
-                style={{
-                  flex: '1 1 0', maxWidth: 160, borderRadius: 8, padding: '12px 0',
-                  fontSize: 14, fontWeight: 600, border: 'none', cursor: 'pointer',
-                  background: t.accent,
-                  color: t.isLight ? '#fff' : t.bg,
-                  opacity: sharing ? 0.5 : 1,
-                }}
-              >
-                ストーリーズ用
-                <span style={{ fontSize: 10, display: 'block', opacity: 0.7 }}>9:16</span>
-              </button>
-              <button
-                onClick={() => generateAndShare('feed')}
-                disabled={sharing}
-                style={{
-                  flex: '1 1 0', maxWidth: 160, borderRadius: 8, padding: '12px 0',
-                  fontSize: 14, fontWeight: 600, cursor: 'pointer',
-                  background: 'transparent',
-                  border: `2px solid ${t.accent}`,
-                  color: t.accent,
-                  opacity: sharing ? 0.5 : 1,
-                }}
-              >
-                フィード用
-                <span style={{ fontSize: 10, display: 'block', opacity: 0.7 }}>4:5</span>
-              </button>
-            </div>
-            {sharing && (
-              <p style={{ fontSize: 12, color: t.subtext, marginTop: 8 }}>画像を生成中...</p>
-            )}
-            {shareResult && (
-              <p style={{ fontSize: 12, color: t.accent, marginTop: 8 }}>{shareResult}</p>
-            )}
+
+            <button
+              onClick={async () => {
+                const url = window.location.href
+                const shareData = {
+                  title: 'REALPROOF - マイプルーフ',
+                  text: '私の「本気のおすすめ」を見てみて！',
+                  url: url,
+                }
+
+                // Web Share API対応 → ネイティブ共有メニュー
+                if (navigator.share) {
+                  try {
+                    await navigator.share(shareData)
+                  } catch (e) {
+                    // ユーザーがキャンセルした場合は何もしない
+                    if ((e as Error).name !== 'AbortError') {
+                      console.error('Share failed:', e)
+                    }
+                  }
+                } else {
+                  // PC等で Web Share API 非対応 → クリップボードにコピー
+                  try {
+                    await navigator.clipboard.writeText(url)
+                    alert('URLをコピーしました！')
+                  } catch {
+                    // clipboard APIも非対応の場合
+                    prompt('以下のURLをコピーしてください:', url)
+                  }
+                }
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                width: '100%',
+                maxWidth: 280,
+                borderRadius: 12,
+                padding: '14px 24px',
+                fontSize: 15,
+                fontWeight: 700,
+                border: 'none',
+                cursor: 'pointer',
+                background: t.accent,
+                color: t.isLight ? '#fff' : t.bg,
+                letterSpacing: 0.5,
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                <polyline points="16 6 12 2 8 6" />
+                <line x1="12" y1="2" x2="12" y2="15" />
+              </svg>
+              シェアする
+            </button>
           </div>
         ) : (
-          /* 他人のカード → CTA表示（従来通り） */
-          <div style={{ textAlign: 'center' }}>
-            <p style={{ fontSize: 14, color: t.subtext, marginBottom: 16, lineHeight: 1.6 }}>
-              あなたも「本気のおすすめ」を<br />証明しませんか？
+          /* ========================================
+             他人のカード → REALPROOF 登録促進バナー
+             ======================================== */
+          <div style={{
+            background: 'linear-gradient(135deg, #1A1A2E 0%, #2a2a4e 100%)',
+            borderRadius: 16,
+            padding: '28px 24px',
+            textAlign: 'center',
+          }}>
+            {/* REALPROOF ロゴ */}
+            <div style={{ marginBottom: 16 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 3, color: '#C4A35A', fontFamily: 'Inter, sans-serif' }}>
+                REAL
+              </span>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 3, color: '#FFFFFF', fontFamily: 'Inter, sans-serif' }}>
+                PROOF
+              </span>
+            </div>
+
+            {/* メインコピー */}
+            <p style={{
+              fontSize: 17,
+              fontWeight: 700,
+              color: '#FFFFFF',
+              lineHeight: 1.6,
+              marginBottom: 8,
+            }}>
+              あなたの「本気のおすすめ」を<br />
+              シェアしよう。
             </p>
+
+            {/* サブコピー */}
+            <p style={{
+              fontSize: 12,
+              color: 'rgba(255,255,255,0.6)',
+              lineHeight: 1.6,
+              marginBottom: 20,
+            }}>
+              行きつけのお店、推しの一冊、秘密のスポット——<br />
+              あなたの「本物」を、カードにして届けよう。
+            </p>
+
+            {/* CTA */}
             <Link href="/sign-up" style={{
               display: 'inline-block',
-              background: t.isLight
-                ? `linear-gradient(135deg, ${t.accent}, ${t.accent}cc)`
-                : `linear-gradient(135deg, ${t.accent}, ${t.accent}dd)`,
-              color: t.isLight ? '#fff' : t.bg,
-              border: 'none', borderRadius: 8, padding: '14px 40px',
-              fontSize: 15, fontWeight: 700, letterSpacing: 1, textDecoration: 'none',
+              background: '#C4A35A',
+              color: '#1A1A2E',
+              border: 'none',
+              borderRadius: 10,
+              padding: '13px 36px',
+              fontSize: 14,
+              fontWeight: 700,
+              letterSpacing: 0.5,
+              textDecoration: 'none',
             }}>
-              REALPROOFに登録する
+              無料ではじめる →
             </Link>
           </div>
         )}
