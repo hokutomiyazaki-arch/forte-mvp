@@ -83,6 +83,9 @@ function MyCardContent() {
   const [birthDay, setBirthDay] = useState('')
   const [savingProfile, setSavingProfile] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false)
+  const [deletingAccount, setDeletingAccount] = useState(false)
+  const [proDeactivated, setProDeactivated] = useState(false)
 
   function generateMyProofQR() {
     if (!authUser?.id) return
@@ -166,6 +169,9 @@ function MyCardContent() {
           if (roleData.role === null) {
             window.location.href = '/onboarding'
             return
+          }
+          if (roleData.proDeactivated) {
+            setProDeactivated(true)
           }
         } catch (e) {
           console.error('[mycard] role check error:', e)
@@ -270,6 +276,26 @@ function MyCardContent() {
       setMessage('エラー：パスワードの変更に失敗しました。')
     }
     setChangingPassword(false)
+  }
+
+  // アカウント削除
+  async function handleDeleteAccount() {
+    setDeletingAccount(true)
+    try {
+      const res = await fetch('/api/account/delete', { method: 'POST' })
+      const data = await res.json()
+      if (data.success) {
+        await signOut()
+        window.location.href = '/'
+      } else {
+        alert('アカウント削除に失敗しました。')
+        setDeletingAccount(false)
+      }
+    } catch (err) {
+      console.error('[mycard] delete account error:', err)
+      alert('アカウント削除に失敗しました。')
+      setDeletingAccount(false)
+    }
   }
 
   // ========== リセットリンク期限切れ ==========
@@ -584,20 +610,7 @@ function MyCardContent() {
           {/* アカウント削除 */}
           <div className="pt-4 border-t border-gray-100">
             <button
-              onClick={async () => {
-                if (!window.confirm('本当にアカウントを削除しますか？この操作は取り消せません。')) return
-                try {
-                  const { error } = await (supabase as any).rpc('delete_user_account')
-                  if (error) {
-                    alert('アカウント削除に失敗しました。')
-                    return
-                  }
-                  await signOut()
-                  window.location.href = '/'
-                } catch (e) {
-                  alert('アカウント削除に失敗しました。')
-                }
-              }}
+              onClick={() => setShowDeleteAccountModal(true)}
               className="text-xs text-red-400 hover:text-red-600 transition"
             >
               アカウントを削除する
@@ -996,6 +1009,37 @@ function MyCardContent() {
           </div>
         )}
       </div>
+
+      {/* アカウント削除確認モーダル */}
+      {showDeleteAccountModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-bold mb-2 text-red-600">アカウントを削除しますか？</h3>
+            <p className="text-sm text-gray-600 mb-4">この操作は取り消せません。以下のデータが全て削除されます：</p>
+            <ul className="text-sm text-gray-600 space-y-1 mb-6">
+              <li>・マイプルーフのデータ</li>
+              <li>・投票履歴</li>
+              <li>・コレクションしたリワード</li>
+              <li>・アカウント情報</li>
+            </ul>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowDeleteAccountModal(false)}
+                className="px-4 py-2 text-sm border rounded"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={handleDeleteAccount}
+                disabled={deletingAccount}
+                className="px-4 py-2 text-sm bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
+              >
+                {deletingAccount ? '削除中...' : '削除する'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )
