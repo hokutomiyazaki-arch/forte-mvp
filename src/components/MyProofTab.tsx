@@ -67,6 +67,16 @@ export default function MyProofTab() {
   const [proDescModal, setProDescModal] = useState<{ proId: string; proName: string } | null>(null)
   const [proDesc, setProDesc] = useState('')
 
+  // Edit custom item modal
+  const [editItem, setEditItem] = useState<MyProofItem | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [editDesc, setEditDesc] = useState('')
+  const [editPhotoUrl, setEditPhotoUrl] = useState('')
+  const [editPhotoPreview, setEditPhotoPreview] = useState<string | null>(null)
+  const [editCroppedBlob, setEditCroppedBlob] = useState<Blob | null>(null)
+  const [editCropSrc, setEditCropSrc] = useState<string | null>(null)
+  const [savingEdit, setSavingEdit] = useState(false)
+
   useEffect(() => {
     loadMyProof()
   }, [])
@@ -247,6 +257,83 @@ export default function MyProofTab() {
     } catch (e) {
       console.error('[MyProofTab] reorder error:', e)
     }
+  }
+
+  function openEditModal(item: MyProofItem) {
+    setEditItem(item)
+    setEditTitle(item.title || '')
+    setEditDesc(item.description || '')
+    setEditPhotoUrl(item.photo_url || '')
+    setEditPhotoPreview(item.photo_url || null)
+    setEditCroppedBlob(null)
+    setEditCropSrc(null)
+  }
+
+  async function saveEdit() {
+    if (!editItem) return
+    if (!editTitle.trim()) {
+      alert('タイトルは必須です')
+      return
+    }
+    setSavingEdit(true)
+    try {
+      let photoUrl = editPhotoUrl || null
+
+      // 新しいクロップ画像がある場合はアップロード
+      if (editCroppedBlob) {
+        const formData = new FormData()
+        formData.append('file', editCroppedBlob, 'cropped.jpg')
+        const uploadRes = await fetch('/api/upload/avatar', { method: 'POST', body: formData })
+        const uploadData = await uploadRes.json()
+        if (uploadData.url) {
+          photoUrl = uploadData.url
+        }
+      }
+
+      const res = await fetch(`/api/myproof/items/${editItem.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: editTitle.trim(),
+          description: editDesc.trim() || null,
+          photo_url: photoUrl,
+        }),
+      })
+      if (res.ok) {
+        setEditItem(null)
+        await loadMyProof()
+      } else {
+        const data = await res.json()
+        alert(data.error || '更新に失敗しました')
+      }
+    } catch (e) {
+      console.error('[MyProofTab] saveEdit error:', e)
+    }
+    setSavingEdit(false)
+  }
+
+  function handleEditPhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      alert('画像サイズは5MB以下にしてください')
+      return
+    }
+    if (!file.type.startsWith('image/')) {
+      alert('画像ファイルを選択してください')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => setEditCropSrc(reader.result as string)
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
+  function handleEditCropComplete(croppedBlob: Blob) {
+    setEditCropSrc(null)
+    setEditCroppedBlob(croppedBlob)
+    setEditPhotoPreview(URL.createObjectURL(croppedBlob))
+    setEditPhotoUrl('')
   }
 
   function handleCustomPhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -439,6 +526,14 @@ export default function MyProofTab() {
                     )}
                   </div>
 
+                  {/* 編集（自由追加のみ） */}
+                  {item.item_type === 'custom' && (
+                    <button
+                      onClick={() => openEditModal(item)}
+                      className="text-gray-300 hover:text-[#C4A35A] text-xs flex-shrink-0"
+                    >✎</button>
+                  )}
+
                   {/* 削除 */}
                   <button
                     onClick={() => removeItem(item.id)}
@@ -582,6 +677,80 @@ export default function MyProofTab() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* 自由追加アイテム編集モーダル */}
+      {editItem && !editCropSrc && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full max-h-[80vh] overflow-y-auto">
+            <h3 className="text-lg font-bold text-[#1A1A2E] mb-4">おすすめを編集</h3>
+            <div className="space-y-3">
+              <input
+                type="text"
+                value={editTitle}
+                onChange={e => setEditTitle(e.target.value)}
+                maxLength={100}
+                placeholder="タイトル"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#C4A35A] outline-none"
+              />
+              <textarea
+                value={editDesc}
+                onChange={e => setEditDesc(e.target.value)}
+                placeholder="おすすめ理由（任意）"
+                rows={2}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#C4A35A] outline-none resize-none"
+              />
+              <p className="text-[10px] text-gray-400 mt-1">
+                💡 URLを入れるとリンクボタンが自動で表示されます
+              </p>
+              <div>
+                <label className="text-xs text-gray-500">写真（任意）</label>
+                <div className="mt-1 flex items-center gap-3">
+                  {editPhotoPreview ? (
+                    <div className="relative">
+                      <img src={editPhotoPreview} alt="" className="w-14 h-14 rounded-full object-cover border-2 border-[#C4A35A]" />
+                      <button
+                        onClick={() => { setEditPhotoPreview(null); setEditCroppedBlob(null); setEditPhotoUrl('') }}
+                        className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center"
+                      >×</button>
+                    </div>
+                  ) : (
+                    <label className="w-14 h-14 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center cursor-pointer text-[10px] text-gray-400 text-center leading-tight">
+                      写真
+                      <input type="file" accept="image/*" onChange={handleEditPhotoSelect} className="hidden" />
+                    </label>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setEditItem(null)}
+                  className="flex-1 py-2 text-sm border border-gray-300 rounded-lg"
+                >
+                  キャンセル
+                </button>
+                <button
+                  onClick={saveEdit}
+                  disabled={savingEdit || !editTitle.trim()}
+                  className="flex-1 py-2 text-sm bg-[#C4A35A] text-white rounded-lg hover:bg-[#b3944f] disabled:opacity-50"
+                >
+                  {savingEdit ? '保存中...' : '保存する'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 編集用写真クロッパー */}
+      {editCropSrc && (
+        <ImageCropper
+          imageSrc={editCropSrc}
+          onCropComplete={handleEditCropComplete}
+          onCancel={() => setEditCropSrc(null)}
+          cropShape="round"
+          aspectRatio={1}
+        />
       )}
 
       {/* プロおすすめ理由入力モーダル */}

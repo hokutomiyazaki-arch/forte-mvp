@@ -280,11 +280,6 @@ export default function MyProofPublicPage() {
             )
           })}
 
-          {/* フッターロゴ（キャプチャに含める） */}
-          <div style={{ textAlign: 'center', marginTop: 24 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: 3, color: t.subtextMuted }}>REALPROOF</div>
-            <div style={{ fontSize: 11, color: t.subtextMuted, marginTop: 4 }}>強みが、あなたを定義する。</div>
-          </div>
         </div>
         {/* キャプチャ対象ここまで */}
 
