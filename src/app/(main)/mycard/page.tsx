@@ -6,6 +6,7 @@ import { useUser, useClerk } from '@clerk/nextjs'
 import { getRewardLabel } from '@/lib/types'
 import RewardContent from '@/components/RewardContent'
 import CardModeSwitch from '@/components/CardModeSwitch'
+import PhotoCropper from '@/components/PhotoCropper'
 import { Suspense } from 'react'
 
 interface RewardWithPro {
@@ -76,6 +77,12 @@ function MyCardContent() {
   const [myProofQrUrl, setMyProofQrUrl] = useState('')
   const [nickname, setNickname] = useState('')
   const [savingNickname, setSavingNickname] = useState(false)
+  const [clientPhotoUrl, setClientPhotoUrl] = useState<string | null>(null)
+  const [birthYear, setBirthYear] = useState('')
+  const [birthMonth, setBirthMonth] = useState('')
+  const [birthDay, setBirthDay] = useState('')
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
 
   function generateMyProofQR() {
     if (!authUser?.id) return
@@ -107,6 +114,25 @@ function MyCardContent() {
       if (data.bookmarks) {
         setBookmarkedPros(data.bookmarks)
         setBookmarkCount(data.bookmarks.length)
+      }
+
+      // クライアントプロフィール取得
+      try {
+        const profileRes = await fetch('/api/client/profile')
+        if (profileRes.ok) {
+          const profileData = await profileRes.json()
+          if (profileData.profile) {
+            if (profileData.profile.photo_url) setClientPhotoUrl(profileData.profile.photo_url)
+            if (profileData.profile.date_of_birth) {
+              const d = new Date(profileData.profile.date_of_birth)
+              setBirthYear(String(d.getFullYear()))
+              setBirthMonth(String(d.getMonth() + 1))
+              setBirthDay(String(d.getDate()))
+            }
+          }
+        }
+      } catch (e) {
+        console.error('[mycard] profile load error:', e)
       }
 
       console.log('[mycard] loadData complete via API')
@@ -404,37 +430,105 @@ function MyCardContent() {
       {showSettings && (
         <div ref={passwordSectionRef} className="bg-white border border-gray-200 rounded-xl p-5 mb-6 shadow-sm space-y-6">
 
-          {/* ニックネーム編集 */}
+          {/* プロフィール */}
           <div>
-            <h2 className="text-sm font-bold text-[#1A1A2E] mb-3">ニックネーム</h2>
-            <div className="flex gap-2">
+            <h2 className="text-sm font-bold text-[#1A1A2E] mb-3">プロフィール</h2>
+
+            {/* 写真クロッパー */}
+            <PhotoCropper
+              currentPhotoUrl={clientPhotoUrl}
+              onCropComplete={async (blob: Blob) => {
+                if (!authUser) return
+                setUploadingAvatar(true)
+                try {
+                  const formData = new FormData()
+                  formData.append('file', blob, 'avatar.jpg')
+                  const res = await fetch('/api/upload/avatar', { method: 'POST', body: formData })
+                  const data = await res.json()
+                  if (data.url) {
+                    setClientPhotoUrl(data.url + '?t=' + Date.now())
+                    await fetch('/api/client/profile', {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ photo_url: data.url }),
+                    })
+                    setMessage('写真を更新しました')
+                  }
+                } catch (e) {
+                  console.error('[mycard] avatar upload error:', e)
+                }
+                setUploadingAvatar(false)
+              }}
+            />
+            {uploadingAvatar && <p className="text-xs text-gray-400 text-center mt-1">アップロード中...</p>}
+
+            {/* ニックネーム */}
+            <div className="mt-4">
+              <label className="text-sm text-gray-600">ニックネーム</label>
               <input
                 type="text"
                 value={nickname}
                 onChange={e => setNickname(e.target.value)}
-                maxLength={20}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
-                placeholder="ニックネームを入力"
+                placeholder="表示名を入力"
+                maxLength={50}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-sm focus:ring-2 focus:ring-[#C4A35A] outline-none"
               />
-              <button
-                onClick={async () => {
-                  if (!nickname.trim()) return
-                  setSavingNickname(true)
-                  if (authUser) {
-                    await (supabase as any).from('clients').upsert({
-                      user_id: authUser.id,
-                      nickname: nickname.trim(),
-                    }, { onConflict: 'user_id' })
-                    setMessage('ニックネームを保存しました')
-                  }
-                  setSavingNickname(false)
-                }}
-                disabled={savingNickname}
-                className="px-4 py-2 bg-[#1A1A2E] text-white text-sm font-medium rounded-lg hover:bg-[#2a2a4e] transition disabled:opacity-50"
-              >
-                {savingNickname ? '...' : '保存'}
-              </button>
             </div>
+
+            {/* 生年月日 */}
+            <div className="mt-4">
+              <label className="text-sm text-gray-600">生年月日</label>
+              <div className="flex gap-2 mt-1">
+                <select value={birthYear} onChange={(e) => setBirthYear(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-2 py-2 text-sm flex-1 focus:ring-2 focus:ring-[#C4A35A] outline-none">
+                  <option value="">年</option>
+                  {Array.from({ length: 71 }, (_, i) => 1940 + i).map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+                <select value={birthMonth} onChange={(e) => setBirthMonth(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-2 py-2 text-sm w-20 focus:ring-2 focus:ring-[#C4A35A] outline-none">
+                  <option value="">月</option>
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+                <select value={birthDay} onChange={(e) => setBirthDay(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-2 py-2 text-sm w-20 focus:ring-2 focus:ring-[#C4A35A] outline-none">
+                  <option value="">日</option>
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <button
+              onClick={async () => {
+                setSavingProfile(true)
+                try {
+                  const dateOfBirth = birthYear && birthMonth && birthDay
+                    ? `${birthYear}-${birthMonth.padStart(2, '0')}-${birthDay.padStart(2, '0')}`
+                    : undefined
+                  await fetch('/api/client/profile', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      nickname: nickname.trim() || undefined,
+                      date_of_birth: dateOfBirth || undefined,
+                    }),
+                  })
+                  setMessage('プロフィールを保存しました')
+                } catch (e) {
+                  console.error('[mycard] profile save error:', e)
+                }
+                setSavingProfile(false)
+              }}
+              disabled={savingProfile}
+              className="mt-4 w-full bg-[#1A1A2E] text-white py-2 rounded-lg text-sm font-medium hover:bg-[#2a2a4e] transition disabled:opacity-50"
+            >
+              {savingProfile ? '保存中...' : '保存する'}
+            </button>
           </div>
 
           {/* パスワード変更 */}

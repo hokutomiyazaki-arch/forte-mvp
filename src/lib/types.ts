@@ -45,6 +45,8 @@ export interface Client {
   id: string
   user_id: string
   nickname: string
+  date_of_birth: string | null
+  photo_url: string | null
   created_at: string
 }
 
