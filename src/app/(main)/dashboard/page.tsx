@@ -147,207 +147,92 @@ export default function DashboardPage() {
       setUser(u)
       setHasEmailIdentity(true)
 
-      // プルーフ項目マスタ取得（プロの有無にかかわらず必要）
-      const { data: piData } = await db.select('proof_items', {
-        select: '*', order: { column: 'sort_order' }
-      })
-      if (piData) {
-        setProofItems(piData)
-      }
-
-      const { data: rawProData } = await db.select('professionals', {
-        select: '*', eq: { user_id: u.id }, maybeSingle: true
-      })
-      const proData = rawProData as any
-
-      if (!proData) {
-        // 新規プロ → プロフィール作成フォームを表示
-        setEditing(true)
-        setLoading(false)
-        return
-      }
-
-      setPro(proData)
-      setForm({
-        name: proData.name || '', title: proData.title || '',
-        prefecture: proData.prefecture || '',
-        area_description: proData.area_description || '',
-        is_online_available: proData.is_online_available || false,
-        bio: proData.bio || '', booking_url: proData.booking_url || '',
-        photo_url: proData.photo_url || '',
-        contact_email: proData.contact_email || '',
-      })
-      setCustomResultFortes(proData.custom_result_fortes || [])
-      setCustomPersonalityFortes(proData.custom_personality_fortes || [])
-
-      // リワード取得
-      const { data: rewardData } = await db.select('rewards', {
-        select: '*', eq: { professional_id: proData.id },
-        order: { column: 'sort_order' }
-      })
-      if (rewardData) {
-        setRewards(rewardData.map((r: any) => ({
-          id: r.id,
-          reward_type: r.reward_type,
-          title: r.title || '',
-          content: r.content || '',
-        })))
-      }
-
-      // vote_summary: proof_id → ラベル変換
-      const { data: rawVoteData } = await db.select('vote_summary', {
-        select: '*', eq: { professional_id: proData.id }
-      })
-      if (rawVoteData && piData) {
-        const labeledVotes = resolveProofLabels(rawVoteData, piData, proData.custom_proofs || [])
-        setVotes(labeledVotes)
-
-        // カスタムプルーフの票数を保存
-        const customVoteCounts = new Map<string, number>()
-        for (const v of rawVoteData) {
-          if (typeof v.proof_id === 'string' && v.proof_id.startsWith('custom_')) {
-            customVoteCounts.set(v.proof_id, v.vote_count || 0)
-          }
+      try {
+        // 専用APIで1リクエスト（サーバー側Promise.all並列）
+        const res = await fetch('/api/dashboard')
+        if (!res.ok) {
+          console.error('[dashboard] API error:', res.status)
+          setLoading(false)
+          return
         }
-        setCustomProofVoteCounts(customVoteCounts)
-      }
+        const data = await res.json()
 
-      // personality_summary: personality_id → ラベル変換
-      const { data: rawPersData } = await db.select('personality_summary', {
-        select: '*', eq: { professional_id: proData.id }
-      })
-      if (rawPersData) {
-        const { data: persItems } = await db.select('personality_items', { select: 'id, label' })
-        if (persItems) {
-          const labeledPers = resolvePersonalityLabels(rawPersData, persItems)
+        // マスターデータ
+        if (data.proofItems) setProofItems(data.proofItems)
+
+        const proData = data.professional
+        if (!proData) {
+          // 新規プロ → プロフィール作成フォームを表示
+          setEditing(true)
+          setLoading(false)
+          return
+        }
+
+        setPro(proData)
+        setForm({
+          name: proData.name || '', title: proData.title || '',
+          prefecture: proData.prefecture || '',
+          area_description: proData.area_description || '',
+          is_online_available: proData.is_online_available || false,
+          bio: proData.bio || '', booking_url: proData.booking_url || '',
+          photo_url: proData.photo_url || '',
+          contact_email: proData.contact_email || '',
+        })
+        setCustomResultFortes(proData.custom_result_fortes || [])
+        setCustomPersonalityFortes(proData.custom_personality_fortes || [])
+
+        // リワード
+        if (data.rewards) setRewards(data.rewards)
+
+        // vote_summary: proof_id → ラベル変換
+        if (data.voteSummary && data.proofItems) {
+          const labeledVotes = resolveProofLabels(data.voteSummary, data.proofItems, proData.custom_proofs || [])
+          setVotes(labeledVotes)
+
+          const customVoteCounts = new Map<string, number>()
+          for (const v of data.voteSummary) {
+            if (typeof v.proof_id === 'string' && v.proof_id.startsWith('custom_')) {
+              customVoteCounts.set(v.proof_id, v.vote_count || 0)
+            }
+          }
+          setCustomProofVoteCounts(customVoteCounts)
+        }
+
+        // personality_summary
+        if (data.personalitySummary && data.personalityItems) {
+          const labeledPers = resolvePersonalityLabels(data.personalitySummary, data.personalityItems)
           setPersonalityVotes(labeledPers)
         }
-      }
 
-      const voteCountResult = await db.select('votes', {
-        select: '*', options: { count: 'exact', head: true },
-        eq: { professional_id: proData.id, status: 'confirmed' }
-      })
-      setTotalVotes(voteCountResult.count || 0)
+        setTotalVotes(data.totalVotes || 0)
+        setBookmarkCount(data.bookmarkCount || 0)
 
-      // ブックマーク数取得
-      const bmCountResult = await db.select('bookmarks', {
-        select: '*', options: { count: 'exact', head: true },
-        eq: { professional_id: proData.id }
-      })
-      setBookmarkCount(bmCountResult.count || 0)
+        // プルーフ選択状態を復元
+        if (data.proofItems) {
+          const validIds = new Set(data.proofItems.map((p: ProofItem) => p.id))
+          const customIds = new Set((proData.custom_proofs || []).map((c: CustomProof) => c.id))
+          const savedProofs: string[] = proData.selected_proofs || []
+          setSelectedProofIds(new Set(savedProofs.filter((id: string) => validIds.has(id) || customIds.has(id))))
+          setCustomProofs(proData.custom_proofs || [])
+        }
 
-      // プルーフ選択状態を復元（マスタは上で取得済み）
-      if (piData) {
-        const validIds = new Set(piData.map((p: ProofItem) => p.id))
-        const customIds = new Set((proData.custom_proofs || []).map((c: CustomProof) => c.id))
-        const savedProofs: string[] = proData.selected_proofs || []
-        // regular proof_item IDs + custom proof IDs の両方を復元
-        setSelectedProofIds(new Set(savedProofs.filter((id: string) => validIds.has(id) || customIds.has(id))))
-        setCustomProofs(proData.custom_proofs || [])
-      }
+        // Voice カードテーマ
+        setSavedVoiceThemeData(proData.voice_card_theme || null)
 
-      // Voice カードテーマ: 生データを保持（モーダル内で解決する）
-      setSavedVoiceThemeData(proData.voice_card_theme || null)
+        // Voices
+        if (data.voiceComments) setVoiceComments(data.voiceComments)
+        if (data.gratitudePhrases) setVoicePhrases(data.gratitudePhrases)
 
-      // Voices: コメント付き確定投票を取得
-      const { data: voiceData } = await db.select('votes', {
-        select: 'id, comment, created_at',
-        eq: { professional_id: proData.id, status: 'confirmed' },
-        not: [{ column: 'comment', operator: 'is', value: null }],
-        neq: { comment: '' },
-        order: { column: 'created_at', options: { ascending: false } }
-      })
-      if (voiceData) setVoiceComments(voiceData)
+        // NFCカード
+        if (data.nfcCard) setNfcCard(data.nfcCard)
 
-      // 感謝フレーズ
-      const { data: phrasesData } = await db.select('gratitude_phrases', {
-        select: '*', order: { column: 'sort_order' }
-      })
-      if (phrasesData) setVoicePhrases(phrasesData)
-
-      // NFCカード取得
-      const { data: nfcData } = await db.select('nfc_cards', {
-        select: 'id, card_uid, status, linked_at',
-        eq: { professional_id: proData.id, status: 'active' },
-        maybeSingle: true
-      })
-      if (nfcData) setNfcCard(nfcData)
-
-      // 団体からの招待を取得
-      const { data: memberInvites } = await db.select('org_members', {
-        select: 'id, organization_id, invited_at, organizations(name, type)',
-        eq: { professional_id: proData.id, status: 'pending' }
-      })
-
-      if (memberInvites) {
-        setPendingInvites(memberInvites.map((m: any) => ({
-          id: m.id,
-          organization_id: m.organization_id,
-          org_name: m.organizations?.name || '不明な団体',
-          org_type: m.organizations?.type || 'store',
-          invited_at: m.invited_at,
-        })))
-      }
-
-      // 所属団体（active、credential_level_idなし＝純粋な所属）を取得
-      const { data: activeMembers } = await db.select('org_members', {
-        select: 'id, organization_id, accepted_at, organizations(id, name, type)',
-        eq: { professional_id: proData.id, status: 'active' },
-        is: { credential_level_id: null }
-      })
-
-      if (activeMembers) {
-        const allOrgs = activeMembers
-          .filter((m: any) => m.organizations)
-          .map((m: any) => ({
-            id: m.organizations.id,
-            member_id: m.id,
-            org_name: m.organizations.name,
-            org_type: m.organizations.type,
-            accepted_at: m.accepted_at,
-          }))
-        // organization_id で重複排除（最初のレコードを採用）
-        const seen = new Set<string>()
-        setActiveOrgs(allOrgs.filter((o: any) => {
-          if (seen.has(o.id)) return false
-          seen.add(o.id)
-          return true
-        }))
-      }
-
-      // credential_levels経由のバッジを取得
-      const { data: credBadgeData } = await db.select('org_members', {
-        select: 'credential_level_id, credential_levels(id, name, description, image_url), organizations(id, name)',
-        eq: { professional_id: proData.id, status: 'active' },
-        not: [{ column: 'credential_level_id', operator: 'is', value: null }]
-      })
-
-      if (credBadgeData) {
-        setCredentialBadges(credBadgeData
-          .filter((m: any) => m.credential_levels && m.organizations)
-          .map((m: any) => ({
-            id: m.credential_levels.id,
-            name: m.credential_levels.name,
-            description: m.credential_levels.description,
-            image_url: m.credential_levels.image_url,
-            org_name: m.organizations.name,
-            org_id: m.organizations.id,
-          }))
-        )
-      }
-
-      // オーナー団体を取得
-      const { data: ownedOrgData } = await db.select('organizations', {
-        select: 'id, name, type',
-        eq: { owner_id: u.id },
-        order: { column: 'created_at', options: { ascending: false } },
-        limit: 1,
-        maybeSingle: true
-      })
-
-      if (ownedOrgData) {
-        setOwnedOrg(ownedOrgData)
+        // 団体関連
+        if (data.pendingInvites) setPendingInvites(data.pendingInvites)
+        if (data.activeOrgs) setActiveOrgs(data.activeOrgs)
+        if (data.credentialBadges) setCredentialBadges(data.credentialBadges)
+        if (data.ownedOrg) setOwnedOrg(data.ownedOrg)
+      } catch (err) {
+        console.error('[dashboard] load error:', err)
       }
 
       setLoading(false)
@@ -855,7 +740,35 @@ export default function DashboardPage() {
     setUploading(false)
   }
 
-  if (loading) return <div className="text-center py-16 text-gray-400">読み込み中...</div>
+  if (loading) return (
+    <div className="max-w-2xl mx-auto px-4 py-8">
+      {/* プロフィールスケルトン */}
+      <div className="flex items-center space-x-4 mb-8">
+        <div className="w-20 h-20 bg-gray-200 rounded-full animate-pulse" />
+        <div className="space-y-2 flex-1">
+          <div className="h-6 bg-gray-200 rounded w-1/3 animate-pulse" />
+          <div className="h-4 bg-gray-200 rounded w-1/2 animate-pulse" />
+          <div className="h-3 bg-gray-100 rounded w-2/3 animate-pulse" />
+        </div>
+      </div>
+      {/* タブスケルトン */}
+      <div className="flex gap-4 border-b border-gray-200 mb-6">
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} className="h-4 w-16 bg-gray-200 rounded animate-pulse mb-3" />
+        ))}
+      </div>
+      {/* カードスケルトン */}
+      <div className="space-y-4">
+        {[1, 2, 3].map(i => (
+          <div key={i} className="bg-white border border-gray-200 rounded-xl p-5 animate-pulse">
+            <div className="h-4 w-24 bg-gray-200 rounded mb-3" />
+            <div className="h-8 w-full bg-gray-100 rounded mb-3" />
+            <div className="h-4 w-2/3 bg-gray-100 rounded" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 
   if (editing) {
     return (

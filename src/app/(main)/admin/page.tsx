@@ -31,35 +31,42 @@ export default function AdminPage() {
     async function load() {
       setAuthorized(true)
 
-      // Pros with vote count
-      const { data: proData } = await db.select('professionals', {
-        select: '*', order: { column: 'created_at' }
-      })
-      if (proData) {
-        const prosWithVotes: any[] = []
-        for (const p of proData) {
-          const result = await db.select('votes', {
-            select: '*', options: { count: 'exact', head: true },
-            eq: { professional_id: p.id }
-          })
-          prosWithVotes.push({ ...p, total_votes: result.count || 0 })
+      // 全クエリを並列実行（N+1ループ廃止）
+      const [proResult, voteSummaryResult, voteResult, pc, cc, vc] = await Promise.all([
+        // プロ一覧
+        db.select('professionals', { select: '*', order: { column: 'created_at' } }),
+        // プロごとの投票数をvote_summaryで一括取得（N+1解消）
+        db.select('vote_summary', { select: 'professional_id, vote_count' }),
+        // 最新投票
+        db.select('votes', {
+          select: '*, professionals(name)',
+          order: { column: 'created_at', options: { ascending: false } },
+          limit: 30
+        }),
+        // 統計: 3つのcount
+        db.select('professionals', { select: '*', options: { count: 'exact', head: true } }),
+        db.select('clients', { select: '*', options: { count: 'exact', head: true } }),
+        db.select('votes', { select: '*', options: { count: 'exact', head: true } }),
+      ])
+
+      if (proResult.data) {
+        // vote_summaryからプロごとの合計投票数を集計
+        const voteCountMap = new Map<string, number>()
+        if (voteSummaryResult.data) {
+          for (const vs of voteSummaryResult.data) {
+            const current = voteCountMap.get(vs.professional_id) || 0
+            voteCountMap.set(vs.professional_id, current + (vs.vote_count || 0))
+          }
         }
-        prosWithVotes.sort((a, b) => b.total_votes - a.total_votes)
+        const prosWithVotes = proResult.data.map((p: any) => ({
+          ...p,
+          total_votes: voteCountMap.get(p.id) || 0,
+        }))
+        prosWithVotes.sort((a: any, b: any) => b.total_votes - a.total_votes)
         setPros(prosWithVotes)
       }
 
-      // Recent votes
-      const { data: voteData } = await db.select('votes', {
-        select: '*, professionals(name)',
-        order: { column: 'created_at', options: { ascending: false } },
-        limit: 30
-      })
-      if (voteData) setRecentVotes(voteData as any)
-
-      // Stats
-      const pc = await db.select('professionals', { select: '*', options: { count: 'exact', head: true } })
-      const cc = await db.select('clients', { select: '*', options: { count: 'exact', head: true } })
-      const vc = await db.select('votes', { select: '*', options: { count: 'exact', head: true } })
+      if (voteResult.data) setRecentVotes(voteResult.data as any)
       setStats({ totalPros: pc.count || 0, totalClients: cc.count || 0, totalVotes: vc.count || 0 })
 
       setLoading(false)

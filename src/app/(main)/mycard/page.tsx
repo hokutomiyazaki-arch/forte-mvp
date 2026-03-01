@@ -84,210 +84,32 @@ function MyCardContent() {
     setMyProofQrUrl(qrApiUrl)
   }
 
-  // データ取得（セッション確立後に呼ぶ）
-  async function loadData(email: string, userId: string) {
+  // データ取得（専用APIで1リクエスト、サーバー側Promise.all並列）
+  async function loadData() {
     setDataLoading(true)
     timerRef.current = setTimeout(() => setTimedOut(true), 10000)
     try {
-      console.log('[mycard] loadData start, email:', email, 'userId:', userId)
+      console.log('[mycard] loadData start via /api/mycard')
 
-      // プロ確認
-      const { data: proCheck } = await (supabase as any)
-        .from('professionals').select('id').eq('user_id', userId).maybeSingle()
-      setIsPro(!!proCheck)
+      const res = await fetch('/api/mycard')
+      if (!res.ok) {
+        console.error('[mycard] API error:', res.status)
+        return
+      }
+      const data = await res.json()
 
-      // ニックネーム取得
-      const { data: clientData } = await (supabase as any)
-        .from('clients').select('nickname').eq('user_id', userId).maybeSingle()
-      if (clientData?.nickname) setNickname(clientData.nickname)
-
-      // LINE認証ユーザー判定 + LINE userId抽出
-      const isLine = email.startsWith('line_') && email.endsWith('@line.realproof.jp')
-      const lineUserId = isLine ? email.replace('line_', '').replace('@line.realproof.jp', '') : null
-      console.log('[mycard] isLine:', isLine, 'lineUserId:', lineUserId)
-
-      // client_rewards を取得 — 複数方法で検索
-      let allClientRewards: any[] = []
-
-      // 方法1: client_email ベース
-      const { data: clientRewards, error: crError } = await (supabase as any)
-        .from('client_rewards')
-        .select('id, reward_id, professional_id, status')
-        .eq('client_email', email)
-        .in('status', ['active', 'used'])
-        .order('created_at', { ascending: false })
-      console.log('[mycard] client_rewards by email:', { count: clientRewards?.length, error: crError?.message })
-
-      if (clientRewards && clientRewards.length > 0) {
-        allClientRewards = clientRewards
+      setIsPro(data.isPro)
+      if (data.nickname) setNickname(data.nickname)
+      setUserEmail(data.email)
+      setIsLineUser(data.isLine)
+      if (data.rewards) setRewards(data.rewards)
+      if (data.voteHistory) setVoteHistory(data.voteHistory)
+      if (data.bookmarks) {
+        setBookmarkedPros(data.bookmarks)
+        setBookmarkCount(data.bookmarks.length)
       }
 
-      // 方法2: LINE認証の場合 auth_provider_id → votes → client_rewards
-      if (allClientRewards.length === 0 && lineUserId) {
-        const { data: lineVotes } = await (supabase as any)
-          .from('votes')
-          .select('id')
-          .eq('auth_provider_id', lineUserId)
-          .eq('auth_method', 'line')
-        if (lineVotes && lineVotes.length > 0) {
-          const voteIds = lineVotes.map((v: any) => v.id)
-          const { data: crByVote } = await (supabase as any)
-            .from('client_rewards')
-            .select('id, reward_id, professional_id, status')
-            .in('vote_id', voteIds)
-            .in('status', ['active', 'used'])
-            .order('created_at', { ascending: false })
-          if (crByVote && crByVote.length > 0) allClientRewards = crByVote
-          console.log('[mycard] client_rewards by auth_provider_id:', { count: crByVote?.length })
-        }
-      }
-
-      // 方法3: client_user_id ベースフォールバック
-      if (allClientRewards.length === 0 && userId) {
-        const { data: userVotes } = await (supabase as any)
-          .from('votes')
-          .select('id, selected_reward_id')
-          .eq('client_user_id', userId)
-          .not('selected_reward_id', 'is', null)
-        if (userVotes && userVotes.length > 0) {
-          const voteIds = userVotes.map((v: any) => v.id)
-          const { data: crByVote } = await (supabase as any)
-            .from('client_rewards')
-            .select('id, reward_id, professional_id, status')
-            .in('vote_id', voteIds)
-            .in('status', ['active', 'used'])
-            .order('created_at', { ascending: false })
-          if (crByVote && crByVote.length > 0) allClientRewards = crByVote
-          console.log('[mycard] client_rewards by client_user_id:', { count: crByVote?.length })
-        }
-      }
-
-      if (allClientRewards && allClientRewards.length > 0) {
-        const rewardIds = Array.from(new Set(allClientRewards.map((cr: any) => cr.reward_id)))
-        const { data: rewardData } = await (supabase as any)
-          .from('rewards')
-          .select('id, reward_type, title, content')
-          .in('id', rewardIds)
-
-        const rewardMap = new Map<string, { reward_type: string; title: string; content: string }>()
-        if (rewardData) {
-          for (const r of rewardData) {
-            rewardMap.set(r.id, { reward_type: r.reward_type, title: r.title || '', content: r.content })
-          }
-        }
-
-        const proIds = Array.from(new Set(allClientRewards.map((cr: any) => cr.professional_id)))
-        const { data: proData } = await (supabase as any)
-          .from('professionals')
-          .select('id, name')
-          .in('id', proIds)
-
-        const proMap = new Map<string, string>()
-        if (proData) {
-          for (const p of proData) {
-            proMap.set(p.id, p.name)
-          }
-        }
-
-        const merged: RewardWithPro[] = allClientRewards.map((cr: any) => {
-          const reward = rewardMap.get(cr.reward_id)
-          return {
-            id: cr.id,
-            reward_id: cr.reward_id,
-            reward_type: reward?.reward_type || '',
-            title: reward?.title || '',
-            content: reward?.content || '',
-            status: cr.status,
-            professional_id: cr.professional_id,
-            pro_name: proMap.get(cr.professional_id) || 'プロ',
-          }
-        })
-        setRewards(merged)
-      }
-
-      // 投票履歴取得（複数方法で検索）
-      let voteData: any[] | null = null
-
-      // 方法1: voter_email ベース
-      const { data: voteByEmail } = await (supabase as any)
-        .from('votes')
-        .select('id, professional_id, result_category, created_at')
-        .eq('voter_email', email)
-        .order('created_at', { ascending: false })
-      if (voteByEmail && voteByEmail.length > 0) voteData = voteByEmail
-
-      // 方法2: LINE認証の場合 auth_provider_id ベース
-      if ((!voteData || voteData.length === 0) && lineUserId) {
-        const { data: voteByLine } = await (supabase as any)
-          .from('votes')
-          .select('id, professional_id, result_category, created_at')
-          .eq('auth_provider_id', lineUserId)
-          .eq('auth_method', 'line')
-          .order('created_at', { ascending: false })
-        if (voteByLine && voteByLine.length > 0) voteData = voteByLine
-      }
-
-      // 方法3: client_user_id ベースフォールバック
-      if ((!voteData || voteData.length === 0) && userId) {
-        const { data: voteByUserId } = await (supabase as any)
-          .from('votes')
-          .select('id, professional_id, result_category, created_at')
-          .eq('client_user_id', userId)
-          .order('created_at', { ascending: false })
-        if (voteByUserId && voteByUserId.length > 0) voteData = voteByUserId
-      }
-
-      if (voteData && voteData.length > 0) {
-        const voteProIds = Array.from(new Set(voteData.map((v: any) => v.professional_id)))
-        const { data: voteProData } = await (supabase as any)
-          .from('professionals')
-          .select('id, name, title, photo_url, prefecture, area_description')
-          .in('id', voteProIds)
-
-        const voteProMap = new Map<string, any>()
-        if (voteProData) {
-          for (const p of voteProData) {
-            voteProMap.set(p.id, p)
-          }
-        }
-
-        setVoteHistory(voteData.map((v: any) => {
-          const p = voteProMap.get(v.professional_id)
-          return {
-            ...v,
-            pro_name: p?.name || '不明',
-            pro_title: p?.title || '',
-            pro_photo_url: p?.photo_url || '',
-            pro_prefecture: p?.prefecture || '',
-            pro_area: p?.area_description || '',
-          }
-        }))
-      }
-
-      // ブックマーク一覧取得
-      const { data: bookmarks } = await (supabase as any)
-        .from('bookmarks')
-        .select(`
-          id,
-          created_at,
-          professional_id,
-          professionals (
-            id,
-            name,
-            title,
-            photo_url,
-            prefecture,
-            area_description
-          )
-        `)
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-      if (bookmarks) {
-        setBookmarkedPros(bookmarks)
-        setBookmarkCount(bookmarks.length)
-      }
-
-      console.log('[mycard] loadData complete')
+      console.log('[mycard] loadData complete via API')
     } catch (e) {
       console.error('[mycard] loadData error:', e)
     }
@@ -311,14 +133,8 @@ function MyCardContent() {
       }
 
       if (isSignedIn && authUser) {
-        const email = authUser.email || ''
-        setUserEmail(email)
-        // LINE認証ユーザー判定
-        const lineUser = (email.startsWith('line_') && email.endsWith('@line.realproof.jp'))
-        setIsLineUser(lineUser)
-        if (lineUser) setIsPasswordReset(false) // LINEユーザーにはパスワードリセット不要
         setAuthMode('ready')
-        await loadData(email, authUser.id)
+        await loadData()
       } else {
         // 未ログイン: インラインフォーム表示
         setAuthMode('auth')
