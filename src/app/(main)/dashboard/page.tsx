@@ -150,6 +150,22 @@ export default function DashboardPage() {
       setUser(u)
       setHasEmailIdentity(true)
 
+      // ロールチェック: DBにレコードなし → /onboarding, clientのみ → /mycard
+      try {
+        const roleRes = await fetch('/api/user/role')
+        const roleData = await roleRes.json()
+        if (roleData.role === null) {
+          window.location.href = '/onboarding'
+          return
+        }
+        if (roleData.role === 'client' && !roleData.proDeactivated) {
+          window.location.href = '/mycard'
+          return
+        }
+      } catch (e) {
+        console.error('[dashboard] role check error:', e)
+      }
+
       try {
         // 専用APIで1リクエスト（サーバー側Promise.all並列）
         const res = await fetch('/api/dashboard')

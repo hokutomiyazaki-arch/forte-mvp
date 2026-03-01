@@ -159,6 +159,17 @@ function MyCardContent() {
       }
 
       if (isSignedIn && authUser) {
+        // ロールチェック: DBにレコードなし → /onboarding
+        try {
+          const roleRes = await fetch('/api/user/role')
+          const roleData = await roleRes.json()
+          if (roleData.role === null) {
+            window.location.href = '/onboarding'
+            return
+          }
+        } catch (e) {
+          console.error('[mycard] role check error:', e)
+        }
         setAuthMode('ready')
         await loadData()
       } else {
