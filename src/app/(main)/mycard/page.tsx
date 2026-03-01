@@ -298,6 +298,22 @@ function MyCardContent() {
     }
   }
 
+  // プロ昇格/再登録
+  async function handleUpgradeToPro() {
+    try {
+      const res = await fetch('/api/professional/register', { method: 'POST' })
+      const data = await res.json()
+      if (data.success) {
+        window.location.href = '/dashboard'
+      } else {
+        alert('プロ登録に失敗しました。')
+      }
+    } catch (err) {
+      console.error('[mycard] upgrade to pro error:', err)
+      alert('プロ登録に失敗しました。')
+    }
+  }
+
   // ========== リセットリンク期限切れ ==========
   if (resetLinkError) {
     return (
@@ -990,6 +1006,31 @@ function MyCardContent() {
         </div>
       )}
 
+      {/* プロ昇格バナー */}
+      {!isPro && (
+        <div style={{
+          background: '#fff', borderRadius: 12, padding: 20, marginTop: 16,
+          border: '1.5px solid rgba(196,163,90,0.3)', textAlign: 'center',
+        }}>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4, color: '#1A1A2E' }}>
+            {proDeactivated ? 'プロとして再登録しませんか？' : 'プロとしても活動しませんか？'}
+          </div>
+          <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>
+            クライアントからの「強み」を集めて可視化できます
+          </div>
+          <button
+            onClick={handleUpgradeToPro}
+            style={{
+              background: '#C4A35A', color: '#fff', border: 'none',
+              borderRadius: 8, padding: '10px 24px', fontSize: 13,
+              fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            {proDeactivated ? 'プロとして再登録する' : 'プロとして登録する'}
+          </button>
+        </div>
+      )}
+
       {/* フッター */}
       <div className="mt-8 space-y-3 text-center">
         <a
@@ -998,16 +1039,6 @@ function MyCardContent() {
         >
           他のプロを探す
         </a>
-        {!isPro && (
-          <div>
-            <a
-              href="/dashboard"
-              className="inline-block text-sm text-[#C4A35A] hover:underline"
-            >
-              プロとしても登録する
-            </a>
-          </div>
-        )}
       </div>
 
       {/* アカウント削除確認モーダル */}
