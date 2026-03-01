@@ -1070,7 +1070,7 @@ export default function DashboardPage() {
                   className="inline-block text-sm font-medium"
                   style={{ color: '#C4A35A' }}
                 >
-                  カードを見る →
+                  マイプルーフを見る →
                 </a>
               </>
             ) : (
