@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { THEMES, CATEGORIES, getCategoryByKey, getCategoryShortLabel } from '@/lib/myproof-themes'
 import type { ThemeKey, CategoryKey } from '@/lib/myproof-themes'
+import ImageCropper from '@/components/ImageCropper'
 
 interface MyProofItem {
   id: string
@@ -54,6 +55,11 @@ export default function MyProofTab() {
   const [newItemCategory, setNewItemCategory] = useState<CategoryKey>('other')
   const [addingItem, setAddingItem] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+
+  // Photo cropper
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
+  const [croppedPhotoBlob, setCroppedPhotoBlob] = useState<Blob | null>(null)
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
 
   // Pro description modal
   const [proDescModal, setProDescModal] = useState<{ proId: string; proName: string } | null>(null)
@@ -155,6 +161,20 @@ export default function MyProofTab() {
     }
     setAddingItem(true)
     try {
+      // クロップ済み画像がある場合はまずアップロード
+      let photoUrl = customPhotoUrl || null
+      if (croppedPhotoBlob && !customPhotoUrl) {
+        setUploadingPhoto(true)
+        const formData = new FormData()
+        formData.append('file', croppedPhotoBlob, 'cropped.jpg')
+        const uploadRes = await fetch('/api/upload/avatar', { method: 'POST', body: formData })
+        const uploadData = await uploadRes.json()
+        if (uploadData.url) {
+          photoUrl = uploadData.url
+        }
+        setUploadingPhoto(false)
+      }
+
       const res = await fetch('/api/myproof/items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -162,7 +182,7 @@ export default function MyProofTab() {
           item_type: 'custom',
           title: customTitle.trim(),
           description: customDesc.trim() || null,
-          photo_url: customPhotoUrl || null,
+          photo_url: photoUrl,
           category: newItemCategory,
         }),
       })
@@ -172,6 +192,8 @@ export default function MyProofTab() {
         setCustomDesc('')
         setCustomPhotoUrl('')
         setNewItemCategory('other')
+        setCroppedPhotoBlob(null)
+        setPhotoPreview(null)
         await loadMyProof()
       } else {
         const data = await res.json()
@@ -215,24 +237,28 @@ export default function MyProofTab() {
     }
   }
 
-  async function handleCustomPhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleCustomPhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     if (file.size > 5 * 1024 * 1024) {
       alert('画像サイズは5MB以下にしてください')
       return
     }
-    setUploadingPhoto(true)
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      const res = await fetch('/api/upload/avatar', { method: 'POST', body: formData })
-      const data = await res.json()
-      if (data.url) setCustomPhotoUrl(data.url)
-    } catch (e) {
-      console.error('[MyProofTab] photo upload error:', e)
+    if (!file.type.startsWith('image/')) {
+      alert('画像ファイルを選択してください')
+      return
     }
-    setUploadingPhoto(false)
+    const reader = new FileReader()
+    reader.onload = () => setCropImageSrc(reader.result as string)
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
+  function handleCropComplete(croppedBlob: Blob) {
+    setCropImageSrc(null)
+    setCroppedPhotoBlob(croppedBlob)
+    setPhotoPreview(URL.createObjectURL(croppedBlob))
+    setCustomPhotoUrl('') // URLはaddCustom時にアップロードで取得
   }
 
   if (loading) {
@@ -451,31 +477,36 @@ export default function MyProofTab() {
               />
               <div>
                 <label className="text-xs text-gray-500">写真（任意）</label>
-                {customPhotoUrl ? (
-                  <div className="mt-1 flex items-center gap-2">
-                    <img src={customPhotoUrl} alt="" className="w-12 h-12 rounded-full object-cover" />
-                    <button onClick={() => setCustomPhotoUrl('')} className="text-xs text-red-400">削除</button>
-                  </div>
-                ) : (
-                  <label className="block mt-1 text-sm text-[#C4A35A] cursor-pointer hover:underline">
-                    {uploadingPhoto ? 'アップロード中...' : '写真を選択'}
-                    <input type="file" accept="image/*" onChange={handleCustomPhotoUpload} className="hidden" />
-                  </label>
-                )}
+                <div className="mt-1 flex items-center gap-3">
+                  {photoPreview ? (
+                    <div className="relative">
+                      <img src={photoPreview} alt="" className="w-14 h-14 rounded-full object-cover border-2 border-[#C4A35A]" />
+                      <button
+                        onClick={() => { setPhotoPreview(null); setCroppedPhotoBlob(null); setCustomPhotoUrl('') }}
+                        className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center"
+                      >×</button>
+                    </div>
+                  ) : (
+                    <label className="w-14 h-14 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center cursor-pointer text-[10px] text-gray-400 text-center leading-tight">
+                      写真
+                      <input type="file" accept="image/*" onChange={handleCustomPhotoSelect} className="hidden" />
+                    </label>
+                  )}
+                </div>
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => { setShowCustomForm(false); setCustomTitle(''); setCustomDesc(''); setCustomPhotoUrl(''); setNewItemCategory('other') }}
+                  onClick={() => { setShowCustomForm(false); setCustomTitle(''); setCustomDesc(''); setCustomPhotoUrl(''); setNewItemCategory('other'); setCroppedPhotoBlob(null); setPhotoPreview(null) }}
                   className="flex-1 py-2 text-sm border border-gray-300 rounded-lg"
                 >
                   キャンセル
                 </button>
                 <button
                   onClick={addCustom}
-                  disabled={addingItem || !customTitle.trim()}
+                  disabled={addingItem || uploadingPhoto || !customTitle.trim()}
                   className="flex-1 py-2 text-sm bg-[#C4A35A] text-white rounded-lg hover:bg-[#b3944f] disabled:opacity-50"
                 >
-                  {addingItem ? '追加中...' : '追加する'}
+                  {addingItem || uploadingPhoto ? 'アップロード中...' : '追加する'}
                 </button>
               </div>
             </div>
@@ -564,6 +595,17 @@ export default function MyProofTab() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 写真クロッパー */}
+      {cropImageSrc && (
+        <ImageCropper
+          imageSrc={cropImageSrc}
+          onCropComplete={handleCropComplete}
+          onCancel={() => setCropImageSrc(null)}
+          cropShape="round"
+          aspectRatio={1}
+        />
       )}
     </>
   )
