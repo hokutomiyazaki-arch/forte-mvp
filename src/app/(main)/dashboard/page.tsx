@@ -1032,7 +1032,7 @@ export default function DashboardPage() {
                       onClick={() => setShowMyProofQR(false)}
                       className="text-sm text-gray-400 hover:text-gray-600 mb-3"
                     >
-                      QRコードを非表示にする
+                      &#10005; 閉じる
                     </button>
                   </>
                 ) : (
@@ -1043,28 +1043,6 @@ export default function DashboardPage() {
                     QRコードを表示する
                   </button>
                 )}
-                <div className="flex items-center justify-center gap-2 mt-3">
-                  <code className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded">
-                    realproof.jp/myproof/p/{myProofQrToken.slice(0, 8)}...
-                  </code>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(`${window.location.origin}/myproof/p/${myProofQrToken}`)
-                    }}
-                    className="text-xs text-[#C4A35A]"
-                  >
-                    コピー
-                  </button>
-                </div>
-                <a
-                  href={`/myproof/p/${myProofQrToken}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-block text-sm font-medium mt-2"
-                  style={{ color: '#C4A35A' }}
-                >
-                  マイプルーフを見る →
-                </a>
               </>
             ) : (
               <p className="text-sm text-gray-400">マイプルーフタブでアイテムを追加するとQRコードが生成されます</p>
@@ -1392,7 +1370,20 @@ export default function DashboardPage() {
 
       {/* ═══ Tab: マイプルーフ ═══ */}
       {dashboardTab === 'myproof' && (
-        <MyProofTab />
+        <>
+          {myProofQrToken && (
+            <a
+              href={`/myproof/p/${myProofQrToken}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block w-full text-center py-3 mb-4 bg-white rounded-xl shadow-sm text-sm font-medium hover:bg-gray-50 transition"
+              style={{ color: '#C4A35A' }}
+            >
+              マイプルーフカードを確認する &#8594;
+            </a>
+          )}
+          <MyProofTab />
+        </>
       )}
 
       {/* ═══ Tab: カード管理 ═══ */}

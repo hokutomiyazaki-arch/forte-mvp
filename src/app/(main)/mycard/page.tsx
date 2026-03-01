@@ -76,6 +76,8 @@ function MyCardContent() {
   const [isLineUser, setIsLineUser] = useState(false)
   const passwordSectionRef = useRef<HTMLDivElement>(null)
   const [myProofQrUrl, setMyProofQrUrl] = useState('')
+  const [myProofQrToken, setMyProofQrToken] = useState('')
+  const [showMyProofQR, setShowMyProofQR] = useState(false)
   const [nickname, setNickname] = useState('')
   const [savingNickname, setSavingNickname] = useState(false)
   const [clientPhotoUrl, setClientPhotoUrl] = useState<string | null>(null)
@@ -119,6 +121,19 @@ function MyCardContent() {
       if (data.bookmarks) {
         setBookmarkedPros(data.bookmarks)
         setBookmarkCount(data.bookmarks.length)
+      }
+
+      // マイプルーフのqr_token取得
+      try {
+        const myproofRes = await fetch('/api/myproof')
+        if (myproofRes.ok) {
+          const myproofData = await myproofRes.json()
+          if (myproofData.card?.qr_token) {
+            setMyProofQrToken(myproofData.card.qr_token)
+          }
+        }
+      } catch (e) {
+        console.error('[mycard] myproof token load error:', e)
       }
 
       // クライアントプロフィール取得
@@ -432,25 +447,42 @@ function MyCardContent() {
   return (
     <div className="max-w-lg mx-auto px-4 py-8">
       {/* マイプルーフ QRコード */}
-      <div style={{
-        background: '#fff', borderRadius: 12, padding: 24,
-        boxShadow: '0 1px 3px rgba(0,0,0,0.08)', marginBottom: 24,
-        textAlign: 'center' as const,
-      }}>
-        <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A1A2E', marginBottom: 8 }}>
-          マイプルーフ QRコード
-        </h2>
-        <p style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>
-          あなたがプルーフしたものを見せましょう
+      <div className="bg-white rounded-xl p-6 shadow-sm mb-6 text-center">
+        <h2 className="text-base font-bold text-[#1A1A2E] mb-1">マイプルーフ QRコード</h2>
+        <p className="text-xs text-gray-500 mb-4">
+          スキャンするとあなたのマイプルーフページが開きます（期限なし）
         </p>
-        {myProofQrUrl ? (
-          <img src={myProofQrUrl} alt="My Proof QR" style={{ margin: '0 auto 12px', maxWidth: 200, display: 'block' }} />
+        {myProofQrToken ? (
+          <>
+            {showMyProofQR ? (
+              <>
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`${window.location.origin}/myproof/p/${myProofQrToken}`)}`}
+                  alt="マイプルーフ QR"
+                  className="mx-auto mb-4"
+                  style={{ width: 200, height: 200 }}
+                />
+                <button
+                  onClick={() => setShowMyProofQR(false)}
+                  className="text-sm text-gray-400 hover:text-gray-600"
+                >
+                  &#10005; 閉じる
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setShowMyProofQR(true)}
+                className="bg-[#C4A35A] text-white rounded-lg px-6 py-3 text-sm font-semibold"
+              >
+                QRコードを表示する
+              </button>
+            )}
+          </>
         ) : (
-          <button onClick={generateMyProofQR} style={{
-            padding: '12px 24px', fontSize: 14, fontWeight: 700,
-            background: '#C4A35A', color: '#fff',
-            border: 'none', borderRadius: 8, cursor: 'pointer',
-          }}>
+          <button
+            onClick={generateMyProofQR}
+            className="bg-[#C4A35A] text-white rounded-lg px-6 py-3 text-sm font-semibold"
+          >
             QRコードを発行する
           </button>
         )}
@@ -463,7 +495,7 @@ function MyCardContent() {
         </div>
       )}
       <div className="flex items-center justify-between mb-2">
-        <h1 className="text-2xl font-bold text-[#1A1A2E]">リワード</h1>
+        <h1 className="text-2xl font-bold text-[#1A1A2E]">ダッシュボード</h1>
         <button
           onClick={() => setShowSettings(!showSettings)}
           className="p-2 text-gray-400 hover:text-[#1A1A2E] transition"
@@ -997,37 +1029,27 @@ function MyCardContent() {
       )}
 
       {/* マイプルーフタブ */}
-      {tab === 'myproof' && <MyProofTab />}
+      {tab === 'myproof' && (
+        <>
+          {myProofQrToken && (
+            <a
+              href={`/myproof/p/${myProofQrToken}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block w-full text-center py-3 mb-4 bg-white rounded-xl shadow-sm text-sm font-medium hover:bg-gray-50 transition"
+              style={{ color: '#C4A35A' }}
+            >
+              マイプルーフカードを確認する &#8594;
+            </a>
+          )}
+          <MyProofTab />
+        </>
+      )}
 
       {/* カード管理タブ */}
       {tab === 'card' && (
         <div>
           <CardModeSwitch />
-        </div>
-      )}
-
-      {/* プロ昇格バナー */}
-      {!isPro && (
-        <div style={{
-          background: '#fff', borderRadius: 12, padding: 20, marginTop: 16,
-          border: '1.5px solid rgba(196,163,90,0.3)', textAlign: 'center',
-        }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4, color: '#1A1A2E' }}>
-            {proDeactivated ? 'プロとして再登録しませんか？' : 'プロとしても活動しませんか？'}
-          </div>
-          <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>
-            クライアントからの「強み」を集めて可視化できます
-          </div>
-          <button
-            onClick={handleUpgradeToPro}
-            style={{
-              background: '#C4A35A', color: '#fff', border: 'none',
-              borderRadius: 8, padding: '10px 24px', fontSize: 13,
-              fontWeight: 600, cursor: 'pointer',
-            }}
-          >
-            {proDeactivated ? 'プロとして再登録する' : 'プロとして登録する'}
-          </button>
         </div>
       )}
 

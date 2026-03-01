@@ -45,6 +45,7 @@ export default function MyProofPublicPage() {
   const [items, setItems] = useState<MyProofItem[]>([])
   const [ownerUserId, setOwnerUserId] = useState<string | null>(null)
   const [sharing, setSharing] = useState(false)
+  const [shareResult, setShareResult] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -74,9 +75,13 @@ export default function MyProofPublicPage() {
 
   async function generateAndShare(format: 'stories' | 'feed') {
     const el = document.getElementById('myproof-card-for-export')
-    if (!el) return
+    if (!el) {
+      alert('カードの生成に失敗しました')
+      return
+    }
 
     setSharing(true)
+    setShareResult('')
     try {
       const targetWidth = 1080
       const targetHeight = format === 'stories' ? 1920 : 1350
@@ -93,23 +98,56 @@ export default function MyProofPublicPage() {
       finalCanvas.width = targetWidth
       finalCanvas.height = targetHeight
       const ctx = finalCanvas.getContext('2d')
-      if (!ctx) return
+      if (!ctx) {
+        alert('画像の生成に失敗しました')
+        setSharing(false)
+        return
+      }
 
       ctx.fillStyle = t.bg
       ctx.fillRect(0, 0, targetWidth, targetHeight)
 
+      // ロゴ描画
+      const logoImg = new Image()
+      logoImg.src = '/images/realproof-logo-gold.png'
+      await new Promise<void>((resolve) => {
+        logoImg.onload = () => resolve()
+        logoImg.onerror = () => resolve()
+      })
+
+      let contentTop = 40
+      if (logoImg.naturalWidth > 0) {
+        const logoHeight = 40
+        const logoWidth = (logoImg.naturalWidth / logoImg.naturalHeight) * logoHeight
+        ctx.drawImage(logoImg, (targetWidth - logoWidth) / 2, 30, logoWidth, logoHeight)
+        contentTop = 90
+      } else {
+        // フォールバック: テキストロゴ
+        ctx.font = 'bold 28px Inter, sans-serif'
+        ctx.fillStyle = t.accent
+        ctx.textAlign = 'center'
+        ctx.fillText('REALPROOF', targetWidth / 2, 60)
+        contentTop = 90
+      }
+
+      // カードコンテンツをロゴの下に配置
+      const availableHeight = targetHeight - contentTop - 40
       const scale = Math.min(
         (targetWidth * 0.9) / canvas.width,
-        (targetHeight * 0.85) / canvas.height
+        (availableHeight * 0.9) / canvas.height
       )
       const scaledWidth = canvas.width * scale
       const scaledHeight = canvas.height * scale
       const x = (targetWidth - scaledWidth) / 2
-      const y = (targetHeight - scaledHeight) / 2
+      const y = contentTop + (availableHeight - scaledHeight) / 2
       ctx.drawImage(canvas, x, y, scaledWidth, scaledHeight)
 
-      const blob = await new Promise<Blob>((resolve) => {
-        finalCanvas.toBlob((b) => resolve(b!), 'image/png')
+      const dataUrl = finalCanvas.toDataURL('image/png')
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        finalCanvas.toBlob((b) => {
+          if (b) resolve(b)
+          else reject(new Error('Blob creation failed'))
+        }, 'image/png')
       })
 
       const fileName = format === 'stories'
@@ -117,6 +155,7 @@ export default function MyProofPublicPage() {
         : 'realproof-myproof-feed.png'
       const file = new File([blob], fileName, { type: 'image/png' })
 
+      // モバイル: Web Share API
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
         try {
           await navigator.share({
@@ -131,23 +170,30 @@ export default function MyProofPublicPage() {
             setSharing(false)
             return
           }
+          // Share失敗時はダウンロードにフォールバック
         }
       }
 
-      // フォールバック: ダウンロード
+      // PC: ダウンロード
       const link = document.createElement('a')
       link.download = fileName
-      link.href = finalCanvas.toDataURL('image/png')
+      link.href = dataUrl
+      document.body.appendChild(link)
       link.click()
+      document.body.removeChild(link)
+
+      setShareResult(`${format === 'stories' ? 'ストーリーズ' : 'フィード'}用画像を保存しました`)
+      setTimeout(() => setShareResult(''), 3000)
     } catch (e) {
       console.error('[myproof share] error:', e)
+      alert('画像の生成中にエラーが発生しました。もう一度お試しください。')
     }
     setSharing(false)
   }
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', background: '#1A1A2E', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ minHeight: '100vh', background: '#FAFAF7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ color: '#9CA3AF', fontSize: 14 }}>読み込み中...</div>
       </div>
     )
@@ -332,6 +378,7 @@ export default function MyProofPublicPage() {
                 }}
               >
                 ストーリーズ用
+                <span style={{ fontSize: 10, display: 'block', opacity: 0.7 }}>9:16</span>
               </button>
               <button
                 onClick={() => generateAndShare('feed')}
@@ -346,10 +393,14 @@ export default function MyProofPublicPage() {
                 }}
               >
                 フィード用
+                <span style={{ fontSize: 10, display: 'block', opacity: 0.7 }}>4:5</span>
               </button>
             </div>
             {sharing && (
               <p style={{ fontSize: 12, color: t.subtext, marginTop: 8 }}>画像を生成中...</p>
+            )}
+            {shareResult && (
+              <p style={{ fontSize: 12, color: t.accent, marginTop: 8 }}>{shareResult}</p>
             )}
           </div>
         ) : (

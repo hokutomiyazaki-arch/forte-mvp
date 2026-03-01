@@ -40,6 +40,8 @@ export default function MyProofTab() {
   const [loading, setLoading] = useState(true)
   const [tagline, setTagline] = useState('')
   const [savingTagline, setSavingTagline] = useState(false)
+  const [taglineSaved, setTaglineSaved] = useState(false)
+  const [themeSaved, setThemeSaved] = useState(false)
   const [selectedTheme, setSelectedTheme] = useState<ThemeKey>('dark')
 
   // Add pro modal
@@ -86,12 +88,17 @@ export default function MyProofTab() {
 
   async function saveTagline() {
     setSavingTagline(true)
+    setTaglineSaved(false)
     try {
-      await fetch('/api/myproof/card', {
+      const res = await fetch('/api/myproof/card', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tagline }),
       })
+      if (res.ok) {
+        setTaglineSaved(true)
+        setTimeout(() => setTaglineSaved(false), 3000)
+      }
     } catch (e) {
       console.error('[MyProofTab] tagline save error:', e)
     }
@@ -100,12 +107,17 @@ export default function MyProofTab() {
 
   async function handleThemeChange(theme: ThemeKey) {
     setSelectedTheme(theme)
+    setThemeSaved(false)
     try {
-      await fetch('/api/myproof/card', {
+      const res = await fetch('/api/myproof/card', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ theme }),
       })
+      if (res.ok) {
+        setThemeSaved(true)
+        setTimeout(() => setThemeSaved(false), 3000)
+      }
     } catch (e) {
       console.error('[MyProofTab] theme save error:', e)
     }
@@ -311,6 +323,9 @@ export default function MyProofTab() {
           <p className="text-xs text-gray-400 mt-1.5">
             {THEMES[selectedTheme]?.label}
           </p>
+          {themeSaved && (
+            <p className="text-xs text-green-600 mt-1">&#10003; テーマを変更しました</p>
+          )}
         </div>
 
         {/* タグライン */}
@@ -333,6 +348,9 @@ export default function MyProofTab() {
               {savingTagline ? '...' : '保存'}
             </button>
           </div>
+          {taglineSaved && (
+            <p className="text-xs text-green-600 mt-1">&#10003; 保存しました!</p>
+          )}
         </div>
       </div>
 
