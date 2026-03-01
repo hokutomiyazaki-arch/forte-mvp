@@ -10,22 +10,23 @@ export const dynamic = 'force-dynamic'
  *
  * POST /api/db
  * Body: { action, table, query }
- *
- * action: 'select' | 'insert' | 'update' | 'upsert' | 'delete' | 'rpc'
- * table: string (table name)
- * query: object with query parameters
  */
 export async function POST(req: NextRequest) {
-  const supabase = getSupabaseAdmin()
-
   try {
-    const body = await req.json()
-    const { action, table, query } = body
+    const body = await req.json().catch(() => null)
 
-    if (!action || !table) {
-      return NextResponse.json({ error: 'Missing action or table' }, { status: 400 })
+    if (!body) {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
+    const { action, table, query: rawQuery } = body
+    const query = rawQuery || {}
+
+    if (!action || !table) {
+      return NextResponse.json({ error: 'Missing action or table', received: { action, table } }, { status: 400 })
+    }
+
+    const supabase = getSupabaseAdmin()
     let result: any
 
     switch (action) {
@@ -41,8 +42,16 @@ export async function POST(req: NextRequest) {
         if (query.lte) for (const [k, v] of Object.entries(query.lte)) q = q.lte(k, v as any)
         if (query.like) for (const [k, v] of Object.entries(query.like)) q = q.like(k, v as string)
         if (query.ilike) for (const [k, v] of Object.entries(query.ilike)) q = q.ilike(k, v as string)
-        if (query.order) q = q.order(query.order.column, query.order.options || {})
+        if (query.or) q = (q as any).or(query.or)
+        if (query.order) {
+          if (Array.isArray(query.order)) {
+            for (const o of query.order) q = q.order(o.column, o.options || {})
+          } else {
+            q = q.order(query.order.column, query.order.options || {})
+          }
+        }
         if (query.limit) q = q.limit(query.limit)
+        if (query.range) q = (q as any).range(query.range[0], query.range[1])
         if (query.maybeSingle) q = (q as any).maybeSingle()
         result = await q
         break
@@ -80,17 +89,26 @@ export async function POST(req: NextRequest) {
         break
       }
 
+      case 'rpc': {
+        result = await (supabase as any).rpc(table, query.params || {})
+        break
+      }
+
       default:
-        return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+        return NextResponse.json({ error: `Invalid action: ${action}` }, { status: 400 })
     }
 
     if (result.error) {
-      return NextResponse.json({ error: result.error.message, code: result.error.code, details: result.error.details }, { status: 400 })
+      console.error(`[db-proxy] ${action} ${table} error:`, result.error.message, result.error.code)
+      return NextResponse.json(
+        { data: null, error: result.error.message, code: result.error.code, details: result.error.details },
+        { status: 200 } // Return 200 with error in body (matches Supabase client behavior)
+      )
     }
 
-    return NextResponse.json({ data: result.data, count: result.count })
+    return NextResponse.json({ data: result.data, error: null, count: result.count ?? null })
   } catch (err: any) {
-    console.error('[db-proxy] error:', err)
-    return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 })
+    console.error('[db-proxy] unexpected error:', err)
+    return NextResponse.json({ data: null, error: err.message || 'Internal error' }, { status: 200 })
   }
 }

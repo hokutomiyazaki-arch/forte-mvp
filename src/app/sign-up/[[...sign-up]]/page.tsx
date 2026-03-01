@@ -4,6 +4,7 @@ export default function SignUpPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#FAFAF7]">
       <SignUp
+        fallbackRedirectUrl="/dashboard"
         appearance={{
           elements: {
             rootBox: 'mx-auto',
