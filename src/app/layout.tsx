@@ -3,6 +3,40 @@ import './globals.css'
 import { ClerkProvider } from '@clerk/nextjs'
 import { jaJP } from '@clerk/localizations'
 
+// Clerk 日本語カスタマイズ（jaJP をベースにカスタムテキストで上書き）
+const clerkLocalization = {
+  ...jaJP,
+  signIn: {
+    ...jaJP.signIn,
+    start: {
+      ...(jaJP.signIn as any)?.start,
+      title: 'ログイン',
+      subtitle: 'REALPROOFにログイン',
+      actionText: 'アカウントをお持ちでない方は',
+      actionLink: '新規登録',
+    },
+  },
+  signUp: {
+    ...jaJP.signUp,
+    start: {
+      ...(jaJP.signUp as any)?.start,
+      title: '新規登録',
+      subtitle: 'REALPROOFに登録',
+      actionText: '既にアカウントをお持ちの方は',
+      actionLink: 'ログイン',
+    },
+  },
+  userButton: {
+    ...jaJP.userButton,
+    action__signOut: 'ログアウト',
+  },
+  formFieldLabel__emailAddress: 'メールアドレス',
+  formFieldLabel__password: 'パスワード',
+  formButtonPrimary: '続ける',
+  socialButtonsBlockButton: '{{provider|titleize}}でログイン',
+  dividerText: 'または',
+}
+
 // 全ページをダイナミックレンダリングにする（env変数がビルド時に不在のため）
 export const dynamic = 'force-dynamic'
 
@@ -42,7 +76,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <ClerkProvider
-      localization={jaJP}
+      localization={clerkLocalization}
       signInFallbackRedirectUrl="/dashboard"
       signUpFallbackRedirectUrl="/dashboard"
       appearance={{
