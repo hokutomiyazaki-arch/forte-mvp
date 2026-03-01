@@ -1,5 +1,8 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 
+// 公開ルート（認証不要）
+const isPublicMyProof = createRouteMatcher(['/myproof/p/(.*)'])
+
 // 認証が必要なルート
 const isProtectedRoute = createRouteMatcher([
   '/dashboard(.*)',
@@ -13,6 +16,10 @@ const isProtectedRoute = createRouteMatcher([
 ])
 
 export default clerkMiddleware(async (auth, req) => {
+  // /myproof/p/[token] は公開ページなので認証スキップ
+  if (isPublicMyProof(req)) {
+    return
+  }
   if (isProtectedRoute(req)) {
     await auth.protect()
   }
