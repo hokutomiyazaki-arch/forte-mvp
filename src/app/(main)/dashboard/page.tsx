@@ -8,6 +8,7 @@ import ForteChart from '@/components/ForteChart'
 import VoiceShareModal from '@/components/VoiceShareCard'
 import ImageCropper from '@/components/ImageCropper'
 import CardModeSwitch from '@/components/CardModeSwitch'
+import MyProofTab from '@/components/MyProofTab'
 import { PREFECTURES } from '@/lib/prefectures'
 
 // バッジ階層: FNTはBDCの上位資格。同レベルのFNTを持っていたらBDCは非表示
@@ -1347,42 +1348,7 @@ export default function DashboardPage() {
 
       {/* ═══ Tab: マイプルーフ ═══ */}
       {dashboardTab === 'myproof' && (
-      <>
-      <div className="bg-white rounded-xl p-6 shadow-sm mb-6">
-        <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">マイプルーフ</h2>
-        <p className="text-sm text-gray-500 mb-4">
-          あなたが信頼する人・モノを集めて、シェアしよう。
-        </p>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <a href={`/myproof/${user?.id}`} style={{
-            padding: '10px 20px', fontSize: 14, fontWeight: 600,
-            background: '#1A1A2E', color: '#C4A35A',
-            borderRadius: 8, textDecoration: 'none',
-          }}>
-            公開ページを見る
-          </a>
-          <a href="/myproof/edit" style={{
-            padding: '10px 20px', fontSize: 14, fontWeight: 600,
-            background: '#C4A35A', color: '#fff',
-            borderRadius: 8, textDecoration: 'none',
-          }}>
-            編集する
-          </a>
-        </div>
-      </div>
-
-      {/* マイプルーフ QRコード */}
-      <div className="bg-white rounded-xl p-6 shadow-sm mb-6 text-center">
-        <h3 className="text-sm font-bold text-[#1A1A2E] mb-3">マイプルーフ QRコード</h3>
-        <p className="text-xs text-gray-400 mb-4">スキャンするとあなたのマイプルーフページが開きます</p>
-        <img
-          src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(typeof window !== 'undefined' ? window.location.origin + '/myproof/' + user?.id : 'https://realproof.jp/myproof/' + user?.id)}`}
-          alt="マイプルーフ QR"
-          className="mx-auto"
-          style={{ width: 200, height: 200 }}
-        />
-      </div>
-      </>
+        <MyProofTab />
       )}
 
       {/* ═══ Tab: カード管理 ═══ */}
