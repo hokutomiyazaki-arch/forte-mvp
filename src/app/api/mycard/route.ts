@@ -202,6 +202,7 @@ export async function GET() {
 
     return NextResponse.json({
       isPro: isActivePro,
+      proId: proCheck.data?.id || null,
       proDeactivated: isDeactivatedPro,
       nickname: clientData.data?.nickname || '',
       email,
