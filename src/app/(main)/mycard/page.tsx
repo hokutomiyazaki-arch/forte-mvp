@@ -7,6 +7,7 @@ import { getRewardLabel } from '@/lib/types'
 import RewardContent from '@/components/RewardContent'
 import CardModeSwitch from '@/components/CardModeSwitch'
 import PhotoCropper from '@/components/PhotoCropper'
+import MyProofTab from '@/components/MyProofTab'
 import { Suspense } from 'react'
 
 interface RewardWithPro {
@@ -688,7 +689,7 @@ function MyCardContent() {
           { key: 'history' as const, label: 'プルーフ済み', count: voteHistory.length },
           { key: 'bookmarked' as const, label: '気になる', count: bookmarkCount },
           { key: 'myproof' as const, label: 'マイプルーフ', count: 0 },
-          { key: 'card' as const, label: 'カード管理', count: 0 },
+          ...((isPro && !proDeactivated) ? [{ key: 'card' as const, label: 'カード管理', count: 0 }] : []),
         ]).map(t => (
           <button
             key={t.key}
@@ -995,39 +996,7 @@ function MyCardContent() {
       )}
 
       {/* マイプルーフタブ */}
-      {tab === 'myproof' && (
-        <div>
-          <div style={{ textAlign: 'center', padding: '16px 0' }}>
-            <p style={{ fontSize: 14, color: '#666', marginBottom: 16 }}>
-              あなたがプルーフしたプロや、お気に入りのものを公開ページで表示できます。
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
-              <a
-                href={`/myproof/${authUser?.id}`}
-                style={{
-                  display: 'inline-block', padding: '12px 32px',
-                  fontSize: 14, fontWeight: 700,
-                  background: '#1A1A2E', color: '#C4A35A',
-                  borderRadius: 8, textDecoration: 'none',
-                }}
-              >
-                マイプルーフを見る
-              </a>
-              <a
-                href="/myproof/edit"
-                style={{
-                  display: 'inline-block', padding: '12px 32px',
-                  fontSize: 14, fontWeight: 700,
-                  background: '#C4A35A', color: '#fff',
-                  borderRadius: 8, textDecoration: 'none',
-                }}
-              >
-                マイプルーフを編集する
-              </a>
-            </div>
-          </div>
-        </div>
-      )}
+      {tab === 'myproof' && <MyProofTab />}
 
       {/* カード管理タブ */}
       {tab === 'card' && (
