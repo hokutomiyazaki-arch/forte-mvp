@@ -96,12 +96,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
       category: item.category || (item.item_type === 'professional' ? 'professional' : 'other'),
     }))
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       card: { ...card, theme: card.theme || 'dark' },
       owner: { name: ownerName, photo_url: ownerPhoto },
       owner_user_id: card.user_id,
       items: itemsWithCategory,
     })
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate')
+    return response
   } catch (err: any) {
     console.error('[api/myproof/public/[token]] error:', err)
     return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 })
