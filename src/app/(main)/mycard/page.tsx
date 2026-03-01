@@ -188,7 +188,7 @@ function MyCardContent() {
       }
     }
     checkSession()
-  }, [authLoaded, authUser])
+  }, [authLoaded, clerkUser?.id])
 
   // パスワードリセット着地時にスクロール
   useEffect(() => {
