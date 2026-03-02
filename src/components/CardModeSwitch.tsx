@@ -21,10 +21,12 @@ export default function CardModeSwitch({ professionalId, initialCardMode }: Prop
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: 'update',
           table: 'professionals',
-          method: 'update',
-          data: { card_mode: cardMode },
-          match: { id: professionalId },
+          query: {
+            data: { card_mode: cardMode },
+            eq: { id: professionalId },
+          },
         }),
       })
 
