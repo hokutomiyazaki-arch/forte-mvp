@@ -38,12 +38,12 @@ export default function MyProofSharePage() {
     // ユーザー情報取得
     const { data: proData } = await (supabase as any)
       .from('professionals')
-      .select('id, display_name, photo_url, custom_proofs')
+      .select('id, name, photo_url, custom_proofs')
       .eq('user_id', userId)
       .maybeSingle()
 
     if (proData) {
-      setUserName(proData.display_name || '')
+      setUserName(proData.name || '')
       setUserPhoto(proData.photo_url || '')
 
       // 投票集計取得

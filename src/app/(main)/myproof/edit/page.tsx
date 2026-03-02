@@ -7,7 +7,7 @@ import ImageCropper from '@/components/ImageCropper'
 
 interface VotedPro {
   id: string
-  display_name: string
+  name: string
   photo_url: string | null
   specialty: string | null
   selected: boolean
@@ -89,12 +89,12 @@ export default function MyProofEditPage() {
     if (uniqueProIds.length > 0) {
       const { data: prosData } = await (supabase as any)
         .from('professionals')
-        .select('id, display_name, name, title, photo_url, specialty')
+        .select('id, name, title, photo_url, specialty')
         .in('id', uniqueProIds)
 
       setVotedPros((prosData || []).map((p: any) => ({
         ...p,
-        display_name: p.display_name || p.name || 'プロ',
+        name: p.name || 'プロ',
         specialty: p.title || p.specialty || '',
         selected: selectedProIds.has(p.id),
       })))
@@ -219,7 +219,7 @@ export default function MyProofEditPage() {
           user_id: authUser.id,
           type: 'pro',
           target_pro_id: pro.id,
-          title: pro.display_name,
+          title: pro.name,
           comment: null,
           photo_url: pro.photo_url,
           display_order: order++,
@@ -296,12 +296,12 @@ export default function MyProofEditPage() {
                 />
                 <img
                   src={pro.photo_url || '/default-avatar.png'}
-                  alt={pro.display_name}
+                  alt={pro.name}
                   style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }}
                 />
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>
-                    {pro.display_name}
+                    {pro.name}
                   </div>
                   {pro.specialty && (
                     <div style={{ fontSize: 12, color: '#888' }}>{pro.specialty}</div>

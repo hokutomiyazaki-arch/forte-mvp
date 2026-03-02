@@ -65,7 +65,7 @@ export default function MyProofPage() {
   const [userName, setUserName] = useState('')
   const [userPhoto, setUserPhoto] = useState('')
   const [myProofs, setMyProofs] = useState<MyProofItem[]>([])
-  const [votedPros, setVotedPros] = useState<{ id: string; display_name: string; photo_url: string | null }[]>([])
+  const [votedPros, setVotedPros] = useState<{ id: string; name: string; photo_url: string | null }[]>([])
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
@@ -85,12 +85,12 @@ export default function MyProofPage() {
 
     const { data: proData } = await (supabase as any)
       .from('professionals')
-      .select('display_name, photo_url')
+      .select('name, photo_url')
       .eq('user_id', userId)
       .maybeSingle()
 
     if (proData) {
-      name = proData.display_name || ''
+      name = proData.name || ''
       photo = proData.photo_url || ''
     }
 
@@ -127,7 +127,7 @@ export default function MyProofPage() {
         const proIds = proTypeItems.map((p: any) => p.target_pro_id)
         const { data: prosData } = await (supabase as any)
           .from('professionals')
-          .select('id, display_name, photo_url')
+          .select('id, name, photo_url')
           .in('id', proIds)
 
         const proMap = new Map((prosData || []).map((p: any) => [p.id, p]))
@@ -135,7 +135,7 @@ export default function MyProofPage() {
         const enriched = proofs.map((p: any) => {
           if (p.type === 'pro' && p.target_pro_id && proMap.has(p.target_pro_id)) {
             const pro = proMap.get(p.target_pro_id) as any
-            return { ...p, pro_name: pro?.display_name, pro_photo_url: pro?.photo_url }
+            return { ...p, pro_name: pro?.name, pro_photo_url: pro?.photo_url }
           }
           return p
         })
@@ -175,7 +175,7 @@ export default function MyProofPage() {
       if (newProIds.length > 0) {
         const { data: prosData } = await (supabase as any)
           .from('professionals')
-          .select('id, display_name, photo_url')
+          .select('id, name, photo_url')
           .in('id', newProIds)
         setVotedPros(prosData || [])
       }
@@ -280,12 +280,12 @@ export default function MyProofPage() {
                     margin: '0 auto 8px', background: '#F0EDE6',
                   }}>
                     {pro.photo_url
-                      ? <img src={pro.photo_url} alt={pro.display_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ? <img src={pro.photo_url} alt={pro.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#AAA', fontSize: 20 }}>👤</div>
                     }
                   </div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: '#2D2D2D', marginBottom: 8 }}>
-                    {pro.display_name}
+                    {pro.name}
                   </div>
                   <a href="/myproof/edit" style={{
                     display: 'inline-block', fontSize: 11, fontWeight: 600,

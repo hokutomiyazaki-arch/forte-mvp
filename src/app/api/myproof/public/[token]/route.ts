@@ -30,13 +30,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
         .eq('user_id', card.user_id)
         .maybeSingle(),
       supabase.from('professionals')
-        .select('name, display_name, photo_url')
+        .select('name, photo_url')
         .eq('user_id', card.user_id)
         .is('deactivated_at', null)
         .maybeSingle(),
     ])
 
-    const ownerName = clientResult.data?.nickname || proResult.data?.name || proResult.data?.display_name || 'ユーザー'
+    const ownerName = clientResult.data?.nickname || proResult.data?.name || 'ユーザー'
     const ownerPhoto = clientResult.data?.photo_url || proResult.data?.photo_url || null
 
     // アイテム取得
@@ -55,7 +55,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
 
       const [proDetailsResult, voteSummaryResult] = await Promise.all([
         supabase.from('professionals')
-          .select('id, name, display_name, title, photo_url')
+          .select('id, name, title, photo_url')
           .in('id', proIds),
         supabase.from('vote_summary')
           .select('professional_id, vote_count')
@@ -80,7 +80,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
           const pro = proMap.get(item.professional_id)
           return {
             ...item,
-            pro_name: pro?.name || pro?.display_name || '不明',
+            pro_name: pro?.name || '不明',
             pro_title: pro?.title || '',
             pro_photo_url: pro?.photo_url || null,
             pro_vote_count: voteCountMap.get(item.professional_id) || 0,
