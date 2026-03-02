@@ -286,8 +286,11 @@ export default function CardPage() {
             </div>
           )}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-              <div style={{ fontSize: 20, fontWeight: 900, color: T.dark, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pro.name}</div>
+            {/* 名前（上の行、フル幅） */}
+            <div style={{ fontSize: 20, fontWeight: 900, color: T.dark }}>{pro.name}</div>
+            {/* タイトル + ブックマークボタン（同じ行） */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 2 }}>
+              <div style={{ fontSize: 12, color: T.gold, fontWeight: 700, flex: 1, minWidth: 0 }}>{pro.title}</div>
               {/* ブックマークボタン — プロ自身は非表示 */}
               {currentUserId !== pro?.user_id && (
                 <button
@@ -316,7 +319,6 @@ export default function CardPage() {
                 </button>
               )}
             </div>
-            <div style={{ fontSize: 12, color: T.gold, fontWeight: 700, marginTop: 2 }}>{pro.title}</div>
             <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>
               {pro.prefecture && <span>{pro.prefecture}</span>}
               {pro.area_description && <span> · {pro.area_description}</span>}
