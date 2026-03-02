@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth, currentUser } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
@@ -35,14 +35,37 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'professional_id is required' }, { status: 400 })
       }
 
-      // votesテーブルで確認（client_user_idで紐づけ）
-      const { data: vote } = await supabase
+      // votesテーブルで確認（client_user_id OR voter_emailで紐づけ）
+      // LINE投票はclient_user_id=nullだがvoter_emailで照合可能
+      const user = await currentUser()
+      const userEmail = user?.emailAddresses?.[0]?.emailAddress || ''
+
+      let vote = null
+
+      // まずclient_user_idで検索
+      const { data: voteById } = await supabase
         .from('votes')
         .select('id')
         .eq('client_user_id', userId)
         .eq('professional_id', professional_id)
         .limit(1)
         .maybeSingle()
+
+      vote = voteById
+
+      // 見つからなければvoter_emailで検索
+      if (!vote && userEmail) {
+        const { data: voteByEmail } = await supabase
+          .from('votes')
+          .select('id')
+          .eq('voter_email', userEmail)
+          .eq('professional_id', professional_id)
+          .eq('status', 'confirmed')
+          .limit(1)
+          .maybeSingle()
+
+        vote = voteByEmail
+      }
 
       if (!vote) {
         return NextResponse.json({ error: '投票済みのプロのみ追加できます' }, { status: 400 })

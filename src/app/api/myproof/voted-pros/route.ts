@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth, currentUser } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
@@ -17,27 +17,45 @@ export async function GET() {
 
     const supabase = getSupabaseAdmin()
 
-    // 投票済みプロを取得（client_user_idで紐づけ）
-    const [votesResult, existingItemsResult] = await Promise.all([
+    // ユーザーのメールアドレスを取得
+    const user = await currentUser()
+    const userEmail = user?.emailAddresses?.[0]?.emailAddress || ''
+
+    // client_user_id OR voter_email で投票を検索
+    // LINE投票はclient_user_id=nullだがvoter_emailにLINEのメールが入っている
+    const votesQueries = [
       supabase.from('votes')
         .select('professional_id')
         .eq('client_user_id', userId)
         .eq('status', 'confirmed'),
+    ]
+    if (userEmail) {
+      votesQueries.push(
+        supabase.from('votes')
+          .select('professional_id')
+          .eq('voter_email', userEmail)
+          .eq('status', 'confirmed')
+      )
+    }
+
+    const [existingItemsResult, ...votesResults] = await Promise.all([
       supabase.from('my_proof_items')
         .select('professional_id')
         .eq('user_id', userId)
         .eq('item_type', 'professional'),
+      ...votesQueries,
     ])
 
+    // 全投票結果をマージして重複排除
+    const allVotes = votesResults.flatMap(r => r.data || [])
     const existingProIds = new Set(
       (existingItemsResult.data || [])
         .map((i: any) => i.professional_id)
         .filter(Boolean)
     )
 
-    // 重複排除して未追加のprofessional_idを抽出
     const uniqueProIds = Array.from(
-      new Set((votesResult.data || []).map((v: any) => v.professional_id))
+      new Set(allVotes.map((v: any) => v.professional_id))
     ).filter(id => !existingProIds.has(id))
 
     if (uniqueProIds.length === 0) {
