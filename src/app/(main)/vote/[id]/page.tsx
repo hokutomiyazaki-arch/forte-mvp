@@ -250,7 +250,50 @@ function VoteForm() {
           .eq('professional_id', proId)
           .eq('voter_email', sessionUser.email)
           .maybeSingle()
-        if (existing) setAlreadyVoted(true)
+        if (existing) {
+          setAlreadyVoted(true)
+        } else {
+          // LINE/Google認証から戻ってきた場合: sessionStorageに保留投票があれば自動送信
+          const pendingVoteStr = sessionStorage.getItem('pending_vote')
+          if (pendingVoteStr) {
+            try {
+              const pendingVote = JSON.parse(pendingVoteStr)
+              // 保留投票のprofessional_idが現在のプロと一致する場合のみ自動送信
+              if (pendingVote.professional_id === proId) {
+                sessionStorage.removeItem('pending_vote')
+                // 自動送信
+                const res = await fetch('/api/vote', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    ...pendingVote,
+                    voter_email: sessionUser.email,
+                  }),
+                })
+                if (res.ok) {
+                  const result = await res.json()
+                  setSubmitted(true)
+                  setSubmittedVoteId(result.voteId || '')
+                  setSubmittedToken(result.token || '')
+                  setLoading(false)
+                  return  // 自動送信成功 → 以降の処理をスキップ
+                } else {
+                  const errData = await res.json().catch(() => ({}))
+                  if (errData.error === 'already_voted') {
+                    setAlreadyVoted(true)
+                  } else {
+                    setError(errData.error || '投票に失敗しました')
+                  }
+                }
+              } else {
+                // 別のプロの保留投票 → クリア
+                sessionStorage.removeItem('pending_vote')
+              }
+            } catch {
+              sessionStorage.removeItem('pending_vote')
+            }
+          }
+        }
       } else {
         // 未ログイン: ローカルストレージからメアド復元
         const savedEmail = localStorage.getItem('proof_voter_email')
@@ -363,10 +406,12 @@ function VoteForm() {
       return
     }
     setError('')
-    // サーバーサイドAPI経由でLINE認証URLにリダイレクト
-    const voteData = buildVoteData()
-    const voteDataParam = encodeURIComponent(JSON.stringify(voteData))
-    window.location.href = `/api/auth/line?context=vote&professional_id=${proId}&qr_token=${qrToken || ''}&vote_data=${voteDataParam}`
+    // 投票データをsessionStorageに保存
+    saveVoteDataToSession()
+    // Clerkサインインページへリダイレクト（LINE/Google認証あり）
+    // 認証後、投票ページに戻ってきて自動送信される
+    const returnUrl = `/vote/${proId}${qrToken ? `?token=${qrToken}` : ''}`
+    window.location.href = `/sign-in?redirect_url=${encodeURIComponent(returnUrl)}`
   }
 
   // ── Google認証で投票 ──
@@ -380,9 +425,11 @@ function VoteForm() {
       return
     }
     setError('')
-    // TODO: Google OAuth投票フロー（Phase 2で実装）
-    // 現時点ではメールでの投票を促す
-    setError('Google認証での投票は準備中です。メールアドレスで投票してください。')
+    // 投票データをsessionStorageに保存
+    saveVoteDataToSession()
+    // Clerkサインインページへリダイレクト（LINE/Google認証あり）
+    const returnUrl = `/vote/${proId}${qrToken ? `?token=${qrToken}` : ''}`
+    window.location.href = `/sign-in?redirect_url=${encodeURIComponent(returnUrl)}`
   }
 
   // ── 投票送信（メール認証用） ──
@@ -1155,7 +1202,7 @@ function VoteForm() {
               <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
                 <path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63h2.386c.349 0 .63.285.63.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63.349 0 .631.285.631.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.281.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314" />
               </svg>
-              LINE連携でプルーフする
+              LINEで認証してプルーフする
             </button>
 
             {/* Google ボタン */}
@@ -1170,7 +1217,7 @@ function VoteForm() {
                 <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
               </svg>
-              Google連携でプルーフする
+              Googleで認証してプルーフする
             </button>
 
             {/* Divider */}
