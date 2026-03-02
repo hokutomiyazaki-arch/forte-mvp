@@ -1159,22 +1159,26 @@ function MyCardContent() {
                       onClick={async (e) => {
                         e.preventDefault()
                         e.stopPropagation()
-                        const res = await fetch('/api/db', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            action: 'delete',
-                            table: 'bookmarks',
-                            query: { eq: { id: bookmark.id } }
+                        try {
+                          const res = await fetch('/api/db', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              action: 'delete',
+                              table: 'bookmarks',
+                              query: { eq: { id: bookmark.id } }
+                            })
                           })
-                        })
-                        const result = await res.json()
-                        if (result.error) {
-                          console.error('Bookmark delete error:', result.error)
-                          return
+                          const result = await res.json()
+                          if (result.error) {
+                            console.error('Bookmark delete error:', result.error)
+                            return
+                          }
+                          setBookmarkedPros(prev => prev.filter(b => b.id !== bookmark.id))
+                          setBookmarkCount(prev => prev - 1)
+                        } catch (err) {
+                          console.error('Bookmark remove error:', err)
                         }
-                        setBookmarkedPros(prev => prev.filter(b => b.id !== bookmark.id))
-                        setBookmarkCount(prev => prev - 1)
                       }}
                       style={{
                         background: 'none', border: 'none', cursor: 'pointer',

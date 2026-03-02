@@ -1,7 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
 // useUser removed — auth is now handled server-side in /api/card/[id]
 import { Professional, VoteSummary, Vote } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
@@ -96,7 +95,6 @@ function RingChart({ label, count, max, size = 76 }: { label: string; count: num
 export default function CardPage() {
   const params = useParams()
   const id = params.id as string
-  const supabase = createClient()
   // Clerk auth removed from client — handled server-side in /api/card/[id]
   const [pro, setPro] = useState<Professional | null>(null)
   const [votes, setVotes] = useState<VoteSummary[]>([])
@@ -202,40 +200,37 @@ export default function CardPage() {
       return
     }
     setBookmarkLoading(true)
-    if (isBookmarked) {
-      const res = await fetch('/api/db', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'delete',
-          table: 'bookmarks',
-          query: { eq: { user_id: currentUserId, professional_id: id } }
+    try {
+      if (isBookmarked) {
+        const res = await fetch('/api/db', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'delete',
+            table: 'bookmarks',
+            query: { eq: { user_id: currentUserId, professional_id: id } }
+          })
         })
-      })
-      const result = await res.json()
-      if (result.error) {
-        console.error('Bookmark delete error:', result.error)
+        const result = await res.json()
+        if (!result.error) setIsBookmarked(false)
       } else {
-        setIsBookmarked(false)
-      }
-    } else {
-      const res = await fetch('/api/db', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'insert',
-          table: 'bookmarks',
-          query: { data: { user_id: currentUserId, professional_id: id } }
+        const res = await fetch('/api/db', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'insert',
+            table: 'bookmarks',
+            query: { data: { user_id: currentUserId, professional_id: id } }
+          })
         })
-      })
-      const result = await res.json()
-      if (result.error) {
-        console.error('Bookmark insert error:', result.error)
-      } else {
-        setIsBookmarked(true)
+        const result = await res.json()
+        if (!result.error) setIsBookmarked(true)
       }
+    } catch (e) {
+      console.error('Bookmark toggle error:', e)
+    } finally {
+      setBookmarkLoading(false)
     }
-    setBookmarkLoading(false)
   }
 
   if (loading) return <div style={{ textAlign: 'center', padding: '64px 0', color: T.textMuted }}>読み込み中...</div>
