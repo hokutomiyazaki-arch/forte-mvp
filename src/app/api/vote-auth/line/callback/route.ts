@@ -301,6 +301,7 @@ export async function GET(request: NextRequest) {
     const redirectParams = new URLSearchParams({
       pro: professional_id,
       vote_id: insertedVote.id,
+      auth_method: 'line',
     })
 
     console.log('[vote-auth/line/callback] Success! Redirecting to vote-confirmed')
