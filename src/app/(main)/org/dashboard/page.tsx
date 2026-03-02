@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase'
 import { useUser } from '@clerk/nextjs'
+import { db } from '@/lib/db'
 
 const ORG_TYPE_LABELS: Record<string, { typeName: string; member: string; members: string; invite: string; count: string; perMember: string; emptyTitle: string; emptyDesc: string; publicPage: string }> = {
   store: {
@@ -40,7 +40,6 @@ const ORG_TYPE_LABELS: Record<string, { typeName: string; member: string; member
 }
 
 export default function OrgDashboardPage() {
-  const supabase = createClient() as any
   const [loading, setLoading] = useState(true)
   const [org, setOrg] = useState<any>(null)
   const [members, setMembers] = useState<any[]>([])
@@ -59,13 +58,12 @@ export default function OrgDashboardPage() {
   async function load(user: any) {
     try {
       // オーナーの団体を取得
-      const { data: orgData, error: orgError } = await supabase
-        .from('organizations')
-        .select('*')
-        .eq('owner_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+      const { data: orgData, error: orgError } = await db.select('organizations', {
+        eq: { owner_id: user.id },
+        order: { column: 'created_at', options: { ascending: false } },
+        limit: 1,
+        maybeSingle: true,
+      })
 
       if (orgError) throw orgError
       if (!orgData) {
@@ -77,20 +75,18 @@ export default function OrgDashboardPage() {
       setOrg(orgData)
 
       // メンバー一覧 + プルーフ数を取得（org_proof_summary ビュー）
-      const { data: memberData } = await supabase
-        .from('org_proof_summary')
-        .select('*')
-        .eq('organization_id', orgData.id)
-        .order('total_votes', { ascending: false })
+      const { data: memberData } = await db.select('org_proof_summary', {
+        eq: { organization_id: orgData.id },
+        order: { column: 'total_votes', options: { ascending: false } },
+      })
 
       setMembers(memberData || [])
 
       // 団体全体の集計（org_aggregate ビュー）
-      const { data: aggData } = await supabase
-        .from('org_aggregate')
-        .select('*')
-        .eq('organization_id', orgData.id)
-        .maybeSingle()
+      const { data: aggData } = await db.select('org_aggregate', {
+        eq: { organization_id: orgData.id },
+        maybeSingle: true,
+      })
 
       setAggregate(aggData)
     } catch (err: any) {
