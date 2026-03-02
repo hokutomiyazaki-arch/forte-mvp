@@ -67,6 +67,11 @@ export default function MyProofTab() {
   const [proDescModal, setProDescModal] = useState<{ proId: string; proName: string } | null>(null)
   const [proDesc, setProDesc] = useState('')
 
+  // Pro edit modal (既存プロの説明文編集)
+  const [proEditItem, setProEditItem] = useState<MyProofItem | null>(null)
+  const [proEditDesc, setProEditDesc] = useState('')
+  const [savingProEdit, setSavingProEdit] = useState(false)
+
   // Edit custom item modal
   const [editItem, setEditItem] = useState<MyProofItem | null>(null)
   const [editTitle, setEditTitle] = useState('')
@@ -257,6 +262,35 @@ export default function MyProofTab() {
     } catch (e) {
       console.error('[MyProofTab] reorder error:', e)
     }
+  }
+
+  function openProEditModal(item: MyProofItem) {
+    setProEditItem(item)
+    setProEditDesc(item.description || '')
+  }
+
+  async function saveProEdit() {
+    if (!proEditItem) return
+    setSavingProEdit(true)
+    try {
+      const res = await fetch(`/api/myproof/items/${proEditItem.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          description: proEditDesc.trim() || null,
+        }),
+      })
+      if (res.ok) {
+        // ローカルstateを更新
+        setItems(prev => prev.map(it =>
+          it.id === proEditItem.id ? { ...it, description: proEditDesc.trim() || null } : it
+        ))
+        setProEditItem(null)
+      }
+    } catch (e) {
+      console.error('[MyProofTab] pro edit error:', e)
+    }
+    setSavingProEdit(false)
   }
 
   function openEditModal(item: MyProofItem) {
@@ -526,13 +560,11 @@ export default function MyProofTab() {
                     )}
                   </div>
 
-                  {/* 編集（自由追加のみ） */}
-                  {item.item_type === 'custom' && (
-                    <button
-                      onClick={() => openEditModal(item)}
-                      className="text-gray-300 hover:text-[#C4A35A] text-xs flex-shrink-0"
-                    >✎</button>
-                  )}
+                  {/* 編集 */}
+                  <button
+                    onClick={() => item.item_type === 'professional' ? openProEditModal(item) : openEditModal(item)}
+                    className="text-gray-300 hover:text-[#C4A35A] text-xs flex-shrink-0"
+                  >✎</button>
 
                   {/* 削除 */}
                   <button
@@ -737,6 +769,43 @@ export default function MyProofTab() {
                   {savingEdit ? '保存中...' : '保存する'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* プロ項目 説明文編集モーダル */}
+      {proEditItem && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-bold text-[#1A1A2E] mb-1">
+              {proEditItem.pro_name || '不明'}
+            </h3>
+            <p className="text-xs text-gray-500 mb-4">おすすめコメントを編集</p>
+
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">ひとこと（任意）</label>
+              <input
+                type="text"
+                value={proEditDesc}
+                onChange={e => setProEditDesc(e.target.value)}
+                placeholder="例: 腰痛が一発で治った！"
+                maxLength={100}
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+              />
+              <p className="text-xs text-gray-400 mt-1 text-right">{proEditDesc.length}/100</p>
+            </div>
+
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => setProEditItem(null)}
+                className="flex-1 py-2 border rounded-lg text-sm text-gray-600"
+              >キャンセル</button>
+              <button
+                onClick={saveProEdit}
+                disabled={savingProEdit}
+                className="flex-1 py-2 bg-[#C4A35A] text-white rounded-lg text-sm disabled:opacity-50"
+              >{savingProEdit ? '保存中...' : '保存'}</button>
             </div>
           </div>
         </div>
