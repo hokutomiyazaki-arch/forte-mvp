@@ -876,7 +876,7 @@ function MyCardContent() {
           { key: 'history' as const, label: 'プルーフ済み', count: voteHistory.length },
           { key: 'bookmarked' as const, label: '気になる', count: bookmarkCount },
           { key: 'myproof' as const, label: 'マイプルーフ', count: 0 },
-          ...(isPro ? [{ key: 'card' as const, label: 'カード管理', count: 0 }] : []),
+          { key: 'card' as const, label: 'カード管理', count: 0 },
         ]).map(t => (
           <button
             key={t.key}
@@ -1201,7 +1201,7 @@ function MyCardContent() {
       )}
 
       {/* カード管理タブ */}
-      {tab === 'card' && isPro && (
+      {tab === 'card' && (
         <div>
           {/* NFC カード管理セクション */}
           <div style={{
