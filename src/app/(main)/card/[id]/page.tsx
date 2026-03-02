@@ -235,7 +235,7 @@ export default function CardPage() {
 
   const handleBookmarkToggle = async () => {
     if (!currentUserId) {
-      window.location.href = `/login?redirect=/card/${id}`
+      window.location.href = `/sign-in?redirect_url=/card/${id}`
       return
     }
     setBookmarkLoading(true)
@@ -287,7 +287,7 @@ export default function CardPage() {
           )}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-              <div style={{ fontSize: 20, fontWeight: 900, color: T.dark }}>{pro.name}</div>
+              <div style={{ fontSize: 20, fontWeight: 900, color: T.dark, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pro.name}</div>
               {/* ブックマークボタン — プロ自身は非表示 */}
               {currentUserId !== pro?.user_id && (
                 <button
