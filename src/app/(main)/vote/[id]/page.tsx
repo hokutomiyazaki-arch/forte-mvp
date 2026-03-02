@@ -155,6 +155,12 @@ function VoteForm() {
         setError('投票の送信に失敗しました。もう一度お試しください。')
       } else if (authError === 'invalid_vote_data') {
         setError('投票データが無効です。もう一度お試しください。')
+      } else if (authError === 'google_cancelled') {
+        setError('Google認証がキャンセルされました')
+      } else if (authError === 'google_failed') {
+        setError('Google認証に失敗しました。もう一度お試しください。')
+      } else if (authError === 'google_no_email') {
+        setError('Googleアカウントからメールアドレスを取得できませんでした。メールアドレスで投票してください。')
       }
 
       // QRトークン期限チェック
@@ -388,7 +394,10 @@ function VoteForm() {
       return
     }
     setError('')
-    setError('Google連携は準備中です。LINEまたはメールアドレスで投票してください。')
+    // 投票データを構築してGoogle認証に直接遷移
+    const voteData = buildVoteData()
+    const voteDataParam = encodeURIComponent(JSON.stringify(voteData))
+    window.location.href = `/api/vote-auth/google?professional_id=${proId}&qr_token=${qrToken || ''}&vote_data=${voteDataParam}`
   }
 
   // ── 投票送信（メール認証用） ──
