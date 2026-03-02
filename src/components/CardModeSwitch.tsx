@@ -72,29 +72,9 @@ export default function CardModeSwitch() {
 
   const hasChanged = cardMode !== originalMode
 
+  // 非プロユーザーは何も表示しない（親のNFC入力UIのみで十分）
   if (!hasPro) {
-    return (
-      <div style={{
-        background: '#fff', borderRadius: 12,
-        border: '1px solid #E8E4DC', padding: 20,
-      }}>
-        <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E', marginBottom: 12 }}>
-          NFCカード設定
-        </h3>
-        <div style={{
-          padding: '12px 16px', borderRadius: 8,
-          background: 'rgba(196,163,90,0.04)',
-          border: '1px solid #E8E4DC',
-        }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>
-            マイプルーフモード
-          </div>
-          <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
-            NFCカードをタップすると、あなたのマイプルーフページが開きます
-          </div>
-        </div>
-      </div>
-    )
+    return null
   }
 
   return (
@@ -102,9 +82,12 @@ export default function CardModeSwitch() {
       background: '#fff', borderRadius: 12,
       border: '1px solid #E8E4DC', padding: 20,
     }}>
-      <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E', marginBottom: 16 }}>
-        プルーフカードモード
+      <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>
+        カードモード
       </h3>
+      <p style={{ fontSize: 12, color: '#888', marginBottom: 16 }}>
+        NFCカードをタップした時の動作を選択
+      </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
         {/* プロモード — プロ登録者のみ表示 */}
