@@ -782,6 +782,24 @@ function MyCardContent() {
             </div>
           )}
 
+          {/* プロ登録（一般ユーザー向け） */}
+          {!isPro && !proDeactivated && (
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <p className="text-sm text-gray-600 mb-2">
+                プロとしても登録しませんか？
+              </p>
+              <p className="text-xs text-gray-400 mb-3">
+                クライアントからのプルーフ（投票）を受け取れるようになります。
+              </p>
+              <button
+                onClick={handleUpgradeToPro}
+                className="px-4 py-2 bg-[#1A1A2E] text-white rounded-lg text-sm hover:opacity-90"
+              >
+                プロとして登録する →
+              </button>
+            </div>
+          )}
+
           {/* パスワード変更 */}
           {isLineUser ? (
             <div className="text-center">
