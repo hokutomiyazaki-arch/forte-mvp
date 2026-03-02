@@ -1159,10 +1159,20 @@ function MyCardContent() {
                       onClick={async (e) => {
                         e.preventDefault()
                         e.stopPropagation()
-                        await (supabase as any)
-                          .from('bookmarks')
-                          .delete()
-                          .eq('id', bookmark.id)
+                        const res = await fetch('/api/db', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            action: 'delete',
+                            table: 'bookmarks',
+                            query: { eq: { id: bookmark.id } }
+                          })
+                        })
+                        const result = await res.json()
+                        if (result.error) {
+                          console.error('Bookmark delete error:', result.error)
+                          return
+                        }
                         setBookmarkedPros(prev => prev.filter(b => b.id !== bookmark.id))
                         setBookmarkCount(prev => prev - 1)
                       }}
