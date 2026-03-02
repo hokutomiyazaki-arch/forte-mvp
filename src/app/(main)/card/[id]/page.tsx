@@ -203,17 +203,37 @@ export default function CardPage() {
     }
     setBookmarkLoading(true)
     if (isBookmarked) {
-      await (supabase as any)
-        .from('bookmarks')
-        .delete()
-        .eq('user_id', currentUserId)
-        .eq('professional_id', id)
-      setIsBookmarked(false)
+      const res = await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'delete',
+          table: 'bookmarks',
+          query: { eq: { user_id: currentUserId, professional_id: id } }
+        })
+      })
+      const result = await res.json()
+      if (result.error) {
+        console.error('Bookmark delete error:', result.error)
+      } else {
+        setIsBookmarked(false)
+      }
     } else {
-      await (supabase as any)
-        .from('bookmarks')
-        .insert({ user_id: currentUserId, professional_id: id })
-      setIsBookmarked(true)
+      const res = await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'insert',
+          table: 'bookmarks',
+          query: { data: { user_id: currentUserId, professional_id: id } }
+        })
+      })
+      const result = await res.json()
+      if (result.error) {
+        console.error('Bookmark insert error:', result.error)
+      } else {
+        setIsBookmarked(true)
+      }
     }
     setBookmarkLoading(false)
   }
