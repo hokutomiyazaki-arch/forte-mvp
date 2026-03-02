@@ -44,6 +44,7 @@ export default function MyProofPublicPage() {
   const [owner, setOwner] = useState<Owner | null>(null)
   const [items, setItems] = useState<MyProofItem[]>([])
   const [ownerUserId, setOwnerUserId] = useState<string | null>(null)
+  const [shareMsg, setShareMsg] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -297,32 +298,38 @@ export default function MyProofPublicPage() {
 
             <button
               onClick={async () => {
+                setShareMsg('')
                 const url = window.location.href
-                const shareData = {
-                  title: 'REALPROOF - マイプルーフ',
-                  text: '私の「本気のおすすめ」を見てみて！',
-                  url: url,
+
+                // クリップボードコピーのヘルパー
+                async function copyToClipboard() {
+                  try {
+                    await navigator.clipboard.writeText(url)
+                    setShareMsg('URLをコピーしました')
+                    setTimeout(() => setShareMsg(''), 3000)
+                  } catch {
+                    prompt('以下のURLをコピーしてください:', url)
+                  }
                 }
 
                 // Web Share API対応 → ネイティブ共有メニュー
-                if (navigator.share) {
+                if (typeof navigator.share === 'function') {
                   try {
-                    await navigator.share(shareData)
+                    await navigator.share({
+                      title: 'REALPROOF - マイプルーフ',
+                      text: '私の「本気のおすすめ」を見てみて！',
+                      url: url,
+                    })
                   } catch (e) {
                     // ユーザーがキャンセルした場合は何もしない
-                    if ((e as Error).name !== 'AbortError') {
-                      console.error('Share failed:', e)
-                    }
+                    if ((e as Error).name === 'AbortError') return
+                    // その他のエラー → クリップボードにフォールバック
+                    console.error('Share failed, falling back to clipboard:', e)
+                    await copyToClipboard()
                   }
                 } else {
                   // PC等で Web Share API 非対応 → クリップボードにコピー
-                  try {
-                    await navigator.clipboard.writeText(url)
-                    alert('URLをコピーしました！')
-                  } catch {
-                    // clipboard APIも非対応の場合
-                    prompt('以下のURLをコピーしてください:', url)
-                  }
+                  await copyToClipboard()
                 }
               }}
               style={{
@@ -350,6 +357,22 @@ export default function MyProofPublicPage() {
               </svg>
               シェアする
             </button>
+
+            {/* コピー完了トースト */}
+            {shareMsg && (
+              <div style={{
+                marginTop: 12,
+                padding: '8px 16px',
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                color: '#065F46',
+                background: '#D1FAE5',
+                display: 'inline-block',
+              }}>
+                ✓ {shareMsg}
+              </div>
+            )}
           </div>
         ) : (
           /* ========================================
