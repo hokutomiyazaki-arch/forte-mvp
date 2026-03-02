@@ -1299,7 +1299,7 @@ function MyCardContent() {
           </div>
 
           {/* カードモード切替（プロユーザーのみ表示） */}
-          {proId && <CardModeSwitch professionalId={proId} initialCardMode={proCardMode} />}
+          {isPro && proId && <CardModeSwitch professionalId={proId} initialCardMode={proCardMode} />}
         </div>
       )}
 
