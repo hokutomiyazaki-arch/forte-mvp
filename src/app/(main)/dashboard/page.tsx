@@ -1023,10 +1023,9 @@ export default function DashboardPage() {
                 {showMyProofQR ? (
                   <>
                     <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`${window.location.origin}/myproof/p/${myProofQrToken}`)}`}
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(`${window.location.origin}/myproof/p/${myProofQrToken}`)}`}
                       alt="マイプルーフ QR"
                       className="mx-auto mb-4"
-                      style={{ width: 200, height: 200 }}
                     />
                     <button
                       onClick={() => setShowMyProofQR(false)}
