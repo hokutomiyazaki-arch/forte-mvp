@@ -234,173 +234,24 @@ function ConfirmedContent() {
           </div>
         )}
 
-        {/* ===== セクション3: 今後のリワードの見方 ===== */}
-        <div className="bg-white rounded-2xl shadow-sm p-6">
-          <h2 className="text-xl font-bold text-[#1A1A2E] mb-4 text-center">
-            📱 リワードをまた見るには
-          </h2>
-
-          <div className="space-y-4">
-            {/* ステップ1: ブックマーク */}
-            <div className="flex items-start gap-4">
-              <div className="w-10 h-10 rounded-full bg-[#C4A35A] flex items-center justify-center flex-shrink-0">
-                <span className="text-white font-bold text-lg">1</span>
-              </div>
-              <div>
-                <p className="text-lg font-bold text-[#1A1A2E]">
-                  このページをブックマーク
-                </p>
-                <p className="text-base text-[#666666] mt-1 leading-relaxed">
-                  今見ているこのページを保存しておけば、
-                  いつでもリワードを確認できます。
-                </p>
-              </div>
-            </div>
-
-            <div className="border-t border-gray-100" />
-
-            {/* ステップ2: ホーム画面追加 */}
-            {isMobile && (
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-full bg-[#C4A35A] flex items-center justify-center flex-shrink-0">
-                  <span className="text-white font-bold text-lg">2</span>
-                </div>
-                <div>
-                  <p className="text-lg font-bold text-[#1A1A2E]">
-                    ホーム画面に追加すると便利
-                  </p>
-                  <p className="text-base text-[#666666] mt-1 leading-relaxed">
-                    ホーム画面に追加すれば、
-                    アプリのようにすぐ開けます。
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* LINE内ブラウザ: Safariで開く案内 */}
-          {isLineBrowser && isIOS && (
-            <div className="mt-6 p-5 rounded-xl bg-[#F5F5F0] space-y-4">
-              <p className="text-lg font-bold text-center text-[#1A1A2E]">
-                Safariで開く方法
-              </p>
-              <div className="space-y-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-9 h-9 rounded-full bg-[#1A1A2E] flex items-center justify-center flex-shrink-0">
-                    <span className="text-white font-bold">①</span>
-                  </div>
-                  <p className="text-lg text-[#1A1A2E]">
-                    右下の <span className="inline-block mx-1 px-2 py-1 bg-white rounded border text-xl">···</span> メニューをタップ
-                  </p>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="w-9 h-9 rounded-full bg-[#1A1A2E] flex items-center justify-center flex-shrink-0">
-                    <span className="text-white font-bold">②</span>
-                  </div>
-                  <p className="text-lg text-[#1A1A2E]">
-                    「Safariで開く」をタップ
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* iOS（Safari）: ホーム画面追加の手順 */}
-          {isIOS && !isLineBrowser && (
-            <div className="mt-6 p-5 rounded-xl bg-[#F5F5F0] space-y-4">
-              <p className="text-lg font-bold text-center text-[#1A1A2E]">
-                ホーム画面への追加方法
-              </p>
-              <div className="space-y-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-9 h-9 rounded-full bg-[#1A1A2E] flex items-center justify-center flex-shrink-0">
-                    <span className="text-white font-bold">①</span>
-                  </div>
-                  <p className="text-lg text-[#1A1A2E]">
-                    画面下の <span className="inline-block mx-1 px-2 py-1 bg-white rounded border text-xl">⬆️</span> をタップ
-                  </p>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="w-9 h-9 rounded-full bg-[#1A1A2E] flex items-center justify-center flex-shrink-0">
-                    <span className="text-white font-bold">②</span>
-                  </div>
-                  <p className="text-lg text-[#1A1A2E]">
-                    「ホーム画面に追加」をタップ
-                  </p>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="w-9 h-9 rounded-full bg-[#1A1A2E] flex items-center justify-center flex-shrink-0">
-                    <span className="text-white font-bold">③</span>
-                  </div>
-                  <p className="text-lg text-[#1A1A2E]">
-                    右上の「追加」をタップ
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Android: PWAインストール可能な場合 */}
-          {installPrompt && !isIOS && (
-            <button
-              onClick={handleInstall}
-              className="mt-6 w-full py-4 rounded-xl font-bold text-lg text-white bg-[#1A1A2E]"
-            >
-              📲 ホーム画面に追加する
-            </button>
-          )}
-
-          {/* Android: beforeinstallpromptが発火しない場合は手動手順 */}
-          {isAndroid && !installPrompt && !isIOS && (
-            <div className="mt-6 p-5 rounded-xl bg-[#F5F5F0] space-y-4">
-              <p className="text-lg font-bold text-center text-[#1A1A2E]">
-                ホーム画面への追加方法
-              </p>
-              <div className="space-y-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-9 h-9 rounded-full bg-[#1A1A2E] flex items-center justify-center flex-shrink-0">
-                    <span className="text-white font-bold">①</span>
-                  </div>
-                  <p className="text-lg text-[#1A1A2E]">
-                    右上の <span className="inline-block mx-1 px-2 py-1 bg-white rounded border text-xl">⋮</span> メニューをタップ
-                  </p>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="w-9 h-9 rounded-full bg-[#1A1A2E] flex items-center justify-center flex-shrink-0">
-                    <span className="text-white font-bold">②</span>
-                  </div>
-                  <p className="text-lg text-[#1A1A2E]">
-                    「ホーム画面に追加」をタップ
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ===== セクション4: ログイン方法の案内 ===== */}
-        <div className="bg-white rounded-2xl shadow-sm p-6">
-          <h2 className="text-xl font-bold text-[#1A1A2E] mb-4 text-center">
-            🔑 次回のログイン方法
-          </h2>
-          <div className="space-y-3">
-            <p className="text-lg text-[#333333] text-center leading-relaxed">
-              次回 REALPROOF にアクセスした時は、
-              <br />
-              <span className="font-bold text-[#06C755]">「LINEでログイン」</span>
-              を押すだけ。
-            </p>
-            <p className="text-lg text-[#333333] text-center leading-relaxed">
-              パスワードは不要です。
-            </p>
-          </div>
-
-          <div className="mt-4 py-4 px-6 bg-[#F5F5F0] rounded-xl text-center">
-            <p className="text-base text-[#666666] mb-1">アクセス先</p>
-            <p className="text-2xl font-bold text-[#1A1A2E] tracking-wide">
-              realproof.jp
-            </p>
-          </div>
+        {/* ===== セクション2.5: アカウント登録CTA ===== */}
+        <div className="bg-[#1A1A2E] rounded-2xl p-6 text-center">
+          <p className="text-white text-lg font-bold mb-2">
+            アカウントを作ると便利
+          </p>
+          <p className="text-gray-400 text-sm mb-5 leading-relaxed">
+            リワードの保存・他のプロの発見が
+            <br />いつでもできるようになります
+          </p>
+          <a
+            href="/sign-up"
+            className="block w-full py-4 rounded-xl font-bold text-lg text-[#1A1A2E] bg-[#C4A35A] hover:bg-[#b3923f] transition"
+          >
+            10秒で無料登録 →
+          </a>
+          <p className="text-gray-500 text-xs mt-3">
+            LINE・Google・メールで登録できます
+          </p>
         </div>
 
         {/* ===== セクション: 近くで活躍するプロ ===== */}
