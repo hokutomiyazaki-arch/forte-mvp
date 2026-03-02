@@ -56,7 +56,7 @@ export async function GET() {
       const proIds = Array.from(new Set(proItems.map((i: any) => i.professional_id)))
       const [proResult, voteResult] = await Promise.all([
         supabase.from('professionals')
-          .select('id, name, display_name, title, photo_url')
+          .select('id, name, title, photo_url')
           .in('id', proIds),
         supabase.from('votes')
           .select('professional_id', { count: 'exact' })
@@ -88,7 +88,7 @@ export async function GET() {
           const pro = proMap.get(item.professional_id)
           return {
             ...item,
-            pro_name: pro?.name || pro?.display_name || '不明',
+            pro_name: pro?.name || '不明',
             pro_title: pro?.title || '',
             pro_photo_url: pro?.photo_url || null,
             pro_vote_count: voteCountMap.get(item.professional_id) || 0,
