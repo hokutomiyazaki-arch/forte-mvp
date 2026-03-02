@@ -20,10 +20,10 @@ export async function GET(
   const { card_uid } = params
 
   try {
-    // 1. card_uid からカードを検索
+    // 1. card_uid からカードを検索（user_id も取得）
     const { data: card, error: cardError } = await supabase
       .from('nfc_cards')
-      .select('id, professional_id, status')
+      .select('id, professional_id, user_id, status')
       .eq('card_uid', card_uid)
       .maybeSingle()
 
@@ -42,12 +42,20 @@ export async function GET(
     }
 
     // カードが未紐づけ
-    if (card.status === 'unlinked' || !card.professional_id) {
+    if (card.status === 'unlinked' || (!card.professional_id && !card.user_id)) {
       return NextResponse.redirect(
         new URL('/?error=card_not_linked', request.url)
       )
     }
 
+    // ═══ パターンA: user_id のみ（一般ユーザー）→ マイプルーフへ ═══
+    if (card.user_id && !card.professional_id) {
+      return NextResponse.redirect(
+        new URL(`/myproof/${card.user_id}`, request.url)
+      )
+    }
+
+    // ═══ パターンB: professional_id あり → 既存ロジック ═══
     // 2. プロの情報取得（card_mode含む）
     const { data: pro } = await supabase
       .from('professionals')
