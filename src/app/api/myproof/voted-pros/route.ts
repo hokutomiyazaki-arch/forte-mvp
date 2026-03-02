@@ -16,10 +16,12 @@ export async function GET() {
     }
 
     const supabase = getSupabaseAdmin()
+    console.log('[voted-pros] userId:', userId)
 
     // ユーザーのメールアドレスを取得
     const user = await currentUser()
     const userEmail = user?.emailAddresses?.[0]?.emailAddress || ''
+    console.log('[voted-pros] userEmail:', userEmail)
 
     // client_user_id OR voter_email で投票を検索
     // LINE投票はclient_user_id=nullだがvoter_emailにLINEのメールが入っている
@@ -48,6 +50,7 @@ export async function GET() {
 
     // 全投票結果をマージして重複排除
     const allVotes = votesResults.flatMap(r => r.data || [])
+    console.log('[voted-pros] allVotes:', JSON.stringify(allVotes))
     const existingProIds = new Set(
       (existingItemsResult.data || [])
         .map((i: any) => i.professional_id)
@@ -57,6 +60,8 @@ export async function GET() {
     const uniqueProIds = Array.from(
       new Set(allVotes.map((v: any) => v.professional_id))
     ).filter(id => !existingProIds.has(id))
+    console.log('[voted-pros] existingProIds:', JSON.stringify(Array.from(existingProIds)))
+    console.log('[voted-pros] uniqueProIds:', JSON.stringify(uniqueProIds))
 
     if (uniqueProIds.length === 0) {
       return NextResponse.json({ pros: [] })
