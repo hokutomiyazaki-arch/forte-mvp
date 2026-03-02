@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase'
 import { useUser } from '@clerk/nextjs'
+import { db } from '@/lib/db'
 
 const ORG_TYPES = [
   { key: 'store', label: '店舗', desc: '整体院・ヨガスタジオ・サロン等', icon: '🏪' },
@@ -10,7 +10,6 @@ const ORG_TYPES = [
 ]
 
 export default function OrgRegisterPage() {
-  const supabase = createClient() as any
   const [step, setStep] = useState<'type' | 'form'>('type')
   const [orgType, setOrgType] = useState('')
   const [name, setName] = useState('')
@@ -36,31 +35,27 @@ export default function OrgRegisterPage() {
         return
       }
 
-      const { data, error: insertError } = await supabase
-        .from('organizations')
-        .insert({
-          owner_id: user.id,
-          type: orgType,
-          name,
-          location: location || null,
-          description: description || null,
-          website_url: websiteUrl || null,
-          booking_url: bookingUrl || null,
-        })
-        .select('id')
-        .maybeSingle()
+      const { data, error: insertError } = await db.insert('organizations', {
+        owner_id: user.id,
+        type: orgType,
+        name,
+        location: location || null,
+        description: description || null,
+        website_url: websiteUrl || null,
+        booking_url: bookingUrl || null,
+      }, { select: 'id', maybeSingle: true })
 
       if (insertError) throw insertError
 
       // オーナー自身がプロの場合、org_membersに自分を追加
-      const { data: proData } = await supabase
-        .from('professionals')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle()
+      const { data: proData } = await db.select('professionals', {
+        select: 'id',
+        eq: { user_id: user.id },
+        maybeSingle: true,
+      })
 
       if (proData && data?.id) {
-        await supabase.from('org_members').insert({
+        await db.insert('org_members', {
           organization_id: data.id,
           professional_id: proData.id,
           is_owner: true,
