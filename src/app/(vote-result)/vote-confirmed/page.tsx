@@ -36,6 +36,7 @@ function ConfirmedContent() {
   const [proName, setProName] = useState('')
   const [reward, setReward] = useState<RewardInfo | null>(null)
   const [loading, setLoading] = useState(true)
+  const [nearbyPros, setNearbyPros] = useState<any[]>([])
 
   // PWA インストール
   const [installPrompt, setInstallPrompt] = useState<any>(null)
@@ -91,6 +92,44 @@ function ConfirmedContent() {
           .maybeSingle()
         if (proData) {
           setProName(proData.name || '')
+        }
+      }
+
+      // 近くのプロを取得
+      if (proId) {
+        const { data: votedPro } = await (supabase as any)
+          .from('professionals')
+          .select('prefecture')
+          .eq('id', proId)
+          .maybeSingle()
+
+        if (votedPro?.prefecture) {
+          const { data: nearby } = await (supabase as any)
+            .from('professionals')
+            .select('id, name, title, photo_url, prefecture, is_online_available')
+            .eq('prefecture', votedPro.prefecture)
+            .neq('id', proId)
+            .eq('is_active', true)
+            .limit(6)
+
+          if (nearby && nearby.length > 0) {
+            const prosWithProofs = await Promise.all(
+              nearby.map(async (p: any) => {
+                const { count } = await (supabase as any)
+                  .from('votes')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('professional_id', p.id)
+                  .eq('status', 'confirmed')
+
+                return {
+                  ...p,
+                  totalProofs: count || 0,
+                }
+              })
+            )
+            prosWithProofs.sort((a: any, b: any) => b.totalProofs - a.totalProofs)
+            setNearbyPros(prosWithProofs)
+          }
         }
       }
 
@@ -363,6 +402,79 @@ function ConfirmedContent() {
             </p>
           </div>
         </div>
+
+        {/* ===== セクション: 近くで活躍するプロ ===== */}
+        {nearbyPros.length > 0 && (
+          <div>
+            <div className="bg-[#1A1A2E] rounded-2xl px-5 py-4 mb-4 text-center">
+              <p className="text-white text-lg font-bold leading-relaxed">
+                <span className="text-[#C4A35A]">{nearbyPros[0]?.prefecture}</span>
+                で活躍するプロが
+                <br />
+                あと<span className="text-[#C4A35A] text-2xl font-black mx-1">{nearbyPros.length}</span>人います
+              </p>
+            </div>
+
+            {/* 横スクロールカルーセル */}
+            <div
+              className="flex gap-3 overflow-x-auto pb-3 -mx-2 px-2"
+              style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}
+            >
+              {nearbyPros.map((p: any) => (
+                <a
+                  key={p.id}
+                  href={`/card/${p.id}`}
+                  className="flex-shrink-0 bg-white rounded-xl border border-gray-200 p-4 shadow-sm"
+                  style={{ width: 200, scrollSnapAlign: 'start', textDecoration: 'none' }}
+                >
+                  {/* プロ写真+名前 */}
+                  <div className="flex items-center gap-3 mb-3">
+                    {p.photo_url ? (
+                      <img
+                        src={p.photo_url}
+                        alt={p.name}
+                        className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-[#1A1A2E] flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                        {p.name?.charAt(0)}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="text-sm font-bold text-[#1A1A2E] truncate">{p.name}</div>
+                      <div className="text-xs text-[#C4A35A] truncate">{p.title || ''}</div>
+                    </div>
+                  </div>
+
+                  {/* プルーフ数 */}
+                  {p.totalProofs > 0 && (
+                    <div className="bg-[#C4A35A]/10 border border-[#C4A35A]/20 rounded-lg px-3 py-2 mb-2">
+                      <span className="text-xs font-bold text-[#1A1A2E]">
+                        {p.totalProofs} proofs
+                      </span>
+                    </div>
+                  )}
+
+                  {/* エリア */}
+                  <div className="text-xs text-gray-500">
+                    {p.prefecture}
+                    {p.is_online_available && (
+                      <span className="ml-1 text-[#C4A35A] font-bold">● オンライン可</span>
+                    )}
+                  </div>
+                </a>
+              ))}
+            </div>
+
+            {/* もっと見る */}
+            <a
+              href="/search"
+              className="block text-center text-base text-[#C4A35A] font-bold mt-2"
+            >
+              プロをもっと見る →
+            </a>
+          </div>
+        )}
 
         {/* ===== セクション5: プロのカード ===== */}
         <div className="text-center space-y-4 pb-8">
