@@ -147,6 +147,14 @@ function VoteForm() {
         setError('LINE認証がキャンセルされました')
       } else if (authError === 'line_expired') {
         setError('認証の有効期限が切れました。もう一度お試しください。')
+      } else if (authError === 'line_no_email') {
+        setError('LINEからメールアドレスを取得できませんでした。メールアドレスを入力して投票してください。')
+      } else if (authError === 'cooldown') {
+        setError('このプロへのプルーフは30分に1件まで。しばらくお待ちください。')
+      } else if (authError === 'vote_failed') {
+        setError('投票の送信に失敗しました。もう一度お試しください。')
+      } else if (authError === 'invalid_vote_data') {
+        setError('投票データが無効です。もう一度お試しください。')
       }
 
       // QRトークン期限チェック
@@ -250,50 +258,7 @@ function VoteForm() {
           .eq('professional_id', proId)
           .eq('voter_email', sessionUser.email)
           .maybeSingle()
-        if (existing) {
-          setAlreadyVoted(true)
-        } else {
-          // LINE/Google認証から戻ってきた場合: sessionStorageに保留投票があれば自動送信
-          const pendingVoteStr = sessionStorage.getItem('pending_vote')
-          if (pendingVoteStr) {
-            try {
-              const pendingVote = JSON.parse(pendingVoteStr)
-              // 保留投票のprofessional_idが現在のプロと一致する場合のみ自動送信
-              if (pendingVote.professional_id === proId) {
-                sessionStorage.removeItem('pending_vote')
-                // 自動送信
-                const res = await fetch('/api/vote', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    ...pendingVote,
-                    voter_email: sessionUser.email,
-                  }),
-                })
-                if (res.ok) {
-                  const result = await res.json()
-                  setSubmitted(true)
-                  setSubmittedVoteId(result.voteId || '')
-                  setSubmittedToken(result.token || '')
-                  setLoading(false)
-                  return  // 自動送信成功 → 以降の処理をスキップ
-                } else {
-                  const errData = await res.json().catch(() => ({}))
-                  if (errData.error === 'already_voted') {
-                    setAlreadyVoted(true)
-                  } else {
-                    setError(errData.error || '投票に失敗しました')
-                  }
-                }
-              } else {
-                // 別のプロの保留投票 → クリア
-                sessionStorage.removeItem('pending_vote')
-              }
-            } catch {
-              sessionStorage.removeItem('pending_vote')
-            }
-          }
-        }
+        if (existing) setAlreadyVoted(true)
       } else {
         // 未ログイン: ローカルストレージからメアド復元
         const savedEmail = localStorage.getItem('proof_voter_email')
@@ -406,12 +371,10 @@ function VoteForm() {
       return
     }
     setError('')
-    // 投票データをsessionStorageに保存
-    saveVoteDataToSession()
-    // Clerkサインインページへリダイレクト（LINE/Google認証あり）
-    // 認証後、投票ページに戻ってきて自動送信される
-    const returnUrl = `/vote/${proId}${qrToken ? `?token=${qrToken}` : ''}`
-    window.location.href = `/sign-in?redirect_url=${encodeURIComponent(returnUrl)}`
+    // 投票データを構築してLINE認証に直接遷移（Clerkを使わない）
+    const voteData = buildVoteData()
+    const voteDataParam = encodeURIComponent(JSON.stringify(voteData))
+    window.location.href = `/api/vote-auth/line?professional_id=${proId}&qr_token=${qrToken || ''}&vote_data=${voteDataParam}`
   }
 
   // ── Google認証で投票 ──
@@ -425,11 +388,7 @@ function VoteForm() {
       return
     }
     setError('')
-    // 投票データをsessionStorageに保存
-    saveVoteDataToSession()
-    // Clerkサインインページへリダイレクト（LINE/Google認証あり）
-    const returnUrl = `/vote/${proId}${qrToken ? `?token=${qrToken}` : ''}`
-    window.location.href = `/sign-in?redirect_url=${encodeURIComponent(returnUrl)}`
+    setError('Google連携は準備中です。LINEまたはメールアドレスで投票してください。')
   }
 
   // ── 投票送信（メール認証用） ──
