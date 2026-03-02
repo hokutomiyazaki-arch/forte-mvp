@@ -50,6 +50,12 @@ export async function POST() {
     await supabase.from('client_rewards').delete().eq('client_id', client.id)
   }
 
+  // user_id ベースのNFCカード解除（削除ではなくunlinkedに戻す）
+  await supabase
+    .from('nfc_cards')
+    .update({ user_id: null, status: 'unlinked', updated_at: new Date().toISOString() })
+    .eq('user_id', userId)
+
   // メインテーブル
   await supabase.from('professionals').delete().eq('user_id', userId)
   await supabase.from('clients').delete().eq('user_id', userId)
