@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { useUser } from '@clerk/nextjs'
+// useUser removed — auth is now handled server-side in /api/card/[id]
 import { Professional, VoteSummary, Vote } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import { COLORS, FONTS } from '@/lib/design-tokens'
@@ -97,8 +97,7 @@ export default function CardPage() {
   const params = useParams()
   const id = params.id as string
   const supabase = createClient()
-  const { user: clerkUser, isLoaded: authLoaded } = useUser()
-  const authUser = clerkUser ? { id: clerkUser.id } : null
+  // Clerk auth removed from client — handled server-side in /api/card/[id]
   const [pro, setPro] = useState<Professional | null>(null)
   const [votes, setVotes] = useState<VoteSummary[]>([])
   const [personalityVotes, setPersonalityVotes] = useState<{ category: string; vote_count: number }[]>([])
@@ -117,121 +116,85 @@ export default function CardPage() {
 
   useEffect(() => {
     async function load() {
-      const { data: proData } = await supabase
-        .from('professionals').select('*').eq('id', id).maybeSingle() as any
-      if (proData?.deactivated_at) {
-        setPro({ ...proData, _deactivated: true } as any)
-        setLoading(false)
-        return
-      }
-      if (proData) setPro(proData)
+      try {
+        const res = await fetch(`/api/card/${id}`)
+        if (!res.ok) {
+          setLoading(false)
+          return
+        }
+        const data = await res.json()
 
-      const { data: rawVoteData } = await supabase
-        .from('vote_summary').select('*').eq('professional_id', id) as any
-      if (rawVoteData && proData) {
-        const { data: piData } = await supabase
-          .from('proof_items').select('id, label') as any
-        if (piData) {
-          const labeledVotes = resolveProofLabels(rawVoteData, piData, proData.custom_proofs || [])
+        if (!data.pro) {
+          setLoading(false)
+          return
+        }
+
+        if (data.pro.deactivated_at) {
+          setPro({ ...data.pro, _deactivated: true } as any)
+          setLoading(false)
+          return
+        }
+
+        setPro(data.pro)
+
+        // プルーフラベル解決
+        if (data.voteSummary.length > 0 && data.proofItems.length > 0) {
+          const labeledVotes = resolveProofLabels(data.voteSummary, data.proofItems, data.pro.custom_proofs || [])
           setVotes(labeledVotes)
         }
-      }
 
-      const { data: rawPersData } = await supabase
-        .from('personality_summary').select('*').eq('professional_id', id) as any
-      if (rawPersData) {
-        const { data: persItems } = await supabase
-          .from('personality_items').select('id, label') as any
-        if (persItems) {
-          const labeledPers = resolvePersonalityLabels(rawPersData, persItems)
+        // 人柄ラベル解決
+        if (data.personalitySummary.length > 0 && data.personalityItems.length > 0) {
+          const labeledPers = resolvePersonalityLabels(data.personalitySummary, data.personalityItems)
           setPersonalityVotes(labeledPers)
         }
-      }
 
-      const { data: commentData } = await supabase
-        .from('votes').select('id, comment, created_at')
-        .eq('professional_id', id).eq('status', 'confirmed')
-        .not('comment', 'is', null).neq('comment', '')
-        .order('created_at', { ascending: false }) as any
-      if (commentData) setComments(commentData)
+        setComments(data.comments)
+        setTotalVotes(data.totalVotes)
+        setBookmarkCount(data.bookmarkCount)
+        setIsBookmarked(data.isBookmarked)
+        setCurrentUserId(data.currentUserId)
 
-      const { count } = await supabase
-        .from('votes').select('*', { count: 'exact', head: true })
-        .eq('professional_id', id).eq('status', 'confirmed') as any
-      setTotalVotes(count || 0)
-
-      // ブックマーク数を取得
-      const { count: bmCount } = await (supabase as any)
-        .from('bookmarks')
-        .select('*', { count: 'exact', head: true })
-        .eq('professional_id', id)
-      setBookmarkCount(bmCount || 0)
-
-      // セッション取得 + ブックマーク状態チェック（AuthProviderから）
-      const sessionUser = authUser
-      if (sessionUser) {
-        setCurrentUserId(sessionUser.id)
-        const { data: bookmark } = await (supabase as any)
-          .from('bookmarks')
-          .select('id')
-          .eq('user_id', sessionUser.id)
-          .eq('professional_id', id)
-          .maybeSingle()
-        setIsBookmarked(!!bookmark)
-      }
-
-      // 所属団体を取得
-      const { data: memberData } = await (supabase as any)
-        .from('org_members')
-        .select('organization_id, credential_level_id, organizations(id, name, type)')
-        .eq('professional_id', id)
-        .eq('status', 'active')
-
-      if (memberData) {
-        const allOrgs = memberData
-          .filter((m: any) => m.organizations && !m.credential_level_id)
-          .map((m: any) => ({
-            id: m.organizations.id,
-            name: m.organizations.name,
-            type: m.organizations.type,
+        // 所属団体
+        if (data.orgMembers) {
+          const allOrgs = data.orgMembers
+            .filter((m: any) => m.organizations && !m.credential_level_id)
+            .map((m: any) => ({
+              id: m.organizations.id,
+              name: m.organizations.name,
+              type: m.organizations.type,
+            }))
+          const seen = new Set<string>()
+          setOrgs(allOrgs.filter((o: any) => {
+            if (seen.has(o.id)) return false
+            seen.add(o.id)
+            return true
           }))
-        // organization_id で重複排除
-        const seen = new Set<string>()
-        setOrgs(allOrgs.filter((o: any) => {
-          if (seen.has(o.id)) return false
-          seen.add(o.id)
-          return true
-        }))
-      }
+        }
 
-      // credential_levels経由のバッジ取得
-      const { data: badgeMemberData } = await (supabase as any)
-        .from('org_members')
-        .select('credential_level_id, credential_levels(id, name, description, image_url), organizations(id, name)')
-        .eq('professional_id', id)
-        .eq('status', 'active')
-        .not('credential_level_id', 'is', null)
-
-      if (badgeMemberData) {
-        setCredentialBadges(badgeMemberData
-          .filter((m: any) => m.credential_levels && m.organizations)
-          .map((m: any) => ({
-            id: m.credential_levels.id,
-            name: m.credential_levels.name,
-            description: m.credential_levels.description,
-            image_url: m.credential_levels.image_url,
-            org_name: m.organizations.name,
-            org_id: m.organizations.id,
-          }))
-        )
+        // バッジ
+        if (data.badgeMembers) {
+          setCredentialBadges(data.badgeMembers
+            .filter((m: any) => m.credential_levels && m.organizations)
+            .map((m: any) => ({
+              id: m.credential_levels.id,
+              name: m.credential_levels.name,
+              description: m.credential_levels.description,
+              image_url: m.credential_levels.image_url,
+              org_name: m.organizations.name,
+              org_id: m.organizations.id,
+            }))
+          )
+        }
+      } catch (err) {
+        console.error('Card load error:', err)
       }
 
       setLoading(false)
-      // バーアニメーション開始を少し遅延
       setTimeout(() => setAnimated(true), 100)
     }
     load()
-  }, [id, authLoaded, authUser])
+  }, [id])
 
   const handleBookmarkToggle = async () => {
     if (!currentUserId) {

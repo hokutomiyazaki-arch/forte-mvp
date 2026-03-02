@@ -1,0 +1,99 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getSupabaseAdmin } from '@/lib/supabase'
+import { auth } from '@clerk/nextjs/server'
+
+export const dynamic = 'force-dynamic'
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id: proId } = await params
+  const supabase = getSupabaseAdmin()
+
+  // Clerk認証（オプション — ブックマーク状態チェック用）
+  let currentUserId: string | null = null
+  try {
+    const { userId } = await auth()
+    currentUserId = userId
+  } catch {
+    // 未ログインでもOK
+  }
+
+  try {
+    // === 並列取得 ===
+    const [
+      proResult,
+      voteSummaryResult,
+      proofItemsResult,
+      personalitySummaryResult,
+      personalityItemsResult,
+      commentsResult,
+      totalVotesResult,
+      bookmarkCountResult,
+      orgMembersResult,
+      badgeMembersResult,
+    ] = await Promise.all([
+      // 1. プロ情報
+      supabase.from('professionals').select('*').eq('id', proId).maybeSingle(),
+      // 2. 投票サマリー
+      supabase.from('vote_summary').select('*').eq('professional_id', proId),
+      // 3. プルーフ項目マスタ
+      supabase.from('proof_items').select('id, label'),
+      // 4. 人柄サマリー
+      supabase.from('personality_summary').select('*').eq('professional_id', proId),
+      // 5. 人柄項目マスタ
+      supabase.from('personality_items').select('id, label'),
+      // 6. コメント付き投票
+      supabase.from('votes').select('id, comment, created_at')
+        .eq('professional_id', proId).eq('status', 'confirmed')
+        .not('comment', 'is', null).neq('comment', '')
+        .order('created_at', { ascending: false }),
+      // 7. 総投票数
+      supabase.from('votes').select('*', { count: 'exact', head: true })
+        .eq('professional_id', proId).eq('status', 'confirmed'),
+      // 8. ブックマーク数
+      supabase.from('bookmarks').select('*', { count: 'exact', head: true })
+        .eq('professional_id', proId),
+      // 9. 所属団体
+      supabase.from('org_members')
+        .select('organization_id, credential_level_id, organizations(id, name, type)')
+        .eq('professional_id', proId).eq('status', 'active'),
+      // 10. バッジ
+      supabase.from('org_members')
+        .select('credential_level_id, credential_levels(id, name, description, image_url), organizations(id, name)')
+        .eq('professional_id', proId).eq('status', 'active')
+        .not('credential_level_id', 'is', null),
+    ])
+
+    // ブックマーク状態（ログイン中のみ）
+    let isBookmarked = false
+    if (currentUserId) {
+      const { data: bookmark } = await supabase
+        .from('bookmarks')
+        .select('id')
+        .eq('user_id', currentUserId)
+        .eq('professional_id', proId)
+        .maybeSingle()
+      isBookmarked = !!bookmark
+    }
+
+    return NextResponse.json({
+      pro: proResult.data,
+      voteSummary: voteSummaryResult.data || [],
+      proofItems: proofItemsResult.data || [],
+      personalitySummary: personalitySummaryResult.data || [],
+      personalityItems: personalityItemsResult.data || [],
+      comments: commentsResult.data || [],
+      totalVotes: totalVotesResult.count || 0,
+      bookmarkCount: bookmarkCountResult.count || 0,
+      isBookmarked,
+      currentUserId,
+      orgMembers: orgMembersResult.data || [],
+      badgeMembers: badgeMembersResult.data || [],
+    })
+  } catch (err) {
+    console.error('[api/card] Error:', err)
+    return NextResponse.json({ error: 'Failed to load card data' }, { status: 500 })
+  }
+}
