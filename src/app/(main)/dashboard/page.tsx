@@ -127,7 +127,7 @@ export default function DashboardPage() {
   const [nfcLoading, setNfcLoading] = useState(false)
   const [nfcError, setNfcError] = useState('')
   const [nfcSuccess, setNfcSuccess] = useState('')
-  const [nfcLostCard, setNfcLostCard] = useState<string | null>(null) // 紛失報告したカードUID
+  const [nfcUnlinkedCard, setNfcUnlinkedCard] = useState<string | null>(null) // 解除したカードUID
 
   // 団体招待 state
   const [pendingInvites, setPendingInvites] = useState<{id: string; organization_id: string; org_name: string; org_type: string; invited_at: string}[]>([])
@@ -404,7 +404,7 @@ export default function DashboardPage() {
         select: 'id, card_uid', eq: { professional_id: pro.id, status: 'active' }, maybeSingle: true
       })
 
-      if (existing) { setNfcError(`既にカード（${existing.card_uid}）が登録されています。先に紛失報告してください。`); setNfcLoading(false); return }
+      if (existing) { setNfcError(`既にカード（${existing.card_uid}）が登録されています。先に紐付けを解除してください。`); setNfcLoading(false); return }
 
       // 3. カードをアクティブ化
       const { error } = await db.update('nfc_cards', {
@@ -420,7 +420,7 @@ export default function DashboardPage() {
       setNfcCard({ id: card.id, card_uid: cardUid, status: 'active', linked_at: new Date().toISOString() })
       setNfcInput('')
       setNfcSuccess('カードが登録されました ✓')
-      setNfcLostCard(null)
+      setNfcUnlinkedCard(null)
       setTimeout(() => setNfcSuccess(''), 3000)
     } catch {
       setNfcError('エラーが発生しました。')
@@ -428,21 +428,21 @@ export default function DashboardPage() {
     setNfcLoading(false)
   }
 
-  // NFC カード紛失報告
-  async function reportNfcLost() {
+  // NFC カード紐付け解除
+  async function unlinkNfcCard() {
     if (!pro || !nfcCard) return
     setNfcLoading(true)
     setNfcError('')
 
     try {
       const { error } = await db.update('nfc_cards', {
-        status: 'lost',
+        status: 'unlinked',
         updated_at: new Date().toISOString(),
       }, { professional_id: pro.id, status: 'active' })
 
-      if (error) { setNfcError('紛失報告に失敗しました。'); setNfcLoading(false); return }
+      if (error) { setNfcError('解除に失敗しました。'); setNfcLoading(false); return }
 
-      setNfcLostCard(nfcCard.card_uid)
+      setNfcUnlinkedCard(nfcCard.card_uid)
       setNfcCard(null)
     } catch {
       setNfcError('エラーが発生しました。')
@@ -1416,25 +1416,25 @@ export default function DashboardPage() {
               </div>
             </div>
             <button
-              onClick={reportNfcLost}
+              onClick={unlinkNfcCard}
               disabled={nfcLoading}
               style={{
                 fontSize: 13, fontWeight: 600,
-                color: '#EF4444', background: 'transparent',
-                border: '1px solid #FCA5A5', borderRadius: 8,
+                color: '#666', background: 'transparent',
+                border: '1px solid #D1D5DB', borderRadius: 8,
                 padding: '8px 16px', cursor: 'pointer',
                 opacity: nfcLoading ? 0.5 : 1,
                 transition: 'all 0.2s',
               }}
             >
-              {nfcLoading ? '処理中...' : '紛失を報告する'}
+              {nfcLoading ? '処理中...' : '紐付けを解除する'}
             </button>
           </div>
         ) : (
           <div>
-            {nfcLostCard && (
+            {nfcUnlinkedCard && (
               <p style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>
-                前のカード（{nfcLostCard}）は紛失として無効化されました。
+                前のカード（{nfcUnlinkedCard}）の紐付けを解除しました。
               </p>
             )}
             <p style={{ fontSize: 13, color: '#666', marginBottom: 12 }}>
@@ -1479,7 +1479,7 @@ export default function DashboardPage() {
       </div>
 
       <div style={{ marginTop: 16 }}>
-        <CardModeSwitch />
+        {pro && <CardModeSwitch professionalId={pro.id} initialCardMode={pro.card_mode || 'pro'} />}
       </div>
       </>)}
 

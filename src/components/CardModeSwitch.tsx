@@ -1,81 +1,46 @@
 'use client'
-import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase'
-import { useUser } from '@clerk/nextjs'
+import { useState } from 'react'
 
-export default function CardModeSwitch() {
-  const supabase = createClient()
-  const { user, isLoaded } = useUser()
-  const authUser = user ? { id: user.id } : null
+type Props = {
+  professionalId: string
+  initialCardMode: 'pro' | 'general'
+}
 
-  const [cardMode, setCardMode] = useState<'pro' | 'general'>('pro')
-  const [originalMode, setOriginalMode] = useState<'pro' | 'general'>('pro')
+export default function CardModeSwitch({ professionalId, initialCardMode }: Props) {
+  const [cardMode, setCardMode] = useState<'pro' | 'general'>(initialCardMode)
+  const [originalMode, setOriginalMode] = useState<'pro' | 'general'>(initialCardMode)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [hasPro, setHasPro] = useState(false)
-
-  useEffect(() => {
-    if (!authUser?.id) return
-    loadCardMode()
-  }, [authUser?.id])
-
-  async function loadCardMode() {
-    if (!authUser?.id) return
-    setLoading(true)
-
-    const { data: proData } = await (supabase as any)
-      .from('professionals')
-      .select('id, card_mode, is_active')
-      .eq('user_id', authUser.id)
-      .maybeSingle()
-
-    if (proData && proData.is_active !== false) {
-      setHasPro(true)
-      const mode = proData.card_mode || 'pro'
-      setCardMode(mode)
-      setOriginalMode(mode)
-    } else {
-      setHasPro(false)
-      setCardMode('general')
-      setOriginalMode('general')
-    }
-    setLoading(false)
-  }
 
   async function handleSave() {
-    if (!authUser?.id) return
     setSaving(true)
     setMessage('')
 
-    const { error } = await (supabase as any)
-      .from('professionals')
-      .update({ card_mode: cardMode })
-      .eq('user_id', authUser.id)
+    try {
+      const res = await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          table: 'professionals',
+          method: 'update',
+          data: { card_mode: cardMode },
+          match: { id: professionalId },
+        }),
+      })
 
-    if (error) {
+      if (res.ok) {
+        setMessage('保存しました')
+        setOriginalMode(cardMode)
+      } else {
+        setMessage('エラー: 保存に失敗しました')
+      }
+    } catch {
       setMessage('エラー: 保存に失敗しました')
-    } else {
-      setMessage('保存しました')
-      setOriginalMode(cardMode)
     }
     setSaving(false)
   }
 
-  if (loading) {
-    return (
-      <div style={{ padding: 16, textAlign: 'center', color: '#888', fontSize: 13 }}>
-        読み込み中...
-      </div>
-    )
-  }
-
   const hasChanged = cardMode !== originalMode
-
-  // 非プロユーザーは何も表示しない（親のNFC入力UIのみで十分）
-  if (!hasPro) {
-    return null
-  }
 
   return (
     <div style={{
@@ -90,8 +55,7 @@ export default function CardModeSwitch() {
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
-        {/* プロモード — プロ登録者のみ表示 */}
-        {hasPro && (
+        {/* プロモード */}
         <label style={{
           display: 'flex', alignItems: 'flex-start', gap: 12,
           padding: '12px 16px', borderRadius: 8,
@@ -116,7 +80,6 @@ export default function CardModeSwitch() {
             </div>
           </div>
         </label>
-        )}
 
         {/* 一般モード */}
         <label style={{

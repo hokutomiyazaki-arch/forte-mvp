@@ -90,6 +90,7 @@ function MyCardContent() {
   const [deletingAccount, setDeletingAccount] = useState(false)
   const [proDeactivated, setProDeactivated] = useState(false)
   const [proId, setProId] = useState<string | null>(null)
+  const [proCardMode, setProCardMode] = useState<'pro' | 'general'>('pro')
 
   // NFC カード管理 state
   const [nfcCard, setNfcCard] = useState<any>(null)
@@ -121,6 +122,7 @@ function MyCardContent() {
 
       setIsPro(data.isPro)
       if (data.proId) setProId(data.proId)
+      if (data.proCardMode) setProCardMode(data.proCardMode)
       if (data.proDeactivated) setProDeactivated(true)
       if (data.nickname) setNickname(data.nickname)
       setUserEmail(data.email)
@@ -1297,7 +1299,7 @@ function MyCardContent() {
           </div>
 
           {/* カードモード切替（プロユーザーのみ表示） */}
-          <CardModeSwitch />
+          {proId && <CardModeSwitch professionalId={proId} initialCardMode={proCardMode} />}
         </div>
       )}
 
