@@ -32,6 +32,7 @@ function ConfirmedContent() {
   const voteId = searchParams.get('vote_id') || ''
   const rewardParam = searchParams.get('reward') || ''
   const authMethod = searchParams.get('auth_method') || ''
+  const hasAccount = searchParams.get('has_account') === 'true'
   const supabase = createClient()
 
   const [proName, setProName] = useState('')
@@ -235,43 +236,60 @@ function ConfirmedContent() {
           </div>
         )}
 
-        {/* ===== セクション2.5: アカウント登録CTA ===== */}
-        <div className="bg-[#1A1A2E] rounded-2xl p-6 text-center">
-          <p className="text-white text-lg font-bold mb-2">
-            アカウントを作ると便利
-          </p>
-          <p className="text-gray-400 text-sm mb-5 leading-relaxed">
-            リワードの保存・他のプロの発見が
-            <br />いつでもできるようになります
-          </p>
+        {/* ===== セクション2.5: アカウント登録CTA or マイカード誘導 ===== */}
+        {hasAccount ? (
+          <div className="bg-[#1A1A2E] rounded-2xl p-6 text-center">
+            <p className="text-white text-lg font-bold mb-2">
+              リワードを保存しました
+            </p>
+            <p className="text-gray-400 text-sm mb-5 leading-relaxed">
+              マイカードからいつでもリワードを確認できます
+            </p>
+            <a
+              href="/mycard"
+              className="block w-full py-4 rounded-xl font-bold text-lg text-[#1A1A2E] bg-[#C4A35A] hover:bg-[#b3923f] transition"
+            >
+              マイカードを見る →
+            </a>
+          </div>
+        ) : (
+          <div className="bg-[#1A1A2E] rounded-2xl p-6 text-center">
+            <p className="text-white text-lg font-bold mb-2">
+              アカウントを作ると便利
+            </p>
+            <p className="text-gray-400 text-sm mb-5 leading-relaxed">
+              リワードの保存・他のプロの発見が
+              <br />いつでもできるようになります
+            </p>
 
-          {authMethod === 'line' ? (
-            <>
-              <a
-                href="/sign-up"
-                className="block w-full py-4 rounded-xl font-bold text-lg text-white transition"
-                style={{ background: '#06C755' }}
-              >
-                LINEで登録する →
-              </a>
-              <p className="text-gray-500 text-xs mt-3">
-                さっきのLINEアカウントで、そのまま登録できます
-              </p>
-            </>
-          ) : (
-            <>
-              <a
-                href="/sign-up"
-                className="block w-full py-4 rounded-xl font-bold text-lg text-[#1A1A2E] bg-[#C4A35A] hover:bg-[#b3923f] transition"
-              >
-                10秒で無料登録 →
-              </a>
-              <p className="text-gray-500 text-xs mt-3">
-                LINE・Google・メールで登録できます
-              </p>
-            </>
-          )}
-        </div>
+            {authMethod === 'line' ? (
+              <>
+                <a
+                  href="/sign-up"
+                  className="block w-full py-4 rounded-xl font-bold text-lg text-white transition"
+                  style={{ background: '#06C755' }}
+                >
+                  LINEで登録する →
+                </a>
+                <p className="text-gray-500 text-xs mt-3">
+                  さっきのLINEアカウントで、そのまま登録できます
+                </p>
+              </>
+            ) : (
+              <>
+                <a
+                  href="/sign-up"
+                  className="block w-full py-4 rounded-xl font-bold text-lg text-[#1A1A2E] bg-[#C4A35A] hover:bg-[#b3923f] transition"
+                >
+                  10秒で無料登録 →
+                </a>
+                <p className="text-gray-500 text-xs mt-3">
+                  LINE・Google・メールで登録できます
+                </p>
+              </>
+            )}
+          </div>
+        )}
 
         {/* ===== セクション: 近くで活躍するプロ ===== */}
         {nearbyPros.length > 0 && (

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getRewardLabel } from '@/lib/types'
+import { clerkClient } from '@clerk/nextjs/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -207,8 +208,18 @@ export async function GET(req: NextRequest) {
       console.log('[confirm-vote] Already confirmed - skipping Steps 2-7, redirecting to vote-confirmed')
     }
 
+    // Clerkアカウント存在チェック
+    let hasAccount = false
+    try {
+      const clerk = await clerkClient()
+      const users = await clerk.users.getUserList({ emailAddress: [vote.voter_email] })
+      hasAccount = users.data.length > 0
+    } catch (e) {
+      console.error('[confirm-vote] Clerk user check failed:', e)
+    }
+
     // vote_id ベースのリダイレクト（リワード情報はフロントがDBから取得）
-    const redirectParams = new URLSearchParams({ pro: professionalId, vote_id: vote.id })
+    const redirectParams = new URLSearchParams({ pro: professionalId, vote_id: vote.id, has_account: hasAccount ? 'true' : 'false' })
 
     return NextResponse.redirect(
       new URL(`/vote-confirmed?${redirectParams.toString()}`, req.url)

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { clerkClient } from '@clerk/nextjs/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -184,7 +185,7 @@ export async function GET(request: NextRequest) {
         status: 'confirmed',  // LINE認証済みなのでメール確認不要
       })
       .select()
-      .single()
+      .maybeSingle()
 
     if (voteError) {
       console.error('[vote-auth/line/callback] Vote INSERT error:', voteError)
@@ -297,11 +298,22 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Step 9c: Clerkアカウント存在チェック
+    let hasAccount = false
+    try {
+      const clerk = await clerkClient()
+      const users = await clerk.users.getUserList({ emailAddress: [email] })
+      hasAccount = users.data.length > 0
+    } catch (e) {
+      console.error('[vote-auth/line/callback] Clerk user check failed:', e)
+    }
+
     // Step 10: vote-confirmed にリダイレクト
     const redirectParams = new URLSearchParams({
       pro: professional_id,
       vote_id: insertedVote.id,
       auth_method: 'line',
+      has_account: hasAccount ? 'true' : 'false',
     })
 
     console.log('[vote-auth/line/callback] Success! Redirecting to vote-confirmed')
