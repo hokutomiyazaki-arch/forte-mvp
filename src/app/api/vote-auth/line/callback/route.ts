@@ -225,6 +225,78 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Step 9b: リワード通知メール送信
+    if (voteData.selected_reward_id && email) {
+      try {
+        // プロ名を取得
+        const { data: proInfo } = await supabaseAdmin
+          .from('professionals')
+          .select('name')
+          .eq('id', professional_id)
+          .maybeSingle()
+
+        // リワード情報を取得
+        const { data: rewardInfo } = await supabaseAdmin
+          .from('rewards')
+          .select('reward_type, content, title')
+          .eq('id', voteData.selected_reward_id)
+          .maybeSingle()
+
+        const resendKey = process.env.RESEND_API_KEY
+        if (resendKey && proInfo?.name && rewardInfo) {
+          const { getRewardLabel } = await import('@/lib/types')
+          const displayLabel = rewardInfo.title || getRewardLabel(rewardInfo.reward_type)
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://realproof.jp'
+
+          const emailRes = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${resendKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from: 'REALPROOF <info@proof-app.jp>',
+              to: email,
+              subject: `${proInfo.name}さんからリワードが届いています`,
+              html: `
+                <div style="max-width:480px;margin:0 auto;font-family:sans-serif;">
+                  <div style="background:#1A1A2E;padding:24px;border-radius:12px 12px 0 0;">
+                    <h1 style="color:#C4A35A;font-size:14px;margin:0;">REALPROOF</h1>
+                  </div>
+                  <div style="padding:24px;background:#fff;border:1px solid #eee;">
+                    <p style="color:#333;">プルーフありがとうございます！</p>
+                    <p style="color:#333;">${proInfo.name}さんからリワードが届いています。</p>
+                    <div style="background:#f8f6f0;border:2px dashed #C4A35A;border-radius:8px;padding:16px;text-align:center;margin:20px 0;">
+                      <p style="color:#666;font-size:12px;margin:0 0 4px;">${displayLabel}</p>
+                      <p style="color:#666;font-size:14px;margin:0;">リワードの中身は下のボタンから確認できます</p>
+                    </div>
+                    <div style="text-align:center;margin:24px 0;">
+                      <a href="${appUrl}/vote-confirmed?pro=${professional_id}&vote_id=${insertedVote.id}"
+                         style="display:inline-block;background:#C4A35A;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:14px;text-align:center;">
+                        リワードを確認する
+                      </a>
+                    </div>
+                  </div>
+                  <div style="padding:16px;text-align:center;background:#f9f9f9;border-radius:0 0 12px 12px;">
+                    <p style="color:#999;font-size:11px;margin:0;">REALPROOF — 強みで証明されたプロに出会う</p>
+                  </div>
+                </div>
+              `,
+            }),
+          })
+
+          if (!emailRes.ok) {
+            console.error('[vote-auth/line/callback] Reward email failed:', emailRes.status)
+          } else {
+            console.log('[vote-auth/line/callback] Reward email sent to:', email)
+          }
+        }
+      } catch (err) {
+        console.error('[vote-auth/line/callback] Reward email error:', err)
+        // メール送信失敗は投票自体には影響しない
+      }
+    }
+
     // Step 10: vote-confirmed にリダイレクト
     const redirectParams = new URLSearchParams({
       pro: professional_id,
