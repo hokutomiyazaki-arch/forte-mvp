@@ -38,7 +38,7 @@ async function getMasterData(supabase: ReturnType<typeof getSupabaseAdmin>) {
  * - マスタデータ(proof_items, personality_items, gratitude_phrases)を5分キャッシュ → -3クエリ
  * - votes 2クエリ(COUNT + コメント) → 1クエリに統合
  * - bookmarks 2クエリ(被COUNT + 自分の一覧) → 一覧から被COUNTは別途(統合不可)
- * - org_members 3クエリ → 1クエリに統合してJSでフィルタ
+ * - org_members: pending招待のみ, professional_badges: バッジ表示
  */
 export async function GET() {
   try {
@@ -101,7 +101,7 @@ export async function GET() {
 
     // ────────────────────────────────────────
     // Phase 2: プロIDが分かったら、全データを並列取得
-    // 統合: votes(COUNT+コメント→1), org_members(3→1)
+    // 統合: votes(COUNT+コメント→1), org_members(pending), professional_badges(バッジ)
     // キャッシュ済: personality_items, gratitude_phrases
     // ────────────────────────────────────────
     const proId = proData.id
@@ -113,7 +113,8 @@ export async function GET() {
       votesResult,
       receivedBookmarkCountResult,
       nfcResult,
-      orgMembersResult,
+      pendingMembersResult,
+      proBadgesResult,
       ownedOrgResult,
       myProofCardResult,
       bookmarksResult,
@@ -134,11 +135,15 @@ export async function GET() {
       supabase.from('bookmarks').select('*', { count: 'exact', head: true }).eq('professional_id', proId),
       // NFCカード
       supabase.from('nfc_cards').select('id, card_uid, status, linked_at').eq('user_id', userId).eq('status', 'active').maybeSingle(),
-      // org_members（pending + active を1クエリで取得）
+      // org_members: pending招待のみ
       supabase.from('org_members')
-        .select('id, organization_id, credential_level_id, status, invited_at, accepted_at, organizations(id, name, type), credential_levels(id, name, description, image_url)')
+        .select('id, organization_id, status, invited_at, organizations(id, name, type)')
         .eq('professional_id', proId)
-        .in('status', ['pending', 'active']),
+        .eq('status', 'pending'),
+      // professional_badges: 取得済みバッジ（所属・認定 + 取得バッジの両方のソース）
+      supabase.from('professional_badges')
+        .select('id, professional_id, badge_level_id, claimed_at, credential_levels(id, name, description, image_url, organization_id, organizations(id, name, type))')
+        .eq('professional_id', proId),
       // オーナー団体
       supabase.from('organizations')
         .select('id, name, type')
@@ -169,12 +174,9 @@ export async function GET() {
     )
 
     // ────────────────────────────────────────
-    // org_members データ整形: 1クエリ結果をJSでフィルタ
+    // pending招待 (org_membersから)
     // ────────────────────────────────────────
-    const allOrgMembers = orgMembersResult.data || []
-
-    const pendingInvites = allOrgMembers
-      .filter((m: any) => m.status === 'pending')
+    const pendingInvites = (pendingMembersResult.data || [])
       .map((m: any) => ({
         id: m.id,
         organization_id: m.organization_id,
@@ -183,34 +185,42 @@ export async function GET() {
         invited_at: m.invited_at,
       }))
 
-    // 所属団体: active かつ credential_level_id なし、重複排除
-    const activeOrgsList = allOrgMembers
-      .filter((m: any) => m.status === 'active' && !m.credential_level_id && m.organizations)
-      .map((m: any) => ({
-        id: m.organizations.id,
-        member_id: m.id,
-        org_name: m.organizations.name,
-        org_type: m.organizations.type,
-        accepted_at: m.accepted_at,
-      }))
-    const seen = new Set<string>()
-    const activeOrgs = activeOrgsList.filter((o: any) => {
-      if (seen.has(o.id)) return false
-      seen.add(o.id)
-      return true
-    })
+    // ────────────────────────────────────────
+    // professional_badges → 所属・認定 + 取得バッジ
+    // ────────────────────────────────────────
+    const allBadgeRecords = proBadgesResult.data || []
 
-    // 資格バッジ: active かつ credential_level_id あり
-    const credentialBadges = allOrgMembers
-      .filter((m: any) => m.status === 'active' && m.credential_level_id && m.credential_levels && m.organizations)
-      .map((m: any) => ({
-        id: m.credential_levels.id,
-        name: m.credential_levels.name,
-        description: m.credential_levels.description,
-        image_url: m.credential_levels.image_url,
-        org_name: m.organizations.name,
-        org_id: m.organizations.id,
-      }))
+    // 所属・認定: professional_badgesを団体ごとにグループ化（重複排除）
+    const orgMap = new Map<string, any>()
+    for (const b of allBadgeRecords) {
+      const cl = b.credential_levels as any
+      const org = cl?.organizations
+      if (org && !orgMap.has(org.id)) {
+        orgMap.set(org.id, {
+          id: org.id,
+          member_id: b.id,
+          org_name: org.name,
+          org_type: org.type,
+          accepted_at: b.claimed_at,
+        })
+      }
+    }
+    const activeOrgs = Array.from(orgMap.values())
+
+    // 取得バッジ: professional_badgesから個別バッジ
+    const credentialBadges = allBadgeRecords
+      .filter((b: any) => b.credential_levels)
+      .map((b: any) => {
+        const cl = b.credential_levels as any
+        return {
+          id: cl.id,
+          name: cl.name,
+          description: cl.description,
+          image_url: cl.image_url,
+          org_name: cl.organizations?.name || '',
+          org_id: cl.organizations?.id || '',
+        }
+      })
 
     console.log('[Dashboard API] Total:', Date.now() - startTime, 'ms')
 

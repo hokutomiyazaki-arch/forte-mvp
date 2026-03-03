@@ -137,7 +137,7 @@ export default function DashboardPage() {
 
   // 所属・認定 state
   const [activeOrgs, setActiveOrgs] = useState<{id: string; member_id: string; org_name: string; org_type: string; accepted_at: string}[]>([])
-  const [leavingOrg, setLeavingOrg] = useState<string | null>(null)
+  // leavingOrg removed: 所属・認定はprofessional_badgesベースに変更
   const [credentialBadges, setCredentialBadges] = useState<{id: string; name: string; description: string | null; image_url: string | null; org_name: string; org_id: string}[]>([])
 
   // 団体オーナー state
@@ -555,20 +555,7 @@ export default function DashboardPage() {
     setInviteProcessing(null)
   }
 
-  // 団体離脱（店舗のみ）
-  async function handleLeaveOrg(memberId: string) {
-    if (!confirm('この団体から離脱しますか？')) return
-    setLeavingOrg(memberId)
-    const { error } = await db.update('org_members',
-      { status: 'removed', removed_at: new Date().toISOString() },
-      { id: memberId }
-    )
-
-    if (!error) {
-      setActiveOrgs(prev => prev.filter(o => o.member_id !== memberId))
-    }
-    setLeavingOrg(null)
-  }
+  // 団体離脱は削除: 所属・認定はprofessional_badgesベースに変更
 
   // プルーフ選択ロジック
   const totalSelected = selectedProofIds.size
@@ -1194,7 +1181,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* 所属・認定 */}
+      {/* 所属・認定（professional_badgesベース） */}
       {activeOrgs.length > 0 && (
         <div className="bg-white rounded-xl p-5 shadow-sm mb-6">
           <h3 className="text-sm font-bold text-[#1A1A2E] mb-3">所属・認定</h3>
@@ -1205,7 +1192,7 @@ export default function DashboardPage() {
               const tagBg = o.org_type === 'store' ? '#E8F4FD' : '#FFF8E7'
               const tagColor = o.org_type === 'store' ? '#2B6CB0' : '#C4A35A'
               return (
-                <div key={o.member_id} className="flex items-center justify-between py-2">
+                <div key={o.id} className="flex items-center py-2">
                   <a
                     href={`/org/${o.id}`}
                     className="flex items-center gap-3 hover:opacity-70 transition"
@@ -1225,16 +1212,6 @@ export default function DashboardPage() {
                       )}
                     </div>
                   </a>
-                  {/* 店舗からのみ自分で離脱可能 */}
-                  {o.org_type === 'store' && (
-                    <button
-                      onClick={() => handleLeaveOrg(o.member_id)}
-                      disabled={leavingOrg === o.member_id}
-                      className="text-xs text-gray-400 hover:text-red-500 transition disabled:opacity-50"
-                    >
-                      {leavingOrg === o.member_id ? '...' : '離脱'}
-                    </button>
-                  )}
                 </div>
               )
             })}
