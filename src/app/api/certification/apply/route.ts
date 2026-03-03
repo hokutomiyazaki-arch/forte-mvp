@@ -10,7 +10,9 @@ export const dynamic = 'force-dynamic'
  * REALPROOF認定（Lv.2 SPECIALIST）の申請を受け付ける
  */
 export async function POST(req: NextRequest) {
+  console.log('[CERT APPLY] start')
   const { userId } = await auth()
+  console.log('[CERT APPLY] userId:', userId ? userId.substring(0, 12) + '...' : 'null')
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -31,8 +33,11 @@ export async function POST(req: NextRequest) {
       phone,
     } = body
 
+    console.log('[CERT APPLY] professionalId from body:', professionalId)
+
     // バリデーション
     if (!professionalId || !categorySlug || !fullNameKanji || !fullNameRomaji || !postalCode || !prefecture || !cityAddress || !phone) {
+      console.log('[CERT APPLY] validation failed:', { professionalId: !!professionalId, categorySlug: !!categorySlug, fullNameKanji: !!fullNameKanji, fullNameRomaji: !!fullNameRomaji, postalCode: !!postalCode, prefecture: !!prefecture, cityAddress: !!cityAddress, phone: !!phone })
       return NextResponse.json(
         { error: '必須項目が入力されていません' },
         { status: 400 }
@@ -42,15 +47,24 @@ export async function POST(req: NextRequest) {
     const supabase = getSupabaseAdmin()
 
     // プロ本人確認（user_id → professional_id の照合）
-    const { data: pro } = await supabase
+    // ※ deactivated_at は JS でチェック（dashboard API と同じパターン）
+    const { data: pro, error: proError } = await supabase
       .from('professionals')
-      .select('id, name, email')
+      .select('id, name, email, deactivated_at')
       .eq('user_id', userId)
-      .is('deactivated_at', null)
       .maybeSingle()
 
-    if (!pro || pro.id !== professionalId) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    console.log('[CERT APPLY] pro query:', pro ? `id=${pro.id}, deactivated=${pro.deactivated_at}` : 'null', 'error:', proError?.message || 'none')
+
+    // deactivated check in JS (matches dashboard API pattern)
+    if (!pro || pro.deactivated_at) {
+      console.log('[CERT APPLY] 403: pro not found or deactivated')
+      return NextResponse.json({ error: 'Forbidden: professional not found' }, { status: 403 })
+    }
+
+    if (String(pro.id) !== String(professionalId)) {
+      console.log('[CERT APPLY] 403: id mismatch. pro.id=', pro.id, 'body.professionalId=', professionalId)
+      return NextResponse.json({ error: 'Forbidden: id mismatch' }, { status: 403 })
     }
 
     // 重複申請チェック
