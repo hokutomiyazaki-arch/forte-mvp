@@ -101,7 +101,8 @@ export default function DashboardPage() {
   const [selectedProofIds, setSelectedProofIds] = useState<Set<string>>(new Set())
   const [customProofs, setCustomProofs] = useState<CustomProof[]>([])
   const [activeTab, setActiveTab] = useState('basic')
-  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'myproof' | 'card' | 'org'>('profile')
+  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'myproof' | 'card' | 'org' | 'bookmarks'>('profile')
+  const [bookmarkedPros, setBookmarkedPros] = useState<any[]>([])
   const [userRole, setUserRole] = useState<'professional' | 'client' | null>(null)
   const [proofSaving, setProofSaving] = useState(false)
   const [proofSaved, setProofSaved] = useState(false)
@@ -231,6 +232,7 @@ export default function DashboardPage() {
 
         setTotalVotes(data.totalVotes || 0)
         setBookmarkCount(data.bookmarkCount || 0)
+        if (data.bookmarks) setBookmarkedPros(data.bookmarks)
 
         // プルーフ選択状態を復元
         if (data.proofItems) {
@@ -1107,6 +1109,7 @@ export default function DashboardPage() {
           { key: 'voices' as const, label: 'Voices' },
           { key: 'myproof' as const, label: 'マイプルーフ' },
           { key: 'card' as const, label: 'カード管理' },
+          { key: 'bookmarks' as const, label: '気になる' },
           ...(ownedOrg ? [{ key: 'org' as const, label: '🏢 団体管理' }] : []),
         ]).map(tab => (
           <button
@@ -1989,6 +1992,119 @@ export default function DashboardPage() {
       )}
 
       </>)}
+
+      {/* ═══ Tab: 気になる ═══ */}
+      {dashboardTab === 'bookmarks' && (
+        <div>
+          {bookmarkedPros.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '60px 20px', color: '#999' }}>
+              <div style={{ fontSize: 40, marginBottom: 16 }}>♡</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: '#666', marginBottom: 8 }}>
+                まだ気になるプロがいません
+              </div>
+              <div style={{ fontSize: 13, color: '#999', lineHeight: 1.8 }}>
+                プロのページで「♡ 気になる」を押すと<br />
+                ここに追加されます
+              </div>
+              <a href="/search" style={{
+                display: 'inline-block',
+                marginTop: 24,
+                padding: '12px 32px',
+                background: '#C4A35A',
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: 14,
+                textDecoration: 'none',
+                borderRadius: 8,
+              }}>
+                プロを探す →
+              </a>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {bookmarkedPros.map(bookmark => {
+                const bPro = bookmark.professionals
+                if (!bPro) return null
+                return (
+                  <a
+                    key={bookmark.id}
+                    href={`/card/${bPro.id}`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 16,
+                      padding: 16,
+                      background: '#FAFAF7',
+                      border: '1px solid #E8E4DC',
+                      borderRadius: 14,
+                      textDecoration: 'none',
+                      transition: 'border-color 0.2s',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = '#C4A35A'}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = '#E8E4DC'}
+                  >
+                    {bPro.photo_url ? (
+                      <img src={bPro.photo_url} alt={bPro.name}
+                        style={{ width: 52, height: 52, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                    ) : (
+                      <div style={{
+                        width: 52, height: 52, borderRadius: '50%',
+                        background: '#1A1A2E', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#fff', fontSize: 20, fontWeight: 'bold', flexShrink: 0,
+                      }}>
+                        {bPro.name?.charAt(0) || '?'}
+                      </div>
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E' }}>{bPro.name}</div>
+                      {bPro.title && (
+                        <div style={{ fontSize: 12, color: '#C4A35A', fontWeight: 600, marginTop: 2 }}>{bPro.title}</div>
+                      )}
+                      {(bPro.prefecture || bPro.area_description) && (
+                        <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>
+                          {bPro.prefecture}{bPro.area_description ? ` · ${bPro.area_description}` : ''}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={async (e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        try {
+                          const res = await fetch('/api/db', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              action: 'delete',
+                              table: 'bookmarks',
+                              query: { eq: { id: bookmark.id } }
+                            })
+                          })
+                          const result = await res.json()
+                          if (result.error) {
+                            console.error('Bookmark delete error:', result.error)
+                            return
+                          }
+                          setBookmarkedPros(prev => prev.filter(b => b.id !== bookmark.id))
+                        } catch (err) {
+                          console.error('Bookmark remove error:', err)
+                        }
+                      }}
+                      style={{
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        fontSize: 18, color: '#C4A35A', padding: 8, flexShrink: 0,
+                      }}
+                      title="ブックマーク解除"
+                    >
+                      ♥
+                    </button>
+                  </a>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ═══ Tab: 団体管理 ═══ */}
       {dashboardTab === 'org' && ownedOrg && (<>

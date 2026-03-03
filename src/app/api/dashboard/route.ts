@@ -83,6 +83,7 @@ export async function GET() {
       credBadgeResult,
       ownedOrgResult,
       myProofCardResult,
+      bookmarksResult,
     ] = await Promise.all([
       // リワード
       supabase.from('rewards').select('*').eq('professional_id', proId).order('sort_order'),
@@ -137,6 +138,11 @@ export async function GET() {
         .select('qr_token')
         .eq('user_id', userId)
         .maybeSingle(),
+      // ブックマーク一覧（気になるプロ）
+      supabase.from('bookmarks')
+        .select('id, created_at, professional_id, professionals(id, name, title, photo_url, prefecture, area_description)')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false }),
     ])
 
     // ────────────────────────────────────────
@@ -201,6 +207,7 @@ export async function GET() {
       credentialBadges,
       ownedOrg: ownedOrgResult.data || null,
       myProofQrToken: myProofCardResult.data?.qr_token || null,
+      bookmarks: bookmarksResult.data || [],
     })
   } catch (err: any) {
     console.error('[api/dashboard] error:', err)
