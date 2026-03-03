@@ -316,6 +316,95 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Step 9d: PROVEN通知チェック（15票到達時のメール通知）
+    try {
+      const PROVEN_THRESHOLD = 15
+      const selectedProofIds: string[] = voteData.selected_proof_ids || []
+      if (selectedProofIds.length > 0) {
+        // このプロの最新vote_summaryを取得
+        const { data: summary } = await supabaseAdmin
+          .from('vote_summary')
+          .select('*')
+          .eq('professional_id', professional_id)
+
+        // プロの情報取得（名前、メール、通知済みリスト）
+        const { data: proForNotif } = await supabaseAdmin
+          .from('professionals')
+          .select('id, name, email, proven_notified_items')
+          .eq('id', professional_id)
+          .maybeSingle()
+
+        if (summary && proForNotif?.email) {
+          const notified: string[] = proForNotif.proven_notified_items || []
+          const newNotified = [...notified]
+
+          // proof_items のラベルマップ
+          const { data: proofItems } = await supabaseAdmin
+            .from('proof_items')
+            .select('id, label')
+
+          const labelMap = new Map<string, string>()
+          for (const item of proofItems || []) {
+            labelMap.set(item.id, item.label)
+          }
+
+          for (const proofId of selectedProofIds) {
+            const item = summary.find((s: any) => s.proof_id === proofId)
+            if (!item || item.vote_count !== PROVEN_THRESHOLD) continue
+            if (notified.includes(proofId)) continue
+
+            const categoryName = labelMap.get(proofId) || proofId
+            // PROVEN達成メール送信
+            const resendKey = process.env.RESEND_API_KEY
+            if (resendKey) {
+              await fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${resendKey}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  from: 'REALPROOF <noreply@realproof.jp>',
+                  to: proForNotif.email,
+                  subject: '✦ PROVEN達成！',
+                  html: `
+                    <div style="font-family: 'Noto Sans JP', sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
+                      <h1 style="color: #D4A843; font-size: 24px;">✦ PROVEN達成！</h1>
+                      <p>${proForNotif.name}さん、おめでとうございます！</p>
+                      <p>「<strong>${categoryName}</strong>」が15プルーフに到達し、
+                      <span style="color: #D4A843; font-weight: bold;">PROVEN（証明済み）</span>になりました。</p>
+                      <p>あなたの強みが認められています。</p>
+                      <div style="margin-top: 24px;">
+                        <a href="https://realproof.jp/dashboard"
+                           style="background: #D4A843; color: #1A1A2E; padding: 12px 24px;
+                                  text-decoration: none; border-radius: 8px; font-weight: bold;">
+                          プロフィールを見る
+                        </a>
+                      </div>
+                      <p style="color: #888; font-size: 12px; margin-top: 32px;">REALPROOF — 強みがあなたを定義する。</p>
+                    </div>
+                  `
+                }),
+              })
+              console.log(`[vote-auth/google/callback] PROVEN email sent for ${categoryName}`)
+            }
+            newNotified.push(proofId)
+          }
+
+          // 通知済みリスト更新
+          if (newNotified.length > notified.length) {
+            await supabaseAdmin
+              .from('professionals')
+              .update({ proven_notified_items: newNotified })
+              .eq('id', professional_id)
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[vote-auth/google/callback] PROVEN notification error:', err)
+      // メール失敗で投票レスポンスをブロックしない
+    }
+
     // Step 9c: Clerkアカウント存在チェック
     let hasAccount = false
     try {
