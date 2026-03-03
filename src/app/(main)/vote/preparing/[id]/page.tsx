@@ -5,7 +5,6 @@ import { useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 
 interface ProInfo {
-  display_name: string
   name: string
   photo_url: string | null
 }
@@ -22,7 +21,7 @@ export default function VotePreparingPage() {
     async function load() {
       const { data } = await (supabase as any)
         .from('professionals')
-        .select('display_name, name, photo_url')
+        .select('name, photo_url')
         .eq('id', proId)
         .maybeSingle()
 
@@ -42,7 +41,7 @@ export default function VotePreparingPage() {
     )
   }
 
-  const displayName = pro?.display_name || pro?.name || 'プロ'
+  const displayName = pro?.name || 'プロ'
   const initials = displayName.charAt(0)
 
   return (
