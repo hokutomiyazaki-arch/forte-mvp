@@ -249,7 +249,7 @@ export default function Home() {
               fontWeight: 500,
               marginBottom: '24px',
             }}>
-              クライアントの信頼が資産に変わるデジタル名刺
+              信頼を資産に変える、ただ一つの証明。
             </div>
 
             {/* ヒーローコピー */}
@@ -313,7 +313,7 @@ export default function Home() {
             letterSpacing: '1.5px',
             fontWeight: 500,
           }}>
-            クライアントの信頼が資産に変わるデジタル名刺
+            信頼を資産に変える、ただ一つの証明。
           </div>
           {/* コピー + CTA（画像の下半分に重なる位置） */}
           <div style={{

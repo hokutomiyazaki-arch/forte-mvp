@@ -42,7 +42,7 @@ export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
   title: 'REALPROOF — 強みが、あなたを定義する。',
-  description: 'クライアントの信頼が資産に変わるデジタル名刺。対面のプロフェッショナルのための強み証明プラットフォーム。',
+  description: '信頼を資産に変える、ただ一つの証明。。対面のプロフェッショナルのための強み証明プラットフォーム。',
   icons: {
     icon: [
       { url: '/icon-32.png', sizes: '32x32', type: 'image/png' },
@@ -53,7 +53,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: 'REALPROOF — 強みが、あなたを定義する。',
-    description: 'クライアントの信頼が資産に変わるデジタル名刺。対面のプロフェッショナルのための強み証明プラットフォーム。',
+    description: '信頼を資産に変える、ただ一つの証明。。対面のプロフェッショナルのための強み証明プラットフォーム。',
     images: [
       {
         url: 'https://forte-mvp.vercel.app/images/hero_ogp.png',
@@ -68,7 +68,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'REALPROOF — 強みが、あなたを定義する。',
-    description: 'クライアントの信頼が資産に変わるデジタル名刺。',
+    description: '信頼を資産に変える、ただ一つの証明。。',
     images: ['https://forte-mvp.vercel.app/images/hero_ogp.png'],
   },
 }
