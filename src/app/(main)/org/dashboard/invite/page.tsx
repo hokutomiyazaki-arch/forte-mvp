@@ -1,32 +1,13 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase'
 import { useUser } from '@clerk/nextjs'
 
-const ORG_TYPE_LABELS: Record<string, { invite: string; inviteDesc: string }> = {
-  store: {
-    invite: 'メンバーを招待',
-    inviteDesc: 'にメンバーを招待します。登録済みのプロのメールアドレスを入力してください。',
-  },
-  credential: {
-    invite: '認定者を追加',
-    inviteDesc: 'に認定者を追加します。登録済みのプロのメールアドレスを入力してください。',
-  },
-  education: {
-    invite: '修了者を追加',
-    inviteDesc: 'に修了者を追加します。登録済みのプロのメールアドレスを入力してください。',
-  },
-}
-
 export default function OrgInvitePage() {
-  const supabase = createClient() as any
   const [loading, setLoading] = useState(true)
   const [org, setOrg] = useState<any>(null)
-  const [email, setEmail] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [message, setMessage] = useState('')
+  const [badges, setBadges] = useState<any[]>([])
   const [error, setError] = useState('')
-  const [invitations, setInvitations] = useState<any[]>([])
+  const [copiedId, setCopiedId] = useState<string | null>(null)
 
   const { user: clerkUser, isLoaded: authLoaded } = useUser()
   const authUser = clerkUser ? { id: clerkUser.id } : null
@@ -34,83 +15,33 @@ export default function OrgInvitePage() {
   useEffect(() => {
     if (!authLoaded) return
     if (!authUser) { window.location.href = '/login?role=pro'; return }
-    load(authUser)
+    load()
   }, [authLoaded, authUser])
 
-  async function load(user: any) {
+  async function load() {
     try {
-      const { data: orgData, error: orgError } = await supabase
-        .from('organizations')
-        .select('*')
-        .eq('owner_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+      const res = await fetch('/api/org-dashboard')
+      if (!res.ok) throw new Error('データの取得に失敗しました')
+      const data = await res.json()
 
-      if (orgError) throw orgError
-      if (!orgData) {
+      if (!data.org) {
         window.location.href = '/org/register'
         return
       }
 
-      setOrg(orgData)
-
-      // 既存の招待一覧
-      const { data: invData } = await supabase
-        .from('org_invitations')
-        .select('*')
-        .eq('organization_id', orgData.id)
-        .order('created_at', { ascending: false })
-
-      setInvitations(invData || [])
+      setOrg(data.org)
+      setBadges(data.badges || [])
     } catch (err: any) {
       setError(err.message || 'データの取得に失敗しました')
     }
     setLoading(false)
   }
 
-  async function handleInvite(e: React.FormEvent) {
-    e.preventDefault()
-    setError('')
-    setMessage('')
-    setSubmitting(true)
-
-    try {
-      const trimmed = email.trim().toLowerCase()
-      if (!trimmed) throw new Error('メールアドレスを入力してください')
-
-      // APIルートでプロ存在確認 + 招待作成 + メール送信
-      const res = await fetch('/api/org-invite', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          organizationId: org.id,
-          orgName: org.name,
-          email: trimmed,
-        }),
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        throw new Error(data.error || '招待の送信に失敗しました')
-      }
-
-      setMessage(`${trimmed} に招待メールを送信しました`)
-      setEmail('')
-
-      // リスト更新
-      const { data: invData } = await supabase
-        .from('org_invitations')
-        .select('*')
-        .eq('organization_id', org.id)
-        .order('created_at', { ascending: false })
-
-      setInvitations(invData || [])
-    } catch (err: any) {
-      setError(err.message || '招待の送信に失敗しました')
-    }
-    setSubmitting(false)
+  function copyClaimUrl(claimToken: string, badgeId: string) {
+    const url = `${window.location.origin}/badge/claim/${claimToken}`
+    navigator.clipboard.writeText(url)
+    setCopiedId(badgeId)
+    setTimeout(() => setCopiedId(null), 2000)
   }
 
   if (loading) {
@@ -124,13 +55,7 @@ export default function OrgInvitePage() {
 
   if (!org) return null
 
-  const L = ORG_TYPE_LABELS[org.type] || ORG_TYPE_LABELS.store
-
-  const statusLabels: Record<string, { label: string; color: string }> = {
-    pending: { label: '待機中', color: 'text-yellow-600 bg-yellow-50' },
-    accepted: { label: '承認済', color: 'text-green-600 bg-green-50' },
-    expired: { label: '期限切れ', color: 'text-gray-400 bg-gray-50' },
-  }
+  const activeBadges = badges.filter((b: any) => b.claim_url_active && b.claim_token)
 
   return (
     <div className="max-w-lg mx-auto px-4 py-8">
@@ -141,61 +66,67 @@ export default function OrgInvitePage() {
         ← ダッシュボードに戻る
       </button>
 
-      <h1 className="text-xl font-bold text-[#1A1A2E] mb-1">{L.invite}</h1>
-      <p className="text-sm text-gray-500 mb-8">
-        {org.name}{L.inviteDesc}
+      <h1 className="text-xl font-bold text-[#1A1A2E] mb-1">メンバーを追加する</h1>
+      <p className="text-sm text-gray-500 mb-8 leading-relaxed">
+        以下のURLをプロに共有してください。<br />
+        URLからバッジを取得すると、自動的にメンバーに追加されます。
       </p>
 
-      {/* 招待フォーム */}
-      <form onSubmit={handleInvite} className="mb-8">
-        <div className="flex gap-2">
-          <input
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            required
-            className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#C4A35A] outline-none"
-            placeholder="pro@example.com"
-          />
+      {error && (
+        <div className="bg-red-50 text-red-600 text-sm p-3 rounded-xl mb-4">
+          {error}
+        </div>
+      )}
+
+      {activeBadges.length === 0 ? (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 text-center">
+          <p className="text-gray-500 text-sm mb-4">
+            {badges.length === 0
+              ? 'バッジがまだ作成されていません。バッジを作成するとメンバー追加URLが生成されます。'
+              : '有効な取得URLがありません。バッジ管理ページで取得URLを有効にしてください。'
+            }
+          </p>
           <button
-            type="submit"
-            disabled={submitting || !email.trim()}
-            className="px-6 py-3 bg-[#1A1A2E] text-white font-medium rounded-xl hover:bg-[#2a2a4e] transition disabled:opacity-50 whitespace-nowrap text-sm"
+            onClick={() => window.location.href = badges.length === 0 ? '/org/dashboard/badges/new' : '/org/dashboard/badges'}
+            className="px-6 py-3 bg-[#1A1A2E] text-white font-medium rounded-xl hover:bg-[#2a2a4e] transition text-sm"
           >
-            {submitting ? '送信中...' : '招待する'}
+            {badges.length === 0 ? 'バッジを作成する' : 'バッジ管理へ'}
           </button>
         </div>
-        {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
-        {message && <p className="text-green-600 text-sm mt-2">{message}</p>}
-      </form>
-
-      {/* 招待履歴 */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-        <h2 className="text-sm font-bold text-[#1A1A2E] mb-4">招待履歴</h2>
-
-        {invitations.length === 0 ? (
-          <p className="text-gray-400 text-sm text-center py-4">まだ招待がありません</p>
-        ) : (
-          <div className="space-y-3">
-            {invitations.map(inv => {
-              const st = statusLabels[inv.status] || statusLabels.pending
-              return (
-                <div key={inv.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
-                  <div>
-                    <div className="text-sm text-[#1A1A2E]">{inv.invited_email}</div>
-                    <div className="text-xs text-gray-400">
-                      {new Date(inv.created_at).toLocaleDateString('ja-JP')}
-                    </div>
+      ) : (
+        <div className="space-y-4">
+          {activeBadges.map((badge: any) => (
+            <div key={badge.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+              <div className="flex items-center gap-3 mb-4">
+                {badge.image_url ? (
+                  <img src={badge.image_url} alt={badge.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                ) : (
+                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#C4A35A] to-[#E8D5A0] flex items-center justify-center text-white font-bold flex-shrink-0">
+                    {badge.name.charAt(0)}
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full ${st.color}`}>
-                    {st.label}
-                  </span>
+                )}
+                <div>
+                  <p className="text-sm font-bold text-[#1A1A2E]">{badge.name}</p>
+                  {badge.description && (
+                    <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{badge.description}</p>
+                  )}
                 </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
+              </div>
+              <div className="flex gap-2">
+                <div className="flex-1 bg-gray-50 rounded-lg px-3 py-2 text-xs text-gray-500 truncate font-mono">
+                  {window.location.origin}/badge/claim/{badge.claim_token.slice(0, 8)}...
+                </div>
+                <button
+                  onClick={() => copyClaimUrl(badge.claim_token, badge.id)}
+                  className="px-4 py-2 bg-[#1A1A2E] text-white rounded-lg text-xs hover:bg-[#2a2a4e] transition whitespace-nowrap font-medium"
+                >
+                  {copiedId === badge.id ? 'コピー済!' : 'URLをコピー'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

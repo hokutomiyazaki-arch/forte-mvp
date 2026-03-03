@@ -7,7 +7,7 @@ const ORG_TYPE_LABELS: Record<string, { typeName: string; member: string; member
     typeName: '店舗',
     member: 'メンバー',
     members: '所属プロフェッショナル',
-    invite: 'メンバーを招待する',
+    invite: 'メンバーを追加する',
     count: '所属メンバー',
     perMember: 'メンバー別プルーフ',
     emptyTitle: 'まだメンバーがいません',

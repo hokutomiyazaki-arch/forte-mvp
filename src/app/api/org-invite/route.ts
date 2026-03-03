@@ -11,6 +11,13 @@ function getSupabaseAdmin() {
 }
 
 export async function POST(req: NextRequest) {
+  // メール招待は廃止。バッジのclaim URLベースでメンバー追加に統一。
+  return NextResponse.json(
+    { error: 'メール招待は廃止されました。バッジの取得URLからメンバーを追加してください。' },
+    { status: 410 }
+  )
+
+  // === 以下は旧コード（参照用に残す） ===
   const supabaseAdmin = getSupabaseAdmin()
 
   try {

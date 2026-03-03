@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic'
  * GET /api/org-dashboard
  * orgダッシュボードに必要な全データをサーバー側で一括取得。
  * N+1問題（ERR_INSUFFICIENT_RESOURCES）の解消。
+ * メンバー管理はバッジベース（org_membersのcredential_level_id付きレコード）。
  */
 export async function GET() {
   try {
@@ -37,7 +38,6 @@ export async function GET() {
       membersResult,
       aggregateResult,
       badgesResult,
-      invitationsResult,
     ] = await Promise.all([
       // メンバー + プルーフ数（org_proof_summary ビュー）
       supabase
@@ -59,16 +59,9 @@ export async function GET() {
         .select('*')
         .eq('organization_id', org.id)
         .order('sort_order', { ascending: true }),
-
-      // 招待一覧
-      supabase
-        .from('org_invitations')
-        .select('*')
-        .eq('organization_id', org.id)
-        .order('created_at', { ascending: false }),
     ])
 
-    // 3. バッジごとの取得者数を一括取得
+    // 3. バッジごとの取得者を一括取得（バッジベースのメンバー管理）
     const badges = badgesResult.data || []
     let badgeHolderCounts: Record<string, number> = {}
     let badgeHolders: any[] = []
@@ -77,7 +70,7 @@ export async function GET() {
       const badgeIds = badges.map((b: any) => b.id)
       const { data: holders } = await supabase
         .from('org_members')
-        .select('credential_level_id, professional_id, professionals(id, name, photo_url)')
+        .select('credential_level_id, professional_id, accepted_at, professionals(id, name, photo_url, title), credential_levels(id, name, image_url)')
         .eq('organization_id', org.id)
         .eq('status', 'active')
         .in('credential_level_id', badgeIds)
@@ -92,6 +85,22 @@ export async function GET() {
       }
     }
 
+    // バッジホルダーから一意メンバーリスト（同じプロが複数バッジを持つ場合は重複排除）
+    const memberMap = new Map<string, any>()
+    for (const h of badgeHolders) {
+      if (h.professionals && !memberMap.has(h.professional_id)) {
+        memberMap.set(h.professional_id, {
+          professional_id: h.professional_id,
+          name: h.professionals.name,
+          photo_url: h.professionals.photo_url,
+          title: h.professionals.title,
+          badge_name: h.credential_levels?.name,
+          accepted_at: h.accepted_at,
+        })
+      }
+    }
+    const uniqueMembers = Array.from(memberMap.values())
+
     return NextResponse.json({
       org,
       members: membersResult.data || [],
@@ -99,7 +108,7 @@ export async function GET() {
       badges,
       badgeHolderCounts,
       badgeHolders,
-      invitations: invitationsResult.data || [],
+      badgeMembers: uniqueMembers,
     })
   } catch (error: any) {
     console.error('[org-dashboard API] error:', error)
