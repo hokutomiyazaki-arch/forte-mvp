@@ -135,7 +135,7 @@ export default function DashboardPage() {
   const [inviteProcessing, setInviteProcessing] = useState<string | null>(null)
   const [inviteAccepted, setInviteAccepted] = useState<string | null>(null) // 承認完了メッセージ用
 
-  // 所属団体 state
+  // 所属・認定 state
   const [activeOrgs, setActiveOrgs] = useState<{id: string; member_id: string; org_name: string; org_type: string; accepted_at: string}[]>([])
   const [leavingOrg, setLeavingOrg] = useState<string | null>(null)
   const [credentialBadges, setCredentialBadges] = useState<{id: string; name: string; description: string | null; image_url: string | null; org_name: string; org_id: string}[]>([])
@@ -1194,13 +1194,16 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* 所属団体 */}
+      {/* 所属・認定 */}
       {activeOrgs.length > 0 && (
         <div className="bg-white rounded-xl p-5 shadow-sm mb-6">
-          <h3 className="text-sm font-bold text-[#1A1A2E] mb-3">所属団体</h3>
+          <h3 className="text-sm font-bold text-[#1A1A2E] mb-3">所属・認定</h3>
           <div className="space-y-3">
             {activeOrgs.map(o => {
               const typeIcon = o.org_type === 'store' ? '🏪' : o.org_type === 'credential' ? '🎓' : '📚'
+              const typeTag = o.org_type === 'store' ? '所属' : o.org_type === 'education' ? '修了' : '認定'
+              const tagBg = o.org_type === 'store' ? '#E8F4FD' : '#FFF8E7'
+              const tagColor = o.org_type === 'store' ? '#2B6CB0' : '#C4A35A'
               return (
                 <div key={o.member_id} className="flex items-center justify-between py-2">
                   <a
@@ -1209,7 +1212,12 @@ export default function DashboardPage() {
                   >
                     <span className="text-lg">{typeIcon}</span>
                     <div>
-                      <div className="text-sm font-medium text-[#1A1A2E]">{o.org_name}</div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-[#1A1A2E]">{o.org_name}</span>
+                        <span style={{ fontSize: '11px', padding: '1px 6px', borderRadius: '4px', backgroundColor: tagBg, color: tagColor, fontWeight: 600 }}>
+                          {typeTag}
+                        </span>
+                      </div>
                       {o.accepted_at && (
                         <div className="text-xs text-gray-400">
                           {new Date(o.accepted_at).toLocaleDateString('ja-JP')} {o.org_type === 'credential' ? 'から認定' : o.org_type === 'education' ? 'から修了' : 'から所属'}
