@@ -139,7 +139,7 @@ export default function DashboardPage() {
 
   // 所属・認定 state
   const [activeOrgs, setActiveOrgs] = useState<{id: string; member_id: string; org_name: string; org_type: string; accepted_at: string}[]>([])
-  // leavingOrg removed: 所属・認定はprofessional_badgesベースに変更
+  // leavingOrg removed: 所属・認定はorg_membersベースに変更
   const [credentialBadges, setCredentialBadges] = useState<{id: string; name: string; description: string | null; image_url: string | null; org_name: string; org_id: string}[]>([])
 
   // 団体オーナー state
@@ -562,7 +562,7 @@ export default function DashboardPage() {
     setInviteProcessing(null)
   }
 
-  // 団体離脱は削除: 所属・認定はprofessional_badgesベースに変更
+  // 団体離脱は削除: 所属・認定はorg_membersベースに変更
 
   // プルーフ選択ロジック
   const totalSelected = selectedProofIds.size
@@ -1204,7 +1204,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* 所属・認定（professional_badgesベース） */}
+      {/* 所属・認定（org_membersベース） */}
       {activeOrgs.length > 0 && (
         <div className="bg-white rounded-xl p-5 shadow-sm mb-6">
           <h3 className="text-sm font-bold text-[#1A1A2E] mb-3">所属・認定</h3>

@@ -38,7 +38,7 @@ async function getMasterData(supabase: ReturnType<typeof getSupabaseAdmin>) {
  * - マスタデータ(proof_items, personality_items, gratitude_phrases)を5分キャッシュ → -3クエリ
  * - votes 2クエリ(COUNT + コメント) → 1クエリに統合
  * - bookmarks 2クエリ(被COUNT + 自分の一覧) → 一覧から被COUNTは別途(統合不可)
- * - org_members: pending招待のみ, professional_badges: バッジ表示
+ * - org_members: pending招待 + バッジ表示(credential_level_id付き)
  */
 export async function GET() {
   try {
@@ -101,7 +101,7 @@ export async function GET() {
 
     // ────────────────────────────────────────
     // Phase 2: プロIDが分かったら、全データを並列取得
-    // 統合: votes(COUNT+コメント→1), org_members(pending), professional_badges(バッジ)
+    // 統合: votes(COUNT+コメント→1), org_members(pending+バッジ)
     // キャッシュ済: personality_items, gratitude_phrases
     // ────────────────────────────────────────
     const proId = proData.id
@@ -141,10 +141,11 @@ export async function GET() {
         .select('id, organization_id, status, invited_at, organizations(id, name, type)')
         .eq('professional_id', proId)
         .eq('status', 'pending'),
-      // professional_badges: 取得済みバッジ（所属・認定 + 取得バッジの両方のソース）
-      supabase.from('professional_badges')
-        .select('id, professional_id, badge_level_id, claimed_at, credential_levels(id, name, description, image_url, organization_id, organizations(id, name, type))')
-        .eq('professional_id', proId),
+      // org_members: バッジ付きレコード（所属・認定 + 取得バッジの両方のソース）
+      supabase.from('org_members')
+        .select('*, credential_levels(id, name, description, image_url, organization_id, organizations(id, name, type))')
+        .eq('professional_id', proId)
+        .not('credential_level_id', 'is', null),
       // オーナー団体
       supabase.from('organizations')
         .select('id, name, type')
@@ -191,11 +192,11 @@ export async function GET() {
       }))
 
     // ────────────────────────────────────────
-    // professional_badges → 所属・認定 + 取得バッジ
+    // org_members(バッジ付き) → 所属・認定 + 取得バッジ
     // ────────────────────────────────────────
     const allBadgeRecords = proBadgesResult.data || []
 
-    // 所属・認定: professional_badgesを団体ごとにグループ化（重複排除）
+    // 所属・認定: org_membersを団体ごとにグループ化（重複排除）
     const orgMap = new Map<string, any>()
     for (const b of allBadgeRecords) {
       const cl = b.credential_levels as any
@@ -206,13 +207,13 @@ export async function GET() {
           member_id: b.id,
           org_name: org.name,
           org_type: org.type,
-          accepted_at: b.claimed_at,
+          accepted_at: b.accepted_at,
         })
       }
     }
     const activeOrgs = Array.from(orgMap.values())
 
-    // 取得バッジ: professional_badgesから個別バッジ
+    // 取得バッジ: org_membersから個別バッジ
     const credentialBadges = allBadgeRecords
       .filter((b: any) => b.credential_levels)
       .map((b: any) => {
