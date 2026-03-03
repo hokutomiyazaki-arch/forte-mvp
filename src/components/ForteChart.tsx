@@ -1,5 +1,6 @@
 'use client'
 import { VoteSummary, Professional } from '@/lib/types'
+import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, PROVEN_GOLD } from '@/lib/constants'
 
 interface PersonalitySummary {
   category: string
@@ -32,24 +33,32 @@ export default function ForteChart({ votes, personalityVotes = [], professional,
             強み
           </h3>
           <div className="space-y-2">
-            {sortedResults.map(v => (
-              <div key={v.category}>
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-sm font-medium text-[#1A1A2E]">
-                    {v.category}
-                  </span>
-                  {showLabels && (
-                    <span className="text-sm text-[#1A1A2E] font-bold">{v.vote_count}</span>
-                  )}
+            {sortedResults.map(v => {
+              const isProven = v.vote_count >= PROVEN_THRESHOLD
+              const isSpecialist = v.vote_count >= SPECIALIST_THRESHOLD
+              const barColor = isProven ? PROVEN_GOLD : '#1A1A2E'
+              const mark = isSpecialist ? ' 🏆' : isProven ? ' ✦' : ''
+              return (
+                <div key={v.category}>
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-sm font-medium text-[#1A1A2E]">
+                      {v.category}
+                    </span>
+                    {showLabels && (
+                      <span className="text-sm font-bold" style={{ color: isProven ? PROVEN_GOLD : '#1A1A2E' }}>
+                        {v.vote_count}{mark}
+                      </span>
+                    )}
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-3">
+                    <div
+                      className="h-3 rounded-full transition-all duration-500"
+                      style={{ width: `${(v.vote_count / maxVotes) * 100}%`, backgroundColor: barColor }}
+                    />
+                  </div>
                 </div>
-                <div className="w-full bg-gray-100 rounded-full h-3">
-                  <div
-                    className="bg-[#1A1A2E] h-3 rounded-full transition-all duration-500"
-                    style={{ width: `${(v.vote_count / maxVotes) * 100}%` }}
-                  />
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}

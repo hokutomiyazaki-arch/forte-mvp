@@ -5,6 +5,7 @@ import { db, uploadFile } from '@/lib/db'
 import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYPES, getRewardType } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import ForteChart from '@/components/ForteChart'
+import { PROVEN_THRESHOLD, PROVEN_GRADIENT } from '@/lib/constants'
 import VoiceShareModal from '@/components/VoiceShareCard'
 import ImageCropper from '@/components/ImageCropper'
 import CardModeSwitch from '@/components/CardModeSwitch'
@@ -1333,21 +1334,25 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* トッププルーフ — 黒背景横長 */}
-      {topForte !== '-' && (
-        <div className="rounded-xl p-4 mb-8 flex items-center justify-between gap-3" style={{ background: '#1A1A2E' }}>
-          <div>
-            <div className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#9CA3AF', fontFamily: "'Inter', sans-serif" }}>TOP PROOF</div>
-            <div className="text-lg font-bold mt-0.5" style={{ color: '#FFFFFF' }}>{topForte}</div>
-          </div>
-          <div className="text-right">
-            <div className="text-2xl font-bold" style={{ color: '#C4A35A', fontFamily: "'Inter', sans-serif" }}>
-              {votes.length > 0 ? votes.sort((a, b) => b.vote_count - a.vote_count)[0]?.vote_count : 0}
+      {/* トッププルーフ — 背景は15票以上でグラデーション */}
+      {topForte !== '-' && (() => {
+        const topVoteCount = votes.length > 0 ? votes.sort((a, b) => b.vote_count - a.vote_count)[0]?.vote_count : 0
+        const topIsProven = topVoteCount >= PROVEN_THRESHOLD
+        return (
+          <div className="rounded-xl p-4 mb-8 flex items-center justify-between gap-3" style={{ background: topIsProven ? PROVEN_GRADIENT : '#1A1A2E' }}>
+            <div>
+              <div className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#9CA3AF', fontFamily: "'Inter', sans-serif" }}>TOP PROOF</div>
+              <div className="text-lg font-bold mt-0.5" style={{ color: '#FFFFFF' }}>{topForte}</div>
             </div>
-            <div className="text-[10px]" style={{ color: '#9CA3AF' }}>votes</div>
+            <div className="text-right">
+              <div className="text-2xl font-bold" style={{ color: '#C4A35A', fontFamily: "'Inter', sans-serif" }}>
+                {topVoteCount}
+              </div>
+              <div className="text-[10px]" style={{ color: '#9CA3AF' }}>votes</div>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
       {topForte === '-' && <div className="mb-8" />}
 
       {/* Proof Chart */}
