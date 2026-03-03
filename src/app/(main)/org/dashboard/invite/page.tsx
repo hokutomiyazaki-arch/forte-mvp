@@ -45,7 +45,22 @@ export default function CertifiedMembersPage() {
         accepted_at: h.accepted_at,
       }))
 
-      setMembers(formatted)
+      // professional_idでグループ化 → 1人1行
+      const grouped = Object.values(
+        formatted.reduce((acc: Record<string, any>, m: any) => {
+          if (!acc[m.professional_id]) {
+            acc[m.professional_id] = {
+              ...m,
+              badges: [{ badge_name: m.badge_name, badge_level_id: m.badge_level_id, accepted_at: m.accepted_at }],
+            }
+          } else {
+            acc[m.professional_id].badges.push({ badge_name: m.badge_name, badge_level_id: m.badge_level_id, accepted_at: m.accepted_at })
+          }
+          return acc
+        }, {})
+      )
+
+      setMembers(grouped)
     } catch (error) {
       console.error(error)
     } finally {
@@ -53,25 +68,28 @@ export default function CertifiedMembersPage() {
     }
   }
 
-  // 認定削除ハンドラ
+  // 認定削除ハンドラ（全バッジ一括削除）
   const handleRevoke = async (member: any) => {
     const typeLabel = orgType === 'store' ? 'メンバー' : orgType === 'education' ? '修了者' : '認定者'
+    const badgeNames = (member.badges || [])
+      .map((b: any) => b.badge_name)
+      .filter(Boolean)
+      .join('、')
 
     if (!confirm(
-      `${member.name} さんの${member.badge_name ? `「${member.badge_name}」バッジ` : '認定'}を削除しますか？\n\n` +
+      `${member.name} さんの${badgeNames ? `全バッジ（${badgeNames}）` : '認定'}を削除しますか？\n\n` +
       `※ この操作は取り消せません。\n` +
       `※ 再度バッジを付与するにはclaim URLからの再取得が必要です。`
     )) {
       return
     }
 
-    const revokeKey = `${member.professional_id}-${member.badge_level_id}`
-    setRevoking(revokeKey)
+    setRevoking(member.professional_id)
     try {
+      // badge_level_idを渡さず、organization_idで一括削除
       const params = new URLSearchParams({
         professional_id: member.professional_id,
         organization_id: orgId,
-        ...(member.badge_level_id ? { badge_level_id: member.badge_level_id } : {}),
       })
       const res = await fetch(`/api/org-badge-revoke?${params}`, { method: 'DELETE' })
       if (!res.ok) {
@@ -80,9 +98,7 @@ export default function CertifiedMembersPage() {
       }
 
       // 一覧から削除
-      setMembers(prev => prev.filter(m =>
-        !(m.professional_id === member.professional_id && m.badge_level_id === member.badge_level_id)
-      ))
+      setMembers(prev => prev.filter(m => m.professional_id !== member.professional_id))
     } catch (error: any) {
       alert(error.message)
     } finally {
@@ -151,11 +167,16 @@ export default function CertifiedMembersPage() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {members.map((member: any, index: number) => {
-            const revokeKey = `${member.professional_id}-${member.badge_level_id}`
+          {members.map((member: any) => {
+            // 最も早い取得日を表示
+            const earliestDate = (member.badges || [])
+              .map((b: any) => b.accepted_at)
+              .filter(Boolean)
+              .sort()[0]
+
             return (
               <div
-                key={`${member.professional_id}-${member.badge_level_id}-${index}`}
+                key={member.professional_id}
                 style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   padding: '14px 16px', backgroundColor: '#fff', borderRadius: '12px',
@@ -190,14 +211,25 @@ export default function CertifiedMembersPage() {
                     }}>
                       {member.name}
                     </p>
-                    {member.badge_name && (
-                      <p style={{ fontSize: '11px', color: '#C4A35A', margin: '2px 0 0 0' }}>
-                        {member.badge_name}
-                      </p>
+                    {/* バッジタグ */}
+                    {member.badges && member.badges.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
+                        {member.badges.map((b: any) => (
+                          <span
+                            key={b.badge_level_id}
+                            style={{
+                              fontSize: '11px', color: '#C4A35A', backgroundColor: '#FFF8E7',
+                              padding: '1px 6px', borderRadius: '4px',
+                            }}
+                          >
+                            {b.badge_name}
+                          </span>
+                        ))}
+                      </div>
                     )}
-                    {member.accepted_at && (
-                      <p style={{ fontSize: '11px', color: '#AAA', margin: '1px 0 0 0' }}>
-                        {new Date(member.accepted_at).toLocaleDateString('ja-JP')} 取得
+                    {earliestDate && (
+                      <p style={{ fontSize: '11px', color: '#AAA', margin: '3px 0 0 0' }}>
+                        {new Date(earliestDate).toLocaleDateString('ja-JP')} 取得
                       </p>
                     )}
                   </div>
@@ -206,15 +238,15 @@ export default function CertifiedMembersPage() {
                 {/* 右側: 削除ボタン */}
                 <button
                   onClick={() => handleRevoke(member)}
-                  disabled={revoking === revokeKey}
+                  disabled={revoking === member.professional_id}
                   style={{
                     background: 'none', border: '1px solid #E53E3E',
                     color: '#E53E3E', fontSize: '12px', padding: '6px 12px',
                     borderRadius: '6px', cursor: 'pointer', flexShrink: 0, marginLeft: '12px',
-                    opacity: revoking === revokeKey ? 0.5 : 1,
+                    opacity: revoking === member.professional_id ? 0.5 : 1,
                   }}
                 >
-                  {revoking === revokeKey ? '削除中...' : '認定削除'}
+                  {revoking === member.professional_id ? '削除中...' : '認定削除'}
                 </button>
               </div>
             )
