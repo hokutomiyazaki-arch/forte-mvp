@@ -205,12 +205,14 @@ export default function CertifiedMembersPage() {
                     </div>
                   )}
                   <div style={{ minWidth: 0 }}>
-                    <p style={{
-                      fontSize: '14px', fontWeight: 600, color: '#1A1A2E',
-                      margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>
-                      {member.name}
-                    </p>
+                    <a href={`/card/${member.professional_id}`} style={{ textDecoration: 'none' }}>
+                      <p style={{
+                        fontSize: '14px', fontWeight: 600, color: '#1A1A2E',
+                        margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {member.name}
+                      </p>
+                    </a>
                     {/* バッジタグ */}
                     {member.badges && member.badges.length > 0 && (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
