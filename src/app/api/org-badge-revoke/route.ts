@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
  * DELETE /api/org-badge-revoke
  * プロの認定を剥奪（この団体のバッジを削除）
  * - badge_level_id あり → 個別バッジのみ削除
- * - badge_level_id なし → この団体の全バッジを削除
+ * - badge_level_id なし → この団体の全メンバーシップを削除（バッジ+所属レコード）
  */
 export async function DELETE(req: NextRequest) {
   const { userId } = await auth()
@@ -53,25 +53,15 @@ export async function DELETE(req: NextRequest) {
 
       if (error) throw error
     } else {
-      // この団体の全バッジIDを取得
-      const { data: badges } = await supabase
-        .from('credential_levels')
-        .select('id')
+      // このプロの、この団体に対する全メンバーシップを削除
+      // （credential_level_id付きバッジレコード + NULLの所属レコード両方）
+      const { error } = await supabase
+        .from('org_members')
+        .delete()
+        .eq('professional_id', professionalId)
         .eq('organization_id', organizationId)
 
-      const badgeIds = badges?.map((b: any) => b.id) || []
-
-      if (badgeIds.length > 0) {
-        // このプロが持つ、この団体の全バッジを削除
-        const { error } = await supabase
-          .from('org_members')
-          .delete()
-          .eq('professional_id', professionalId)
-          .eq('organization_id', organizationId)
-          .in('credential_level_id', badgeIds)
-
-        if (error) throw error
-      }
+      if (error) throw error
     }
 
     return NextResponse.json({ success: true })
