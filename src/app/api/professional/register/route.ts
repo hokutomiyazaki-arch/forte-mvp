@@ -25,6 +25,13 @@ export async function POST() {
     await supabase.from('professionals')
       .update({ deactivated_at: null })
       .eq('user_id', userId)
+
+    // 既存NFCカードにprofessional_idを自動セット
+    await supabase.from('nfc_cards')
+      .update({ professional_id: existingPro.id, updated_at: new Date().toISOString() })
+      .eq('user_id', userId)
+      .eq('status', 'active')
+
     return NextResponse.json({ success: true, action: 'reactivated' })
   }
 
@@ -33,12 +40,20 @@ export async function POST() {
   const clerkImageUrl = user?.imageUrl || null
   const displayName = user?.firstName || user?.username || ''
 
-  await supabase.from('professionals').insert({
+  const { data: newPro } = await supabase.from('professionals').insert({
     user_id: userId,
     name: displayName || '', // name は NOT NULL
     title: '', // title は NOT NULL、ダッシュボードで後から設定
     photo_url: clerkImageUrl,
-  })
+  }).select('id').maybeSingle()
+
+  // 既存NFCカードにprofessional_idを自動セット
+  if (newPro) {
+    await supabase.from('nfc_cards')
+      .update({ professional_id: newPro.id, updated_at: new Date().toISOString() })
+      .eq('user_id', userId)
+      .eq('status', 'active')
+  }
 
   return NextResponse.json({ success: true, action: 'created' })
 }
