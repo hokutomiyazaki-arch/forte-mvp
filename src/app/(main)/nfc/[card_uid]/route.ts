@@ -75,6 +75,9 @@ export async function GET(
       .eq('id', card.professional_id)
       .maybeSingle()
 
+    console.log('NFC DEBUG - card:', JSON.stringify({ professional_id: card.professional_id, user_id: card.user_id }))
+    console.log('NFC DEBUG - pro:', JSON.stringify({ found: !!pro, selected_proofs: pro?.selected_proofs, card_mode: pro?.card_mode }))
+
     // 2.5 card_mode が 'general' ならマイプルーフへリダイレクト
     if (pro && pro.card_mode === 'general' && pro.user_id) {
       const { data: myProofCard } = await supabase
@@ -95,6 +98,7 @@ export async function GET(
 
     // 3. プロモード: 強み登録チェック
     const selectedProofs = pro?.selected_proofs || []
+    console.log('NFC DEBUG - selectedProofs:', JSON.stringify({ length: selectedProofs.length, raw: pro?.selected_proofs, type: typeof pro?.selected_proofs }))
     if (!pro || selectedProofs.length === 0) {
       // 強み未登録 → 準備中ページにリダイレクト + プロに通知メール
       try {
