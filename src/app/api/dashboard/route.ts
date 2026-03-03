@@ -4,10 +4,41 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
+// ────────────────────────────────────────
+// マスタデータキャッシュ（全ユーザー共通、5分TTL）
+// ────────────────────────────────────────
+const CACHE_TTL = 5 * 60 * 1000
+let masterCache: { proofItems: any[]; personalityItems: any[]; phrases: any[] } | null = null
+let masterCacheTime = 0
+
+async function getMasterData(supabase: ReturnType<typeof getSupabaseAdmin>) {
+  if (masterCache && Date.now() - masterCacheTime < CACHE_TTL) {
+    return masterCache
+  }
+  const [proofItemsResult, personalityItemsResult, phrasesResult] = await Promise.all([
+    supabase.from('proof_items').select('*').order('sort_order'),
+    supabase.from('personality_items').select('id, label'),
+    supabase.from('gratitude_phrases').select('*').order('sort_order'),
+  ])
+  masterCache = {
+    proofItems: proofItemsResult.data || [],
+    personalityItems: personalityItemsResult.data || [],
+    phrases: phrasesResult.data || [],
+  }
+  masterCacheTime = Date.now()
+  return masterCache
+}
+
 /**
  * GET /api/dashboard
  * 1リクエストでダッシュボードに必要な全データをまとめて返す。
  * サーバー側でPromise.allを使い並列実行。
+ *
+ * 最適化:
+ * - マスタデータ(proof_items, personality_items, gratitude_phrases)を5分キャッシュ → -3クエリ
+ * - votes 2クエリ(COUNT + コメント) → 1クエリに統合
+ * - bookmarks 2クエリ(被COUNT + 自分の一覧) → 一覧から被COUNTは別途(統合不可)
+ * - org_members 3クエリ → 1クエリに統合してJSでフィルタ
  */
 export async function GET() {
   try {
@@ -21,13 +52,13 @@ export async function GET() {
     // ────────────────────────────────────────
     // Phase 1: プロフィール + マスターデータを並列取得
     // ────────────────────────────────────────
-    const [proResult, proofItemsResult] = await Promise.all([
+    const [proResult, master] = await Promise.all([
       supabase.from('professionals').select('*').eq('user_id', userId).maybeSingle(),
-      supabase.from('proof_items').select('*').order('sort_order'),
+      getMasterData(supabase),
     ])
 
     const proDataRaw = proResult.data
-    const proofItems = proofItemsResult.data || []
+    const { proofItems, personalityItems, phrases } = master
 
     // deactivated proはclientとして扱う（proDataをnullにする）
     const isDeactivatedPro = !!(proDataRaw && proDataRaw.deactivated_at)
@@ -48,11 +79,11 @@ export async function GET() {
         rewards: [],
         voteSummary: [],
         personalitySummary: [],
-        personalityItems: [],
+        personalityItems,
         totalVotes: 0,
         bookmarkCount: 0,
         voiceComments: [],
-        gratitudePhrases: [],
+        gratitudePhrases: phrases,
         nfcCard: null,
         pendingInvites: [],
         activeOrgs: [],
@@ -65,6 +96,8 @@ export async function GET() {
 
     // ────────────────────────────────────────
     // Phase 2: プロIDが分かったら、全データを並列取得
+    // 統合: votes(COUNT+コメント→1), org_members(3→1)
+    // キャッシュ済: personality_items, gratitude_phrases
     // ────────────────────────────────────────
     const proId = proData.id
 
@@ -72,15 +105,10 @@ export async function GET() {
       rewardsResult,
       voteSummaryResult,
       personalitySummaryResult,
-      personalityItemsResult,
-      voteCountResult,
-      bookmarkCountResult,
-      voiceResult,
-      phrasesResult,
+      votesResult,
+      receivedBookmarkCountResult,
       nfcResult,
-      pendingInvitesResult,
-      activeMembersResult,
-      credBadgeResult,
+      orgMembersResult,
       ownedOrgResult,
       myProofCardResult,
       bookmarksResult,
@@ -91,41 +119,21 @@ export async function GET() {
       supabase.from('vote_summary').select('*').eq('professional_id', proId),
       // パーソナリティサマリー
       supabase.from('personality_summary').select('*').eq('professional_id', proId),
-      // パーソナリティ項目マスタ
-      supabase.from('personality_items').select('id, label'),
-      // 総投票数
-      supabase.from('votes').select('*', { count: 'exact', head: true }).eq('professional_id', proId).eq('status', 'confirmed'),
-      // ブックマーク数
-      supabase.from('bookmarks').select('*', { count: 'exact', head: true }).eq('professional_id', proId),
-      // Voiceコメント
+      // 投票（総数 + コメント付きを1クエリで取得）
       supabase.from('votes')
-        .select('id, comment, created_at')
+        .select('id, comment, created_at', { count: 'exact' })
         .eq('professional_id', proId)
         .eq('status', 'confirmed')
-        .not('comment', 'is', null)
-        .neq('comment', '')
         .order('created_at', { ascending: false }),
-      // 感謝フレーズ
-      supabase.from('gratitude_phrases').select('*').order('sort_order'),
+      // 被ブックマーク数（他ユーザーからのブックマーク）
+      supabase.from('bookmarks').select('*', { count: 'exact', head: true }).eq('professional_id', proId),
       // NFCカード
       supabase.from('nfc_cards').select('id, card_uid, status, linked_at').eq('professional_id', proId).eq('status', 'active').maybeSingle(),
-      // 団体招待（pending）
+      // org_members（pending + active を1クエリで取得）
       supabase.from('org_members')
-        .select('id, organization_id, invited_at, organizations(name, type)')
+        .select('id, organization_id, credential_level_id, status, invited_at, accepted_at, organizations(id, name, type), credential_levels(id, name, description, image_url)')
         .eq('professional_id', proId)
-        .eq('status', 'pending'),
-      // 所属団体（active, credential_level_idなし）
-      supabase.from('org_members')
-        .select('id, organization_id, accepted_at, organizations(id, name, type)')
-        .eq('professional_id', proId)
-        .eq('status', 'active')
-        .is('credential_level_id', null),
-      // 資格バッジ
-      supabase.from('org_members')
-        .select('credential_level_id, credential_levels(id, name, description, image_url), organizations(id, name)')
-        .eq('professional_id', proId)
-        .eq('status', 'active')
-        .not('credential_level_id', 'is', null),
+        .in('status', ['pending', 'active']),
       // オーナー団体
       supabase.from('organizations')
         .select('id, name, type')
@@ -146,19 +154,31 @@ export async function GET() {
     ])
 
     // ────────────────────────────────────────
-    // 団体データ整形
+    // votes データ整形: 総数 + コメント付きをJSで分離
     // ────────────────────────────────────────
-    const pendingInvites = (pendingInvitesResult.data || []).map((m: any) => ({
-      id: m.id,
-      organization_id: m.organization_id,
-      org_name: m.organizations?.name || '不明な団体',
-      org_type: m.organizations?.type || 'store',
-      invited_at: m.invited_at,
-    }))
+    const totalVotes = votesResult.count || 0
+    const voiceComments = (votesResult.data || []).filter(
+      (v: any) => v.comment && v.comment.trim() !== ''
+    )
 
-    // 所属団体: 重複排除
-    const activeOrgsList = (activeMembersResult.data || [])
-      .filter((m: any) => m.organizations)
+    // ────────────────────────────────────────
+    // org_members データ整形: 1クエリ結果をJSでフィルタ
+    // ────────────────────────────────────────
+    const allOrgMembers = orgMembersResult.data || []
+
+    const pendingInvites = allOrgMembers
+      .filter((m: any) => m.status === 'pending')
+      .map((m: any) => ({
+        id: m.id,
+        organization_id: m.organization_id,
+        org_name: m.organizations?.name || '不明な団体',
+        org_type: m.organizations?.type || 'store',
+        invited_at: m.invited_at,
+      }))
+
+    // 所属団体: active かつ credential_level_id なし、重複排除
+    const activeOrgsList = allOrgMembers
+      .filter((m: any) => m.status === 'active' && !m.credential_level_id && m.organizations)
       .map((m: any) => ({
         id: m.organizations.id,
         member_id: m.id,
@@ -173,9 +193,9 @@ export async function GET() {
       return true
     })
 
-    // 資格バッジ整形
-    const credentialBadges = (credBadgeResult.data || [])
-      .filter((m: any) => m.credential_levels && m.organizations)
+    // 資格バッジ: active かつ credential_level_id あり
+    const credentialBadges = allOrgMembers
+      .filter((m: any) => m.status === 'active' && m.credential_level_id && m.credential_levels && m.organizations)
       .map((m: any) => ({
         id: m.credential_levels.id,
         name: m.credential_levels.name,
@@ -196,11 +216,11 @@ export async function GET() {
       })),
       voteSummary: voteSummaryResult.data || [],
       personalitySummary: personalitySummaryResult.data || [],
-      personalityItems: personalityItemsResult.data || [],
-      totalVotes: voteCountResult.count || 0,
-      bookmarkCount: bookmarkCountResult.count || 0,
-      voiceComments: voiceResult.data || [],
-      gratitudePhrases: phrasesResult.data || [],
+      personalityItems,
+      totalVotes,
+      bookmarkCount: receivedBookmarkCountResult.count || 0,
+      voiceComments,
+      gratitudePhrases: phrases,
       nfcCard: nfcResult.data || null,
       pendingInvites,
       activeOrgs,
