@@ -77,13 +77,31 @@ export default function OrgPublicPage() {
 
       // credential/education団体: レベル別集計
       if (orgData.type === 'credential' || orgData.type === 'education') {
-        const { data: levelAggData } = await supabase
-          .from('org_level_aggregate')
-          .select('*')
-          .eq('organization_id', orgId)
-          .order('sort_order', { ascending: true })
+        // org_level_aggregate ビューと credential_levels を並列取得
+        // ビューに image_url が含まれない場合のフォールバック
+        const [levelAggResult, credLevelsResult] = await Promise.all([
+          supabase
+            .from('org_level_aggregate')
+            .select('*')
+            .eq('organization_id', orgId)
+            .order('sort_order', { ascending: true }),
+          supabase
+            .from('credential_levels')
+            .select('id, image_url')
+            .eq('organization_id', orgId),
+        ])
 
-        setLevelAggregates(levelAggData || [])
+        const imageMap = new Map<string, string | null>()
+        for (const cl of (credLevelsResult.data || [])) {
+          imageMap.set(cl.id, cl.image_url)
+        }
+
+        const levelAggData = (levelAggResult.data || []).map((la: any) => ({
+          ...la,
+          image_url: la.image_url || imageMap.get(la.level_id) || null,
+        }))
+
+        setLevelAggregates(levelAggData)
       }
     } catch (err: any) {
       setError(err.message || 'データの取得に失敗しました')
