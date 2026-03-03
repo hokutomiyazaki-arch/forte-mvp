@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import { Professional, VoteSummary, Vote } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import { COLORS, FONTS } from '@/lib/design-tokens'
+import { PROVEN_THRESHOLD, PROVEN_GOLD } from '@/lib/constants'
 // VoiceShareModal removed — public card is view-only
 import RelatedPros from '@/components/RelatedPros'
 
@@ -344,6 +345,15 @@ export default function CardPage() {
             <span style={{ fontSize: 30, fontWeight: 'bold', color: T.gold, fontFamily: T.fontMono }}>{totalVotes}</span>
             <span style={{ fontSize: 13, color: T.textSub, marginLeft: 6 }}>proofs</span>
           </div>
+          {(() => {
+            const provenCount = sortedVotes.filter(v => v.vote_count >= PROVEN_THRESHOLD).length
+            return provenCount > 0 ? (
+              <div style={{ textAlign: 'center' }}>
+                <span style={{ fontSize: 20, fontWeight: 'bold', color: PROVEN_GOLD, fontFamily: T.fontMono }}>{provenCount}</span>
+                <span style={{ fontSize: 11, color: PROVEN_GOLD, marginLeft: 4, fontWeight: 700 }}>proven</span>
+              </div>
+            ) : null
+          })()}
           {bookmarkCount > 0 && (
             <div style={{ textAlign: 'center' }}>
               <span style={{ fontSize: 20, fontWeight: 'bold', color: T.text, fontFamily: T.fontMono }}>{bookmarkCount}</span>
@@ -403,26 +413,35 @@ export default function CardPage() {
                 STRENGTH PROOFS
               </div>
 
-              {/* Top 3 — バーチャート（票数でティア分け） */}
+              {/* Top 3 — バーチャート（票数でティア分け + PROVEN対応） */}
               {top3.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
                   {top3.map((v, i) => {
                     const pct = (v.vote_count / maxVotes) * 100
+                    const isProven = v.vote_count >= PROVEN_THRESHOLD
                     const tier = v.vote_count > 30 ? 'elite' : v.vote_count > 10 ? 'strong' : 'normal'
                     const cardBg = tier === 'normal' ? T.cardBg : '#1A1A2E'
                     const cardBorder = tier === 'normal' ? T.cardBorder : '#2A2A3E'
                     const labelColor = tier === 'elite' ? '#C4A35A' : tier === 'strong' ? '#FFFFFF' : T.text
                     const countColor = tier === 'elite' ? '#C4A35A' : tier === 'strong' ? '#FFFFFF' : T.gold
                     const barTrack = tier === 'normal' ? '#F0EDE6' : '#2A2A3E'
+                    const barFill = isProven ? PROVEN_GOLD : getBarColor(i)
                     return (
                       <div key={v.category} style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 14, padding: 18 }}>
+                        {isProven && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, color: PROVEN_GOLD }}>
+                              🛡 PROVEN
+                            </span>
+                          </div>
+                        )}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, gap: 8 }}>
                           <span style={{ fontSize: 14, fontWeight: 700, color: labelColor, lineHeight: 1.5, overflowWrap: 'anywhere' as const, minWidth: 0 }}>{v.category}</span>
                           <span style={{ fontSize: 16, fontWeight: 'bold', color: countColor, fontFamily: T.fontMono, flexShrink: 0 }}>{v.vote_count}</span>
                         </div>
                         <div style={{ width: '100%', height: 8, background: barTrack, borderRadius: 99 }}>
                           <div style={{
-                            height: 8, borderRadius: 99, background: getBarColor(i),
+                            height: 8, borderRadius: 99, background: barFill,
                             width: animated ? `${pct}%` : '0%',
                             transition: `width 1.2s ease ${i * 0.08}s`,
                           }} />
@@ -433,21 +452,29 @@ export default function CardPage() {
                 </div>
               )}
 
-              {/* 残り — バーチャート */}
+              {/* 残り — バーチャート（PROVEN対応） */}
               {rest.length > 0 && (
                 <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: 18, marginBottom: 10 }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     {rest.map((v, i) => {
                       const pct = (v.vote_count / maxVotes) * 100
+                      const isProven = v.vote_count >= PROVEN_THRESHOLD
                       return (
                         <div key={v.category} style={{ width: '100%' }}>
+                          {isProven && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+                              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: PROVEN_GOLD }}>
+                                🛡 PROVEN
+                              </span>
+                            </div>
+                          )}
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4, gap: 8 }}>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: T.text, lineHeight: 1.5, overflowWrap: 'anywhere' as const, minWidth: 0 }}>{v.category}</span>
-                            <span style={{ fontSize: 13, color: T.textMuted, fontFamily: T.fontMono, flexShrink: 0 }}>{v.vote_count}</span>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: isProven ? PROVEN_GOLD : T.text, lineHeight: 1.5, overflowWrap: 'anywhere' as const, minWidth: 0 }}>{v.category}</span>
+                            <span style={{ fontSize: 13, color: isProven ? PROVEN_GOLD : T.textMuted, fontFamily: T.fontMono, flexShrink: 0 }}>{v.vote_count}</span>
                           </div>
                           <div style={{ width: '100%', height: 5, background: '#F0EDE6', borderRadius: 99 }}>
                             <div style={{
-                              height: 5, borderRadius: 99, background: getBarColor(3),
+                              height: 5, borderRadius: 99, background: isProven ? PROVEN_GOLD : getBarColor(3),
                               width: animated ? `${pct}%` : '0%',
                               transition: `width 1.2s ease ${(i + 3) * 0.08}s`,
                             }} />
