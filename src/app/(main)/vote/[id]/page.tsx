@@ -90,7 +90,6 @@ function VoteForm() {
   const qrToken = searchParams.get('token')
   const supabase = createClient()
   const { user: clerkUser, isLoaded: authLoaded } = useUser()
-  const authUser = clerkUser ? { id: clerkUser.id, email: clerkUser.primaryEmailAddress?.emailAddress } : null
 
   // 基本 state
   const [pro, setPro] = useState<Professional | null>(null)
@@ -99,6 +98,7 @@ function VoteForm() {
   const [error, setError] = useState('')
   const [alreadyVoted, setAlreadyVoted] = useState(false)
   const [tokenExpired, setTokenExpired] = useState(false)
+  const [isSelfVote, setIsSelfVote] = useState(false)
   const [submittedVoteId, setSubmittedVoteId] = useState('')
   const [submittedToken, setSubmittedToken] = useState('')
   const [showEmailFix, setShowEmailFix] = useState(false)
@@ -135,7 +135,15 @@ function VoteForm() {
   // アコーディオン
   const [accordionOpen, setAccordionOpen] = useState({ proof: false, personality: false, reward: false })
 
+  const loadedRef = useRef(false)
+
   useEffect(() => {
+    // authLoaded が false の間は待機
+    if (!authLoaded) return
+    // 既にロード済みなら再実行しない（Clerk auth state変更による再レンダー防止）
+    if (loadedRef.current) return
+    loadedRef.current = true
+
     async function load() {
       // LINE/Google認証からのエラーハンドリング
       const authError = searchParams.get('error')
@@ -252,17 +260,27 @@ function VoteForm() {
         .order('sort_order')
       if (persItems) setPersonalityItems(persItems)
 
-      // セッション確認（AuthProviderから取得）
-      const sessionUser = authUser
-      if (sessionUser?.email) {
-        setSessionEmail(sessionUser.email)
+      // セッション確認（Clerkから取得）
+      const sessionUserEmail = clerkUser?.primaryEmailAddress?.emailAddress
+      if (sessionUserEmail) {
+        setSessionEmail(sessionUserEmail)
         setIsLoggedIn(true)
+
+        // セルフ投票チェック（user_idベース）
+        if (clerkUser?.id && proData?.user_id) {
+          if (clerkUser.id === proData.user_id) {
+            setIsSelfVote(true)
+            setLoading(false)
+            return
+          }
+        }
+
         // ログイン済みならセッションメールで重複投票チェック
         const { data: existing, error: voteCheckError } = await (supabase as any)
           .from('votes')
           .select('id')
           .eq('professional_id', proId)
-          .eq('voter_email', sessionUser.email)
+          .eq('voter_email', sessionUserEmail)
           .maybeSingle()
         if (existing) setAlreadyVoted(true)
       } else {
@@ -284,7 +302,8 @@ function VoteForm() {
       setLoading(false)
     }
     load()
-  }, [proId, authLoaded, authUser])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [proId, authLoaded])
 
   // ── 強みプルーフ選択 ──
   function toggleProofId(id: string) {
@@ -609,6 +628,26 @@ function VoteForm() {
         </div>
         <h1 className="text-xl font-bold text-[#1A1A2E] mb-2">QRコードの有効期限が切れています</h1>
         <p className="text-gray-500 mb-6">このQRコードは24時間の有効期限が過ぎています。プロに新しいQRコードを発行してもらってください。</p>
+      </div>
+    )
+  }
+
+  if (isSelfVote) {
+    return (
+      <div className="max-w-md mx-auto text-center py-16 px-4">
+        <div className="w-16 h-16 rounded-full bg-[#C4A35A]/10 flex items-center justify-center mx-auto mb-4">
+          <svg className="w-8 h-8 text-[#C4A35A]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M12 3a9 9 0 100 18 9 9 0 000-18z" />
+          </svg>
+        </div>
+        <h1 className="text-xl font-bold text-[#1A1A2E] mb-2">ご自身のプロフィールには投票できません</h1>
+        <p className="text-gray-500 mb-6">クライアントにNFCカードを見せて、投票を依頼してください。</p>
+        <a
+          href="/dashboard"
+          className="inline-block px-6 py-3 bg-[#1A1A2E] text-[#C4A35A] font-bold rounded-xl hover:opacity-90 transition"
+        >
+          ダッシュボードに戻る
+        </a>
       </div>
     )
   }
