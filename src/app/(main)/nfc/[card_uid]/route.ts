@@ -71,12 +71,9 @@ export async function GET(
     // 2. プロの情報取得（card_mode含む）
     const { data: pro } = await supabase
       .from('professionals')
-      .select('selected_proofs, display_name, name, contact_email, user_id, last_nfc_notify_at, card_mode')
+      .select('selected_proofs, name, contact_email, user_id, last_nfc_notify_at, card_mode')
       .eq('id', card.professional_id)
       .maybeSingle()
-
-    console.log('NFC DEBUG - card:', JSON.stringify({ professional_id: card.professional_id, user_id: card.user_id }))
-    console.log('NFC DEBUG - pro:', JSON.stringify({ found: !!pro, selected_proofs: pro?.selected_proofs, card_mode: pro?.card_mode }))
 
     // 2.5 card_mode が 'general' ならマイプルーフへリダイレクト
     if (pro && pro.card_mode === 'general' && pro.user_id) {
@@ -98,7 +95,6 @@ export async function GET(
 
     // 3. プロモード: 強み登録チェック
     const selectedProofs = pro?.selected_proofs || []
-    console.log('NFC DEBUG - selectedProofs:', JSON.stringify({ length: selectedProofs.length, raw: pro?.selected_proofs, type: typeof pro?.selected_proofs }))
     if (!pro || selectedProofs.length === 0) {
       // 強み未登録 → 準備中ページにリダイレクト + プロに通知メール
       try {
@@ -119,7 +115,7 @@ export async function GET(
             // 通知メールを送信（非同期、レスポンスを待たない）
             const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://realproof.jp'
             const resendKey = process.env.RESEND_API_KEY
-            const displayName = pro?.display_name || pro?.name || 'プロ'
+            const displayName = pro?.name || 'プロ'
 
             if (resendKey) {
               fetch('https://api.resend.com/emails', {
