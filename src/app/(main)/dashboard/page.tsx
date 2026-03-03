@@ -2181,9 +2181,11 @@ export default function DashboardPage() {
             <span style={{ fontSize: 24 }}>✉️</span>
             <div>
               <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E' }}>
-                {ownedOrg.type === 'store' ? 'メンバー招待' : ownedOrg.type === 'credential' ? '認定者追加' : '修了者追加'}
+                {ownedOrg.type === 'store' ? 'メンバー管理' : ownedOrg.type === 'credential' ? '認定者管理' : '修了者管理'}
               </div>
-              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>メールで招待を送信</div>
+              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>
+                {ownedOrg.type === 'store' ? 'メンバーの一覧・管理' : ownedOrg.type === 'credential' ? '認定者の一覧・管理' : '修了者の一覧・管理'}
+              </div>
             </div>
           </button>
 
