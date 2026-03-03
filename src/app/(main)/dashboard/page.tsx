@@ -395,11 +395,11 @@ export default function DashboardPage() {
     try {
       // 1. card_uid が存在し、unlinked 状態であることを確認
       const { data: card } = await db.select('nfc_cards', {
-        select: 'id, status', eq: { card_uid: cardUid }, maybeSingle: true
+        select: 'id, status, user_id, professional_id', eq: { card_uid: cardUid }, maybeSingle: true
       })
 
       if (!card) { setNfcError('カードIDが見つかりません。カード裏面に印字されたIDを確認してください。'); setNfcLoading(false); return }
-      if (card.status !== 'unlinked') { setNfcError('このカードは既に使用されています。'); setNfcLoading(false); return }
+      if (card.status !== 'unlinked' && (card.user_id || card.professional_id)) { setNfcError('このカードは既に使用されています。'); setNfcLoading(false); return }
 
       // 2. プロに既存のアクティブカードがないことを確認
       const { data: existing } = await db.select('nfc_cards', {

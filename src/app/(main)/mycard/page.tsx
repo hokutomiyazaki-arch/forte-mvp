@@ -357,7 +357,7 @@ function MyCardContent() {
       // 1. card_uid が存在し、unlinked状態か確認
       const { data: card } = await (supabase as any)
         .from('nfc_cards')
-        .select('id, status')
+        .select('id, status, user_id, professional_id')
         .eq('card_uid', cardUid)
         .maybeSingle()
 
@@ -366,7 +366,7 @@ function MyCardContent() {
         setNfcLoading(false)
         return
       }
-      if (card.status !== 'unlinked') {
+      if (card.status !== 'unlinked' && (card.user_id || card.professional_id)) {
         setNfcError('このカードは既に使用されています。')
         setNfcLoading(false)
         return
