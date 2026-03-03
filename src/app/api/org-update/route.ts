@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 
 /**
  * PUT /api/org-update
- * 団体情報（名前・説明）を更新
+ * 団体情報（名前・説明・ロゴ画像）を更新
  */
 export async function PUT(req: NextRequest) {
   const { userId } = await auth()
@@ -16,7 +16,7 @@ export async function PUT(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { organization_id, name, description } = body
+    const { organization_id, name, description, logo_url } = body
 
     if (!organization_id) {
       return NextResponse.json({ error: 'organization_id required' }, { status: 400 })
@@ -39,6 +39,7 @@ export async function PUT(req: NextRequest) {
     const updateData: Record<string, any> = {}
     if (name !== undefined) updateData.name = name
     if (description !== undefined) updateData.description = description
+    if (logo_url !== undefined) updateData.logo_url = logo_url
 
     const { data, error } = await supabase
       .from('organizations')

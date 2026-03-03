@@ -1,8 +1,9 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useUser } from '@clerk/nextjs'
 import dynamic from 'next/dynamic'
 import { RESULT_FORTES } from '@/lib/types'
+import ImageCropper from '@/components/ImageCropper'
 
 // recharts を dynamic import（SSR無効化）
 const RechartsCharts = dynamic(() => import('./RechartsCharts'), { ssr: false })
@@ -55,6 +56,10 @@ export default function OrgDashboardPage() {
   const [editOrgName, setEditOrgName] = useState('')
   const [editOrgDescription, setEditOrgDescription] = useState('')
   const [editOrgSaving, setEditOrgSaving] = useState(false)
+  const [editOrgLogoUrl, setEditOrgLogoUrl] = useState('')
+  const [cropperSrc, setCropperSrc] = useState<string | null>(null)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+  const logoInputRef = useRef<HTMLInputElement>(null)
 
   const { user: clerkUser, isLoaded: authLoaded } = useUser()
   const authUser = clerkUser ? { id: clerkUser.id } : null
@@ -120,7 +125,44 @@ export default function OrgDashboardPage() {
   const handleOrgEditStart = () => {
     setEditOrgName(org.name || '')
     setEditOrgDescription(org.description || '')
+    setEditOrgLogoUrl(org.logo_url || '')
     setEditingOrg(true)
+  }
+
+  const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      alert('画像は5MB以下にしてください')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => setCropperSrc(reader.result as string)
+    reader.readAsDataURL(file)
+    // inputリセット（同じファイル再選択可能に）
+    e.target.value = ''
+  }
+
+  const handleLogoCropComplete = async (blob: Blob) => {
+    setCropperSrc(null)
+    setUploadingLogo(true)
+    try {
+      const formData = new FormData()
+      formData.append('bucket', 'badge-images')
+      formData.append('path', `org-logos/${org.id}/${Date.now()}.jpg`)
+      formData.append('file', blob, 'logo.jpg')
+      formData.append('upsert', 'true')
+
+      const res = await fetch('/api/storage', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'アップロードに失敗しました')
+
+      setEditOrgLogoUrl(data.publicUrl)
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setUploadingLogo(false)
+    }
   }
 
   const handleOrgEditSave = async () => {
@@ -133,10 +175,11 @@ export default function OrgDashboardPage() {
           organization_id: org.id,
           name: editOrgName,
           description: editOrgDescription,
+          logo_url: editOrgLogoUrl || null,
         }),
       })
       if (!res.ok) throw new Error('更新に失敗しました')
-      setOrg((prev: any) => ({ ...prev, name: editOrgName, description: editOrgDescription }))
+      setOrg((prev: any) => ({ ...prev, name: editOrgName, description: editOrgDescription, logo_url: editOrgLogoUrl || null }))
       setEditingOrg(false)
     } catch (err: any) {
       alert(err.message)
@@ -150,9 +193,13 @@ export default function OrgDashboardPage() {
       {/* ヘッダー */}
       <div className="mb-6">
         <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 bg-[#1A1A2E] rounded-lg flex items-center justify-center text-white text-lg font-bold">
-            {org.name.charAt(0)}
-          </div>
+          {org.logo_url ? (
+            <img src={org.logo_url} alt="" className="w-10 h-10 rounded-lg object-cover" />
+          ) : (
+            <div className="w-10 h-10 bg-[#1A1A2E] rounded-lg flex items-center justify-center text-white text-lg font-bold">
+              {org.name.charAt(0)}
+            </div>
+          )}
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold text-[#1A1A2E]">{org.name}</h1>
@@ -320,6 +367,48 @@ export default function OrgDashboardPage() {
             <h3 style={{ color: '#1A1A2E', fontSize: '18px', fontWeight: 700, marginBottom: '20px' }}>
               団体情報を編集
             </h3>
+
+            {/* ロゴ画像 */}
+            <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+              <div
+                onClick={() => logoInputRef.current?.click()}
+                style={{
+                  width: '80px', height: '80px', borderRadius: '12px',
+                  margin: '0 auto 8px', cursor: 'pointer', overflow: 'hidden',
+                  position: 'relative', border: '2px dashed #E5E5E0',
+                }}
+              >
+                {editOrgLogoUrl ? (
+                  <img src={editOrgLogoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <div style={{
+                    width: '100%', height: '100%', backgroundColor: '#1A1A2E',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#fff', fontSize: '28px', fontWeight: 700,
+                  }}>
+                    {editOrgName.charAt(0) || '?'}
+                  </div>
+                )}
+                <div style={{
+                  position: 'absolute', bottom: 0, left: 0, right: 0,
+                  backgroundColor: 'rgba(0,0,0,0.5)', color: '#fff',
+                  fontSize: '10px', textAlign: 'center', padding: '2px 0',
+                }}>
+                  {uploadingLogo ? '...' : '📷'}
+                </div>
+              </div>
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleLogoFileChange}
+                style={{ display: 'none' }}
+              />
+              <p style={{ fontSize: '11px', color: '#AAA' }}>
+                {uploadingLogo ? 'アップロード中...' : 'タップして画像を変更'}
+              </p>
+            </div>
+
             <div style={{ marginBottom: '16px' }}>
               <label style={{ display: 'block', fontSize: '13px', color: '#666', marginBottom: '6px' }}>団体名</label>
               <input
@@ -370,6 +459,15 @@ export default function OrgDashboardPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 画像クロッパー */}
+      {cropperSrc && (
+        <ImageCropper
+          imageSrc={cropperSrc}
+          onCropComplete={handleLogoCropComplete}
+          onCancel={() => setCropperSrc(null)}
+        />
       )}
     </div>
   )
