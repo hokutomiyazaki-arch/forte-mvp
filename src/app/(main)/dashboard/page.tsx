@@ -2,7 +2,8 @@
 import { useEffect, useState } from 'react'
 import { useUser, useClerk } from '@clerk/nextjs'
 import { db, uploadFile } from '@/lib/db'
-import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYPES, getRewardType } from '@/lib/types'
+import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYPES, getRewardType, getRewardLabel } from '@/lib/types'
+import RewardContent from '@/components/RewardContent'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import ForteChart from '@/components/ForteChart'
 import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, PROVEN_GOLD, PROVEN_GRADIENT } from '@/lib/constants'
@@ -103,7 +104,8 @@ export default function DashboardPage() {
   const [selectedProofIds, setSelectedProofIds] = useState<Set<string>>(new Set())
   const [customProofs, setCustomProofs] = useState<CustomProof[]>([])
   const [activeTab, setActiveTab] = useState('basic')
-  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'myproof' | 'card' | 'org' | 'bookmarks'>('profile')
+  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'received_rewards' | 'voices' | 'myproof' | 'card' | 'org' | 'bookmarks'>('profile')
+  const [receivedRewards, setReceivedRewards] = useState<{ id: string; reward_id: string; reward_type: string; title: string; content: string; status: string; professional_id: string; pro_name: string; created_at: string }[]>([])
   const [bookmarkedPros, setBookmarkedPros] = useState<any[]>([])
   const [userRole, setUserRole] = useState<'professional' | 'client' | null>(null)
   const [proofSaving, setProofSaving] = useState(false)
@@ -267,6 +269,7 @@ export default function DashboardPage() {
         if (data.ownedOrg) setOwnedOrg(data.ownedOrg)
         if (data.myProofQrToken) setMyProofQrToken(data.myProofQrToken)
         if (data.certApplications) setCertApplications(data.certApplications)
+        if (data.receivedRewards) setReceivedRewards(data.receivedRewards)
       } catch (err) {
         console.error('[dashboard] load error:', err)
       }
@@ -1103,7 +1106,8 @@ export default function DashboardPage() {
         {([
           { key: 'profile' as const, label: 'プロフィール' },
           { key: 'proofs' as const, label: '強み設定' },
-          { key: 'rewards' as const, label: 'リワード' },
+          { key: 'rewards' as const, label: 'リワード設定' },
+          { key: 'received_rewards' as const, label: '受け取ったリワード' },
           { key: 'voices' as const, label: 'Voices' },
           { key: 'myproof' as const, label: 'マイプルーフ' },
           { key: 'card' as const, label: 'カード管理' },
@@ -1958,6 +1962,85 @@ export default function DashboardPage() {
         )}
       </div>
 
+      </>)}
+
+      {/* ═══ Tab: 受け取ったリワード ═══ */}
+      {dashboardTab === 'received_rewards' && (<>
+      <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
+        <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">受け取ったリワード</h2>
+        <p className="text-sm text-[#9CA3AF] mb-4">
+          他のプロに投票して受け取ったリワードの一覧です。
+        </p>
+
+        {receivedRewards.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="text-4xl mb-4">🎁</div>
+            <p className="text-gray-400 text-sm">まだリワードを受け取っていません。</p>
+            <p className="text-xs text-gray-300 mt-2">プロに投票してリワードを受け取りましょう！</p>
+            <a
+              href="/search"
+              className="inline-block mt-4 px-5 py-2 text-sm font-medium text-[#C4A35A] border border-[#C4A35A] rounded-lg hover:bg-[#C4A35A]/5 transition"
+            >
+              プロを探す →
+            </a>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {receivedRewards.filter(r => r.status === 'active').length > 0 && (
+              <div className="space-y-3">
+                {receivedRewards.filter(r => r.status === 'active').map(reward => (
+                  <div key={reward.id} className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+                    <div className="p-5">
+                      <div className="text-xs text-[#C4A35A] font-medium mb-1">
+                        {reward.title || getRewardLabel(reward.reward_type)}
+                      </div>
+                      <RewardContent content={reward.content} className="text-lg font-bold text-[#1A1A2E] mb-3" />
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-gray-500">{reward.pro_name}さんから</p>
+                          {reward.professional_id && (
+                            <a href={`/card/${reward.professional_id}`} className="text-xs text-[#C4A35A] hover:underline">
+                              カードを見る →
+                            </a>
+                          )}
+                        </div>
+                        {reward.created_at && (
+                          <span className="text-xs text-gray-400">
+                            {new Date(reward.created_at).toLocaleDateString('ja-JP')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {receivedRewards.filter(r => r.status === 'used').length > 0 && (
+              <div className="mt-6">
+                <p className="text-xs text-gray-400 mb-2 font-medium">使用済み</p>
+                <div className="space-y-2">
+                  {receivedRewards.filter(r => r.status === 'used').map(reward => (
+                    <div key={reward.id} className="bg-gray-50 text-gray-400 rounded-xl overflow-hidden">
+                      <div className="p-4">
+                        <div className="text-xs font-medium mb-1">
+                          {reward.title || getRewardLabel(reward.reward_type)}
+                        </div>
+                        <RewardContent content={reward.content} className="text-sm" strikethrough />
+                        <div className="flex items-center justify-between mt-2">
+                          <p className="text-xs text-gray-300">{reward.pro_name}さんから</p>
+                          <span className="text-xs px-2 py-0.5 bg-gray-200 text-gray-500 rounded-full">
+                            {reward.reward_type === 'coupon' ? '使用済み' : '削除済み'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
       </>)}
 
       {/* ═══ Tab: Voices ═══ */}

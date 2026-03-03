@@ -53,12 +53,16 @@ export async function GET() {
     const supabase = getSupabaseAdmin()
 
     // ────────────────────────────────────────
-    // Phase 1: プロフィール + マスターデータを並列取得
+    // Phase 1: プロフィール + マスターデータ + Clerkメール を並列取得
     // ────────────────────────────────────────
-    const [proResult, master] = await Promise.all([
+    const [proResult, master, clerkRes] = await Promise.all([
       supabase.from('professionals').select('*').eq('user_id', userId).maybeSingle(),
       getMasterData(supabase),
+      fetch(`https://api.clerk.com/v1/users/${userId}`, {
+        headers: { Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}` },
+      }).then(r => r.json()).catch(() => null),
     ])
+    const userEmail = clerkRes?.email_addresses?.[0]?.email_address || ''
 
     console.log('[Dashboard API] Phase 1 done:', Date.now() - startTime, 'ms')
 
@@ -119,6 +123,9 @@ export async function GET() {
       myProofCardResult,
       bookmarksResult,
       certApplicationsResult,
+      // 受け取ったリワード: email + client_user_id の2方法を並列
+      crByEmailResult,
+      crByUserIdResult,
     ] = await Promise.all([
       // リワード
       supabase.from('rewards').select('*').eq('professional_id', proId).order('sort_order'),
@@ -167,6 +174,19 @@ export async function GET() {
       supabase.from('certification_applications')
         .select('category_slug, status')
         .eq('professional_id', proId),
+      // 受け取ったリワード: 方法1 — client_email
+      userEmail
+        ? supabase.from('client_rewards')
+            .select('id, reward_id, professional_id, status, created_at')
+            .eq('client_email', userEmail)
+            .in('status', ['active', 'used'])
+            .order('created_at', { ascending: false })
+        : Promise.resolve({ data: null, error: null }),
+      // 受け取ったリワード: 方法2 — votes.client_user_id
+      supabase.from('votes')
+        .select('id, selected_reward_id')
+        .eq('client_user_id', userId)
+        .not('selected_reward_id', 'is', null),
     ])
 
     console.log('[Dashboard API] Phase 2 done:', Date.now() - startTime, 'ms')
@@ -228,6 +248,55 @@ export async function GET() {
         }
       })
 
+    // ────────────────────────────────────────
+    // 受け取ったリワード: email → vote fallback → 詳細取得
+    // ────────────────────────────────────────
+    let allReceivedCR: any[] = crByEmailResult.data && crByEmailResult.data.length > 0
+      ? crByEmailResult.data
+      : []
+
+    // email で見つからない場合、votes.client_user_id 経由で検索
+    if (allReceivedCR.length === 0 && crByUserIdResult.data && crByUserIdResult.data.length > 0) {
+      const voteIds = crByUserIdResult.data.map((v: any) => v.id)
+      const { data: crByVote } = await supabase.from('client_rewards')
+        .select('id, reward_id, professional_id, status, created_at')
+        .in('vote_id', voteIds)
+        .in('status', ['active', 'used'])
+        .order('created_at', { ascending: false })
+      if (crByVote && crByVote.length > 0) allReceivedCR = crByVote
+    }
+
+    let receivedRewards: any[] = []
+    if (allReceivedCR.length > 0) {
+      const rIds = Array.from(new Set(allReceivedCR.map((cr: any) => cr.reward_id)))
+      const pIds = Array.from(new Set(allReceivedCR.map((cr: any) => cr.professional_id)))
+
+      const [rDetails, pDetails] = await Promise.all([
+        supabase.from('rewards').select('id, reward_type, title, content').in('id', rIds),
+        supabase.from('professionals').select('id, name').in('id', pIds),
+      ])
+
+      const rMap = new Map<string, any>()
+      if (rDetails.data) for (const r of rDetails.data) rMap.set(r.id, r)
+      const pMap = new Map<string, string>()
+      if (pDetails.data) for (const p of pDetails.data) pMap.set(p.id, p.name)
+
+      receivedRewards = allReceivedCR.map((cr: any) => {
+        const reward = rMap.get(cr.reward_id)
+        return {
+          id: cr.id,
+          reward_id: cr.reward_id,
+          reward_type: reward?.reward_type || '',
+          title: reward?.title || '',
+          content: reward?.content || '',
+          status: cr.status,
+          professional_id: cr.professional_id,
+          pro_name: pMap.get(cr.professional_id) || 'プロ',
+          created_at: cr.created_at,
+        }
+      })
+    }
+
     console.log('[Dashboard API] Total:', Date.now() - startTime, 'ms')
 
     return NextResponse.json({
@@ -254,6 +323,7 @@ export async function GET() {
       myProofQrToken: myProofCardResult.data?.qr_token || null,
       bookmarks: bookmarksResult.data || [],
       certApplications: certApplicationsResult.data || [],
+      receivedRewards,
     })
   } catch (err: any) {
     console.error('[api/dashboard] error:', err)
