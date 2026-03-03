@@ -950,22 +950,6 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* 認定申請モーダル */}
-        {certModal && pro && (
-          <CertificationModal
-            professionalId={pro.id}
-            categorySlug={certModal.slug}
-            categoryName={certModal.name}
-            proofCount={certModal.count}
-            topPersonality={personalityVotes.length > 0 ? personalityVotes.sort((a, b) => b.vote_count - a.vote_count)[0].category : null}
-            onClose={() => setCertModal(null)}
-            onComplete={(certNum) => {
-              setCertApplications(prev => [...prev, { category_slug: certModal.slug, status: 'pending' }])
-              setCertModal(null)
-            }}
-          />
-        )}
-
         {/* 解除確認モーダル */}
         {showDeactivateModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -2253,6 +2237,22 @@ export default function DashboardPage() {
           ログアウト
         </button>
       </div>
+
+      {/* 認定申請モーダル */}
+      {certModal && pro && (
+        <CertificationModal
+          professionalId={pro.id}
+          categorySlug={certModal.slug}
+          categoryName={certModal.name}
+          proofCount={certModal.count}
+          topPersonality={personalityVotes.length > 0 ? [...personalityVotes].sort((a, b) => b.vote_count - a.vote_count)[0].category : null}
+          onClose={() => setCertModal(null)}
+          onComplete={(certNum) => {
+            setCertApplications(prev => [...prev, { category_slug: certModal.slug, status: 'pending' }])
+            setCertModal(null)
+          }}
+        />
+      )}
 
     </div>
   )
