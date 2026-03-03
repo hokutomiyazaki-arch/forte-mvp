@@ -77,8 +77,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <ClerkProvider
       localization={clerkLocalization}
-      signInFallbackRedirectUrl="/dashboard"
-      signUpFallbackRedirectUrl="/dashboard"
+      signInFallbackRedirectUrl="/auth-redirect"
+      signUpFallbackRedirectUrl="/auth-redirect"
       appearance={{
         variables: {
           colorPrimary: '#1A1A2E',

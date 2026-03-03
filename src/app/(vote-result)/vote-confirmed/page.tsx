@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase'
 import { getRewardLabel } from '@/lib/types'
 import RewardContent from '@/components/RewardContent'
 import { Suspense } from 'react'
+import { useProStatus } from '@/lib/useProStatus'
+import { getMyPageUrl } from '@/lib/navigation'
 
 interface RewardInfo {
   reward_type: string
@@ -34,6 +36,7 @@ function ConfirmedContent() {
   const authMethod = searchParams.get('auth_method') || ''
   const hasAccount = searchParams.get('has_account') === 'true'
   const supabase = createClient()
+  const { isPro } = useProStatus()
 
   const [proName, setProName] = useState('')
   const [reward, setReward] = useState<RewardInfo | null>(null)
@@ -240,16 +243,16 @@ function ConfirmedContent() {
         {hasAccount ? (
           <div className="bg-[#1A1A2E] rounded-2xl p-6 text-center">
             <p className="text-white text-lg font-bold mb-2">
-              リワードを保存しました
+              {isPro ? 'ダッシュボードに戻る' : 'リワードを保存しました'}
             </p>
             <p className="text-gray-400 text-sm mb-5 leading-relaxed">
-              マイカードからいつでもリワードを確認できます
+              {isPro ? 'プロダッシュボードで投票状況を確認できます' : 'マイカードからいつでもリワードを確認できます'}
             </p>
             <a
-              href="/mycard"
+              href={getMyPageUrl(isPro)}
               className="block w-full py-4 rounded-xl font-bold text-lg text-[#1A1A2E] bg-[#C4A35A] hover:bg-[#b3923f] transition"
             >
-              マイカードを見る →
+              {isPro ? 'ダッシュボードを見る →' : 'マイカードを見る →'}
             </a>
           </div>
         ) : (
