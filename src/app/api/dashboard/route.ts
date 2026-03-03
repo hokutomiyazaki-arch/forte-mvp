@@ -47,6 +47,9 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const startTime = Date.now()
+    console.log('[Dashboard API] Start')
+
     const supabase = getSupabaseAdmin()
 
     // ────────────────────────────────────────
@@ -56,6 +59,8 @@ export async function GET() {
       supabase.from('professionals').select('*').eq('user_id', userId).maybeSingle(),
       getMasterData(supabase),
     ])
+
+    console.log('[Dashboard API] Phase 1 done:', Date.now() - startTime, 'ms')
 
     const proDataRaw = proResult.data
     const { proofItems, personalityItems, phrases } = master
@@ -153,6 +158,8 @@ export async function GET() {
         .order('created_at', { ascending: false }),
     ])
 
+    console.log('[Dashboard API] Phase 2 done:', Date.now() - startTime, 'ms')
+
     // ────────────────────────────────────────
     // votes データ整形: 総数 + コメント付きをJSで分離
     // ────────────────────────────────────────
@@ -204,6 +211,8 @@ export async function GET() {
         org_name: m.organizations.name,
         org_id: m.organizations.id,
       }))
+
+    console.log('[Dashboard API] Total:', Date.now() - startTime, 'ms')
 
     return NextResponse.json({
       professional: proData,
