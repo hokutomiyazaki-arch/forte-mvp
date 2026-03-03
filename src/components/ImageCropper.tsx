@@ -14,6 +14,7 @@ export default function ImageCropper({
   imageSrc,
   onCropComplete,
   onCancel,
+  cropShape = 'round',
 }: ImageCropperProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -86,27 +87,50 @@ export default function ImageCropper({
     // 画像を描画
     ctx.drawImage(img, drawX, drawY, drawW, drawH);
 
-    // 半透明オーバーレイ（円の外側を暗くする）
+    // 半透明オーバーレイ（クロップ領域の外側を暗くする）
     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
     ctx.fillRect(0, 0, cw, ch);
 
-    // 円形の穴を開ける（クリア）
+    // クロップ領域の穴を開ける（クリア）
     ctx.save();
     ctx.beginPath();
-    ctx.arc(cropCenterX, cropCenterY, cropSize / 2, 0, Math.PI * 2);
+    if (cropShape === 'rect') {
+      const cropLeft = cropCenterX - cropSize / 2;
+      const cropTop = cropCenterY - cropSize / 2;
+      ctx.rect(cropLeft, cropTop, cropSize, cropSize);
+    } else {
+      ctx.arc(cropCenterX, cropCenterY, cropSize / 2, 0, Math.PI * 2);
+    }
     ctx.clip();
 
-    // 円内に画像を再描画
+    // クロップ領域内に画像を再描画
     ctx.drawImage(img, drawX, drawY, drawW, drawH);
     ctx.restore();
 
-    // 円形ガイド線
+    // ガイド線
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(cropCenterX, cropCenterY, cropSize / 2, 0, Math.PI * 2);
+    if (cropShape === 'rect') {
+      const cropLeft = cropCenterX - cropSize / 2;
+      const cropTop = cropCenterY - cropSize / 2;
+      // 角丸の四角形ガイド
+      const r = 12;
+      ctx.moveTo(cropLeft + r, cropTop);
+      ctx.lineTo(cropLeft + cropSize - r, cropTop);
+      ctx.arcTo(cropLeft + cropSize, cropTop, cropLeft + cropSize, cropTop + r, r);
+      ctx.lineTo(cropLeft + cropSize, cropTop + cropSize - r);
+      ctx.arcTo(cropLeft + cropSize, cropTop + cropSize, cropLeft + cropSize - r, cropTop + cropSize, r);
+      ctx.lineTo(cropLeft + r, cropTop + cropSize);
+      ctx.arcTo(cropLeft, cropTop + cropSize, cropLeft, cropTop + cropSize - r, r);
+      ctx.lineTo(cropLeft, cropTop + r);
+      ctx.arcTo(cropLeft, cropTop, cropLeft + r, cropTop, r);
+      ctx.closePath();
+    } else {
+      ctx.arc(cropCenterX, cropCenterY, cropSize / 2, 0, Math.PI * 2);
+    }
     ctx.stroke();
-  }, [zoom, offset, imageLoaded]);
+  }, [zoom, offset, imageLoaded, cropShape]);
 
   // 描画の更新
   useEffect(() => {

@@ -467,6 +467,7 @@ export default function OrgDashboardPage() {
           imageSrc={cropperSrc}
           onCropComplete={handleLogoCropComplete}
           onCancel={() => setCropperSrc(null)}
+          cropShape="rect"
         />
       )}
     </div>
