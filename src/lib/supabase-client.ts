@@ -56,6 +56,8 @@ interface QueryState {
     not?: { column: string; operator: string; value: any }[]
     is?: Record<string, any>
     contains?: Record<string, any>
+    gt?: Record<string, any>
+    lt?: Record<string, any>
     gte?: Record<string, any>
     lte?: Record<string, any>
     like?: Record<string, string>
@@ -125,6 +127,18 @@ class QueryBuilder {
   contains(column: string, value: any) {
     if (!this.state.filters.contains) this.state.filters.contains = {}
     this.state.filters.contains[column] = value
+    return this
+  }
+
+  gt(column: string, value: any) {
+    if (!this.state.filters.gt) this.state.filters.gt = {}
+    this.state.filters.gt[column] = value
+    return this
+  }
+
+  lt(column: string, value: any) {
+    if (!this.state.filters.lt) this.state.filters.lt = {}
+    this.state.filters.lt[column] = value
     return this
   }
 
@@ -212,6 +226,8 @@ class QueryBuilder {
     if (state.filters.not && state.filters.not.length > 0) query.not = state.filters.not
     if (state.filters.is && Object.keys(state.filters.is).length > 0) query.is = state.filters.is
     if (state.filters.contains && Object.keys(state.filters.contains).length > 0) query.contains = state.filters.contains
+    if (state.filters.gt && Object.keys(state.filters.gt).length > 0) query.gt = state.filters.gt
+    if (state.filters.lt && Object.keys(state.filters.lt).length > 0) query.lt = state.filters.lt
     if (state.filters.gte && Object.keys(state.filters.gte).length > 0) query.gte = state.filters.gte
     if (state.filters.lte && Object.keys(state.filters.lte).length > 0) query.lte = state.filters.lte
     if (state.filters.like && Object.keys(state.filters.like).length > 0) query.like = state.filters.like

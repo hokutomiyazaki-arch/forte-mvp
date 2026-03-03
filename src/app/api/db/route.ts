@@ -38,6 +38,8 @@ export async function POST(req: NextRequest) {
         if (query.not) for (const item of query.not) q = q.not(item.column, item.operator, item.value)
         if (query.is) for (const [k, v] of Object.entries(query.is)) q = q.is(k, v as any)
         if (query.contains) for (const [k, v] of Object.entries(query.contains)) q = q.contains(k, v as any)
+        if (query.gt) for (const [k, v] of Object.entries(query.gt)) q = q.gt(k, v as any)
+        if (query.lt) for (const [k, v] of Object.entries(query.lt)) q = q.lt(k, v as any)
         if (query.gte) for (const [k, v] of Object.entries(query.gte)) q = q.gte(k, v as any)
         if (query.lte) for (const [k, v] of Object.entries(query.lte)) q = q.lte(k, v as any)
         if (query.like) for (const [k, v] of Object.entries(query.like)) q = q.like(k, v as string)
