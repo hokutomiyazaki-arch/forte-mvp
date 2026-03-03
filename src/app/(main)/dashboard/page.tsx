@@ -1107,10 +1107,10 @@ export default function DashboardPage() {
           { key: 'profile' as const, label: 'プロフィール' },
           { key: 'proofs' as const, label: '強み設定' },
           { key: 'rewards' as const, label: 'リワード設定' },
-          { key: 'received_rewards' as const, label: '受け取ったリワード' },
           { key: 'voices' as const, label: 'Voices' },
           { key: 'myproof' as const, label: 'マイプルーフ' },
           { key: 'card' as const, label: 'カード管理' },
+          { key: 'received_rewards' as const, label: 'リワード' },
           { key: 'bookmarks' as const, label: '気になる' },
           ...(ownedOrg ? [{ key: 'org' as const, label: '🏢 団体管理' }] : []),
         ]).map(tab => (
@@ -1964,10 +1964,10 @@ export default function DashboardPage() {
 
       </>)}
 
-      {/* ═══ Tab: 受け取ったリワード ═══ */}
+      {/* ═══ Tab: リワード ═══ */}
       {dashboardTab === 'received_rewards' && (<>
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
-        <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">受け取ったリワード</h2>
+        <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">リワード</h2>
         <p className="text-sm text-[#9CA3AF] mb-4">
           他のプロに投票して受け取ったリワードの一覧です。
         </p>
