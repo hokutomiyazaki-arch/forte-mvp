@@ -7,14 +7,21 @@ interface PersonalitySummary {
   vote_count: number
 }
 
+interface CertApplication {
+  category_slug: string
+  status: string
+}
+
 interface Props {
   votes: VoteSummary[]
   personalityVotes?: PersonalitySummary[]
   professional?: Professional | null
   showLabels?: boolean
+  certApplications?: CertApplication[]
+  onCertApply?: (categorySlug: string, categoryName: string, proofCount: number) => void
 }
 
-export default function ForteChart({ votes, personalityVotes = [], professional, showLabels = true }: Props) {
+export default function ForteChart({ votes, personalityVotes = [], professional, showLabels = true, certApplications = [], onCertApply }: Props) {
   const sortedResults = [...votes].sort((a, b) => b.vote_count - a.vote_count)
   const sortedPersonality = [...personalityVotes].sort((a, b) => b.vote_count - a.vote_count)
   const rawMax = Math.max(
@@ -23,6 +30,12 @@ export default function ForteChart({ votes, personalityVotes = [], professional,
     1
   )
   const maxVotes = Math.ceil(rawMax * 1.5)
+
+  // 認定申請マップ: category_slug → status
+  const certMap = new Map<string, string>()
+  for (const app of certApplications) {
+    certMap.set(app.category_slug, app.status)
+  }
 
   return (
     <div className="space-y-6">
@@ -38,6 +51,9 @@ export default function ForteChart({ votes, personalityVotes = [], professional,
               const isSpecialist = v.vote_count >= SPECIALIST_THRESHOLD
               const barColor = isProven ? PROVEN_GOLD : '#1A1A2E'
               const mark = isSpecialist ? ' 🏆' : isProven ? ' ✦' : ''
+              const slug = v.proof_id || v.category
+              const appStatus = certMap.get(slug)
+              const hasApplied = !!appStatus
               return (
                 <div key={v.category}>
                   <div className="flex justify-between items-center mb-1">
@@ -56,6 +72,21 @@ export default function ForteChart({ votes, personalityVotes = [], professional,
                       style={{ width: `${(v.vote_count / maxVotes) * 100}%`, backgroundColor: barColor }}
                     />
                   </div>
+                  {/* 30票以上: 認定申請ボタン or ステータスラベル */}
+                  {isSpecialist && !hasApplied && onCertApply && (
+                    <button
+                      onClick={() => onCertApply(slug, v.category, v.vote_count)}
+                      className="mt-1 text-xs font-bold px-3 py-1 rounded"
+                      style={{ backgroundColor: PROVEN_GOLD, color: '#1A1A2E' }}
+                    >
+                      認定を申請する
+                    </button>
+                  )}
+                  {isSpecialist && hasApplied && (
+                    <span className="mt-1 inline-block text-xs" style={{ color: PROVEN_GOLD }}>
+                      認定済み — {appStatus === 'shipped' ? '発送済み' : '発送準備中'}
+                    </span>
+                  )}
                 </div>
               )
             })}

@@ -118,6 +118,7 @@ export async function GET() {
       ownedOrgResult,
       myProofCardResult,
       bookmarksResult,
+      certApplicationsResult,
     ] = await Promise.all([
       // リワード
       supabase.from('rewards').select('*').eq('professional_id', proId).order('sort_order'),
@@ -161,6 +162,10 @@ export async function GET() {
         .select('id, created_at, professional_id, professionals(id, name, title, photo_url, prefecture, area_description)')
         .eq('user_id', userId)
         .order('created_at', { ascending: false }),
+      // 認定申請（Lv.2 SPECIALIST）
+      supabase.from('certification_applications')
+        .select('category_slug, status')
+        .eq('professional_id', proId),
     ])
 
     console.log('[Dashboard API] Phase 2 done:', Date.now() - startTime, 'ms')
@@ -247,6 +252,7 @@ export async function GET() {
       ownedOrg: ownedOrgResult.data || null,
       myProofQrToken: myProofCardResult.data?.qr_token || null,
       bookmarks: bookmarksResult.data || [],
+      certApplications: certApplicationsResult.data || [],
     })
   } catch (err: any) {
     console.error('[api/dashboard] error:', err)

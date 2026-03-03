@@ -17,6 +17,7 @@ interface LabeledSummary {
   professional_id: string
   category: string
   vote_count: number
+  proof_id?: string
 }
 
 interface ProofItem {
@@ -61,6 +62,7 @@ export function resolveProofLabels(
     professional_id: v.professional_id,
     category: proofMap.get(v.proof_id) || customMap.get(v.proof_id) || '-',
     vote_count: v.vote_count,
+    proof_id: v.proof_id,
   }))
 }
 

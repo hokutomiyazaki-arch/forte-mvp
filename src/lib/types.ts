@@ -66,6 +66,7 @@ export interface VoteSummary {
   professional_id: string
   category: string
   vote_count: number
+  proof_id?: string
 }
 
 export interface QrToken {

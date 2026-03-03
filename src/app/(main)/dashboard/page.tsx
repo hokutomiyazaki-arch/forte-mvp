@@ -5,8 +5,9 @@ import { db, uploadFile } from '@/lib/db'
 import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYPES, getRewardType } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import ForteChart from '@/components/ForteChart'
-import { PROVEN_THRESHOLD, PROVEN_GRADIENT } from '@/lib/constants'
+import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, PROVEN_GRADIENT } from '@/lib/constants'
 import VoiceShareModal from '@/components/VoiceShareCard'
+import CertificationModal from '@/components/CertificationModal'
 import ImageCropper from '@/components/ImageCropper'
 import CardModeSwitch from '@/components/CardModeSwitch'
 import MyProofTab from '@/components/MyProofTab'
@@ -144,6 +145,10 @@ export default function DashboardPage() {
   // 団体オーナー state
   const [ownedOrg, setOwnedOrg] = useState<{id: string; name: string; type: string} | null>(null)
 
+  // 認定申請 state
+  const [certApplications, setCertApplications] = useState<{category_slug: string; status: string}[]>([])
+  const [certModal, setCertModal] = useState<{slug: string; name: string; count: number} | null>(null)
+
   const { user: clerkUser, isLoaded: authLoaded } = useUser()
 
   useEffect(() => {
@@ -260,6 +265,7 @@ export default function DashboardPage() {
         if (data.credentialBadges) setCredentialBadges(data.credentialBadges)
         if (data.ownedOrg) setOwnedOrg(data.ownedOrg)
         if (data.myProofQrToken) setMyProofQrToken(data.myProofQrToken)
+        if (data.certApplications) setCertApplications(data.certApplications)
       } catch (err) {
         console.error('[dashboard] load error:', err)
       }
@@ -944,6 +950,22 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* 認定申請モーダル */}
+        {certModal && pro && (
+          <CertificationModal
+            professionalId={pro.id}
+            categorySlug={certModal.slug}
+            categoryName={certModal.name}
+            proofCount={certModal.count}
+            topPersonality={personalityVotes.length > 0 ? personalityVotes.sort((a, b) => b.vote_count - a.vote_count)[0].category : null}
+            onClose={() => setCertModal(null)}
+            onComplete={(certNum) => {
+              setCertApplications(prev => [...prev, { category_slug: certModal.slug, status: 'pending' }])
+              setCertModal(null)
+            }}
+          />
+        )}
+
         {/* 解除確認モーダル */}
         {showDeactivateModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -1358,7 +1380,13 @@ export default function DashboardPage() {
       {/* Proof Chart */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
         <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">プルーフチャート</h2>
-        <ForteChart votes={votes} personalityVotes={personalityVotes} professional={pro} />
+        <ForteChart
+          votes={votes}
+          personalityVotes={personalityVotes}
+          professional={pro}
+          certApplications={certApplications}
+          onCertApply={(slug, name, count) => setCertModal({ slug, name, count })}
+        />
       </div>
 
       </>)}
