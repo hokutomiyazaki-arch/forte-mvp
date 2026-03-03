@@ -76,30 +76,45 @@ export default function OrgPublicPage() {
       setAggregate(aggData)
 
       // credential/education団体: レベル別集計
+      // credential_levels テーブル + org_members から直接取得（ビュー不使用）
       if (orgData.type === 'credential' || orgData.type === 'education') {
-        // org_level_aggregate ビューと credential_levels を並列取得
-        // ビューに image_url が含まれない場合のフォールバック
-        const [levelAggResult, credLevelsResult] = await Promise.all([
+        const [levelsResult, levelMembersResult] = await Promise.all([
           supabase
-            .from('org_level_aggregate')
+            .from('credential_levels')
             .select('*')
             .eq('organization_id', orgId)
             .order('sort_order', { ascending: true }),
           supabase
-            .from('credential_levels')
-            .select('id, image_url')
-            .eq('organization_id', orgId),
+            .from('org_members')
+            .select('credential_level_id, professional_id')
+            .eq('organization_id', orgId)
+            .eq('status', 'active'),
         ])
 
-        const imageMap = new Map<string, string | null>()
-        for (const cl of (credLevelsResult.data || [])) {
-          imageMap.set(cl.id, cl.image_url)
+        const levels = levelsResult.data || []
+        const levelMembers = (levelMembersResult.data || []).filter((m: any) => m.credential_level_id)
+
+        // memberData（org_proof_summary）から投票数マップを作成
+        const votesMap = new Map<string, number>()
+        for (const m of (memberData || [])) {
+          votesMap.set(m.professional_id, Number(m.total_votes) || 0)
         }
 
-        const levelAggData = (levelAggResult.data || []).map((la: any) => ({
-          ...la,
-          image_url: la.image_url || imageMap.get(la.level_id) || null,
-        }))
+        // レベルごとの集計をJSで実施
+        const levelAggData = levels.map((cl: any) => {
+          const membersInLevel = levelMembers.filter((m: any) => m.credential_level_id === cl.id)
+          const memberCount = membersInLevel.length
+          const totalVotes = membersInLevel.reduce((sum: number, m: any) => sum + (votesMap.get(m.professional_id) || 0), 0)
+          return {
+            level_id: cl.id,
+            organization_id: cl.organization_id,
+            level_name: cl.name,
+            image_url: cl.image_url,
+            sort_order: cl.sort_order,
+            member_count: memberCount,
+            total_votes: totalVotes,
+          }
+        })
 
         setLevelAggregates(levelAggData)
       }
