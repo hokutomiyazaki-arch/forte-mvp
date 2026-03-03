@@ -45,6 +45,7 @@ export default function RelatedPros({
         .neq('id', currentProId)
         .not('name', 'is', null)
         .neq('name', '')
+        .is('deactivated_at', null)
         .order('created_at', { ascending: false })
         .limit(maxDisplay)
 

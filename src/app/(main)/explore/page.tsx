@@ -75,7 +75,7 @@ export default function ExplorePage() {
   useEffect(() => {
     async function load() {
       const [prosRes, voteRes, proofRes] = await Promise.all([
-        supabase.from('professionals').select('*') as any,
+        supabase.from('professionals').select('*').is('deactivated_at', null) as any,
         supabase.from('vote_summary').select('*') as any,
         supabase.from('proof_items').select('*') as any,
       ])
