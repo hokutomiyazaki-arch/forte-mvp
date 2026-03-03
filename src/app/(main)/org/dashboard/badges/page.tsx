@@ -15,6 +15,12 @@ export default function OrgBadgesPage() {
   const [expandedBadge, setExpandedBadge] = useState<string | null>(null)
   // 剥奪
   const [revoking, setRevoking] = useState<string | null>(null)
+  // 編集モーダル
+  const [editingBadge, setEditingBadge] = useState<any>(null)
+  const [editName, setEditName] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [editImageUrl, setEditImageUrl] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
 
   const { user: clerkUser, isLoaded: authLoaded } = useUser()
   const authUser = clerkUser ? { id: clerkUser.id } : null
@@ -68,6 +74,44 @@ export default function OrgBadgesPage() {
     navigator.clipboard.writeText(url)
     setCopiedId(levelId)
     setTimeout(() => setCopiedId(null), 2000)
+  }
+
+  function handleEditStart(badge: any) {
+    setEditingBadge(badge)
+    setEditName(badge.name || '')
+    setEditDescription(badge.description || '')
+    setEditImageUrl(badge.image_url || '')
+  }
+
+  async function handleEditSave() {
+    if (!editingBadge) return
+    setEditSaving(true)
+    try {
+      const res = await fetch('/api/org-badge', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          badge_id: editingBadge.id,
+          name: editName,
+          description: editDescription,
+          image_url: editImageUrl || null,
+        }),
+      })
+      if (!res.ok) throw new Error('更新に失敗しました')
+
+      setLevels(prev =>
+        prev.map(l =>
+          l.id === editingBadge.id
+            ? { ...l, name: editName, description: editDescription, image_url: editImageUrl || null }
+            : l
+        )
+      )
+      setEditingBadge(null)
+    } catch (error: any) {
+      alert(error.message)
+    } finally {
+      setEditSaving(false)
+    }
   }
 
   async function handleRevoke(professionalId: string, badgeLevelId: string, professionalName: string) {
@@ -177,9 +221,21 @@ export default function OrgBadgesPage() {
                 )}
 
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-base font-bold text-[#1A1A2E] truncate">
-                    {level.name}
-                  </h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-base font-bold text-[#1A1A2E] truncate">
+                      {level.name}
+                    </h3>
+                    <button
+                      onClick={() => handleEditStart(level)}
+                      style={{
+                        background: 'none', border: '1px solid #E5E5E0',
+                        color: '#666', fontSize: '12px', padding: '2px 10px',
+                        borderRadius: '6px', cursor: 'pointer', flexShrink: 0,
+                      }}
+                    >
+                      編集
+                    </button>
+                  </div>
                   <p className="text-xs text-gray-500 mt-0.5">
                     取得者: {claimCounts[level.id] || 0}名
                   </p>
@@ -305,6 +361,114 @@ export default function OrgBadgesPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+      {/* 編集モーダル */}
+      {editingBadge && (
+        <div
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '16px',
+          }}
+          onClick={() => setEditingBadge(null)}
+        >
+          <div
+            style={{
+              backgroundColor: '#FAFAF7', borderRadius: '16px',
+              padding: '24px', maxWidth: '480px', width: '100%',
+              maxHeight: '90vh', overflowY: 'auto',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ color: '#1A1A2E', fontSize: '18px', fontWeight: 700, marginBottom: '20px' }}>
+              バッジを編集
+            </h3>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '13px', color: '#666', marginBottom: '6px' }}>
+                バッジ名
+              </label>
+              <input
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: '8px',
+                  border: '1px solid #E5E5E0', fontSize: '14px', color: '#1A1A2E',
+                  backgroundColor: '#fff', boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '13px', color: '#666', marginBottom: '6px' }}>
+                説明
+              </label>
+              <textarea
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                rows={3}
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: '8px',
+                  border: '1px solid #E5E5E0', fontSize: '14px', color: '#1A1A2E',
+                  backgroundColor: '#fff', resize: 'vertical', boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', fontSize: '13px', color: '#666', marginBottom: '6px' }}>
+                画像URL
+              </label>
+              <input
+                type="url"
+                value={editImageUrl}
+                onChange={(e) => setEditImageUrl(e.target.value)}
+                placeholder="https://example.com/badge.png"
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: '8px',
+                  border: '1px solid #E5E5E0', fontSize: '14px', color: '#1A1A2E',
+                  backgroundColor: '#fff', boxSizing: 'border-box',
+                }}
+              />
+              {editImageUrl && (
+                <div style={{ marginTop: '8px', textAlign: 'center' }}>
+                  <img
+                    src={editImageUrl}
+                    alt="プレビュー"
+                    style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '12px' }}
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setEditingBadge(null)}
+                style={{
+                  padding: '10px 20px', borderRadius: '8px', border: '1px solid #E5E5E0',
+                  backgroundColor: '#fff', color: '#666', fontSize: '14px', cursor: 'pointer',
+                }}
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={handleEditSave}
+                disabled={editSaving || !editName.trim()}
+                style={{
+                  padding: '10px 20px', borderRadius: '8px', border: 'none',
+                  backgroundColor: '#C4A35A', color: '#fff', fontSize: '14px',
+                  fontWeight: 600, cursor: 'pointer',
+                  opacity: editSaving || !editName.trim() ? 0.5 : 1,
+                }}
+              >
+                {editSaving ? '保存中...' : '保存する'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
