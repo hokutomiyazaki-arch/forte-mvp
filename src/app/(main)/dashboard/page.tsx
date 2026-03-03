@@ -1314,7 +1314,7 @@ export default function DashboardPage() {
           <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
             <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">取得バッジ</h2>
             <div className="flex flex-wrap justify-center gap-6">
-              {/* credential_levels経由のバッジ（新方式） */}
+              {/* org_badge_levels経由のバッジ（新方式） */}
               {credentialBadges.map((badge) => (
                 <a key={badge.id} href={`/org/${badge.org_id}`} className="flex flex-col items-center hover:opacity-70 transition">
                   {badge.image_url ? (

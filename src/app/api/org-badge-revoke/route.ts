@@ -62,9 +62,9 @@ export async function DELETE(req: NextRequest) {
         .eq('credential_level_id', badgeLevelId)
     } else {
       // この団体の全バッジを削除
-      // credential_levelsからこの団体のバッジIDを取得
+      // org_badge_levelsからこの団体のバッジIDを取得
       const { data: levels } = await supabase
-        .from('credential_levels')
+        .from('org_badge_levels')
         .select('id')
         .eq('organization_id', organizationId)
 

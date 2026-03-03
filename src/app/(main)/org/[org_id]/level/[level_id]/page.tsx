@@ -25,7 +25,7 @@ export default function LevelDetailPage() {
           eq: { id: orgId },
           maybeSingle: true,
         }),
-        db.select('credential_levels', {
+        db.select('org_badge_levels', {
           eq: { id: levelId, organization_id: orgId },
           maybeSingle: true,
         }),

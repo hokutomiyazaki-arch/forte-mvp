@@ -61,7 +61,7 @@ export async function GET(
         .eq('professional_id', proId).eq('status', 'active'),
       // 10. バッジ
       supabase.from('org_members')
-        .select('credential_level_id, credential_levels(id, name, description, image_url), organizations(id, name)')
+        .select('credential_level_id, org_badge_levels(id, name, description, image_url), organizations(id, name)')
         .eq('professional_id', proId).eq('status', 'active')
         .not('credential_level_id', 'is', null),
     ])

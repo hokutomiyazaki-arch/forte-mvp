@@ -33,14 +33,14 @@ export default function CertifiedMembersPage() {
       setOrgType(data.org.type || 'credential')
 
       // badgeHolders: credential_level_id付きのorg_membersレコード
-      // professionals, credential_levels がJOINされている
+      // professionals, org_badge_levels がJOINされている
       const holderList = data.badgeHolders || []
 
       const formatted = holderList.map((h: any) => ({
         professional_id: h.professional_id,
         name: h.professionals?.name || '不明',
         photo_url: h.professionals?.photo_url,
-        badge_name: h.credential_levels?.name,
+        badge_name: h.org_badge_levels?.name,
         badge_level_id: h.credential_level_id,
         accepted_at: h.accepted_at,
       }))

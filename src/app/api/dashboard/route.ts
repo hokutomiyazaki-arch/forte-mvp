@@ -143,7 +143,7 @@ export async function GET() {
         .eq('status', 'pending'),
       // professional_badges: 取得済みバッジ（所属・認定 + 取得バッジの両方のソース）
       supabase.from('professional_badges')
-        .select('id, professional_id, badge_level_id, claimed_at, credential_levels(id, name, description, image_url, organization_id, organizations(id, name, type))')
+        .select('id, professional_id, badge_level_id, claimed_at, org_badge_levels(id, name, description, image_url, organization_id, organizations(id, name, type))')
         .eq('professional_id', proId),
       // オーナー団体
       supabase.from('organizations')
@@ -198,7 +198,7 @@ export async function GET() {
     // 所属・認定: professional_badgesを団体ごとにグループ化（重複排除）
     const orgMap = new Map<string, any>()
     for (const b of allBadgeRecords) {
-      const cl = b.credential_levels as any
+      const cl = b.org_badge_levels as any
       const org = cl?.organizations
       if (org && !orgMap.has(org.id)) {
         orgMap.set(org.id, {
@@ -214,9 +214,9 @@ export async function GET() {
 
     // 取得バッジ: professional_badgesから個別バッジ
     const credentialBadges = allBadgeRecords
-      .filter((b: any) => b.credential_levels)
+      .filter((b: any) => b.org_badge_levels)
       .map((b: any) => {
-        const cl = b.credential_levels as any
+        const cl = b.org_badge_levels as any
         return {
           id: cl.id,
           name: cl.name,

@@ -27,7 +27,7 @@ export default function BadgeClaimPage({ params }: { params: { claim_token: stri
     try {
       // バッジ情報取得
       const { data: levelData, error: levelError } = await supabase
-        .from('credential_levels')
+        .from('org_badge_levels')
         .select('*, organizations(id, name, type)')
         .eq('claim_token', params.claim_token)
         .maybeSingle()
