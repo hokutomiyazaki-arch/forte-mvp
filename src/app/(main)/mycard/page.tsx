@@ -1271,14 +1271,14 @@ function MyCardContent() {
               /* カード未登録 */
               <div>
                 <p style={{ fontSize: 13, color: '#666', marginBottom: 12 }}>
-                  カード裏面記載のIDを入力してください
+                  カード裏面記載のRから始まるIDを入力してください
                 </p>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <input
                     type="text"
                     value={nfcInput}
                     onChange={(e) => { setNfcInput(e.target.value); setNfcError('') }}
-                    placeholder="RP-001"
+                    placeholder="XXXX"
                     style={{
                       padding: '10px 14px', fontSize: 14, fontWeight: 600,
                       border: '1px solid #E5E7EB', borderRadius: 8,
