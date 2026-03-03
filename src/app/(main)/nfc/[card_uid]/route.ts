@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 // サーバーサイドなのでService Role Keyを使用（遅延初期化）
 function getSupabase() {
