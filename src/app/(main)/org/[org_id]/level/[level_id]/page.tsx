@@ -1,10 +1,9 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase'
+import { db } from '@/lib/db'
 import { useParams } from 'next/navigation'
 
 export default function LevelDetailPage() {
-  const supabase = createClient() as any
   const params = useParams()
   const orgId = params.org_id as string
   const levelId = params.level_id as string
@@ -20,42 +19,37 @@ export default function LevelDetailPage() {
 
   async function load() {
     try {
-      // 団体情報
-      const { data: orgData } = await supabase
-        .from('organizations')
-        .select('*')
-        .eq('id', orgId)
-        .maybeSingle()
+      // 団体情報 + レベル情報を並列取得
+      const [orgResult, levelResult] = await Promise.all([
+        db.select('organizations', {
+          eq: { id: orgId },
+          maybeSingle: true,
+        }),
+        db.select('credential_levels', {
+          eq: { id: levelId, organization_id: orgId },
+          maybeSingle: true,
+        }),
+      ])
 
-      if (!orgData) {
+      if (!orgResult.data) {
         setError('団体が見つかりませんでした')
         setLoading(false)
         return
       }
-      setOrg(orgData)
+      setOrg(orgResult.data)
 
-      // レベル情報
-      const { data: levelData } = await supabase
-        .from('credential_levels')
-        .select('*')
-        .eq('id', levelId)
-        .eq('organization_id', orgId)
-        .maybeSingle()
-
-      if (!levelData) {
+      if (!levelResult.data) {
         setError('バッジが見つかりませんでした')
         setLoading(false)
         return
       }
-      setLevel(levelData)
+      setLevel(levelResult.data)
 
-      // 認定者一覧（org_members + professionals + vote集計）
-      const { data: memberData } = await supabase
-        .from('org_members')
-        .select('professional_id, professionals(id, name, photo_url, title)')
-        .eq('organization_id', orgId)
-        .eq('credential_level_id', levelId)
-        .eq('status', 'active')
+      // 認定者一覧（org_members + professionals JOIN）
+      const { data: memberData } = await db.select('org_members', {
+        select: 'professional_id, professionals(id, name, photo_url, title)',
+        eq: { organization_id: orgId, credential_level_id: levelId, status: 'active' },
+      })
 
       if (memberData) {
         // 投票数を別途取得
@@ -65,13 +59,13 @@ export default function LevelDetailPage() {
 
         let voteCounts: Record<string, number> = {}
         if (proIds.length > 0) {
-          const { data: voteData } = await supabase
-            .from('vote_summary')
-            .select('professional_id, vote_count')
-            .in('professional_id', proIds)
+          const { data: voteData } = await db.select('vote_summary', {
+            select: 'professional_id, vote_count',
+            in: { professional_id: proIds },
+          })
 
           if (voteData) {
-            for (const v of voteData) {
+            for (const v of voteData as any[]) {
               voteCounts[v.professional_id] = (voteCounts[v.professional_id] || 0) + v.vote_count
             }
           }
@@ -150,44 +144,55 @@ export default function LevelDetailPage() {
         </div>
       </div>
 
-      {/* 認定者一覧 */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-        <h2 className="text-sm font-bold text-[#1A1A2E] mb-4">
-          {org.type === 'credential' ? '認定者一覧' : '修了者一覧'}
-        </h2>
+      {/* 認定者一覧（カード形式） */}
+      <h2 className="text-sm font-bold text-[#1A1A2E] mb-4">
+        {org.type === 'credential' ? '認定者一覧' : '修了者一覧'}
+      </h2>
 
-        {members.length === 0 ? (
-          <p className="text-gray-400 text-sm text-center py-4">まだ取得者がいません</p>
-        ) : (
-          <div className="space-y-3">
-            {members.map((m: any) => (
-              <a
-                key={m.id}
-                href={`/card/${m.id}`}
-                className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition"
-              >
+      {members.length === 0 ? (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 text-center">
+          <p className="text-gray-400 text-sm">まだ取得者がいません</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          {members.map((m: any) => (
+            <a
+              key={m.id}
+              href={`/card/${m.id}`}
+              className="block p-4 rounded-xl transition-shadow hover:shadow-md"
+              style={{ backgroundColor: '#FAFAF7', border: '1px solid #E5E5E0' }}
+            >
+              <div className="flex flex-col items-center text-center">
                 {m.photo_url ? (
-                  <img src={m.photo_url} alt="" className="w-10 h-10 rounded-full object-cover" />
+                  <img
+                    src={m.photo_url}
+                    alt={m.name}
+                    className="w-16 h-16 rounded-full object-cover mb-2"
+                  />
                 ) : (
-                  <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-sm text-gray-400">
-                    {m.name?.charAt(0) || '?'}
+                  <div className="w-16 h-16 rounded-full mb-2 flex items-center justify-center"
+                       style={{ backgroundColor: '#E5E5E0' }}>
+                    <span style={{ fontSize: '24px', color: '#888' }}>
+                      {m.name?.charAt(0) || '?'}
+                    </span>
                   </div>
                 )}
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-[#1A1A2E] truncate">{m.name}</div>
-                  {m.title && (
-                    <div className="text-xs text-gray-400 truncate">{m.title}</div>
-                  )}
-                </div>
-                <div className="text-xs text-gray-400 flex-shrink-0">
+                <p style={{ fontSize: '14px', fontWeight: 600, color: '#1A1A2E' }}>
+                  {m.name}
+                </p>
+                {m.title && (
+                  <p style={{ fontSize: '12px', color: '#888', marginTop: '2px' }} className="truncate w-full">
+                    {m.title}
+                  </p>
+                )}
+                <p style={{ fontSize: '11px', color: '#C4A35A', marginTop: '4px', fontWeight: 600 }}>
                   {m.total_votes}票
-                </div>
-                <span className="text-gray-300 text-sm">→</span>
-              </a>
-            ))}
-          </div>
-        )}
-      </div>
+                </p>
+              </div>
+            </a>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
