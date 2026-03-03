@@ -11,6 +11,11 @@ export default function OrgBadgesPage() {
   const [error, setError] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
+  // アコーディオン
+  const [expandedBadge, setExpandedBadge] = useState<string | null>(null)
+  // 剥奪
+  const [revoking, setRevoking] = useState<string | null>(null)
+
   const { user: clerkUser, isLoaded: authLoaded } = useUser()
   const authUser = clerkUser ? { id: clerkUser.id } : null
 
@@ -63,6 +68,38 @@ export default function OrgBadgesPage() {
     navigator.clipboard.writeText(url)
     setCopiedId(levelId)
     setTimeout(() => setCopiedId(null), 2000)
+  }
+
+  async function handleRevoke(professionalId: string, badgeLevelId: string, professionalName: string) {
+    if (!confirm(`${professionalName} さんのこのバッジを削除しますか？\n\n※ この操作は取り消せません。再度バッジを付与するにはclaim URLからの再取得が必要です。`)) {
+      return
+    }
+
+    setRevoking(professionalId + '_' + badgeLevelId)
+    try {
+      const res = await fetch(
+        `/api/org-badge-revoke?professional_id=${professionalId}&organization_id=${org.id}&badge_level_id=${badgeLevelId}`,
+        { method: 'DELETE' }
+      )
+      if (!res.ok) throw new Error('削除に失敗しました')
+
+      // ローカルstateから削除
+      setLevels(prev =>
+        prev.map(l =>
+          l.id === badgeLevelId
+            ? { ...l, holders: (l.holders || []).filter((h: any) => h.professional_id !== professionalId) }
+            : l
+        )
+      )
+      setClaimCounts(prev => ({
+        ...prev,
+        [badgeLevelId]: Math.max(0, (prev[badgeLevelId] || 0) - 1),
+      }))
+    } catch (error: any) {
+      alert(error.message)
+    } finally {
+      setRevoking(null)
+    }
   }
 
   if (loading) {
@@ -171,7 +208,7 @@ export default function OrgBadgesPage() {
                 </div>
                 <div className="flex gap-2">
                   <div className="flex-1 bg-gray-50 rounded-lg px-3 py-2 text-xs text-gray-500 truncate font-mono">
-                    /badge/claim/{level.claim_token.slice(0, 8)}...
+                    /badge/claim/{level.claim_token?.slice(0, 8)}...
                   </div>
                   <button
                     onClick={() => copyClaimUrl(level.claim_token, level.id)}
@@ -180,6 +217,91 @@ export default function OrgBadgesPage() {
                     {copiedId === level.id ? 'コピー済!' : 'コピー'}
                   </button>
                 </div>
+              </div>
+
+              {/* 取得者アコーディオン */}
+              <div style={{ marginTop: '12px' }}>
+                <button
+                  onClick={() => setExpandedBadge(expandedBadge === level.id ? null : level.id)}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: '#C4A35A', fontSize: '13px', fontWeight: 600,
+                    display: 'flex', alignItems: 'center', gap: '4px',
+                    padding: 0,
+                  }}
+                >
+                  {org.type === 'store' ? 'バッジ取得者一覧' : '認定者一覧'} ({level.holders?.length || 0}名)
+                  <span style={{ transform: expandedBadge === level.id ? 'rotate(180deg)' : 'none', transition: '0.2s', display: 'inline-block' }}>
+                    ▼
+                  </span>
+                </button>
+
+                {expandedBadge === level.id && (
+                  <div style={{
+                    marginTop: '12px', padding: '12px',
+                    backgroundColor: '#F5F5F0', borderRadius: '12px',
+                  }}>
+                    {(!level.holders || level.holders.length === 0) ? (
+                      <p style={{ color: '#888', fontSize: '13px', margin: 0 }}>まだ取得者がいません</p>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {level.holders.map((holder: any) => (
+                          <div
+                            key={holder.professional_id}
+                            style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                              padding: '8px 12px', backgroundColor: '#fff', borderRadius: '8px',
+                              border: '1px solid #E5E5E0',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              {holder.professionals?.photo_url ? (
+                                <img
+                                  src={holder.professionals.photo_url}
+                                  alt=""
+                                  style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
+                                />
+                              ) : (
+                                <div style={{
+                                  width: '32px', height: '32px', borderRadius: '50%',
+                                  backgroundColor: '#E5E5E0', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  fontSize: '14px', color: '#888',
+                                }}>
+                                  {holder.professionals?.name?.charAt(0) || '?'}
+                                </div>
+                              )}
+                              <div>
+                                <p style={{ fontSize: '13px', fontWeight: 600, color: '#1A1A2E', margin: 0 }}>
+                                  {holder.professionals?.name}
+                                </p>
+                                <p style={{ fontSize: '11px', color: '#888', margin: 0 }}>
+                                  {holder.accepted_at ? new Date(holder.accepted_at).toLocaleDateString('ja-JP') : ''}
+                                </p>
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() => handleRevoke(
+                                holder.professional_id,
+                                level.id,
+                                holder.professionals?.name || ''
+                              )}
+                              disabled={revoking === holder.professional_id + '_' + level.id}
+                              style={{
+                                background: 'none', border: '1px solid #E53E3E',
+                                color: '#E53E3E', fontSize: '12px', padding: '4px 10px',
+                                borderRadius: '6px', cursor: 'pointer',
+                                opacity: revoking === holder.professional_id + '_' + level.id ? 0.5 : 1,
+                              }}
+                            >
+                              {revoking === holder.professional_id + '_' + level.id ? '削除中...' : '認定削除'}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ))}

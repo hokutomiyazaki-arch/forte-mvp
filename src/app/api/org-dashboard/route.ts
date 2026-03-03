@@ -119,11 +119,23 @@ export async function GET() {
         })),
     ]
 
+    // 5. バッジにholders（取得者リスト）を紐づけ
+    const badgesWithHolders = badges.map((badge: any) => ({
+      ...badge,
+      holders: badgeHolders
+        .filter((h: any) => h.credential_level_id === badge.id)
+        .map((h: any) => ({
+          professional_id: h.professional_id,
+          accepted_at: h.accepted_at,
+          professionals: h.professionals,
+        })),
+    }))
+
     return NextResponse.json({
       org,
       members: mergedMembers,
       aggregate: aggregateResult.data || null,
-      badges,
+      badges: badgesWithHolders,
       badgeHolderCounts,
       badgeHolders,
       badgeMembers: uniqueMembers,
