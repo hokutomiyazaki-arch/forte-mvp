@@ -35,7 +35,6 @@ export async function POST() {
       const { error: nfcError } = await supabase
         .from('nfc_cards')
         .update({
-          card_mode: 'general',
           professional_id: null,
           user_id: userId,
           updated_at: new Date().toISOString(),
