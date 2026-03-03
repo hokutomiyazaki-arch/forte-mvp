@@ -206,19 +206,19 @@ export async function GET() {
     if (proId) {
       const { data: badgeData } = await supabase
         .from('org_members')
-        .select('credential_level_id, org_badge_levels(id, name, description, image_url), organizations(id, name)')
+        .select('credential_level_id, credential_levels(id, name, description, image_url), organizations(id, name)')
         .eq('professional_id', proId)
         .eq('status', 'active')
         .not('credential_level_id', 'is', null)
 
       if (badgeData) {
         credentialBadges = badgeData
-          .filter((m: any) => m.org_badge_levels && m.organizations)
+          .filter((m: any) => m.credential_levels && m.organizations)
           .map((m: any) => ({
-            id: m.org_badge_levels.id,
-            name: m.org_badge_levels.name,
-            description: m.org_badge_levels.description,
-            image_url: m.org_badge_levels.image_url,
+            id: m.credential_levels.id,
+            name: m.credential_levels.name,
+            description: m.credential_levels.description,
+            image_url: m.credential_levels.image_url,
             org_name: m.organizations.name,
             org_id: m.organizations.id,
           }))

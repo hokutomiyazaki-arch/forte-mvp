@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
 
     // 2. バッジ（credential_level）の存在・有効性確認
     const { data: levelData } = await supabaseAdmin
-      .from('org_badge_levels')
+      .from('credential_levels')
       .select('id, organization_id, claim_url_active')
       .eq('id', levelId)
       .eq('organization_id', organizationId)

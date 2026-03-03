@@ -54,7 +54,7 @@ export default function OrgBadgesPage() {
   async function toggleClaimUrl(levelId: string, currentActive: boolean) {
     try {
       const { error: updateError } = await db.update(
-        'org_badge_levels',
+        'credential_levels',
         { claim_url_active: !currentActive },
         { id: levelId }
       )

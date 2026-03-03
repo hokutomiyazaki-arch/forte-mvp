@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 
 /**
  * PUT /api/org-badge
- * バッジ（org_badge_levels）の名前・説明・画像を更新
+ * バッジ（credential_levels）の名前・説明・画像を更新
  */
 export async function PUT(req: NextRequest) {
   const { userId } = await auth()
@@ -26,7 +26,7 @@ export async function PUT(req: NextRequest) {
 
     // このバッジが属する団体のオーナーか確認
     const { data: badge } = await supabase
-      .from('org_badge_levels')
+      .from('credential_levels')
       .select('id, organization_id, organizations(owner_id)')
       .eq('id', badge_id)
       .maybeSingle()
@@ -47,7 +47,7 @@ export async function PUT(req: NextRequest) {
     if (image_url !== undefined) updateData.image_url = image_url
 
     const { data: updated, error } = await supabase
-      .from('org_badge_levels')
+      .from('credential_levels')
       .update(updateData)
       .eq('id', badge_id)
       .select()

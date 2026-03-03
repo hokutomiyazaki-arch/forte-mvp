@@ -53,9 +53,9 @@ export async function GET() {
         .eq('organization_id', org.id)
         .maybeSingle(),
 
-      // バッジ一覧（org_badge_levels）
+      // バッジ一覧（credential_levels）
       supabase
-        .from('org_badge_levels')
+        .from('credential_levels')
         .select('*')
         .eq('organization_id', org.id)
         .order('sort_order', { ascending: true }),
@@ -70,7 +70,7 @@ export async function GET() {
       const badgeIds = badges.map((b: any) => b.id)
       const { data: holders } = await supabase
         .from('org_members')
-        .select('credential_level_id, professional_id, accepted_at, professionals(id, name, photo_url, title), org_badge_levels(id, name, image_url)')
+        .select('credential_level_id, professional_id, accepted_at, professionals(id, name, photo_url, title), credential_levels(id, name, image_url)')
         .eq('organization_id', org.id)
         .eq('status', 'active')
         .in('credential_level_id', badgeIds)
@@ -94,7 +94,7 @@ export async function GET() {
           name: h.professionals.name,
           photo_url: h.professionals.photo_url,
           title: h.professionals.title,
-          badge_name: h.org_badge_levels?.name,
+          badge_name: h.credential_levels?.name,
           accepted_at: h.accepted_at,
         })
       }

@@ -174,12 +174,12 @@ export default function CardPage() {
         // バッジ
         if (data.badgeMembers) {
           setCredentialBadges(data.badgeMembers
-            .filter((m: any) => m.org_badge_levels && m.organizations)
+            .filter((m: any) => m.credential_levels && m.organizations)
             .map((m: any) => ({
-              id: m.org_badge_levels.id,
-              name: m.org_badge_levels.name,
-              description: m.org_badge_levels.description,
-              image_url: m.org_badge_levels.image_url,
+              id: m.credential_levels.id,
+              name: m.credential_levels.name,
+              description: m.credential_levels.description,
+              image_url: m.credential_levels.image_url,
               org_name: m.organizations.name,
               org_id: m.organizations.id,
             }))
@@ -548,7 +548,7 @@ export default function CardPage() {
           </div>
           {(displayBadges.length > 0 || credentialBadges.length > 0) ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {/* org_badge_levels経由のバッジ（新方式） */}
+              {/* credential_levels経由のバッジ（新方式） */}
               {credentialBadges.map((badge) => (
                 <a
                   key={badge.id}

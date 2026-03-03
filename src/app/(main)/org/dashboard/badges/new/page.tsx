@@ -44,7 +44,7 @@ export default function NewBadgePage() {
 
       // 既存バッジ数（sort_order用）
       const { data: levelData } = await supabase
-        .from('org_badge_levels')
+        .from('credential_levels')
         .select('id')
         .eq('organization_id', orgData.id)
 
@@ -103,7 +103,7 @@ export default function NewBadgePage() {
 
       // バッジ作成
       const { error: insertError } = await supabase
-        .from('org_badge_levels')
+        .from('credential_levels')
         .insert({
           organization_id: org.id,
           name: name.trim(),
