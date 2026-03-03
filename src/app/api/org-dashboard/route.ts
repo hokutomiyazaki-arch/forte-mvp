@@ -101,9 +101,27 @@ export async function GET() {
     }
     const uniqueMembers = Array.from(memberMap.values())
 
+    // 4. メンバーリスト統合: org_proof_summary + badgeMembers（投票なしのバッジ取得者も含める）
+    const proofMembers = membersResult.data || []
+    const proofMemberIds = new Set(proofMembers.map((m: any) => m.professional_id))
+    const mergedMembers = [
+      ...proofMembers,
+      // バッジ取得者のうち、org_proof_summaryに含まれていない人を追加（投票0件）
+      ...uniqueMembers
+        .filter(m => !proofMemberIds.has(m.professional_id))
+        .map(m => ({
+          professional_id: m.professional_id,
+          professional_name: m.name,
+          photo_url: m.photo_url,
+          title: m.title,
+          total_votes: 0,
+          organization_id: org.id,
+        })),
+    ]
+
     return NextResponse.json({
       org,
-      members: membersResult.data || [],
+      members: mergedMembers,
       aggregate: aggregateResult.data || null,
       badges,
       badgeHolderCounts,
