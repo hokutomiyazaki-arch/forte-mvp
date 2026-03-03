@@ -1,10 +1,9 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase'
+import { db } from '@/lib/db'
 import { useUser } from '@clerk/nextjs'
 
 export default function OrgBadgesPage() {
-  const supabase = createClient() as any
   const [loading, setLoading] = useState(true)
   const [org, setOrg] = useState<any>(null)
   const [levels, setLevels] = useState<any[]>([])
@@ -18,56 +17,23 @@ export default function OrgBadgesPage() {
   useEffect(() => {
     if (!authLoaded) return
     if (!authUser) { window.location.href = '/login?role=pro'; return }
-    load(authUser)
+    load()
   }, [authLoaded, authUser])
 
-  async function load(user: any) {
+  async function load() {
     try {
-      const { data: orgData, error: orgError } = await supabase
-        .from('organizations')
-        .select('*')
-        .eq('owner_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+      const res = await fetch('/api/org-dashboard')
+      if (!res.ok) throw new Error('データの取得に失敗しました')
+      const data = await res.json()
 
-      if (orgError) throw orgError
-      if (!orgData) {
+      if (!data.org) {
         window.location.href = '/org/register'
         return
       }
 
-      setOrg(orgData)
-
-      // バッジ一覧取得
-      const { data: levelData, error: levelError } = await supabase
-        .from('credential_levels')
-        .select('*')
-        .eq('organization_id', orgData.id)
-        .order('sort_order', { ascending: true })
-
-      if (levelError) throw levelError
-      setLevels(levelData || [])
-
-      // 各バッジの取得者数（org_membersからcredential_level_idごとにCOUNT）
-      if (levelData && levelData.length > 0) {
-        const { data: memberData } = await supabase
-          .from('org_members')
-          .select('credential_level_id')
-          .eq('organization_id', orgData.id)
-          .eq('status', 'active')
-          .not('credential_level_id', 'is', null)
-
-        const counts: Record<string, number> = {}
-        if (memberData) {
-          for (const m of memberData) {
-            if (m.credential_level_id) {
-              counts[m.credential_level_id] = (counts[m.credential_level_id] || 0) + 1
-            }
-          }
-        }
-        setClaimCounts(counts)
-      }
+      setOrg(data.org)
+      setLevels(data.badges || [])
+      setClaimCounts(data.badgeHolderCounts || {})
     } catch (err: any) {
       setError(err.message || 'データの取得に失敗しました')
     }
@@ -76,12 +42,13 @@ export default function OrgBadgesPage() {
 
   async function toggleClaimUrl(levelId: string, currentActive: boolean) {
     try {
-      const { error: updateError } = await supabase
-        .from('credential_levels')
-        .update({ claim_url_active: !currentActive })
-        .eq('id', levelId)
+      const { error: updateError } = await db.update(
+        'credential_levels',
+        { claim_url_active: !currentActive },
+        { id: levelId }
+      )
 
-      if (updateError) throw updateError
+      if (updateError) throw new Error(updateError.message)
 
       setLevels(prev =>
         prev.map(l => l.id === levelId ? { ...l, claim_url_active: !currentActive } : l)

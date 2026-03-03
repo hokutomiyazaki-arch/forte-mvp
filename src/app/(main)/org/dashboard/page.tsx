@@ -1,7 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useUser } from '@clerk/nextjs'
-import { db } from '@/lib/db'
 
 const ORG_TYPE_LABELS: Record<string, { typeName: string; member: string; members: string; invite: string; count: string; perMember: string; emptyTitle: string; emptyDesc: string; publicPage: string }> = {
   store: {
@@ -52,43 +51,23 @@ export default function OrgDashboardPage() {
   useEffect(() => {
     if (!authLoaded) return
     if (!authUser) { window.location.href = '/login?role=pro'; return }
-    load(authUser)
+    load()
   }, [authLoaded, authUser])
 
-  async function load(user: any) {
+  async function load() {
     try {
-      // オーナーの団体を取得
-      const { data: orgData, error: orgError } = await db.select('organizations', {
-        eq: { owner_id: user.id },
-        order: { column: 'created_at', options: { ascending: false } },
-        limit: 1,
-        maybeSingle: true,
-      })
+      const res = await fetch('/api/org-dashboard')
+      if (!res.ok) throw new Error('データの取得に失敗しました')
+      const data = await res.json()
 
-      if (orgError) throw orgError
-      if (!orgData) {
-        // 団体未登録 → 登録ページへ
+      if (!data.org) {
         window.location.href = '/org/register'
         return
       }
 
-      setOrg(orgData)
-
-      // メンバー一覧 + プルーフ数を取得（org_proof_summary ビュー）
-      const { data: memberData } = await db.select('org_proof_summary', {
-        eq: { organization_id: orgData.id },
-        order: { column: 'total_votes', options: { ascending: false } },
-      })
-
-      setMembers(memberData || [])
-
-      // 団体全体の集計（org_aggregate ビュー）
-      const { data: aggData } = await db.select('org_aggregate', {
-        eq: { organization_id: orgData.id },
-        maybeSingle: true,
-      })
-
-      setAggregate(aggData)
+      setOrg(data.org)
+      setMembers(data.members || [])
+      setAggregate(data.aggregate || null)
     } catch (err: any) {
       setError(err.message || 'データの取得に失敗しました')
     }
