@@ -506,6 +506,10 @@ function VoteForm() {
     // selected_proof_ids: UUID と カスタムID を両方 TEXT[] として送信
     const proofIdsToSend = isHopeful ? null : (hasProofs ? allSelectedProofIds : null)
 
+    // ── ログイン済みユーザー: メール認証スキップ、直接確定 ──
+    const isSessionVote = voteMethodRef.current === 'session' && isLoggedIn && !!sessionEmail
+    const voteStatus = isSessionVote ? 'confirmed' : 'pending'
+
     // 投票INSERT
     const { data: voteData, error: voteError } = await (supabase as any).from('votes').insert({
       professional_id: proId,
@@ -519,7 +523,7 @@ function VoteForm() {
       selected_reward_id: selectedRewardId || null,
       comment: comment.trim() || null,
       qr_token: qrToken,
-      status: 'pending',
+      status: voteStatus,
     }).select().maybeSingle()
 
     if (voteError) {
@@ -559,17 +563,6 @@ function VoteForm() {
       console.error('[handleSubmit] vote_emails INSERT error:', emailInsertError)
     }
 
-    // 確認トークンを作成
-    const { data: confirmation, error: confirmError } = await (supabase as any)
-      .from('vote_confirmations')
-      .insert({ vote_id: voteData.id })
-      .select()
-      .maybeSingle()
-
-    if (confirmError) {
-      console.error('[handleSubmit] vote_confirmations INSERT error:', confirmError)
-    }
-
     // リワード選択をclient_rewardsに保存
     if (selectedRewardId && voteData) {
       const { error: rewardInsertError } = await (supabase as any).from('client_rewards').insert({
@@ -582,6 +575,24 @@ function VoteForm() {
       if (rewardInsertError) {
         console.error('[handleSubmit] client_rewards INSERT error:', rewardInsertError)
       }
+    }
+
+    // ── ログイン済み（Clerk認証済み）: メール認証不要 → 完了画面へ直接遷移 ──
+    if (isSessionVote) {
+      window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${voteData.id}&has_account=true`
+      return
+    }
+
+    // ── 未ログイン（メール投票）: 従来通りメール確認フロー ──
+    // 確認トークンを作成
+    const { data: confirmation, error: confirmError } = await (supabase as any)
+      .from('vote_confirmations')
+      .insert({ vote_id: voteData.id })
+      .select()
+      .maybeSingle()
+
+    if (confirmError) {
+      console.error('[handleSubmit] vote_confirmations INSERT error:', confirmError)
     }
 
     // 確認メール送信
@@ -600,8 +611,6 @@ function VoteForm() {
         })
         if (!emailRes.ok) {
           console.error('[handleSubmit] send-confirmation API error:', emailRes.status, await emailRes.text())
-        } else {
-          // Confirmation email sent OK
         }
       } catch (err) {
         console.error('[handleSubmit] Confirmation email send failed:', err)
