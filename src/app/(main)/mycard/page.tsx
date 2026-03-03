@@ -91,6 +91,7 @@ function MyCardContent() {
   const [proDeactivated, setProDeactivated] = useState(false)
   const [proId, setProId] = useState<string | null>(null)
   const [proCardMode, setProCardMode] = useState<'pro' | 'general'>('pro')
+  const [credentialBadges, setCredentialBadges] = useState<{id: string; name: string; description: string | null; image_url: string | null; org_name: string; org_id: string}[]>([])
 
   // NFC カード管理 state
   const [nfcCard, setNfcCard] = useState<any>(null)
@@ -133,6 +134,7 @@ function MyCardContent() {
         setBookmarkedPros(data.bookmarks)
         setBookmarkCount(data.bookmarks.length)
       }
+      if (data.credentialBadges) setCredentialBadges(data.credentialBadges)
 
       // マイプルーフのqr_token取得
       try {
@@ -1199,6 +1201,32 @@ function MyCardContent() {
       {/* マイプルーフタブ */}
       {tab === 'myproof' && (
         <>
+          {/* 保有バッジ */}
+          {credentialBadges.length > 0 && (
+            <div className="mb-4">
+              <h3 style={{ color: '#1A1A2E', fontSize: '15px', fontWeight: 700, marginBottom: '12px' }}>
+                保有バッジ
+              </h3>
+              <div className="space-y-2">
+                {credentialBadges.map((badge) => (
+                  <div key={badge.id} className="flex items-center gap-3 p-3 rounded-xl" style={{ backgroundColor: '#fff', border: '1px solid #E8E4DC' }}>
+                    {badge.image_url ? (
+                      <img src={badge.image_url} alt={badge.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'linear-gradient(135deg, #C4A35A, #E8D5A0)' }}>
+                        <span className="text-white font-bold">{badge.name.charAt(0)}</span>
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p style={{ fontSize: '14px', fontWeight: 600, color: '#1A1A2E' }}>{badge.name}</p>
+                      <p style={{ fontSize: '11px', color: '#888' }}>{badge.org_name}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {myProofQrToken && (
             <a
               href={`/myproof/p/${myProofQrToken}`}
