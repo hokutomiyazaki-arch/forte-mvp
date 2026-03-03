@@ -1,0 +1,254 @@
+'use client'
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  RadarChart, PolarGrid, PolarAngleAxis, Radar,
+  LineChart, Line,
+} from 'recharts'
+
+interface AnalyticsData {
+  memberProofCounts?: { name: string; proof_count: number; photo_url?: string }[]
+  strengthDistribution?: { label: string; count: number }[]
+  recentComments?: { comment: string; created_at: string; professional_name: string; professional_photo?: string }[]
+  monthlyTrend?: { month: string; count: number }[]
+}
+
+function MemberRanking({ data }: { data: any[] }) {
+  if (!data || data.length === 0) {
+    return (
+      <div style={{ padding: '24px', textAlign: 'center', color: '#888' }}>
+        まだプルーフデータがありません
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ marginBottom: '32px' }}>
+      <h4 style={{ color: '#1A1A2E', fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>
+        メンバー別プルーフ数
+      </h4>
+      <div style={{ width: '100%', height: Math.max(200, data.length * 40) }}>
+        <ResponsiveContainer>
+          <BarChart data={data} layout="vertical" margin={{ left: 80, right: 20 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#E5E5E0" />
+            <XAxis type="number" tick={{ fill: '#888', fontSize: 12 }} />
+            <YAxis
+              type="category"
+              dataKey="name"
+              tick={{ fill: '#1A1A2E', fontSize: 12 }}
+              width={75}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#1A1A2E', border: 'none',
+                borderRadius: '8px', color: '#FAFAF7', fontSize: '13px',
+              }}
+              formatter={(value: number) => [`${value} プルーフ`, '']}
+            />
+            <Bar dataKey="proof_count" fill="#C4A35A" radius={[0, 4, 4, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  )
+}
+
+function StrengthRadar({ data }: { data: any[] }) {
+  if (!data || data.length < 3) {
+    return (
+      <div style={{ padding: '24px', textAlign: 'center', color: '#888' }}>
+        レーダー表示に十分なデータがありません（最低3項目必要）
+      </div>
+    )
+  }
+
+  const chartData = data.map(d => ({
+    ...d,
+    displayLabel: d.label.length > 8 ? d.label.substring(0, 8) + '…' : d.label,
+  }))
+
+  return (
+    <div style={{ marginBottom: '32px' }}>
+      <h4 style={{ color: '#1A1A2E', fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>
+        団体全体の強み分布
+      </h4>
+      <div style={{ width: '100%', height: 300 }}>
+        <ResponsiveContainer>
+          <RadarChart data={chartData}>
+            <PolarGrid stroke="#E5E5E0" />
+            <PolarAngleAxis
+              dataKey="displayLabel"
+              tick={{ fill: '#1A1A2E', fontSize: 11 }}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#1A1A2E', border: 'none',
+                borderRadius: '8px', color: '#FAFAF7', fontSize: '13px',
+              }}
+              formatter={(value: number) => [`${value} 票`, '']}
+            />
+            <Radar
+              dataKey="count"
+              stroke="#C4A35A"
+              fill="#C4A35A"
+              fillOpacity={0.3}
+            />
+          </RadarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  )
+}
+
+function CommentFeed({ data }: { data: any[] }) {
+  if (!data || data.length === 0) {
+    return (
+      <div style={{ padding: '24px', textAlign: 'center', color: '#888' }}>
+        まだコメントがありません
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ marginBottom: '32px' }}>
+      <h4 style={{ color: '#1A1A2E', fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>
+        最新のクライアントコメント
+      </h4>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {data.map((item: any, i: number) => (
+          <div
+            key={i}
+            style={{
+              padding: '16px', borderRadius: '12px',
+              backgroundColor: '#fff', border: '1px solid #E5E5E0',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              {item.professional_photo ? (
+                <img src={item.professional_photo} alt=""
+                  style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} />
+              ) : (
+                <div style={{
+                  width: '28px', height: '28px', borderRadius: '50%',
+                  backgroundColor: '#E5E5E0', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '12px', color: '#888',
+                }}>
+                  {item.professional_name?.charAt(0) || '?'}
+                </div>
+              )}
+              <span style={{ fontSize: '13px', fontWeight: 600, color: '#1A1A2E' }}>
+                {item.professional_name}
+              </span>
+              <span style={{ fontSize: '11px', color: '#AAA', marginLeft: 'auto' }}>
+                {new Date(item.created_at).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' })}
+              </span>
+            </div>
+            <p style={{ fontSize: '14px', color: '#333', lineHeight: '1.5', margin: 0 }}>
+              「{item.comment}」
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function MonthlyTrend({ data }: { data: any[] }) {
+  if (!data || data.length === 0) {
+    return (
+      <div style={{ padding: '24px', textAlign: 'center', color: '#888' }}>
+        まだトレンドデータがありません
+      </div>
+    )
+  }
+
+  const chartData = data.map(d => ({
+    ...d,
+    displayMonth: `${parseInt(d.month.split('-')[1])}月`,
+  }))
+
+  return (
+    <div style={{ marginBottom: '32px' }}>
+      <h4 style={{ color: '#1A1A2E', fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>
+        月別プルーフ推移
+      </h4>
+      <div style={{ width: '100%', height: 250 }}>
+        <ResponsiveContainer>
+          <LineChart data={chartData} margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#E5E5E0" />
+            <XAxis dataKey="displayMonth" tick={{ fill: '#888', fontSize: 12 }} />
+            <YAxis tick={{ fill: '#888', fontSize: 12 }} allowDecimals={false} />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#1A1A2E', border: 'none',
+                borderRadius: '8px', color: '#FAFAF7', fontSize: '13px',
+              }}
+              formatter={(value: number) => [`${value} プルーフ`, '']}
+            />
+            <Line
+              type="monotone"
+              dataKey="count"
+              stroke="#C4A35A"
+              strokeWidth={2}
+              dot={{ fill: '#C4A35A', stroke: '#C4A35A', r: 4 }}
+              activeDot={{ r: 6, fill: '#C4A35A' }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  )
+}
+
+export default function RechartsCharts({ analytics }: { analytics: AnalyticsData | null }) {
+  if (!analytics) {
+    return (
+      <div style={{ padding: '32px', textAlign: 'center', color: '#888' }}>
+        分析データがありません。メンバーが追加されると表示されます。
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      {/* KPIサマリーカード */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
+        gap: '12px', marginBottom: '24px',
+      }}>
+        <div style={{
+          padding: '16px', borderRadius: '12px', backgroundColor: '#fff',
+          border: '1px solid #E5E5E0', textAlign: 'center',
+        }}>
+          <p style={{ fontSize: '24px', fontWeight: 700, color: '#C4A35A', margin: 0 }}>
+            {analytics.memberProofCounts?.reduce((sum, m) => sum + m.proof_count, 0) || 0}
+          </p>
+          <p style={{ fontSize: '12px', color: '#888', marginTop: '4px' }}>総プルーフ数</p>
+        </div>
+        <div style={{
+          padding: '16px', borderRadius: '12px', backgroundColor: '#fff',
+          border: '1px solid #E5E5E0', textAlign: 'center',
+        }}>
+          <p style={{ fontSize: '24px', fontWeight: 700, color: '#C4A35A', margin: 0 }}>
+            {analytics.memberProofCounts?.filter(m => m.proof_count > 0).length || 0}
+          </p>
+          <p style={{ fontSize: '12px', color: '#888', marginTop: '4px' }}>評価済みメンバー</p>
+        </div>
+        <div style={{
+          padding: '16px', borderRadius: '12px', backgroundColor: '#fff',
+          border: '1px solid #E5E5E0', textAlign: 'center',
+        }}>
+          <p style={{ fontSize: '24px', fontWeight: 700, color: '#C4A35A', margin: 0 }}>
+            {analytics.recentComments?.length || 0}
+          </p>
+          <p style={{ fontSize: '12px', color: '#888', marginTop: '4px' }}>コメント数</p>
+        </div>
+      </div>
+
+      {/* チャート */}
+      <MemberRanking data={analytics.memberProofCounts || []} />
+      <StrengthRadar data={analytics.strengthDistribution || []} />
+      <MonthlyTrend data={analytics.monthlyTrend || []} />
+      <CommentFeed data={analytics.recentComments || []} />
+    </div>
+  )
+}

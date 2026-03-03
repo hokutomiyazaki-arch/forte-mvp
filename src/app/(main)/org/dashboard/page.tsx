@@ -1,6 +1,11 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useUser } from '@clerk/nextjs'
+import dynamic from 'next/dynamic'
+import { RESULT_FORTES } from '@/lib/types'
+
+// recharts を dynamic import（SSR無効化）
+const RechartsCharts = dynamic(() => import('./RechartsCharts'), { ssr: false })
 
 const ORG_TYPE_LABELS: Record<string, { typeName: string; member: string; members: string; invite: string; count: string; perMember: string; emptyTitle: string; emptyDesc: string; publicPage: string }> = {
   store: {
@@ -43,6 +48,8 @@ export default function OrgDashboardPage() {
   const [org, setOrg] = useState<any>(null)
   const [members, setMembers] = useState<any[]>([])
   const [aggregate, setAggregate] = useState<any>(null)
+  const [analytics, setAnalytics] = useState<any>(null)
+  const [activeTab, setActiveTab] = useState<'overview' | 'analytics'>('overview')
   const [error, setError] = useState('')
 
   const { user: clerkUser, isLoaded: authLoaded } = useUser()
@@ -68,6 +75,7 @@ export default function OrgDashboardPage() {
       setOrg(data.org)
       setMembers(data.members || [])
       setAggregate(data.aggregate || null)
+      if (data.analytics) setAnalytics(data.analytics)
     } catch (err: any) {
       setError(err.message || 'データの取得に失敗しました')
     }
@@ -96,10 +104,19 @@ export default function OrgDashboardPage() {
   const L = ORG_TYPE_LABELS[org.type] || ORG_TYPE_LABELS.store
   const maxVotes = Math.max(...members.map(m => m.total_votes || 0), 1)
 
+  // result_categoryキーをラベルに変換
+  const strengthWithLabels = (analytics?.strengthDistribution || []).map((d: any) => {
+    const forte = RESULT_FORTES.find(f => f.key === d.label)
+    return {
+      ...d,
+      label: forte?.label || d.label,
+    }
+  })
+
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
       {/* ヘッダー */}
-      <div className="mb-8">
+      <div className="mb-6">
         <div className="flex items-center gap-3 mb-2">
           <div className="w-10 h-10 bg-[#1A1A2E] rounded-lg flex items-center justify-center text-white text-lg font-bold">
             {org.name.charAt(0)}
@@ -111,7 +128,31 @@ export default function OrgDashboardPage() {
         </div>
       </div>
 
-      {/* サマリーカード */}
+      {/* タブ */}
+      <div className="flex gap-1 mb-6 bg-gray-100 rounded-xl p-1">
+        <button
+          onClick={() => setActiveTab('overview')}
+          className={`flex-1 py-2 text-sm font-medium rounded-lg transition ${
+            activeTab === 'overview'
+              ? 'bg-white text-[#1A1A2E] shadow-sm'
+              : 'text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          概要
+        </button>
+        <button
+          onClick={() => setActiveTab('analytics')}
+          className={`flex-1 py-2 text-sm font-medium rounded-lg transition ${
+            activeTab === 'analytics'
+              ? 'bg-white text-[#1A1A2E] shadow-sm'
+              : 'text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          分析
+        </button>
+      </div>
+
+      {/* サマリーカード（常に表示） */}
       <div className="grid grid-cols-3 gap-3 mb-8">
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
           <div className="text-2xl font-bold text-[#1A1A2E]">
@@ -133,76 +174,91 @@ export default function OrgDashboardPage() {
         </div>
       </div>
 
-      {/* メンバー別プルーフ */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6">
-        <h2 className="text-sm font-bold text-[#1A1A2E] mb-4">{L.perMember}</h2>
+      {/* === 概要タブ === */}
+      {activeTab === 'overview' && (
+        <>
+          {/* メンバー別プルーフ */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6">
+            <h2 className="text-sm font-bold text-[#1A1A2E] mb-4">{L.perMember}</h2>
 
-        {members.length === 0 ? (
-          <div className="text-center py-8">
-            <p className="text-gray-400 text-sm mb-1">{L.emptyTitle}</p>
-            <p className="text-gray-300 text-xs">{L.emptyDesc}</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {members.map((m, i) => (
-              <div key={m.professional_id} className="flex items-center gap-3">
-                <span className="text-xs text-gray-300 w-5 text-right">{i + 1}</span>
-                {m.photo_url ? (
-                  <img
-                    src={m.photo_url}
-                    alt=""
-                    className="w-8 h-8 rounded-full object-cover"
-                  />
-                ) : (
-                  <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs text-gray-400">
-                    {m.professional_name?.charAt(0) || '?'}
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-[#1A1A2E] truncate">
-                    {m.professional_name}
-                  </div>
-                  <div className="mt-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-[#C4A35A] rounded-full transition-all"
-                      style={{ width: `${((m.total_votes || 0) / maxVotes) * 100}%` }}
-                    />
-                  </div>
-                </div>
-                <span className="text-sm font-bold text-[#1A1A2E] tabular-nums w-12 text-right">
-                  {m.total_votes || 0}票
-                </span>
+            {members.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-400 text-sm mb-1">{L.emptyTitle}</p>
+                <p className="text-gray-300 text-xs">{L.emptyDesc}</p>
               </div>
-            ))}
+            ) : (
+              <div className="space-y-3">
+                {members.map((m, i) => (
+                  <div key={m.professional_id} className="flex items-center gap-3">
+                    <span className="text-xs text-gray-300 w-5 text-right">{i + 1}</span>
+                    {m.photo_url ? (
+                      <img
+                        src={m.photo_url}
+                        alt=""
+                        className="w-8 h-8 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs text-gray-400">
+                        {(m.professional_name || m.name)?.charAt(0) || '?'}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-[#1A1A2E] truncate">
+                        {m.professional_name || m.name}
+                      </div>
+                      <div className="mt-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-[#C4A35A] rounded-full transition-all"
+                          style={{ width: `${((m.total_votes || 0) / maxVotes) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                    <span className="text-sm font-bold text-[#1A1A2E] tabular-nums w-12 text-right">
+                      {m.total_votes || 0}票
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {/* アクションボタン */}
-      <div className="flex flex-col gap-3">
-        {org.type !== 'store' && (
-          <button
-            onClick={() => window.location.href = '/org/dashboard/badges'}
-            className="w-full py-3 bg-[#C4A35A] text-white font-medium rounded-xl hover:bg-[#b3944f] transition text-sm"
-          >
-            🎖️ バッジ管理
-          </button>
-        )}
-        <div className="flex gap-3">
-          <button
-            onClick={() => window.location.href = '/org/dashboard/invite'}
-            className="flex-1 py-3 bg-[#1A1A2E] text-white font-medium rounded-xl hover:bg-[#2a2a4e] transition text-sm"
-          >
-            {L.invite}
-          </button>
-          <button
-            onClick={() => window.location.href = `/org/${org.id}`}
-            className="flex-1 py-3 bg-white text-[#1A1A2E] font-medium rounded-xl border border-gray-200 hover:border-[#C4A35A] transition text-sm"
-          >
-            {L.publicPage}
-          </button>
-        </div>
-      </div>
+          {/* アクションボタン */}
+          <div className="flex flex-col gap-3">
+            {org.type !== 'store' && (
+              <button
+                onClick={() => window.location.href = '/org/dashboard/badges'}
+                className="w-full py-3 bg-[#C4A35A] text-white font-medium rounded-xl hover:bg-[#b3944f] transition text-sm"
+              >
+                バッジ管理
+              </button>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => window.location.href = '/org/dashboard/invite'}
+                className="flex-1 py-3 bg-[#1A1A2E] text-white font-medium rounded-xl hover:bg-[#2a2a4e] transition text-sm"
+              >
+                {L.invite}
+              </button>
+              <button
+                onClick={() => window.location.href = `/org/${org.id}`}
+                className="flex-1 py-3 bg-white text-[#1A1A2E] font-medium rounded-xl border border-gray-200 hover:border-[#C4A35A] transition text-sm"
+              >
+                {L.publicPage}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* === 分析タブ === */}
+      {activeTab === 'analytics' && (
+        <RechartsCharts
+          analytics={{
+            ...analytics,
+            strengthDistribution: strengthWithLabels,
+          }}
+        />
+      )}
     </div>
   )
 }

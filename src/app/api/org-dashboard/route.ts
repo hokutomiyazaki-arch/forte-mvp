@@ -131,6 +131,107 @@ export async function GET() {
         })),
     }))
 
+    // 6. 分析データ取得（メンバーがいる場合のみ）
+    let analytics: any = null
+    const memberProIds = mergedMembers.map((m: any) => m.professional_id).filter(Boolean)
+
+    if (memberProIds.length > 0) {
+      const sixMonthsAgo = new Date()
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
+
+      const [
+        strengthResult,
+        commentsResult,
+        monthlyResult,
+      ] = await Promise.all([
+        // 強み分布: result_category集計
+        supabase
+          .from('votes')
+          .select('result_category')
+          .in('professional_id', memberProIds)
+          .not('result_category', 'is', null),
+
+        // 最新コメント
+        supabase
+          .from('votes')
+          .select('comment, created_at, professional_id')
+          .in('professional_id', memberProIds)
+          .not('comment', 'is', null)
+          .neq('comment', '')
+          .order('created_at', { ascending: false })
+          .limit(20),
+
+        // 月別トレンド（直近6ヶ月）
+        supabase
+          .from('votes')
+          .select('created_at')
+          .in('professional_id', memberProIds)
+          .gte('created_at', sixMonthsAgo.toISOString()),
+      ])
+
+      // 強み分布集計
+      const strengthMap: Record<string, number> = {}
+      if (strengthResult.data) {
+        for (const v of strengthResult.data) {
+          const cat = v.result_category
+          if (cat) {
+            strengthMap[cat] = (strengthMap[cat] || 0) + 1
+          }
+        }
+      }
+      const strengthDistribution = Object.entries(strengthMap)
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 8)
+
+      // コメント整形（プロ名マップ作成）
+      const proNameMap = new Map<string, { name: string; photo_url: string | null }>()
+      for (const m of mergedMembers) {
+        proNameMap.set(m.professional_id, {
+          name: m.professional_name || m.name || '不明',
+          photo_url: m.photo_url || null,
+        })
+      }
+      const recentComments = (commentsResult.data || []).map((v: any) => {
+        const pro = proNameMap.get(v.professional_id)
+        return {
+          comment: v.comment,
+          created_at: v.created_at,
+          professional_name: pro?.name || '不明',
+          professional_photo: pro?.photo_url || null,
+        }
+      })
+
+      // 月別トレンド集計
+      const monthlyMap: Record<string, number> = {}
+      if (monthlyResult.data) {
+        for (const v of monthlyResult.data) {
+          const month = v.created_at.substring(0, 7) // "2026-03"
+          monthlyMap[month] = (monthlyMap[month] || 0) + 1
+        }
+      }
+      const monthlyTrend = Object.entries(monthlyMap)
+        .map(([month, count]) => ({ month, count }))
+        .sort((a, b) => a.month.localeCompare(b.month))
+
+      // メンバー別プルーフ数（mergedMembersから直接構築）
+      const memberProofCounts = mergedMembers
+        .map((m: any) => ({
+          professional_id: m.professional_id,
+          name: m.professional_name || m.name || '不明',
+          photo_url: m.photo_url,
+          proof_count: m.total_votes || 0,
+        }))
+        .sort((a: any, b: any) => b.proof_count - a.proof_count)
+
+      analytics = {
+        memberProofCounts,
+        strengthDistribution,
+        recentComments,
+        monthlyTrend,
+      }
+    }
+
     return NextResponse.json({
       org,
       members: mergedMembers,
@@ -139,6 +240,7 @@ export async function GET() {
       badgeHolderCounts,
       badgeHolders,
       badgeMembers: uniqueMembers,
+      analytics,
     })
   } catch (error: any) {
     console.error('[org-dashboard API] error:', error)
