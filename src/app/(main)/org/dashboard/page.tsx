@@ -51,6 +51,10 @@ export default function OrgDashboardPage() {
   const [analytics, setAnalytics] = useState<any>(null)
   const [activeTab, setActiveTab] = useState<'overview' | 'analytics'>('overview')
   const [error, setError] = useState('')
+  const [editingOrg, setEditingOrg] = useState(false)
+  const [editOrgName, setEditOrgName] = useState('')
+  const [editOrgDescription, setEditOrgDescription] = useState('')
+  const [editOrgSaving, setEditOrgSaving] = useState(false)
 
   const { user: clerkUser, isLoaded: authLoaded } = useUser()
   const authUser = clerkUser ? { id: clerkUser.id } : null
@@ -113,6 +117,34 @@ export default function OrgDashboardPage() {
     }
   })
 
+  const handleOrgEditStart = () => {
+    setEditOrgName(org.name || '')
+    setEditOrgDescription(org.description || '')
+    setEditingOrg(true)
+  }
+
+  const handleOrgEditSave = async () => {
+    setEditOrgSaving(true)
+    try {
+      const res = await fetch('/api/org-update', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organization_id: org.id,
+          name: editOrgName,
+          description: editOrgDescription,
+        }),
+      })
+      if (!res.ok) throw new Error('更新に失敗しました')
+      setOrg((prev: any) => ({ ...prev, name: editOrgName, description: editOrgDescription }))
+      setEditingOrg(false)
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setEditOrgSaving(false)
+    }
+  }
+
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
       {/* ヘッダー */}
@@ -122,7 +154,15 @@ export default function OrgDashboardPage() {
             {org.name.charAt(0)}
           </div>
           <div>
-            <h1 className="text-xl font-bold text-[#1A1A2E]">{org.name}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold text-[#1A1A2E]">{org.name}</h1>
+              <button
+                onClick={handleOrgEditStart}
+                className="text-xs text-gray-400 border border-gray-200 rounded-md px-2 py-0.5 hover:border-[#C4A35A] hover:text-[#C4A35A] transition"
+              >
+                編集
+              </button>
+            </div>
             <p className="text-xs text-gray-400">{L.typeName}</p>
           </div>
         </div>
@@ -258,6 +298,78 @@ export default function OrgDashboardPage() {
             strengthDistribution: strengthWithLabels,
           }}
         />
+      )}
+
+      {/* 団体編集モーダル */}
+      {editingOrg && (
+        <div
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
+          }}
+          onClick={() => setEditingOrg(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#FAFAF7', borderRadius: '16px',
+              padding: '24px', maxWidth: '480px', width: '100%',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ color: '#1A1A2E', fontSize: '18px', fontWeight: 700, marginBottom: '20px' }}>
+              団体情報を編集
+            </h3>
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '13px', color: '#666', marginBottom: '6px' }}>団体名</label>
+              <input
+                type="text"
+                value={editOrgName}
+                onChange={(e) => setEditOrgName(e.target.value)}
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: '8px',
+                  border: '1px solid #E5E5E0', fontSize: '14px', color: '#1A1A2E',
+                  backgroundColor: '#fff', boxSizing: 'border-box',
+                }}
+              />
+            </div>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', fontSize: '13px', color: '#666', marginBottom: '6px' }}>説明</label>
+              <textarea
+                value={editOrgDescription}
+                onChange={(e) => setEditOrgDescription(e.target.value)}
+                rows={4}
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: '8px',
+                  border: '1px solid #E5E5E0', fontSize: '14px', color: '#1A1A2E',
+                  backgroundColor: '#fff', resize: 'vertical', boxSizing: 'border-box',
+                }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setEditingOrg(false)}
+                style={{
+                  padding: '10px 20px', borderRadius: '8px', border: '1px solid #E5E5E0',
+                  backgroundColor: '#fff', color: '#666', fontSize: '14px', cursor: 'pointer',
+                }}
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={handleOrgEditSave}
+                disabled={editOrgSaving || !editOrgName.trim()}
+                style={{
+                  padding: '10px 20px', borderRadius: '8px', border: 'none',
+                  backgroundColor: '#C4A35A', color: '#fff', fontSize: '14px', fontWeight: 600,
+                  cursor: 'pointer', opacity: editOrgSaving || !editOrgName.trim() ? 0.5 : 1,
+                }}
+              >
+                {editOrgSaving ? '保存中...' : '保存する'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
