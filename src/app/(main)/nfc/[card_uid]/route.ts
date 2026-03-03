@@ -51,8 +51,19 @@ export async function GET(
 
     // ═══ パターンA: user_id のみ（一般ユーザー）→ マイプルーフへ ═══
     if (card.user_id && !card.professional_id) {
+      const { data: myProofCard } = await supabase
+        .from('my_proof_cards')
+        .select('qr_token')
+        .eq('user_id', card.user_id)
+        .maybeSingle()
+
+      if (myProofCard?.qr_token) {
+        return NextResponse.redirect(
+          new URL(`/myproof/p/${myProofCard.qr_token}`, request.url)
+        )
+      }
       return NextResponse.redirect(
-        new URL(`/myproof/${card.user_id}`, request.url)
+        new URL('/?error=myproof_not_configured', request.url)
       )
     }
 
@@ -66,8 +77,19 @@ export async function GET(
 
     // 2.5 card_mode が 'general' ならマイプルーフへリダイレクト
     if (pro && pro.card_mode === 'general' && pro.user_id) {
+      const { data: myProofCard } = await supabase
+        .from('my_proof_cards')
+        .select('qr_token')
+        .eq('user_id', pro.user_id)
+        .maybeSingle()
+
+      if (myProofCard?.qr_token) {
+        return NextResponse.redirect(
+          new URL(`/myproof/p/${myProofCard.qr_token}`, request.url)
+        )
+      }
       return NextResponse.redirect(
-        new URL(`/myproof/${pro.user_id}`, request.url)
+        new URL('/?error=myproof_not_configured', request.url)
       )
     }
 

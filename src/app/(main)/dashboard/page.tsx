@@ -401,15 +401,16 @@ export default function DashboardPage() {
       if (!card) { setNfcError('カードIDが見つかりません。カード裏面に印字されたIDを確認してください。'); setNfcLoading(false); return }
       if (card.status !== 'unlinked' && (card.user_id || card.professional_id)) { setNfcError('このカードは既に使用されています。'); setNfcLoading(false); return }
 
-      // 2. プロに既存のアクティブカードがないことを確認
+      // 2. 既存のアクティブカードがないことを確認（user_idベース）
       const { data: existing } = await db.select('nfc_cards', {
-        select: 'id, card_uid', eq: { professional_id: pro.id, status: 'active' }, maybeSingle: true
+        select: 'id, card_uid', eq: { user_id: user!.id, status: 'active' }, maybeSingle: true
       })
 
       if (existing) { setNfcError(`既にカード（${existing.card_uid}）が登録されています。先に紐付けを解除してください。`); setNfcLoading(false); return }
 
-      // 3. カードをアクティブ化
+      // 3. カードをアクティブ化（user_id + professional_id 両方セット）
       const { error } = await db.update('nfc_cards', {
+        user_id: user!.id,
         professional_id: pro.id,
         status: 'active',
         linked_at: new Date().toISOString(),
@@ -438,9 +439,11 @@ export default function DashboardPage() {
 
     try {
       const { error } = await db.update('nfc_cards', {
+        professional_id: null,
+        user_id: null,
         status: 'unlinked',
         updated_at: new Date().toISOString(),
-      }, { professional_id: pro.id, status: 'active' })
+      }, { user_id: user!.id, status: 'active' })
 
       if (error) { setNfcError('解除に失敗しました。'); setNfcLoading(false); return }
 

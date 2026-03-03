@@ -133,7 +133,7 @@ export async function GET() {
       // 被ブックマーク数（他ユーザーからのブックマーク）
       supabase.from('bookmarks').select('*', { count: 'exact', head: true }).eq('professional_id', proId),
       // NFCカード
-      supabase.from('nfc_cards').select('id, card_uid, status, linked_at').eq('professional_id', proId).eq('status', 'active').maybeSingle(),
+      supabase.from('nfc_cards').select('id, card_uid, status, linked_at').eq('user_id', userId).eq('status', 'active').maybeSingle(),
       // org_members（pending + active を1クエリで取得）
       supabase.from('org_members')
         .select('id, organization_id, credential_level_id, status, invited_at, accepted_at, organizations(id, name, type), credential_levels(id, name, description, image_url)')
