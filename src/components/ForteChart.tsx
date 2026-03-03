@@ -18,10 +18,9 @@ interface Props {
   professional?: Professional | null
   showLabels?: boolean
   certApplications?: CertApplication[]
-  onCertApply?: (categorySlug: string, categoryName: string, proofCount: number) => void
 }
 
-export default function ForteChart({ votes, personalityVotes = [], professional, showLabels = true, certApplications = [], onCertApply }: Props) {
+export default function ForteChart({ votes, personalityVotes = [], professional, showLabels = true, certApplications = [] }: Props) {
   const sortedResults = [...votes].sort((a, b) => b.vote_count - a.vote_count)
   const sortedPersonality = [...personalityVotes].sort((a, b) => b.vote_count - a.vote_count)
   const rawMax = Math.max(
@@ -72,16 +71,7 @@ export default function ForteChart({ votes, personalityVotes = [], professional,
                       style={{ width: `${(v.vote_count / maxVotes) * 100}%`, backgroundColor: barColor }}
                     />
                   </div>
-                  {/* 30票以上: 認定申請ボタン or ステータスラベル */}
-                  {isSpecialist && !hasApplied && onCertApply && (
-                    <button
-                      onClick={() => onCertApply(slug, v.category, v.vote_count)}
-                      className="mt-1 text-xs font-bold px-3 py-1 rounded"
-                      style={{ backgroundColor: PROVEN_GOLD, color: '#1A1A2E' }}
-                    >
-                      認定を申請する
-                    </button>
-                  )}
+                  {/* 30票以上 + 申請済み: ステータスラベル */}
                   {isSpecialist && hasApplied && (
                     <span className="mt-1 inline-block text-xs" style={{ color: PROVEN_GOLD }}>
                       認定済み — {appStatus === 'shipped' ? '発送済み' : '発送準備中'}

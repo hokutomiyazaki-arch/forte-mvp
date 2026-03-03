@@ -5,7 +5,7 @@ import { db, uploadFile } from '@/lib/db'
 import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYPES, getRewardType } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import ForteChart from '@/components/ForteChart'
-import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, PROVEN_GRADIENT } from '@/lib/constants'
+import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, PROVEN_GOLD, PROVEN_GRADIENT } from '@/lib/constants'
 import VoiceShareModal from '@/components/VoiceShareCard'
 import CertificationModal from '@/components/CertificationModal'
 import ImageCropper from '@/components/ImageCropper'
@@ -148,6 +148,7 @@ export default function DashboardPage() {
   // 認定申請 state
   const [certApplications, setCertApplications] = useState<{category_slug: string; status: string}[]>([])
   const [certModal, setCertModal] = useState<{slug: string; name: string; count: number} | null>(null)
+  const [dismissedCerts, setDismissedCerts] = useState<string[]>([])
 
   const { user: clerkUser, isLoaded: authLoaded } = useUser()
 
@@ -1361,6 +1362,90 @@ export default function DashboardPage() {
       })()}
       {topForte === '-' && <div className="mb-8" />}
 
+      {/* ★ 認定申請バナー — 30票以上 & 未申請のカテゴリごとに表示 */}
+      {(() => {
+        const appliedSlugs = certApplications.map(app => app.category_slug)
+        const eligibleCategories = votes
+          .filter(v => {
+            const slug = v.proof_id || v.category
+            return v.vote_count >= SPECIALIST_THRESHOLD && !appliedSlugs.includes(slug)
+          })
+          .map(v => {
+            const slug = v.proof_id || v.category
+            return {
+              proof_id: slug,
+              label: v.category,
+              vote_count: v.vote_count,
+              topPersonality: personalityVotes.length > 0
+                ? [...personalityVotes].sort((a, b) => b.vote_count - a.vote_count)[0].category
+                : null,
+            }
+          })
+
+        return eligibleCategories
+          .filter(cat => !dismissedCerts.includes(cat.proof_id))
+          .map(cat => (
+            <div
+              key={cat.proof_id}
+              style={{
+                background: 'linear-gradient(135deg, #1A1A2E 0%, #2A1F0A 100%)',
+                borderRadius: '16px',
+                padding: '24px',
+                marginBottom: '16px',
+                border: '1px solid rgba(212, 168, 67, 0.3)',
+                position: 'relative' as const,
+              }}
+            >
+              <button
+                onClick={() => setDismissedCerts(prev => [...prev, cat.proof_id])}
+                style={{
+                  position: 'absolute' as const,
+                  top: '12px',
+                  right: '12px',
+                  background: 'none',
+                  border: 'none',
+                  color: 'rgba(250, 250, 247, 0.5)',
+                  fontSize: '18px',
+                  cursor: 'pointer',
+                  padding: '4px',
+                }}
+                aria-label="閉じる"
+              >
+                ✕
+              </button>
+              <div style={{ fontSize: '14px', marginBottom: '12px' }}>
+                <span style={{ fontSize: '24px', marginRight: '8px' }}>🏆</span>
+                <span style={{ color: PROVEN_GOLD, fontSize: '16px', fontWeight: 'bold' }}>
+                  REALPROOF認定に到達しました！
+                </span>
+              </div>
+              <p style={{ color: '#FAFAF7', fontSize: '14px', lineHeight: '1.7', margin: '0 0 20px 0' }}>
+                「<strong style={{ color: PROVEN_GOLD }}>{cat.label}</strong>」が{cat.vote_count}プルーフを突破。
+                <br />
+                あなたの実力が証明されました。
+                <br />
+                認定証と名前入りプルーフカードを無料でお届けします。
+              </p>
+              <button
+                onClick={() => setCertModal({ slug: cat.proof_id, name: cat.label, count: cat.vote_count })}
+                style={{
+                  background: PROVEN_GOLD,
+                  color: '#1A1A2E',
+                  padding: '14px 24px',
+                  borderRadius: '8px',
+                  fontWeight: 'bold',
+                  fontSize: '15px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  width: '100%',
+                }}
+              >
+                認定を申請する →
+              </button>
+            </div>
+          ))
+      })()}
+
       {/* Proof Chart */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
         <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">プルーフチャート</h2>
@@ -1369,7 +1454,6 @@ export default function DashboardPage() {
           personalityVotes={personalityVotes}
           professional={pro}
           certApplications={certApplications}
-          onCertApply={(slug, name, count) => setCertModal({ slug, name, count })}
         />
       </div>
 
