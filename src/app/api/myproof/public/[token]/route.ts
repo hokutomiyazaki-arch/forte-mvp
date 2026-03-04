@@ -37,8 +37,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
     ])
 
     const ownerName = clientResult.data?.nickname || proResult.data?.name || 'ユーザー'
-    const ownerPhoto = clientResult.data?.photo_url || proResult.data?.photo_url || null
-
+const ownerPhoto = proResult.data?.photo_url || clientResult.data?.photo_url || null
     // アイテム取得
     const { data: items } = await supabase
       .from('my_proof_items')
