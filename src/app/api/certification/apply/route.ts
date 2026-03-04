@@ -46,15 +46,22 @@ export async function POST(req: NextRequest) {
 
     const supabase = getSupabaseAdmin()
 
-    // プロ本人確認（user_id → professional_id の照合）
-    // ※ deactivated_at は JS でチェック（dashboard API と同じパターン）
-    const { data: pro, error: proError } = await supabase
-      .from('professionals')
-      .select('id, name, email, deactivated_at')
-      .eq('user_id', userId)
-      .maybeSingle()
+    // プロ本人確認 + Clerkメール取得を並列実行
+    const [proResult, clerkRes] = await Promise.all([
+      supabase
+        .from('professionals')
+        .select('id, name, deactivated_at')
+        .eq('user_id', userId)
+        .maybeSingle(),
+      fetch(`https://api.clerk.com/v1/users/${userId}`, {
+        headers: { Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}` },
+      }).then(r => r.json()).catch(() => null),
+    ])
 
-    console.log('[CERT APPLY] pro query:', pro ? `id=${pro.id}, deactivated=${pro.deactivated_at}` : 'null', 'error:', proError?.message || 'none')
+    const { data: pro, error: proError } = proResult
+    const proEmail = clerkRes?.email_addresses?.[0]?.email_address || ''
+
+    console.log('[CERT APPLY] pro query:', pro ? `id=${pro.id}, deactivated=${pro.deactivated_at}` : 'null', 'error:', proError?.message || 'none', 'email:', proEmail ? 'found' : 'missing')
 
     // deactivated check in JS (matches dashboard API pattern)
     if (!pro || pro.deactivated_at) {
@@ -120,7 +127,7 @@ export async function POST(req: NextRequest) {
     try {
       await sendOpsNotificationEmail({
         proName: pro.name,
-        proEmail: pro.email,
+        proEmail,
         fullNameKanji,
         fullNameRomaji,
         categoryName: categorySlug,
