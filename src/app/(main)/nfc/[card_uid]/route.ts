@@ -49,29 +49,44 @@ export async function GET(
       )
     }
 
-    // ═══ パターンA: user_id のみ（一般ユーザー）→ マイプルーフへ ═══
+    // ═══ パターンA: user_id のみ（professional_id NULL）═══
+    // professional_id がなくても user_id でプロを検索し、card_mode で分岐
     if (card.user_id && !card.professional_id) {
-      const { data: myProofCard } = await supabase
-        .from('my_proof_cards')
-        .select('qr_token')
+      const { data: proByUser } = await supabase
+        .from('professionals')
+        .select('id, card_mode, selected_proofs, name, contact_email, user_id, last_nfc_notify_at')
         .eq('user_id', card.user_id)
         .maybeSingle()
 
-      if (myProofCard?.qr_token) {
+      if (proByUser && proByUser.card_mode !== 'general') {
+        // プロが存在し card_mode が 'pro' or null → 投票モードへ
+        // nfc_cards.professional_id を補完して以降の処理に合流
+        card.professional_id = proByUser.id
+        // proを後続で使えるよう変数を設定せず、パターンBに合流
+      } else {
+        // プロ未登録 or card_mode='general' → マイプルーフへ
+        const { data: myProofCard } = await supabase
+          .from('my_proof_cards')
+          .select('qr_token')
+          .eq('user_id', card.user_id)
+          .maybeSingle()
+
+        if (myProofCard?.qr_token) {
+          return NextResponse.redirect(
+            new URL(`/myproof/p/${myProofCard.qr_token}`, request.url)
+          )
+        }
         return NextResponse.redirect(
-          new URL(`/myproof/p/${myProofCard.qr_token}`, request.url)
+          new URL('/?error=myproof_not_configured', request.url)
         )
       }
-      return NextResponse.redirect(
-        new URL('/?error=myproof_not_configured', request.url)
-      )
     }
 
     // ═══ パターンB: professional_id あり → 既存ロジック ═══
     // 2. プロの情報取得（card_mode含む）
     const { data: pro } = await supabase
       .from('professionals')
-      .select('selected_proofs, name, contact_email, user_id, last_nfc_notify_at, card_mode')
+      .select('id, selected_proofs, name, contact_email, user_id, last_nfc_notify_at, card_mode')
       .eq('id', card.professional_id)
       .maybeSingle()
 
