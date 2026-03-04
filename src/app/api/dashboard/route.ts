@@ -82,7 +82,11 @@ export async function GET() {
         supabase.from('organizations').select('id, name, type').eq('owner_id', userId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
       ])
 
+      // role判定: deactivated pro or clientレコードあり → client、どちらもなし → null(onboarding)
+      const clientRole = (isDeactivatedPro || clientResult.data) ? 'client' : null
+
       return NextResponse.json({
+        role: clientRole,
         professional: null,
         proofItems,
         rewards: [],
@@ -300,6 +304,7 @@ export async function GET() {
     console.log('[Dashboard API] Total:', Date.now() - startTime, 'ms')
 
     return NextResponse.json({
+      role: 'professional',
       professional: proData,
       proofItems,
       rewards: (rewardsResult.data || []).map((r: any) => ({

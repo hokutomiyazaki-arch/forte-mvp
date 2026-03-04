@@ -107,7 +107,7 @@ export default function DashboardPage() {
   const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'received_rewards' | 'voices' | 'myproof' | 'card' | 'org' | 'bookmarks'>('profile')
   const [receivedRewards, setReceivedRewards] = useState<{ id: string; reward_id: string; reward_type: string; title: string; content: string; status: string; professional_id: string; pro_name: string; created_at: string }[]>([])
   const [bookmarkedPros, setBookmarkedPros] = useState<any[]>([])
-  const [userRole, setUserRole] = useState<'professional' | 'client' | null>(null)
+  // userRole removed: /api/dashboard の role レスポンスで判定
   const [proofSaving, setProofSaving] = useState(false)
   const [proofSaved, setProofSaved] = useState(false)
   const [proofError, setProofError] = useState('')
@@ -163,27 +163,8 @@ export default function DashboardPage() {
       setUser(u)
       setHasEmailIdentity(true)
 
-      // ロールチェック: DBにレコードなし → /onboarding
       try {
-        const roleRes = await fetch('/api/user/role')
-        const roleData = await roleRes.json()
-        if (roleData.role === null) {
-          window.location.href = '/onboarding'
-          return
-        }
-        setUserRole(roleData.role)
-        console.log('[DASHBOARD DEBUG] roleData:', JSON.stringify(roleData))
-        // client/deactivated proは/mycardへリダイレクト
-        if (roleData.role === 'client') {
-          window.location.href = '/mycard'
-          return
-        }
-      } catch (e) {
-        console.error('[dashboard] role check error:', e)
-      }
-
-      try {
-        // 専用APIで1リクエスト（サーバー側Promise.all並列）
+        // 専用APIで1リクエスト（サーバー側Promise.all並列 + role判定込み）
         const res = await fetch('/api/dashboard')
         if (!res.ok) {
           console.error('[dashboard] API error:', res.status)
@@ -192,13 +173,21 @@ export default function DashboardPage() {
         }
         const data = await res.json()
 
+        // ロールチェック: /api/dashboard のレスポンスから判定
+        if (data.role === null) {
+          window.location.href = '/onboarding'
+          return
+        }
+        if (data.role === 'client') {
+          window.location.href = '/mycard'
+          return
+        }
+
         // マスターデータ
         if (data.proofItems) setProofItems(data.proofItems)
 
         const proData = data.professional
-        console.log('[DASHBOARD DEBUG] proData:', proData ? 'exists' : 'null', 'deactivated_at:', proData?.deactivated_at)
         if (!proData) {
-          // client/deactivated pro: roleチェックでリダイレクト済みだが念のため
           setLoading(false)
           return
         }
