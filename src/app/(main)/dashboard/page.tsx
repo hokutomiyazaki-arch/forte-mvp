@@ -2416,7 +2416,7 @@ export default function DashboardPage() {
           onClose={() => setCertModal(null)}
           onComplete={(certNum) => {
             setCertApplications(prev => [...prev, { category_slug: certModal.slug, status: 'pending' }])
-            setCertModal(null)
+            // モーダルは閉じない → 完了画面を表示し、ユーザーが「ダッシュボードに戻る」を押して閉じる
           }}
         />
       )}

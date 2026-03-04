@@ -200,7 +200,7 @@ async function sendOpsNotificationEmail(params: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: 'REALPROOF <noreply@realproof.jp>',
+          from: 'REAL PROOF <info@proof-app.jp>',
           to: OPS_EMAIL,
           subject: `REALPROOF認定申請 ${proName} / ${categoryName} / ${proofCount}proofs`,
           html: `
