@@ -143,21 +143,54 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Step 5: 自己投票チェック
+    // Step 5: 自己投票チェック（強化版）
     const { data: proData } = await supabaseAdmin
       .from('professionals')
-      .select('user_id')
+      .select('user_id, contact_email, email')
       .eq('id', professional_id)
       .maybeSingle()
 
-    if (proData?.user_id) {
-      const { data: clientData } = await supabaseAdmin
-        .from('clients')
-        .select('user_id')
-        .eq('email', email)
-        .maybeSingle()
+    if (proData) {
+      let isSelfVote = false
 
-      if (clientData?.user_id === proData.user_id) {
+      // Check 1: professionals.contact_email と一致
+      if (proData.contact_email && proData.contact_email.toLowerCase() === email) {
+        isSelfVote = true
+      }
+
+      // Check 2: professionals.email と一致
+      if (!isSelfVote && proData.email && proData.email.toLowerCase() === email) {
+        isSelfVote = true
+      }
+
+      // Check 3: Clerk経由でプロの全メールアドレスと照合
+      if (!isSelfVote && proData.user_id) {
+        try {
+          const clerk = await clerkClient()
+          const clerkUser = await clerk.users.getUser(proData.user_id)
+          const proEmails = clerkUser.emailAddresses.map(e => e.emailAddress.toLowerCase())
+          if (proEmails.includes(email)) {
+            isSelfVote = true
+          }
+        } catch (e) {
+          console.error('[vote-auth/google/callback] Clerk self-vote check failed:', e)
+        }
+      }
+
+      // Check 4: clientsテーブルのuser_id照合（フォールバック）
+      if (!isSelfVote && proData.user_id) {
+        const { data: clientData } = await supabaseAdmin
+          .from('clients')
+          .select('user_id')
+          .eq('email', email)
+          .maybeSingle()
+
+        if (clientData?.user_id === proData.user_id) {
+          isSelfVote = true
+        }
+      }
+
+      if (isSelfVote) {
         return NextResponse.redirect(
           new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=self_vote`, origin)
         )
