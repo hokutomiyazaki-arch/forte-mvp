@@ -1,23 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { SignInButton, SignedIn, SignedOut, UserButton, useUser } from '@clerk/nextjs'
 
 export default function Navbar() {
-  const { user, isLoaded } = useUser()
-  const [isPro, setIsPro] = useState(false)
+  const { isLoaded } = useUser()
   const [menuOpen, setMenuOpen] = useState(false)
 
-  useEffect(() => {
-    if (user) {
-      fetch('/api/user/role')
-        .then(res => res.json())
-        .then(data => setIsPro(data.isPro))
-        .catch(() => setIsPro(false))
-    }
-  }, [user])
-
-  const myPageHref = isPro ? '/dashboard' : '/mycard'
+  const myPageHref = '/mypage'
 
   return (
     <nav style={{
