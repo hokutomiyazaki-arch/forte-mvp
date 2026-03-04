@@ -146,9 +146,13 @@ export default function OrgPublicPage() {
     <div className="max-w-2xl mx-auto px-4 py-8">
       {/* ヘッダー */}
       <div className="text-center mb-8">
-        <div className="w-16 h-16 bg-[#1A1A2E] rounded-2xl flex items-center justify-center text-white text-2xl font-bold mx-auto mb-3">
-          {org.name.charAt(0)}
-        </div>
+        {org.logo_url ? (
+          <img src={org.logo_url} alt={org.name} className="w-16 h-16 rounded-2xl object-cover mx-auto mb-3" />
+        ) : (
+          <div className="w-16 h-16 bg-[#1A1A2E] rounded-2xl flex items-center justify-center text-white text-2xl font-bold mx-auto mb-3">
+            {org.name.charAt(0)}
+          </div>
+        )}
         <h1 className="text-2xl font-bold text-[#1A1A2E]">{org.name}</h1>
         <p className="text-sm text-gray-400 mt-1">{L.typeName}</p>
         {org.location && (
