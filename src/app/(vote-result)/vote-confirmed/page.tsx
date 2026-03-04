@@ -35,8 +35,11 @@ function ConfirmedContent() {
   const rewardParam = searchParams.get('reward') || ''
   const authMethod = searchParams.get('auth_method') || ''
   const hasAccount = searchParams.get('has_account') === 'true'
+  const roleParam = searchParams.get('role')
   const supabase = createClient()
   const { isPro } = useProStatus()
+  // OAuth後はClerk未認証のためisPro判定不可。URLパラメータをフォールバック
+  const isProUser = isPro || roleParam === 'pro'
 
   const [proName, setProName] = useState('')
   const [reward, setReward] = useState<RewardInfo | null>(null)
@@ -260,29 +263,26 @@ function ConfirmedContent() {
         {hasAccount ? (
           <div className="bg-[#1A1A2E] rounded-2xl p-6 text-center">
             <p className="text-white text-lg font-bold mb-2">
-              {isPro ? 'ダッシュボードに戻る' : 'リワードを保存しました'}
+              {isProUser ? 'ダッシュボードに戻る' : 'リワードを保存しました'}
             </p>
             <p className="text-gray-400 text-sm mb-5 leading-relaxed">
-              {isPro ? 'プロダッシュボードで投票状況を確認できます' : 'マイカードからいつでもリワードを確認できます'}
+              {isProUser ? 'プロダッシュボードで投票状況を確認できます' : 'マイカードからいつでもリワードを確認できます'}
             </p>
             <button
               onClick={async () => {
                 try {
                   const res = await fetch('/api/user/role')
                   const data = await res.json()
-                  if (data.isPro) {
-                    window.location.href = '/dashboard'
-                  } else {
-                    window.location.href = '/mycard'
-                  }
+                  const isProResult = data.isPro || roleParam === 'pro'
+                  window.location.href = isProResult ? '/dashboard' : '/mycard'
                 } catch {
-                  // フォールバック: useProStatus の結果を使用
-                  window.location.href = isPro ? '/dashboard' : '/mycard'
+                  // フォールバック: URLパラメータ → useProStatus の結果
+                  window.location.href = isProUser ? '/dashboard' : '/mycard'
                 }
               }}
               className="block w-full py-4 rounded-xl font-bold text-lg text-[#1A1A2E] bg-[#C4A35A] hover:bg-[#b3923f] transition cursor-pointer"
             >
-              {isPro ? 'ダッシュボードを見る →' : 'マイカードを見る →'}
+              {isProUser ? 'ダッシュボードを見る →' : 'マイカードを見る →'}
             </button>
           </div>
         ) : (

@@ -488,12 +488,21 @@ export async function GET(request: NextRequest) {
       // メール失敗で投票レスポンスをブロックしない
     }
 
-    // Step 9c: Clerkアカウント存在チェック
+    // Step 9c: Clerkアカウント存在チェック + 投票者のロール判定
     let hasAccount = false
+    let voterIsPro = false
     try {
       const clerk = await clerkClient()
       const users = await clerk.users.getUserList({ emailAddress: [email] })
       hasAccount = users.data.length > 0
+      if (hasAccount) {
+        const { data: voterPro } = await supabaseAdmin
+          .from('professionals')
+          .select('id')
+          .eq('user_id', users.data[0].id)
+          .maybeSingle()
+        voterIsPro = !!voterPro
+      }
     } catch (e) {
       console.error('[vote-auth/google/callback] Clerk user check failed:', e)
     }
@@ -504,6 +513,7 @@ export async function GET(request: NextRequest) {
       vote_id: insertedVote.id,
       auth_method: 'google',
       has_account: hasAccount ? 'true' : 'false',
+      role: voterIsPro ? 'pro' : 'client',
     })
 
     console.log('[vote-auth/google/callback] Success! Redirecting to vote-confirmed')
