@@ -1,19 +1,32 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useProStatus } from '@/lib/useProStatus'
+import { useAuth } from '@clerk/nextjs'
 
 export default function MyPage() {
-  const { isPro, isLoading } = useProStatus()
+  const { isLoaded, isSignedIn } = useAuth()
 
   useEffect(() => {
-    if (isLoading) return // ロード完了まで待つ
-    if (isPro) {
-      window.location.href = '/dashboard'
-    } else {
-      window.location.href = '/mycard'
+    if (!isLoaded) return
+    if (!isSignedIn) {
+      window.location.href = '/sign-in'
+      return
     }
-  }, [isPro, isLoading])
+
+    // hookに頼らず直接APIを叩く
+    fetch('/api/user/role')
+      .then(res => res.json())
+      .then(data => {
+        if (data.isPro) {
+          window.location.href = '/dashboard'
+        } else {
+          window.location.href = '/mycard'
+        }
+      })
+      .catch(() => {
+        window.location.href = '/mycard'
+      })
+  }, [isLoaded, isSignedIn])
 
   return (
     <div className="min-h-screen bg-[#FAFAF7] flex items-center justify-center">
