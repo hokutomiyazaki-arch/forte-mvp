@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useUser, useClerk } from '@clerk/nextjs'
 import { db, uploadFile } from '@/lib/db'
-import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYPES, getRewardType, getRewardLabel } from '@/lib/types'
+import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYPES, getRewardType, getRewardLabel, FNT_NEURO_APPS } from '@/lib/types'
 import RewardContent from '@/components/RewardContent'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import ForteChart from '@/components/ForteChart'
@@ -633,6 +633,14 @@ export default function DashboardPage() {
     if (delError) {
       console.error('[handleSaveRewards] delete error:', delError.message)
       setRewardError('保存に失敗しました。もう一度お試しください。')
+      setRewardSaving(false)
+      return
+    }
+
+    // FNTアプリの未選択チェック
+    const fntWithoutApp = rewards.find(r => r.reward_type === 'fnt_neuro_app' && !r.content.trim())
+    if (fntWithoutApp) {
+      setRewardError('FNT神経科学アプリを選択してください。')
       setRewardSaving(false)
       return
     }
@@ -1869,6 +1877,47 @@ export default function DashboardPage() {
                       placeholder={reward.reward_type === 'selfcare' ? 'タイトル（例：自宅でできる肩こり解消法）' : 'タイトル（例：FNTアプリドリル）'}
                     />
                   )}
+                  {reward.reward_type === 'fnt_neuro_app' ? (
+                    <div className="space-y-2">
+                      <p className="text-xs text-[#9CA3AF] mb-1">アプリを1つ選択してください</p>
+                      {FNT_NEURO_APPS.map(app => {
+                        const isAppSelected = reward.content === app.url
+                        return (
+                          <div key={app.id} className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = [...rewards]
+                                updated[idx] = { ...updated[idx], content: isAppSelected ? '' : app.url }
+                                setRewards(updated)
+                              }}
+                              className={`flex-1 text-left px-3 py-2.5 rounded-lg border text-sm transition-colors ${
+                                isAppSelected
+                                  ? 'border-[#C4A35A] bg-[#C4A35A]/10 font-medium text-[#1A1A2E]'
+                                  : 'border-[#E5E7EB] bg-white text-[#1A1A2E] hover:bg-[#FAFAF7]'
+                              }`}
+                            >
+                              <span className={isAppSelected ? 'text-[#C4A35A] mr-2' : 'text-[#E5E7EB] mr-2'}>
+                                {isAppSelected ? '●' : '○'}
+                              </span>
+                              {app.name}
+                            </button>
+                            <a
+                              href={app.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-[#C4A35A] hover:underline whitespace-nowrap px-2 py-2"
+                            >
+                              ▶ プレビュー
+                            </a>
+                          </div>
+                        )
+                      })}
+                      {!reward.content && (
+                        <p className="text-xs text-red-400 mt-1">アプリを選択してください</p>
+                      )}
+                    </div>
+                  ) : (
                   <textarea
                     value={reward.content}
                     onChange={e => {
@@ -1880,6 +1929,7 @@ export default function DashboardPage() {
                     className="w-full px-3 py-2 bg-white border border-[#E5E7EB] rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#C4A35A] focus:border-[#C4A35A] resize-none"
                     placeholder="リワードの内容を入力...（URLを入れるとボタンに変換されます）"
                   />
+                  )}
                 </div>
               )
             })}

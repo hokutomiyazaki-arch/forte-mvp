@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { getRewardLabel } from '@/lib/types'
+import { getRewardLabel, FNT_NEURO_APPS } from '@/lib/types'
 import RewardContent from '@/components/RewardContent'
 import { Suspense } from 'react'
 import { useProStatus } from '@/lib/useProStatus'
@@ -24,6 +24,7 @@ function getRewardIcon(rewardType: string): string {
     media: '🎬',
     surprise: '🎁',
     freeform: '✨',
+    fnt_neuro_app: '🧠',
   }
   return icons[rewardType] || '🎁'
 }
@@ -229,12 +230,29 @@ function ConfirmedContent() {
                   {reward.title || getRewardLabel(reward.reward_type)}
                 </p>
               </div>
-              {reward.content && (
+              {reward.reward_type === 'fnt_neuro_app' && reward.content ? (
+                <div className="mt-4">
+                  <p className="text-sm text-[#666666] mb-3">
+                    トレーナーからのプレゼント：神経科学アプリを体験してみてください
+                  </p>
+                  <a
+                    href={reward.content}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block w-full py-3 px-6 bg-[#C4A35A] text-[#1A1A2E] font-bold text-center rounded-lg hover:opacity-90 transition-opacity"
+                  >
+                    アプリを開く →
+                  </a>
+                  <p className="text-xs text-[#9CA3AF] mt-2 text-center">
+                    {FNT_NEURO_APPS.find(app => app.url === reward.content)?.name ?? 'FNT神経科学アプリ'}
+                  </p>
+                </div>
+              ) : reward.content ? (
                 <RewardContent
                   content={reward.content}
                   className="text-lg text-[#333333] leading-relaxed"
                 />
-              )}
+              ) : null}
             </div>
           </div>
         )}

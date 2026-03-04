@@ -3,7 +3,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { useUser, useClerk } from '@clerk/nextjs'
-import { getRewardLabel } from '@/lib/types'
+import { getRewardLabel, FNT_NEURO_APPS } from '@/lib/types'
 import RewardContent from '@/components/RewardContent'
 import CardModeSwitch from '@/components/CardModeSwitch'
 import PhotoCropper from '@/components/PhotoCropper'
@@ -924,7 +924,26 @@ function MyCardContent() {
                       <p className="text-base text-[#C4A35A] font-semibold mb-3 text-center">
                         {reward.title || getRewardLabel(reward.reward_type)}
                       </p>
-                      <RewardContent content={reward.content} className="text-lg font-bold text-[#1A1A2E] mb-4 text-center" />
+                      {reward.reward_type === 'fnt_neuro_app' && reward.content ? (
+                        <div className="mb-4">
+                          <p className="text-sm text-[#666666] mb-3 text-center">
+                            トレーナーからのプレゼント：神経科学アプリを体験してみてください
+                          </p>
+                          <a
+                            href={reward.content}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block w-full py-3 px-6 bg-[#C4A35A] text-[#1A1A2E] font-bold text-center rounded-lg hover:opacity-90 transition-opacity"
+                          >
+                            アプリを開く →
+                          </a>
+                          <p className="text-xs text-[#9CA3AF] mt-2 text-center">
+                            {FNT_NEURO_APPS.find(app => app.url === reward.content)?.name ?? 'FNT神経科学アプリ'}
+                          </p>
+                        </div>
+                      ) : (
+                        <RewardContent content={reward.content} className="text-lg font-bold text-[#1A1A2E] mb-4 text-center" />
+                      )}
 
                       {confirmingId === reward.id ? (
                         <div className="space-y-2">

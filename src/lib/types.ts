@@ -115,6 +115,14 @@ export const REWARD_TYPES = [
   { id: 'media',     label: 'おすすめ作品',       description: '映画・音楽・Podcast', hasTitle: false },
   { id: 'surprise',  label: 'シークレット',       description: '種類すら非公開！何が出るかお楽しみ', hasTitle: false },
   { id: 'freeform',  label: '自由記入',           description: '何でもOK。タイトルと内容を自由に設定', hasTitle: true },
+  { id: 'fnt_neuro_app', label: 'FNT神経科学アプリ', description: '神経科学に基づくトレーニングアプリをプレゼント', hasTitle: false },
+] as const
+
+export const FNT_NEURO_APPS = [
+  { id: 'okn',            name: 'OKNアプリ',               url: 'https://hokutomiyazaki-arch.github.io/OKN/' },
+  { id: 'random_saccade', name: 'ランダムサッカード',       url: 'https://hokutomiyazaki-arch.github.io/randum-saccade/' },
+  { id: 'find_number',    name: '周辺視野課題（数字探し）', url: 'https://hokutomiyazaki-arch.github.io/find-number/' },
+  { id: 'interoception',  name: '内受容覚テスト',           url: 'https://hokutomiyazaki-arch.github.io/interoception/' },
 ] as const
 
 export function getRewardLabel(rewardType: string): string {
