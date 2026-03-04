@@ -74,13 +74,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden: id mismatch' }, { status: 403 })
     }
 
-    // 重複申請チェック
-    const { data: existing } = await supabase
-      .from('certification_applications')
-      .select('id')
-      .eq('professional_id', professionalId)
-      .eq('category_slug', categorySlug)
-      .maybeSingle()
+    // 重複申請チェック + カテゴリ名取得を並列
+    const [{ data: existing }, { data: proofItem }] = await Promise.all([
+      supabase
+        .from('certification_applications')
+        .select('id')
+        .eq('professional_id', professionalId)
+        .eq('category_slug', categorySlug)
+        .maybeSingle(),
+      supabase
+        .from('proof_items')
+        .select('label')
+        .eq('id', categorySlug)
+        .maybeSingle(),
+    ])
+    const categoryName = proofItem?.label || categorySlug
 
     if (existing) {
       return NextResponse.json({ error: 'Already applied' }, { status: 409 })
@@ -130,7 +138,7 @@ export async function POST(req: NextRequest) {
         proEmail,
         fullNameKanji,
         fullNameRomaji,
-        categoryName: categorySlug,
+        categoryName,
         proofCount: proofCount || 30,
         topPersonality: topPersonality || '—',
         cardUrl: `https://realproof.jp/card/${professionalId}`,
