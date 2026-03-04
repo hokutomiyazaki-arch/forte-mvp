@@ -6,7 +6,6 @@ import { getRewardLabel, FNT_NEURO_APPS } from '@/lib/types'
 import RewardContent from '@/components/RewardContent'
 import { Suspense } from 'react'
 import { useProStatus } from '@/lib/useProStatus'
-import { getMyPageUrl } from '@/lib/navigation'
 
 interface RewardInfo {
   reward_type: string
@@ -266,12 +265,25 @@ function ConfirmedContent() {
             <p className="text-gray-400 text-sm mb-5 leading-relaxed">
               {isPro ? 'プロダッシュボードで投票状況を確認できます' : 'マイカードからいつでもリワードを確認できます'}
             </p>
-            <a
-              href={getMyPageUrl(isPro)}
-              className="block w-full py-4 rounded-xl font-bold text-lg text-[#1A1A2E] bg-[#C4A35A] hover:bg-[#b3923f] transition"
+            <button
+              onClick={async () => {
+                try {
+                  const res = await fetch('/api/user/role')
+                  const data = await res.json()
+                  if (data.isPro) {
+                    window.location.href = '/dashboard'
+                  } else {
+                    window.location.href = '/mycard'
+                  }
+                } catch {
+                  // フォールバック: useProStatus の結果を使用
+                  window.location.href = isPro ? '/dashboard' : '/mycard'
+                }
+              }}
+              className="block w-full py-4 rounded-xl font-bold text-lg text-[#1A1A2E] bg-[#C4A35A] hover:bg-[#b3923f] transition cursor-pointer"
             >
               {isPro ? 'ダッシュボードを見る →' : 'マイカードを見る →'}
-            </a>
+            </button>
           </div>
         ) : (
           <div className="bg-[#1A1A2E] rounded-2xl p-6 text-center">
