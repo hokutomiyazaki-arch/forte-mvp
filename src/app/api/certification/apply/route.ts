@@ -162,6 +162,26 @@ export async function POST(req: NextRequest) {
       // email_sent = false のまま。運営が後で確認可能。
     }
 
+    // プロ本人への確認メール送信
+    if (proEmail) {
+      try {
+        await sendProConfirmationEmail({
+          proName: pro.name,
+          proEmail,
+          categoryName,
+          proofCount: proofCount || 30,
+          certNumber,
+          postalCode,
+          prefecture,
+          cityAddress,
+          building: building || '',
+        })
+      } catch (err) {
+        console.error('[certification/apply] Pro confirmation email failed:', err)
+        // プロへのメール失敗で申請をブロックしない
+      }
+    }
+
     return NextResponse.json({
       success: true,
       certificationNumber: certNumber,
@@ -251,6 +271,72 @@ async function sendOpsNotificationEmail(params: {
       return
     } catch (err) {
       console.error(`[certification/apply] Ops email attempt ${attempt} failed:`, err)
+      if (attempt === 3) throw err
+      await new Promise(r => setTimeout(r, 1000 * attempt))
+    }
+  }
+}
+
+/**
+ * プロ本人への確認メール送信（リトライ付き最大3回）
+ */
+async function sendProConfirmationEmail(params: {
+  proName: string
+  proEmail: string
+  categoryName: string
+  proofCount: number
+  certNumber: string
+  postalCode: string
+  prefecture: string
+  cityAddress: string
+  building: string
+}) {
+  const resendKey = process.env.RESEND_API_KEY
+  if (!resendKey) return
+
+  const { proName, proEmail, categoryName, proofCount, certNumber } = params
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: 'REAL PROOF <info@proof-app.jp>',
+          to: proEmail,
+          subject: `🏆 REALPROOF認定申請を受け付けました`,
+          html: `
+            <div style="font-family: 'Noto Sans JP', sans-serif; max-width: 600px; margin: 0 auto; color: #1A1A2E;">
+              <h2 style="color: #C4A35A;">${proName}様</h2>
+              <p>REALPROOF認定の申請を受け付けました。</p>
+              <hr style="border: none; border-top: 1px solid #E5E5E0; margin: 20px 0;"/>
+              <h3>■ 認定内容</h3>
+              <p>認定名: REALPROOF認定「${categoryName}」スペシャリスト<br/>
+              プルーフ数: ${proofCount}<br/>
+              認定番号: ${certNumber}</p>
+              <hr style="border: none; border-top: 1px solid #E5E5E0; margin: 20px 0;"/>
+              <h3>■ 送付先</h3>
+              <p>〒 ${params.postalCode}<br/>
+              ${params.prefecture} ${params.cityAddress}${params.building ? '<br/>' + params.building : ''}</p>
+              <hr style="border: none; border-top: 1px solid #E5E5E0; margin: 20px 0;"/>
+              <p>準備が整い次第、上記の住所に賞状と名前入りプルーフカードをお届けします。</p>
+              <p style="color: #888; font-size: 14px; margin-top: 30px;">REALPROOF — 強みがあなたを定義する。</p>
+            </div>
+          `
+        }),
+      })
+
+      if (!res.ok) {
+        throw new Error(`Resend API returned ${res.status}`)
+      }
+
+      console.log(`[certification/apply] Pro confirmation email sent (attempt ${attempt})`)
+      return
+    } catch (err) {
+      console.error(`[certification/apply] Pro email attempt ${attempt} failed:`, err)
       if (attempt === 3) throw err
       await new Promise(r => setTimeout(r, 1000 * attempt))
     }

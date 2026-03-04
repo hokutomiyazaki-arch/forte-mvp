@@ -304,9 +304,19 @@ export default function CertificationModal({
               REALPROOF認定「<strong>{categoryName}スペシャリスト</strong>」の
             </p>
             <p className="text-sm text-gray-600 mb-4">
-              賞状と名前入り特別カードをお届けします。
+              賞状と名前入りプルーフカードをお届けします。
             </p>
-            <p className="text-xs text-gray-500 mb-6">
+
+            <div className="bg-gray-50 rounded-lg p-4 mb-4 text-left">
+              <p className="text-xs font-bold text-gray-500 mb-2">■ 送付先</p>
+              <p className="text-sm text-gray-700">
+                〒 {postalCode}<br />
+                {prefecture} {cityAddress}
+                {building && <><br />{building}</>}
+              </p>
+            </div>
+
+            <p className="text-xs text-gray-500 mb-4">
               準備が整い次第、上記の住所に発送いたします。
             </p>
             {certNumber && (
