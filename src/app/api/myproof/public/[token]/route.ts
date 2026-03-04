@@ -37,7 +37,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
     ])
 
     const ownerName = clientResult.data?.nickname || proResult.data?.name || 'ユーザー'
-    const ownerPhoto = clientResult.data?.photo_url || proResult.data?.photo_url || null
+    // professionals.photo_url を最優先（ダッシュボードで設定した画像）
+    const ownerPhoto = proResult.data?.photo_url || clientResult.data?.photo_url || null
 
     // アイテム取得
     const { data: items } = await supabase
