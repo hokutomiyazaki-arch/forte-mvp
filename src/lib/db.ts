@@ -42,6 +42,11 @@ async function dbFetch(action: string, table: string, query: DbQuery): Promise<D
       return { data: null, error: { message: result.error || 'Request failed', code: result.code, details: result.details } }
     }
 
+    // /api/db は status:200 でもエラーを返す場合がある（Supabase互換）
+    if (result.error) {
+      return { data: null, error: { message: result.error, code: result.code, details: result.details } }
+    }
+
     return { data: result.data, error: null, count: result.count }
   } catch (err: any) {
     return { data: null, error: { message: err.message || 'Network error' } }
