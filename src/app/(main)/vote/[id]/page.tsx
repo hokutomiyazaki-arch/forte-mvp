@@ -444,7 +444,23 @@ function VoteForm() {
       return
     }
 
-    // 自己投票チェック（メールアドレスベース）
+    // 自己投票チェック（Clerkユーザー直接照合）
+    if (clerkUser && pro) {
+      // user_id 照合
+      if (clerkUser.id === pro.user_id) {
+        setError('ご自身のプルーフには投票できません')
+        return
+      }
+      // Clerkメールアドレス照合
+      const clerkEmail = clerkUser.primaryEmailAddress?.emailAddress
+      if (clerkEmail && pro.contact_email &&
+          clerkEmail.toLowerCase() === pro.contact_email.toLowerCase()) {
+        setError('ご自身のプルーフには投票できません')
+        return
+      }
+    }
+
+    // 自己投票チェック（メールアドレスベース — API経由フォールバック）
     try {
       const checkRes = await fetch('/api/check-email', {
         method: 'POST',
