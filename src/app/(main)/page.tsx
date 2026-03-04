@@ -574,6 +574,351 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ═══ S6.5: 集め続けると、こうなる。 ═══ */}
+      <section style={{
+        background: '#FAFAF7',
+        padding: '96px 24px',
+        overflow: 'hidden',
+      }}>
+        <div style={{ maxWidth: '960px', margin: '0 auto' }}>
+
+          {/* ── ヘッダー ── */}
+          <Reveal>
+            <div style={{ textAlign: 'center', marginBottom: '72px' }}>
+              <div style={{
+                width: '48px',
+                height: '2px',
+                background: '#C4A35A',
+                margin: '0 auto 24px',
+              }} />
+              <h2 style={{
+                fontFamily: "'Noto Sans JP', sans-serif",
+                fontSize: 'clamp(26px, 5vw, 38px)',
+                fontWeight: 700,
+                color: '#1A1A2E',
+                letterSpacing: '-0.02em',
+                lineHeight: 1.3,
+                marginBottom: '16px',
+              }}>
+                集め続けると、こうなる。
+              </h2>
+              <p style={{
+                fontFamily: "'Noto Sans JP', sans-serif",
+                fontSize: '15px',
+                color: '#6B6B7B',
+                letterSpacing: '0.02em',
+                lineHeight: 1.8,
+              }}>
+                プルーフが積み上がるほど、あなたの証明は本物になる。
+              </p>
+            </div>
+          </Reveal>
+
+          {/* ── 3枚カード ── */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: '32px',
+            alignItems: 'end',
+          }}
+          className="grid-cards-proof"
+          >
+
+            {/* ── カード1: Lv.1 PROVEN ── */}
+            <Reveal delay={0}>
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column' as const,
+                alignItems: 'center',
+                gap: '24px',
+              }}>
+                <div style={{
+                  width: '100%',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  boxShadow: '0 8px 32px rgba(26,26,46,0.10)',
+                  transform: 'rotate(-1.5deg)',
+                  transition: 'transform 0.4s ease, box-shadow 0.4s ease',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'rotate(0deg) scale(1.03)';
+                  e.currentTarget.style.boxShadow = '0 16px 48px rgba(196,163,90,0.20)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'rotate(-1.5deg)';
+                  e.currentTarget.style.boxShadow = '0 8px 32px rgba(26,26,46,0.10)';
+                }}
+                >
+                  <img
+                    src="/card-level-1.png"
+                    alt="REALPROOF PROVEN NFCカードとアプリ画面"
+                    style={{ width: '100%', height: 'auto', display: 'block' }}
+                  />
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '12px',
+                  }}>
+                    <span style={{
+                      fontFamily: "'Inter', sans-serif",
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      color: '#C4A35A',
+                      letterSpacing: '2px',
+                      textTransform: 'uppercase' as const,
+                    }}>15 Proofs</span>
+                    <span style={{
+                      width: '1px',
+                      height: '12px',
+                      background: '#C4A35A',
+                      opacity: 0.4,
+                    }} />
+                    <span style={{
+                      fontFamily: "'Inter', sans-serif",
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      color: '#C4A35A',
+                      letterSpacing: '2.5px',
+                      textTransform: 'uppercase' as const,
+                    }}>Lv.1</span>
+                  </div>
+                  <p style={{
+                    fontFamily: "'Noto Sans JP', sans-serif",
+                    fontSize: '18px',
+                    fontWeight: 700,
+                    color: '#1A1A2E',
+                    marginBottom: '8px',
+                    letterSpacing: '-0.01em',
+                  }}>
+                    PROVEN
+                  </p>
+                  <p style={{
+                    fontFamily: "'Noto Sans JP', sans-serif",
+                    fontSize: '13px',
+                    color: '#6B6B7B',
+                    lineHeight: 1.7,
+                  }}>
+                    バーがゴールドに光る。<br />
+                    NFCカードが届く。証明済み。
+                  </p>
+                </div>
+              </div>
+            </Reveal>
+
+            {/* ── カード2: Lv.2 SPECIALIST ── */}
+            <Reveal delay={0.15}>
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column' as const,
+                alignItems: 'center',
+                gap: '24px',
+              }}>
+                <div style={{
+                  width: '100%',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  boxShadow: '0 16px 48px rgba(196,163,90,0.18)',
+                  transform: 'rotate(0deg) scale(1.04)',
+                  transition: 'transform 0.4s ease, box-shadow 0.4s ease',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'rotate(0deg) scale(1.08)';
+                  e.currentTarget.style.boxShadow = '0 24px 64px rgba(196,163,90,0.30)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'rotate(0deg) scale(1.04)';
+                  e.currentTarget.style.boxShadow = '0 16px 48px rgba(196,163,90,0.18)';
+                }}
+                >
+                  <img
+                    src="/card-level-2.png"
+                    alt="REALPROOF SPECIALIST 認定証と黒カード"
+                    style={{ width: '100%', height: 'auto', display: 'block' }}
+                  />
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '12px',
+                  }}>
+                    <span style={{
+                      fontFamily: "'Inter', sans-serif",
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      color: '#C4A35A',
+                      letterSpacing: '2px',
+                      textTransform: 'uppercase' as const,
+                    }}>30 Proofs</span>
+                    <span style={{
+                      width: '1px',
+                      height: '12px',
+                      background: '#C4A35A',
+                      opacity: 0.4,
+                    }} />
+                    <span style={{
+                      fontFamily: "'Inter', sans-serif",
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      color: '#C4A35A',
+                      letterSpacing: '2.5px',
+                      textTransform: 'uppercase' as const,
+                    }}>Lv.2</span>
+                  </div>
+                  <p style={{
+                    fontFamily: "'Noto Sans JP', sans-serif",
+                    fontSize: '18px',
+                    fontWeight: 700,
+                    color: '#1A1A2E',
+                    marginBottom: '8px',
+                    letterSpacing: '-0.01em',
+                  }}>
+                    SPECIALIST
+                  </p>
+                  <p style={{
+                    fontFamily: "'Noto Sans JP', sans-serif",
+                    fontSize: '13px',
+                    color: '#6B6B7B',
+                    lineHeight: 1.7,
+                  }}>
+                    認定証と、あなたの名前が<br />
+                    刻まれた黒カードが届く。
+                  </p>
+                </div>
+              </div>
+            </Reveal>
+
+            {/* ── カード3: Lv.3 MASTER ── */}
+            <Reveal delay={0.3}>
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column' as const,
+                alignItems: 'center',
+                gap: '24px',
+              }}>
+                <div style={{
+                  width: '100%',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  boxShadow: '0 20px 64px rgba(26,26,46,0.18)',
+                  transform: 'rotate(1.5deg)',
+                  transition: 'transform 0.4s ease, box-shadow 0.4s ease',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'rotate(0deg) scale(1.03)';
+                  e.currentTarget.style.boxShadow = '0 24px 72px rgba(26,26,46,0.28)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'rotate(1.5deg)';
+                  e.currentTarget.style.boxShadow = '0 20px 64px rgba(26,26,46,0.18)';
+                }}
+                >
+                  <img
+                    src="/card-level-3.png"
+                    alt="REALPROOF MASTER ブラックメタルカード ゴールド刻印"
+                    style={{ width: '100%', height: 'auto', display: 'block' }}
+                  />
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '12px',
+                  }}>
+                    <span style={{
+                      fontFamily: "'Inter', sans-serif",
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      color: '#C4A35A',
+                      letterSpacing: '2px',
+                      textTransform: 'uppercase' as const,
+                    }}>50 Proofs</span>
+                    <span style={{
+                      width: '1px',
+                      height: '12px',
+                      background: '#C4A35A',
+                      opacity: 0.4,
+                    }} />
+                    <span style={{
+                      fontFamily: "'Inter', sans-serif",
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      color: '#C4A35A',
+                      letterSpacing: '2.5px',
+                      textTransform: 'uppercase' as const,
+                    }}>Lv.3</span>
+                  </div>
+                  <p style={{
+                    fontFamily: "'Noto Sans JP', sans-serif",
+                    fontSize: '18px',
+                    fontWeight: 700,
+                    color: '#1A1A2E',
+                    marginBottom: '8px',
+                    letterSpacing: '-0.01em',
+                  }}>
+                    MASTER
+                  </p>
+                  <p style={{
+                    fontFamily: "'Noto Sans JP', sans-serif",
+                    fontSize: '13px',
+                    color: '#6B6B7B',
+                    lineHeight: 1.7,
+                  }}>
+                    ブラックメタルカード。<br />
+                    あなたの強みは、もう誰にも疑えない。
+                  </p>
+                </div>
+              </div>
+            </Reveal>
+
+          </div>
+
+          {/* ── モバイル用スタイル ── */}
+          <style>{`
+            @media (max-width: 640px) {
+              .grid-cards-proof {
+                grid-template-columns: 1fr !important;
+                gap: 48px !important;
+                align-items: center !important;
+              }
+            }
+            @media (min-width: 641px) and (max-width: 900px) {
+              .grid-cards-proof {
+                grid-template-columns: repeat(3, 1fr) !important;
+                gap: 16px !important;
+              }
+            }
+          `}</style>
+
+          {/* ── ボトムコピー ── */}
+          <Reveal delay={0.4}>
+            <div style={{
+              textAlign: 'center',
+              marginTop: '64px',
+              paddingTop: '48px',
+              borderTop: '1px solid rgba(26,26,46,0.08)',
+            }}>
+              <p style={{
+                fontFamily: "'Noto Sans JP', sans-serif",
+                fontSize: '14px',
+                color: '#6B6B7B',
+                lineHeight: 1.9,
+                letterSpacing: '0.03em',
+              }}>
+                広告費をかけたプロではない。<br />
+                積み上げたプロが、見つかる。
+              </p>
+            </div>
+          </Reveal>
+
+        </div>
+      </section>
+
       {/* ═══ S7: VOICES ═══ */}
       <section style={{ ...sectionPad, backgroundColor: '#1A1A2E' }}>
         <div className={inner}>
@@ -672,7 +1017,7 @@ export default function Home() {
             <div className="text-center">
               <div style={{ color: '#C4A35A', fontSize: '12px', letterSpacing: '3px', fontFamily: "'Inter', sans-serif", fontWeight: 500, marginBottom: '12px' }}>FOUNDING MEMBER</div>
               <h2 style={{ color: '#FAFAF7', fontSize: '22px', fontWeight: 700, marginBottom: '20px' }}>
-                最初の仲間だけの特権。<br />70,000人のネットワークに参加。<br />ただし、条件がある。
+                最初の仲間だけの特権。<br />35,000人のネットワークに参加。<br />ただし、条件がある。
               </h2>
               <p style={{ color: '#FAFAF7', fontSize: '15px', marginBottom: '28px' }}>
                 クライアントから5票以上を集めた人だけが、<br className="hidden md:inline" />
@@ -681,7 +1026,7 @@ export default function Home() {
             </div>
 
             <div className="max-w-sm mx-auto mb-8">
-              {['70,000人のメルマガでREALPROOFの思想とFoundingメンバーを拡散', '新しい時代の始まりを肌で体感', '一緒にREALPROOFの文化を作る', 'プラットフォーム改善に直接関われる', '永久にFounding Memberバッジが表示される'].map((item, i) => (
+              {['35,000人のメルマガでREALPROOFの思想とFoundingメンバーを拡散', '新しい時代の始まりを肌で体感', '一緒にREALPROOFの文化を作る', 'プラットフォーム改善に直接関われる', '永久にFounding Memberバッジが表示される'].map((item, i) => (
                 <div key={i} className="flex items-start gap-3 mb-3">
                   <span style={{ color: '#C4A35A', fontSize: '14px', marginTop: '2px', flexShrink: 0 }}>✦</span>
                   <span style={{ color: '#FAFAF7', fontSize: '15px' }}>{item}</span>
