@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
     // Step 5: 自己投票チェック（強化版）
     const { data: proData } = await supabaseAdmin
       .from('professionals')
-      .select('user_id, contact_email, email')
+      .select('user_id, contact_email')
       .eq('id', professional_id)
       .maybeSingle()
 
@@ -144,8 +144,8 @@ export async function GET(request: NextRequest) {
         isSelfVote = true
       }
 
-      // Check 2: professionals.email と一致
-      if (!isSelfVote && proData.email && proData.email.toLowerCase() === email) {
+      // Check 2: professionals.contact_email と一致（重複チェック）
+      if (!isSelfVote && proData.contact_email && proData.contact_email.toLowerCase() === email) {
         isSelfVote = true
       }
 
@@ -344,11 +344,11 @@ export async function GET(request: NextRequest) {
 
         const { data: proForNotif } = await supabaseAdmin
           .from('professionals')
-          .select('id, name, email, proven_notified_items, specialist_notified_items')
+          .select('id, name, contact_email, proven_notified_items, specialist_notified_items')
           .eq('id', professional_id)
           .maybeSingle()
 
-        if (summary && proForNotif?.email) {
+        if (summary && proForNotif?.contact_email) {
           const provenNotified: string[] = proForNotif.proven_notified_items || []
           const newProvenNotified = [...provenNotified]
           const specialistNotified: string[] = proForNotif.specialist_notified_items || []
@@ -382,7 +382,7 @@ export async function GET(request: NextRequest) {
                   },
                   body: JSON.stringify({
                     from: 'REALPROOF <noreply@realproof.jp>',
-                    to: proForNotif.email,
+                    to: proForNotif.contact_email,
                     subject: '✦ PROVEN達成！',
                     html: `
                       <div style="font-family: 'Noto Sans JP', sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
@@ -419,7 +419,7 @@ export async function GET(request: NextRequest) {
                   },
                   body: JSON.stringify({
                     from: 'REALPROOF <noreply@realproof.jp>',
-                    to: proForNotif.email,
+                    to: proForNotif.contact_email,
                     subject: '🏆 REALPROOF認定達成！',
                     html: `
                       <div style="font-family: 'Noto Sans JP', sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
