@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
     }))
   }
 
-  return new ImageResponse(
+  const imageResponse = new ImageResponse(
     (
       <div
         style={{
@@ -226,4 +226,8 @@ export async function GET(request: NextRequest) {
       height: 630,
     }
   )
+
+  // キャッシュを無効化
+  imageResponse.headers.set('Cache-Control', 'no-store, max-age=0')
+  return imageResponse
 }
