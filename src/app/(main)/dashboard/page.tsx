@@ -2085,6 +2085,20 @@ export default function DashboardPage() {
       {/* ═══ Tab: Voices ═══ */}
       {dashboardTab === 'voices' && (<>
 
+      {/* シェア説明バナー */}
+      <div className="mb-6 flex items-start gap-3 rounded-lg border-l-4 border-[#C4A35A] bg-[#1A1A2E] px-4 py-3">
+        <svg className="mt-0.5 h-4 w-4 shrink-0 text-[#C4A35A]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+        </svg>
+        <div>
+          <p className="text-sm font-medium text-[#FAFAF7]">カードをタップしてシェア</p>
+          <p className="mt-0.5 text-xs text-[#888888]">
+            クライアントから届いたコメントを、感謝の言葉とともにSNSでシェアできます。
+          </p>
+        </div>
+      </div>
+
       {/* Voices */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
         <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">
