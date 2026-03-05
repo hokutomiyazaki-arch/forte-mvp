@@ -2,7 +2,7 @@ import { ImageResponse } from '@vercel/og'
 import { NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 
 // ブランドカラー
 const DARK = '#1A1A2E'
