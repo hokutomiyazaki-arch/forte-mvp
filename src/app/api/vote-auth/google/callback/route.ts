@@ -356,11 +356,11 @@ export async function GET(request: NextRequest) {
         // プロの情報取得（名前、メール、通知済みリスト）
         const { data: proForNotif } = await supabaseAdmin
           .from('professionals')
-          .select('id, name, email, proven_notified_items, specialist_notified_items')
+          .select('id, name, contact_email, proven_notified_items, specialist_notified_items')
           .eq('id', professional_id)
           .maybeSingle()
 
-        if (summary && proForNotif?.email) {
+        if (summary && proForNotif?.contact_email) {
           const provenNotified: string[] = proForNotif.proven_notified_items || []
           const newProvenNotified = [...provenNotified]
           const specialistNotified: string[] = proForNotif.specialist_notified_items || []
@@ -395,7 +395,7 @@ export async function GET(request: NextRequest) {
                   },
                   body: JSON.stringify({
                     from: 'REALPROOF <noreply@realproof.jp>',
-                    to: proForNotif.email,
+                    to: proForNotif.contact_email,
                     subject: '✦ PROVEN達成！',
                     html: `
                       <div style="font-family: 'Noto Sans JP', sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
@@ -432,7 +432,7 @@ export async function GET(request: NextRequest) {
                   },
                   body: JSON.stringify({
                     from: 'REALPROOF <noreply@realproof.jp>',
-                    to: proForNotif.email,
+                    to: proForNotif.contact_email,
                     subject: '🏆 REALPROOF認定達成！',
                     html: `
                       <div style="font-family: 'Noto Sans JP', sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
