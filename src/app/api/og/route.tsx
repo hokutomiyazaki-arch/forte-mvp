@@ -46,9 +46,10 @@ export async function GET(request: Request) {
   }
 
   // フォント読み込み
-  let fontData: ArrayBuffer
+  let fontData: ArrayBuffer | Buffer
   try {
-    fontData = readFileSync(join(process.cwd(), 'public/fonts/NotoSansJP-Regular.ttf')).buffer
+    const buf = readFileSync(join(process.cwd(), 'public/fonts/NotoSansJP-Regular.ttf'))
+    fontData = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
     console.log('STEP_E: フォント読み込み完了')
   } catch (e) {
     console.error('FONT_ERROR:', e)
