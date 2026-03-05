@@ -630,6 +630,22 @@
     .mock-bars { gap:4px; }
     .mock-bar-name { font-size:6px; }
   }
+
+  /* ── MOBILE OVERFLOW FIX ── */
+  @media (max-width:768px) {
+    html, body { overflow-x: hidden; max-width: 100vw; }
+
+    .compare-section { padding-left: 0; padding-right: 0; }
+    .compare-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 0 20px; }
+
+    .hero-mock { overflow: hidden; }
+    .mock-window { max-width: 100%; }
+    .mock-title-text { display: none; }
+    .mock-summary-row { flex-wrap: wrap; }
+
+    .loop-section .reveal,
+    .cycle-wrap { max-width: 100%; overflow: hidden; }
+  }
 </style>
 </head>
 <body>
@@ -915,6 +931,7 @@
 <section class="compare-section">
   <div class="section-label">Comparison</div>
   <h2 class="compare-headline reveal">★で選ぶ時代は、<br><em style="color:var(--gold);">終わった。</em></h2>
+  <div class="compare-table-wrap">
   <table class="compare-table reveal">
     <thead>
       <tr>
@@ -931,6 +948,7 @@
       <tr><td>スタッフが辞めたら</td><td>消える</td><td>消える</td><td class="col-rp">個人に残る（辞めても）</td></tr>
     </tbody>
   </table>
+  </div>
 </section>
 
 <!-- STEPS -->
