@@ -1,5 +1,7 @@
 import { ImageResponse } from 'next/og'
 import { createClient } from '@supabase/supabase-js'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 
 export const runtime = 'nodejs'
 
@@ -44,11 +46,8 @@ export async function GET(request: Request) {
     }
   }
 
-  // Noto Sans JPフォントをGoogleから取得
-  const fontRes = await fetch(
-    'https://fonts.gstatic.com/s/notosansjp/v52/-F6jfjtqLzI2JPCgQBnw7HFyzSD-AsregP8VFBEj75vY0rw-oME.woff2'
-  )
-  const fontData = await fontRes.arrayBuffer()
+  // ローカルフォントを読み込み
+  const fontData = readFileSync(join(process.cwd(), 'public/fonts/NotoSansJP-Regular.ttf'))
 
   return new ImageResponse(
     (
@@ -64,39 +63,18 @@ export async function GET(request: Request) {
           padding: '60px',
         }}
       >
-        <div style={{
-          fontSize: '24px',
-          color: '#C4A35A',
-          marginBottom: '24px',
-          letterSpacing: '4px',
-          fontFamily: 'Noto Sans JP',
-        }}>
+        <div style={{ fontSize: '24px', color: '#C4A35A', marginBottom: '24px', letterSpacing: '4px', fontFamily: 'NotoSansJP' }}>
           REALPROOF | 強みの証明
         </div>
-        <div style={{
-          fontSize: '64px',
-          fontWeight: 'bold',
-          color: '#FAFAF7',
-          marginBottom: '16px',
-          fontFamily: 'Noto Sans JP',
-        }}>
+        <div style={{ fontSize: '64px', fontWeight: 'bold', color: '#FAFAF7', marginBottom: '16px', fontFamily: 'NotoSansJP' }}>
           {name}
         </div>
         {title ? (
-          <div style={{
-            fontSize: '28px',
-            color: '#aaaaaa',
-            marginBottom: '40px',
-            fontFamily: 'Noto Sans JP',
-          }}>
+          <div style={{ fontSize: '28px', color: '#aaaaaa', marginBottom: '40px', fontFamily: 'NotoSansJP' }}>
             {title}
           </div>
         ) : null}
-        <div style={{
-          fontSize: '36px',
-          color: '#C4A35A',
-          fontFamily: 'Noto Sans JP',
-        }}>
+        <div style={{ fontSize: '36px', color: '#C4A35A', fontFamily: 'NotoSansJP' }}>
           {totalProofs} クライアントからの証明
         </div>
       </div>
@@ -104,13 +82,7 @@ export async function GET(request: Request) {
     {
       width: 1200,
       height: 630,
-      fonts: [
-        {
-          name: 'Noto Sans JP',
-          data: fontData,
-          style: 'normal',
-        },
-      ],
+      fonts: [{ name: 'NotoSansJP', data: fontData, style: 'normal' as const }],
     }
   )
 }
