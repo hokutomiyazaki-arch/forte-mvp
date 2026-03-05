@@ -39,40 +39,51 @@ export async function GET(request: NextRequest) {
       proTitle = pro.title || '強みが、あなたを定義する。'
     }
 
-    // 総投票数（confirmed のみ）
+    // 証明数合計（vote_type='proof' のもの）
     const { count } = await supabase
       .from('votes')
       .select('*', { count: 'exact', head: true })
       .eq('professional_id', proId)
-      .eq('status', 'confirmed')
+      .eq('vote_type', 'proof')
     totalProofs = count || 0
 
-    // 上位3プルーフ取得（vote_summary → proof_items JOIN）
+    // トップ3プルーフ（vote_summaryビュー経由）
+    let summaryData: any[] | null = null
     try {
-      const { data: summaryData } = await supabase
+      const { data } = await supabase
         .from('vote_summary')
         .select('proof_id, vote_count')
         .eq('professional_id', proId)
         .order('vote_count', { ascending: false })
         .limit(3)
+      summaryData = data
 
+      // proof_idからラベルを取得
       if (summaryData && summaryData.length > 0) {
-        const proofIds = summaryData.map((s: any) => s.proof_id)
+        const proofIds = summaryData.map((d: any) => d.proof_id)
         const { data: proofItems } = await supabase
           .from('proof_items')
           .select('id, label')
           .in('id', proofIds)
 
         if (proofItems) {
-          const labelMap = new Map(proofItems.map((p: any) => [p.id, p.label]))
-          topProofs = summaryData
-            .map((s: any) => labelMap.get(s.proof_id) || '')
-            .filter(Boolean)
+          topProofs = summaryData.map((d: any) => {
+            const item = proofItems.find((p: any) => p.id === d.proof_id)
+            return item?.label || ''
+          }).filter(Boolean)
         }
       }
     } catch {
       // vote_summary が使えない場合は topProofs を空のまま
     }
+
+    // デバッグログ
+    console.log('OG_DEBUG:', JSON.stringify({
+      proId,
+      totalProofs,
+      topProofs,
+      summaryData,
+    }))
   }
 
   return new ImageResponse(
