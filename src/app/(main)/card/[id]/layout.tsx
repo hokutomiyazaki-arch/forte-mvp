@@ -20,7 +20,7 @@ export async function generateMetadata({
 
   const proName = pro?.name || 'プロフェッショナル'
   const proTitle = pro?.title || '強みが、あなたを定義する。'
-  const ogImageUrl = `${baseUrl}/og-default.png`
+  const ogImageUrl = `${baseUrl}/hero_ogp.png`
 
   return {
     title: `${proName} | REALPROOF`,
