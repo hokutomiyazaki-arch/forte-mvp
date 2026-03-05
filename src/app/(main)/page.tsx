@@ -1049,6 +1049,16 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ═══ FOR STORES LINK ═══ */}
+      <div style={{ textAlign: 'center', padding: '24px', borderTop: '1px solid rgba(255,255,255,0.08)', backgroundColor: '#1A1A2E' }}>
+        <a
+          href="/for-stores"
+          style={{ fontSize: '13px', color: '#9A9A9A', textDecoration: 'none', letterSpacing: '0.05em' }}
+        >
+          店舗・団体のオーナーの方はこちら →
+        </a>
+      </div>
+
       {/* ═══ FOOTER ═══ */}
       <footer className="text-center" style={{ backgroundColor: '#0F0F1E', padding: '48px 24px 32px' }}>
         <div style={{ color: '#C4A35A', fontSize: '16px', fontFamily: "'Inter', sans-serif", fontWeight: 500, letterSpacing: '3px', marginBottom: '24px' }}>REALPROOF</div>

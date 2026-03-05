@@ -28,6 +28,7 @@ export default function Navbar() {
       {/* Desktop メニュー（640px以上） */}
       <div style={{ display: 'flex', gap: 16, alignItems: 'center', fontSize: 14 }}
            className="hidden-mobile">
+        <a href="/for-stores" style={{ color: '#9A9A9A', textDecoration: 'none', fontSize: 13, border: '1px solid #444', padding: '4px 12px', borderRadius: 6, whiteSpace: 'nowrap' as const }}>店舗・団体の方へ</a>
         <a href="/explore" style={{ color: '#fff', textDecoration: 'none' }}>プロを探す</a>
         {!isLoaded ? (
           <div style={{ width: 80 }} />
@@ -83,6 +84,8 @@ export default function Navbar() {
           display: 'flex', flexDirection: 'column' as const, gap: 16,
           fontSize: 15,
         }}>
+          <a href="/for-stores" style={{ color: '#9A9A9A', textDecoration: 'none' }}
+            onClick={() => setMenuOpen(false)}>店舗・団体の方へ</a>
           <a href="/explore" style={{ color: '#fff', textDecoration: 'none' }}
             onClick={() => setMenuOpen(false)}>プロを探す</a>
           <SignedIn>

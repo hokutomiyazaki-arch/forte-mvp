@@ -9,6 +9,14 @@ const nextConfig = {
       },
     ],
   },
+  async rewrites() {
+    return [
+      {
+        source: '/for-stores',
+        destination: '/for-stores.html',
+      },
+    ]
+  },
   async redirects() {
     return [
       {
