@@ -46,8 +46,26 @@ export async function GET(request: Request) {
     }
   }
 
-  // ローカルフォントを読み込み
-  const fontData = readFileSync(join(process.cwd(), 'public/fonts/NotoSansJP-Regular.ttf'))
+  console.log('STEP1: データ取得完了', { name, totalProofs })
+
+  let fontData: Buffer
+  try {
+    const fontPath = join(process.cwd(), 'public/fonts/NotoSansJP-Regular.ttf')
+    console.log('STEP2: フォントパス', fontPath)
+    fontData = readFileSync(fontPath)
+    console.log('STEP3: フォント読み込み完了', fontData.byteLength)
+  } catch (fontError) {
+    console.error('FONT_ERROR:', fontError)
+    // フォントなしでフォールバック
+    return new ImageResponse(
+      <div style={{ background: '#1A1A2E', width: '1200px', height: '630px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#C4A35A', fontSize: '48px' }}>
+        FONT LOAD FAILED
+      </div>,
+      { width: 1200, height: 630 }
+    )
+  }
+
+  console.log('STEP4: ImageResponse開始')
 
   return new ImageResponse(
     (
