@@ -143,58 +143,50 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Step 5: 自己投票チェック（強化版）
+    // Step 5: 自己投票チェック（実在カラムのみ + デバッグログ付き）
     const { data: proData } = await supabaseAdmin
       .from('professionals')
-      .select('user_id, contact_email, email')
+      .select('user_id, contact_email')
       .eq('id', professional_id)
       .maybeSingle()
 
-    if (proData) {
-      let isSelfVote = false
-
-      // Check 1: professionals.contact_email と一致
-      if (proData.contact_email && proData.contact_email.toLowerCase() === email) {
-        isSelfVote = true
+    // 投票者のClerkアカウント情報を取得（自己投票チェック + Step 9cで再利用）
+    let voterClerkUserId: string | null = null
+    let hasAccount = false
+    try {
+      const clerk = await clerkClient()
+      const users = await clerk.users.getUserList({ emailAddress: [email] })
+      hasAccount = users.data.length > 0
+      if (hasAccount) {
+        voterClerkUserId = users.data[0].id
       }
+    } catch (e) {
+      console.error('[vote-auth/google/callback] Clerk voter lookup failed:', e)
+    }
 
-      // Check 2: professionals.email と一致
-      if (!isSelfVote && proData.email && proData.email.toLowerCase() === email) {
-        isSelfVote = true
-      }
+    // デバッグログ（必ず出力）
+    console.log('SELF_VOTE_CHECK:', JSON.stringify({
+      googleEmail: email,
+      proUserId: proData?.user_id,
+      proEmail: proData?.contact_email,
+      clerkUserId: voterClerkUserId,
+    }))
 
-      // Check 3: Clerk経由でプロの全メールアドレスと照合
-      if (!isSelfVote && proData.user_id) {
-        try {
-          const clerk = await clerkClient()
-          const clerkUser = await clerk.users.getUser(proData.user_id)
-          const proEmails = clerkUser.emailAddresses.map(e => e.emailAddress.toLowerCase())
-          if (proEmails.includes(email)) {
-            isSelfVote = true
-          }
-        } catch (e) {
-          console.error('[vote-auth/google/callback] Clerk self-vote check failed:', e)
-        }
-      }
+    // Check 1: user_id照合（最も確実）
+    if (voterClerkUserId && proData?.user_id && voterClerkUserId === proData.user_id) {
+      console.log('SELF_VOTE_BLOCKED: user_id match')
+      return NextResponse.redirect(
+        new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=self_vote`, origin)
+      )
+    }
 
-      // Check 4: clientsテーブルのuser_id照合（フォールバック）
-      if (!isSelfVote && proData.user_id) {
-        const { data: clientData } = await supabaseAdmin
-          .from('clients')
-          .select('user_id')
-          .eq('email', email)
-          .maybeSingle()
-
-        if (clientData?.user_id === proData.user_id) {
-          isSelfVote = true
-        }
-      }
-
-      if (isSelfVote) {
-        return NextResponse.redirect(
-          new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=self_vote`, origin)
-        )
-      }
+    // Check 2: メール照合（contact_email）
+    if (proData?.contact_email && email &&
+        proData.contact_email.toLowerCase() === email.toLowerCase()) {
+      console.log('SELF_VOTE_BLOCKED: email match')
+      return NextResponse.redirect(
+        new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=self_vote`, origin)
+      )
     }
 
     // Step 6: 30分クールダウンチェック
@@ -488,23 +480,19 @@ export async function GET(request: NextRequest) {
       // メール失敗で投票レスポンスをブロックしない
     }
 
-    // Step 9c: Clerkアカウント存在チェック + 投票者のロール判定
-    let hasAccount = false
+    // Step 9c: 投票者のロール判定（Clerk情報はStep 5で取得済み）
     let voterIsPro = false
-    try {
-      const clerk = await clerkClient()
-      const users = await clerk.users.getUserList({ emailAddress: [email] })
-      hasAccount = users.data.length > 0
-      if (hasAccount) {
+    if (hasAccount && voterClerkUserId) {
+      try {
         const { data: voterPro } = await supabaseAdmin
           .from('professionals')
           .select('id')
-          .eq('user_id', users.data[0].id)
+          .eq('user_id', voterClerkUserId)
           .maybeSingle()
         voterIsPro = !!voterPro
+      } catch (e) {
+        console.error('[vote-auth/google/callback] Voter pro check failed:', e)
       }
-    } catch (e) {
-      console.error('[vote-auth/google/callback] Clerk user check failed:', e)
     }
 
     // Step 10: vote-confirmed にリダイレクト
