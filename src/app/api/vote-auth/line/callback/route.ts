@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 import { clerkClient } from '@clerk/nextjs/server'
-import { getSupabaseAdminNoCache } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
+
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -106,7 +113,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=invalid_vote_data`, origin))
     }
 
-    const supabaseAdmin = getSupabaseAdminNoCache()
+    const supabaseAdmin = getSupabaseAdmin()
+
+    console.log('[debug] professional_id:', professional_id)
+    console.log('[debug] email:', email)
+    console.log('[debug] vote_data raw:', stateData)
 
     // Step 4: 重複投票チェック
     const { data: existingVote } = await supabaseAdmin
