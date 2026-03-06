@@ -33,11 +33,12 @@ export async function GET() {
       return NextResponse.json({ org: null })
     }
 
-    // 2. 残りのデータを並列取得
+    // 2. 全データを並列取得（holdersクエリも含めて同時実行）
     const [
       membersResult,
       aggregateResult,
       badgesResult,
+      holdersResult,
     ] = await Promise.all([
       // メンバー + プルーフ数（org_proof_summary ビュー）
       supabase
@@ -59,42 +60,38 @@ export async function GET() {
         .select('*')
         .eq('organization_id', org.id)
         .order('sort_order', { ascending: true }),
-    ])
 
-    // 3. バッジごとの取得者を一括取得（バッジベースのメンバー管理）
-    const badges = badgesResult.data || []
-    let badgeHolderCounts: Record<string, number> = {}
-    let badgeHolders: any[] = []
-
-    if (badges.length > 0) {
-      const badgeIds = badges.map((b: any) => b.id)
-      const { data: holders } = await supabase
+      // バッジ取得者一括取得（org_members + professional + credential_level）
+      supabase
         .from('org_members')
         .select('credential_level_id, professional_id, accepted_at, professionals(id, name, photo_url, title), credential_levels(id, name, image_url)')
         .eq('organization_id', org.id)
         .eq('status', 'active')
-        .in('credential_level_id', badgeIds)
+        .not('credential_level_id', 'is', null),
+    ])
 
-      if (holders) {
-        badgeHolders = holders
-        for (const h of holders) {
-          if (h.credential_level_id) {
-            badgeHolderCounts[h.credential_level_id] = (badgeHolderCounts[h.credential_level_id] || 0) + 1
-          }
-        }
+    // 3. バッジ・ホルダー集計
+    const badges = badgesResult.data || []
+    const badgeHolders = holdersResult.data || []
+    const badgeHolderCounts: Record<string, number> = {}
+    for (const h of badgeHolders) {
+      if (h.credential_level_id) {
+        badgeHolderCounts[h.credential_level_id] = (badgeHolderCounts[h.credential_level_id] || 0) + 1
       }
     }
 
     // バッジホルダーから一意メンバーリスト（同じプロが複数バッジを持つ場合は重複排除）
     const memberMap = new Map<string, any>()
     for (const h of badgeHolders) {
-      if (h.professionals && !memberMap.has(h.professional_id)) {
+      const pro = h.professionals as any
+      const cl = h.credential_levels as any
+      if (pro && !memberMap.has(h.professional_id)) {
         memberMap.set(h.professional_id, {
           professional_id: h.professional_id,
-          name: h.professionals.name,
-          photo_url: h.professionals.photo_url,
-          title: h.professionals.title,
-          badge_name: h.credential_levels?.name,
+          name: pro.name,
+          photo_url: pro.photo_url,
+          title: pro.title,
+          badge_name: cl?.name,
           accepted_at: h.accepted_at,
         })
       }
