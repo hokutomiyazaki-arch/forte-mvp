@@ -17,6 +17,20 @@ export function getSupabaseAdmin() {
   })
 }
 
+// Vercelキャッシュ無効化した専用クライアント（vote-auth callback用）
+export function getSupabaseAdminNoCache() {
+  return supaCreateClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      global: {
+        fetch: (url: RequestInfo | URL, options?: RequestInit) =>
+          fetch(url, { ...options, cache: 'no-store' }),
+      },
+    }
+  )
+}
+
 // 旧互換: 他ファイルでimportしてる場合のために残す
 // サーバーサイドではservice_role keyを使う
 // クライアントサイドでは /api/db プロキシを使う

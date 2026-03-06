@@ -1,22 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { clerkClient } from '@clerk/nextjs/server'
+import { getSupabaseAdminNoCache } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
-
-// キャッシュ無効化したSupabaseクライアント
-function getSupabaseAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      global: {
-        fetch: (url: RequestInfo | URL, options?: RequestInit) =>
-          fetch(url, { ...options, cache: 'no-store' }),
-      },
-    }
-  )
-}
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -120,24 +106,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=invalid_vote_data`, origin))
     }
 
-    const supabaseAdmin = getSupabaseAdmin()
-
-    console.log('[debug-step4-start] professional_id:', professional_id)
-    console.log('[debug-step4-start] email:', email)
+    const supabaseAdmin = getSupabaseAdminNoCache()
 
     // Step 4: 重複投票チェック
-    const { data: existingVote, error: existingVoteError } = await supabaseAdmin
+    const { data: existingVote } = await supabaseAdmin
       .from('votes')
       .select('id')
       .eq('professional_id', professional_id)
       .eq('voter_email', email)
       .maybeSingle()
 
-    console.log('[debug-step4-result] existingVote:', existingVote)
-    console.log('[debug-step4-result] existingVoteError:', existingVoteError)
-
     if (existingVote) {
-      console.log('[debug-step4-redirect] → already_voted')
       return NextResponse.redirect(
         new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=already_voted`, origin)
       )
@@ -215,7 +194,6 @@ export async function GET(request: NextRequest) {
     }
 
     // Step 7: 投票INSERT（LINEで認証済みなので status='confirmed'）
-    console.log('[debug-insert] 投票INSERT直前 professional_id:', professional_id, 'email:', email)
     const { data: insertedVote, error: voteError } = await supabaseAdmin
       .from('votes')
       .insert({
@@ -481,23 +459,44 @@ export async function GET(request: NextRequest) {
       console.error('[vote-auth/line/callback] PROVEN/SPECIALIST notification error:', err)
     }
 
-    // Step 9c: Clerkアカウント存在チェック + 投票者のロール判定
-    let hasAccount = false
+    // Step 9c: LINE OAuth経由は必ずアカウントがある
+    const hasAccount = true
     let voterIsPro = false
     try {
       const clerk = await clerkClient()
-      const users = await clerk.users.getUserList({ emailAddress: [email] })
-      hasAccount = users.data.length > 0
-      if (hasAccount) {
+      const clerkUsers = await clerk.users.getUserList({ emailAddress: [email] })
+      const clerkUserId = clerkUsers.data[0]?.id ?? null
+
+      if (clerkUserId) {
+        // clients テーブルにupsert
+        await supabaseAdmin
+          .from('clients')
+          .upsert(
+            {
+              user_id: clerkUserId,
+              email: email,
+              nickname: email.split('@')[0],
+            },
+            { onConflict: 'user_id' }
+          )
+
+        // votes.client_user_id も更新
+        await supabaseAdmin
+          .from('votes')
+          .update({ client_user_id: clerkUserId })
+          .eq('voter_email', email)
+          .eq('professional_id', professional_id)
+
+        // プロ判定
         const { data: voterPro } = await supabaseAdmin
           .from('professionals')
           .select('id')
-          .eq('user_id', users.data[0].id)
+          .eq('user_id', clerkUserId)
           .maybeSingle()
         voterIsPro = !!voterPro
       }
     } catch (e) {
-      console.error('[vote-auth/line/callback] Clerk user check failed:', e)
+      console.error('[vote-auth/line/callback] clients upsert / pro check failed:', e)
     }
 
     // Step 10: vote-confirmed にリダイレクト
