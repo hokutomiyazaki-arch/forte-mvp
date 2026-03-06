@@ -115,19 +115,22 @@ export async function GET(request: NextRequest) {
 
     const supabaseAdmin = getSupabaseAdmin()
 
-    console.log('[debug] professional_id:', professional_id)
-    console.log('[debug] email:', email)
-    console.log('[debug] vote_data raw:', stateData)
+    console.log('[debug-step4-start] professional_id:', professional_id)
+    console.log('[debug-step4-start] email:', email)
 
     // Step 4: 重複投票チェック
-    const { data: existingVote } = await supabaseAdmin
+    const { data: existingVote, error: existingVoteError } = await supabaseAdmin
       .from('votes')
       .select('id')
       .eq('professional_id', professional_id)
       .eq('voter_email', email)
       .maybeSingle()
 
+    console.log('[debug-step4-result] existingVote:', existingVote)
+    console.log('[debug-step4-result] existingVoteError:', existingVoteError)
+
     if (existingVote) {
+      console.log('[debug-step4-redirect] → already_voted')
       return NextResponse.redirect(
         new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=already_voted`, origin)
       )
