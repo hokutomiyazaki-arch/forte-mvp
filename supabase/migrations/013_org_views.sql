@@ -16,7 +16,7 @@ SELECT
   MAX(v.created_at) AS latest_vote_at
 FROM org_members om
 JOIN professionals p ON om.professional_id = p.id
-LEFT JOIN votes v ON v.professional_id = p.id AND v.status = 'confirmed'
+LEFT JOIN votes v ON v.professional_id = p.id
 WHERE om.status = 'active'
 GROUP BY om.organization_id, p.id, p.name, p.photo_url;
 
@@ -34,5 +34,5 @@ SELECT
   ) AS votes_last_30_days
 FROM organizations o
 JOIN org_members om ON om.organization_id = o.id AND om.status = 'active'
-LEFT JOIN votes v ON v.professional_id = om.professional_id AND v.status = 'confirmed'
+LEFT JOIN votes v ON v.professional_id = om.professional_id
 GROUP BY o.id, o.name, o.type, o.location;
