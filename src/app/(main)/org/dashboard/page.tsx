@@ -50,6 +50,8 @@ export default function OrgDashboardPage() {
   const [members, setMembers] = useState<any[]>([])
   const [aggregate, setAggregate] = useState<any>(null)
   const [analytics, setAnalytics] = useState<any>(null)
+  const [analyticsLoading, setAnalyticsLoading] = useState(false)
+  const [analyticsLoaded, setAnalyticsLoaded] = useState(false)
   const [activeTab, setActiveTab] = useState<'overview' | 'analytics'>('overview')
   const [error, setError] = useState('')
   const [editingOrg, setEditingOrg] = useState(false)
@@ -84,7 +86,6 @@ export default function OrgDashboardPage() {
       setOrg(data.org)
       setMembers(data.members || [])
       setAggregate(data.aggregate || null)
-      if (data.analytics) setAnalytics(data.analytics)
     } catch (err: any) {
       setError(err.message || 'データの取得に失敗しました')
     }
@@ -121,6 +122,28 @@ export default function OrgDashboardPage() {
       label: forte?.label || d.label,
     }
   })
+
+  // 分析タブクリック時に遅延ロード（一度取得したらキャッシュ）
+  async function loadAnalytics() {
+    if (analyticsLoaded || analyticsLoading || !org) return
+    setAnalyticsLoading(true)
+    try {
+      const res = await fetch(`/api/org-analytics?orgId=${org.id}`)
+      if (!res.ok) throw new Error('分析データの取得に失敗しました')
+      const data = await res.json()
+      if (data.analytics) setAnalytics(data.analytics)
+      setAnalyticsLoaded(true)
+    } catch (err: any) {
+      console.error('Analytics load error:', err)
+    } finally {
+      setAnalyticsLoading(false)
+    }
+  }
+
+  function handleAnalyticsTab() {
+    setActiveTab('analytics')
+    loadAnalytics()
+  }
 
   const handleOrgEditStart = () => {
     setEditOrgName(org.name || '')
@@ -228,7 +251,7 @@ export default function OrgDashboardPage() {
           概要
         </button>
         <button
-          onClick={() => setActiveTab('analytics')}
+          onClick={handleAnalyticsTab}
           className={`flex-1 py-2 text-sm font-medium rounded-lg transition ${
             activeTab === 'analytics'
               ? 'bg-white text-[#1A1A2E] shadow-sm'
@@ -339,12 +362,19 @@ export default function OrgDashboardPage() {
 
       {/* === 分析タブ === */}
       {activeTab === 'analytics' && (
-        <RechartsCharts
-          analytics={{
-            ...analytics,
-            strengthDistribution: strengthWithLabels,
-          }}
-        />
+        analyticsLoading ? (
+          <div className="text-center py-16">
+            <div className="animate-spin w-8 h-8 border-2 border-[#C4A35A] border-t-transparent rounded-full mx-auto" />
+            <p className="text-gray-400 mt-4 text-sm">分析データを読み込み中...</p>
+          </div>
+        ) : (
+          <RechartsCharts
+            analytics={{
+              ...analytics,
+              strengthDistribution: strengthWithLabels,
+            }}
+          />
+        )
       )}
 
       {/* 団体編集モーダル */}
