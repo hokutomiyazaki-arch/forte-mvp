@@ -280,7 +280,7 @@ export default function OrgBadgesPage() {
                   <img
                     src={level.image_url}
                     alt={level.name}
-                    className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
+                    className="w-14 h-14 rounded-xl object-cover flex-shrink-0 bg-white"
                   />
                 ) : (
                   <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-[#C4A35A] to-[#E8D5A0] flex items-center justify-center text-white text-xl font-bold flex-shrink-0">
@@ -509,7 +509,7 @@ export default function OrgBadgesPage() {
                   <img
                     src={editImageUrl}
                     alt="プレビュー"
-                    style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '12px' }}
+                    style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '12px', backgroundColor: '#fff' }}
                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                   />
                 ) : (

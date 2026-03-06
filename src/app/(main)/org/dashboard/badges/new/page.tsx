@@ -162,7 +162,7 @@ export default function NewBadgePage() {
               <img
                 src={imagePreview}
                 alt="プレビュー"
-                className="w-20 h-20 rounded-xl object-cover"
+                className="w-20 h-20 rounded-xl object-cover bg-white"
               />
             ) : (
               <div className="w-20 h-20 rounded-xl bg-gradient-to-br from-[#C4A35A] to-[#E8D5A0] flex items-center justify-center text-white text-2xl font-bold">
