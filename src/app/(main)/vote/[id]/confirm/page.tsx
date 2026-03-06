@@ -85,13 +85,6 @@ function VoteConfirmForm() {
           });
         }
 
-        // clients テーブルに upsert（エラーでも投票フローは止めない）
-        try {
-          await fetch('/api/client-upsert', { method: 'POST' })
-        } catch (e) {
-          console.error('[confirm] client-upsert failed (non-critical):', e)
-        }
-
         // sessionStorage をクリア
         sessionStorage.removeItem('pending_vote');
 
