@@ -234,6 +234,10 @@ export default function ImageCropper({
       const outCtx = outCanvas.getContext('2d');
       if (!outCtx) throw new Error('Canvas context not available');
 
+      // 白背景を描画（JPEG変換時の黒背景を防止）
+      outCtx.fillStyle = '#FFFFFF';
+      outCtx.fillRect(0, 0, outputSize, outputSize);
+
       outCtx.drawImage(
         img,
         srcX, srcY, srcW, srcH,
