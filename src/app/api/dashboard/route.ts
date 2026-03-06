@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth, currentUser } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
@@ -47,24 +47,25 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const isDev = process.env.NODE_ENV === 'development'
     const startTime = Date.now()
-    console.log('[Dashboard API] Start')
+    if (isDev) console.log('[Dashboard API] Start')
 
     const supabase = getSupabaseAdmin()
 
+    // Clerkからメールアドレスを取得（外部API不要）
+    const user = await currentUser()
+    const userEmail = user?.emailAddresses?.[0]?.emailAddress || ''
+
     // ────────────────────────────────────────
-    // Phase 1: プロフィール + マスターデータ + Clerkメール を並列取得
+    // Phase 1: プロフィール + マスターデータ を並列取得
     // ────────────────────────────────────────
-    const [proResult, master, clerkRes] = await Promise.all([
+    const [proResult, master] = await Promise.all([
       supabase.from('professionals').select('*').eq('user_id', userId).maybeSingle(),
       getMasterData(supabase),
-      fetch(`https://api.clerk.com/v1/users/${userId}`, {
-        headers: { Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}` },
-      }).then(r => r.json()).catch(() => null),
     ])
-    const userEmail = clerkRes?.email_addresses?.[0]?.email_address || ''
 
-    console.log('[Dashboard API] Phase 1 done:', Date.now() - startTime, 'ms')
+    if (isDev) console.log('[Dashboard API] Phase 1 done:', Date.now() - startTime, 'ms')
 
     const proDataRaw = proResult.data
     const { proofItems, personalityItems, phrases } = master
@@ -127,9 +128,8 @@ export async function GET() {
       myProofCardResult,
       bookmarksResult,
       certApplicationsResult,
-      // 受け取ったリワード: email + client_user_id の2方法を並列
+      // 受け取ったリワード: emailマッチ
       crByEmailResult,
-      crByUserIdResult,
     ] = await Promise.all([
       // リワード
       supabase.from('rewards').select('*').eq('professional_id', proId).order('sort_order'),
@@ -178,7 +178,7 @@ export async function GET() {
       supabase.from('certification_applications')
         .select('category_slug, status')
         .eq('professional_id', proId),
-      // 受け取ったリワード: 方法1 — client_email
+      // 受け取ったリワード: client_emailマッチ
       userEmail
         ? supabase.from('client_rewards')
             .select('id, reward_id, professional_id, status, created_at')
@@ -186,14 +186,9 @@ export async function GET() {
             .in('status', ['active', 'used'])
             .order('created_at', { ascending: false })
         : Promise.resolve({ data: null, error: null }),
-      // 受け取ったリワード: 方法2 — votes.client_user_id
-      supabase.from('votes')
-        .select('id, selected_reward_id')
-        .eq('client_user_id', userId)
-        .not('selected_reward_id', 'is', null),
     ])
 
-    console.log('[Dashboard API] Phase 2 done:', Date.now() - startTime, 'ms')
+    if (isDev) console.log('[Dashboard API] Phase 2 done:', Date.now() - startTime, 'ms')
 
     // ────────────────────────────────────────
     // votes データ整形: 総数 + コメント付きをJSで分離
@@ -253,22 +248,11 @@ export async function GET() {
       })
 
     // ────────────────────────────────────────
-    // 受け取ったリワード: email → vote fallback → 詳細取得
+    // 受け取ったリワード: emailマッチ → 詳細取得
     // ────────────────────────────────────────
-    let allReceivedCR: any[] = crByEmailResult.data && crByEmailResult.data.length > 0
+    const allReceivedCR: any[] = crByEmailResult.data && crByEmailResult.data.length > 0
       ? crByEmailResult.data
       : []
-
-    // email で見つからない場合、votes.client_user_id 経由で検索
-    if (allReceivedCR.length === 0 && crByUserIdResult.data && crByUserIdResult.data.length > 0) {
-      const voteIds = crByUserIdResult.data.map((v: any) => v.id)
-      const { data: crByVote } = await supabase.from('client_rewards')
-        .select('id, reward_id, professional_id, status, created_at')
-        .in('vote_id', voteIds)
-        .in('status', ['active', 'used'])
-        .order('created_at', { ascending: false })
-      if (crByVote && crByVote.length > 0) allReceivedCR = crByVote
-    }
 
     let receivedRewards: any[] = []
     if (allReceivedCR.length > 0) {
@@ -301,7 +285,7 @@ export async function GET() {
       })
     }
 
-    console.log('[Dashboard API] Total:', Date.now() - startTime, 'ms')
+    if (isDev) console.log('[Dashboard API] Total:', Date.now() - startTime, 'ms')
 
     return NextResponse.json({
       role: 'professional',
