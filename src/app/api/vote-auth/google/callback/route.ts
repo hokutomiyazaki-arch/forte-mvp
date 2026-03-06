@@ -4,12 +4,6 @@ import { clerkClient } from '@clerk/nextjs/server'
 
 export const dynamic = 'force-dynamic'
 
-function getSupabaseAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-}
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -127,7 +121,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=invalid_vote_data`, origin))
     }
 
-    const supabaseAdmin = getSupabaseAdmin()
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: { autoRefreshToken: false, persistSession: false },
+        global: {
+          fetch: (url: any, init: any) =>
+            fetch(url, { ...init, cache: 'no-store' }),
+        },
+      }
+    )
 
     // Step 4: 重複投票チェック
     const { data: existingVote } = await supabaseAdmin
