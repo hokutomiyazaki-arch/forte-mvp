@@ -459,44 +459,23 @@ export async function GET(request: NextRequest) {
       console.error('[vote-auth/line/callback] PROVEN/SPECIALIST notification error:', err)
     }
 
-    // Step 9c: LINE OAuth経由は必ずアカウントがある
-    const hasAccount = true
+    // Step 9c: Clerkアカウント存在チェック + 投票者のロール判定
+    let hasAccount = false
     let voterIsPro = false
     try {
       const clerk = await clerkClient()
-      const clerkUsers = await clerk.users.getUserList({ emailAddress: [email] })
-      const clerkUserId = clerkUsers.data[0]?.id ?? null
-
-      if (clerkUserId) {
-        // clients テーブルにupsert
-        await supabaseAdmin
-          .from('clients')
-          .upsert(
-            {
-              user_id: clerkUserId,
-              email: email,
-              nickname: email.split('@')[0],
-            },
-            { onConflict: 'user_id' }
-          )
-
-        // votes.client_user_id も更新
-        await supabaseAdmin
-          .from('votes')
-          .update({ client_user_id: clerkUserId })
-          .eq('voter_email', email)
-          .eq('professional_id', professional_id)
-
-        // プロ判定
+      const users = await clerk.users.getUserList({ emailAddress: [email] })
+      hasAccount = users.data.length > 0
+      if (hasAccount) {
         const { data: voterPro } = await supabaseAdmin
           .from('professionals')
           .select('id')
-          .eq('user_id', clerkUserId)
+          .eq('user_id', users.data[0].id)
           .maybeSingle()
         voterIsPro = !!voterPro
       }
     } catch (e) {
-      console.error('[vote-auth/line/callback] clients upsert / pro check failed:', e)
+      console.error('[vote-auth/line/callback] Clerk user check failed:', e)
     }
 
     // Step 10: vote-confirmed にリダイレクト

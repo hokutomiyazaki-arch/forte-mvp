@@ -144,13 +144,13 @@ export async function GET(request: NextRequest) {
       .maybeSingle()
 
     // 投票者のClerkアカウント情報を取得（自己投票チェック + Step 9cで再利用）
-    // Google OAuth経由は必ずアカウントがある
-    const hasAccount = true
     let voterClerkUserId: string | null = null
+    let hasAccount = false
     try {
       const clerk = await clerkClient()
       const users = await clerk.users.getUserList({ emailAddress: [email] })
-      if (users.data.length > 0) {
+      hasAccount = users.data.length > 0
+      if (hasAccount) {
         voterClerkUserId = users.data[0].id
       }
     } catch (e) {
@@ -473,30 +473,10 @@ export async function GET(request: NextRequest) {
       // メール失敗で投票レスポンスをブロックしない
     }
 
-    // Step 9c: clients upsert + 投票者のロール判定
+    // Step 9c: 投票者のロール判定（Clerk情報はStep 5で取得済み）
     let voterIsPro = false
-    if (voterClerkUserId) {
+    if (hasAccount && voterClerkUserId) {
       try {
-        // clients テーブルにupsert
-        await supabaseAdmin
-          .from('clients')
-          .upsert(
-            {
-              user_id: voterClerkUserId,
-              email: email,
-              nickname: email.split('@')[0],
-            },
-            { onConflict: 'user_id' }
-          )
-
-        // votes.client_user_id も更新
-        await supabaseAdmin
-          .from('votes')
-          .update({ client_user_id: voterClerkUserId })
-          .eq('voter_email', email)
-          .eq('professional_id', professional_id)
-
-        // プロ判定
         const { data: voterPro } = await supabaseAdmin
           .from('professionals')
           .select('id')
@@ -504,7 +484,7 @@ export async function GET(request: NextRequest) {
           .maybeSingle()
         voterIsPro = !!voterPro
       } catch (e) {
-        console.error('[vote-auth/google/callback] clients upsert / pro check failed:', e)
+        console.error('[vote-auth/google/callback] Voter pro check failed:', e)
       }
     }
 
