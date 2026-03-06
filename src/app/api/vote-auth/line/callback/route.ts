@@ -208,6 +208,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Step 7: 投票INSERT（LINEで認証済みなので status='confirmed'）
+    console.log('[debug-insert] 投票INSERT直前 professional_id:', professional_id, 'email:', email)
     const { data: insertedVote, error: voteError } = await supabaseAdmin
       .from('votes')
       .insert({
