@@ -21,6 +21,8 @@ export default function OrgBadgesPage() {
   const [editDescription, setEditDescription] = useState('')
   const [editImageUrl, setEditImageUrl] = useState('')
   const [editSaving, setEditSaving] = useState(false)
+  // バッジ削除
+  const [deletingBadge, setDeletingBadge] = useState<string | null>(null)
 
   const { user: clerkUser, isLoaded: authLoaded } = useUser()
   const authUser = clerkUser ? { id: clerkUser.id } : null
@@ -111,6 +113,32 @@ export default function OrgBadgesPage() {
       alert(error.message)
     } finally {
       setEditSaving(false)
+    }
+  }
+
+  async function handleDeleteBadge(badgeId: string, badgeName: string) {
+    const holderCount = claimCounts[badgeId] || 0
+    const message = holderCount > 0
+      ? `このバッジ「${badgeName}」を削除すると、取得者${holderCount}名のバッジ認定も全て取り消されます。本当に削除しますか？`
+      : `バッジ「${badgeName}」を削除しますか？`
+
+    if (!confirm(message)) return
+
+    setDeletingBadge(badgeId)
+    try {
+      const res = await fetch(`/api/org/badge/delete?badgeId=${badgeId}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('削除に失敗しました')
+
+      setLevels(prev => prev.filter(l => l.id !== badgeId))
+      setClaimCounts(prev => {
+        const next = { ...prev }
+        delete next[badgeId]
+        return next
+      })
+    } catch (error: any) {
+      alert(error.message)
+    } finally {
+      setDeletingBadge(null)
     }
   }
 
@@ -225,16 +253,30 @@ export default function OrgBadgesPage() {
                     <h3 className="text-base font-bold text-[#1A1A2E] truncate">
                       {level.name}
                     </h3>
-                    <button
-                      onClick={() => handleEditStart(level)}
-                      style={{
-                        background: 'none', border: '1px solid #E5E5E0',
-                        color: '#666', fontSize: '12px', padding: '2px 10px',
-                        borderRadius: '6px', cursor: 'pointer', flexShrink: 0,
-                      }}
-                    >
-                      編集
-                    </button>
+                    <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                      <button
+                        onClick={() => handleEditStart(level)}
+                        style={{
+                          background: 'none', border: '1px solid #E5E5E0',
+                          color: '#666', fontSize: '12px', padding: '2px 10px',
+                          borderRadius: '6px', cursor: 'pointer',
+                        }}
+                      >
+                        編集
+                      </button>
+                      <button
+                        onClick={() => handleDeleteBadge(level.id, level.name)}
+                        disabled={deletingBadge === level.id}
+                        style={{
+                          background: 'none', border: '1px solid #E53E3E',
+                          color: '#E53E3E', fontSize: '12px', padding: '2px 10px',
+                          borderRadius: '6px', cursor: 'pointer',
+                          opacity: deletingBadge === level.id ? 0.5 : 1,
+                        }}
+                      >
+                        {deletingBadge === level.id ? '削除中...' : '削除'}
+                      </button>
+                    </div>
                   </div>
                   <p className="text-xs text-gray-500 mt-0.5">
                     取得者: {claimCounts[level.id] || 0}名
