@@ -115,6 +115,10 @@ export async function GET(request: NextRequest) {
 
     const supabaseAdmin = getSupabaseAdmin()
 
+    console.log('[debug] professional_id:', professional_id)
+    console.log('[debug] email:', email)
+    console.log('[debug] vote_data raw:', stateData)
+
     // Step 4: 重複投票チェック
     const { data: existingVote } = await supabaseAdmin
       .from('votes')
