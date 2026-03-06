@@ -309,17 +309,13 @@ function ConfirmedContent() {
                 </p>
               </>
             ) : (
-              <>
-                <a
-                  href="/sign-up"
-                  className="block w-full py-4 rounded-xl font-bold text-lg text-[#1A1A2E] bg-[#C4A35A] hover:bg-[#b3923f] transition"
-                >
-                  10秒で無料登録 →
-                </a>
-                <p className="text-gray-500 text-xs mt-3">
-                  LINE・Google・メールで登録できます
+              <div className="text-center p-5 bg-amber-50 border border-amber-200 rounded-xl">
+                <p className="text-2xl mb-2">✉️</p>
+                <p className="font-semibold text-gray-800">メールを確認してください</p>
+                <p className="text-sm text-gray-500 mt-2">
+                  パスワードを設定するとリワードをいつでも確認できます
                 </p>
-              </>
+              </div>
             )}
           </div>
         )}
