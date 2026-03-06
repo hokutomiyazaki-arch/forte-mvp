@@ -1,7 +1,8 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { db } from '@/lib/db'
 import { useUser } from '@clerk/nextjs'
+import ImageCropper from '@/components/ImageCropper'
 
 export default function OrgBadgesPage() {
   const [loading, setLoading] = useState(true)
@@ -21,6 +22,9 @@ export default function OrgBadgesPage() {
   const [editDescription, setEditDescription] = useState('')
   const [editImageUrl, setEditImageUrl] = useState('')
   const [editSaving, setEditSaving] = useState(false)
+  const [editCropperSrc, setEditCropperSrc] = useState<string | null>(null)
+  const [editUploadingImage, setEditUploadingImage] = useState(false)
+  const editImageInputRef = useRef<HTMLInputElement>(null)
   // バッジ削除
   const [deletingBadge, setDeletingBadge] = useState<string | null>(null)
 
@@ -83,6 +87,42 @@ export default function OrgBadgesPage() {
     setEditName(badge.name || '')
     setEditDescription(badge.description || '')
     setEditImageUrl(badge.image_url || '')
+    setEditCropperSrc(null)
+  }
+
+  function handleEditImageFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      alert('画像は5MB以下にしてください')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => setEditCropperSrc(reader.result as string)
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
+  async function handleEditCropComplete(blob: Blob) {
+    setEditCropperSrc(null)
+    setEditUploadingImage(true)
+    try {
+      const formData = new FormData()
+      formData.append('bucket', 'badge-images')
+      formData.append('path', `${org.id}/${editingBadge.id}_${Date.now()}.jpg`)
+      formData.append('file', blob, 'badge.jpg')
+      formData.append('upsert', 'true')
+
+      const res = await fetch('/api/storage', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'アップロードに失敗しました')
+
+      setEditImageUrl(data.publicUrl)
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setEditUploadingImage(false)
+    }
   }
 
   async function handleEditSave() {
@@ -462,29 +502,50 @@ export default function OrgBadgesPage() {
 
             <div style={{ marginBottom: '20px' }}>
               <label style={{ display: 'block', fontSize: '13px', color: '#666', marginBottom: '6px' }}>
-                画像URL
+                バッジ画像
               </label>
-              <input
-                type="url"
-                value={editImageUrl}
-                onChange={(e) => setEditImageUrl(e.target.value)}
-                placeholder="https://example.com/badge.png"
-                style={{
-                  width: '100%', padding: '10px 12px', borderRadius: '8px',
-                  border: '1px solid #E5E5E0', fontSize: '14px', color: '#1A1A2E',
-                  backgroundColor: '#fff', boxSizing: 'border-box',
-                }}
-              />
-              {editImageUrl && (
-                <div style={{ marginTop: '8px', textAlign: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                {editImageUrl ? (
                   <img
                     src={editImageUrl}
                     alt="プレビュー"
                     style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '12px' }}
                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                   />
+                ) : (
+                  <div style={{
+                    width: '80px', height: '80px', borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #C4A35A, #E8D5A0)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#fff', fontSize: '28px', fontWeight: 700,
+                  }}>
+                    {editName.charAt(0) || '?'}
+                  </div>
+                )}
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => editImageInputRef.current?.click()}
+                    disabled={editUploadingImage}
+                    style={{
+                      padding: '8px 16px', borderRadius: '8px',
+                      backgroundColor: '#F5F5F0', border: '1px solid #E5E5E0',
+                      color: '#666', fontSize: '13px', cursor: 'pointer',
+                      opacity: editUploadingImage ? 0.5 : 1,
+                    }}
+                  >
+                    {editUploadingImage ? 'アップロード中...' : '画像を選択'}
+                  </button>
+                  <input
+                    ref={editImageInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleEditImageFileChange}
+                    style={{ display: 'none' }}
+                  />
+                  <p style={{ fontSize: '11px', color: '#AAA', marginTop: '4px' }}>PNG/JPG 5MB以下</p>
                 </div>
-              )}
+              </div>
             </div>
 
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
@@ -512,6 +573,16 @@ export default function OrgBadgesPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 画像クロッパー（編集モーダル用） */}
+      {editCropperSrc && (
+        <ImageCropper
+          imageSrc={editCropperSrc}
+          onCropComplete={handleEditCropComplete}
+          onCancel={() => setEditCropperSrc(null)}
+          cropShape="rect"
+        />
       )}
     </div>
   )

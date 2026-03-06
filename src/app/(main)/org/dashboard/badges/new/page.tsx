@@ -1,7 +1,8 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useUser } from '@clerk/nextjs'
+import ImageCropper from '@/components/ImageCropper'
 
 export default function NewBadgePage() {
   const supabase = createClient() as any
@@ -9,8 +10,10 @@ export default function NewBadgePage() {
   const [org, setOrg] = useState<any>(null)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imageBlob, setImageBlob] = useState<Blob | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [cropperSrc, setCropperSrc] = useState<string | null>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [existingCount, setExistingCount] = useState(0)
@@ -59,15 +62,22 @@ export default function NewBadgePage() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    if (file.size > 2 * 1024 * 1024) {
-      setError('画像は2MB以下にしてください')
+    if (file.size > 5 * 1024 * 1024) {
+      setError('画像は5MB以下にしてください')
       return
     }
 
-    setImageFile(file)
     const reader = new FileReader()
-    reader.onload = () => setImagePreview(reader.result as string)
+    reader.onload = () => setCropperSrc(reader.result as string)
     reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
+  function handleCropComplete(blob: Blob) {
+    setCropperSrc(null)
+    setImageBlob(blob)
+    const url = URL.createObjectURL(blob)
+    setImagePreview(url)
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -81,24 +91,19 @@ export default function NewBadgePage() {
       let imageUrl: string | null = null
 
       // 画像アップロード
-      if (imageFile) {
-        const ext = imageFile.name.split('.').pop() || 'png'
-        const filePath = `${org.id}/${Date.now()}.${ext}`
+      if (imageBlob) {
+        const filePath = `${org.id}/${Date.now()}.jpg`
 
-        const { error: uploadError } = await supabase.storage
-          .from('badge-images')
-          .upload(filePath, imageFile, {
-            cacheControl: '3600',
-            upsert: false,
-          })
+        const formData = new FormData()
+        formData.append('bucket', 'badge-images')
+        formData.append('path', filePath)
+        formData.append('file', imageBlob, 'badge.jpg')
 
-        if (uploadError) throw new Error('画像のアップロードに失敗しました: ' + uploadError.message)
+        const uploadRes = await fetch('/api/storage', { method: 'POST', body: formData })
+        const uploadData = await uploadRes.json()
+        if (!uploadRes.ok) throw new Error('画像のアップロードに失敗しました: ' + (uploadData.error || ''))
 
-        const { data: urlData } = supabase.storage
-          .from('badge-images')
-          .getPublicUrl(filePath)
-
-        imageUrl = urlData.publicUrl
+        imageUrl = uploadData.publicUrl
       }
 
       // バッジ作成
@@ -165,16 +170,21 @@ export default function NewBadgePage() {
               </div>
             )}
             <div>
-              <label className="cursor-pointer px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200 transition inline-block">
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                className="cursor-pointer px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200 transition inline-block"
+              >
                 画像を選択
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageChange}
-                  className="hidden"
-                />
-              </label>
-              <p className="text-xs text-gray-400 mt-1">PNG/JPG 2MB以下</p>
+              </button>
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageChange}
+                style={{ display: 'none' }}
+              />
+              <p className="text-xs text-gray-400 mt-1">PNG/JPG 5MB以下</p>
             </div>
           </div>
         </div>
@@ -224,6 +234,16 @@ export default function NewBadgePage() {
           {submitting ? '作成中...' : 'バッジを作成'}
         </button>
       </form>
+
+      {/* 画像クロッパー */}
+      {cropperSrc && (
+        <ImageCropper
+          imageSrc={cropperSrc}
+          onCropComplete={handleCropComplete}
+          onCancel={() => setCropperSrc(null)}
+          cropShape="rect"
+        />
+      )}
     </div>
   )
 }
