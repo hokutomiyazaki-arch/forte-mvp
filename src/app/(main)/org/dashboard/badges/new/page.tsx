@@ -1,11 +1,9 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { createClient } from '@/lib/supabase'
 import { useUser } from '@clerk/nextjs'
 import ImageCropper from '@/components/ImageCropper'
 
 export default function NewBadgePage() {
-  const supabase = createClient() as any
   const [loading, setLoading] = useState(true)
   const [org, setOrg] = useState<any>(null)
   const [name, setName] = useState('')
@@ -24,34 +22,29 @@ export default function NewBadgePage() {
   useEffect(() => {
     if (!authLoaded) return
     if (!authUser) { window.location.href = '/login?role=pro'; return }
-    load(authUser)
+    load()
   }, [authLoaded, authUser])
 
-  async function load(user: any) {
+  async function load() {
     try {
-      const { data: orgData, error: orgError } = await supabase
-        .from('organizations')
-        .select('*')
-        .eq('owner_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+      // まず org-dashboard から団体情報を取得
+      const dashRes = await fetch('/api/org-dashboard')
+      if (!dashRes.ok) throw new Error('データの取得に失敗しました')
+      const dashData = await dashRes.json()
 
-      if (orgError) throw orgError
-      if (!orgData) {
+      if (!dashData.org) {
         window.location.href = '/org/register'
         return
       }
 
-      setOrg(orgData)
+      setOrg(dashData.org)
 
-      // 既存バッジ数（sort_order用）
-      const { data: levelData } = await supabase
-        .from('credential_levels')
-        .select('id')
-        .eq('organization_id', orgData.id)
+      // バッジ件数を取得
+      const badgeRes = await fetch(`/api/org-badge?org_id=${dashData.org.id}`)
+      if (!badgeRes.ok) throw new Error('バッジ情報の取得に失敗しました')
+      const badgeData = await badgeRes.json()
 
-      setExistingCount(levelData?.length || 0)
+      setExistingCount(badgeData.badgeCount || 0)
     } catch (err: any) {
       setError(err.message || 'データの取得に失敗しました')
     }
@@ -106,18 +99,21 @@ export default function NewBadgePage() {
         imageUrl = uploadData.publicUrl
       }
 
-      // バッジ作成
-      const { error: insertError } = await supabase
-        .from('credential_levels')
-        .insert({
+      // バッジ作成（API経由）
+      const createRes = await fetch('/api/org-badge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           organization_id: org.id,
           name: name.trim(),
           description: description.trim() || null,
           image_url: imageUrl,
           sort_order: existingCount,
-        })
+        }),
+      })
 
-      if (insertError) throw insertError
+      const createData = await createRes.json()
+      if (!createRes.ok) throw new Error(createData.error || 'バッジの作成に失敗しました')
 
       window.location.href = '/org/dashboard/badges'
     } catch (err: any) {
