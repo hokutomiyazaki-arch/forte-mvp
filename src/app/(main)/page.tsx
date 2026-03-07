@@ -367,17 +367,17 @@ export default function Home() {
               }}>
                 今すぐ無料で登録 →
               </button>
-              <p style={{
-                marginTop: '8px',
-                fontSize: '11px',
-                color: 'rgba(250,250,247,0.45)',
-                textAlign: 'center',
-              }}>
-                通常 <span style={{ textDecoration: 'line-through' }}>¥2,980/月</span> が、今は無料。
-                <span style={{ margin: '0 6px', opacity: 0.5 }}>·</span>
-                クレジットカード不要。
-              </p>
             </div>
+            <p style={{
+              marginTop: '8px',
+              fontSize: '11px',
+              color: 'rgba(250,250,247,0.45)',
+              textAlign: 'center',
+            }}>
+              通常 <span style={{ textDecoration: 'line-through' }}>¥2,980/月</span> が、今は無料。
+              <span style={{ margin: '0 6px', opacity: 0.5 }}>·</span>
+              クレジットカード不要。
+            </p>
             <div className="scroll-bounce" style={{ marginTop: '16px', opacity: heroLoaded ? 0.5 : 0, transition: 'opacity 1s ease-out 1.5s', display: 'flex', justifyContent: 'center' }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C4A35A" strokeWidth="1.5">
                 <path d="M12 5v14M5 12l7 7 7-7"/>
