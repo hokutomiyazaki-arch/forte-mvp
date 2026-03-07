@@ -522,7 +522,7 @@ export default function ForStoresPage() {
         {/* NAV */}
         <nav className="fsp-nav">
           <a href="#" className="fsp-nav-logo">REALPROOF</a>
-          <a href="#cta" className="fsp-nav-pill">今すぐお問い合わせ</a>
+          <a href="mailto:bodydiscoverystudio@gmail.com?subject=REALPROOF%20店舗プランについて" className="fsp-nav-pill">今すぐお問い合わせ</a>
         </nav>
 
         {/* ═══ HERO (dark) ═══ */}
@@ -545,7 +545,7 @@ export default function ForStoresPage() {
                 頑張りが自分に蓄積されない「構造」の問題です。<br />
                 REALPROOFは、その構造を根本から変えます。
               </p>
-              <a href="#cta" className="fsp-hero-cta">今すぐお問い合わせ →</a>
+              <a href="mailto:bodydiscoverystudio@gmail.com?subject=REALPROOF%20店舗プランについて" className="fsp-hero-cta">今すぐお問い合わせ →</a>
             </div>
             <div className="fsp-hero-right">
               <div className="fsp-dash">
@@ -1008,7 +1008,7 @@ export default function ForStoresPage() {
               個人の資産にする、最初の仕組みです。<br />
               まずお気軽にご相談ください。
             </p>
-            <a href="#" className="fsp-cta-btn fsp-rev fsp-d2">今すぐお問い合わせ</a>
+            <a href="mailto:bodydiscoverystudio@gmail.com?subject=REALPROOF%20店舗プランについて" className="fsp-cta-btn fsp-rev fsp-d2">今すぐお問い合わせ</a>
             <p className="fsp-cta-note fsp-rev fsp-d3">MVP参加のご相談もこちらから　|　返信は通常2営業日以内</p>
           </div>
         </section>
