@@ -27,24 +27,17 @@ export default function NewBadgePage() {
 
   async function load() {
     try {
-      // まず org-dashboard から団体情報を取得
-      const dashRes = await fetch('/api/org-dashboard')
-      if (!dashRes.ok) throw new Error('データの取得に失敗しました')
-      const dashData = await dashRes.json()
+      const res = await fetch('/api/org-badge')
+      if (!res.ok) { setError('データ取得に失敗しました'); setLoading(false); return }
+      const { org, badgeCount } = await res.json()
 
-      if (!dashData.org) {
+      if (!org) {
         window.location.href = '/org/register'
         return
       }
 
-      setOrg(dashData.org)
-
-      // バッジ件数を取得
-      const badgeRes = await fetch(`/api/org-badge?org_id=${dashData.org.id}`)
-      if (!badgeRes.ok) throw new Error('バッジ情報の取得に失敗しました')
-      const badgeData = await badgeRes.json()
-
-      setExistingCount(badgeData.badgeCount || 0)
+      setOrg(org)
+      setExistingCount(badgeCount || 0)
     } catch (err: any) {
       setError(err.message || 'データの取得に失敗しました')
     }

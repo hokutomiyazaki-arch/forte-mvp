@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic'
 /**
  * GET /api/org-badge?org_id=xxx
  * バッジ新規作成ページ用: organizations + credential_levelsの件数を返す
+ * org_id未指定の場合はowner_idで団体を自動検索
  */
 export async function GET(req: NextRequest) {
   const { userId } = await auth()
@@ -16,9 +17,22 @@ export async function GET(req: NextRequest) {
 
   try {
     const supabase = getSupabaseAdmin()
-    const orgId = req.nextUrl.searchParams.get('org_id')
+    let orgId = req.nextUrl.searchParams.get('org_id')
+
+    // org_id未指定の場合はowner_idで検索
     if (!orgId) {
-      return NextResponse.json({ error: 'org_id required' }, { status: 400 })
+      const { data: myOrg } = await supabase
+        .from('organizations')
+        .select('id')
+        .eq('owner_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (!myOrg) {
+        return NextResponse.json({ org: null, badgeCount: 0 })
+      }
+      orgId = myOrg.id
     }
 
     const [orgResult, levelsResult] = await Promise.all([
