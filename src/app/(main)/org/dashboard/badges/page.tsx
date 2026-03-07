@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { db } from '@/lib/db'
 import { useUser } from '@clerk/nextjs'
 import ImageCropper from '@/components/ImageCropper'
+import BadgeQRModal from '@/components/BadgeQRModal'
 
 export default function OrgBadgesPage() {
   const [loading, setLoading] = useState(true)
@@ -27,6 +28,8 @@ export default function OrgBadgesPage() {
   const editImageInputRef = useRef<HTMLInputElement>(null)
   // バッジ削除
   const [deletingBadge, setDeletingBadge] = useState<string | null>(null)
+  // QRモーダル
+  const [qrBadge, setQrBadge] = useState<{ name: string; token: string } | null>(null)
 
   const { user: clerkUser, isLoaded: authLoaded } = useUser()
   const authUser = clerkUser ? { id: clerkUser.id } : null
@@ -349,6 +352,12 @@ export default function OrgBadgesPage() {
                     /badge/claim/{level.claim_token?.slice(0, 8)}...
                   </div>
                   <button
+                    onClick={() => setQrBadge({ name: level.name, token: level.claim_token })}
+                    className="px-3 py-2 bg-white text-[#1A1A2E] border border-gray-200 rounded-lg text-xs hover:border-[#C4A35A] transition whitespace-nowrap"
+                  >
+                    QR
+                  </button>
+                  <button
                     onClick={() => copyClaimUrl(level.claim_token, level.id)}
                     className="px-3 py-2 bg-[#1A1A2E] text-white rounded-lg text-xs hover:bg-[#2a2a4e] transition whitespace-nowrap"
                   >
@@ -582,6 +591,15 @@ export default function OrgBadgesPage() {
           onCropComplete={handleEditCropComplete}
           onCancel={() => setEditCropperSrc(null)}
           cropShape="rect"
+        />
+      )}
+
+      {/* QRコードモーダル */}
+      {qrBadge && (
+        <BadgeQRModal
+          badgeName={qrBadge.name}
+          claimToken={qrBadge.token}
+          onClose={() => setQrBadge(null)}
         />
       )}
     </div>
