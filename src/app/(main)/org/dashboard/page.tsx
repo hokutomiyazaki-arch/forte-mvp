@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { useUser, useAuth } from '@clerk/nextjs'
+import { useUser } from '@clerk/nextjs'
 import dynamic from 'next/dynamic'
 import { RESULT_FORTES } from '@/lib/types'
 import ImageCropper from '@/components/ImageCropper'
@@ -66,7 +66,6 @@ export default function OrgDashboardPage() {
   const logoInputRef = useRef<HTMLInputElement>(null)
 
   const { user: clerkUser, isLoaded: authLoaded } = useUser()
-  const { getToken } = useAuth()
   const authUser = clerkUser ? { id: clerkUser.id } : null
 
   useEffect(() => {
@@ -74,25 +73,6 @@ export default function OrgDashboardPage() {
     if (!authUser) { window.location.href = '/login?role=pro'; return }
     load()
   }, [authLoaded, authUser])
-
-  // スリープ復帰時にネットワーク回復を待ち、トークン更新してから再ロード
-  useEffect(() => {
-    const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible') {
-        // ネットワーク回復を待つ（1500ms）
-        await new Promise(resolve => setTimeout(resolve, 1500))
-        try {
-          // トークン更新を試みる（失敗しても続行）
-          await getToken({ skipCache: true })
-        } catch (e) {
-          // トークン更新失敗は無視してloadを続行
-        }
-        load()
-      }
-    }
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [])
 
   async function load() {
     try {
@@ -126,7 +106,13 @@ export default function OrgDashboardPage() {
   if (error) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-16 text-center">
-        <p className="text-red-500">{error}</p>
+        <p className="text-red-500 mb-4">{error}</p>
+        <button
+          onClick={() => { setError(''); setLoading(true); load() }}
+          className="px-6 py-3 bg-[#1A1A2E] text-white rounded-xl text-sm font-medium"
+        >
+          再読み込み
+        </button>
       </div>
     )
   }
