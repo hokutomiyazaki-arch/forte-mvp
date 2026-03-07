@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { useUser } from '@clerk/nextjs'
+import { useUser, useAuth } from '@clerk/nextjs'
 import dynamic from 'next/dynamic'
 import { RESULT_FORTES } from '@/lib/types'
 import ImageCropper from '@/components/ImageCropper'
@@ -66,6 +66,7 @@ export default function OrgDashboardPage() {
   const logoInputRef = useRef<HTMLInputElement>(null)
 
   const { user: clerkUser, isLoaded: authLoaded } = useUser()
+  const { getToken } = useAuth()
   const authUser = clerkUser ? { id: clerkUser.id } : null
 
   useEffect(() => {
@@ -74,11 +75,12 @@ export default function OrgDashboardPage() {
     load()
   }, [authLoaded, authUser])
 
-  // スリープ復帰時に再ロード
+  // スリープ復帰時にClerkトークンを強制更新してから再ロード
   useEffect(() => {
-    const handleVisibilityChange = () => {
+    const handleVisibilityChange = async () => {
       if (document.visibilityState === 'visible') {
-        load()
+        await getToken({ skipCache: true })
+        setTimeout(() => load(), 300)
       }
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
