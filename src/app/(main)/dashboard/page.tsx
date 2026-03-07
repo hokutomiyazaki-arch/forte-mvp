@@ -57,6 +57,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   esthe: 'エステ',
   sports: 'スポーツ',
   education: '教育',
+  coaching: 'コーチング',
+  nutrition: '栄養',
   specialist: 'スペシャリスト',
 }
 const CATEGORY_KEYS = Object.keys(CATEGORY_LABELS)
