@@ -149,12 +149,12 @@ export async function GET() {
       supabase.from('nfc_cards').select('id, card_uid, status, linked_at').eq('user_id', userId).eq('status', 'active').maybeSingle(),
       // org_members: pending招待のみ
       supabase.from('org_members')
-        .select('id, organization_id, status, invited_at, organizations(id, name, type)')
+        .select('id, organization_id, status, invited_at, organizations(id, name, type, logo_url)')
         .eq('professional_id', proId)
         .eq('status', 'pending'),
       // org_members: バッジ付きレコード（所属・認定 + 取得バッジの両方のソース）
       supabase.from('org_members')
-        .select('*, credential_levels(id, name, description, image_url, organization_id, organizations(id, name, type))')
+        .select('*, credential_levels(id, name, description, image_url, organization_id, organizations(id, name, type, logo_url))')
         .eq('professional_id', proId)
         .not('credential_level_id', 'is', null),
       // オーナー団体
@@ -226,6 +226,7 @@ export async function GET() {
           member_id: b.id,
           org_name: org.name,
           org_type: org.type,
+          logo_url: org.logo_url,
           accepted_at: b.accepted_at,
         })
       }

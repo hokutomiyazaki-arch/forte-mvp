@@ -140,7 +140,7 @@ export default function DashboardPage() {
   const [inviteAccepted, setInviteAccepted] = useState<string | null>(null) // 承認完了メッセージ用
 
   // 所属・認定 state
-  const [activeOrgs, setActiveOrgs] = useState<{id: string; member_id: string; org_name: string; org_type: string; accepted_at: string}[]>([])
+  const [activeOrgs, setActiveOrgs] = useState<{id: string; member_id: string; org_name: string; org_type: string; logo_url?: string; accepted_at: string}[]>([])
   // leavingOrg removed: 所属・認定はorg_membersベースに変更
   const [credentialBadges, setCredentialBadges] = useState<{id: string; name: string; description: string | null; image_url: string | null; org_name: string; org_id: string}[]>([])
 
@@ -1206,7 +1206,11 @@ export default function DashboardPage() {
                     href={`/org/${o.id}`}
                     className="flex items-center gap-3 hover:opacity-70 transition"
                   >
-                    <span className="text-lg">{typeIcon}</span>
+                    {o.logo_url ? (
+                      <img src={o.logo_url} alt={o.org_name} className="w-6 h-6 rounded-full object-cover" />
+                    ) : (
+                      <span className="text-lg">{typeIcon}</span>
+                    )}
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-[#1A1A2E]">{o.org_name}</span>
