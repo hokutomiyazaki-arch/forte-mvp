@@ -1,6 +1,5 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase'
 import { useParams } from 'next/navigation'
 
 const ORG_TYPE_LABELS: Record<string, { typeName: string; members: string; count: string; empty: string }> = {
@@ -25,7 +24,6 @@ const ORG_TYPE_LABELS: Record<string, { typeName: string; members: string; count
 }
 
 export default function OrgPublicPage() {
-  const supabase = createClient() as any
   const params = useParams()
   const orgId = params.org_id as string
   const [loading, setLoading] = useState(true)
@@ -41,83 +39,16 @@ export default function OrgPublicPage() {
 
   async function load() {
     try {
-      // 団体情報
-      const { data: orgData, error: orgError } = await supabase
-        .from('organizations')
-        .select('*')
-        .eq('id', orgId)
-        .maybeSingle()
-
-      if (orgError) throw orgError
-      if (!orgData) {
-        setError('団体が見つかりませんでした')
-        setLoading(false)
-        return
+      const res = await fetch(`/api/org/${orgId}`)
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'データの取得に失敗しました')
       }
-
-      setOrg(orgData)
-
-      // メンバー + プルーフ数
-      const { data: memberData } = await supabase
-        .from('org_proof_summary')
-        .select('*')
-        .eq('organization_id', orgId)
-        .order('total_votes', { ascending: false })
-
-      setMembers(memberData || [])
-
-      // 集計
-      const { data: aggData } = await supabase
-        .from('org_aggregate')
-        .select('*')
-        .eq('organization_id', orgId)
-        .maybeSingle()
-
-      setAggregate(aggData)
-
-      // credential/education団体: レベル別集計
-      // credential_levels テーブル + org_members から直接取得（ビュー不使用）
-      if (orgData.type === 'credential' || orgData.type === 'education') {
-        const [levelsResult, levelMembersResult] = await Promise.all([
-          supabase
-            .from('credential_levels')
-            .select('*')
-            .eq('organization_id', orgId)
-            .order('sort_order', { ascending: true }),
-          supabase
-            .from('org_members')
-            .select('credential_level_id, professional_id')
-            .eq('organization_id', orgId)
-            .eq('status', 'active'),
-        ])
-
-        const levels = levelsResult.data || []
-        const levelMembers = (levelMembersResult.data || []).filter((m: any) => m.credential_level_id)
-
-        // memberData（org_proof_summary）から投票数マップを作成
-        const votesMap = new Map<string, number>()
-        for (const m of (memberData || [])) {
-          votesMap.set(m.professional_id, Number(m.total_votes) || 0)
-        }
-
-        // レベルごとの集計をJSで実施
-        const levelAggData = levels.map((cl: any) => {
-          const membersInLevel = levelMembers.filter((m: any) => m.credential_level_id === cl.id)
-          const memberCount = membersInLevel.length
-          const totalVotes = membersInLevel.reduce((sum: number, m: any) => sum + (votesMap.get(m.professional_id) || 0), 0)
-          return {
-            level_id: cl.id,
-            organization_id: cl.organization_id,
-            level_name: cl.name,
-            image_url: cl.image_url,
-            sort_order: cl.sort_order,
-            member_count: memberCount,
-            total_votes: totalVotes,
-          }
-        })
-
-        setLevelAggregates(levelAggData)
-      }
+      const data = await res.json()
+      setOrg(data.org)
+      setMembers(data.members || [])
+      setAggregate(data.aggregate || null)
+      setLevelAggregates(data.levelAggregates || [])
     } catch (err: any) {
       setError(err.message || 'データの取得に失敗しました')
     }

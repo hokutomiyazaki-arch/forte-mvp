@@ -1,6 +1,5 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { db } from '@/lib/db'
 import { useParams } from 'next/navigation'
 
 export default function LevelDetailPage() {
@@ -19,68 +18,15 @@ export default function LevelDetailPage() {
 
   async function load() {
     try {
-      // 団体情報 + レベル情報を並列取得
-      const [orgResult, levelResult] = await Promise.all([
-        db.select('organizations', {
-          eq: { id: orgId },
-          maybeSingle: true,
-        }),
-        db.select('credential_levels', {
-          eq: { id: levelId, organization_id: orgId },
-          maybeSingle: true,
-        }),
-      ])
-
-      if (!orgResult.data) {
-        setError('団体が見つかりませんでした')
-        setLoading(false)
-        return
+      const res = await fetch(`/api/org/${orgId}/level/${levelId}`)
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'データの取得に失敗しました')
       }
-      setOrg(orgResult.data)
-
-      if (!levelResult.data) {
-        setError('バッジが見つかりませんでした')
-        setLoading(false)
-        return
-      }
-      setLevel(levelResult.data)
-
-      // 認定者一覧（org_members + professionals JOIN）
-      const { data: memberData } = await db.select('org_members', {
-        select: 'professional_id, professionals(id, name, photo_url, title)',
-        eq: { organization_id: orgId, credential_level_id: levelId, status: 'active' },
-      })
-
-      if (memberData) {
-        // 投票数を別途取得
-        const proIds = memberData
-          .filter((m: any) => m.professionals)
-          .map((m: any) => m.professionals.id)
-
-        let voteCounts: Record<string, number> = {}
-        if (proIds.length > 0) {
-          const { data: voteData } = await db.select('vote_summary', {
-            select: 'professional_id, vote_count',
-            in: { professional_id: proIds },
-          })
-
-          if (voteData) {
-            for (const v of voteData as any[]) {
-              voteCounts[v.professional_id] = (voteCounts[v.professional_id] || 0) + v.vote_count
-            }
-          }
-        }
-
-        const enriched = memberData
-          .filter((m: any) => m.professionals)
-          .map((m: any) => ({
-            ...m.professionals,
-            total_votes: voteCounts[m.professionals.id] || 0,
-          }))
-          .sort((a: any, b: any) => b.total_votes - a.total_votes)
-
-        setMembers(enriched)
-      }
+      const data = await res.json()
+      setOrg(data.org)
+      setLevel(data.level)
+      setMembers(data.professionals || [])
     } catch (err: any) {
       setError(err.message || 'データの取得に失敗しました')
     }
@@ -138,7 +84,7 @@ export default function LevelDetailPage() {
         </div>
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
           <div className="text-2xl font-bold text-[#C4A35A]">
-            {members.reduce((s: number, m: any) => s + m.total_votes, 0)}
+            {members.reduce((s: number, m: any) => s + (m.total_votes || 0), 0)}
           </div>
           <div className="text-xs text-gray-400 mt-1">プルーフ</div>
         </div>
@@ -157,8 +103,8 @@ export default function LevelDetailPage() {
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           {members.map((m: any) => (
             <a
-              key={m.id}
-              href={`/card/${m.id}`}
+              key={m.professional_id}
+              href={`/card/${m.professional_id}`}
               className="block p-4 rounded-xl transition-shadow hover:shadow-md"
               style={{ backgroundColor: '#FAFAF7', border: '1px solid #E5E5E0' }}
             >
@@ -166,19 +112,19 @@ export default function LevelDetailPage() {
                 {m.photo_url ? (
                   <img
                     src={m.photo_url}
-                    alt={m.name}
+                    alt={m.professional_name}
                     className="w-16 h-16 rounded-full object-cover mb-2"
                   />
                 ) : (
                   <div className="w-16 h-16 rounded-full mb-2 flex items-center justify-center"
                        style={{ backgroundColor: '#E5E5E0' }}>
                     <span style={{ fontSize: '24px', color: '#888' }}>
-                      {m.name?.charAt(0) || '?'}
+                      {m.professional_name?.charAt(0) || '?'}
                     </span>
                   </div>
                 )}
                 <p style={{ fontSize: '14px', fontWeight: 600, color: '#1A1A2E' }}>
-                  {m.name}
+                  {m.professional_name}
                 </p>
                 {m.title && (
                   <p style={{ fontSize: '12px', color: '#888', marginTop: '2px' }} className="truncate w-full">
@@ -186,7 +132,7 @@ export default function LevelDetailPage() {
                   </p>
                 )}
                 <p style={{ fontSize: '11px', color: '#C4A35A', marginTop: '4px', fontWeight: 600 }}>
-                  {m.total_votes}票
+                  {m.total_votes || 0}票
                 </p>
               </div>
             </a>
