@@ -52,6 +52,8 @@ export default function OrgDashboardPage() {
   const [analytics, setAnalytics] = useState<any>(null)
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
   const [analyticsLoaded, setAnalyticsLoaded] = useState(false)
+  const [selectedBadgeId, setSelectedBadgeId] = useState<string | null>(null)
+  const [credentialLevels, setCredentialLevels] = useState<{ id: string; name: string }[]>([])
   const [activeTab, setActiveTab] = useState<'overview' | 'analytics'>('overview')
   const [error, setError] = useState('')
   const [editingOrg, setEditingOrg] = useState(false)
@@ -142,6 +144,10 @@ export default function OrgDashboardPage() {
           memberStrengths: proofData.memberStrengths || [],
         })
       }
+      // バッジ一覧をセット（Fix 3）
+      if (proofData.credentialLevels) {
+        setCredentialLevels(proofData.credentialLevels)
+      }
       setAnalyticsLoaded(true)
     } catch (err: any) {
       console.error('Analytics load error:', err)
@@ -153,6 +159,27 @@ export default function OrgDashboardPage() {
   function handleAnalyticsTab() {
     setActiveTab('analytics')
     loadAnalytics()
+  }
+
+  // バッジフィルタ変更時にproof-analyticsを再取得（Fix 3）
+  async function handleBadgeFilter(badgeId: string | null) {
+    setSelectedBadgeId(badgeId)
+    if (!org) return
+    try {
+      const url = badgeId
+        ? `/api/org/proof-analytics?orgId=${org.id}&credential_level_id=${badgeId}`
+        : `/api/org/proof-analytics?orgId=${org.id}`
+      const res = await fetch(url)
+      if (!res.ok) return
+      const proofData = await res.json()
+      setAnalytics((prev: any) => ({
+        ...prev,
+        topProofItems: proofData.topProofItems || [],
+        memberStrengths: proofData.memberStrengths || [],
+      }))
+    } catch (err) {
+      console.error('Badge filter error:', err)
+    }
   }
 
   const handleOrgEditStart = () => {
@@ -378,12 +405,42 @@ export default function OrgDashboardPage() {
             <p className="text-gray-400 mt-4 text-sm">分析データを読み込み中...</p>
           </div>
         ) : (
-          <RechartsCharts
-            analytics={{
-              ...analytics,
-              strengthDistribution: strengthWithLabels,
-            }}
-          />
+          <>
+            {/* バッジ別フィルタ（Fix 3） */}
+            {credentialLevels.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-4">
+                <button
+                  onClick={() => handleBadgeFilter(null)}
+                  className={`px-3 py-1 rounded-full text-sm border transition-colors ${
+                    selectedBadgeId === null
+                      ? 'bg-[#C4A35A] text-white border-[#C4A35A]'
+                      : 'bg-white text-gray-600 border-gray-300'
+                  }`}
+                >
+                  全メンバー
+                </button>
+                {credentialLevels.map((level) => (
+                  <button
+                    key={level.id}
+                    onClick={() => handleBadgeFilter(level.id)}
+                    className={`px-3 py-1 rounded-full text-sm border transition-colors ${
+                      selectedBadgeId === level.id
+                        ? 'bg-[#C4A35A] text-white border-[#C4A35A]'
+                        : 'bg-white text-gray-600 border-gray-300'
+                    }`}
+                  >
+                    {level.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            <RechartsCharts
+              analytics={{
+                ...analytics,
+                strengthDistribution: strengthWithLabels,
+              }}
+            />
+          </>
         )
       )}
 

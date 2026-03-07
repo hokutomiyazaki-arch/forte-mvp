@@ -217,7 +217,7 @@ function ProofRanking({ data }: { data: any[] }) {
       </h4>
       <div style={{ width: '100%', height: Math.max(200, data.length * 40) }}>
         <ResponsiveContainer>
-          <BarChart data={data} layout="vertical" margin={{ left: 100, right: 20 }}>
+          <BarChart data={data} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#E5E5E0" />
             <XAxis type="number" tick={{ fill: '#888', fontSize: 12 }} allowDecimals={false} />
             <YAxis

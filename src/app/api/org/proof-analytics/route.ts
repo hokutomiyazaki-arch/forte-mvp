@@ -35,19 +35,46 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
+    // credential_level_id フィルタ（Fix 3）
+    const credentialLevelId = request.nextUrl.searchParams.get('credential_level_id')
+
+    // バッジ一覧を取得（フィルタUI用）
+    const { data: credentialLevels } = await supabase
+      .from('credential_levels')
+      .select('id, name')
+      .eq('organization_id', orgId)
+      .order('name')
+
     // アクティブメンバーのprofessional_id一覧を取得
-    const { data: members } = await supabase
+    // org_membersはバッジ別に複数行持つため、Mapで重複排除（Fix 2）
+    let membersQuery = supabase
       .from('org_members')
       .select('professional_id, professionals(id, name, photo_url)')
       .eq('organization_id', orgId)
       .eq('status', 'active')
 
-    if (!members || members.length === 0) {
+    if (credentialLevelId) {
+      membersQuery = membersQuery.eq('credential_level_id', credentialLevelId)
+    }
+
+    const { data: rawMembers } = await membersQuery
+
+    if (!rawMembers || rawMembers.length === 0) {
       return NextResponse.json({
         topProofItems: [],
         memberStrengths: [],
+        credentialLevels: credentialLevels || [],
       })
     }
+
+    // Mapで重複排除: 同じprofessional_idは1つだけ残す（Fix 2）
+    const uniqueMemberMap = new Map<string, typeof rawMembers[0]>()
+    for (const m of rawMembers) {
+      if (!uniqueMemberMap.has(m.professional_id)) {
+        uniqueMemberMap.set(m.professional_id, m)
+      }
+    }
+    const members = Array.from(uniqueMemberMap.values())
 
     const memberProIds = members.map(m => m.professional_id)
 
@@ -125,6 +152,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       topProofItems,
       memberStrengths,
+      credentialLevels: credentialLevels || [],
     })
   } catch (error: any) {
     console.error('[org/proof-analytics] error:', error)
