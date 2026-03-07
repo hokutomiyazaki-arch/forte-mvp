@@ -1301,7 +1301,8 @@ export default function DashboardPage() {
       {/* Badges */}
       {(() => {
         const displayBadges = filterAndSortBadges(pro?.badges || [])
-        const hasBadges = displayBadges.length > 0 || credentialBadges.length > 0
+        const hasExpertBadges = (pro as any)?.is_double_expert || (pro as any)?.is_cross_expert || (pro as any)?.is_triple_expert || (pro as any)?.is_cross_master
+        const hasBadges = displayBadges.length > 0 || credentialBadges.length > 0 || hasExpertBadges
         return hasBadges ? (
           <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
             <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">取得バッジ</h2>
@@ -1319,6 +1320,39 @@ export default function DashboardPage() {
                   <span className="text-[10px] text-gray-400 mt-1">{badge.name}</span>
                 </a>
               ))}
+              {/* エキスパートバッジ */}
+              {(pro as any)?.is_double_expert && (
+                <div className="flex flex-col items-center">
+                  <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-[#C4A35A] to-[#E8D5A0] flex items-center justify-center text-white text-lg font-bold">
+                    W
+                  </div>
+                  <span className="text-[10px] text-gray-400 mt-1">ダブルエキスパート</span>
+                </div>
+              )}
+              {(pro as any)?.is_cross_expert && (
+                <div className="flex flex-col items-center">
+                  <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-[#C4A35A] to-[#E8D5A0] flex items-center justify-center text-white text-lg font-bold">
+                    X
+                  </div>
+                  <span className="text-[10px] text-gray-400 mt-1">クロスエキスパート</span>
+                </div>
+              )}
+              {(pro as any)?.is_triple_expert && (
+                <div className="flex flex-col items-center">
+                  <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-[#C4A35A] to-[#E8D5A0] flex items-center justify-center text-white text-lg font-bold">
+                    T
+                  </div>
+                  <span className="text-[10px] text-gray-400 mt-1">トリプルエキスパート</span>
+                </div>
+              )}
+              {(pro as any)?.is_cross_master && (
+                <div className="flex flex-col items-center">
+                  <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-[#C4A35A] to-[#E8D5A0] flex items-center justify-center text-white text-lg font-bold">
+                    XM
+                  </div>
+                  <span className="text-[10px] text-gray-400 mt-1">クロスマスター</span>
+                </div>
+              )}
               {/* pro.badges経由のバッジ（旧方式） */}
               {displayBadges.map((badge, i) => (
                 <div key={i} className="flex flex-col items-center">
