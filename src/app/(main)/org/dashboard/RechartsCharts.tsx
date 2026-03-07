@@ -222,16 +222,19 @@ function ProofRanking({ data }: { data: any[] }) {
             <XAxis type="number" tick={{ fill: '#888', fontSize: 12 }} allowDecimals={false} />
             <YAxis
               type="category"
-              dataKey="label"
+              dataKey="strength_label"
               tick={{ fill: '#1A1A2E', fontSize: 12 }}
-              width={95}
+              width={80}
             />
             <Tooltip
               contentStyle={{
                 backgroundColor: '#1A1A2E', border: 'none',
                 borderRadius: '8px', color: '#FAFAF7', fontSize: '13px',
               }}
-              formatter={(value: number) => [`${value} 票`, '']}
+              formatter={(value: any, name: any, props: any) => [
+                `${props.payload.count}票`,
+                props.payload.label
+              ]}
             />
             <Bar dataKey="count" fill="#C4A35A" radius={[0, 4, 4, 0]} />
           </BarChart>
