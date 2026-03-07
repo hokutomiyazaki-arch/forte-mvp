@@ -75,12 +75,19 @@ export default function OrgDashboardPage() {
     load()
   }, [authLoaded, authUser])
 
-  // スリープ復帰時にClerkトークンを強制更新してから再ロード
+  // スリープ復帰時にネットワーク回復を待ち、トークン更新してから再ロード
   useEffect(() => {
     const handleVisibilityChange = async () => {
       if (document.visibilityState === 'visible') {
-        await getToken({ skipCache: true })
-        setTimeout(() => load(), 300)
+        // ネットワーク回復を待つ（1500ms）
+        await new Promise(resolve => setTimeout(resolve, 1500))
+        try {
+          // トークン更新を試みる（失敗しても続行）
+          await getToken({ skipCache: true })
+        } catch (e) {
+          // トークン更新失敗は無視してloadを続行
+        }
+        load()
       }
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
