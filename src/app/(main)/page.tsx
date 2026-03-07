@@ -289,8 +289,18 @@ export default function Home() {
                 animation: heroLoaded ? 'pulseGlow 3s ease-in-out infinite' : 'none',
                 lineHeight: 1.2,
               }}>
-                信頼を資産に変える →
+                今すぐ無料で登録 →
               </button>
+              <p style={{
+                marginTop: '10px',
+                fontSize: '12px',
+                color: 'rgba(250,250,247,0.5)',
+                letterSpacing: '0.03em',
+              }}>
+                通常 <span style={{ textDecoration: 'line-through' }}>¥2,980/月</span> が、今は無料。
+                <span style={{ margin: '0 8px', opacity: 0.5 }}>·</span>
+                クレジットカード不要。
+              </p>
             </div>
           </div>
         </div>
@@ -355,8 +365,18 @@ export default function Home() {
                 fontFamily: "'Noto Sans JP', sans-serif",
                 animation: heroLoaded ? 'pulseGlow 3s ease-in-out infinite' : 'none',
               }}>
-                信頼を資産に変える →
+                今すぐ無料で登録 →
               </button>
+              <p style={{
+                marginTop: '8px',
+                fontSize: '11px',
+                color: 'rgba(250,250,247,0.45)',
+                textAlign: 'center',
+              }}>
+                通常 <span style={{ textDecoration: 'line-through' }}>¥2,980/月</span> が、今は無料。
+                <span style={{ margin: '0 6px', opacity: 0.5 }}>·</span>
+                クレジットカード不要。
+              </p>
             </div>
             <div className="scroll-bounce" style={{ marginTop: '16px', opacity: heroLoaded ? 0.5 : 0, transition: 'opacity 1s ease-out 1.5s', display: 'flex', justifyContent: 'center' }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C4A35A" strokeWidth="1.5">
@@ -702,7 +722,7 @@ export default function Home() {
                     lineHeight: 1.7,
                   }}>
                     バーがゴールドに光る。<br />
-                    NFCカードが届く。証明済み。
+                    証明済み。
                   </p>
                 </div>
               </div>
@@ -1006,6 +1026,29 @@ export default function Home() {
               width: '100%', fontFamily: "'Noto Sans JP', sans-serif" }}>
               プロとして登録する →
             </button>
+
+            {/* 価格アンカー */}
+            <div style={{ marginTop: '20px', textAlign: 'center' }}>
+              {/* 取り消し線 */}
+              <p style={{ fontSize: '14px', color: '#9A9A9A', marginBottom: '4px' }}>
+                <span style={{ textDecoration: 'line-through' }}>¥2,980/月</span>
+                <span style={{ margin: '0 8px', opacity: 0.4 }}>·</span>
+                <span style={{ textDecoration: 'line-through' }}>NFCカード ¥9,890</span>
+              </p>
+
+              {/* 区切り線 */}
+              <div style={{ width: '40px', margin: '12px auto', borderTop: '1px solid rgba(255,255,255,0.12)' }} />
+
+              {/* 完全無料（ゴールド強調） */}
+              <p style={{ fontSize: '15px', fontWeight: 700, color: '#C4A35A', marginBottom: '6px' }}>
+                MVP期間中：完全無料
+              </p>
+
+              {/* CC不要 */}
+              <p style={{ fontSize: '12px', color: '#9A9A9A' }}>
+                クレジットカード不要
+              </p>
+            </div>
           </Reveal>
         </div>
       </section>
