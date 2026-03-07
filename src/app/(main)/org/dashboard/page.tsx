@@ -128,10 +128,20 @@ export default function OrgDashboardPage() {
     if (analyticsLoaded || analyticsLoading || !org) return
     setAnalyticsLoading(true)
     try {
-      const res = await fetch(`/api/org-analytics?orgId=${org.id}`)
-      if (!res.ok) throw new Error('分析データの取得に失敗しました')
-      const data = await res.json()
-      if (data.analytics) setAnalytics(data.analytics)
+      const [analyticsRes, proofRes] = await Promise.all([
+        fetch(`/api/org-analytics?orgId=${org.id}`),
+        fetch(`/api/org/proof-analytics?orgId=${org.id}`),
+      ])
+      if (!analyticsRes.ok) throw new Error('分析データの取得に失敗しました')
+      const data = await analyticsRes.json()
+      const proofData = proofRes.ok ? await proofRes.json() : {}
+      if (data.analytics) {
+        setAnalytics({
+          ...data.analytics,
+          topProofItems: proofData.topProofItems || [],
+          memberStrengths: proofData.memberStrengths || [],
+        })
+      }
       setAnalyticsLoaded(true)
     } catch (err: any) {
       console.error('Analytics load error:', err)

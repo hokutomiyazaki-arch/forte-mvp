@@ -10,6 +10,8 @@ interface AnalyticsData {
   strengthDistribution?: { label: string; count: number }[]
   recentComments?: { comment: string; created_at: string; professional_name: string; professional_photo?: string }[]
   monthlyTrend?: { month: string; count: number }[]
+  topProofItems?: { proof_id: string; label: string; strength_label: string; count: number }[]
+  memberStrengths?: { professional_id: string; name: string; photo_url: string | null; total_proofs: number; top_proof_labels: string[] }[]
 }
 
 function MemberRanking({ data }: { data: any[] }) {
@@ -199,6 +201,116 @@ function MonthlyTrend({ data }: { data: any[] }) {
   )
 }
 
+function ProofRanking({ data }: { data: any[] }) {
+  if (!data || data.length === 0) {
+    return (
+      <div style={{ padding: '24px', textAlign: 'center', color: '#888' }}>
+        まだプルーフデータがありません
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ marginBottom: '32px' }}>
+      <h4 style={{ color: '#1A1A2E', fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>
+        強みランキング TOP{data.length}
+      </h4>
+      <div style={{ width: '100%', height: Math.max(200, data.length * 40) }}>
+        <ResponsiveContainer>
+          <BarChart data={data} layout="vertical" margin={{ left: 100, right: 20 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#E5E5E0" />
+            <XAxis type="number" tick={{ fill: '#888', fontSize: 12 }} allowDecimals={false} />
+            <YAxis
+              type="category"
+              dataKey="label"
+              tick={{ fill: '#1A1A2E', fontSize: 12 }}
+              width={95}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#1A1A2E', border: 'none',
+                borderRadius: '8px', color: '#FAFAF7', fontSize: '13px',
+              }}
+              formatter={(value: number) => [`${value} 票`, '']}
+            />
+            <Bar dataKey="count" fill="#C4A35A" radius={[0, 4, 4, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  )
+}
+
+function MemberStrengthsTable({ data }: { data: any[] }) {
+  if (!data || data.length === 0) {
+    return (
+      <div style={{ padding: '24px', textAlign: 'center', color: '#888' }}>
+        まだメンバーデータがありません
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ marginBottom: '32px' }}>
+      <h4 style={{ color: '#1A1A2E', fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>
+        メンバー別 強み
+      </h4>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+          <thead>
+            <tr style={{ borderBottom: '2px solid #E5E5E0' }}>
+              <th style={{ textAlign: 'left', padding: '8px 12px', color: '#888', fontWeight: 600 }}>名前</th>
+              <th style={{ textAlign: 'center', padding: '8px 12px', color: '#888', fontWeight: 600, whiteSpace: 'nowrap' }}>総プルーフ</th>
+              <th style={{ textAlign: 'left', padding: '8px 12px', color: '#888', fontWeight: 600 }}>主な強み</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((m: any) => (
+              <tr key={m.professional_id} style={{ borderBottom: '1px solid #F0F0F0' }}>
+                <td style={{ padding: '10px 12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {m.photo_url ? (
+                      <img src={m.photo_url} alt="" style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} />
+                    ) : (
+                      <div style={{
+                        width: '28px', height: '28px', borderRadius: '50%',
+                        backgroundColor: '#E5E5E0', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '12px', color: '#888',
+                      }}>
+                        {m.name?.charAt(0) || '?'}
+                      </div>
+                    )}
+                    <span style={{ fontWeight: 600, color: '#1A1A2E', whiteSpace: 'nowrap' }}>{m.name}</span>
+                  </div>
+                </td>
+                <td style={{ textAlign: 'center', padding: '10px 12px', color: '#C4A35A', fontWeight: 700 }}>
+                  {m.total_proofs}票
+                </td>
+                <td style={{ padding: '10px 12px' }}>
+                  <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                    {(m.top_proof_labels || []).map((label: string, i: number) => (
+                      <span
+                        key={i}
+                        style={{
+                          fontSize: '11px', padding: '2px 8px', borderRadius: '12px',
+                          backgroundColor: '#FFF8E7', color: '#C4A35A', fontWeight: 600,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 export default function RechartsCharts({ analytics }: { analytics: AnalyticsData | null }) {
   if (!analytics) {
     return (
@@ -246,6 +358,8 @@ export default function RechartsCharts({ analytics }: { analytics: AnalyticsData
 
       {/* チャート */}
       <MemberRanking data={analytics.memberProofCounts || []} />
+      <ProofRanking data={analytics.topProofItems || []} />
+      <MemberStrengthsTable data={analytics.memberStrengths || []} />
       <StrengthRadar data={analytics.strengthDistribution || []} />
       <MonthlyTrend data={analytics.monthlyTrend || []} />
       <CommentFeed data={analytics.recentComments || []} />
