@@ -74,6 +74,17 @@ export default function OrgDashboardPage() {
     load()
   }, [authLoaded, authUser])
 
+  // スリープ復帰時に再ロード
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        load()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [])
+
   async function load() {
     try {
       const res = await fetch('/api/org-dashboard')
