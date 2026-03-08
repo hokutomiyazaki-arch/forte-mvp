@@ -542,10 +542,9 @@ export default function Home() {
       </section>
 
       {/* ═══ S6: ベネフィット ═══ */}
-      <section style={{
+      <section className="benefit-bg" style={{
         ...sectionPad,
         backgroundColor: '#1A1A2E',
-        backgroundImage: 'url(/images/therapy.png)',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         position: 'relative',
@@ -582,7 +581,14 @@ export default function Home() {
             </div>
 
             <style>{`
+              .benefit-bg {
+                background-image: url(/images/therapy.png);
+              }
               @media (max-width: 640px) {
+                .benefit-bg {
+                  background-image: url(/images/therapy_sp.png);
+                  background-position: center top;
+                }
                 .benefit-grid {
                   grid-template-columns: 1fr !important;
                   gap: 12px !important;
