@@ -175,6 +175,12 @@ const BenefitIcons: Record<string, React.ReactNode> = {
       <path d="M24 8l4.5 9 10 1.5-7.25 7 1.7 10L24 31l-8.95 4.7 1.7-10L9.5 18.5l10-1.5z" strokeLinejoin="round"/>
     </svg>
   ),
+  connect: (
+    <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="#C4A35A" strokeWidth="1.5">
+      <circle cx="16" cy="24" r="6"/><circle cx="32" cy="24" r="6"/><path d="M22 24h4"/>
+      <path d="M10 24c0-8 6-14 14-14M38 24c0 8-6 14-14 14" strokeDasharray="3 3"/>
+    </svg>
+  ),
 };
 
 // ════════════════════════════════════════════
@@ -565,12 +571,24 @@ export default function Home() {
             </div>
           </Reveal>
           <Reveal delay={0.15}>
-            <div className="hidden md:grid md:grid-cols-4 md:gap-6 mt-8">
-              {benefits.map((b, i) => <BenefitCard key={i} benefit={b} />)}
+            {/* PC・SP共通: 2×2グリッド */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, 1fr)',
+              gap: '16px',
+              marginTop: '32px',
+            }} className="benefit-grid">
+              {benefits.map((b, i) => <BenefitCardWide key={i} benefit={b} />)}
             </div>
-            <div className="md:hidden mt-8">
-              <SwipeSlider darkDots>{benefits.map((b, i) => <BenefitCard key={i} benefit={b} />)}</SwipeSlider>
-            </div>
+
+            <style>{`
+              @media (max-width: 640px) {
+                .benefit-grid {
+                  grid-template-columns: 1fr !important;
+                  gap: 12px !important;
+                }
+              }
+            `}</style>
           </Reveal>
         </div>
       </section>
@@ -1185,10 +1203,26 @@ const pillars = [
 ];
 
 const benefits = [
-  { icon: 'eye',   title: '技術に、値段がつけられる',              desc: '積み上げてきたものが、初めて「見える価値」になる。' },
-  { icon: 'loop',  title: '「ありがとう」が、消えなくなる',        desc: '感謝はいつも、その場で終わっていた。初めて、積み上がるようになる。' },
-  { icon: 'share', title: '初対面の3秒で、信頼が伝わる',           desc: '自己紹介より先に、クライアントの声が語りかける。' },
-  { icon: 'star',  title: '技術を届けたい人が、あなたを見つける。', desc: '広告も、営業も、いらない。信頼の記録が、代わりに語りかける。' },
+  {
+    icon: 'connect',
+    title: '技術を届けたい人が、あなたを見つける。',
+    desc: '広告も、営業も、いらない。信頼の記録が、代わりに語りかける。',
+  },
+  {
+    icon: 'loop',
+    title: '「ありがとう」が、消えなくなる',
+    desc: '感謝はいつも、その場で終わっていた。初めて、積み上がるようになる。',
+  },
+  {
+    icon: 'share',
+    title: '初対面の3秒で、信頼が伝わる',
+    desc: '自己紹介より先に、クライアントの声が語りかける。',
+  },
+  {
+    icon: 'eye',
+    title: '技術に、値段がつけられる',
+    desc: '積み上げてきたものが、初めて「見える価値」になる。',
+  },
 ];
 
 const voices = [
@@ -1276,6 +1310,40 @@ function BenefitCard({ benefit }: { benefit: typeof benefits[number] }) {
       <div className="mb-3">{BenefitIcons[benefit.icon]}</div>
       <h3 style={{ color: '#C4A35A', fontSize: '18px', fontWeight: 700, marginBottom: '12px' }}>{benefit.title}</h3>
       <p style={{ color: '#FAFAF7', fontSize: '14px', lineHeight: 1.8, opacity: 0.85 }}>{benefit.desc}</p>
+    </div>
+  );
+}
+
+function BenefitCardWide({ benefit }: { benefit: typeof benefits[number] }) {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: '20px',
+      backgroundColor: '#222240',
+      borderRadius: '16px',
+      padding: '24px',
+    }}>
+      {/* アイコン（左） */}
+      <div style={{ flexShrink: 0, marginTop: '2px' }}>
+        {BenefitIcons[benefit.icon]}
+      </div>
+      {/* テキスト（右） */}
+      <div>
+        <h3 style={{
+          color: '#C4A35A',
+          fontSize: '16px',
+          fontWeight: 700,
+          marginBottom: '8px',
+          lineHeight: 1.4,
+        }}>{benefit.title}</h3>
+        <p style={{
+          color: '#FAFAF7',
+          fontSize: '14px',
+          lineHeight: 1.8,
+          opacity: 0.85,
+        }}>{benefit.desc}</p>
+      </div>
     </div>
   );
 }
