@@ -1,6 +1,21 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { ClerkProvider } from '@clerk/nextjs'
+import { Inter, Noto_Sans_JP } from 'next/font/google'
+
+const inter = Inter({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800', '900'],
+  variable: '--font-inter',
+  display: 'swap',
+})
+
+const notoSansJP = Noto_Sans_JP({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800', '900'],
+  variable: '--font-noto-sans-jp',
+  display: 'swap',
+})
 import { jaJP } from '@clerk/localizations'
 
 // Clerk 日本語カスタマイズ（jaJP をベースにカスタムテキストで上書き）
@@ -115,15 +130,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         },
       }}
     >
-      <html lang="ja">
+      <html lang="ja" className={`${inter.variable} ${notoSansJP.variable}`}>
         <head>
           <meta name="theme-color" content="#1A1A2E" />
-          <link rel="preconnect" href="https://fonts.googleapis.com" />
-          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-          <link
-            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+JP:wght@400;500;600;700;800;900&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Noto+Serif+JP:wght@300;400;500;600&family=Lato:wght@300;400;700&display=swap"
-            rel="stylesheet"
-          />
         </head>
         <body className="min-h-screen">
           {children}

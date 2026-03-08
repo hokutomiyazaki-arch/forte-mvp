@@ -1,6 +1,29 @@
 'use client'
 
 import { useEffect } from 'react'
+import { Cormorant_Garamond, Noto_Serif_JP, Lato } from 'next/font/google'
+
+const cormorant = Cormorant_Garamond({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600'],
+  style: ['normal', 'italic'],
+  variable: '--font-cormorant',
+  display: 'swap',
+})
+
+const notoSerifJP = Noto_Serif_JP({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600'],
+  variable: '--font-noto-serif-jp',
+  display: 'swap',
+})
+
+const lato = Lato({
+  subsets: ['latin'],
+  weight: ['300', '400', '700'],
+  variable: '--font-lato',
+  display: 'swap',
+})
 
 export default function ForStoresPage() {
   useEffect(() => {
@@ -17,7 +40,7 @@ export default function ForStoresPage() {
   }, [])
 
   return (
-    <>
+    <div className={`${cormorant.variable} ${notoSerifJP.variable} ${lato.variable}`}>
       <style>{`
 /* ─── FOR-STORES PAGE (scoped with .fsp prefix) ─── */
 .fsp-root {
@@ -1018,6 +1041,6 @@ export default function ForStoresPage() {
           <span className="fsp-fc">© 2026 株式会社 Legrand chariot　|　CONFIDENTIAL</span>
         </footer>
       </div>
-    </>
+    </div>
   )
 }

@@ -1,5 +1,10 @@
 # REALPROOF 開発ルール
 
+## 🚨 絶対ルール（最優先）
+- **ブランチを作らない。常にmainに直接コミット・push。**
+- worktreeも作らない。
+- `git checkout -b` は使わない。
+
 ## 鉄則
 - getUser()は使わない。常にgetSession()
 - .single()は使わない。常に.maybeSingle()
