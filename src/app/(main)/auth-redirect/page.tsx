@@ -2,36 +2,36 @@
 import { useUser } from '@clerk/nextjs'
 import { useEffect } from 'react'
 
-export default function AuthRedirect() {
+export default function AuthRedirectPage() {
   const { user, isLoaded } = useUser()
 
   useEffect(() => {
     if (!isLoaded) return
-    if (!user) {
-      window.location.href = '/sign-in'
-      return
-    }
+    if (!user) { window.location.href = '/sign-in'; return }
 
     fetch('/api/user/role')
       .then(res => res.json())
       .then(data => {
-        console.log('[auth-redirect] roleData:', JSON.stringify(data))
-        if (data.role === 'professional' && !data.proDeactivated) {
+        if (data.role === 'professional') {
           window.location.href = '/dashboard'
-        } else if (data.role === null) {
-          window.location.href = '/onboarding'
-        } else {
+        } else if (data.role === 'client') {
           window.location.href = '/mycard'
+        } else {
+          // DBにレコードなし = 新規ユーザー
+          window.location.href = '/onboarding'
         }
       })
       .catch(() => {
-        window.location.href = '/mycard'
+        window.location.href = '/onboarding'
       })
   }, [isLoaded, user])
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#FAFAF7]">
-      <div className="animate-pulse text-gray-400">読み込み中...</div>
+    <div style={{
+      display: 'flex', justifyContent: 'center', alignItems: 'center',
+      height: '100vh', background: '#FAFAF7',
+    }}>
+      <div className="animate-pulse" style={{ color: '#888' }}>読み込み中...</div>
     </div>
   )
 }
