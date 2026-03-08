@@ -917,6 +917,10 @@ function VoteForm() {
           {/* ── 1. リワード選択（常時展開、必須） ── */}
           {hasRewards && (
             <div className="bg-white rounded-xl p-4 shadow-sm">
+              <div className="mb-4">
+                <span className="text-xs tracking-widest text-[#C4A35A] uppercase">STEP 1</span>
+                <p className="text-xl font-semibold text-[#1A1A2E] mt-1">プレゼントを選んでください 🎁</p>
+              </div>
               <div className="flex items-center justify-between mb-3">
                 <p className="text-sm font-bold text-[#1A1A2E]">
                   リワードを選ぶ <span className="text-red-400">*</span>
@@ -957,7 +961,7 @@ function VoteForm() {
                           )}
                         </div>
                       </div>
-                      <span className={`text-sm ${isSelected ? 'text-[#1A1A2E] font-medium' : 'text-[#1A1A2E]'}`}>
+                      <span className={`text-lg ${isSelected ? 'text-[#1A1A2E] font-medium' : 'text-[#1A1A2E]'}`}>
                         {displayLabel}
                       </span>
                     </label>
@@ -972,6 +976,10 @@ function VoteForm() {
 
           {/* ── 2. セッション回数セレクター ── */}
           <div className="bg-white rounded-xl p-4 shadow-sm">
+            <div className="mb-4">
+              <span className="text-xs tracking-widest text-[#C4A35A] uppercase">STEP {hasRewards ? 2 : 1}</span>
+              <p className="text-xl font-semibold text-[#1A1A2E] mt-1">何回目のご利用ですか？</p>
+            </div>
             <p className="text-sm font-bold text-[#1A1A2E] mb-3">
               {pro.name}さんのセッションは？
             </p>
@@ -984,7 +992,7 @@ function VoteForm() {
                   key={opt.value}
                   type="button"
                   onClick={() => setSessionCount(opt.value)}
-                  className={`py-3 px-4 rounded-lg text-sm font-medium border-2 transition-colors ${
+                  className={`py-3 px-4 rounded-lg text-lg font-medium border-2 transition-colors ${
                     sessionCount === opt.value
                       ? 'border-[#C4A35A] bg-[#1A1A2E] text-[#C4A35A]'
                       : 'border-[#E5E7EB] bg-white text-[#1A1A2E] hover:border-gray-300'
@@ -996,7 +1004,11 @@ function VoteForm() {
             </div>
           </div>
 
-          {/* ── 2. 強みプルーフ（アコーディオン） ── */}
+          {/* ── 3. 強みプルーフ（アコーディオン） ── */}
+          <div className="mb-0">
+            <span className="text-xs tracking-widest text-[#C4A35A] uppercase">STEP {hasRewards ? 3 : 2}</span>
+            <p className="text-xl font-semibold text-[#1A1A2E] mt-1">あなたが感じたことを選んでください（3つまで）</p>
+          </div>
           <Accordion
             title="強みプルーフ"
             count={proofCount}
@@ -1038,7 +1050,7 @@ function VoteForm() {
                           )}
                         </div>
                       </div>
-                      <span className="text-sm text-[#1A1A2E]">{item.label}</span>
+                      <span className="text-lg text-[#1A1A2E]">{item.label}</span>
                     </label>
                   )
                 })}
@@ -1072,7 +1084,7 @@ function VoteForm() {
                     )}
                   </div>
                 </div>
-                <span className="text-sm text-[#1A1A2E]">期待できそう！</span>
+                <span className="text-lg text-[#1A1A2E]">期待できそう！</span>
               </label>
               {isHopeful && (
                 <p className="text-xs text-[#9CA3AF] ml-11 mt-1">
@@ -1087,7 +1099,11 @@ function VoteForm() {
             </div>
           </Accordion>
 
-          {/* ── 3. 人柄プルーフ（アコーディオン） ── */}
+          {/* ── 4. 人柄プルーフ（アコーディオン） ── */}
+          <div className="mb-0">
+            <span className="text-xs tracking-widest text-[#C4A35A] uppercase">STEP {hasRewards ? 4 : 3}</span>
+            <p className="text-xl font-semibold text-[#1A1A2E] mt-1">この方の人柄は？（任意・3つまで）</p>
+          </div>
           <Accordion
             title="人柄プルーフ"
             count={personalityCount}
@@ -1128,15 +1144,19 @@ function VoteForm() {
                         )}
                       </div>
                     </div>
-                    <span className="text-sm text-[#1A1A2E]">{item.label}</span>
+                    <span className="text-lg text-[#1A1A2E]">{item.label}</span>
                   </label>
                 )
               })}
             </div>
           </Accordion>
 
-          {/* ── 4. ひとことコメント ── */}
+          {/* ── 5. ひとことコメント ── */}
           <div className="bg-white rounded-xl p-4 shadow-sm">
+            <div className="mb-4">
+              <span className="text-xs tracking-widest text-[#C4A35A] uppercase">STEP {hasRewards ? 5 : 4}</span>
+              <p className="text-xl font-semibold text-[#1A1A2E] mt-1">一言メッセージをどうぞ（任意）</p>
+            </div>
             <label className="block text-sm font-bold text-[#1A1A2E] mb-1">
               ひとことコメント（任意）
             </label>
@@ -1158,8 +1178,12 @@ function VoteForm() {
             </div>
           )}
 
-          {/* ── 5. 認証方法選択 / 送信 ── */}
+          {/* ── 6. 認証方法選択 / 送信 ── */}
           <div className="bg-white rounded-xl p-4 shadow-sm space-y-3">
+            <div className="mb-4">
+              <span className="text-xs tracking-widest text-[#C4A35A] uppercase">STEP {hasRewards ? 6 : 5}</span>
+              <p className="text-xl font-semibold text-[#1A1A2E] mt-1">投票を完了する</p>
+            </div>
             <p className="text-sm font-bold text-[#1A1A2E] mb-1">プルーフを送信する</p>
 
             {/* ログイン済み: このアカウントで投票 */}
@@ -1258,6 +1282,9 @@ function VoteForm() {
               メールで送信する
             </button>
 
+            <p className="text-sm text-gray-400 mt-2 text-center">
+              LINE・Google・メールで本人確認します
+            </p>
             <p className="text-center text-[#9CA3AF] text-xs">
               ※ プルーフは匿名です。プロにメールアドレスは公開されません。
             </p>
