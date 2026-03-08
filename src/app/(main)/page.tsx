@@ -170,6 +170,11 @@ const BenefitIcons: Record<string, React.ReactNode> = {
   eye: (<svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="#C4A35A" strokeWidth="1.5"><ellipse cx="24" cy="24" rx="16" ry="10"/><circle cx="24" cy="24" r="5"/></svg>),
   loop: (<svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="#C4A35A" strokeWidth="1.5"><path d="M32 16c4 3 6 7 6 8s-2 5-6 8M16 32c-4-3-6-7-6-8s2-5 6-8"/><path d="M30 12l4 4-4 4M18 36l-4-4 4-4"/></svg>),
   share: (<svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="#C4A35A" strokeWidth="1.5"><path d="M24 34V14m0 0l-7 7m7-7l7 7"/><rect x="10" y="28" width="28" height="10" rx="2"/></svg>),
+  star: (
+    <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="#C4A35A" strokeWidth="1.5">
+      <path d="M24 8l4.5 9 10 1.5-7.25 7 1.7 10L24 31l-8.95 4.7 1.7-10L9.5 18.5l10-1.5z" strokeLinejoin="round"/>
+    </svg>
+  ),
 };
 
 // ════════════════════════════════════════════
@@ -452,7 +457,7 @@ export default function Home() {
       </section>
 
       {/* ═══ S4.5: 口コミ比較 ═══ */}
-      <section style={{ ...sectionPad, backgroundColor: '#FAFAF7' }}>
+      <section style={{ ...sectionPad, backgroundColor: '#E8E3D8' }}>
         <div className={inner}>
           <Reveal>
             <div className="text-center mb-10">
@@ -531,8 +536,22 @@ export default function Home() {
       </section>
 
       {/* ═══ S6: ベネフィット ═══ */}
-      <section style={{ ...sectionPad, backgroundColor: '#1A1A2E' }}>
-        <div className={inner}>
+      <section style={{
+        ...sectionPad,
+        backgroundColor: '#1A1A2E',
+        backgroundImage: 'url(/images/therapy.png)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        position: 'relative',
+      }}>
+        {/* オーバーレイ */}
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.55)',
+          zIndex: 0,
+        }} />
+        <div className={inner} style={{ position: 'relative', zIndex: 1 }}>
           <Reveal>
             <div className="text-center mb-4">
               <h2 style={{ color: '#FAFAF7', fontSize: '22px', fontWeight: 700, marginBottom: '16px' }}>
@@ -546,7 +565,7 @@ export default function Home() {
             </div>
           </Reveal>
           <Reveal delay={0.15}>
-            <div className="hidden md:grid md:grid-cols-3 md:gap-6 mt-8">
+            <div className="hidden md:grid md:grid-cols-4 md:gap-6 mt-8">
               {benefits.map((b, i) => <BenefitCard key={i} benefit={b} />)}
             </div>
             <div className="md:hidden mt-8">
@@ -1149,26 +1168,27 @@ const howItWorksSteps = [
 
 const pillars = [
   {
-    title: '一生、消えない。',
-    desc: '積み上げた信頼は、あなたのものとしてずっと残り続ける。1年目も、10年目も。消えない信頼が、あなたのキャリアを支える。',
-    iconKey: 'permanent',
-  },
-  {
-    title: '★じゃ、わからない。',
-    desc: '★1つで何がわかる？ REALPROOFは「この人の何が良いか」を多次元で可視化する。',
+    title: '強みに、投票する。',
+    desc: '★じゃない。「この人の何が良いか」を言葉と数字で記録する。',
     iconKey: 'multidim',
   },
   {
-    title: '嘘が、つけない。',
-    desc: '対面限定。本人認証。1人1回。実際に会った人しか記録できない設計。',
+    title: 'あなた個人に、紐づく。',
+    desc: '店舗じゃなく、あなたに積み上がる。どこに移っても、ゼロに戻らない。',
+    iconKey: 'permanent',
+  },
+  {
+    title: '会った人しか、押せない。',
+    desc: 'NFC/QRで本人認証。対面限定。買えない、頼めない、作れない記録。',
     iconKey: 'tamperproof',
   },
 ];
 
 const benefits = [
-  { icon: 'eye', title: '自分の強みが、見える。', desc: '「あなたの何が良いですか？」と聞かれて、すぐ答えられるか。信頼の記録が貯まると、クライアントの目を通して「自分が何で選ばれているか」が見えてくる。自己紹介が変わる。現場の自信が変わる。' },
-  { icon: 'loop', title: '紹介の輪が、回り出す。', desc: 'クライアントも、プロ同士も、あなたの「強み」をシェアし合える。広告費¥0。営業トーク不要。あなたを本当に必要としている人だけが、あなたに出会える。' },
-  { icon: 'share', title: 'どこにでも、貼れる。', desc: 'Instagram、ホームページ、LINE、名刺。あなたが今使っているチャネルに、信頼の証拠をそのまま載せられる。REALPROOFの中だけで完結しない。あなたの武器になる。' },
+  { icon: 'eye',   title: '技術に、値段がつけられる',              desc: '積み上げてきたものが、初めて「見える価値」になる。' },
+  { icon: 'loop',  title: '「ありがとう」が、消えなくなる',        desc: '感謝はいつも、その場で終わっていた。初めて、積み上がるようになる。' },
+  { icon: 'share', title: '初対面の3秒で、信頼が伝わる',           desc: '自己紹介より先に、クライアントの声が語りかける。' },
+  { icon: 'star',  title: '技術を届けたい人が、あなたを見つける。', desc: '広告も、営業も、いらない。信頼の記録が、代わりに語りかける。' },
 ];
 
 const voices = [
