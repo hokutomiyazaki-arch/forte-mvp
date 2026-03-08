@@ -1,8 +1,16 @@
+'use client'
+
 import { SignIn } from '@clerk/nextjs'
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
+import { useEffect, useState } from 'react'
 
 export default function SignInPage() {
+  const [isLineBrowser, setIsLineBrowser] = useState(false)
+  useEffect(() => {
+    setIsLineBrowser(/Line/i.test(navigator.userAgent))
+  }, [])
+
   return (
     <div className="min-h-screen bg-[#FAFAF7]">
       <Navbar />
@@ -16,6 +24,9 @@ export default function SignInPage() {
               headerTitle: 'text-[#1A1A2E]',
               headerSubtitle: 'text-gray-500',
               socialButtonsBlockButton: 'border-gray-200',
+              socialButtonsBlockButton__google: isLineBrowser
+                ? { display: 'none' }
+                : {},
               formButtonPrimary: 'bg-[#1A1A2E] hover:bg-[#2a2a4e]',
             }
           }}
