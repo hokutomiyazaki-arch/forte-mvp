@@ -738,6 +738,7 @@ export default function Home() {
                 }}
                 >
                   <img
+                    loading="lazy"
                     src="/card-level-1.png"
                     alt="REALPROOF PROVEN NFCカードとアプリ画面"
                     style={{ width: '100%', height: 'auto', display: 'block' }}
@@ -822,6 +823,7 @@ export default function Home() {
                 }}
                 >
                   <img
+                    loading="lazy"
                     src="/card-level-2.png"
                     alt="REALPROOF SPECIALIST 認定証と黒カード"
                     style={{ width: '100%', height: 'auto', display: 'block' }}
@@ -906,6 +908,7 @@ export default function Home() {
                 }}
                 >
                   <img
+                    loading="lazy"
                     src="/card-level-3.png"
                     alt="REALPROOF MASTER ブラックメタルカード ゴールド刻印"
                     style={{ width: '100%', height: 'auto', display: 'block' }}
@@ -1044,6 +1047,7 @@ export default function Home() {
               <div className="mx-auto mb-5" style={{ width: '72px', height: '72px', borderRadius: '50%', border: '1px solid #C4A35A', overflow: 'hidden',
                 background: 'linear-gradient(135deg, #2a2a3e, #1a1a2e)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <img
+                  loading="lazy"
                   src="/images/founder.png"
                   alt="宮崎ほくと"
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
@@ -1289,6 +1293,7 @@ function StepCard({ step }: { step: typeof howItWorksSteps[number] }) {
       {step.mockup && (
         <div className="mb-3 mx-auto" style={{ maxWidth: '200px' }}>
           <img
+            loading="lazy"
             src={step.mockup}
             alt={step.title}
             className="rounded-lg w-full"
