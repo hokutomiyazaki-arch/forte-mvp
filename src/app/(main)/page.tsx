@@ -367,17 +367,17 @@ export default function Home() {
               }}>
                 今すぐ無料で登録 →
               </button>
-              <p style={{
-                marginTop: '8px',
-                fontSize: '11px',
-                color: 'rgba(250,250,247,0.45)',
-                textAlign: 'center',
-              }}>
-                通常 <span style={{ textDecoration: 'line-through' }}>¥2,980/月</span> が、今は無料。
-                <span style={{ margin: '0 6px', opacity: 0.5 }}>·</span>
-                クレジットカード不要。
-              </p>
             </div>
+            <p style={{
+              marginTop: '8px',
+              fontSize: '11px',
+              color: 'rgba(250,250,247,0.45)',
+              textAlign: 'center',
+            }}>
+              通常 <span style={{ textDecoration: 'line-through' }}>¥2,980/月</span> が、今は無料。
+              <span style={{ margin: '0 6px', opacity: 0.5 }}>·</span>
+              クレジットカード不要。
+            </p>
             <div className="scroll-bounce" style={{ marginTop: '16px', opacity: heroLoaded ? 0.5 : 0, transition: 'opacity 1s ease-out 1.5s', display: 'flex', justifyContent: 'center' }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C4A35A" strokeWidth="1.5">
                 <path d="M12 5v14M5 12l7 7 7-7"/>
@@ -446,44 +446,6 @@ export default function Home() {
             <p className="text-center" style={{ color: '#9A9A9A', fontSize: '13px', marginTop: '28px' }}>
               ログイン不要。アプリのダウンロードも不要。<br />
               クライアントはメールアドレスだけで記録できる。
-            </p>
-          </Reveal>
-        </div>
-      </section>
-
-      {/* ═══ S4: 多次元の強み ═══ */}
-      <section style={{ ...sectionPad, backgroundColor: '#1A1A2E' }}>
-        <div className={inner} ref={chartRef}>
-          <Reveal>
-            <div className="text-center mb-10">
-              <h2 style={{ color: '#FAFAF7', fontSize: '22px', fontWeight: 700 }}>
-                あなたの強みに人が集まる。<br />
-                磨いた強みがキャリアになる。
-              </h2>
-            </div>
-          </Reveal>
-
-          <div className="mb-10"><BarChart animated={chartVisible} /></div>
-
-          <Reveal delay={0.3}>
-            <div className="md:flex md:gap-12 md:justify-center text-center md:text-left">
-              <div style={{ marginBottom: '20px' }}>
-                <div style={{ color: '#FAFAF7', fontSize: '15px', fontWeight: 700 }}>技術的強み</div>
-                <div style={{ color: '#C4A35A', fontSize: '12px', fontFamily: "'Inter', sans-serif", marginBottom: '4px' }}>Result Proofs</div>
-                <div style={{ color: '#9A9A9A', fontSize: '14px' }}>クライアントが実感した具体的な成果</div>
-              </div>
-              <div style={{ marginBottom: '28px' }}>
-                <div style={{ color: '#FAFAF7', fontSize: '15px', fontWeight: 700 }}>人間的強み</div>
-                <div style={{ color: '#C4A35A', fontSize: '12px', fontFamily: "'Inter', sans-serif", marginBottom: '4px' }}>Humanity Proofs</div>
-                <div style={{ color: '#9A9A9A', fontSize: '14px' }}>信頼、共感、安心感</div>
-              </div>
-            </div>
-          </Reveal>
-
-          <Reveal delay={0.4}>
-            <p className="text-center" style={{ color: '#C4A35A', fontSize: '16px', fontWeight: 700 }}>
-              REALPROOFには★の数も批判も存在しない。<br />
-              あるのは「あなたの強みへの記録」だけ。
             </p>
           </Reveal>
         </div>
@@ -633,6 +595,69 @@ export default function Home() {
               </p>
             </div>
           </Reveal>
+
+          {/* ── グラフ（S4から移動） ── */}
+          <div ref={chartRef} style={{ marginBottom: '80px' }}>
+            <Reveal>
+              <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+                <h2 style={{
+                  color: '#1A1A2E',
+                  fontSize: 'clamp(20px, 4vw, 26px)',
+                  fontWeight: 700,
+                  lineHeight: 1.5,
+                  marginBottom: '12px',
+                }}>
+                  あなたの強みに人が集まる。<br />
+                  磨いた強みがキャリアになる。
+                </h2>
+                <p style={{ color: '#6B6B7B', fontSize: '14px' }}>
+                  クライアントはあなたの何を評価しているのか、数字で見える。
+                </p>
+              </div>
+            </Reveal>
+
+            {/* グラフ（ダークカード内に入れてコントラストを維持） */}
+            <div style={{
+              backgroundColor: '#1A1A2E',
+              borderRadius: '16px',
+              padding: '40px 32px',
+              marginBottom: '32px',
+              boxShadow: '0 8px 32px rgba(26,26,46,0.10)',
+            }}>
+              <BarChart animated={chartVisible} />
+            </div>
+
+            {/* 凡例 */}
+            <Reveal delay={0.3}>
+              <div className="md:flex md:gap-12 md:justify-center text-center md:text-left">
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{ color: '#1A1A2E', fontSize: '15px', fontWeight: 700 }}>技術的強み</div>
+                  <div style={{ color: '#C4A35A', fontSize: '12px', fontFamily: "'Inter', sans-serif", marginBottom: '4px' }}>Result Proofs</div>
+                  <div style={{ color: '#6B6B7B', fontSize: '14px' }}>クライアントが実感した具体的な成果</div>
+                </div>
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{ color: '#1A1A2E', fontSize: '15px', fontWeight: 700 }}>人間的強み</div>
+                  <div style={{ color: '#C4A35A', fontSize: '12px', fontFamily: "'Inter', sans-serif", marginBottom: '4px' }}>Humanity Proofs</div>
+                  <div style={{ color: '#6B6B7B', fontSize: '14px' }}>信頼、共感、安心感</div>
+                </div>
+              </div>
+            </Reveal>
+
+            <Reveal delay={0.4}>
+              <p style={{
+                textAlign: 'center',
+                color: '#1A1A2E',
+                fontSize: '15px',
+                fontWeight: 700,
+                marginTop: '8px',
+                paddingTop: '24px',
+                borderTop: '1px solid rgba(26,26,46,0.08)',
+              }}>
+                REALPROOFには★の数も批判も存在しない。<br />
+                あるのは「あなたの強みへの記録」だけ。
+              </p>
+            </Reveal>
+          </div>
 
           {/* ── 3枚カード ── */}
           <div style={{
