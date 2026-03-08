@@ -829,7 +829,7 @@ export default function DashboardPage() {
           <div className="flex flex-col items-center">
             <div className="relative">
               {form.photo_url ? (
-                <img src={form.photo_url} alt="" className={`w-24 h-24 rounded-full object-cover mb-2 ${uploading ? 'opacity-40' : ''}`} />
+                <img src={form.photo_url} alt="" loading="lazy" className={`w-24 h-24 rounded-full object-cover mb-2 ${uploading ? 'opacity-40' : ''}`} />
               ) : (
                 <div className={`w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-sm mb-2 ${uploading ? 'opacity-40' : ''}`}>写真</div>
               )}
@@ -1209,7 +1209,7 @@ export default function DashboardPage() {
                     className="flex items-center gap-3 hover:opacity-70 transition"
                   >
                     {o.logo_url ? (
-                      <img src={o.logo_url} alt={o.org_name} className="w-6 h-6 rounded-full object-cover" />
+                      <img src={o.logo_url} alt={o.org_name} loading="lazy" className="w-6 h-6 rounded-full object-cover" />
                     ) : (
                       <span className="text-lg">{typeIcon}</span>
                     )}
@@ -1399,7 +1399,7 @@ export default function DashboardPage() {
               {credentialBadges.map((badge) => (
                 <a key={badge.id} href={`/org/${badge.org_id}`} className="flex flex-col items-center hover:opacity-70 transition">
                   {badge.image_url ? (
-                    <img src={badge.image_url} alt={badge.name} className="w-16 h-16 rounded-xl object-cover" />
+                    <img src={badge.image_url} alt={badge.name} loading="lazy" className="w-16 h-16 rounded-xl object-cover" />
                   ) : (
                     <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-[#C4A35A] to-[#E8D5A0] flex items-center justify-center text-white text-lg font-bold">
                       {badge.name.charAt(0)}
@@ -1411,7 +1411,7 @@ export default function DashboardPage() {
               {/* pro.badges経由のバッジ（旧方式） */}
               {displayBadges.map((badge, i) => (
                 <div key={i} className="flex flex-col items-center">
-                  <img src={badge.image_url} alt={badge.label} className="w-16 h-16" />
+                  <img src={badge.image_url} alt={badge.label} loading="lazy" className="w-16 h-16" />
                   <span className="text-[10px] text-gray-400 mt-1">{badge.label}</span>
                 </div>
               ))}
@@ -2364,7 +2364,7 @@ export default function DashboardPage() {
                     onMouseLeave={e => e.currentTarget.style.borderColor = '#E8E4DC'}
                   >
                     {bPro.photo_url ? (
-                      <img src={bPro.photo_url} alt={bPro.name}
+                      <img src={bPro.photo_url} alt={bPro.name} loading="lazy"
                         style={{ width: 52, height: 52, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
                     ) : (
                       <div style={{
