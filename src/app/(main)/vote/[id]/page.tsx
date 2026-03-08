@@ -137,6 +137,11 @@ function VoteForm() {
 
   const loadedRef = useRef(false)
 
+  // URLバーからトークンを消す（カジュアルな拡散への心理的摩擦）
+  useEffect(() => {
+    window.history.replaceState(null, '', '/vote')
+  }, [])
+
   useEffect(() => {
     // authLoaded が false の間は待機
     if (!authLoaded) return
