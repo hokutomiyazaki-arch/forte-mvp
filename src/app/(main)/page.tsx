@@ -1164,6 +1164,8 @@ export default function Home() {
       <div style={{ textAlign: 'center', padding: '24px', borderTop: '1px solid rgba(255,255,255,0.08)', backgroundColor: '#1A1A2E' }}>
         <a
           href="/for-stores"
+          target="_blank"
+          rel="noopener noreferrer"
           style={{ fontSize: '13px', color: '#9A9A9A', textDecoration: 'none', letterSpacing: '0.05em' }}
         >
           店舗・団体のオーナーの方はこちら →
