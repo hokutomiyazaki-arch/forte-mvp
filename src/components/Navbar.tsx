@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { SignInButton, SignedIn, SignedOut, UserButton, useUser } from '@clerk/nextjs'
+import { SignedIn, SignedOut, UserButton, useUser } from '@clerk/nextjs'
 
 export default function Navbar() {
   const { isLoaded } = useUser()
@@ -48,15 +48,14 @@ export default function Navbar() {
               />
             </SignedIn>
             <SignedOut>
-              <SignInButton mode="modal">
-                <button style={{
+              <a href="https://accounts.realproof.jp/sign-in?redirect_url=https%3A%2F%2Frealproof.jp%2Fauth-redirect"
+                style={{
                   color: '#1A1A2E', background: '#C4A35A', border: 'none',
                   cursor: 'pointer', fontSize: 14, padding: '6px 16px',
-                  borderRadius: 8, fontWeight: 600,
+                  borderRadius: 8, fontWeight: 600, textDecoration: 'none',
                 }}>
-                  ログイン
-                </button>
-              </SignInButton>
+                ログイン
+              </a>
             </SignedOut>
           </>
         )}
@@ -100,13 +99,11 @@ export default function Navbar() {
             />
           </SignedIn>
           <SignedOut>
-            <SignInButton mode="modal">
-              <button onClick={() => setMenuOpen(false)}
-                style={{ color: '#fff', background: 'none', border: 'none',
-                  cursor: 'pointer', fontSize: 15, textAlign: 'left' as const, padding: 0 }}>
-                ログイン
-              </button>
-            </SignInButton>
+            <a href="https://accounts.realproof.jp/sign-in?redirect_url=https%3A%2F%2Frealproof.jp%2Fauth-redirect"
+              onClick={() => setMenuOpen(false)}
+              style={{ color: '#fff', textDecoration: 'none', fontSize: 15 }}>
+              ログイン
+            </a>
           </SignedOut>
         </div>
       )}

@@ -1,31 +1,25 @@
-import { SignUp } from '@clerk/nextjs'
-import Link from 'next/link'
-import Navbar from '@/components/Navbar'
+'use client'
+import { useEffect } from 'react'
+import { useAuth } from '@clerk/nextjs'
 
 export default function SignUpPage() {
+  const { isSignedIn, isLoaded } = useAuth()
+
+  useEffect(() => {
+    if (!isLoaded) return
+    if (isSignedIn) {
+      window.location.href = '/auth-redirect'
+      return
+    }
+    window.location.href = `https://accounts.realproof.jp/sign-up?redirect_url=${encodeURIComponent('https://realproof.jp/auth-redirect')}`
+  }, [isLoaded, isSignedIn])
+
   return (
-    <div className="min-h-screen bg-[#FAFAF7]">
-      <Navbar />
-      <div className="flex flex-col items-center justify-center pt-20 pb-12 px-4">
-        <SignUp
-          fallbackRedirectUrl="/auth-redirect"
-          appearance={{
-            elements: {
-              rootBox: 'mx-auto',
-              card: 'bg-white shadow-lg',
-              headerTitle: 'text-[#1A1A2E]',
-              headerSubtitle: 'text-gray-500',
-              formButtonPrimary: 'bg-[#1A1A2E] hover:bg-[#2a2a4e]',
-            }
-          }}
-        />
-        <Link
-          href="/"
-          className="mt-6 text-sm text-gray-500 hover:text-[#C4A35A] transition-colors"
-        >
-          &larr; トップページに戻る
-        </Link>
-      </div>
+    <div style={{
+      display: 'flex', justifyContent: 'center', alignItems: 'center',
+      height: '100vh', background: '#FAFAF7',
+    }}>
+      <div className="animate-pulse" style={{ color: '#888' }}>登録ページに移動中...</div>
     </div>
   )
 }

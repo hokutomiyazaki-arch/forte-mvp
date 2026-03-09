@@ -1,0 +1,218 @@
+diff --git a/src/app/(main)/badge/claim/[claim_token]/page.tsx b/src/app/(main)/badge/claim/[claim_token]/page.tsx
+index 6d3573e..a634882 100644
+--- a/src/app/(main)/badge/claim/[claim_token]/page.tsx
++++ b/src/app/(main)/badge/claim/[claim_token]/page.tsx
+@@ -194,7 +194,10 @@ export default function BadgeClaimPage({ params }: { params: { claim_token: stri
+               バッジを取得するにはログインが必要です。
+             </p>
+             <button
+-              onClick={() => window.location.href = `/login?role=pro&redirect=/badge/claim/${params.claim_token}`}
++              onClick={() => {
++                const redirectUrl = encodeURIComponent(`https://realproof.jp/badge/claim/${params.claim_token}`)
++                window.location.href = `https://accounts.realproof.jp/sign-in?redirect_url=${redirectUrl}`
++              }}
+               className="w-full py-3 bg-[#1A1A2E] text-white font-medium rounded-xl hover:bg-[#2a2a4e] transition"
+             >
+               ログインして取得
+diff --git a/src/app/(main)/badge/claim/page.tsx b/src/app/(main)/badge/claim/page.tsx
+index 871b851..4efd8e6 100644
+--- a/src/app/(main)/badge/claim/page.tsx
++++ b/src/app/(main)/badge/claim/page.tsx
+@@ -82,7 +82,7 @@ function ClaimForm() {
+             <p className="font-bold text-[#1A1A2E]">{badge.label}</p>
+           </div>
+         )}
+-        <a href={`/sign-in?redirect_url=${encodeURIComponent(`/badge/claim?code=${code}`)}`}
++        <a href={`https://accounts.realproof.jp/sign-in?redirect_url=${encodeURIComponent(`https://realproof.jp/badge/claim?code=${code}`)}`}
+           className="inline-block px-8 py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition">
+           ログインする
+         </a>
+diff --git a/src/app/sign-in/[[...sign-in]]/page.tsx b/src/app/sign-in/[[...sign-in]]/page.tsx
+index b74848f..380c3ab 100644
+--- a/src/app/sign-in/[[...sign-in]]/page.tsx
++++ b/src/app/sign-in/[[...sign-in]]/page.tsx
+@@ -1,32 +1,50 @@
+-import { SignIn } from '@clerk/nextjs'
+-import Link from 'next/link'
+-import Navbar from '@/components/Navbar'
++'use client'
++import { useSearchParams } from 'next/navigation'
++import { useEffect, Suspense } from 'react'
++import { useAuth } from '@clerk/nextjs'
++
++const ACCOUNTS_BASE = 'https://accounts.realproof.jp'
++const APP_BASE = 'https://realproof.jp'
++
++function SignInRedirect() {
++  const searchParams = useSearchParams()
++  const { isSignedIn, isLoaded } = useAuth()
++
++  useEffect(() => {
++    if (!isLoaded) return
++
++    const redirect = searchParams.get('redirect') || searchParams.get('redirect_url')
++
++    if (isSignedIn) {
++      window.location.href = redirect || '/auth-redirect'
++      return
++    }
++
++    const afterSignIn = redirect
++      ? `${APP_BASE}${redirect.startsWith('/') ? redirect : '/' + redirect}`
++      : `${APP_BASE}/auth-redirect`
++
++    window.location.href = `${ACCOUNTS_BASE}/sign-in?redirect_url=${encodeURIComponent(afterSignIn)}`
++  }, [isLoaded, isSignedIn, searchParams])
++
++  return (
++    <div style={{
++      display: 'flex', justifyContent: 'center', alignItems: 'center',
++      height: '100vh', background: '#FAFAF7',
++    }}>
++      <div className="animate-pulse" style={{ color: '#888' }}>ログインページに移動中...</div>
++    </div>
++  )
++}
+ 
+ export default function SignInPage() {
+   return (
+-    <div className="min-h-screen bg-[#FAFAF7]">
+-      <Navbar />
+-      <div className="flex flex-col items-center justify-center pt-20 pb-12 px-4">
+-        <SignIn
+-          fallbackRedirectUrl="/auth-redirect"
+-          appearance={{
+-            elements: {
+-              rootBox: 'mx-auto',
+-              card: 'bg-white shadow-lg',
+-              headerTitle: 'text-[#1A1A2E]',
+-              headerSubtitle: 'text-gray-500',
+-              socialButtonsBlockButton: 'border-gray-200',
+-              formButtonPrimary: 'bg-[#1A1A2E] hover:bg-[#2a2a4e]',
+-            }
+-          }}
+-        />
+-        <Link
+-          href="/"
+-          className="mt-6 text-sm text-gray-500 hover:text-[#C4A35A] transition-colors"
+-        >
+-          &larr; トップページに戻る
+-        </Link>
++    <Suspense fallback={
++      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#FAFAF7' }}>
++        <div style={{ color: '#888' }}>読み込み中...</div>
+       </div>
+-    </div>
++    }>
++      <SignInRedirect />
++    </Suspense>
+   )
+ }
+diff --git a/src/app/sign-up/[[...sign-up]]/page.tsx b/src/app/sign-up/[[...sign-up]]/page.tsx
+index 28dbb9d..c673001 100644
+--- a/src/app/sign-up/[[...sign-up]]/page.tsx
++++ b/src/app/sign-up/[[...sign-up]]/page.tsx
+@@ -1,31 +1,25 @@
+-import { SignUp } from '@clerk/nextjs'
+-import Link from 'next/link'
+-import Navbar from '@/components/Navbar'
++'use client'
++import { useEffect } from 'react'
++import { useAuth } from '@clerk/nextjs'
+ 
+ export default function SignUpPage() {
++  const { isSignedIn, isLoaded } = useAuth()
++
++  useEffect(() => {
++    if (!isLoaded) return
++    if (isSignedIn) {
++      window.location.href = '/auth-redirect'
++      return
++    }
++    window.location.href = `https://accounts.realproof.jp/sign-up?redirect_url=${encodeURIComponent('https://realproof.jp/auth-redirect')}`
++  }, [isLoaded, isSignedIn])
++
+   return (
+-    <div className="min-h-screen bg-[#FAFAF7]">
+-      <Navbar />
+-      <div className="flex flex-col items-center justify-center pt-20 pb-12 px-4">
+-        <SignUp
+-          fallbackRedirectUrl="/auth-redirect"
+-          appearance={{
+-            elements: {
+-              rootBox: 'mx-auto',
+-              card: 'bg-white shadow-lg',
+-              headerTitle: 'text-[#1A1A2E]',
+-              headerSubtitle: 'text-gray-500',
+-              formButtonPrimary: 'bg-[#1A1A2E] hover:bg-[#2a2a4e]',
+-            }
+-          }}
+-        />
+-        <Link
+-          href="/"
+-          className="mt-6 text-sm text-gray-500 hover:text-[#C4A35A] transition-colors"
+-        >
+-          &larr; トップページに戻る
+-        </Link>
+-      </div>
++    <div style={{
++      display: 'flex', justifyContent: 'center', alignItems: 'center',
++      height: '100vh', background: '#FAFAF7',
++    }}>
++      <div className="animate-pulse" style={{ color: '#888' }}>登録ページに移動中...</div>
+     </div>
+   )
+ }
+diff --git a/src/components/Navbar.tsx b/src/components/Navbar.tsx
+index 19da9d5..a4fda42 100644
+--- a/src/components/Navbar.tsx
++++ b/src/components/Navbar.tsx
+@@ -1,7 +1,7 @@
+ 'use client'
+ 
+ import { useState } from 'react'
+-import { SignInButton, SignedIn, SignedOut, UserButton, useUser } from '@clerk/nextjs'
++import { SignedIn, SignedOut, UserButton, useUser } from '@clerk/nextjs'
+ 
+ export default function Navbar() {
+   const { isLoaded } = useUser()
+@@ -48,15 +48,14 @@ export default function Navbar() {
+               />
+             </SignedIn>
+             <SignedOut>
+-              <SignInButton mode="modal">
+-                <button style={{
++              <a href="https://accounts.realproof.jp/sign-in?redirect_url=https%3A%2F%2Frealproof.jp%2Fauth-redirect"
++                style={{
+                   color: '#1A1A2E', background: '#C4A35A', border: 'none',
+                   cursor: 'pointer', fontSize: 14, padding: '6px 16px',
+-                  borderRadius: 8, fontWeight: 600,
++                  borderRadius: 8, fontWeight: 600, textDecoration: 'none',
+                 }}>
+-                  ログイン
+-                </button>
+-              </SignInButton>
++                ログイン
++              </a>
+             </SignedOut>
+           </>
+         )}
+@@ -100,13 +99,11 @@ export default function Navbar() {
+             />
+           </SignedIn>
+           <SignedOut>
+-            <SignInButton mode="modal">
+-              <button onClick={() => setMenuOpen(false)}
+-                style={{ color: '#fff', background: 'none', border: 'none',
+-                  cursor: 'pointer', fontSize: 15, textAlign: 'left' as const, padding: 0 }}>
+-                ログイン
+-              </button>
+-            </SignInButton>
++            <a href="https://accounts.realproof.jp/sign-in?redirect_url=https%3A%2F%2Frealproof.jp%2Fauth-redirect"
++              onClick={() => setMenuOpen(false)}
++              style={{ color: '#fff', textDecoration: 'none', fontSize: 15 }}>
++              ログイン
++            </a>
+           </SignedOut>
+         </div>
+       )}

@@ -82,7 +82,7 @@ function ClaimForm() {
             <p className="font-bold text-[#1A1A2E]">{badge.label}</p>
           </div>
         )}
-        <a href={`/sign-in?redirect_url=${encodeURIComponent(`/badge/claim?code=${code}`)}`}
+        <a href={`https://accounts.realproof.jp/sign-in?redirect_url=${encodeURIComponent(`https://realproof.jp/badge/claim?code=${code}`)}`}
           className="inline-block px-8 py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition">
           ログインする
         </a>

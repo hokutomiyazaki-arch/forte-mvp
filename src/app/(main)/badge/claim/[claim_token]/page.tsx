@@ -194,7 +194,10 @@ export default function BadgeClaimPage({ params }: { params: { claim_token: stri
               バッジを取得するにはログインが必要です。
             </p>
             <button
-              onClick={() => window.location.href = `/login?role=pro&redirect=/badge/claim/${params.claim_token}`}
+              onClick={() => {
+                const redirectUrl = encodeURIComponent(`https://realproof.jp/badge/claim/${params.claim_token}`)
+                window.location.href = `https://accounts.realproof.jp/sign-in?redirect_url=${redirectUrl}`
+              }}
               className="w-full py-3 bg-[#1A1A2E] text-white font-medium rounded-xl hover:bg-[#2a2a4e] transition"
             >
               ログインして取得
