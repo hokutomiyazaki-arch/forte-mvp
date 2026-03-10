@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
  *
  * iPhoneのLINEアプリ内ブラウザ → Safari遷移時にCookieが消える問題の対策。
  * Clerkの OAuth callback を clerk.realproof.jp（別サブドメイン）ではなく
- * realproof.jp/__clerk/ 経由にすることで、同一ドメインでCookieを維持する。
+ * realproof.jp/api/clerk-proxy/ 経由にすることで、同一ドメインでCookieを維持する。
  */
 
 function getClerkFapiHost(): string {
@@ -24,14 +24,14 @@ function getClerkFapiHost(): string {
 async function handler(req: NextRequest) {
   const fapiHost = getClerkFapiHost()
 
-  // Extract the path after /__clerk/
+  // Extract the path after /api/clerk-proxy/
   const url = new URL(req.url)
-  const clerkPath = url.pathname.replace(/^\/__clerk/, '') || '/'
+  const clerkPath = url.pathname.replace(/^\/api\/clerk-proxy/, '') || '/'
   const targetUrl = `https://${fapiHost}${clerkPath}${url.search}`
 
   // Forward headers, adding required proxy headers
   const headers = new Headers(req.headers)
-  headers.set('Clerk-Proxy-Url', `${url.origin}/__clerk`)
+  headers.set('Clerk-Proxy-Url', `${url.origin}/api/clerk-proxy`)
   headers.set('Clerk-Secret-Key', process.env.CLERK_SECRET_KEY || '')
   headers.set(
     'X-Forwarded-For',
