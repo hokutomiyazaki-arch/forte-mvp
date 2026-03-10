@@ -16,13 +16,11 @@ const isProtectedRoute = createRouteMatcher([
 ])
 
 export default clerkMiddleware(async (auth, req) => {
-  // /myproof/p/[token] は公開ページなので認証スキップ
-  if (isPublicMyProof(req)) {
-    return
-  }
-  if (isProtectedRoute(req)) {
-    await auth.protect()
-  }
+  if (isPublicMyProof(req)) return
+  if (isProtectedRoute(req)) await auth.protect()
+}, (req) => {
+  const proxyUrl = process.env.NEXT_PUBLIC_CLERK_PROXY_URL
+  return proxyUrl ? { proxyUrl } : {}
 })
 
 export const config = {
