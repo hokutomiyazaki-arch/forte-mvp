@@ -23,12 +23,12 @@ export async function GET(
     if (orgError) throw orgError
     if (!org) return NextResponse.json({ error: '団体が見つかりません' }, { status: 404 })
 
-    const [membersResult, aggResult] = await Promise.all([
+    const [orgMembersResult, aggResult] = await Promise.all([
       supabase
-        .from('org_proof_summary')
-        .select('*')
+        .from('org_members')
+        .select('id, professional_id, credential_level_id, status, professionals(id, name, photo_url)')
         .eq('organization_id', orgId)
-        .order('total_votes', { ascending: false }),
+        .eq('status', 'active'),
 
       supabase
         .from('org_aggregate')
@@ -37,7 +37,7 @@ export async function GET(
         .maybeSingle(),
     ])
 
-    const members = membersResult.data || []
+    const allOrgMembers = orgMembersResult.data || []
     const aggregate = aggResult.data
 
     let levelAggregates: any[] = []
@@ -59,13 +59,18 @@ export async function GET(
       const levels = levelsResult.data || []
       const levelMembers = (levelMembersResult.data || []).filter((m: any) => m.credential_level_id)
 
-      const votesMap = new Map<string, number>()
-      for (const m of members) {
-        votesMap.set(m.professional_id, Number(m.total_votes) || 0)
-      }
-
       levelAggregates = levels.map((cl: any) => {
         const membersInLevel = levelMembers.filter((m: any) => m.credential_level_id === cl.id)
+
+        const memberDetails = membersInLevel.map((m: any) => {
+          const om = allOrgMembers.find((o: any) => o.professional_id === m.professional_id)
+          return {
+            professional_id: m.professional_id,
+            name: (om as any)?.professionals?.name || '',
+            photo_url: (om as any)?.professionals?.photo_url || null,
+          }
+        })
+
         return {
           level_id: cl.id,
           organization_id: cl.organization_id,
@@ -73,14 +78,13 @@ export async function GET(
           image_url: cl.image_url,
           sort_order: cl.sort_order,
           member_count: membersInLevel.length,
-          total_votes: membersInLevel.reduce(
-            (sum: number, m: any) => sum + (votesMap.get(m.professional_id) || 0), 0
-          ),
+          total_votes: 0,
+          members: memberDetails,
         }
       })
     }
 
-    return NextResponse.json({ org, members, aggregate, levelAggregates })
+    return NextResponse.json({ org, members: allOrgMembers, aggregate, levelAggregates })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
