@@ -151,6 +151,132 @@ function SplashScreen({ onDone }: { onDone: () => void }) {
   );
 }
 
+// ── ステップ管理型 ──
+type VoteStep =
+  | "intro"
+  | "confirm"
+  | "reward"
+  | "proofs"
+  | "personality"
+  | "comment"
+  | "auth"
+  | "done"
+  | "hopeful_done"
+
+// ── 共通スタイル定数 ──
+const S = {
+  title: {
+    color: "#FAFAF7", fontWeight: 700, fontSize: 20,
+    marginBottom: 8, textAlign: "center" as const,
+  },
+  subtitle: {
+    color: "#8B8B9A", fontSize: 13, lineHeight: 1.7,
+    textAlign: "center" as const, marginBottom: 28,
+  },
+  primaryBtn: {
+    width: "100%", padding: "15px", borderRadius: 14,
+    background: "linear-gradient(135deg, #C4A35A, #D4B56A)",
+    border: "none", color: "#1A1A2E",
+    fontSize: 15, fontWeight: 700, cursor: "pointer",
+    marginBottom: 10,
+  },
+  secondaryBtn: {
+    width: "100%", padding: "13px", borderRadius: 14,
+    background: "rgba(255,255,255,0.03)",
+    border: "1.5px solid rgba(255,255,255,0.12)",
+    color: "#8B8B9A", fontSize: 14, cursor: "pointer",
+    marginBottom: 10,
+  },
+  skipBtn: {
+    background: "transparent", border: "none",
+    color: "#8B8B9A", fontSize: 13, cursor: "pointer",
+    textDecoration: "underline", textDecorationColor: "rgba(139,139,154,0.35)",
+    padding: "8px",
+  },
+}
+
+// ── 全ステップ共通のフェードラッパー ──
+function StepWrapper({
+  children,
+  isTransitioning,
+  step,
+  totalSteps,
+  onBack,
+  showBack = true,
+}: {
+  children: React.ReactNode
+  isTransitioning: boolean
+  step?: number
+  totalSteps?: number
+  onBack?: () => void
+  showBack?: boolean
+}) {
+  return (
+    <div style={{
+      minHeight: "100vh",
+      background: "#1A1A2E",
+      display: "flex",
+      flexDirection: "column",
+      opacity: isTransitioning ? 0 : 1,
+      transform: isTransitioning ? "translateY(6px)" : "translateY(0)",
+      transition: "opacity 0.22s ease, transform 0.22s ease",
+    }}>
+      {/* プログレスバー（step指定時のみ表示） */}
+      {step !== undefined && totalSteps !== undefined && (
+        <div style={{
+          position: "sticky", top: 0, zIndex: 10,
+          background: "#1A1A2E",
+          borderBottom: "1px solid rgba(196,163,90,0.1)",
+          padding: "12px 20px",
+        }}>
+          {/* 戻るボタン */}
+          {showBack && onBack && (
+            <button
+              onClick={onBack}
+              style={{
+                background: "transparent", border: "none",
+                color: "#8B8B9A", fontSize: 13, cursor: "pointer",
+                marginBottom: 10, padding: 0,
+                display: "flex", alignItems: "center", gap: 4,
+              }}
+            >
+              ← 戻る
+            </button>
+          )}
+          {/* バー */}
+          <div style={{ display: "flex", gap: 4, marginBottom: 6 }}>
+            {Array.from({ length: totalSteps }).map((_, i) => (
+              <div key={i} style={{
+                flex: 1, height: 3, borderRadius: 100,
+                background: i < step
+                  ? "#C4A35A"
+                  : i === step - 1
+                    ? "rgba(196,163,90,0.4)"
+                    : "rgba(255,255,255,0.07)",
+                transition: "background 0.4s ease",
+              }} />
+            ))}
+          </div>
+          <div style={{ color: "#8B8B9A", fontSize: 11, textAlign: "center" }}>
+            ステップ {step} / {totalSteps}
+          </div>
+        </div>
+      )}
+
+      {/* コンテンツ */}
+      <div style={{
+        flex: 1,
+        display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center",
+        padding: "32px 24px",
+        maxWidth: 480, width: "100%", margin: "0 auto",
+      }}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
 // ── メインフォーム ──
 function VoteForm() {
   const params = useParams()
@@ -214,6 +340,36 @@ function VoteForm() {
   )
 
   const loadedRef = useRef(false)
+
+  // ── ステップ管理 ──
+  const [voteStep, setVoteStep] = useState<VoteStep>("intro")
+  const [isTransitioning, setIsTransitioning] = useState(false)
+  const stepHistory = useRef<VoteStep[]>([])
+  const [showEmailInput, setShowEmailInput] = useState(false)
+
+  const goTo = (next: VoteStep) => {
+    setIsTransitioning(true)
+    setTimeout(() => {
+      setVoteStep(next)
+      setIsTransitioning(false)
+    }, 220)
+  }
+
+  const goBack = () => {
+    const prev = stepHistory.current.pop()
+    if (prev) {
+      setIsTransitioning(true)
+      setTimeout(() => {
+        setVoteStep(prev)
+        setIsTransitioning(false)
+      }, 220)
+    }
+  }
+
+  const goToWithHistory = (next: VoteStep) => {
+    stepHistory.current.push(voteStep)
+    goTo(next)
+  }
 
   // URLバーからトークンを消す（カジュアルな拡散への心理的摩擦）
   useEffect(() => {
@@ -782,100 +938,6 @@ function VoteForm() {
     )
   }
 
-  // ── セッション確認（正常な投票アクセス時のみ） ──
-  if (sessionConfirmed === null) {
-    return (
-      <>
-        <style>{`
-          nav, footer { display: none !important; }
-          main { padding: 0 !important; max-width: 100% !important; }
-        `}</style>
-        <div style={{
-          minHeight: "100vh", background: "#1A1A2E",
-          display: "flex", flexDirection: "column",
-          alignItems: "center", justifyContent: "center",
-          padding: "24px", gap: 24,
-        }}>
-          {/* プロ情報 */}
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 28, marginBottom: 12 }}>🙏</div>
-            <div style={{ color: "#C4A35A", fontWeight: 700, fontSize: 17, marginBottom: 6 }}>
-              {pro.name}さんの
-            </div>
-            <div style={{ color: "#FAFAF7", fontSize: 15, lineHeight: 1.7 }}>
-              セッションを受けましたか？
-            </div>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%", maxWidth: 360 }}>
-            {/* はい → 既存フローへ */}
-            <button
-              onClick={() => setSessionConfirmed(true)}
-              style={{
-                padding: "15px", borderRadius: 14,
-                background: "linear-gradient(135deg, #C4A35A, #D4B56A)",
-                border: "none", color: "#1A1A2E",
-                fontSize: 15, fontWeight: 700, cursor: "pointer",
-              }}
-            >
-              はい、受けました！
-            </button>
-
-            {/* 気になっている → hopeful_done */}
-            <button
-              onClick={async () => {
-                await submitHopefulVote();
-                setSessionConfirmed(false);
-              }}
-              style={{
-                padding: "14px", borderRadius: 14,
-                background: "rgba(255,255,255,0.03)",
-                border: "1.5px solid rgba(255,255,255,0.14)",
-                color: "#8B8B9A", fontSize: 14, cursor: "pointer",
-              }}
-            >
-              まだですが、気になっています
-            </button>
-          </div>
-        </div>
-      </>
-    )
-  }
-
-  // ── 「気になっている」完了画面 ──
-  if (sessionConfirmed === false) {
-    return (
-      <>
-        <style>{`
-          nav, footer { display: none !important; }
-          main { padding: 0 !important; max-width: 100% !important; }
-        `}</style>
-        <div style={{
-          minHeight: "100vh", background: "#1A1A2E",
-          display: "flex", flexDirection: "column",
-          alignItems: "center", justifyContent: "center",
-          padding: "24px", textAlign: "center",
-        }}>
-          <div style={{ fontSize: 40, marginBottom: 16 }}>💫</div>
-          <div style={{ color: "#C4A35A", fontWeight: 700, fontSize: 18, marginBottom: 12 }}>
-            気持ちが届きました！
-          </div>
-          <div style={{ color: "#FAFAF7", fontSize: 14, lineHeight: 1.9, marginBottom: 8 }}>
-            「期待できそう！」のプルーフを<br />
-            <span style={{ color: "#C4A35A", fontWeight: 600 }}>
-              {pro.name}
-            </span>
-            さんに送りました。
-          </div>
-          <div style={{ color: "#8B8B9A", fontSize: 12, lineHeight: 1.8 }}>
-            ぜひ一度セッションを受けてみてください。<br />
-            受けた後にまたプルーフ投票できます ✨
-          </div>
-        </div>
-      </>
-    )
-  }
-
   // ── メールアドレス修正+再送信 ──
   async function handleResend() {
     const newEmail = fixEmail.trim().toLowerCase()
@@ -1081,418 +1143,545 @@ function VoteForm() {
     )
   }
 
-  // ── 投票フォーム ──
-  const proofCount = isHopeful ? 1 : selectedProofIds.size
-  const personalityCount = selectedPersonalityIds.size
-  const rewardCount = selectedRewardId ? 1 : 0
+  // ── ステップUI用の変数 ──
   const hasRewards = proRewards.length > 0
-  const rewardSatisfied = !hasRewards || !!selectedRewardId
-  const canSubmitSession = !!sessionCount && !!sessionEmail && rewardSatisfied
-  const canSubmitEmail = !!sessionCount && voterEmail.trim().length > 0 && voterEmail.includes('@') && rewardSatisfied
-  const canSubmit = canSubmitSession || canSubmitEmail
+  const totalSteps = hasRewards ? 6 : 5
 
-  // 強みプルーフの表示項目（プロが設定した9項目）
+  // 強みプルーフの表示項目（プロが設定した項目）
   const allProofDisplayItems = [
     ...proofItems.map(p => ({ id: p.id, label: p.label, isCustom: false })),
     ...customProofs.filter(c => c.label?.trim()).map(c => ({ id: c.id, label: c.label, isCustom: true })),
   ]
 
+  // ステップ番号計算（intro/confirm/hopeful_doneはundefined）
+  const stepNum = (s: VoteStep): number | undefined => {
+    const order = hasRewards
+      ? ['reward', 'proofs', 'personality', 'comment', 'auth', 'done']
+      : ['proofs', 'personality', 'comment', 'auth', 'done']
+    const idx = order.indexOf(s)
+    return idx >= 0 ? idx + 1 : undefined
+  }
+
   return (
-    <div className="min-h-screen bg-[#FAFAF7]">
-      <div className="max-w-lg mx-auto px-4 py-8">
-        {/* プロ情報ヘッダー */}
-        <div className="text-center mb-8">
-          {pro.photo_url && (
-            <img
-              src={pro.photo_url}
-              alt={pro.name}
-              className="w-20 h-20 rounded-full mx-auto mb-3 object-cover border-2 border-[#C4A35A]"
-            />
-          )}
-          <h1 className="text-xl font-bold text-[#1A1A2E]">{pro.name}</h1>
-          {pro.title && <p className="text-sm text-gray-500">{pro.title}</p>}
-          {isLoggedIn && sessionEmail && (
-            <p className="text-xs text-gray-400 mt-2">
-              ✓ {sessionEmail} でログイン中
-            </p>
-          )}
-        </div>
+    <>
+      <style>{`
+        nav, footer { display: none !important; }
+        main { padding: 0 !important; max-width: 100% !important; }
+      `}</style>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-
-          {/* ── 1. リワード選択（常時展開、必須） ── */}
-          {hasRewards && (
-            <div className="bg-white rounded-xl p-4 shadow-sm">
-              <div className="mb-3">
-                <span className="text-xs text-[#C4A35A] tracking-widest opacity-70">STEP 1｜プレゼントを選んでください 🎁</span>
-              </div>
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-sm font-bold text-[#1A1A2E]">
-                  リワードを選ぶ <span className="text-red-400">*</span>
-                </p>
-                <span className="text-xs text-[#9CA3AF]">{rewardCount}/1</span>
-              </div>
-              <div className="space-y-2">
-                {proRewards.map(reward => {
-                  const isSelected = selectedRewardId === reward.id
-                  const displayLabel = reward.reward_type === 'surprise'
-                    ? 'シークレット — 何が出るかお楽しみ！'
-                    : reward.title && (reward.reward_type === 'selfcare' || reward.reward_type === 'freeform')
-                      ? reward.title
-                      : getRewardLabel(reward.reward_type)
-                  return (
-                    <label
-                      key={reward.id}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${
-                        isSelected ? 'bg-[#FAFAF7]' : 'hover:bg-[#FAFAF7]'
-                      }`}
-                    >
-                      <div className="relative flex-shrink-0">
-                        <input
-                          type="radio"
-                          name="reward"
-                          value={reward.id}
-                          checked={isSelected}
-                          onChange={() => setSelectedRewardId(isSelected ? '' : reward.id)}
-                          className="sr-only"
-                        />
-                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
-                          isSelected
-                            ? 'border-[#C4A35A]'
-                            : 'border-[#E5E7EB]'
-                        }`}>
-                          {isSelected && (
-                            <div className="w-2.5 h-2.5 rounded-full bg-[#C4A35A]" />
-                          )}
-                        </div>
-                      </div>
-                      <span className={`text-sm ${isSelected ? 'text-[#1A1A2E] font-medium' : 'text-[#1A1A2E]'}`}>
-                        {displayLabel}
-                      </span>
-                    </label>
-                  )
-                })}
-              </div>
-              <p className="text-xs text-[#9CA3AF] mt-3">
-                リワードの内容は投票後に開示されます
-              </p>
-            </div>
-          )}
-
-          {/* ── 2. セッション回数セレクター ── */}
-          <div className="bg-white rounded-xl p-4 shadow-sm">
-            <div className="mb-3">
-              <span className="text-xs text-[#C4A35A] tracking-widest opacity-70">STEP {hasRewards ? 2 : 1}｜何回目のご利用ですか？</span>
-            </div>
-            <p className="text-sm font-bold text-[#1A1A2E] mb-3">
-              {pro.name}さんのセッションは？
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { value: 'first' as const, label: '1回目' },
-                { value: 'repeat' as const, label: '2回目以降' },
-              ].map(opt => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setSessionCount(opt.value)}
-                  className={`py-3 px-4 rounded-lg text-sm font-medium border-2 transition-colors ${
-                    sessionCount === opt.value
-                      ? 'border-[#C4A35A] bg-[#1A1A2E] text-[#C4A35A]'
-                      : 'border-[#E5E7EB] bg-white text-[#1A1A2E] hover:border-gray-300'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* ── 3. 強みプルーフ（アコーディオン） ── */}
-          <div className="mb-3">
-            <span className="text-xs text-[#C4A35A] tracking-widest opacity-70">STEP {hasRewards ? 3 : 2}｜あなたが感じたことを選んでください（3つまで）</span>
-          </div>
-          <Accordion
-            title="強みプルーフ"
-            count={proofCount}
-            max={MAX_PROOF}
-            isOpen={accordionOpen.proof}
-            onToggle={() => setAccordionOpen(prev => ({ ...prev, proof: !prev.proof }))}
-          >
-            <p className="text-sm text-gray-500 mb-2">{pro.name}さんの強みを0〜3つ選んでください</p>
-            <p className="text-xs text-gray-400 mb-3">選ばなくてもOKです</p>
-            {allProofDisplayItems.length > 0 ? (
-              <div className="space-y-2">
-                {allProofDisplayItems.map(item => {
-                  const isChecked = selectedProofIds.has(item.id)
-                  const isDisabled = isHopeful || (!isChecked && selectedProofIds.size >= MAX_PROOF)
-                  return (
-                    <label
-                      key={item.id}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                        isDisabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:bg-[#FAFAF7]'
-                      } ${isChecked ? 'bg-[#FAFAF7]' : ''}`}
-                    >
-                      <div className="relative flex-shrink-0">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          disabled={isDisabled}
-                          onChange={() => toggleProofId(item.id)}
-                          className="sr-only"
-                        />
-                        <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
-                          isChecked
-                            ? 'bg-[#C4A35A] border-[#C4A35A]'
-                            : 'bg-white border-[#E5E7EB]'
-                        }`}>
-                          {isChecked && (
-                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </div>
-                      </div>
-                      <span className="text-sm text-[#1A1A2E]">{item.label}</span>
-                    </label>
-                  )
-                })}
-              </div>
-            ) : null}
-
-            {/* 区切り線 + 期待できそう！ */}
-            <div className="border-t border-[#E5E7EB] mt-3 pt-3">
-              <label
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                  selectedProofIds.size > 0 ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:bg-[#FAFAF7]'
-                } ${isHopeful ? 'bg-[#FAFAF7]' : ''}`}
-              >
-                <div className="relative flex-shrink-0">
-                  <input
-                    type="checkbox"
-                    checked={isHopeful}
-                    disabled={selectedProofIds.size > 0}
-                    onChange={toggleHopeful}
-                    className="sr-only"
-                  />
-                  <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
-                    isHopeful
-                      ? 'bg-[#C4A35A] border-[#C4A35A]'
-                      : 'bg-white border-[#E5E7EB]'
-                  }`}>
-                    {isHopeful && (
-                      <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                  </div>
+      {/* ── イントロ画面 ── */}
+      {voteStep === "intro" && (
+        <StepWrapper isTransitioning={isTransitioning} showBack={false}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ marginBottom: 20 }}>
+              {pro.photo_url ? (
+                <img src={pro.photo_url} alt={pro.name} style={{
+                  width: 80, height: 80, borderRadius: "50%",
+                  objectFit: "cover", margin: "0 auto", display: "block",
+                  boxShadow: "0 4px 20px rgba(196,163,90,0.35)",
+                }} />
+              ) : (
+                <div style={{
+                  width: 80, height: 80, borderRadius: "50%",
+                  background: "linear-gradient(135deg, #C4A35A, #D4B56A)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 28, fontWeight: 700, color: "#1A1A2E",
+                  margin: "0 auto",
+                  boxShadow: "0 4px 20px rgba(196,163,90,0.35)",
+                }}>
+                  {pro.name?.[0] ?? "?"}
                 </div>
-                <span className="text-sm text-[#1A1A2E]">期待できそう！</span>
-              </label>
-              {isHopeful && (
-                <p className="text-xs text-[#9CA3AF] ml-11 mt-1">
-                  「期待できそう！」を選ぶと他の項目は選択できません
-                </p>
-              )}
-              {selectedProofIds.size > 0 && (
-                <p className="text-xs text-[#9CA3AF] ml-11 mt-1">
-                  他の項目を選択中は「期待できそう！」は選択できません
-                </p>
               )}
             </div>
-          </Accordion>
 
-          {/* ── 4. 人柄プルーフ（アコーディオン） ── */}
-          <div className="mb-3">
-            <span className="text-xs text-[#C4A35A] tracking-widest opacity-70">STEP {hasRewards ? 4 : 3}｜この方の人柄は？（任意・3つまで）</span>
+            <div style={{ color: "#C4A35A", fontWeight: 700, fontSize: 18, marginBottom: 6 }}>
+              {pro.name}さんへ
+            </div>
+            <div style={{ color: "#FAFAF7", fontSize: 15, marginBottom: 20 }}>
+              プルーフ投票
+            </div>
+
+            {/* 約30秒バッジ */}
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              background: "rgba(196,163,90,0.12)",
+              border: "1px solid rgba(196,163,90,0.35)",
+              borderRadius: 100, padding: "6px 16px", marginBottom: 28,
+            }}>
+              <span style={{ fontSize: 14 }}>⏱️</span>
+              <span style={{ color: "#C4A35A", fontWeight: 700, fontSize: 13 }}>
+                約30秒で完了します
+              </span>
+            </div>
+
+            <div style={{ color: "#8B8B9A", fontSize: 12, lineHeight: 1.8, marginBottom: 32 }}>
+              セッションの感想を教えてください。<br />
+              お礼にリワードをお渡しします。
+            </div>
+
+            <button
+              onClick={() => goToWithHistory("confirm")}
+              style={{ ...S.primaryBtn, fontSize: 16 }}
+            >
+              プルーフ投票をはじめる →
+            </button>
           </div>
-          <Accordion
-            title="人柄プルーフ"
-            count={personalityCount}
-            max={MAX_PERSONALITY}
-            isOpen={accordionOpen.personality}
-            onToggle={() => setAccordionOpen(prev => ({ ...prev, personality: !prev.personality }))}
-          >
-            <p className="text-sm text-gray-500 mb-2">{pro.name}さんの人柄を0〜3つ選んでください</p>
-            <p className="text-xs text-gray-400 mb-3">選ばなくてもOKです</p>
-            <div className="space-y-2">
-              {personalityItems.map(item => {
-                const isChecked = selectedPersonalityIds.has(item.id)
-                const isDisabled = !isChecked && selectedPersonalityIds.size >= MAX_PERSONALITY
+        </StepWrapper>
+      )}
+
+      {/* ── セッション確認 ── */}
+      {voteStep === "confirm" && (
+        <StepWrapper isTransitioning={isTransitioning} showBack={false}>
+          <div style={{ textAlign: "center", width: "100%" }}>
+            <div style={{ fontSize: 32, marginBottom: 16 }}>🙏</div>
+            <div style={S.title}>
+              <span style={{ color: "#C4A35A" }}>{pro.name}</span>さんの
+              <br />セッションを受けましたか？
+            </div>
+            <div style={{ height: 28 }} />
+
+            <button
+              onClick={() => {
+                setSessionCount('first')
+                setSessionConfirmed(true)
+                goToWithHistory(hasRewards ? "reward" : "proofs")
+              }}
+              style={S.primaryBtn}
+            >
+              はい、受けました！
+            </button>
+
+            <button
+              onClick={async () => {
+                await submitHopefulVote()
+                goTo("hopeful_done")
+              }}
+              style={S.secondaryBtn}
+            >
+              まだですが、気になっています
+            </button>
+          </div>
+        </StepWrapper>
+      )}
+
+      {/* ── STEP 1: リワード選択 ── */}
+      {voteStep === "reward" && (
+        <StepWrapper
+          isTransitioning={isTransitioning}
+          step={1} totalSteps={totalSteps}
+          onBack={goBack} showBack={false}
+        >
+          <div style={{ width: "100%" }}>
+            <div style={S.title}>リワードを選んでください 🎁</div>
+            <div style={S.subtitle}>投票完了後に内容が開示されます</div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {proRewards.map(reward => {
+                const displayLabel = reward.reward_type === 'surprise'
+                  ? 'シークレット — 何が出るかお楽しみ！'
+                  : reward.title && (reward.reward_type === 'selfcare' || reward.reward_type === 'freeform')
+                    ? reward.title
+                    : getRewardLabel(reward.reward_type)
                 return (
-                  <label
-                    key={item.id}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                      isDisabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:bg-[#FAFAF7]'
-                    } ${isChecked ? 'bg-[#FAFAF7]' : ''}`}
+                  <button
+                    key={reward.id}
+                    onClick={() => {
+                      setSelectedRewardId(reward.id)
+                      goToWithHistory("proofs")
+                    }}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 14,
+                      padding: "14px 16px", borderRadius: 14,
+                      border: "1.5px solid rgba(196,163,90,0.22)",
+                      background: "rgba(196,163,90,0.04)",
+                      cursor: "pointer", textAlign: "left",
+                    }}
                   >
-                    <div className="relative flex-shrink-0">
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        disabled={isDisabled}
-                        onChange={() => togglePersonalityId(item.id)}
-                        className="sr-only"
-                      />
-                      <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
-                        isChecked
-                          ? 'bg-[#C4A35A] border-[#C4A35A]'
-                          : 'bg-white border-[#E5E7EB]'
-                      }`}>
-                        {isChecked && (
-                          <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ color: "#FAFAF7", fontWeight: 600, fontSize: 14 }}>
+                        {displayLabel}
+                      </div>
+                      <div style={{ color: "#8B8B9A", fontSize: 12, marginTop: 2 }}>
+                        投票後に開示されます
                       </div>
                     </div>
-                    <span className="text-sm text-[#1A1A2E]">{item.label}</span>
-                  </label>
+                    <span style={{ color: "#C4A35A", fontSize: 18, flexShrink: 0 }}>›</span>
+                  </button>
                 )
               })}
             </div>
-          </Accordion>
+          </div>
+        </StepWrapper>
+      )}
 
-          {/* ── 5. ひとことコメント ── */}
-          <div className="bg-white rounded-xl p-4 shadow-sm">
-            <div className="mb-3">
-              <span className="text-xs text-[#C4A35A] tracking-widest opacity-70">STEP {hasRewards ? 5 : 4}｜一言メッセージをどうぞ（任意）</span>
+      {/* ── STEP 2: 強みプルーフ選択 ── */}
+      {voteStep === "proofs" && (
+        <StepWrapper
+          isTransitioning={isTransitioning}
+          step={stepNum("proofs")} totalSteps={totalSteps}
+          onBack={goBack}
+        >
+          <div style={{ width: "100%" }}>
+            <div style={S.title}>
+              <span style={{ color: "#C4A35A" }}>強み</span>を選んでください
             </div>
-            <label className="block text-sm font-bold text-[#1A1A2E] mb-1">
-              ひとことコメント（任意）
-            </label>
+            <div style={S.subtitle}>最大3つ選べます</div>
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 28 }}>
+              {allProofDisplayItems.map(item => {
+                const isSelected = selectedProofIds.has(item.id)
+                const disabled = isHopeful || (!isSelected && selectedProofIds.size >= MAX_PROOF)
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => toggleProofId(item.id)}
+                    disabled={disabled}
+                    style={{
+                      padding: "9px 15px", borderRadius: 100,
+                      border: isSelected
+                        ? "2px solid #C4A35A"
+                        : "1.5px solid rgba(196,163,90,0.24)",
+                      background: isSelected ? "rgba(196,163,90,0.13)" : "rgba(255,255,255,0.03)",
+                      color: isSelected ? "#C4A35A" : "#FAFAF7",
+                      fontSize: 13, fontWeight: isSelected ? 600 : 400,
+                      cursor: disabled ? "default" : "pointer",
+                      opacity: disabled && !isSelected ? 0.32 : 1,
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                )
+              })}
+              {/* 期待できそう！チップ */}
+              <button
+                onClick={toggleHopeful}
+                disabled={selectedProofIds.size > 0}
+                style={{
+                  padding: "9px 15px", borderRadius: 100,
+                  border: isHopeful
+                    ? "2px solid #C4A35A"
+                    : "1.5px solid rgba(196,163,90,0.24)",
+                  background: isHopeful ? "rgba(196,163,90,0.13)" : "rgba(255,255,255,0.03)",
+                  color: isHopeful ? "#C4A35A" : "#FAFAF7",
+                  fontSize: 13, fontWeight: isHopeful ? 600 : 400,
+                  cursor: selectedProofIds.size > 0 ? "default" : "pointer",
+                  opacity: selectedProofIds.size > 0 ? 0.32 : 1,
+                }}
+              >
+                期待できそう！
+              </button>
+            </div>
+
+            <button
+              onClick={() => goToWithHistory("personality")}
+              disabled={selectedProofIds.size === 0 && !isHopeful}
+              style={{
+                ...S.primaryBtn,
+                opacity: selectedProofIds.size === 0 && !isHopeful ? 0.4 : 1,
+              }}
+            >
+              次へ →
+            </button>
+            <button
+              onClick={() => goToWithHistory("personality")}
+              style={{ ...S.skipBtn, display: "block", margin: "0 auto" }}
+            >
+              スキップ
+            </button>
+          </div>
+        </StepWrapper>
+      )}
+
+      {/* ── STEP 3: 人柄選択 ── */}
+      {voteStep === "personality" && (
+        <StepWrapper
+          isTransitioning={isTransitioning}
+          step={stepNum("personality")} totalSteps={totalSteps}
+          onBack={goBack}
+        >
+          <div style={{ width: "100%" }}>
+            <div style={S.title}>
+              <span style={{ color: "#C4A35A" }}>人柄</span>はいかがでしたか？
+            </div>
+            <div style={S.subtitle}>最大3つ（任意です）</div>
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 28 }}>
+              {personalityItems.map(item => {
+                const isSelected = selectedPersonalityIds.has(item.id)
+                const disabled = selectedPersonalityIds.size >= 3 && !isSelected
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => togglePersonalityId(item.id)}
+                    disabled={disabled}
+                    style={{
+                      padding: "9px 15px", borderRadius: 100,
+                      border: isSelected
+                        ? "2px solid #C4A35A"
+                        : "1.5px solid rgba(196,163,90,0.24)",
+                      background: isSelected ? "rgba(196,163,90,0.13)" : "rgba(255,255,255,0.03)",
+                      color: isSelected ? "#C4A35A" : "#FAFAF7",
+                      fontSize: 13, fontWeight: isSelected ? 600 : 400,
+                      cursor: disabled ? "default" : "pointer",
+                      opacity: disabled && !isSelected ? 0.32 : 1,
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            <button
+              onClick={() => goToWithHistory("comment")}
+              disabled={selectedPersonalityIds.size === 0}
+              style={{
+                ...S.primaryBtn,
+                opacity: selectedPersonalityIds.size === 0 ? 0.4 : 1,
+              }}
+            >
+              次へ →
+            </button>
+            <button
+              onClick={() => goToWithHistory("comment")}
+              style={{ ...S.skipBtn, display: "block", margin: "0 auto" }}
+            >
+              スキップ
+            </button>
+          </div>
+        </StepWrapper>
+      )}
+
+      {/* ── STEP 4: コメント入力 ── */}
+      {voteStep === "comment" && (
+        <StepWrapper
+          isTransitioning={isTransitioning}
+          step={stepNum("comment")} totalSteps={totalSteps}
+          onBack={goBack}
+        >
+          <div style={{ width: "100%" }}>
+            <div style={S.title}>ひとこと伝えるとしたら？</div>
+            <div style={S.subtitle}>100文字まで（任意です）</div>
+
             <textarea
               value={comment}
-              onChange={e => setComment(e.target.value)}
-              maxLength={100}
-              rows={2}
-              className="w-full px-3 py-2.5 bg-[#FAFAF7] border border-[#E5E7EB] rounded-lg text-sm focus:ring-2 focus:ring-[#C4A35A] focus:border-[#C4A35A] outline-none resize-none"
-              placeholder="このプロへのメッセージ（100文字以内）"
+              onChange={e => setComment(e.target.value.slice(0, 100))}
+              placeholder="例: 長年悩んでいた腰痛が1回で改善しました…"
+              style={{
+                width: "100%", borderRadius: 12, resize: "none",
+                border: "1.5px solid rgba(196,163,90,0.27)",
+                background: "#16213E", color: "#FAFAF7",
+                fontSize: 14, padding: "14px", minHeight: 100,
+                lineHeight: 1.7, marginBottom: 8,
+                boxSizing: "border-box",
+              }}
             />
-            <p className="text-xs text-[#9CA3AF] text-right mt-1">{comment.length}/100</p>
+            <div style={{ color: "#8B8B9A", fontSize: 12, textAlign: "right", marginBottom: 20 }}>
+              {comment.length}/100
+            </div>
+
+            <button
+              onClick={() => goToWithHistory("auth")}
+              style={S.primaryBtn}
+            >
+              次へ →
+            </button>
+            <button
+              onClick={() => goToWithHistory("auth")}
+              style={{ ...S.skipBtn, display: "block", margin: "0 auto" }}
+            >
+              スキップ
+            </button>
           </div>
+        </StepWrapper>
+      )}
 
-          {/* エラー表示 */}
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-              <p className="text-red-600 text-sm">{error}</p>
+      {/* ── STEP 5: 認証 ── */}
+      {voteStep === "auth" && (
+        <StepWrapper
+          isTransitioning={isTransitioning}
+          step={stepNum("auth")} totalSteps={totalSteps}
+          onBack={goBack}
+        >
+          <div style={{ width: "100%" }}>
+            <div style={S.title}>ほぼ完了です！🎉</div>
+            <div style={S.subtitle}>
+              本人確認をお願いします。<br />
+              プルーフの信頼性を守るためです。
             </div>
-          )}
 
-          {/* ── 6. 認証方法選択 / 送信 ── */}
-          <div className="bg-white rounded-xl p-4 shadow-sm space-y-3">
-            <div className="mb-3">
-              <span className="text-xs text-[#C4A35A] tracking-widest opacity-70">STEP {hasRewards ? 6 : 5}｜投票を完了する</span>
-            </div>
-            <p className="text-sm font-bold text-[#1A1A2E] mb-1">プルーフを送信する</p>
-
-            {/* ログイン済み: このアカウントで投票 */}
-            {isLoggedIn && sessionEmail && (
-              <>
-                <button
-                  type="submit"
-                  disabled={!canSubmitSession}
-                  onClick={() => { voteMethodRef.current = 'session' }}
-                  className={`w-full py-3.5 rounded-xl text-sm font-medium tracking-wider transition-colors ${
-                    canSubmitSession
-                      ? 'bg-[#1A1A2E] text-[#C4A35A] hover:bg-[#2a2a4e]'
-                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  }`}
-                >
-                  このアカウントでプルーフする
-                </button>
-                {!canSubmitSession && (
-                  <p className="text-xs text-[#9CA3AF] text-center">
-                    {hasRewards ? 'リワードとセッション回数を選択してください' : 'セッション回数を選択してください'}
-                  </p>
-                )}
-
-                {/* Divider */}
-                <div className="relative py-1">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-gray-300"></div>
-                  </div>
-                  <div className="relative flex justify-center text-sm">
-                    <span className="px-4 bg-white text-gray-400">または別の方法で</span>
-                  </div>
-                </div>
-              </>
+            {error && (
+              <div style={{
+                background: "rgba(220,38,38,0.1)",
+                border: "1px solid rgba(220,38,38,0.3)",
+                borderRadius: 12, padding: "10px 14px", marginBottom: 16,
+              }}>
+                <div style={{ color: "#FCA5A5", fontSize: 13 }}>{error}</div>
+              </div>
             )}
 
-            {/* LINE ボタン */}
-            <button
-              type="button"
-              onClick={handleLineVote}
-              className="w-full flex items-center justify-center gap-3 px-6 py-4 rounded-xl text-white font-bold text-base transition-all hover:opacity-90"
-              style={{ backgroundColor: '#06C755' }}
-            >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
-                <path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63h2.386c.349 0 .63.285.63.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63.349 0 .631.285.631.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.281.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314" />
-              </svg>
-              LINEで認証してプルーフする
-            </button>
+            {isLoggedIn && sessionEmail ? (
+              <button
+                onClick={() => {
+                  voteMethodRef.current = 'session'
+                  handleSubmit({ preventDefault: () => {} } as React.FormEvent)
+                }}
+                style={S.primaryBtn}
+              >
+                このアカウントで投票する
+              </button>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {/* LINE */}
+                <button
+                  onClick={() => handleLineVote()}
+                  style={{
+                    ...S.primaryBtn, marginBottom: 0,
+                    background: "#06C755",
+                    display: "flex", alignItems: "center",
+                    justifyContent: "center", gap: 10,
+                  }}
+                >
+                  <svg width={20} height={20} viewBox="0 0 24 24" fill="white">
+                    <path d="M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/>
+                  </svg>
+                  LINEで続ける
+                </button>
 
-            {/* Google ボタン */}
-            <button
-              type="button"
-              onClick={handleGoogleVote}
-              className="w-full flex items-center justify-center gap-3 px-6 py-4 rounded-xl font-bold text-base border-2 border-gray-300 bg-white text-gray-700 transition-all hover:bg-gray-50"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-              </svg>
-              Googleで認証してプルーフする
-            </button>
+                {/* Google */}
+                <button
+                  onClick={() => handleGoogleVote()}
+                  style={{
+                    ...S.secondaryBtn, marginBottom: 0,
+                    display: "flex", alignItems: "center",
+                    justifyContent: "center", gap: 10,
+                  }}
+                >
+                  <svg width={16} height={16} viewBox="0 0 24 24">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                  </svg>
+                  Googleで続ける
+                </button>
 
-            {/* Divider */}
-            <div className="relative py-1">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300"></div>
+                {/* メール入力 */}
+                {!showEmailInput ? (
+                  <button
+                    onClick={() => setShowEmailInput(true)}
+                    style={{
+                      background: "transparent", border: "none",
+                      color: "#8B8B9A", fontSize: 13, cursor: "pointer",
+                      textDecoration: "underline", padding: "8px",
+                      textAlign: "center",
+                    }}
+                  >
+                    メールアドレスで続ける
+                  </button>
+                ) : (
+                  <div style={{ marginTop: 8 }}>
+                    <input
+                      type="email"
+                      value={voterEmail}
+                      onChange={e => setVoterEmail(e.target.value)}
+                      placeholder="メールアドレスを入力"
+                      style={{
+                        width: "100%", padding: "12px 14px", borderRadius: 12,
+                        border: "1.5px solid rgba(196,163,90,0.27)",
+                        background: "#16213E", color: "#FAFAF7",
+                        fontSize: 14, marginBottom: 10,
+                        boxSizing: "border-box",
+                        outline: "none",
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        voteMethodRef.current = 'email'
+                        handleSubmit({ preventDefault: () => {} } as React.FormEvent)
+                      }}
+                      disabled={!voterEmail.trim() || !voterEmail.includes('@')}
+                      style={{
+                        ...S.primaryBtn,
+                        opacity: !voterEmail.trim() || !voterEmail.includes('@') ? 0.4 : 1,
+                      }}
+                    >
+                      メールで送信する
+                    </button>
+                  </div>
+                )}
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-white text-gray-400">または</span>
-              </div>
+            )}
+
+            <div style={{ marginTop: 16, textAlign: "center" }}>
+              <span style={{ color: "#8B8B9A", fontSize: 11 }}>
+                ※ プルーフは匿名です。プロにメールアドレスは公開されません。
+              </span>
             </div>
-
-            {/* メールアドレス入力 */}
-            <div>
-              <input
-                type="email"
-                value={voterEmail}
-                onChange={e => setVoterEmail(e.target.value)}
-                className="w-full px-3 py-2.5 bg-[#FAFAF7] border border-[#E5E7EB] rounded-lg text-sm focus:ring-2 focus:ring-[#C4A35A] focus:border-[#C4A35A] outline-none"
-                placeholder="メールアドレスで送信する"
-              />
-            </div>
-
-            {/* メール送信ボタン */}
-            <button
-              type="submit"
-              disabled={!canSubmitEmail}
-              onClick={() => { voteMethodRef.current = 'email' }}
-              className={`w-full py-3.5 rounded-xl text-sm font-medium tracking-wider transition-colors ${
-                canSubmitEmail
-                  ? 'bg-[#1A1A2E] text-[#C4A35A] hover:bg-[#2a2a4e]'
-                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-              }`}
-            >
-              メールで送信する
-            </button>
-
-            <p className="text-xs text-gray-400 mt-2 text-center opacity-70">
-              LINE・Google・メールで本人確認します
-            </p>
-            <p className="text-center text-[#9CA3AF] text-xs">
-              ※ プルーフは匿名です。プロにメールアドレスは公開されません。
-            </p>
           </div>
+        </StepWrapper>
+      )}
 
-        </form>
-      </div>
-    </div>
+      {/* ── STEP 6: 完了・リワード開示 ── */}
+      {voteStep === "done" && (
+        <StepWrapper isTransitioning={isTransitioning} showBack={false}>
+          <div style={{ textAlign: "center", width: "100%" }}>
+            <div style={{ fontSize: 40, marginBottom: 16 }}>🎉</div>
+            <div style={S.title}>プルーフ投票が完了しました！</div>
+            <div style={S.subtitle}>
+              あなたの声が、{pro.name}さんの<br />
+              実力の証明になります。
+            </div>
+
+            {selectedRewardId && proRewards.find(r => r.id === selectedRewardId) && (
+              <div style={{
+                background: "rgba(196,163,90,0.09)",
+                border: "1px solid rgba(196,163,90,0.28)",
+                borderRadius: 16, padding: "20px",
+                marginBottom: 24, width: "100%",
+              }}>
+                <div style={{ color: "#8B8B9A", fontSize: 11, marginBottom: 8, letterSpacing: 1 }}>
+                  YOUR REWARD
+                </div>
+                <div style={{ color: "#FAFAF7", fontWeight: 700, fontSize: 16, marginBottom: 6 }}>
+                  {proRewards.find(r => r.id === selectedRewardId)!.title}
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={() => { window.location.href = "/mycard" }}
+              style={S.primaryBtn}
+            >
+              マイページでリワードを保存する
+            </button>
+          </div>
+        </StepWrapper>
+      )}
+
+      {/* ── hopeful完了画面 ── */}
+      {voteStep === "hopeful_done" && (
+        <StepWrapper isTransitioning={isTransitioning} showBack={false}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 40, marginBottom: 16 }}>💫</div>
+            <div style={S.title}>気持ちが届きました！</div>
+            <div style={{
+              color: "#FAFAF7", fontSize: 14, lineHeight: 1.9, marginBottom: 8,
+            }}>
+              「期待できそう！」のプルーフを<br />
+              <span style={{ color: "#C4A35A", fontWeight: 600 }}>
+                {pro.name}
+              </span>
+              さんに送りました。
+            </div>
+            <div style={{ color: "#8B8B9A", fontSize: 12, lineHeight: 1.8 }}>
+              ぜひ一度セッションを受けてみてください。<br />
+              受けた後にまたプルーフ投票できます ✨
+            </div>
+          </div>
+        </StepWrapper>
+      )}
+    </>
   )
 }
 
