@@ -40,6 +40,19 @@ export async function GET(
     const allOrgMembers = orgMembersResult.data || []
     const aggregate = aggResult.data
 
+    // 重複排除（同一プロが複数バッジを持つ場合）+ 投票数マージ
+    const uniqueMembers = Array.from(
+      new Map(allOrgMembers.map((m: any) => [m.professional_id, m])).values()
+    )
+    const { data: proofSummary } = await supabase
+      .from('org_proof_summary')
+      .select('professional_id, total_votes')
+      .eq('organization_id', orgId)
+    const votesMap = new Map((proofSummary || []).map((s: any) => [s.professional_id, Number(s.total_votes) || 0]))
+    const members = uniqueMembers
+      .map((m: any) => ({ ...m, total_votes: votesMap.get(m.professional_id) || 0 }))
+      .sort((a: any, b: any) => b.total_votes - a.total_votes)
+
     let levelAggregates: any[] = []
     if (org.type === 'credential' || org.type === 'education') {
       const [levelsResult, levelMembersResult] = await Promise.all([
@@ -84,7 +97,7 @@ export async function GET(
       })
     }
 
-    return NextResponse.json({ org, members: allOrgMembers, aggregate, levelAggregates })
+    return NextResponse.json({ org, members, aggregate, levelAggregates })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
