@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   const { data: level } = await supabase
     .from('credential_levels')
     .select('id, name, description, image_url, organization_id, organizations(name)')
-    .eq('id', credentialLevelId)
+    .eq('claim_token', credentialLevelId)
     .maybeSingle()
 
   if (!level) return NextResponse.json({ error: 'invalid' })

@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   const { data: level } = await supabase
     .from('credential_levels')
     .select('id, name, description, image_url, organization_id, organizations(name)')
-    .eq('id', id)
+    .eq('claim_token', id)
     .maybeSingle()
 
   if (!level) return NextResponse.json({ error: 'invalid' })
