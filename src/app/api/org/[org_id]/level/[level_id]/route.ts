@@ -25,7 +25,7 @@ export async function GET(
       supabase.from('credential_levels').select('*').eq('id', levelId).maybeSingle(),
       supabase
         .from('org_members')
-        .select('professional_id')
+        .select('professional_id, user_id')
         .eq('organization_id', orgId)
         .eq('credential_level_id', levelId)
         .eq('status', 'active'),
@@ -66,25 +66,52 @@ export async function GET(
       votesMap = new Map((summaryData || []).map((s: any) => [s.professional_id, s.total_votes || 0]))
     }
 
-    // 全メンバー（プロ + 一般）をマージ
+    // プロのみ（professional_idあり）
     professionals = allMembers
       .filter((m: any) => m.professional_id != null)
       .map((m: any) => {
-        const pro = m.professional_id ? profMap.get(m.professional_id) : null
+        const pro = profMap.get(m.professional_id)
         return {
-          professional_id: m.professional_id || null,
-          professional_name: pro?.name || '一般会員',
+          professional_id: m.professional_id,
+          professional_name: pro?.name || '不明',
           photo_url: pro?.photo_url || null,
           title: pro?.title || '',
-          total_votes: m.professional_id ? (votesMap.get(m.professional_id) || 0) : 0,
+          total_votes: votesMap.get(m.professional_id) || 0,
         }
       })
       .sort((a: any, b: any) => b.total_votes - a.total_votes)
+
+    // 一般会員（professional_idなし）→ clientsから取得
+    const generalUserIds = allMembers
+      .filter((m: any) => !m.professional_id && m.user_id)
+      .map((m: any) => m.user_id)
+    let clientMap = new Map<string, any>()
+    if (generalUserIds.length > 0) {
+      const { data: clientData } = await supabase
+        .from('clients')
+        .select('user_id, nickname, photo_url')
+        .in('user_id', generalUserIds)
+      for (const c of (clientData || [])) {
+        clientMap.set(c.user_id, c)
+      }
+    }
+    const generalMembers = allMembers
+      .filter((m: any) => !m.professional_id)
+      .map((m: any) => {
+        const client = m.user_id ? clientMap.get(m.user_id) : null
+        return {
+          user_id: m.user_id || null,
+          display_name: client?.nickname || '一般会員',
+          photo_url: client?.photo_url || null,
+        }
+      })
 
     return NextResponse.json({
       org: orgResult.data,
       level: levelResult.data,
       professionals,
+      generals: generalMembers,
+      general_count: generalMembers.length,
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })

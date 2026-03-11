@@ -421,7 +421,14 @@ export default function OrgBadgesPage() {
                                   )}
                                   <div>
                                     <p style={{ fontSize: '13px', fontWeight: 600, color: '#1A1A2E', margin: 0, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                      {holder.professionals.name}
+                                      <span className="flex items-center gap-1 flex-wrap">
+                                        {holder.professionals.name}
+                                        {!holder.professional_id && (
+                                          <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
+                                            一般会員
+                                          </span>
+                                        )}
+                                      </span>
                                     </p>
                                     <p style={{ fontSize: '11px', color: '#888', margin: 0 }}>
                                       {holder.accepted_at ? new Date(holder.accepted_at).toLocaleDateString('ja-JP') : ''}

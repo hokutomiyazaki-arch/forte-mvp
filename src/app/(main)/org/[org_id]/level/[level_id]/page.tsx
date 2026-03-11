@@ -10,6 +10,8 @@ export default function LevelDetailPage() {
   const [org, setOrg] = useState<any>(null)
   const [level, setLevel] = useState<any>(null)
   const [members, setMembers] = useState<any[]>([])
+  const [generals, setGenerals] = useState<any[]>([])
+  const [generalCount, setGeneralCount] = useState(0)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -27,6 +29,8 @@ export default function LevelDetailPage() {
       setOrg(data.org)
       setLevel(data.level)
       setMembers(data.professionals || [])
+      setGenerals(data.generals || [])
+      setGeneralCount(data.general_count || 0)
     } catch (err: any) {
       setError(err.message || 'データの取得に失敗しました')
     }
@@ -137,6 +141,33 @@ export default function LevelDetailPage() {
               </div>
             </a>
           ))}
+        </div>
+      )}
+
+      {/* 一般認定者まとめカード */}
+      {generalCount > 0 && (
+        <div className="mt-6">
+          <a
+            href={`/org/${orgId}/level/${levelId}/generals`}
+            className="block p-4 rounded-xl transition-shadow hover:shadow-md"
+            style={{ backgroundColor: '#F5F5F0', border: '1px solid #E5E5E0' }}
+          >
+            <div className="flex flex-col items-center text-center">
+              <div className="w-16 h-16 rounded-full mb-2 flex items-center justify-center"
+                   style={{ backgroundColor: '#E5E5E0' }}>
+                <span style={{ fontSize: '20px', color: '#888' }}>👥</span>
+              </div>
+              <p style={{ fontSize: '14px', fontWeight: 600, color: '#1A1A2E' }}>
+                一般認定者
+              </p>
+              <p style={{ fontSize: '12px', color: '#888', marginTop: '2px' }}>
+                {generalCount}名
+              </p>
+              <p style={{ fontSize: '11px', color: '#C4A35A', marginTop: '4px', fontWeight: 600 }}>
+                一覧を見る →
+              </p>
+            </div>
+          </a>
         </div>
       )}
     </div>
