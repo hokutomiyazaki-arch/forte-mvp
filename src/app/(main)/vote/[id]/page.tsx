@@ -378,8 +378,15 @@ function VoteForm() {
   }
 
   // URLバーからトークンを消す（カジュアルな拡散への心理的摩擦）
+  // ただし ?error= がある場合はsearchParamsが読まれるまで保持する
   useEffect(() => {
-    window.history.replaceState(null, '', '/vote')
+    const params = new URLSearchParams(window.location.search)
+    if (params.has('error')) {
+      // エラーパラメータだけ残してパスをクリーン化
+      window.history.replaceState(null, '', `/vote?error=${params.get('error')}`)
+    } else {
+      window.history.replaceState(null, '', '/vote')
+    }
   }, [])
 
   useEffect(() => {
