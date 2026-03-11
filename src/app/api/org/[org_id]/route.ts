@@ -83,7 +83,30 @@ export async function GET(
       })
     }
 
-    return NextResponse.json({ org, members, aggregate, levelAggregates })
+    // 一般メンバー取得（professional_idなし・user_idあり・重複なし）
+    const { data: generalMembersRaw } = await supabase
+      .from('org_members')
+      .select('user_id')
+      .eq('organization_id', orgId)
+      .is('professional_id', null)
+      .not('user_id', 'is', null)
+
+    const uniqueUserIds = Array.from(new Set((generalMembersRaw || []).map((m: any) => m.user_id)))
+
+    let generalMembers: any[] = []
+    if (uniqueUserIds.length > 0) {
+      const { data: clientData } = await supabase
+        .from('clients')
+        .select('user_id, nickname, photo_url')
+        .in('user_id', uniqueUserIds)
+      generalMembers = (clientData || []).map((c: any) => ({
+        user_id: c.user_id,
+        display_name: c.nickname || '一般会員',
+        photo_url: c.photo_url || null,
+      }))
+    }
+
+    return NextResponse.json({ org, members, aggregate, levelAggregates, general_count: uniqueUserIds.length, generals: generalMembers })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
