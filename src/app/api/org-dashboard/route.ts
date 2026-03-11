@@ -73,6 +73,22 @@ export async function GET() {
     // 3. バッジ・ホルダー集計
     const badges = badgesResult.data || []
     const badgeHolders = holdersResult.data || []
+
+    // professional_idがNULLのメンバーのuser_idを収集してclientsテーブルから一括取得
+    const generalUserIds = badgeHolders
+      .filter((h: any) => !h.professional_id && h.user_id)
+      .map((h: any) => h.user_id)
+    let clientMap = new Map<string, any>()
+    if (generalUserIds.length > 0) {
+      const { data: clientData } = await supabase
+        .from('clients')
+        .select('user_id, nickname, photo_url')
+        .in('user_id', generalUserIds)
+      for (const c of (clientData || [])) {
+        clientMap.set(c.user_id, c)
+      }
+    }
+
     const badgeHolderCounts: Record<string, number> = {}
     for (const h of badgeHolders) {
       if (h.credential_level_id) {
@@ -121,13 +137,21 @@ export async function GET() {
       ...badge,
       holders: badgeHolders
         .filter((h: any) => h.credential_level_id === badge.id)
-        .map((h: any) => ({
-          id: h.id,
-          user_id: h.user_id,
-          professional_id: h.professional_id,
-          accepted_at: h.accepted_at,
-          professionals: h.professionals,
-        })),
+        .map((h: any) => {
+          const client = h.user_id ? clientMap.get(h.user_id) : null
+          return {
+            id: h.id,
+            user_id: h.user_id,
+            professional_id: h.professional_id,
+            accepted_at: h.accepted_at,
+            professionals: h.professionals || (client ? {
+              id: null,
+              name: client.nickname || '一般会員',
+              photo_url: client.photo_url || null,
+              title: '',
+            } : null),
+          }
+        }),
     }))
 
     return NextResponse.json({
