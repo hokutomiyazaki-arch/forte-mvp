@@ -185,15 +185,15 @@ export default function OrgBadgesPage() {
     }
   }
 
-  async function handleRevoke(professionalId: string, badgeLevelId: string, professionalName: string) {
-    if (!confirm(`${professionalName} さんのこのバッジを削除しますか？\n\n※ この操作は取り消せません。再度バッジを付与するにはclaim URLからの再取得が必要です。`)) {
+  async function handleRevoke(memberId: string, badgeLevelId: string, holderName: string) {
+    if (!confirm(`${holderName} さんのこのバッジを削除しますか？\n\n※ この操作は取り消せません。再度バッジを付与するにはclaim URLからの再取得が必要です。`)) {
       return
     }
 
-    setRevoking(professionalId + '_' + badgeLevelId)
+    setRevoking(memberId + '_' + badgeLevelId)
     try {
       const res = await fetch(
-        `/api/org-badge-revoke?professional_id=${professionalId}&organization_id=${org.id}&badge_level_id=${badgeLevelId}`,
+        `/api/org-badge-revoke?member_id=${memberId}&organization_id=${org.id}`,
         { method: 'DELETE' }
       )
       if (!res.ok) throw new Error('削除に失敗しました')
@@ -202,7 +202,7 @@ export default function OrgBadgesPage() {
       setLevels(prev =>
         prev.map(l =>
           l.id === badgeLevelId
-            ? { ...l, holders: (l.holders || []).filter((h: any) => h.professional_id !== professionalId) }
+            ? { ...l, holders: (l.holders || []).filter((h: any) => h.id !== memberId) }
             : l
         )
       )
@@ -394,7 +394,7 @@ export default function OrgBadgesPage() {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {level.holders.map((holder: any) => (
                           <div
-                            key={holder.professional_id}
+                            key={holder.id}
                             style={{
                               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                               padding: '8px 12px', backgroundColor: '#fff', borderRadius: '8px',
@@ -402,46 +402,68 @@ export default function OrgBadgesPage() {
                             }}
                           >
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              {holder.professionals?.photo_url ? (
-                                <img
-                                  src={holder.professionals.photo_url}
-                                  alt=""
-                                  style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
-                                />
+                              {holder.professionals ? (
+                                <>
+                                  {holder.professionals.photo_url ? (
+                                    <img
+                                      src={holder.professionals.photo_url}
+                                      alt=""
+                                      style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
+                                    />
+                                  ) : (
+                                    <div style={{
+                                      width: '32px', height: '32px', borderRadius: '50%',
+                                      backgroundColor: '#E5E5E0', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                      fontSize: '14px', color: '#888',
+                                    }}>
+                                      {holder.professionals.name?.charAt(0) || '?'}
+                                    </div>
+                                  )}
+                                  <div>
+                                    <p style={{ fontSize: '13px', fontWeight: 600, color: '#1A1A2E', margin: 0 }}>
+                                      {holder.professionals.name}
+                                    </p>
+                                    <p style={{ fontSize: '11px', color: '#888', margin: 0 }}>
+                                      {holder.accepted_at ? new Date(holder.accepted_at).toLocaleDateString('ja-JP') : ''}
+                                    </p>
+                                  </div>
+                                </>
                               ) : (
-                                <div style={{
-                                  width: '32px', height: '32px', borderRadius: '50%',
-                                  backgroundColor: '#E5E5E0', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  fontSize: '14px', color: '#888',
-                                }}>
-                                  {holder.professionals?.name?.charAt(0) || '?'}
-                                </div>
+                                <>
+                                  <div style={{
+                                    width: '32px', height: '32px', borderRadius: '50%',
+                                    backgroundColor: '#E5E5E0', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: '14px', color: '#888',
+                                  }}>
+                                    ?
+                                  </div>
+                                  <div>
+                                    <p style={{ fontSize: '13px', fontWeight: 600, color: '#888', margin: 0 }}>
+                                      一般会員
+                                    </p>
+                                    <p style={{ fontSize: '11px', color: '#888', margin: 0 }}>
+                                      {holder.accepted_at ? new Date(holder.accepted_at).toLocaleDateString('ja-JP') : ''}
+                                    </p>
+                                  </div>
+                                </>
                               )}
-                              <div>
-                                <p style={{ fontSize: '13px', fontWeight: 600, color: '#1A1A2E', margin: 0 }}>
-                                  {holder.professionals?.name}
-                                </p>
-                                <p style={{ fontSize: '11px', color: '#888', margin: 0 }}>
-                                  {holder.accepted_at ? new Date(holder.accepted_at).toLocaleDateString('ja-JP') : ''}
-                                </p>
-                              </div>
                             </div>
 
                             <button
                               onClick={() => handleRevoke(
-                                holder.professional_id,
+                                holder.id,
                                 level.id,
-                                holder.professionals?.name || ''
+                                holder.professionals?.name || '一般会員'
                               )}
-                              disabled={revoking === holder.professional_id + '_' + level.id}
+                              disabled={revoking === holder.id + '_' + level.id}
                               style={{
                                 background: 'none', border: '1px solid #E53E3E',
                                 color: '#E53E3E', fontSize: '12px', padding: '4px 10px',
                                 borderRadius: '6px', cursor: 'pointer',
-                                opacity: revoking === holder.professional_id + '_' + level.id ? 0.5 : 1,
+                                opacity: revoking === holder.id + '_' + level.id ? 0.5 : 1,
                               }}
                             >
-                              {revoking === holder.professional_id + '_' + level.id ? '削除中...' : '認定削除'}
+                              {revoking === holder.id + '_' + level.id ? '削除中...' : '認定削除'}
                             </button>
                           </div>
                         ))}

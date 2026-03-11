@@ -18,13 +18,12 @@ export async function DELETE(req: NextRequest) {
 
   try {
     const { searchParams } = new URL(req.url)
-    const professionalId = searchParams.get('professional_id')
+    const memberId = searchParams.get('member_id')
     const organizationId = searchParams.get('organization_id')
-    const badgeLevelId = searchParams.get('badge_level_id')
 
-    if (!professionalId || !organizationId) {
+    if (!memberId || !organizationId) {
       return NextResponse.json(
-        { error: 'professional_id and organization_id are required' },
+        { error: 'member_id and organization_id are required' },
         { status: 400 }
       )
     }
@@ -42,26 +41,13 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    if (badgeLevelId) {
-      // 個別バッジのみ削除（org_members の credential_level_id 一致レコード）
-      const { error } = await supabase
-        .from('org_members')
-        .delete()
-        .eq('professional_id', professionalId)
-        .eq('organization_id', organizationId)
-        .eq('credential_level_id', badgeLevelId)
+    const { error } = await supabase
+      .from('org_members')
+      .delete()
+      .eq('id', memberId)
+      .eq('organization_id', organizationId)
 
-      if (error) throw error
-    } else {
-      // この団体の全レコードを削除（org_members）
-      const { error } = await supabase
-        .from('org_members')
-        .delete()
-        .eq('professional_id', professionalId)
-        .eq('organization_id', organizationId)
-
-      if (error) throw error
-    }
+    if (error) throw error
 
     return NextResponse.json({ success: true })
   } catch (error: any) {

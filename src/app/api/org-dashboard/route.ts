@@ -64,7 +64,7 @@ export async function GET() {
       // バッジ取得者一括取得（org_members + professional + credential_level）
       supabase
         .from('org_members')
-        .select('credential_level_id, professional_id, accepted_at, professionals(id, name, photo_url, title), credential_levels(id, name, image_url)')
+        .select('id, user_id, credential_level_id, professional_id, accepted_at, professionals(id, name, photo_url, title), credential_levels(id, name, image_url)')
         .eq('organization_id', org.id)
         .eq('status', 'active')
         .not('credential_level_id', 'is', null),
@@ -122,6 +122,8 @@ export async function GET() {
       holders: badgeHolders
         .filter((h: any) => h.credential_level_id === badge.id)
         .map((h: any) => ({
+          id: h.id,
+          user_id: h.user_id,
           professional_id: h.professional_id,
           accepted_at: h.accepted_at,
           professionals: h.professionals,
