@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   const { data: existing } = await supabase
     .from('org_members')
     .select('id')
-    .eq('credential_level_id', credentialLevelId)
+    .eq('credential_level_id', level.id)
     .eq('user_id', userId)
     .maybeSingle()
 
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
     .from('org_members')
     .insert({
       organization_id: level.organization_id,
-      credential_level_id: credentialLevelId,
+      credential_level_id: level.id,
       user_id: userId,
       professional_id: pro?.id || null,
       role: 'member',
