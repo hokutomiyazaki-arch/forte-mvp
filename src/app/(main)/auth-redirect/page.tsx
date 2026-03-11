@@ -9,14 +9,6 @@ export default function AuthRedirectPage() {
     if (!isLoaded) return
     if (!user) { window.location.href = '/sign-in'; return }
 
-    // バッジ取得リダイレクト復元
-    const badgeRedirect = sessionStorage.getItem('badge_claim_redirect')
-    if (badgeRedirect) {
-      sessionStorage.removeItem('badge_claim_redirect')
-      window.location.href = badgeRedirect
-      return
-    }
-
     fetch('/api/user/role')
       .then(res => res.json())
       .then(data => {
