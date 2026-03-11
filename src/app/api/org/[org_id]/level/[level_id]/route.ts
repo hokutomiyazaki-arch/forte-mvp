@@ -68,6 +68,7 @@ export async function GET(
 
     // 全メンバー（プロ + 一般）をマージ
     professionals = allMembers
+      .filter((m: any) => m.professional_id != null)
       .map((m: any) => {
         const pro = m.professional_id ? profMap.get(m.professional_id) : null
         return {
