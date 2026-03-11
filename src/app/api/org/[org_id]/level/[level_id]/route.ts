@@ -28,34 +28,51 @@ export async function GET(
     if (!orgResult.data) return NextResponse.json({ error: '団体が見つかりません' }, { status: 404 })
     if (!levelResult.data) return NextResponse.json({ error: 'レベルが見つかりません' }, { status: 404 })
 
-    const professionalIds = (membersResult.data || []).map((m: any) => m.professional_id)
+    const allMembers = membersResult.data || []
+    const professionalIds = allMembers
+      .map((m: any) => m.professional_id)
+      .filter((id: any) => id != null)
 
     let professionals: any[] = []
+
+    // プロ情報を取得（professional_idがあるメンバーのみ）
+    let profMap = new Map<string, any>()
     if (professionalIds.length > 0) {
       const { data: profData } = await supabase
         .from('professionals')
         .select('id, name, photo_url, title')
         .in('id', professionalIds)
 
-      // 投票数を org_proof_summary からマージ
+      for (const p of (profData || [])) {
+        profMap.set(p.id, p)
+      }
+    }
+
+    // 投票数を org_proof_summary からマージ
+    let votesMap = new Map<string, number>()
+    if (professionalIds.length > 0) {
       const { data: summaryData } = await supabase
         .from('org_proof_summary')
         .select('professional_id, total_votes')
         .eq('organization_id', orgId)
         .in('professional_id', professionalIds)
 
-      const votesMap = new Map((summaryData || []).map((s: any) => [s.professional_id, s.total_votes || 0]))
-
-      professionals = (profData || [])
-        .map((p: any) => ({
-          professional_id: p.id,
-          professional_name: p.name,
-          photo_url: p.photo_url,
-          title: p.title,
-          total_votes: votesMap.get(p.id) || 0,
-        }))
-        .sort((a: any, b: any) => b.total_votes - a.total_votes)
+      votesMap = new Map((summaryData || []).map((s: any) => [s.professional_id, s.total_votes || 0]))
     }
+
+    // 全メンバー（プロ + 一般）をマージ
+    professionals = allMembers
+      .map((m: any) => {
+        const pro = m.professional_id ? profMap.get(m.professional_id) : null
+        return {
+          professional_id: m.professional_id || null,
+          professional_name: pro?.name || '一般会員',
+          photo_url: pro?.photo_url || null,
+          title: pro?.title || '',
+          total_votes: m.professional_id ? (votesMap.get(m.professional_id) || 0) : 0,
+        }
+      })
+      .sort((a: any, b: any) => b.total_votes - a.total_votes)
 
     return NextResponse.json({
       org: orgResult.data,
