@@ -331,7 +331,10 @@ function VoteForm() {
   const [accordionOpen, setAccordionOpen] = useState({ proof: false, personality: false, reward: false })
 
   // スプラッシュ
-  const [showSplash, setShowSplash] = useState(true)
+  const [showSplash, setShowSplash] = useState(() => {
+    if (typeof window === 'undefined') return true
+    return !new URLSearchParams(window.location.search).has('error')
+  })
 
   // セッション確認（null=未回答, true=受けた, false=気になっている）
   // OAuth認証エラーで戻ってきた場合はセッション確認をスキップ
@@ -342,7 +345,10 @@ function VoteForm() {
   const loadedRef = useRef(false)
 
   // ── ステップ管理 ──
-  const [voteStep, setVoteStep] = useState<VoteStep>("intro")
+  const [voteStep, setVoteStep] = useState<VoteStep>(() => {
+    if (typeof window === 'undefined') return "intro"
+    return new URLSearchParams(window.location.search).has('error') ? "auth" : "intro"
+  })
   const [isTransitioning, setIsTransitioning] = useState(false)
   const stepHistory = useRef<VoteStep[]>([])
   const [showEmailInput, setShowEmailInput] = useState(false)
