@@ -126,7 +126,7 @@ export default function OrgPublicPage() {
           <h2 className="text-sm font-bold text-[#1A1A2E] mb-2">
             {org.type === 'credential' ? '認定レベル' : '修了レベル'}
           </h2>
-          {levelAggregates.map(la => (
+          {levelAggregates.map((la: any) => (
             <a
               key={la.level_id}
               href={`/org/${orgId}/level/${la.level_id}`}
@@ -141,10 +141,12 @@ export default function OrgPublicPage() {
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-bold text-[#1A1A2E] truncate">{la.level_name}</div>
-                  <div className="text-xs text-gray-400 mt-1">
-                    {la.member_count}名 · {la.total_votes}プルーフ
-                  </div>
+                  <div className="text-sm font-bold text-[#1A1A2E] truncate">{la.level_name}  ({la.member_count}名)</div>
+                  {la.members && la.members.length > 0 && (
+                    <div className="text-xs text-gray-400 mt-1 truncate">
+                      {la.members.map((m: any) => m.name).filter(Boolean).join('  /  ')}
+                    </div>
+                  )}
                 </div>
                 <span className="text-gray-300 text-sm">→</span>
               </div>
@@ -161,25 +163,22 @@ export default function OrgPublicPage() {
           <p className="text-gray-400 text-sm text-center py-4">{L.empty}</p>
         ) : (
           <div className="space-y-3">
-            {members.map(m => (
+            {members.map((m: any) => (
               <a
                 key={m.professional_id}
                 href={`/card/${m.professional_id}`}
                 className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition"
               >
-                {m.photo_url ? (
-                  <img src={m.photo_url} alt="" className="w-10 h-10 rounded-full object-cover" />
+                {m.professionals?.photo_url ? (
+                  <img src={m.professionals.photo_url} alt="" className="w-10 h-10 rounded-full object-cover" />
                 ) : (
                   <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-sm text-gray-400">
-                    {m.professional_name?.charAt(0) || '?'}
+                    {m.professionals?.name?.charAt(0) || '?'}
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-[#1A1A2E] truncate">
-                    {m.professional_name}
-                  </div>
-                  <div className="text-xs text-gray-400">
-                    {m.total_votes || 0}票のプルーフ
+                    {m.professionals?.name || ''}
                   </div>
                 </div>
                 <span className="text-gray-300 text-sm">→</span>
