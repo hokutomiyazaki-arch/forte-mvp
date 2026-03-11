@@ -827,7 +827,7 @@ function VoteForm() {
         reward_id: selectedRewardId,
         professional_id: proId,
         client_email: email,
-        status: 'pending',
+        status: isSessionVote ? 'active' : 'pending',
       })
       if (rewardInsertError) {
         console.error('[handleSubmit] client_rewards INSERT error:', rewardInsertError)
