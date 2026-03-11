@@ -32,13 +32,29 @@ export async function GET(
 
     let professionals: any[] = []
     if (professionalIds.length > 0) {
-      const { data } = await supabase
+      const { data: profData } = await supabase
+        .from('professionals')
+        .select('id, name, photo_url, title')
+        .in('id', professionalIds)
+
+      // 投票数を org_proof_summary からマージ
+      const { data: summaryData } = await supabase
         .from('org_proof_summary')
-        .select('*')
+        .select('professional_id, total_votes')
         .eq('organization_id', orgId)
         .in('professional_id', professionalIds)
-        .order('total_votes', { ascending: false })
-      professionals = data || []
+
+      const votesMap = new Map((summaryData || []).map((s: any) => [s.professional_id, s.total_votes || 0]))
+
+      professionals = (profData || [])
+        .map((p: any) => ({
+          professional_id: p.id,
+          professional_name: p.name,
+          photo_url: p.photo_url,
+          title: p.title,
+          total_votes: votesMap.get(p.id) || 0,
+        }))
+        .sort((a: any, b: any) => b.total_votes - a.total_votes)
     }
 
     return NextResponse.json({
