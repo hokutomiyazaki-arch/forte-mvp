@@ -82,6 +82,75 @@ function Accordion({
   )
 }
 
+// ── スプラッシュスクリーン ──
+function SplashScreen({ onDone }: { onDone: () => void }) {
+  const [phase, setPhase] = useState<"enter" | "hold" | "exit">("enter");
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setPhase("hold"), 120);
+    const t2 = setTimeout(() => setPhase("exit"),  1900);
+    const t3 = setTimeout(() => onDone(),           2500);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const wrapOpacity = phase === "hold" ? 1 : 0;
+  const wrapFilter  = phase === "exit" ? "blur(8px)" : "blur(0px)";
+  const logoScale   = phase === "enter" ? 0.88 : phase === "hold" ? 1 : 1.05;
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 9999,
+      background: "#1A1A2E",
+      display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      opacity: wrapOpacity,
+      filter: wrapFilter,
+      transition: "opacity 0.5s ease, filter 0.5s ease",
+    }}>
+      <style>{`
+        @keyframes splashBar { from { width: 0 } to { width: 100% } }
+      `}</style>
+
+      <div style={{
+        display: "flex", flexDirection: "column", alignItems: "center", gap: 24,
+        transform: `scale(${logoScale})`,
+        transition: "transform 0.65s cubic-bezier(0.34, 1.56, 0.64, 1)",
+      }}>
+        <img
+          src="/images/icon.png"
+          alt="REALPROOF"
+          style={{
+            width: 120,
+            height: "auto",
+            filter: "drop-shadow(0 0 24px rgba(196,163,90,0.55))",
+          }}
+        />
+        <div style={{
+          fontSize: 13, fontWeight: 500,
+          color: "rgba(196,163,90,0.75)",
+          letterSpacing: 2, textAlign: "center", lineHeight: 1.9,
+        }}>
+          技術を磨く本物が輝く社会へ
+        </div>
+      </div>
+
+      {/* ローディングバー */}
+      <div style={{
+        position: "absolute", bottom: 56,
+        width: 56, height: 2, borderRadius: 100,
+        background: "rgba(255,255,255,0.07)", overflow: "hidden",
+      }}>
+        <div style={{
+          height: "100%", borderRadius: 100,
+          background: "linear-gradient(90deg, #C4A35A, #D4B56A)",
+          animation: "splashBar 1.9s ease forwards",
+        }} />
+      </div>
+    </div>
+  );
+}
+
 // ── メインフォーム ──
 function VoteForm() {
   const params = useParams()
@@ -134,6 +203,15 @@ function VoteForm() {
 
   // アコーディオン
   const [accordionOpen, setAccordionOpen] = useState({ proof: false, personality: false, reward: false })
+
+  // スプラッシュ
+  const [showSplash, setShowSplash] = useState(true)
+
+  // セッション確認（null=未回答, true=受けた, false=気になっている）
+  // OAuth認証エラーで戻ってきた場合はセッション確認をスキップ
+  const [sessionConfirmed, setSessionConfirmed] = useState<boolean | null>(
+    searchParams.get('error') ? true : null
+  )
 
   const loadedRef = useRef(false)
 
@@ -358,6 +436,30 @@ function VoteForm() {
       vote_type: determineVoteType(),
       session_count: sessionCount,
       qr_token: qrToken,
+    }
+  }
+
+  // ── hopeful投票（「気になっている」用） ──
+  const submitHopefulVote = async () => {
+    if (!pro) return
+    try {
+      await (supabase as any).from('votes').insert({
+        professional_id: proId,
+        voter_email: null,
+        client_user_id: null,
+        vote_type: 'hopeful',
+        selected_proof_ids: null,
+        selected_personality_ids: null,
+        selected_reward_id: null,
+        comment: null,
+        qr_token: qrToken || null,
+        status: 'confirmed',
+        session_count: 'first',
+        vote_weight: 0.5,
+      })
+    } catch (e) {
+      console.error('hopeful vote error:', e)
+      // エラーでも完了画面は表示する（UXを壊さない）
     }
   }
 
@@ -614,6 +716,11 @@ function VoteForm() {
     setSubmitted(true)
   }
 
+  // ── スプラッシュ（データはバックグラウンドで読み込み中） ──
+  if (showSplash) {
+    return <SplashScreen onDone={() => setShowSplash(false)} />
+  }
+
   // ── ローディング ──
   if (loading) {
     return <div className="text-center py-16 text-gray-400">読み込み中...</div>
@@ -672,6 +779,100 @@ function VoteForm() {
           {pro.name}さんのカードを見る
         </a>
       </div>
+    )
+  }
+
+  // ── セッション確認（正常な投票アクセス時のみ） ──
+  if (sessionConfirmed === null) {
+    return (
+      <>
+        <style>{`
+          nav, footer { display: none !important; }
+          main { padding: 0 !important; max-width: 100% !important; }
+        `}</style>
+        <div style={{
+          minHeight: "100vh", background: "#1A1A2E",
+          display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center",
+          padding: "24px", gap: 24,
+        }}>
+          {/* プロ情報 */}
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 28, marginBottom: 12 }}>🙏</div>
+            <div style={{ color: "#C4A35A", fontWeight: 700, fontSize: 17, marginBottom: 6 }}>
+              {pro.name}さんの
+            </div>
+            <div style={{ color: "#FAFAF7", fontSize: 15, lineHeight: 1.7 }}>
+              セッションを受けましたか？
+            </div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%", maxWidth: 360 }}>
+            {/* はい → 既存フローへ */}
+            <button
+              onClick={() => setSessionConfirmed(true)}
+              style={{
+                padding: "15px", borderRadius: 14,
+                background: "linear-gradient(135deg, #C4A35A, #D4B56A)",
+                border: "none", color: "#1A1A2E",
+                fontSize: 15, fontWeight: 700, cursor: "pointer",
+              }}
+            >
+              はい、受けました！
+            </button>
+
+            {/* 気になっている → hopeful_done */}
+            <button
+              onClick={async () => {
+                await submitHopefulVote();
+                setSessionConfirmed(false);
+              }}
+              style={{
+                padding: "14px", borderRadius: 14,
+                background: "rgba(255,255,255,0.03)",
+                border: "1.5px solid rgba(255,255,255,0.14)",
+                color: "#8B8B9A", fontSize: 14, cursor: "pointer",
+              }}
+            >
+              まだですが、気になっています
+            </button>
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  // ── 「気になっている」完了画面 ──
+  if (sessionConfirmed === false) {
+    return (
+      <>
+        <style>{`
+          nav, footer { display: none !important; }
+          main { padding: 0 !important; max-width: 100% !important; }
+        `}</style>
+        <div style={{
+          minHeight: "100vh", background: "#1A1A2E",
+          display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center",
+          padding: "24px", textAlign: "center",
+        }}>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>💫</div>
+          <div style={{ color: "#C4A35A", fontWeight: 700, fontSize: 18, marginBottom: 12 }}>
+            気持ちが届きました！
+          </div>
+          <div style={{ color: "#FAFAF7", fontSize: 14, lineHeight: 1.9, marginBottom: 8 }}>
+            「期待できそう！」のプルーフを<br />
+            <span style={{ color: "#C4A35A", fontWeight: 600 }}>
+              {pro.name}
+            </span>
+            さんに送りました。
+          </div>
+          <div style={{ color: "#8B8B9A", fontSize: 12, lineHeight: 1.8 }}>
+            ぜひ一度セッションを受けてみてください。<br />
+            受けた後にまたプルーフ投票できます ✨
+          </div>
+        </div>
+      </>
     )
   }
 
