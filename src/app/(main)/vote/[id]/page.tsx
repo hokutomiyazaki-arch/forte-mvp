@@ -590,7 +590,7 @@ function VoteForm() {
       selected_reward_id: selectedRewardId || null,
       comment: comment.trim() || null,
       vote_type: determineVoteType(),
-      session_count: sessionCount,
+      session_count: sessionCount || 'first',
       qr_token: qrToken,
     }
   }
@@ -621,10 +621,7 @@ function VoteForm() {
 
   // ── LINE認証で投票 ──
   function handleLineVote() {
-    if (!sessionCount) {
-      setError('セッション回数を選択してください')
-      return
-    }
+    const effectiveSessionCount = sessionCount || 'first'
     if (proRewards.length > 0 && !selectedRewardId) {
       setError('リワードを選択してください')
       return
@@ -638,10 +635,7 @@ function VoteForm() {
 
   // ── Google認証で投票 ──
   function handleGoogleVote() {
-    if (!sessionCount) {
-      setError('セッション回数を選択してください')
-      return
-    }
+    const effectiveSessionCount = sessionCount || 'first'
     if (proRewards.length > 0 && !selectedRewardId) {
       setError('リワードを選択してください')
       return
