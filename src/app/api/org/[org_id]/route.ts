@@ -55,35 +55,21 @@ export async function GET(
 
     let levelAggregates: any[] = []
     if (org.type === 'credential' || org.type === 'education') {
-      const [levelsResult, levelMembersResult] = await Promise.all([
-        supabase
-          .from('credential_levels')
-          .select('*')
-          .eq('organization_id', orgId)
-          .order('sort_order', { ascending: true }),
+      const { data: levels } = await supabase
+        .from('credential_levels')
+        .select('*')
+        .eq('organization_id', orgId)
+        .order('sort_order', { ascending: true })
 
-        supabase
-          .from('org_members')
-          .select('credential_level_id, professional_id')
-          .eq('organization_id', orgId)
-          .eq('status', 'active'),
-      ])
-
-      const levels = levelsResult.data || []
-      const levelMembers = (levelMembersResult.data || []).filter((m: any) => m.credential_level_id)
-
-      levelAggregates = levels.map((cl: any) => {
-        const membersInLevel = levelMembers.filter((m: any) => m.credential_level_id === cl.id)
-
-        const memberDetails = membersInLevel.map((m: any) => {
-          const om = allOrgMembers.find((o: any) => o.professional_id === m.professional_id)
-          return {
-            professional_id: m.professional_id,
-            name: (om as any)?.professionals?.name || '',
-            photo_url: (om as any)?.professionals?.photo_url || null,
-          }
-        })
-
+      levelAggregates = (levels || []).map((cl: any) => {
+        const membersInLevel = allOrgMembers.filter(
+          (m: any) => m.credential_level_id === cl.id
+        )
+        const memberDetails = membersInLevel.map((m: any) => ({
+          professional_id: m.professional_id,
+          name: m.professionals?.name || '',
+          photo_url: m.professionals?.photo_url || null,
+        }))
         return {
           level_id: cl.id,
           organization_id: cl.organization_id,
