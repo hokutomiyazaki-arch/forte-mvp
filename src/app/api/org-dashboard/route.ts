@@ -114,23 +114,42 @@ export async function GET() {
     }
     const uniqueMembers = Array.from(memberMap.values())
 
-    // 4. メンバーリスト統合: org_proof_summary + badgeMembers（投票なしのバッジ取得者も含める）
+    // 4. メンバーリスト統合: org_proof_summary を基本にし、バッジ取得者を補完
     const proofMembers = membersResult.data || []
-    const proofMemberIds = new Set(proofMembers.map((m: any) => m.professional_id))
-    const mergedMembers = [
-      ...proofMembers,
-      // バッジ取得者のうち、org_proof_summaryに含まれていない人を追加（投票0件）
-      ...uniqueMembers
-        .filter(m => !proofMemberIds.has(m.professional_id))
-        .map(m => ({
+
+    // org_proof_summaryから投票数マップを作成（Number変換でbigint文字列対策）
+    const votesMap = new Map<string, number>()
+    for (const m of proofMembers) {
+      votesMap.set(m.professional_id, Number(m.total_votes) || 0)
+    }
+
+    // 全メンバーをMapで統合（重複排除 + 投票数の確実な引き継ぎ）
+    const mergedMap = new Map<string, any>()
+
+    // org_proof_summaryのメンバーを基本データとして追加
+    for (const m of proofMembers) {
+      mergedMap.set(m.professional_id, {
+        ...m,
+        total_votes: Number(m.total_votes) || 0,
+      })
+    }
+
+    // バッジ取得者のうち、org_proof_summaryに含まれていない人を追加
+    for (const m of uniqueMembers) {
+      if (!mergedMap.has(m.professional_id)) {
+        mergedMap.set(m.professional_id, {
           professional_id: m.professional_id,
           professional_name: m.name,
           photo_url: m.photo_url,
           title: m.title,
-          total_votes: 0,
+          total_votes: votesMap.get(m.professional_id) || 0,
           organization_id: org.id,
-        })),
-    ]
+        })
+      }
+    }
+
+    const mergedMembers = Array.from(mergedMap.values())
+      .sort((a: any, b: any) => (Number(b.total_votes) || 0) - (Number(a.total_votes) || 0))
 
     // 5. バッジにholders（取得者リスト）を紐づけ
     const badgesWithHolders = badges.map((badge: any) => ({
