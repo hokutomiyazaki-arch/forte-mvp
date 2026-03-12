@@ -469,12 +469,12 @@ export default function OrgDashboardPage() {
             <RechartsCharts
               analytics={{
                 ...analytics,
-                strengthDistribution: strengthChartData.length > 0 ? strengthChartData : strengthWithLabels,
                 memberStrengths: (analytics?.memberStrengths || []).map((ms: any) => {
                   const member = members.find((m: any) => m.professional_id === ms.professional_id)
                   return { ...ms, top_strength: member?.top_strength || '' }
                 }),
               }}
+              strengthDistributionData={strengthChartData}
             />
           </>
         )
