@@ -114,42 +114,33 @@ export async function GET() {
     }
     const uniqueMembers = Array.from(memberMap.values())
 
-    // 4. メンバーリスト統合: org_proof_summary を基本にし、バッジ取得者を補完
+    // 4. メンバーリスト統合: org_proof_summary を基本にして、バッジ情報を追加する方式
+    // org_proof_summary の total_votes を正として lookup map を構築
     const proofMembers = membersResult.data || []
-
-    // org_proof_summaryから投票数マップを作成（Number変換でbigint文字列対策）
-    const votesMap = new Map<string, number>()
+    const proofVotesMap = new Map<string, number>()
     for (const m of proofMembers) {
-      votesMap.set(m.professional_id, Number(m.total_votes) || 0)
+      proofVotesMap.set(m.professional_id, Number(m.total_votes) || 0)
     }
+    const proofMemberIds = new Set(proofMembers.map((m: any) => m.professional_id))
 
-    // 全メンバーをMapで統合（重複排除 + 投票数の確実な引き継ぎ）
-    const mergedMap = new Map<string, any>()
-
-    // org_proof_summaryのメンバーを基本データとして追加
-    for (const m of proofMembers) {
-      mergedMap.set(m.professional_id, {
+    // proofMembers を基本に、バッジ取得者のうち未含有の人を追加
+    // total_votes は常に proofVotesMap から取得（上書き防止）
+    const mergedMembers = [
+      ...proofMembers.map((m: any) => ({
         ...m,
         total_votes: Number(m.total_votes) || 0,
-      })
-    }
-
-    // バッジ取得者のうち、org_proof_summaryに含まれていない人を追加
-    for (const m of uniqueMembers) {
-      if (!mergedMap.has(m.professional_id)) {
-        mergedMap.set(m.professional_id, {
+      })),
+      ...uniqueMembers
+        .filter(m => !proofMemberIds.has(m.professional_id))
+        .map(m => ({
           professional_id: m.professional_id,
           professional_name: m.name,
           photo_url: m.photo_url,
           title: m.title,
-          total_votes: votesMap.get(m.professional_id) || 0,
+          total_votes: proofVotesMap.get(m.professional_id) || 0,
           organization_id: org.id,
-        })
-      }
-    }
-
-    const mergedMembers = Array.from(mergedMap.values())
-      .sort((a: any, b: any) => (Number(b.total_votes) || 0) - (Number(a.total_votes) || 0))
+        })),
+    ].sort((a: any, b: any) => (Number(b.total_votes) || 0) - (Number(a.total_votes) || 0))
 
     // 5. バッジにholders（取得者リスト）を紐づけ
     const badgesWithHolders = badges.map((badge: any) => ({
