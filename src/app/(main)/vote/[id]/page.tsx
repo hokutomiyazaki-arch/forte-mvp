@@ -696,6 +696,20 @@ function VoteForm() {
     }
 
     try {
+      // ── 重複投票チェック（SMS送信前に確認） ──
+      const { data: existingVote } = await (supabase as any)
+        .from('votes')
+        .select('id')
+        .eq('professional_id', proId)
+        .eq('voter_email', formattedPhone)
+        .maybeSingle()
+
+      if (existingVote) {
+        setError('この電話番号では既にこのプロに投票済みです')
+        setPhoneSending(false)
+        return
+      }
+
       // まず signIn（既存ユーザー）
       try {
         await signIn!.create({ identifier: formattedPhone })
@@ -722,7 +736,9 @@ function VoteForm() {
       await signUp!.preparePhoneNumberVerification()
       setPhoneStep('verify')
     } catch (err: any) {
-      console.error('[handlePhoneSend] Error:', err)
+      console.error('[handlePhoneSend] Full error:', JSON.stringify(err, null, 2))
+      console.error('[handlePhoneSend] Error message:', err?.message)
+      console.error('[handlePhoneSend] Clerk errors:', err?.errors)
       const clerkError = err?.errors?.[0]
       if (clerkError?.code === 'form_phone_number_blocked') {
         setError('この電話番号は使用できません')
@@ -809,13 +825,25 @@ function VoteForm() {
 
       window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${insertedVote.id}&has_account=true`
     } catch (err: any) {
-      console.error('[handlePhoneVerify] Error:', err)
+      console.error('[handlePhoneVerify] Full error:', JSON.stringify(err, null, 2))
+      console.error('[handlePhoneVerify] Error type:', typeof err)
+      console.error('[handlePhoneVerify] Error message:', err?.message)
+      console.error('[handlePhoneVerify] Clerk errors:', err?.errors)
+
       const clerkError = err?.errors?.[0]
       if (clerkError?.code === 'form_code_incorrect') {
         setError('認証コードが正しくありません')
       } else if (clerkError?.code === 'verification_expired') {
         setError('認証コードの有効期限が切れました。再送信してください。')
         setPhoneStep('input')
+      } else if (clerkError?.code === 'form_identifier_exists') {
+        setError('この電話番号は既に別のアカウントで使用されています。LINEまたはGoogleで認証してください。')
+      } else if (clerkError?.code === 'session_exists') {
+        setError('既にログイン済みです。ページを再読み込みしてください。')
+      } else if (clerkError?.longMessage || clerkError?.message) {
+        setError(`認証エラー: ${clerkError.longMessage || clerkError.message}`)
+      } else if (err?.message) {
+        setError(`エラー: ${err.message}`)
       } else {
         setError('認証に失敗しました。もう一度お試しください。')
       }
