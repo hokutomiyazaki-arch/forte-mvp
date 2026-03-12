@@ -774,13 +774,20 @@ function VoteForm() {
           strategy: 'phone_code',
           code: phoneCode,
         })
+        console.log('[handlePhoneVerify] signIn result status:', result.status, 'sessionId:', result.createdSessionId)
         if (result.status === 'complete' && result.createdSessionId) {
-          await setSignInActive!({ session: result.createdSessionId })
+          // ⚠️ setActiveは呼ばない — 投票ページ内でセッション確立するとClerkが
+          // 再レンダー→リダイレクトを起こし、投票送信コードに到達しない
+          // await setSignInActive!({ session: result.createdSessionId })
+          console.log('[handlePhoneVerify] signIn complete, session created but setActive skipped to prevent redirect')
         }
       } else {
         const result = await signUp!.attemptPhoneNumberVerification({ code: phoneCode })
+        console.log('[handlePhoneVerify] signUp result status:', result.status, 'sessionId:', result.createdSessionId)
         if (result.status === 'complete' && result.createdSessionId) {
-          await setSignUpActive!({ session: result.createdSessionId })
+          // ⚠️ setActiveは呼ばない（理由は上と同じ）
+          // await setSignUpActive!({ session: result.createdSessionId })
+          console.log('[handlePhoneVerify] signUp complete, session created but setActive skipped to prevent redirect')
         }
       }
 
