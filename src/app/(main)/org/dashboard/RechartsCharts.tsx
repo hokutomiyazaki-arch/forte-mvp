@@ -56,10 +56,10 @@ function MemberRanking({ data }: { data: any[] }) {
 }
 
 function StrengthRadar({ data }: { data: any[] }) {
-  if (!data || data.length < 3) {
+  if (!data || data.length === 0) {
     return (
       <div style={{ padding: '24px', textAlign: 'center', color: '#888' }}>
-        レーダー表示に十分なデータがありません（最低3項目必要）
+        まだプルーフデータがありません
       </div>
     )
   }
@@ -68,6 +68,34 @@ function StrengthRadar({ data }: { data: any[] }) {
     ...d,
     displayLabel: d.label.length > 8 ? d.label.substring(0, 8) + '…' : d.label,
   }))
+
+  // 3項目未満は横棒グラフ、3項目以上はレーダーチャート
+  if (chartData.length < 3) {
+    return (
+      <div style={{ marginBottom: '32px' }}>
+        <h4 style={{ color: '#1A1A2E', fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>
+          団体全体の強み分布
+        </h4>
+        <div style={{ width: '100%', height: Math.max(150, chartData.length * 50) }}>
+          <ResponsiveContainer>
+            <BarChart data={chartData} layout="vertical" margin={{ left: 80, right: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#E5E5E0" />
+              <XAxis type="number" tick={{ fill: '#888', fontSize: 12 }} allowDecimals={false} />
+              <YAxis type="category" dataKey="displayLabel" tick={{ fill: '#1A1A2E', fontSize: 12 }} width={75} />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: '#1A1A2E', border: 'none',
+                  borderRadius: '8px', color: '#FAFAF7', fontSize: '13px',
+                }}
+                formatter={(value: number) => [`${value} 票`, '']}
+              />
+              <Bar dataKey="count" fill="#C4A35A" radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div style={{ marginBottom: '32px' }}>
