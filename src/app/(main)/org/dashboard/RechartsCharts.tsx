@@ -19,7 +19,7 @@ function MemberRanking({ data }: { data: any[] }) {
   if (!data || data.length === 0) {
     return (
       <div style={{ padding: '24px', textAlign: 'center', color: '#888' }}>
-        まだプルーフデータがありません
+        MR: データなし
       </div>
     )
   }
@@ -60,7 +60,7 @@ function StrengthRadar({ data }: { data: any[] }) {
   if (!data || data.length === 0) {
     return (
       <div style={{ padding: '24px', textAlign: 'center', color: '#888' }}>
-        まだプルーフデータがありません
+        SR: データなし
       </div>
     )
   }
@@ -280,7 +280,7 @@ function ProofRanking({ data }: { data: any[] }) {
   if (!data || data.length === 0) {
     return (
       <div style={{ padding: '24px', textAlign: 'center', color: '#888' }}>
-        まだプルーフデータがありません
+        PR: データなし
       </div>
     )
   }
