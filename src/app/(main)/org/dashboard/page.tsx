@@ -162,6 +162,8 @@ export default function OrgDashboardPage() {
       if (!analyticsRes.ok) throw new Error('分析データの取得に失敗しました')
       const data = await analyticsRes.json()
       const proofData = proofRes.ok ? await proofRes.json() : {}
+      console.log('[DEBUG] org-analytics strengthDistribution:', JSON.stringify(data.analytics?.strengthDistribution))
+      console.log('[DEBUG] org-analytics full keys:', data.analytics ? Object.keys(data.analytics) : 'analytics is null')
       if (data.analytics) {
         setAnalytics({
           ...data.analytics,

@@ -56,6 +56,7 @@ function MemberRanking({ data }: { data: any[] }) {
 }
 
 function StrengthRadar({ data }: { data: any[] }) {
+  console.log('[DEBUG] StrengthRadar received data:', JSON.stringify(data))
   if (!data || data.length === 0) {
     return (
       <div style={{ padding: '24px', textAlign: 'center', color: '#888' }}>
@@ -399,6 +400,8 @@ function MemberStrengthsTable({ data }: { data: any[] }) {
 }
 
 export default function RechartsCharts({ analytics, strengthDistributionData }: { analytics: AnalyticsData | null; strengthDistributionData?: { label: string; count: number }[] }) {
+  console.log('[DEBUG] RechartsCharts props - analytics.strengthDistribution:', JSON.stringify(analytics?.strengthDistribution))
+  console.log('[DEBUG] RechartsCharts props - strengthDistributionData:', JSON.stringify(strengthDistributionData))
   if (!analytics) {
     return (
       <div style={{ padding: '32px', textAlign: 'center', color: '#888' }}>
