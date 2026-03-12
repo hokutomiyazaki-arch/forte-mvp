@@ -398,7 +398,7 @@ function MemberStrengthsTable({ data }: { data: any[] }) {
   )
 }
 
-export default function RechartsCharts({ analytics }: { analytics: AnalyticsData | null }) {
+export default function RechartsCharts({ analytics, strengthDistributionData }: { analytics: AnalyticsData | null; strengthDistributionData?: { label: string; count: number }[] }) {
   if (!analytics) {
     return (
       <div style={{ padding: '32px', textAlign: 'center', color: '#888' }}>
@@ -447,7 +447,7 @@ export default function RechartsCharts({ analytics }: { analytics: AnalyticsData
       <MemberRanking data={analytics.memberProofCounts || []} />
       <ProofRanking data={analytics.topProofItems || []} />
       <MemberStrengthsTable data={analytics.memberStrengths || []} />
-      <StrengthRadar data={analytics.strengthDistribution || []} />
+      <StrengthRadar data={strengthDistributionData || analytics.strengthDistribution || []} />
       <MonthlyTrend data={analytics.monthlyTrend || []} />
       <DailyTrend data={analytics.dailyTrend || []} />
       <CommentFeed data={analytics.recentComments || []} />
