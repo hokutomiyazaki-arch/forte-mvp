@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { useUser } from '@clerk/nextjs'
+import { useUser, useSignUp, useSignIn } from '@clerk/nextjs'
 import { Professional, getRewardLabel } from '@/lib/types'
 import { Suspense } from 'react'
 // AuthMethodSelector は login ページで使用。投票ページはフォーム内のためインライン実装
@@ -285,6 +285,8 @@ function VoteForm() {
   const qrToken = searchParams.get('token')
   const supabase = createClient()
   const { user: clerkUser, isLoaded: authLoaded } = useUser()
+  const { signUp, setActive: setSignUpActive } = useSignUp()
+  const { signIn, setActive: setSignInActive } = useSignIn()
 
   // 基本 state
   const [pro, setPro] = useState<Professional | null>(null)
@@ -352,6 +354,23 @@ function VoteForm() {
   const [isTransitioning, setIsTransitioning] = useState(false)
   const stepHistory = useRef<VoteStep[]>([])
   const [showEmailInput, setShowEmailInput] = useState(false)
+
+  // 電話番号認証（SMS）
+  const [showPhoneInput, setShowPhoneInput] = useState(false)
+  const [phoneNumber, setPhoneNumber] = useState('')
+  const [phoneCode, setPhoneCode] = useState('')
+  const [phoneSending, setPhoneSending] = useState(false)
+  const [phoneVerifying, setPhoneVerifying] = useState(false)
+  const [phoneStep, setPhoneStep] = useState<'input' | 'verify'>('input')
+
+  // フォールバック認証
+  const [showFallback, setShowFallback] = useState(false)
+  const [fallbackName, setFallbackName] = useState('')
+  const [fallbackYear, setFallbackYear] = useState('')
+  const [fallbackMonth, setFallbackMonth] = useState('')
+  const [fallbackDay, setFallbackDay] = useState('')
+  const [fallbackPhone, setFallbackPhone] = useState('')
+  const [isFallbackVote, setIsFallbackVote] = useState(false)
 
   const goTo = (next: VoteStep) => {
     setIsTransitioning(true)
@@ -658,6 +677,216 @@ function VoteForm() {
     const voteData = buildVoteData()
     const voteDataParam = encodeURIComponent(JSON.stringify(voteData))
     window.location.href = `/api/vote-auth/google?professional_id=${proId}&qr_token=${qrToken || ''}&vote_data=${voteDataParam}`
+  }
+
+  // ── 電話番号認証: SMS送信 ──
+  async function handlePhoneSend() {
+    if (!phoneNumber.trim()) {
+      setError('電話番号を入力してください')
+      return
+    }
+    setError('')
+    setPhoneSending(true)
+
+    let formattedPhone = phoneNumber.trim().replace(/[-\s()]/g, '')
+    if (formattedPhone.startsWith('0')) {
+      formattedPhone = '+81' + formattedPhone.slice(1)
+    } else if (!formattedPhone.startsWith('+')) {
+      formattedPhone = '+81' + formattedPhone
+    }
+
+    try {
+      // まず signIn（既存ユーザー）
+      try {
+        await signIn!.create({ identifier: formattedPhone })
+        const phoneFactor = signIn!.supportedFirstFactors?.find(
+          (f: any) => f.strategy === 'phone_code'
+        ) as any
+        if (phoneFactor?.phoneNumberId) {
+          await signIn!.prepareFirstFactor({
+            strategy: 'phone_code',
+            phoneNumberId: phoneFactor.phoneNumberId,
+          })
+          setPhoneStep('verify')
+          setPhoneSending(false)
+          return
+        }
+      } catch (signInErr: any) {
+        if (signInErr?.errors?.[0]?.code !== 'form_identifier_not_found') {
+          throw signInErr
+        }
+      }
+
+      // signUp（新規ユーザー）
+      await signUp!.create({ phoneNumber: formattedPhone })
+      await signUp!.preparePhoneNumberVerification()
+      setPhoneStep('verify')
+    } catch (err: any) {
+      console.error('[handlePhoneSend] Error:', err)
+      const clerkError = err?.errors?.[0]
+      if (clerkError?.code === 'form_phone_number_blocked') {
+        setError('この電話番号は使用できません')
+      } else if (clerkError?.message) {
+        setError(clerkError.message)
+      } else {
+        setError('SMSの送信に失敗しました。番号を確認してください。')
+      }
+    }
+    setPhoneSending(false)
+  }
+
+  // ── 電話番号認証: コード確認 + 投票送信 ──
+  async function handlePhoneVerify() {
+    if (!phoneCode.trim() || phoneCode.length < 6) {
+      setError('6桁の認証コードを入力してください')
+      return
+    }
+    setError('')
+    setPhoneVerifying(true)
+
+    try {
+      let formattedPhone = phoneNumber.trim().replace(/[-\s()]/g, '')
+      if (formattedPhone.startsWith('0')) {
+        formattedPhone = '+81' + formattedPhone.slice(1)
+      } else if (!formattedPhone.startsWith('+')) {
+        formattedPhone = '+81' + formattedPhone
+      }
+
+      // signIn or signUp の検証
+      if (signIn?.status === 'needs_first_factor') {
+        const result = await signIn.attemptFirstFactor({
+          strategy: 'phone_code',
+          code: phoneCode,
+        })
+        if (result.status === 'complete' && result.createdSessionId) {
+          await setSignInActive!({ session: result.createdSessionId })
+        }
+      } else {
+        const result = await signUp!.attemptPhoneNumberVerification({ code: phoneCode })
+        if (result.status === 'complete' && result.createdSessionId) {
+          await setSignUpActive!({ session: result.createdSessionId })
+        }
+      }
+
+      // 認証成功 → 投票送信
+      await new Promise(resolve => setTimeout(resolve, 500))
+      const voteData = buildVoteData()
+
+      const { data: insertedVote, error: voteError } = await (supabase as any).from('votes').insert({
+        professional_id: proId,
+        voter_email: formattedPhone,
+        client_user_id: null,
+        session_count: voteData.session_count,
+        vote_weight: voteData.session_count === 'first' ? 0.5 : 1.0,
+        vote_type: voteData.vote_type,
+        selected_proof_ids: voteData.selected_proof_ids,
+        selected_personality_ids: voteData.selected_personality_ids,
+        selected_reward_id: voteData.selected_reward_id,
+        comment: voteData.comment,
+        qr_token: voteData.qr_token,
+        status: 'confirmed',
+      }).select().maybeSingle()
+
+      if (voteError) {
+        if (voteError.code === '23505') {
+          setError('この電話番号では既に投票済みです')
+        } else {
+          setError(`投票の送信に失敗しました: ${voteError.message}`)
+        }
+        setPhoneVerifying(false)
+        return
+      }
+
+      if (selectedRewardId && insertedVote) {
+        await (supabase as any).from('client_rewards').insert({
+          vote_id: insertedVote.id,
+          reward_id: selectedRewardId,
+          professional_id: proId,
+          client_email: formattedPhone,
+          status: 'active',
+        })
+      }
+
+      goTo('done')
+    } catch (err: any) {
+      console.error('[handlePhoneVerify] Error:', err)
+      const clerkError = err?.errors?.[0]
+      if (clerkError?.code === 'form_code_incorrect') {
+        setError('認証コードが正しくありません')
+      } else if (clerkError?.code === 'verification_expired') {
+        setError('認証コードの有効期限が切れました。再送信してください。')
+        setPhoneStep('input')
+      } else {
+        setError('認証に失敗しました。もう一度お試しください。')
+      }
+    }
+    setPhoneVerifying(false)
+  }
+
+  // ── フォールバック認証: 名前+生年月日+電話番号で認証なし投票 ──
+  async function handleFallbackSubmit() {
+    setError('')
+
+    // バリデーション
+    if (fallbackName.trim().length < 2) {
+      setError('お名前を入力してください')
+      return
+    }
+    if (!fallbackYear || !fallbackMonth || !fallbackDay) {
+      setError('生年月日を入力してください')
+      return
+    }
+    const rawPhone = fallbackPhone.replace(/[-\s()]/g, '')
+    if (rawPhone.length < 10 || !rawPhone.startsWith('0')) {
+      setError('携帯番号を正しく入力してください')
+      return
+    }
+
+    let formattedPhone = rawPhone
+    if (formattedPhone.startsWith('0')) {
+      formattedPhone = '+81' + formattedPhone.slice(1)
+    }
+
+    const birthDate = `${fallbackYear}-${fallbackMonth.padStart(2,'0')}-${fallbackDay.padStart(2,'0')}`
+
+    const voteData = buildVoteData()
+
+    const { data: insertedVote, error: voteError } = await (supabase as any).from('votes').insert({
+      professional_id: proId,
+      voter_email: formattedPhone, // 電話番号を識別子として使用
+      client_user_id: null,
+      session_count: voteData.session_count,
+      vote_weight: voteData.session_count === 'first' ? 0.5 : 1.0,
+      vote_type: voteData.vote_type,
+      selected_proof_ids: voteData.selected_proof_ids,
+      selected_personality_ids: voteData.selected_personality_ids,
+      selected_reward_id: voteData.selected_reward_id,
+      comment: `[FB:${fallbackName.trim()}/${birthDate}] ${voteData.comment || ''}`.trim(),
+      qr_token: voteData.qr_token,
+      status: 'confirmed', // フォールバックは即確定（後で認証を促す）
+    }).select().maybeSingle()
+
+    if (voteError) {
+      if (voteError.code === '23505') {
+        setError('この電話番号では既に投票済みです')
+      } else {
+        setError(`投票の送信に失敗しました: ${voteError.message}`)
+      }
+      return
+    }
+
+    if (selectedRewardId && insertedVote) {
+      await (supabase as any).from('client_rewards').insert({
+        vote_id: insertedVote.id,
+        reward_id: selectedRewardId,
+        professional_id: proId,
+        client_email: formattedPhone,
+        status: 'pending', // フォールバックはpending（後で認証したらactiveに）
+      })
+    }
+
+    setIsFallbackVote(true)
+    goTo('done')
   }
 
   // ── 投票送信（メール認証用） ──
@@ -1617,6 +1846,269 @@ function VoteForm() {
                     </button>
                   </div>
                 )}
+
+                {/* ── 区切り線 ── */}
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 12,
+                  margin: "10px 0 6px",
+                }}>
+                  <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.06)" }} />
+                  <span style={{ color: "rgba(139,139,154,0.5)", fontSize: 10 }}>その他</span>
+                  <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.06)" }} />
+                </div>
+
+                {/* ── 電話番号認証（テキストリンク） ── */}
+                {!showPhoneInput && phoneStep === 'input' && !showFallback && (
+                  <button
+                    onClick={() => { setShowPhoneInput(true); setShowFallback(false); }}
+                    style={{
+                      background: "transparent", border: "none",
+                      color: "#8B8B9A", fontSize: 13, cursor: "pointer",
+                      padding: "6px", textAlign: "center", width: "100%",
+                    }}
+                  >
+                    📱 電話番号で認証する
+                  </button>
+                )}
+
+                {/* ── 電話番号入力フォーム ── */}
+                {showPhoneInput && phoneStep === 'input' && !showFallback && (
+                  <div style={{ animation: "fadeUp .18s ease" }}>
+                    <div style={{
+                      color: "#8B8B9A", fontSize: 11, textAlign: "center",
+                      marginBottom: 8,
+                    }}>
+                      SMSで届く6桁のコードで本人確認します
+                    </div>
+                    <div style={{ position: "relative" }}>
+                      <span style={{
+                        position: "absolute", left: 14, top: "50%",
+                        transform: "translateY(-50%)",
+                        color: "#8B8B9A", fontSize: 14,
+                      }}>+81</span>
+                      <input
+                        type="tel"
+                        value={phoneNumber}
+                        onChange={e => setPhoneNumber(e.target.value.replace(/[^\d-]/g, ''))}
+                        placeholder="090-1234-5678"
+                        style={{
+                          width: "100%", padding: "12px 14px 12px 50px", borderRadius: 12,
+                          border: "1.5px solid rgba(196,163,90,0.27)",
+                          background: "#16213E", color: "#FAFAF7",
+                          fontSize: 16, marginBottom: 10,
+                          boxSizing: "border-box", outline: "none",
+                          letterSpacing: 1,
+                        }}
+                      />
+                    </div>
+                    <button
+                      onClick={handlePhoneSend}
+                      disabled={phoneSending || !phoneNumber.trim()}
+                      style={{
+                        ...S.primaryBtn,
+                        opacity: phoneSending || !phoneNumber.trim() ? 0.5 : 1,
+                      }}
+                    >
+                      {phoneSending ? '送信中...' : '認証コードを送信する'}
+                    </button>
+                  </div>
+                )}
+
+                {/* ── 認証コード入力 ── */}
+                {phoneStep === 'verify' && !showFallback && (
+                  <div style={{ animation: "fadeUp .18s ease" }}>
+                    <div style={{
+                      color: "#C4A35A", fontSize: 14, fontWeight: 600,
+                      textAlign: "center", marginBottom: 6,
+                    }}>
+                      認証コードを送信しました
+                    </div>
+                    <div style={{
+                      color: "#8B8B9A", fontSize: 12, textAlign: "center",
+                      marginBottom: 16,
+                    }}>
+                      {phoneNumber} に届いた6桁のコードを入力
+                    </div>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={phoneCode}
+                      onChange={e => setPhoneCode(e.target.value.replace(/\D/g, ''))}
+                      placeholder="123456"
+                      autoFocus
+                      style={{
+                        width: "100%", padding: "14px", borderRadius: 12,
+                        border: "1.5px solid rgba(196,163,90,0.27)",
+                        background: "#16213E", color: "#FAFAF7",
+                        fontSize: 24, textAlign: "center",
+                        letterSpacing: 8, marginBottom: 10,
+                        boxSizing: "border-box", outline: "none",
+                      }}
+                    />
+                    <button
+                      onClick={handlePhoneVerify}
+                      disabled={phoneVerifying || phoneCode.length < 6}
+                      style={{
+                        ...S.primaryBtn,
+                        opacity: phoneVerifying || phoneCode.length < 6 ? 0.5 : 1,
+                      }}
+                    >
+                      {phoneVerifying ? '確認中...' : '認証して投票する'}
+                    </button>
+                    <button
+                      onClick={() => { setPhoneStep('input'); setPhoneCode(''); setError(''); }}
+                      style={{ ...S.skipBtn, display: "block", margin: "4px auto 0" }}
+                    >
+                      電話番号を変更する
+                    </button>
+                  </div>
+                )}
+
+                {/* ── フォールバック認証リンク ── */}
+                {!showFallback && phoneStep === 'input' && (
+                  <div style={{ textAlign: "center" }}>
+                    <button
+                      onClick={() => { setShowFallback(true); setShowPhoneInput(false); }}
+                      style={{
+                        background: "transparent", border: "none",
+                        color: "rgba(139,139,154,0.42)", fontSize: 12,
+                        cursor: "pointer", padding: "4px",
+                      }}
+                    >
+                      認証がうまくいかない方はこちら
+                    </button>
+                  </div>
+                )}
+
+                {/* ── フォールバックフォーム ── */}
+                {showFallback && (
+                  <div style={{ animation: "fadeUp .18s ease" }}>
+                    <button
+                      onClick={() => setShowFallback(false)}
+                      style={{
+                        background: "transparent", border: "none",
+                        color: "#8B8B9A", fontSize: 13, cursor: "pointer",
+                        marginBottom: 14, padding: 0,
+                      }}
+                    >
+                      ← 戻る
+                    </button>
+
+                    <div style={{ marginBottom: 14 }}>
+                      <label style={{ color: "rgba(250,250,247,0.55)", fontSize: 12, marginBottom: 6, display: "block" }}>
+                        お名前
+                      </label>
+                      <input
+                        type="text"
+                        value={fallbackName}
+                        onChange={e => setFallbackName(e.target.value)}
+                        placeholder="田中 花子"
+                        style={{
+                          width: "100%", padding: "13px 14px", borderRadius: 10,
+                          border: `1.5px solid ${fallbackName.trim().length >= 2 ? "rgba(196,163,90,0.5)" : "rgba(255,255,255,0.12)"}`,
+                          background: "#16213E", color: "#FAFAF7",
+                          fontSize: 15, boxSizing: "border-box", outline: "none",
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ marginBottom: 14 }}>
+                      <label style={{ color: "rgba(250,250,247,0.55)", fontSize: 12, marginBottom: 6, display: "block" }}>
+                        生年月日
+                      </label>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                        <input
+                          type="tel"
+                          value={fallbackYear}
+                          onChange={e => setFallbackYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                          placeholder="1970"
+                          style={{
+                            flex: 1, padding: "11px 8px", borderRadius: 10, textAlign: "center",
+                            border: "1.5px solid rgba(255,255,255,0.12)",
+                            background: "#16213E", color: "#FAFAF7",
+                            fontSize: 15, boxSizing: "border-box", outline: "none",
+                          }}
+                        />
+                        <span style={{ color: "#8B8B9A", fontSize: 13 }}>年</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <input
+                          type="tel"
+                          value={fallbackMonth}
+                          onChange={e => setFallbackMonth(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                          placeholder="3"
+                          style={{
+                            flex: 1, padding: "11px 8px", borderRadius: 10, textAlign: "center",
+                            border: "1.5px solid rgba(255,255,255,0.12)",
+                            background: "#16213E", color: "#FAFAF7",
+                            fontSize: 15, boxSizing: "border-box", outline: "none",
+                          }}
+                        />
+                        <span style={{ color: "#8B8B9A", fontSize: 13 }}>月</span>
+                        <input
+                          type="tel"
+                          value={fallbackDay}
+                          onChange={e => setFallbackDay(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                          placeholder="15"
+                          style={{
+                            flex: 1, padding: "11px 8px", borderRadius: 10, textAlign: "center",
+                            border: "1.5px solid rgba(255,255,255,0.12)",
+                            background: "#16213E", color: "#FAFAF7",
+                            fontSize: 15, boxSizing: "border-box", outline: "none",
+                          }}
+                        />
+                        <span style={{ color: "#8B8B9A", fontSize: 13 }}>日</span>
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: 18 }}>
+                      <label style={{ color: "rgba(250,250,247,0.55)", fontSize: 12, marginBottom: 6, display: "block" }}>
+                        携帯番号
+                      </label>
+                      <input
+                        type="tel"
+                        value={fallbackPhone}
+                        onChange={e => {
+                          const d = e.target.value.replace(/\D/g, '').slice(0, 11)
+                          if (d.length <= 3) setFallbackPhone(d)
+                          else if (d.length <= 7) setFallbackPhone(`${d.slice(0,3)}-${d.slice(3)}`)
+                          else setFallbackPhone(`${d.slice(0,3)}-${d.slice(3,7)}-${d.slice(7)}`)
+                        }}
+                        placeholder="090-1234-5678"
+                        style={{
+                          width: "100%", padding: "13px 14px", borderRadius: 10,
+                          border: "1.5px solid rgba(255,255,255,0.12)",
+                          background: "#16213E", color: "#FAFAF7",
+                          fontSize: 15, boxSizing: "border-box", outline: "none",
+                          letterSpacing: 1,
+                        }}
+                      />
+                      <div style={{ color: "#8B8B9A", fontSize: 11, marginTop: 6, lineHeight: 1.6 }}>
+                        📨 投票完了後、この番号にアカウント登録のご案内をお送りします
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={handleFallbackSubmit}
+                      disabled={
+                        fallbackName.trim().length < 2 ||
+                        !fallbackYear || !fallbackMonth || !fallbackDay ||
+                        fallbackPhone.replace(/\D/g, '').length < 10
+                      }
+                      style={{
+                        ...S.primaryBtn,
+                        opacity: (
+                          fallbackName.trim().length < 2 ||
+                          !fallbackYear || !fallbackMonth || !fallbackDay ||
+                          fallbackPhone.replace(/\D/g, '').length < 10
+                        ) ? 0.4 : 1,
+                      }}
+                    >
+                      投票を完了する →
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1656,12 +2148,99 @@ function VoteForm() {
               </div>
             )}
 
-            <button
-              onClick={() => { window.location.href = "/mycard" }}
-              style={S.primaryBtn}
-            >
-              マイページでリワードを保存する
-            </button>
+            {isFallbackVote ? (
+              <div style={{ width: "100%" }}>
+                <div style={{
+                  background: "rgba(196,163,90,0.07)",
+                  border: "1px solid rgba(196,163,90,0.2)",
+                  borderRadius: 12, padding: "14px",
+                  marginBottom: 16, textAlign: "left",
+                }}>
+                  <div style={{ fontWeight: 700, marginBottom: 4, color: "#C4A35A", fontSize: 14 }}>
+                    リワードを保存しませんか？
+                  </div>
+                  <div style={{ color: "#FAFAF7", fontSize: 13, lineHeight: 1.7 }}>
+                    アカウントを作ると、リワードや投票履歴をいつでも確認できます。
+                  </div>
+                </div>
+
+                {/* SMS認証で登録 */}
+                <button
+                  onClick={() => {
+                    setPhoneNumber(fallbackPhone)
+                    setShowPhoneInput(true)
+                    setPhoneStep('input')
+                    goTo('auth')
+                  }}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                    width: "100%", padding: "14px", borderRadius: 12,
+                    background: "rgba(74,144,217,0.1)",
+                    border: "1.5px solid rgba(74,144,217,0.4)",
+                    cursor: "pointer", marginBottom: 8, color: "#FAFAF7",
+                    fontSize: 14, fontWeight: 700,
+                  }}
+                >
+                  📱 SMS認証を完了する
+                </button>
+
+                {/* LINE登録 */}
+                <button
+                  onClick={() => handleLineVote()}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                    width: "100%", padding: "13px", borderRadius: 12,
+                    background: "#06C755", border: "none",
+                    cursor: "pointer", marginBottom: 8,
+                  }}
+                >
+                  <svg width={18} height={18} viewBox="0 0 24 24" fill="white">
+                    <path d="M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/>
+                  </svg>
+                  <span style={{ color: "white", fontSize: 14, fontWeight: 700 }}>LINEで登録</span>
+                </button>
+
+                {/* Google登録 */}
+                <button
+                  onClick={() => handleGoogleVote()}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                    width: "100%", padding: "12px", borderRadius: 12,
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1.5px solid rgba(255,255,255,0.14)",
+                    cursor: "pointer", marginBottom: 8,
+                  }}
+                >
+                  <svg width={16} height={16} viewBox="0 0 24 24">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                  </svg>
+                  <span style={{ color: "#8B8B9A", fontSize: 13 }}>Googleで登録</span>
+                </button>
+
+                {/* このまま閉じる */}
+                <button
+                  onClick={() => { window.location.href = "/" }}
+                  style={{
+                    width: "100%", padding: "10px", borderRadius: 12,
+                    background: "transparent",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    color: "#8B8B9A", fontSize: 13, cursor: "pointer",
+                  }}
+                >
+                  このまま閉じる
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => { window.location.href = "/mycard" }}
+                style={S.primaryBtn}
+              >
+                マイページでリワードを保存する
+              </button>
+            )}
           </div>
         </StepWrapper>
       )}
