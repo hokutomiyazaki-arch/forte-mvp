@@ -90,10 +90,23 @@ export async function GET(request: NextRequest) {
 
     // vote_summary ビューから団体メンバーのデータを取得
     // vote_summary: professional_id, proof_id, vote_count (UNNESTは既にビュー内で実行済み)
-    const { data: voteSummary } = await supabase
-      .from('vote_summary')
-      .select('professional_id, proof_id, vote_count')
-      .in('professional_id', memberProIds)
+    const [{ data: voteSummary }, { data: proofSummary }] = await Promise.all([
+      supabase
+        .from('vote_summary')
+        .select('professional_id, proof_id, vote_count')
+        .in('professional_id', memberProIds),
+      // org_proof_summary から正確な総プルーフ数を取得（vote_summaryはselected_proof_idsがある投票のみ）
+      supabase
+        .from('org_proof_summary')
+        .select('professional_id, total_votes')
+        .eq('organization_id', orgId),
+    ])
+
+    // 正確な総プルーフ数マップ
+    const totalVotesMap = new Map<string, number>()
+    for (const s of proofSummary || []) {
+      totalVotesMap.set(s.professional_id, Number(s.total_votes) || 0)
+    }
 
     const summaryData = voteSummary || []
 
@@ -144,7 +157,7 @@ export async function GET(request: NextRequest) {
         professional_id: m.professional_id,
         name: pro?.name || '不明',
         photo_url: pro?.photo_url || null,
-        total_proofs: proofData?.total || 0,
+        total_proofs: totalVotesMap.get(m.professional_id) || proofData?.total || 0,
         top_proof_labels: topProofLabels,
       }
     }).sort((a, b) => b.total_proofs - a.total_proofs)
