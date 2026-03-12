@@ -84,15 +84,21 @@ export async function GET(request: NextRequest) {
 
     const [
       strengthResult,
+      proofItemsResult,
       commentsResult,
       monthlyResult,
     ] = await Promise.all([
-      // 強み分布: result_category集計
+      // 強み分布: selected_proof_ids + proof_items で集計
       supabase
         .from('votes')
-        .select('result_category')
+        .select('selected_proof_ids')
         .in('professional_id', memberProIds)
-        .not('result_category', 'is', null),
+        .not('selected_proof_ids', 'is', null),
+
+      // proof_items マスタ
+      supabase
+        .from('proof_items')
+        .select('id, tab, strength_label'),
 
       // 最新コメント
       supabase
@@ -112,18 +118,30 @@ export async function GET(request: NextRequest) {
         .gte('created_at', sixMonthsAgo.toISOString()),
     ])
 
-    // 強み分布集計
-    const strengthMap: Record<string, number> = {}
+    // 強み分布集計（selected_proof_ids → proof_items.tab で集計）
+    const TAB_LABELS: Record<string, string> = {
+      basic: '基本', body_pro: 'ボディプロ', yoga: 'ヨガ', pilates: 'ピラティス',
+      esthe: 'エステ', sports: 'スポーツ', education: '教育', coaching: 'コーチング', nutrition: '栄養',
+    }
+    const piMap = new Map<string, { tab: string; strength_label: string }>()
+    for (const pi of proofItemsResult.data || []) {
+      piMap.set(pi.id, { tab: pi.tab, strength_label: pi.strength_label })
+    }
+
+    const tabCountMap: Record<string, number> = {}
     if (strengthResult.data) {
       for (const v of strengthResult.data) {
-        const cat = v.result_category
-        if (cat) {
-          strengthMap[cat] = (strengthMap[cat] || 0) + 1
+        const pids: string[] = v.selected_proof_ids || []
+        for (const pid of pids) {
+          const piInfo = piMap.get(pid)
+          if (piInfo?.tab) {
+            tabCountMap[piInfo.tab] = (tabCountMap[piInfo.tab] || 0) + 1
+          }
         }
       }
     }
-    const strengthDistribution = Object.entries(strengthMap)
-      .map(([label, count]) => ({ label, count }))
+    const strengthDistribution = Object.entries(tabCountMap)
+      .map(([tab, count]) => ({ label: TAB_LABELS[tab] || tab, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 8)
 

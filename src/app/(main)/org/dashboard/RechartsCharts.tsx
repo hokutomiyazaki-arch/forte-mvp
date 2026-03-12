@@ -447,7 +447,7 @@ export default function RechartsCharts({ analytics, strengthDistributionData }: 
       <MemberRanking data={analytics.memberProofCounts || []} />
       <ProofRanking data={analytics.topProofItems || []} />
       <MemberStrengthsTable data={analytics.memberStrengths || []} />
-      <StrengthRadar data={strengthDistributionData || analytics.strengthDistribution || []} />
+      <StrengthRadar data={strengthDistributionData && strengthDistributionData.length > 0 ? strengthDistributionData : (analytics?.strengthDistribution || [])} />
       <MonthlyTrend data={analytics.monthlyTrend || []} />
       <DailyTrend data={analytics.dailyTrend || []} />
       <CommentFeed data={analytics.recentComments || []} />
