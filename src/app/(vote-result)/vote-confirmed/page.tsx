@@ -117,7 +117,7 @@ function ConfirmedContent() {
             .select('id, name, title, photo_url, prefecture, is_online_available')
             .eq('prefecture', votedPro.prefecture)
             .neq('id', proId)
-            .eq('is_active', true)
+            .is('deactivated_at', null)
             .limit(6)
 
           if (nearby && nearby.length > 0) {
