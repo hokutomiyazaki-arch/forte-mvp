@@ -55,6 +55,7 @@ export default function OrgDashboardPage() {
   const [selectedBadgeId, setSelectedBadgeId] = useState<string | null>(null)
   const [credentialLevels, setCredentialLevels] = useState<{ id: string; name: string }[]>([])
   const [activeTab, setActiveTab] = useState<'overview' | 'analytics'>('overview')
+  const [strengthDistribution, setStrengthDistribution] = useState<any[]>([])
   const [error, setError] = useState('')
   const [editingOrg, setEditingOrg] = useState(false)
   const [editOrgName, setEditOrgName] = useState('')
@@ -88,6 +89,7 @@ export default function OrgDashboardPage() {
       setOrg(data.org)
       setMembers(data.members || [])
       setAggregate(data.aggregate || null)
+      setStrengthDistribution(data.strengthDistribution || [])
     } catch (err: any) {
       setError(err.message || 'データの取得に失敗しました')
     }
@@ -122,7 +124,20 @@ export default function OrgDashboardPage() {
   const L = ORG_TYPE_LABELS[org.type] || ORG_TYPE_LABELS.store
   const maxVotes = Math.max(...members.map(m => m.total_votes || 0), 1)
 
-  // result_categoryキーをラベルに変換
+  // tabキーを日本語ラベルに変換（org-dashboardのstrengthDistribution用）
+  const TAB_LABELS: Record<string, string> = {
+    basic: '基本',
+    body_pro: 'ボディプロ',
+    coaching: 'コーチング',
+    sports: 'スポーツ',
+    education: '教育',
+  }
+  const strengthChartData = strengthDistribution.map((d: any) => ({
+    label: TAB_LABELS[d.tab] || d.tab,
+    count: d.count,
+  }))
+
+  // result_categoryキーをラベルに変換（org-analyticsのstrengthDistribution用、フォールバック）
   const strengthWithLabels = (analytics?.strengthDistribution || []).map((d: any) => {
     const forte = RESULT_FORTES.find(f => f.key === d.label)
     return {
@@ -356,8 +371,15 @@ export default function OrgDashboardPage() {
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-[#1A1A2E] truncate">
-                        {m.professional_name || m.name}
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-[#1A1A2E] truncate">
+                          {m.professional_name || m.name}
+                        </span>
+                        {m.top_strength && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#FFF8E7] text-[#C4A35A] font-semibold whitespace-nowrap flex-shrink-0">
+                            {m.top_strength}
+                          </span>
+                        )}
                       </div>
                       <div className="mt-1 h-2 bg-gray-100 rounded-full overflow-hidden">
                         <div
@@ -443,7 +465,11 @@ export default function OrgDashboardPage() {
             <RechartsCharts
               analytics={{
                 ...analytics,
-                strengthDistribution: strengthWithLabels,
+                strengthDistribution: strengthChartData.length > 0 ? strengthChartData : strengthWithLabels,
+                memberStrengths: (analytics?.memberStrengths || []).map((ms: any) => {
+                  const member = members.find((m: any) => m.professional_id === ms.professional_id)
+                  return { ...ms, top_strength: member?.top_strength || '' }
+                }),
               }}
             />
           </>
