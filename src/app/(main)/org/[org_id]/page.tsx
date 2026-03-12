@@ -32,6 +32,7 @@ export default function OrgPublicPage() {
   const [aggregate, setAggregate] = useState<any>(null)
   const [levelAggregates, setLevelAggregates] = useState<any[]>([])
   const [generalCount, setGeneralCount] = useState(0)
+  const [proofTopMembers, setProofTopMembers] = useState<any[]>([])
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -51,6 +52,7 @@ export default function OrgPublicPage() {
       setAggregate(data.aggregate || null)
       setLevelAggregates(data.levelAggregates || [])
       setGeneralCount(data.general_count || 0)
+      setProofTopMembers(data.proofTopMembers || [])
     } catch (err: any) {
       setError(err.message || 'データの取得に失敗しました')
     }
@@ -175,6 +177,55 @@ export default function OrgPublicPage() {
               <span className="text-gray-300 text-sm">→</span>
             </div>
           </a>
+        </div>
+      )}
+
+      {/* プルーフ別トッププロフェッショナル */}
+      {proofTopMembers.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-sm font-bold text-[#1A1A2E] mb-3">各分野のトッププロフェッショナル</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
+            {proofTopMembers.map((item: any, i: number) => (
+              <a
+                key={i}
+                href={`/card/${item.top_professional_id}`}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '12px',
+                  padding: '14px', borderRadius: '12px',
+                  backgroundColor: '#FAFAF7', border: '1px solid #E5E5E0',
+                  textDecoration: 'none', transition: 'border-color 0.2s',
+                }}
+                className="hover:border-[#C4A35A]"
+              >
+                {item.top_photo_url ? (
+                  <img
+                    src={item.top_photo_url}
+                    alt=""
+                    style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+                  />
+                ) : (
+                  <div style={{
+                    width: '40px', height: '40px', borderRadius: '50%',
+                    backgroundColor: '#E5E5E0', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '14px', color: '#888', flexShrink: 0,
+                  }}>
+                    {item.top_name?.charAt(0) || '?'}
+                  </div>
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '13px', color: '#C4A35A', fontWeight: 600, marginBottom: '2px' }}>
+                    {item.proof_label}
+                  </div>
+                  <div style={{ fontSize: '14px', color: '#1A1A2E', fontWeight: 500 }}>
+                    {item.top_name}
+                  </div>
+                </div>
+                <div style={{ fontSize: '12px', color: '#888', whiteSpace: 'nowrap' }}>
+                  {item.vote_count}/{item.total_voters}票
+                </div>
+              </a>
+            ))}
+          </div>
         </div>
       )}
 

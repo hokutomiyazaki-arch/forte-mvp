@@ -106,7 +106,84 @@ export async function GET(
       }))
     }
 
-    return NextResponse.json({ org, members, aggregate, levelAggregates, general_count: uniqueUserIds.length, generals: generalMembers })
+    // プルーフ別トップメンバー集計
+    const memberProIds = uniqueMembers
+      .map((m: any) => m.professional_id)
+      .filter(Boolean)
+    let proofTopMembers: any[] = []
+
+    if (memberProIds.length > 0) {
+      // メンバーの投票でselected_proof_idsがある投票を取得
+      const { data: votesWithProofs } = await supabase
+        .from('votes')
+        .select('professional_id, selected_proof_ids')
+        .in('professional_id', memberProIds)
+        .not('selected_proof_ids', 'is', null)
+
+      if (votesWithProofs && votesWithProofs.length > 0) {
+        // proof_item_id ごと × professional_id ごとの集計
+        const proofProMap: Record<string, Record<string, number>> = {}
+        const proofTotalMap: Record<string, number> = {}
+
+        for (const v of votesWithProofs) {
+          const proofIds: string[] = v.selected_proof_ids || []
+          for (const pid of proofIds) {
+            if (!proofProMap[pid]) proofProMap[pid] = {}
+            proofProMap[pid][v.professional_id] = (proofProMap[pid][v.professional_id] || 0) + 1
+            proofTotalMap[pid] = (proofTotalMap[pid] || 0) + 1
+          }
+        }
+
+        // proof_itemsのラベルを取得
+        const proofItemIds = Object.keys(proofProMap)
+        if (proofItemIds.length > 0) {
+          const { data: proofItems } = await supabase
+            .from('proof_items')
+            .select('id, label')
+            .in('id', proofItemIds)
+
+          const labelMap = new Map((proofItems || []).map((p: any) => [p.id, p.label]))
+
+          // プロ情報マップ
+          const proMap = new Map(
+            uniqueMembers.map((m: any) => [
+              m.professional_id,
+              { name: m.professionals?.name || '', photo_url: m.professionals?.photo_url || null },
+            ])
+          )
+
+          // 各proof_itemでトップのprofessionalを特定
+          const rankings = proofItemIds
+            .map(proofId => {
+              const proCounts = proofProMap[proofId]
+              let topProId = ''
+              let topCount = 0
+              for (const [proId, count] of Object.entries(proCounts)) {
+                if (count > topCount) {
+                  topProId = proId
+                  topCount = count
+                }
+              }
+              const proInfo = proMap.get(topProId)
+              return {
+                proof_label: labelMap.get(proofId) || '',
+                top_professional_id: topProId,
+                top_name: proInfo?.name || '',
+                top_photo_url: proInfo?.photo_url || null,
+                vote_count: topCount,
+                total_voters: proofTotalMap[proofId] || 0,
+              }
+            })
+            .filter(r => r.proof_label)
+            .sort((a, b) => b.total_voters - a.total_voters)
+            .slice(0, 10)
+
+          proofTopMembers = rankings
+        }
+      }
+    }
+
+    return NextResponse.json({ org, members, aggregate, levelAggregates, general_count: uniqueUserIds.length, generals: generalMembers, proofTopMembers })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
