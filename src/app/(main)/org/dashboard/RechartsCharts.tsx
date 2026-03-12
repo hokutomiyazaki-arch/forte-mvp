@@ -19,7 +19,7 @@ function MemberRanking({ data }: { data: any[] }) {
   if (!data || data.length === 0) {
     return (
       <div style={{ padding: '24px', textAlign: 'center', color: '#888' }}>
-        MR: データなし
+        まだプルーフデータがありません
       </div>
     )
   }
@@ -56,11 +56,10 @@ function MemberRanking({ data }: { data: any[] }) {
 }
 
 function StrengthRadar({ data }: { data: any[] }) {
-  console.log('[DEBUG] StrengthRadar received data:', JSON.stringify(data))
   if (!data || data.length === 0) {
     return (
       <div style={{ padding: '24px', textAlign: 'center', color: '#888' }}>
-        SR: データなし
+        まだプルーフデータがありません
       </div>
     )
   }
@@ -280,7 +279,7 @@ function ProofRanking({ data }: { data: any[] }) {
   if (!data || data.length === 0) {
     return (
       <div style={{ padding: '24px', textAlign: 'center', color: '#888' }}>
-        PR: データなし
+        まだプルーフデータがありません
       </div>
     )
   }
@@ -297,7 +296,7 @@ function ProofRanking({ data }: { data: any[] }) {
             <XAxis type="number" tick={{ fill: '#888', fontSize: 12 }} allowDecimals={false} />
             <YAxis
               type="category"
-              dataKey="strength_label"
+              dataKey="label"
               tick={{ fill: '#1A1A2E', fontSize: 12 }}
               width={80}
             />
@@ -400,8 +399,6 @@ function MemberStrengthsTable({ data }: { data: any[] }) {
 }
 
 export default function RechartsCharts({ analytics, strengthDistributionData }: { analytics: AnalyticsData | null; strengthDistributionData?: { label: string; count: number }[] }) {
-  console.log('[DEBUG] RechartsCharts props - analytics.strengthDistribution:', JSON.stringify(analytics?.strengthDistribution))
-  console.log('[DEBUG] RechartsCharts props - strengthDistributionData:', JSON.stringify(strengthDistributionData))
   if (!analytics) {
     return (
       <div style={{ padding: '32px', textAlign: 'center', color: '#888' }}>
@@ -448,7 +445,11 @@ export default function RechartsCharts({ analytics, strengthDistributionData }: 
 
       {/* チャート */}
       <MemberRanking data={analytics.memberProofCounts || []} />
-      <ProofRanking data={analytics.topProofItems || []} />
+      <ProofRanking data={
+        (analytics.topProofItems && analytics.topProofItems.length > 0)
+          ? analytics.topProofItems
+          : (strengthDistributionData || [])
+      } />
       <MemberStrengthsTable data={analytics.memberStrengths || []} />
       <StrengthRadar data={
         (analytics?.strengthDistribution && analytics.strengthDistribution.length > 0)
