@@ -807,7 +807,7 @@ function VoteForm() {
         })
       }
 
-      goTo('done')
+      window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${insertedVote.id}&has_account=true`
     } catch (err: any) {
       console.error('[handlePhoneVerify] Error:', err)
       const clerkError = err?.errors?.[0]
@@ -885,8 +885,7 @@ function VoteForm() {
       })
     }
 
-    setIsFallbackVote(true)
-    goTo('done')
+    window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${insertedVote.id}&has_account=false`
   }
 
   // ── 投票送信（メール認証用） ──
