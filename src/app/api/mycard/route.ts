@@ -25,6 +25,9 @@ export async function GET() {
     })
     const clerkUser = await clerkRes.json()
     const email = clerkUser?.email_addresses?.[0]?.email_address || ''
+    const phone = clerkUser?.phone_numbers?.[0]?.phone_number || ''
+    // メールまたは電話番号（SMS認証ユーザーはメールがない）
+    const identifier = email || phone
 
     const isLine = email.startsWith('line_') && email.endsWith('@line.realproof.jp')
     const lineUserId = isLine ? email.replace('line_', '').replace('@line.realproof.jp', '') : null
@@ -56,10 +59,10 @@ export async function GET() {
         .order('created_at', { ascending: false }),
 
       // === リワード検索: 3方法を並列 ===
-      // 方法1: client_email
+      // 方法1: client_email（メールまたは電話番号）
       supabase.from('client_rewards')
         .select('id, reward_id, professional_id, status')
-        .eq('client_email', email)
+        .eq('client_email', identifier)
         .in('status', ['active', 'used'])
         .order('created_at', { ascending: false }),
       // 方法2: LINE auth votes
@@ -73,10 +76,10 @@ export async function GET() {
         .not('selected_reward_id', 'is', null),
 
       // === 投票履歴検索: 3方法を並列 ===
-      // 方法1: voter_email
+      // 方法1: voter_email（メールまたは電話番号）
       supabase.from('votes')
         .select('id, professional_id, result_category, created_at')
-        .eq('voter_email', email)
+        .eq('voter_email', identifier)
         .order('created_at', { ascending: false }),
       // 方法2: LINE auth
       lineUserId
