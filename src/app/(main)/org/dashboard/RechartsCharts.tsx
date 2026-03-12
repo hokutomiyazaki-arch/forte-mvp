@@ -10,6 +10,7 @@ interface AnalyticsData {
   strengthDistribution?: { label: string; count: number }[]
   recentComments?: { comment: string; created_at: string; professional_name: string; professional_photo?: string }[]
   monthlyTrend?: { month: string; count: number }[]
+  dailyTrend?: { date: string; count: number }[]
   topProofItems?: { proof_id: string; label: string; strength_label: string; count: number }[]
   memberStrengths?: { professional_id: string; name: string; photo_url: string | null; total_proofs: number; top_proof_labels: string[] }[]
 }
@@ -201,6 +202,51 @@ function MonthlyTrend({ data }: { data: any[] }) {
   )
 }
 
+function DailyTrend({ data }: { data: any[] }) {
+  if (!data || data.length === 0) {
+    return (
+      <div style={{ padding: '24px', textAlign: 'center', color: '#888' }}>
+        日別データがありません
+      </div>
+    )
+  }
+
+  const chartData = data.map(d => ({
+    ...d,
+    displayDate: `${d.date.substring(5, 7)}/${d.date.substring(8, 10)}`,
+  }))
+
+  return (
+    <div style={{ marginBottom: '32px' }}>
+      <h4 style={{ color: '#1A1A2E', fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>
+        日別プルーフ推移（直近30日）
+      </h4>
+      <div style={{ width: '100%', height: 250 }}>
+        <ResponsiveContainer>
+          <BarChart data={chartData} margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#E5E5E0" />
+            <XAxis
+              dataKey="displayDate"
+              tick={{ fill: '#888', fontSize: 11 }}
+              interval={4}
+            />
+            <YAxis tick={{ fill: '#888', fontSize: 12 }} allowDecimals={false} />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#1A1A2E', border: 'none',
+                borderRadius: '8px', color: '#FAFAF7', fontSize: '13px',
+              }}
+              labelFormatter={(label) => `${label}`}
+              formatter={(value: number) => [`${value}票`, 'プルーフ']}
+            />
+            <Bar dataKey="count" fill="#C4A35A" radius={[2, 2, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  )
+}
+
 function ProofRanking({ data }: { data: any[] }) {
   if (!data || data.length === 0) {
     return (
@@ -365,6 +411,7 @@ export default function RechartsCharts({ analytics }: { analytics: AnalyticsData
       <MemberStrengthsTable data={analytics.memberStrengths || []} />
       <StrengthRadar data={analytics.strengthDistribution || []} />
       <MonthlyTrend data={analytics.monthlyTrend || []} />
+      <DailyTrend data={analytics.dailyTrend || []} />
       <CommentFeed data={analytics.recentComments || []} />
     </div>
   )

@@ -150,6 +150,29 @@ export async function GET(request: NextRequest) {
       .map(([month, count]) => ({ month, count }))
       .sort((a, b) => a.month.localeCompare(b.month))
 
+    // 日別プルーフ推移（直近30日）
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().substring(0, 10)
+    const dailyMap: Record<string, number> = {}
+    if (monthlyResult.data) {
+      for (const v of monthlyResult.data) {
+        if (v.created_at) {
+          const date = v.created_at.substring(0, 10)
+          if (date >= thirtyDaysAgoStr) {
+            dailyMap[date] = (dailyMap[date] || 0) + 1
+          }
+        }
+      }
+    }
+    const dailyTrend: { date: string; count: number }[] = []
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date()
+      d.setDate(d.getDate() - i)
+      const dateStr = d.toISOString().substring(0, 10)
+      dailyTrend.push({ date: dateStr, count: dailyMap[dateStr] || 0 })
+    }
+
     // メンバー別プルーフ数
     const memberProofCounts = Array.from(memberMap.entries())
       .map(([professional_id, m]) => ({
@@ -166,6 +189,7 @@ export async function GET(request: NextRequest) {
         strengthDistribution,
         recentComments,
         monthlyTrend,
+        dailyTrend,
       },
     })
   } catch (error: any) {
