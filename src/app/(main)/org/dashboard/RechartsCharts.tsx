@@ -12,7 +12,7 @@ interface AnalyticsData {
   monthlyTrend?: { month: string; count: number }[]
   dailyTrend?: { date: string; count: number }[]
   topProofItems?: { proof_id: string; label: string; strength_label: string; count: number }[]
-  memberStrengths?: { professional_id: string; name: string; photo_url: string | null; total_proofs: number; top_proof_labels: string[] }[]
+  memberStrengths?: { professional_id: string; name: string; photo_url: string | null; total_proofs: number; top_proof_labels: string[]; top_strength?: string }[]
 }
 
 function MemberRanking({ data }: { data: any[] }) {
@@ -336,20 +336,30 @@ function MemberStrengthsTable({ data }: { data: any[] }) {
                   {m.total_proofs}票
                 </td>
                 <td style={{ padding: '10px 12px' }}>
-                  <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                    {(m.top_proof_labels || []).map((label: string, i: number) => (
-                      <span
-                        key={i}
-                        style={{
-                          fontSize: '11px', padding: '2px 8px', borderRadius: '12px',
-                          backgroundColor: '#FFF8E7', color: '#C4A35A', fontWeight: 600,
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {label}
-                      </span>
-                    ))}
-                  </div>
+                  {m.top_strength ? (
+                    <span style={{
+                      fontSize: '12px', padding: '2px 10px', borderRadius: '12px',
+                      backgroundColor: '#FFF8E7', color: '#C4A35A', fontWeight: 600,
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {m.top_strength}
+                    </span>
+                  ) : (
+                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                      {(m.top_proof_labels || []).map((label: string, i: number) => (
+                        <span
+                          key={i}
+                          style={{
+                            fontSize: '11px', padding: '2px 8px', borderRadius: '12px',
+                            backgroundColor: '#FFF8E7', color: '#C4A35A', fontWeight: 600,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {label}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}
