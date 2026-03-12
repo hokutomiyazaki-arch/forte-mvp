@@ -1836,61 +1836,6 @@ function VoteForm() {
                   Googleで続ける
                 </button>
 
-                {/* メール入力 */}
-                {!showEmailInput ? (
-                  <button
-                    onClick={() => setShowEmailInput(true)}
-                    style={{
-                      background: "transparent", border: "none",
-                      color: "#8B8B9A", fontSize: 13, cursor: "pointer",
-                      textDecoration: "underline", padding: "8px",
-                      textAlign: "center",
-                    }}
-                  >
-                    メールアドレスで続ける
-                  </button>
-                ) : (
-                  <div style={{ marginTop: 8 }}>
-                    <input
-                      type="email"
-                      value={voterEmail}
-                      onChange={e => setVoterEmail(e.target.value)}
-                      placeholder="メールアドレスを入力"
-                      style={{
-                        width: "100%", padding: "12px 14px", borderRadius: 12,
-                        border: "1.5px solid rgba(196,163,90,0.27)",
-                        background: "#16213E", color: "#FAFAF7",
-                        fontSize: 14, marginBottom: 10,
-                        boxSizing: "border-box",
-                        outline: "none",
-                      }}
-                    />
-                    <button
-                      onClick={() => {
-                        voteMethodRef.current = 'email'
-                        handleSubmit({ preventDefault: () => {} } as React.FormEvent)
-                      }}
-                      disabled={!voterEmail.trim() || !voterEmail.includes('@')}
-                      style={{
-                        ...S.primaryBtn,
-                        opacity: !voterEmail.trim() || !voterEmail.includes('@') ? 0.4 : 1,
-                      }}
-                    >
-                      メールで送信する
-                    </button>
-                  </div>
-                )}
-
-                {/* ── 区切り線 ── */}
-                <div style={{
-                  display: "flex", alignItems: "center", gap: 12,
-                  margin: "10px 0 6px",
-                }}>
-                  <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.06)" }} />
-                  <span style={{ color: "rgba(139,139,154,0.5)", fontSize: 10 }}>その他</span>
-                  <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.06)" }} />
-                </div>
-
                 {/* ── 電話番号認証（テキストリンク） ── */}
                 {!showPhoneInput && phoneStep === 'input' && !showFallback && (
                   <button
@@ -1995,6 +1940,61 @@ function VoteForm() {
                       style={{ ...S.skipBtn, display: "block", margin: "4px auto 0" }}
                     >
                       電話番号を変更する
+                    </button>
+                  </div>
+                )}
+
+                {/* ── 区切り線 ── */}
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 12,
+                  margin: "10px 0 6px",
+                }}>
+                  <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.06)" }} />
+                  <span style={{ color: "rgba(139,139,154,0.5)", fontSize: 10 }}>その他</span>
+                  <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.06)" }} />
+                </div>
+
+                {/* メール入力 */}
+                {!showEmailInput ? (
+                  <button
+                    onClick={() => setShowEmailInput(true)}
+                    style={{
+                      background: "transparent", border: "none",
+                      color: "#8B8B9A", fontSize: 13, cursor: "pointer",
+                      textDecoration: "underline", padding: "8px",
+                      textAlign: "center",
+                    }}
+                  >
+                    メールアドレスで続ける
+                  </button>
+                ) : (
+                  <div style={{ marginTop: 8 }}>
+                    <input
+                      type="email"
+                      value={voterEmail}
+                      onChange={e => setVoterEmail(e.target.value)}
+                      placeholder="メールアドレスを入力"
+                      style={{
+                        width: "100%", padding: "12px 14px", borderRadius: 12,
+                        border: "1.5px solid rgba(196,163,90,0.27)",
+                        background: "#16213E", color: "#FAFAF7",
+                        fontSize: 14, marginBottom: 10,
+                        boxSizing: "border-box",
+                        outline: "none",
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        voteMethodRef.current = 'email'
+                        handleSubmit({ preventDefault: () => {} } as React.FormEvent)
+                      }}
+                      disabled={!voterEmail.trim() || !voterEmail.includes('@')}
+                      style={{
+                        ...S.primaryBtn,
+                        opacity: !voterEmail.trim() || !voterEmail.includes('@') ? 0.4 : 1,
+                      }}
+                    >
+                      メールで送信する
                     </button>
                   </div>
                 )}
