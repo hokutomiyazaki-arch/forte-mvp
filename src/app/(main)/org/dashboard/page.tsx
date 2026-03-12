@@ -128,9 +128,13 @@ export default function OrgDashboardPage() {
   const TAB_LABELS: Record<string, string> = {
     basic: '基本',
     body_pro: 'ボディプロ',
-    coaching: 'コーチング',
+    yoga: 'ヨガ',
+    pilates: 'ピラティス',
+    esthe: 'エステ',
     sports: 'スポーツ',
     education: '教育',
+    coaching: 'コーチング',
+    nutrition: '栄養',
   }
   const strengthChartData = strengthDistribution.map((d: any) => ({
     label: TAB_LABELS[d.tab] || d.tab,
