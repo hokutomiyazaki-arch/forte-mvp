@@ -54,10 +54,20 @@ export default function OrgDashboardPage() {
   const [analyticsLoaded, setAnalyticsLoaded] = useState(false)
   const [selectedBadgeId, setSelectedBadgeId] = useState<string | null>(null)
   const [credentialLevels, setCredentialLevels] = useState<{ id: string; name: string }[]>([])
-  const [activeTab, setActiveTab] = useState<'overview' | 'analytics'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'analytics' | 'resources'>('overview')
   const [strengthDistribution, setStrengthDistribution] = useState<any[]>([])
   const [topStrengthItems, setTopStrengthItems] = useState<{ label: string; count: number }[]>([])
   const [error, setError] = useState('')
+
+  // 共有資料 state
+  const [resources, setResources] = useState<any[]>([])
+  const [resourcesLoading, setResourcesLoading] = useState(false)
+  const [resourcesLoaded, setResourcesLoaded] = useState(false)
+  const [showResourceModal, setShowResourceModal] = useState(false)
+  const [editingResource, setEditingResource] = useState<any>(null)
+  const [resourceForm, setResourceForm] = useState({ title: '', url: '', description: '', credential_level_id: '' })
+  const [resourceSaving, setResourceSaving] = useState(false)
+  const [resourceBadges, setResourceBadges] = useState<{ id: string; name: string }[]>([])
   const [editingOrg, setEditingOrg] = useState(false)
   const [editOrgName, setEditOrgName] = useState('')
   const [editOrgDescription, setEditOrgDescription] = useState('')
@@ -275,6 +285,127 @@ export default function OrgDashboardPage() {
     }
   }
 
+  // === 共有資料 ===
+  async function loadResources() {
+    if (resourcesLoaded || resourcesLoading || !org) return
+    setResourcesLoading(true)
+    try {
+      const [resRes, badgeRes] = await Promise.all([
+        fetch(`/api/organizations/${org.id}/resources`),
+        fetch(`/api/org/proof-analytics?orgId=${org.id}`),
+      ])
+      if (resRes.ok) {
+        const data = await resRes.json()
+        setResources(data)
+      }
+      if (badgeRes.ok) {
+        const badgeData = await badgeRes.json()
+        if (badgeData.credentialLevels) {
+          setResourceBadges(badgeData.credentialLevels)
+        }
+      }
+      setResourcesLoaded(true)
+    } catch (err) {
+      console.error('Resources load error:', err)
+    } finally {
+      setResourcesLoading(false)
+    }
+  }
+
+  function handleResourcesTab() {
+    setActiveTab('resources')
+    loadResources()
+  }
+
+  function openResourceModal(resource?: any) {
+    if (resource) {
+      setEditingResource(resource)
+      setResourceForm({
+        title: resource.title || '',
+        url: resource.url || '',
+        description: resource.description || '',
+        credential_level_id: resource.credential_level_id || '',
+      })
+    } else {
+      setEditingResource(null)
+      setResourceForm({ title: '', url: '', description: '', credential_level_id: '' })
+    }
+    setShowResourceModal(true)
+  }
+
+  async function handleResourceSave() {
+    if (!org) return
+    setResourceSaving(true)
+    try {
+      const body = {
+        title: resourceForm.title.trim(),
+        url: resourceForm.url.trim(),
+        description: resourceForm.description.trim() || null,
+        credential_level_id: resourceForm.credential_level_id || null,
+      }
+
+      if (editingResource) {
+        const res = await fetch(`/api/organizations/${org.id}/resources/${editingResource.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+        if (!res.ok) {
+          const err = await res.json()
+          alert(err.error || '更新に失敗しました')
+          return
+        }
+      } else {
+        const res = await fetch(`/api/organizations/${org.id}/resources`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+        if (!res.ok) {
+          const err = await res.json()
+          alert(err.error || '追加に失敗しました')
+          return
+        }
+      }
+
+      setShowResourceModal(false)
+      setResourcesLoaded(false)
+      loadResources()
+    } catch (err: any) {
+      alert(err.message || 'エラーが発生しました')
+    } finally {
+      setResourceSaving(false)
+    }
+  }
+
+  async function handleResourceToggle(resource: any) {
+    if (!org) return
+    try {
+      const res = await fetch(`/api/organizations/${org.id}/resources/${resource.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: !resource.is_active }),
+      })
+      if (res.ok) {
+        setResources(prev => prev.map(r => r.id === resource.id ? { ...r, is_active: !r.is_active } : r))
+      }
+    } catch (err) {
+      console.error('Toggle error:', err)
+    }
+  }
+
+  async function handleResourceDelete(resource: any) {
+    if (!org || !confirm('本当に削除しますか？')) return
+    try {
+      const res = await fetch(`/api/organizations/${org.id}/resources/${resource.id}`, { method: 'DELETE' })
+      if (res.ok) {
+        setResources(prev => prev.filter(r => r.id !== resource.id))
+      }
+    } catch (err) {
+      console.error('Delete error:', err)
+    }
+  }
+
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
       {/* ヘッダー */}
@@ -323,6 +454,16 @@ export default function OrgDashboardPage() {
           }`}
         >
           分析
+        </button>
+        <button
+          onClick={handleResourcesTab}
+          className={`flex-1 py-2 text-sm font-medium rounded-lg transition ${
+            activeTab === 'resources'
+              ? 'bg-white text-[#1A1A2E] shadow-sm'
+              : 'text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          共有資料
         </button>
       </div>
 
@@ -481,6 +622,200 @@ export default function OrgDashboardPage() {
             />
           </>
         )
+      )}
+
+      {/* === 共有資料タブ === */}
+      {activeTab === 'resources' && (
+        resourcesLoading ? (
+          <div className="text-center py-16">
+            <div className="animate-spin w-8 h-8 border-2 border-[#C4A35A] border-t-transparent rounded-full mx-auto" />
+            <p className="text-gray-400 mt-4 text-sm">資料を読み込み中...</p>
+          </div>
+        ) : (
+          <>
+            <button
+              onClick={() => openResourceModal()}
+              className="w-full py-3 bg-[#C4A35A] text-white font-medium rounded-xl hover:bg-[#b3944f] transition text-sm mb-6"
+            >
+              ＋ 資料を追加
+            </button>
+
+            {resources.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-gray-400 text-sm mb-1">まだ共有資料はありません</p>
+                <p className="text-gray-300 text-xs">上のボタンから資料を追加しましょう</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {resources.map((r: any) => (
+                  <div key={r.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <h3 className="text-sm font-semibold text-[#1A1A2E] flex-1">{r.title}</h3>
+                      <div className="flex gap-2 flex-shrink-0">
+                        <button
+                          onClick={() => openResourceModal(r)}
+                          className="text-xs text-gray-400 border border-gray-200 rounded-md px-2 py-0.5 hover:border-[#C4A35A] hover:text-[#C4A35A] transition"
+                        >
+                          編集
+                        </button>
+                        <button
+                          onClick={() => handleResourceDelete(r)}
+                          className="text-xs text-gray-400 border border-gray-200 rounded-md px-2 py-0.5 hover:border-red-400 hover:text-red-400 transition"
+                        >
+                          削除
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-400 truncate mb-1">{r.url}</p>
+                    {r.description && (
+                      <p className="text-xs text-gray-500 mb-2 line-clamp-2">{r.description}</p>
+                    )}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-gray-400">
+                        対象: {r.credential_level_name || '全メンバー'}
+                      </span>
+                      <button
+                        onClick={() => handleResourceToggle(r)}
+                        className={`text-xs px-3 py-1 rounded-full border transition ${
+                          r.is_active
+                            ? 'bg-green-50 text-green-600 border-green-200'
+                            : 'bg-gray-50 text-gray-400 border-gray-200'
+                        }`}
+                      >
+                        {r.is_active ? '● 公開中' : '○ 非公開'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )
+      )}
+
+      {/* 資料追加/編集モーダル */}
+      {showResourceModal && (
+        <div
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
+          }}
+          onClick={() => setShowResourceModal(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#FAFAF7', borderRadius: '16px',
+              padding: '24px', maxWidth: '480px', width: '100%',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ color: '#1A1A2E', fontSize: '18px', fontWeight: 700, marginBottom: '20px' }}>
+              {editingResource ? '資料を編集' : '資料を追加'}
+            </h3>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '13px', color: '#666', marginBottom: '6px' }}>
+                タイトル <span style={{ color: '#C4A35A' }}>*</span>
+              </label>
+              <input
+                type="text"
+                value={resourceForm.title}
+                onChange={(e) => setResourceForm(prev => ({ ...prev, title: e.target.value }))}
+                maxLength={100}
+                placeholder="例: 第3回セミナー動画"
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: '8px',
+                  border: '1px solid #E5E5E0', fontSize: '14px', color: '#1A1A2E',
+                  backgroundColor: '#fff', boxSizing: 'border-box' as const,
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '13px', color: '#666', marginBottom: '6px' }}>
+                URL <span style={{ color: '#C4A35A' }}>*</span>
+              </label>
+              <input
+                type="url"
+                value={resourceForm.url}
+                onChange={(e) => setResourceForm(prev => ({ ...prev, url: e.target.value }))}
+                maxLength={2000}
+                placeholder="https://"
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: '8px',
+                  border: '1px solid #E5E5E0', fontSize: '14px', color: '#1A1A2E',
+                  backgroundColor: '#fff', boxSizing: 'border-box' as const,
+                }}
+              />
+              <p style={{ fontSize: '11px', color: '#AAA', marginTop: '4px' }}>
+                ※ https:// で始まるURLを入力
+              </p>
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '13px', color: '#666', marginBottom: '6px' }}>
+                説明文（任意）
+              </label>
+              <textarea
+                value={resourceForm.description}
+                onChange={(e) => setResourceForm(prev => ({ ...prev, description: e.target.value }))}
+                maxLength={500}
+                rows={3}
+                placeholder="資料の説明を入力"
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: '8px',
+                  border: '1px solid #E5E5E0', fontSize: '14px', color: '#1A1A2E',
+                  backgroundColor: '#fff', resize: 'vertical' as const, boxSizing: 'border-box' as const,
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', fontSize: '13px', color: '#666', marginBottom: '6px' }}>
+                対象バッジ
+              </label>
+              <select
+                value={resourceForm.credential_level_id}
+                onChange={(e) => setResourceForm(prev => ({ ...prev, credential_level_id: e.target.value }))}
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: '8px',
+                  border: '1px solid #E5E5E0', fontSize: '14px', color: '#1A1A2E',
+                  backgroundColor: '#fff', boxSizing: 'border-box' as const,
+                }}
+              >
+                <option value="">全メンバー</option>
+                {resourceBadges.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowResourceModal(false)}
+                style={{
+                  padding: '10px 20px', borderRadius: '8px', border: '1px solid #E5E5E0',
+                  backgroundColor: '#fff', color: '#666', fontSize: '14px', cursor: 'pointer',
+                }}
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={handleResourceSave}
+                disabled={resourceSaving || !resourceForm.title.trim() || !resourceForm.url.trim() || !resourceForm.url.startsWith('https://')}
+                style={{
+                  padding: '10px 20px', borderRadius: '8px', border: 'none',
+                  backgroundColor: '#C4A35A', color: '#fff', fontSize: '14px', fontWeight: 600,
+                  cursor: 'pointer',
+                  opacity: (resourceSaving || !resourceForm.title.trim() || !resourceForm.url.trim() || !resourceForm.url.startsWith('https://')) ? 0.5 : 1,
+                }}
+              >
+                {resourceSaving ? '保存中...' : editingResource ? '更新する' : '追加する'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 団体編集モーダル */}
