@@ -54,10 +54,10 @@ export async function GET(
       .map(m => m.credential_level_id)
       .filter(Boolean) as string[]
 
-    // 4. リソース取得: is_active=true
+    // 4. リソース取得: is_active=true（credential_levelsのnameもJOIN）
     const { data: resources, error } = await supabase
       .from('org_resources')
-      .select('id, title, url, description, sort_order, credential_level_id, created_at')
+      .select('id, title, url, description, sort_order, credential_level_id, created_at, credential_levels(name)')
       .eq('organization_id', orgId)
       .eq('is_active', true)
       .order('sort_order', { ascending: true })
@@ -69,7 +69,16 @@ export async function GET(
     const visibleResources = (resources || []).filter((r: any) => {
       if (!r.credential_level_id) return true
       return myBadgeIds.includes(r.credential_level_id)
-    })
+    }).map((r: any) => ({
+      id: r.id,
+      title: r.title,
+      url: r.url,
+      description: r.description,
+      sort_order: r.sort_order,
+      credential_level_id: r.credential_level_id,
+      credential_level_name: r.credential_levels?.name || null,
+      created_at: r.created_at,
+    }))
 
     return NextResponse.json(visibleResources)
   } catch (error: any) {

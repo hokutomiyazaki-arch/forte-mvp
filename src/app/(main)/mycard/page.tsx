@@ -102,6 +102,7 @@ function MyCardContent() {
   const [memberResources, setMemberResources] = useState<any[]>([])
   const [memberResourcesLoading, setMemberResourcesLoading] = useState(false)
   const [hasOrgMembership, setHasOrgMembership] = useState(false)
+  const [memberAccordionOpen, setMemberAccordionOpen] = useState<Record<string, boolean>>({})
 
   // NFC カード管理 state
   const [nfcCard, setNfcCard] = useState<any>(null)
@@ -228,6 +229,14 @@ function MyCardContent() {
       if (res.ok) {
         const data = await res.json()
         setMemberResources(data)
+        // 全アコーディオンをデフォルト開く
+        const openState: Record<string, boolean> = {}
+        const keys = new Set<string>()
+        for (const r of data) {
+          keys.add(r.credential_level_id || '__all__')
+        }
+        keys.forEach(k => { openState[k] = true })
+        setMemberAccordionOpen(openState)
       } else {
         setMemberResources([])
       }
@@ -249,6 +258,28 @@ function MyCardContent() {
   function handleMemberOrgChange(orgId: string) {
     setSelectedMemberOrgId(orgId)
     loadMemberResources(orgId)
+  }
+
+  // メンバー用: リソースをバッジ別グループに変換
+  function getMemberResourceGroups() {
+    const grouped = new Map<string, any[]>()
+    for (const r of memberResources) {
+      const key = r.credential_level_id || '__all__'
+      if (!grouped.has(key)) grouped.set(key, [])
+      grouped.get(key)!.push(r)
+    }
+    const groups: { key: string; badgeName: string; resources: any[] }[] = []
+    // 「全メンバー向け」を先頭
+    if (grouped.has('__all__')) {
+      groups.push({ key: '__all__', badgeName: '全メンバー向け', resources: grouped.get('__all__')! })
+    }
+    grouped.forEach((resources, key) => {
+      if (key !== '__all__') {
+        const badgeName = resources[0]?.credential_level_name || 'バッジ'
+        groups.push({ key, badgeName: `${badgeName} 専用`, resources })
+      }
+    })
+    return groups
   }
 
   // 初回: セッション確認（AuthProviderから取得、setSessionもProvider側で完了済み）
@@ -1521,37 +1552,61 @@ function MyCardContent() {
               <p style={{ color: '#9CA3AF', fontSize: 14 }}>まだ共有資料はありません</p>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {memberResources.map((r: any) => (
-                <div key={r.id} style={{
-                  background: '#fff', borderRadius: 14, padding: '18px 16px',
-                  border: '1px solid #E5E7EB',
-                }}>
-                  <h4 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', marginBottom: 4 }}>
-                    {r.title}
-                  </h4>
-                  {r.description && (
-                    <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, marginBottom: 12 }}>
-                      {r.description}
-                    </p>
-                  )}
-                  <a
-                    href={r.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {getMemberResourceGroups().map(group => (
+                <div key={group.key}>
+                  {/* アコーディオンヘッダー */}
+                  <button
+                    onClick={() => setMemberAccordionOpen(prev => ({ ...prev, [group.key]: !prev[group.key] }))}
                     style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 4,
-                      padding: '8px 16px', borderRadius: 10,
-                      background: '#C4A35A', color: '#fff',
-                      fontSize: 13, fontWeight: 600, textDecoration: 'none',
-                      transition: 'background 0.2s',
+                      width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '10px 14px', background: '#F3F4F6', borderRadius: 10,
+                      border: 'none', cursor: 'pointer', marginBottom: memberAccordionOpen[group.key] ? 8 : 0,
                     }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#B3923F')}
-                    onMouseLeave={e => (e.currentTarget.style.background = '#C4A35A')}
                   >
-                    資料を開く
-                    <span aria-hidden="true">→</span>
-                  </a>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>
+                      <span style={{ color: '#6B7280', marginRight: 6 }}>{memberAccordionOpen[group.key] ? '▼' : '▶'}</span>
+                      {group.badgeName}
+                    </span>
+                    <span style={{ fontSize: 13, color: '#9CA3AF' }}>({group.resources.length}件)</span>
+                  </button>
+                  {/* アコーディオンコンテンツ */}
+                  {memberAccordionOpen[group.key] && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {group.resources.map((r: any) => (
+                        <div key={r.id} style={{
+                          background: '#fff', borderRadius: 14, padding: '18px 16px',
+                          border: '1px solid #E5E7EB',
+                        }}>
+                          <h4 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', marginBottom: 4 }}>
+                            {r.title}
+                          </h4>
+                          {r.description && (
+                            <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, marginBottom: 12 }}>
+                              {r.description}
+                            </p>
+                          )}
+                          <a
+                            href={r.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              display: 'inline-flex', alignItems: 'center', gap: 4,
+                              padding: '8px 16px', borderRadius: 10,
+                              background: '#C4A35A', color: '#fff',
+                              fontSize: 13, fontWeight: 600, textDecoration: 'none',
+                              transition: 'background 0.2s',
+                            }}
+                            onMouseEnter={e => (e.currentTarget.style.background = '#B3923F')}
+                            onMouseLeave={e => (e.currentTarget.style.background = '#C4A35A')}
+                          >
+                            資料を開く
+                            <span aria-hidden="true">→</span>
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
