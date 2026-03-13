@@ -58,7 +58,7 @@ function MyCardContent() {
   const [rewards, setRewards] = useState<RewardWithPro[]>([])
   const [voteHistory, setVoteHistory] = useState<VoteHistory[]>([])
   const [dataLoading, setDataLoading] = useState(false)
-  const [tab, setTab] = useState<'rewards' | 'history' | 'bookmarked' | 'myproof' | 'card'>('rewards')
+  const [tab, setTab] = useState<'rewards' | 'history' | 'bookmarked' | 'myproof' | 'card' | 'myorgs'>('rewards')
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [redeeming, setRedeeming] = useState(false)
   const [message, setMessage] = useState('')
@@ -95,6 +95,13 @@ function MyCardContent() {
   const [proId, setProId] = useState<string | null>(null)
   const [proCardMode, setProCardMode] = useState<'pro' | 'general'>('pro')
   const [credentialBadges, setCredentialBadges] = useState<{id: string; name: string; description: string | null; image_url: string | null; org_name: string; org_id: string}[]>([])
+
+  // 団体リソース state
+  const [memberOrgs, setMemberOrgs] = useState<{id: string; name: string; description: string | null; logo_url: string | null}[]>([])
+  const [selectedMemberOrgId, setSelectedMemberOrgId] = useState<string | null>(null)
+  const [memberResources, setMemberResources] = useState<any[]>([])
+  const [memberResourcesLoading, setMemberResourcesLoading] = useState(false)
+  const [hasOrgMembership, setHasOrgMembership] = useState(false)
 
   // NFC カード管理 state
   const [nfcCard, setNfcCard] = useState<any>(null)
@@ -140,6 +147,21 @@ function MyCardContent() {
         setBookmarkCount(data.bookmarks.length)
       }
       if (data.credentialBadges) setCredentialBadges(data.credentialBadges)
+
+      // 所属団体一覧を取得（バッジ持ちユーザー用）
+      try {
+        const orgsRes = await fetch('/api/my/organizations')
+        if (orgsRes.ok) {
+          const orgsData = await orgsRes.json()
+          if (Array.isArray(orgsData) && orgsData.length > 0) {
+            setMemberOrgs(orgsData)
+            setHasOrgMembership(true)
+            setSelectedMemberOrgId(orgsData[0].id)
+          }
+        }
+      } catch (e) {
+        console.error('[mycard] member orgs load error:', e)
+      }
 
       // マイプルーフのqr_token取得
       try {
@@ -196,6 +218,37 @@ function MyCardContent() {
     }
     if (timerRef.current) clearTimeout(timerRef.current)
     setDataLoading(false)
+  }
+
+  // メンバー用: 所属団体のリソース取得
+  async function loadMemberResources(orgId: string) {
+    setMemberResourcesLoading(true)
+    try {
+      const res = await fetch(`/api/my/organizations/${orgId}/resources`)
+      if (res.ok) {
+        const data = await res.json()
+        setMemberResources(data)
+      } else {
+        setMemberResources([])
+      }
+    } catch (err) {
+      console.error('[mycard] member resources load error:', err)
+      setMemberResources([])
+    } finally {
+      setMemberResourcesLoading(false)
+    }
+  }
+
+  function handleMyOrgsTab() {
+    setTab('myorgs')
+    if (selectedMemberOrgId) {
+      loadMemberResources(selectedMemberOrgId)
+    }
+  }
+
+  function handleMemberOrgChange(orgId: string) {
+    setSelectedMemberOrgId(orgId)
+    loadMemberResources(orgId)
   }
 
   // 初回: セッション確認（AuthProviderから取得、setSessionもProvider側で完了済み）
@@ -916,10 +969,11 @@ function MyCardContent() {
           { key: 'bookmarked' as const, label: '気になる', count: bookmarkCount },
           { key: 'myproof' as const, label: 'マイプルーフ', count: 0 },
           { key: 'card' as const, label: 'カード管理', count: 0 },
+          ...(hasOrgMembership ? [{ key: 'myorgs' as const, label: '📋 団体', count: 0 }] : []),
         ]).map(t => (
           <button
             key={t.key}
-            onClick={() => setTab(t.key)}
+            onClick={() => t.key === 'myorgs' ? handleMyOrgsTab() : setTab(t.key)}
             style={{
               flex: '0 0 auto',
               padding: '12px 14px',
@@ -1398,6 +1452,110 @@ function MyCardContent() {
 
           {/* カードモード切替（プロユーザーのみ表示） */}
           {isPro && proId && <CardModeSwitch professionalId={proId} initialCardMode={proCardMode} />}
+        </div>
+      )}
+
+      {/* 団体タブ（メンバー用リソース閲覧） */}
+      {tab === 'myorgs' && hasOrgMembership && (
+        <div>
+          {/* 複数団体の場合: セレクター */}
+          {memberOrgs.length > 1 && (
+            <div style={{ marginBottom: 16 }}>
+              <select
+                value={selectedMemberOrgId || ''}
+                onChange={(e) => handleMemberOrgChange(e.target.value)}
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: 10,
+                  border: '1px solid #E5E7EB', fontSize: 14, color: '#1A1A2E',
+                  backgroundColor: '#fff', boxSizing: 'border-box' as const,
+                }}
+              >
+                {memberOrgs.map(org => (
+                  <option key={org.id} value={org.id}>{org.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* 団体名（1団体のみの場合） */}
+          {memberOrgs.length === 1 && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16,
+              padding: '14px 16px', background: '#fff', borderRadius: 12,
+              border: '1px solid #E5E7EB',
+            }}>
+              {memberOrgs[0].logo_url ? (
+                <img src={memberOrgs[0].logo_url} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover' }} />
+              ) : (
+                <div style={{
+                  width: 36, height: 36, borderRadius: 8, background: '#1A1A2E',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#fff', fontSize: 16, fontWeight: 700,
+                }}>
+                  {memberOrgs[0].name.charAt(0)}
+                </div>
+              )}
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E' }}>
+                {memberOrgs[0].name}
+              </div>
+            </div>
+          )}
+
+          {/* 共有資料セクション */}
+          <div style={{ marginBottom: 8 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', marginBottom: 12 }}>
+              共有資料
+            </h3>
+          </div>
+
+          {memberResourcesLoading ? (
+            <div style={{ textAlign: 'center', padding: '40px 0' }}>
+              <div className="animate-spin" style={{
+                width: 32, height: 32, border: '2px solid #C4A35A',
+                borderTopColor: 'transparent', borderRadius: '50%', margin: '0 auto',
+              }} />
+              <p style={{ color: '#9CA3AF', marginTop: 12, fontSize: 13 }}>読み込み中...</p>
+            </div>
+          ) : memberResources.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 0' }}>
+              <p style={{ color: '#9CA3AF', fontSize: 14 }}>まだ共有資料はありません</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {memberResources.map((r: any) => (
+                <div key={r.id} style={{
+                  background: '#fff', borderRadius: 14, padding: '18px 16px',
+                  border: '1px solid #E5E7EB',
+                }}>
+                  <h4 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', marginBottom: 4 }}>
+                    {r.title}
+                  </h4>
+                  {r.description && (
+                    <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, marginBottom: 12 }}>
+                      {r.description}
+                    </p>
+                  )}
+                  <a
+                    href={r.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      padding: '8px 16px', borderRadius: 10,
+                      background: '#C4A35A', color: '#fff',
+                      fontSize: 13, fontWeight: 600, textDecoration: 'none',
+                      transition: 'background 0.2s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#B3923F')}
+                    onMouseLeave={e => (e.currentTarget.style.background = '#C4A35A')}
+                  >
+                    資料を開く
+                    <span aria-hidden="true">→</span>
+                  </a>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
