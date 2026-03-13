@@ -33,6 +33,7 @@ export default function OrgPublicPage() {
   const [levelAggregates, setLevelAggregates] = useState<any[]>([])
   const [generalCount, setGeneralCount] = useState(0)
   const [proofTopMembers, setProofTopMembers] = useState<any[]>([])
+  const [topStrengthItems, setTopStrengthItems] = useState<{ label: string; count: number }[]>([])
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -53,6 +54,7 @@ export default function OrgPublicPage() {
       setLevelAggregates(data.levelAggregates || [])
       setGeneralCount(data.general_count || 0)
       setProofTopMembers(data.proofTopMembers || [])
+      setTopStrengthItems(data.topStrengthItems || [])
     } catch (err: any) {
       setError(err.message || 'データの取得に失敗しました')
     }
@@ -123,6 +125,42 @@ export default function OrgPublicPage() {
           <div className="text-xs text-gray-400 mt-1">直近30日</div>
         </div>
       </div>
+
+      {/* 強みランキング TOP5 */}
+      {topStrengthItems.length > 0 && (() => {
+        const maxCount = Math.max(...topStrengthItems.map(d => d.count), 1)
+        return (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6">
+            <h2 className="text-sm font-bold text-[#1A1A2E] mb-4">強みランキング TOP{topStrengthItems.length}</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {topStrengthItems.map((item, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '12px', color: '#AAA', width: '18px', textAlign: 'right', flexShrink: 0 }}>{i + 1}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '13px', color: '#1A1A2E', fontWeight: 500, marginBottom: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {item.label}
+                    </div>
+                    <div style={{ height: '8px', backgroundColor: '#F0F0F0', borderRadius: '4px', overflow: 'hidden' }}>
+                      <div
+                        style={{
+                          height: '100%',
+                          width: `${(item.count / maxCount) * 100}%`,
+                          backgroundColor: '#C4A35A',
+                          borderRadius: '4px',
+                          transition: 'width 0.3s',
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#C4A35A', whiteSpace: 'nowrap', width: '36px', textAlign: 'right', flexShrink: 0 }}>
+                    {item.count}票
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* レベル別セクション（credential/education団体のみ） */}
       {(org.type === 'credential' || org.type === 'education') && levelAggregates.length > 0 && (

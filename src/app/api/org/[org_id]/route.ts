@@ -111,6 +111,7 @@ export async function GET(
       .map((m: any) => m.professional_id)
       .filter(Boolean)
     let proofTopMembers: any[] = []
+    let topStrengthItems: { label: string; count: number }[] = []
 
     if (memberProIds.length > 0) {
       // メンバーの投票でselected_proof_idsがある投票を取得
@@ -179,11 +180,21 @@ export async function GET(
             .slice(0, 10)
 
           proofTopMembers = rankings
+
+          // 個別強みランキング（proof_item_id別、label使用、TOP5）
+          topStrengthItems = proofItemIds
+            .map(proofId => ({
+              label: labelMap.get(proofId) || '',
+              count: proofTotalMap[proofId] || 0,
+            }))
+            .filter(item => item.label)
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 5)
         }
       }
     }
 
-    return NextResponse.json({ org, members, aggregate, levelAggregates, general_count: uniqueUserIds.length, generals: generalMembers, proofTopMembers })
+    return NextResponse.json({ org, members, aggregate, levelAggregates, general_count: uniqueUserIds.length, generals: generalMembers, proofTopMembers, topStrengthItems })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
