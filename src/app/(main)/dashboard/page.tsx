@@ -1012,6 +1012,21 @@ export default function DashboardPage() {
         </button>
       </div>
 
+      {/* 姓名未設定バナー */}
+      {pro && !pro.first_name?.trim() && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
+          <p className="text-sm text-amber-800 font-medium mb-2">
+            姓名が未設定です。プロフィールを更新してください。
+          </p>
+          <button
+            onClick={() => setEditing(true)}
+            className="text-sm font-bold text-[#C4A35A] hover:underline"
+          >
+            プロフィール編集へ →
+          </button>
+        </div>
+      )}
+
       {/* QRコード（タブの上に配置） — タブに応じて切替 */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-6 text-center">
         {dashboardTab === 'myproof' ? (

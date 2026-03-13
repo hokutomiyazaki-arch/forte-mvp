@@ -79,6 +79,7 @@ function MyCardContent() {
   const [myProofQrToken, setMyProofQrToken] = useState('')
   const [showMyProofQR, setShowMyProofQR] = useState(false)
   const [nickname, setNickname] = useState('')
+  const [clientFirstName, setClientFirstName] = useState('')
   const [savingNickname, setSavingNickname] = useState(false)
   const [clientPhotoUrl, setClientPhotoUrl] = useState<string | null>(null)
   const [birthYear, setBirthYear] = useState('')
@@ -126,6 +127,7 @@ function MyCardContent() {
       if (data.proCardMode) setProCardMode(data.proCardMode)
       if (data.proDeactivated) setProDeactivated(true)
       if (data.nickname) setNickname(data.nickname)
+      if (data.clientFirstName) setClientFirstName(data.clientFirstName)
       setUserEmail(data.email)
       setIsLineUser(data.isLine)
       if (data.rewards) setRewards(data.rewards)
@@ -649,6 +651,21 @@ function MyCardContent() {
         <p className="text-sm text-gray-400 mb-6 truncate max-w-[300px]">
           {userEmail.startsWith('line_') && userEmail.endsWith('@line.realproof.jp') ? 'LINE連携済み' : userEmail}
         </p>
+      )}
+
+      {/* 姓名未設定バナー */}
+      {!clientFirstName?.trim() && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
+          <p className="text-sm text-amber-800 font-medium mb-2">
+            姓名が未設定です。プロフィールを更新してください。
+          </p>
+          <button
+            onClick={() => setShowSettings(true)}
+            className="text-sm font-bold text-[#C4A35A] hover:underline"
+          >
+            プロフィール編集へ →
+          </button>
+        </div>
       )}
 
       {/* 設定パネル */}

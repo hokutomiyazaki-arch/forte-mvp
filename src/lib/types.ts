@@ -6,6 +6,9 @@ export interface Professional {
   id: string
   user_id: string
   name: string
+  last_name: string | null
+  first_name: string | null
+  store_name: string | null
   title: string
   location: string | null
   years_experience: number | null
