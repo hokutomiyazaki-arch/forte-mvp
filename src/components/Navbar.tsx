@@ -2,12 +2,12 @@
 
 import { useState } from 'react'
 import { SignInButton, SignedIn, SignedOut, UserButton, useUser } from '@clerk/nextjs'
+import { useProStatus } from '@/lib/useProStatus'
 
 export default function Navbar() {
   const { isLoaded } = useUser()
+  const { isPro } = useProStatus()
   const [menuOpen, setMenuOpen] = useState(false)
-
-  const myPageHref = '/mypage'
 
   return (
     <nav style={{
@@ -35,7 +35,10 @@ export default function Navbar() {
         ) : (
           <>
             <SignedIn>
-              <a href={myPageHref} style={{ color: '#fff', textDecoration: 'none' }}>マイページ</a>
+              {isPro && (
+                <a href="/dashboard" style={{ color: '#fff', textDecoration: 'none' }}>プロページ</a>
+              )}
+              <a href="/mycard" style={{ color: '#fff', textDecoration: 'none' }}>一般ページ</a>
               <UserButton
                 appearance={{
                   elements: {
@@ -89,8 +92,12 @@ export default function Navbar() {
           <a href="/explore" style={{ color: '#fff', textDecoration: 'none' }}
             onClick={() => setMenuOpen(false)}>プロを探す</a>
           <SignedIn>
-            <a href={myPageHref} style={{ color: '#fff', textDecoration: 'none' }}
-              onClick={() => setMenuOpen(false)}>マイページ</a>
+            {isPro && (
+              <a href="/dashboard" style={{ color: '#fff', textDecoration: 'none' }}
+                onClick={() => setMenuOpen(false)}>プロページ</a>
+            )}
+            <a href="/mycard" style={{ color: '#fff', textDecoration: 'none' }}
+              onClick={() => setMenuOpen(false)}>一般ページ</a>
             <UserButton
               appearance={{
                 elements: {
