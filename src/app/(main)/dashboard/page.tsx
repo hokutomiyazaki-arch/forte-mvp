@@ -118,6 +118,7 @@ export default function DashboardPage() {
   const [customProofVoteCounts, setCustomProofVoteCounts] = useState<Map<string, number>>(new Map())
   const [myProofQrToken, setMyProofQrToken] = useState<string | null>(null)
   const [showMyProofQR, setShowMyProofQR] = useState(false)
+  const [showKakegoe, setShowKakegoe] = useState(false)
 
   // Voices用 state
   const [voiceComments, setVoiceComments] = useState<{ id: string; comment: string; created_at: string }[]>([])
@@ -1148,6 +1149,46 @@ export default function DashboardPage() {
               )
             })()}
           </>
+        )}
+      </div>
+
+      {/* 声がけテンプレート */}
+      <div className="mb-8">
+        <button
+          onClick={() => setShowKakegoe(!showKakegoe)}
+          className="w-full text-center py-3 text-sm text-[#C4A35A] hover:text-[#B08D3E] transition-colors"
+        >
+          {showKakegoe ? '▲ 閉じる' : '💡 クライアントへの声がけ例を見る'}
+        </button>
+
+        {showKakegoe && (
+          <div className="bg-white rounded-xl p-5 shadow-sm space-y-4">
+            <p className="text-xs text-gray-400 mb-2">セッション後にQRを見せる時、こんなふうに声をかけてみてください</p>
+
+            {/* パターン1: カジュアル */}
+            <div className="border-l-2 border-[#C4A35A] pl-4">
+              <p className="text-xs font-medium text-[#C4A35A] mb-1">カジュアル</p>
+              <p className="text-sm text-[#1A1A2E] leading-relaxed">
+                「今日の感想、30秒だけ聞かせてもらえますか？QRかざすだけで終わります。お礼にちょっとした特典もお渡ししてます😊」
+              </p>
+            </div>
+
+            {/* パターン2: 説明込み */}
+            <div className="border-l-2 border-[#C4A35A] pl-4">
+              <p className="text-xs font-medium text-[#C4A35A] mb-1">しっかり説明</p>
+              <p className="text-sm text-[#1A1A2E] leading-relaxed">
+                「REALPROOFっていう、クライアントさんが"この人の強みはこれだ"って投票できるサービスをやってるんです。よかったら私の強みに投票してもらえませんか？30秒で終わります。お礼に○○をお渡ししてます」
+              </p>
+            </div>
+
+            {/* パターン3: リワード推し */}
+            <div className="border-l-2 border-[#C4A35A] pl-4">
+              <p className="text-xs font-medium text-[#C4A35A] mb-1">リワード推し</p>
+              <p className="text-sm text-[#1A1A2E] leading-relaxed">
+                「このQRで投票してもらうと、私からのちょっとしたプレゼントが開封できるんです。何が出るかはお楽しみ！30秒で終わるので試してみてください」
+              </p>
+            </div>
+          </div>
         )}
       </div>
 
