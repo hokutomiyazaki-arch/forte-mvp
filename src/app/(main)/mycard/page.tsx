@@ -79,6 +79,7 @@ function MyCardContent() {
   const [myProofQrToken, setMyProofQrToken] = useState('')
   const [showMyProofQR, setShowMyProofQR] = useState(false)
   const [nickname, setNickname] = useState('')
+  const [clientLastName, setClientLastName] = useState('')
   const [clientFirstName, setClientFirstName] = useState('')
   const [savingNickname, setSavingNickname] = useState(false)
   const [clientPhotoUrl, setClientPhotoUrl] = useState<string | null>(null)
@@ -127,6 +128,7 @@ function MyCardContent() {
       if (data.proCardMode) setProCardMode(data.proCardMode)
       if (data.proDeactivated) setProDeactivated(true)
       if (data.nickname) setNickname(data.nickname)
+      if (data.clientLastName) setClientLastName(data.clientLastName)
       if (data.clientFirstName) setClientFirstName(data.clientFirstName)
       setUserEmail(data.email)
       setIsLineUser(data.isLine)
@@ -704,17 +706,30 @@ function MyCardContent() {
             />
             {uploadingAvatar && <p className="text-xs text-gray-400 text-center mt-1">アップロード中...</p>}
 
-            {/* ニックネーム */}
-            <div className="mt-4">
-              <label className="text-sm text-gray-600">ニックネーム</label>
-              <input
-                type="text"
-                value={nickname}
-                onChange={e => setNickname(e.target.value)}
-                placeholder="表示名を入力"
-                maxLength={50}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-sm focus:ring-2 focus:ring-[#C4A35A] outline-none"
-              />
+            {/* 姓名 */}
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm text-gray-600">姓</label>
+                <input
+                  type="text"
+                  value={clientLastName}
+                  onChange={e => setClientLastName(e.target.value)}
+                  placeholder="山田"
+                  maxLength={20}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-sm focus:ring-2 focus:ring-[#C4A35A] outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-sm text-gray-600">名</label>
+                <input
+                  type="text"
+                  value={clientFirstName}
+                  onChange={e => setClientFirstName(e.target.value)}
+                  placeholder="太郎"
+                  maxLength={20}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-sm focus:ring-2 focus:ring-[#C4A35A] outline-none"
+                />
+              </div>
             </div>
 
             {/* 生年月日 */}
@@ -756,7 +771,11 @@ function MyCardContent() {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                      nickname: nickname.trim() || undefined,
+                      last_name: clientLastName.trim() || undefined,
+                      first_name: clientFirstName.trim() || undefined,
+                      nickname: clientLastName.trim() && clientFirstName.trim()
+                        ? `${clientLastName.trim()} ${clientFirstName.trim()}`
+                        : nickname.trim() || undefined,
                       date_of_birth: dateOfBirth || undefined,
                     }),
                   })

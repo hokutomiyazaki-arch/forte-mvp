@@ -40,9 +40,11 @@ export async function PUT(request: Request) {
 
     const supabase = getSupabaseAdmin()
     const body = await request.json()
-    const { nickname, date_of_birth, photo_url } = body
+    const { nickname, last_name, first_name, date_of_birth, photo_url } = body
 
     const updateData: Record<string, any> = {}
+    if (last_name !== undefined) updateData.last_name = last_name
+    if (first_name !== undefined) updateData.first_name = first_name
     if (nickname !== undefined) updateData.nickname = nickname
     if (date_of_birth !== undefined) updateData.date_of_birth = date_of_birth
     if (photo_url !== undefined) updateData.photo_url = photo_url

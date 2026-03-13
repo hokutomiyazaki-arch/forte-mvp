@@ -51,7 +51,7 @@ export async function GET() {
       // プロ確認（deactivated_atも取得してactive判定に使う）
       supabase.from('professionals').select('id, deactivated_at, card_mode').eq('user_id', userId).maybeSingle(),
       // ニックネーム
-      supabase.from('clients').select('nickname, first_name').eq('user_id', userId).maybeSingle(),
+      supabase.from('clients').select('nickname, last_name, first_name').eq('user_id', userId).maybeSingle(),
       // ブックマーク
       supabase.from('bookmarks')
         .select('id, created_at, professional_id, professionals(id, name, title, photo_url, prefecture, area_description)')
@@ -232,6 +232,7 @@ export async function GET() {
       proCardMode: proCheck.data?.card_mode || 'pro',
       proDeactivated: isDeactivatedPro,
       nickname: clientData.data?.nickname || '',
+      clientLastName: clientData.data?.last_name || '',
       clientFirstName: clientData.data?.first_name || '',
       email,
       isLine,
