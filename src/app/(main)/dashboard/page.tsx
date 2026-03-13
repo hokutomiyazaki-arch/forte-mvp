@@ -79,7 +79,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
 
   const [form, setForm] = useState({
-    name: '', title: '', prefecture: '', area_description: '',
+    name: '', last_name: '', first_name: '', store_name: '',
+    title: '', prefecture: '', area_description: '',
     is_online_available: false,
     bio: '', booking_url: '', photo_url: '', contact_email: '',
   })
@@ -196,7 +197,11 @@ export default function DashboardPage() {
 
         setPro(proData)
         setForm({
-          name: proData.name || '', title: proData.title || '',
+          name: proData.name || '',
+          last_name: proData.last_name || '',
+          first_name: proData.first_name || '',
+          store_name: proData.store_name || '',
+          title: proData.title || '',
           prefecture: proData.prefecture || '',
           area_description: proData.area_description || '',
           is_online_available: proData.is_online_available || false,
@@ -309,13 +314,23 @@ export default function DashboardPage() {
     if (!user) { setSaving(false); return }
 
     const urlPattern = /https?:\/\/|www\./i
-    if (form.name.length > 20) {
-      setFormError('名前は20文字以内で入力してください')
+    if (!form.last_name.trim() || !form.first_name.trim()) {
+      setFormError('姓と名を入力してください')
       setSaving(false)
       return
     }
-    if (urlPattern.test(form.name)) {
+    if (form.last_name.trim().length > 20 || form.first_name.trim().length > 20) {
+      setFormError('姓名は各20文字以内で入力してください')
+      setSaving(false)
+      return
+    }
+    if (urlPattern.test(form.last_name) || urlPattern.test(form.first_name)) {
       setFormError('名前にURLを含めることはできません')
+      setSaving(false)
+      return
+    }
+    if (form.store_name.trim().length > 50) {
+      setFormError('店舗名は50文字以内で入力してください')
       setSaving(false)
       return
     }
@@ -331,7 +346,12 @@ export default function DashboardPage() {
     const validPersonalityFortes = customPersonalityFortes.filter(f => f.label.trim())
 
     const record: any = {
-      user_id: user.id, name: form.name, title: form.title,
+      user_id: user.id,
+      last_name: form.last_name.trim(),
+      first_name: form.first_name.trim(),
+      store_name: form.store_name.trim() || null,
+      name: `${form.last_name.trim()} ${form.first_name.trim()}`,
+      title: form.title,
       prefecture: form.prefecture || null,
       area_description: form.area_description || null,
       is_online_available: form.is_online_available,
@@ -873,9 +893,24 @@ export default function DashboardPage() {
             </div>
           )}
 
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">姓 *（20文字以内）</label>
+              <input required maxLength={20} value={form.last_name} onChange={e => setForm({...form, last_name: e.target.value})}
+                placeholder="山田"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">名 *（20文字以内）</label>
+              <input required maxLength={20} value={form.first_name} onChange={e => setForm({...form, first_name: e.target.value})}
+                placeholder="太郎"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none" />
+            </div>
+          </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">名前 *（20文字以内）</label>
-            <input required maxLength={20} value={form.name} onChange={e => setForm({...form, name: e.target.value})}
+            <label className="block text-sm font-medium text-gray-700 mb-1">店舗名・所属（50文字以内）</label>
+            <input maxLength={50} value={form.store_name} onChange={e => setForm({...form, store_name: e.target.value})}
+              placeholder="〇〇整体院 / フリーランス"
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none" />
           </div>
           <div>
