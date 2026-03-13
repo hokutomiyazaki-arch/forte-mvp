@@ -61,10 +61,18 @@ export async function GET(
         .eq('organization_id', orgId)
         .order('sort_order', { ascending: true })
 
+      // credential_level_id別にorg_membersをグループ化（nullは除外）
+      const membersByLevelId = new Map<string, any[]>()
+      for (const m of allOrgMembers) {
+        if (m.credential_level_id) {
+          const arr = membersByLevelId.get(m.credential_level_id) || []
+          arr.push(m)
+          membersByLevelId.set(m.credential_level_id, arr)
+        }
+      }
+
       levelAggregates = (levels || []).map((cl: any) => {
-        const membersInLevel = allOrgMembers.filter(
-          (m: any) => m.credential_level_id === cl.id
-        )
+        const membersInLevel = membersByLevelId.get(cl.id) || []
         const memberDetails = membersInLevel.map((m: any) => ({
           professional_id: m.professional_id,
           name: m.professionals?.name || '',
