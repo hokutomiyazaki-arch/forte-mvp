@@ -36,9 +36,9 @@ export default function Navbar() {
           <>
             <SignedIn>
               {isPro && (
-                <a href="/dashboard" style={{ color: '#fff', textDecoration: 'none' }}>プロページ</a>
+                <a href="/dashboard" style={{ color: '#fff', textDecoration: 'none' }}>プロメニュー</a>
               )}
-              <a href="/mycard" style={{ color: '#fff', textDecoration: 'none' }}>一般ページ</a>
+              <a href="/mycard" style={{ color: '#fff', textDecoration: 'none' }}>一般メニュー</a>
               <UserButton
                 appearance={{
                   elements: {
@@ -94,10 +94,10 @@ export default function Navbar() {
           <SignedIn>
             {isPro && (
               <a href="/dashboard" style={{ color: '#fff', textDecoration: 'none' }}
-                onClick={() => setMenuOpen(false)}>プロページ</a>
+                onClick={() => setMenuOpen(false)}>プロメニュー</a>
             )}
             <a href="/mycard" style={{ color: '#fff', textDecoration: 'none' }}
-              onClick={() => setMenuOpen(false)}>一般ページ</a>
+              onClick={() => setMenuOpen(false)}>一般メニュー</a>
             <UserButton
               appearance={{
                 elements: {
