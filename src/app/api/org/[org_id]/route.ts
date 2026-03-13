@@ -88,18 +88,32 @@ export async function GET(
         .eq('organization_id', orgId)
         .order('sort_order', { ascending: true })
 
-      // credential_level_id別にorg_membersをグループ化（nullは除外）
-      const membersByLevelId = new Map<string, any[]>()
-      for (const m of allOrgMembers) {
-        if (m.credential_level_id) {
-          const arr = membersByLevelId.get(m.credential_level_id) || []
-          arr.push(m)
-          membersByLevelId.set(m.credential_level_id, arr)
+      // 各credential_levelごとにorg_membersから直接取得（VIEWキャッシュ回避）
+      const levelIds = (levels || []).map((cl: any) => cl.id)
+      const { data: levelMembersRaw } = await supabase
+        .from('org_members')
+        .select('professional_id, credential_level_id, professionals(id, name, photo_url)')
+        .eq('organization_id', orgId)
+        .eq('status', 'active')
+        .not('credential_level_id', 'is', null)
+        .in('credential_level_id', levelIds)
+
+      // credential_level_id別にグループ化 + professional_id重複排除
+      const membersByLevelId = new Map<string, Map<string, any>>()
+      for (const m of levelMembersRaw || []) {
+        if (!m.credential_level_id || !m.professional_id) continue
+        if (!membersByLevelId.has(m.credential_level_id)) {
+          membersByLevelId.set(m.credential_level_id, new Map())
+        }
+        const levelMap = membersByLevelId.get(m.credential_level_id)!
+        if (!levelMap.has(m.professional_id)) {
+          levelMap.set(m.professional_id, m)
         }
       }
 
       levelAggregates = (levels || []).map((cl: any) => {
-        const membersInLevel = membersByLevelId.get(cl.id) || []
+        const levelMap = membersByLevelId.get(cl.id)
+        const membersInLevel = levelMap ? Array.from(levelMap.values()) : []
         const memberDetails = membersInLevel.map((m: any) => ({
           professional_id: m.professional_id,
           name: m.professionals?.name || '',
