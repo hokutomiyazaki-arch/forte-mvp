@@ -132,7 +132,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <html lang="ja" className={`${inter.variable} ${notoSansJP.variable}`}>
         <head>
+          <link rel="manifest" href="/manifest.json" />
           <meta name="theme-color" content="#1A1A2E" />
+          <meta name="apple-mobile-web-app-capable" content="yes" />
+          <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+          <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         </head>
         <body className="min-h-screen">
           {children}

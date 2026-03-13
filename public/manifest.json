@@ -2,7 +2,7 @@
   "name": "REALPROOF",
   "short_name": "REALPROOF",
   "description": "クライアントの信頼が資産に変わるデジタル名刺",
-  "start_url": "/mycard",
+  "start_url": "/auth-redirect",
   "display": "standalone",
   "theme_color": "#1A1A2E",
   "background_color": "#FAFAF7",
