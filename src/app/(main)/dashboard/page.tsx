@@ -391,6 +391,22 @@ export default function DashboardPage() {
 
     // パスワードはClerkで管理するため、ここでは何もしない
 
+    // === clients テーブルへの同期（プロ側をマスターとする） ===
+    const syncData: Record<string, any> = {
+      last_name: form.last_name.trim(),
+      first_name: form.first_name.trim(),
+      nickname: `${form.last_name.trim()} ${form.first_name.trim()}`,
+    }
+    if (form.photo_url) {
+      syncData.photo_url = form.photo_url
+    }
+    db.update('clients', syncData, { user_id: user.id })
+      .then(({ error: syncError }) => {
+        if (syncError) {
+          console.error('Client sync error (non-fatal):', syncError.message)
+        }
+      })
+
     setSaving(false)
     setEditing(false)
   }
