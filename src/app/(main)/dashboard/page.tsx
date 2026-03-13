@@ -2,8 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useUser, useClerk } from '@clerk/nextjs'
 import { db, uploadFile } from '@/lib/db'
-import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYPES, getRewardType, getRewardLabel, FNT_NEURO_APPS } from '@/lib/types'
-import RewardContent from '@/components/RewardContent'
+import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYPES, getRewardType, FNT_NEURO_APPS } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import ForteChart from '@/components/ForteChart'
 import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, PROVEN_GOLD, PROVEN_GRADIENT } from '@/lib/constants'
@@ -11,7 +10,6 @@ import VoiceShareModal from '@/components/VoiceShareCard'
 import CertificationModal from '@/components/CertificationModal'
 import ImageCropper from '@/components/ImageCropper'
 import CardModeSwitch from '@/components/CardModeSwitch'
-import MyProofTab from '@/components/MyProofTab'
 import InstallPrompt from '@/components/InstallPrompt'
 import { PREFECTURES } from '@/lib/prefectures'
 
@@ -108,16 +106,12 @@ export default function DashboardPage() {
   const [selectedProofIds, setSelectedProofIds] = useState<Set<string>>(new Set())
   const [customProofs, setCustomProofs] = useState<CustomProof[]>([])
   const [activeTab, setActiveTab] = useState('basic')
-  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'received_rewards' | 'voices' | 'myproof' | 'card' | 'org' | 'bookmarks'>('profile')
-  const [receivedRewards, setReceivedRewards] = useState<{ id: string; reward_id: string; reward_type: string; title: string; content: string; status: string; professional_id: string; pro_name: string; created_at: string }[]>([])
-  const [bookmarkedPros, setBookmarkedPros] = useState<any[]>([])
+  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'card' | 'org'>('profile')
   // userRole removed: /api/dashboard の role レスポンスで判定
   const [proofSaving, setProofSaving] = useState(false)
   const [proofSaved, setProofSaved] = useState(false)
   const [proofError, setProofError] = useState('')
   const [customProofVoteCounts, setCustomProofVoteCounts] = useState<Map<string, number>>(new Map())
-  const [myProofQrToken, setMyProofQrToken] = useState<string | null>(null)
-  const [showMyProofQR, setShowMyProofQR] = useState(false)
   const [showKakegoe, setShowKakegoe] = useState(false)
 
   // Voices用 state
@@ -239,7 +233,7 @@ export default function DashboardPage() {
 
         setTotalVotes(data.totalVotes || 0)
         setBookmarkCount(data.bookmarkCount || 0)
-        if (data.bookmarks) setBookmarkedPros(data.bookmarks)
+        // bookmarks removed (now in /mycard only)
 
         // プルーフ選択状態を復元
         if (data.proofItems) {
@@ -265,9 +259,9 @@ export default function DashboardPage() {
         if (data.activeOrgs) setActiveOrgs(data.activeOrgs)
         if (data.credentialBadges) setCredentialBadges(data.credentialBadges)
         if (data.ownedOrg) setOwnedOrg(data.ownedOrg)
-        if (data.myProofQrToken) setMyProofQrToken(data.myProofQrToken)
+        // myProofQrToken removed (now in /mycard only)
         if (data.certApplications) setCertApplications(data.certApplications)
-        if (data.receivedRewards) setReceivedRewards(data.receivedRewards)
+        // receivedRewards removed (now in /mycard only)
       } catch (err) {
         console.error('[dashboard] load error:', err)
       }
@@ -1080,92 +1074,53 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* QRコード（タブの上に配置） — タブに応じて切替 */}
+      {/* QRコード（タブの上に配置） */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-6 text-center">
-        {dashboardTab === 'myproof' ? (
-          <>
-            <h2 className="text-base font-bold text-[#1A1A2E] mb-1">マイプルーフ QRコード</h2>
-            <p className="text-xs text-gray-500 mb-4">
-              スキャンするとあなたのマイプルーフページが開きます（期限なし）
-            </p>
-            {myProofQrToken ? (
-              <>
-                {showMyProofQR ? (
-                  <>
-                    <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(`${window.location.origin}/myproof/p/${myProofQrToken}`)}`}
-                      alt="マイプルーフ QR"
-                      className="mx-auto mb-4"
-                    />
-                    <button
-                      onClick={() => setShowMyProofQR(false)}
-                      className="text-sm text-gray-400 hover:text-gray-600 mb-3"
-                    >
-                      &#10005; 閉じる
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    onClick={() => setShowMyProofQR(true)}
-                    className="bg-[#1A1A2E] text-white rounded-lg px-6 py-3 text-sm font-semibold mb-3"
-                  >
-                    QRコードを表示する
-                  </button>
-                )}
-              </>
-            ) : (
-              <p className="text-sm text-gray-400">マイプルーフタブでアイテムを追加するとQRコードが生成されます</p>
-            )}
-          </>
-        ) : (
-          <>
-            <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">24時間限定 プルーフ用QRコード</h2>
-            {(() => {
-              const proofsReady = selectedProofIds.size === 9
+        <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">24時間限定 プルーフ用QRコード</h2>
+        {(() => {
+          const proofsReady = selectedProofIds.size === 9
 
-              if (!proofsReady) {
-                return (
-                  <div className="py-4">
-                    <p className="text-sm text-[#9CA3AF] mb-3">
-                      QRコードを発行するには、強み設定を完了してください：
-                    </p>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-center gap-2 text-sm">
-                        <span className="text-red-400">✗</span>
-                        <span className="text-[#1A1A2E]">強み設定（{selectedProofIds.size} / 9 選択中）</span>
-                      </div>
-                    </div>
+          if (!proofsReady) {
+            return (
+              <div className="py-4">
+                <p className="text-sm text-[#9CA3AF] mb-3">
+                  QRコードを発行するには、強み設定を完了してください：
+                </p>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-center gap-2 text-sm">
+                    <span className="text-red-400">✗</span>
+                    <span className="text-[#1A1A2E]">強み設定（{selectedProofIds.size} / 9 選択中）</span>
                   </div>
-                )
-              }
+                </div>
+              </div>
+            )
+          }
 
-              return (
+          return (
+            <>
+              <p className="text-sm text-gray-500 mb-4">クライアントに見せてプルーフを贈ってもらいましょう</p>
+              {qrUrl ? (
                 <>
-                  <p className="text-sm text-gray-500 mb-4">クライアントに見せてプルーフを贈ってもらいましょう</p>
-                  {qrUrl ? (
-                    <>
-                      <img src={qrUrl} alt="QR Code" className="mx-auto mb-4" />
-                      <button
-                        onClick={async () => {
-                          await generateQR()
-                          setQrRefreshed(true)
-                          setTimeout(() => setQrRefreshed(false), 2000)
-                        }}
-                        className="text-sm text-[#9CA3AF] hover:text-[#C4A35A] transition-colors"
-                      >
-                        {qrRefreshed ? '更新しました ✓' : 'QRコードを更新する'}
-                      </button>
-                    </>
-                  ) : (
-                    <button onClick={generateQR} className="px-6 py-3 bg-[#C4A35A] text-white rounded-lg hover:bg-[#b3944f] transition">
-                      24時間限定QRコードを発行する
-                    </button>
-                  )}
+                  <img src={qrUrl} alt="QR Code" className="mx-auto mb-4" />
+                  <button
+                    onClick={async () => {
+                      await generateQR()
+                      setQrRefreshed(true)
+                      setTimeout(() => setQrRefreshed(false), 2000)
+                    }}
+                    className="text-sm text-[#9CA3AF] hover:text-[#C4A35A] transition-colors"
+                  >
+                    {qrRefreshed ? '更新しました ✓' : 'QRコードを更新する'}
+                  </button>
                 </>
-              )
-            })()}
-          </>
-        )}
+              ) : (
+                <button onClick={generateQR} className="px-6 py-3 bg-[#C4A35A] text-white rounded-lg hover:bg-[#b3944f] transition">
+                  24時間限定QRコードを発行する
+                </button>
+              )}
+            </>
+          )
+        })()}
       </div>
 
       {/* 声がけテンプレート */}
@@ -1215,10 +1170,7 @@ export default function DashboardPage() {
           { key: 'proofs' as const, label: '強み設定' },
           { key: 'rewards' as const, label: 'リワード設定' },
           { key: 'voices' as const, label: 'Voices' },
-          { key: 'myproof' as const, label: 'マイプルーフ' },
           { key: 'card' as const, label: 'カード管理' },
-          { key: 'received_rewards' as const, label: 'リワード' },
-          { key: 'bookmarks' as const, label: '気になる' },
           ...(ownedOrg ? [{ key: 'org' as const, label: '🏢 団体管理' }] : []),
         ]).map(tab => (
           <button
@@ -1662,24 +1614,6 @@ export default function DashboardPage() {
       </div>
 
       </>)}
-
-      {/* ═══ Tab: マイプルーフ ═══ */}
-      {dashboardTab === 'myproof' && (
-        <>
-          {myProofQrToken && (
-            <a
-              href={`/myproof/p/${myProofQrToken}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block w-full text-center py-3 mb-4 bg-white rounded-xl shadow-sm text-sm font-medium hover:bg-gray-50 transition"
-              style={{ color: '#C4A35A' }}
-            >
-              マイプルーフカードを確認する &#8594;
-            </a>
-          )}
-          <MyProofTab />
-        </>
-      )}
 
       {/* ═══ Tab: カード管理 ═══ */}
       {dashboardTab === 'card' && (<>
@@ -2206,85 +2140,6 @@ export default function DashboardPage() {
 
       </>)}
 
-      {/* ═══ Tab: リワード ═══ */}
-      {dashboardTab === 'received_rewards' && (<>
-      <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
-        <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">リワード</h2>
-        <p className="text-sm text-[#9CA3AF] mb-4">
-          他のプロに投票して受け取ったリワードの一覧です。
-        </p>
-
-        {receivedRewards.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="text-4xl mb-4">🎁</div>
-            <p className="text-gray-400 text-sm">まだリワードを受け取っていません。</p>
-            <p className="text-xs text-gray-300 mt-2">プロに投票してリワードを受け取りましょう！</p>
-            <a
-              href="/search"
-              className="inline-block mt-4 px-5 py-2 text-sm font-medium text-[#C4A35A] border border-[#C4A35A] rounded-lg hover:bg-[#C4A35A]/5 transition"
-            >
-              プロを探す →
-            </a>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {receivedRewards.filter(r => r.status === 'active').length > 0 && (
-              <div className="space-y-3">
-                {receivedRewards.filter(r => r.status === 'active').map(reward => (
-                  <div key={reward.id} className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-                    <div className="p-5">
-                      <div className="text-xs text-[#C4A35A] font-medium mb-1">
-                        {reward.title || getRewardLabel(reward.reward_type)}
-                      </div>
-                      <RewardContent content={reward.content} className="text-lg font-bold text-[#1A1A2E] mb-3" />
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm text-gray-500">{reward.pro_name}さんから</p>
-                          {reward.professional_id && (
-                            <a href={`/card/${reward.professional_id}`} className="text-xs text-[#C4A35A] hover:underline">
-                              カードを見る →
-                            </a>
-                          )}
-                        </div>
-                        {reward.created_at && (
-                          <span className="text-xs text-gray-400">
-                            {new Date(reward.created_at).toLocaleDateString('ja-JP')}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {receivedRewards.filter(r => r.status === 'used').length > 0 && (
-              <div className="mt-6">
-                <p className="text-xs text-gray-400 mb-2 font-medium">使用済み</p>
-                <div className="space-y-2">
-                  {receivedRewards.filter(r => r.status === 'used').map(reward => (
-                    <div key={reward.id} className="bg-gray-50 text-gray-400 rounded-xl overflow-hidden">
-                      <div className="p-4">
-                        <div className="text-xs font-medium mb-1">
-                          {reward.title || getRewardLabel(reward.reward_type)}
-                        </div>
-                        <RewardContent content={reward.content} className="text-sm" strikethrough />
-                        <div className="flex items-center justify-between mt-2">
-                          <p className="text-xs text-gray-300">{reward.pro_name}さんから</p>
-                          <span className="text-xs px-2 py-0.5 bg-gray-200 text-gray-500 rounded-full">
-                            {reward.reward_type === 'coupon' ? '使用済み' : '削除済み'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-      </>)}
-
       {/* ═══ Tab: Voices ═══ */}
       {dashboardTab === 'voices' && (<>
 
@@ -2420,119 +2275,6 @@ export default function DashboardPage() {
       )}
 
       </>)}
-
-      {/* ═══ Tab: 気になる ═══ */}
-      {dashboardTab === 'bookmarks' && (
-        <div>
-          {bookmarkedPros.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '60px 20px', color: '#999' }}>
-              <div style={{ fontSize: 40, marginBottom: 16 }}>♡</div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: '#666', marginBottom: 8 }}>
-                まだ気になるプロがいません
-              </div>
-              <div style={{ fontSize: 13, color: '#999', lineHeight: 1.8 }}>
-                プロのページで「♡ 気になる」を押すと<br />
-                ここに追加されます
-              </div>
-              <a href="/search" style={{
-                display: 'inline-block',
-                marginTop: 24,
-                padding: '12px 32px',
-                background: '#C4A35A',
-                color: '#fff',
-                fontWeight: 700,
-                fontSize: 14,
-                textDecoration: 'none',
-                borderRadius: 8,
-              }}>
-                プロを探す →
-              </a>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {bookmarkedPros.map(bookmark => {
-                const bPro = bookmark.professionals
-                if (!bPro) return null
-                return (
-                  <a
-                    key={bookmark.id}
-                    href={`/card/${bPro.id}`}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 16,
-                      padding: 16,
-                      background: '#FAFAF7',
-                      border: '1px solid #E8E4DC',
-                      borderRadius: 14,
-                      textDecoration: 'none',
-                      transition: 'border-color 0.2s',
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.borderColor = '#C4A35A'}
-                    onMouseLeave={e => e.currentTarget.style.borderColor = '#E8E4DC'}
-                  >
-                    {bPro.photo_url ? (
-                      <img src={bPro.photo_url} alt={bPro.name} loading="lazy"
-                        style={{ width: 52, height: 52, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-                    ) : (
-                      <div style={{
-                        width: 52, height: 52, borderRadius: '50%',
-                        background: '#1A1A2E', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: '#fff', fontSize: 20, fontWeight: 'bold', flexShrink: 0,
-                      }}>
-                        {bPro.name?.charAt(0) || '?'}
-                      </div>
-                    )}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E' }}>{bPro.name}</div>
-                      {bPro.title && (
-                        <div style={{ fontSize: 12, color: '#C4A35A', fontWeight: 600, marginTop: 2 }}>{bPro.title}</div>
-                      )}
-                      {(bPro.prefecture || bPro.area_description) && (
-                        <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>
-                          {bPro.prefecture}{bPro.area_description ? ` · ${bPro.area_description}` : ''}
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      onClick={async (e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        try {
-                          const res = await fetch('/api/db', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              action: 'delete',
-                              table: 'bookmarks',
-                              query: { eq: { id: bookmark.id } }
-                            })
-                          })
-                          const result = await res.json()
-                          if (result.error) {
-                            console.error('Bookmark delete error:', result.error)
-                            return
-                          }
-                          setBookmarkedPros(prev => prev.filter(b => b.id !== bookmark.id))
-                        } catch (err) {
-                          console.error('Bookmark remove error:', err)
-                        }
-                      }}
-                      style={{
-                        background: 'none', border: 'none', cursor: 'pointer',
-                        fontSize: 18, color: '#C4A35A', padding: 8, flexShrink: 0,
-                      }}
-                      title="ブックマーク解除"
-                    >
-                      ♥
-                    </button>
-                  </a>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* ═══ Tab: 団体管理 ═══ */}
       {dashboardTab === 'org' && ownedOrg && (<>
