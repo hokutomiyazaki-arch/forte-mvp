@@ -67,15 +67,25 @@ export async function GET(
       votes_last_30_days: recentVotes,
     }
 
-    // 重複排除（同一プロが複数バッジを持つ場合）+ 投票数マージ
+    // 重複排除（同一プロが複数バッジを持つ場合）+ 投票数を直接votesテーブルから取得
     const uniqueMembers = Array.from(
       new Map(allOrgMembers.map((m: any) => [m.professional_id, m])).values()
     )
-    const { data: proofSummary } = await supabase
-      .from('org_proof_summary')
-      .select('professional_id, total_votes')
-      .eq('organization_id', orgId)
-    const votesMap = new Map((proofSummary || []).map((s: any) => [s.professional_id, Number(s.total_votes) || 0]))
+
+    // org_proof_summary VIEWの代わりにvotesテーブルから直接集計（Vercelキャッシュ問題回避）
+    let votesMap = new Map<string, number>()
+    if (professionalIds.length > 0) {
+      const { data: votesPerPro } = await supabase
+        .from('votes')
+        .select('professional_id')
+        .in('professional_id', professionalIds)
+      const countMap: Record<string, number> = {}
+      for (const v of votesPerPro || []) {
+        countMap[v.professional_id] = (countMap[v.professional_id] || 0) + 1
+      }
+      votesMap = new Map(Object.entries(countMap))
+    }
+
     const members = uniqueMembers
       .map((m: any) => ({ ...m, total_votes: votesMap.get(m.professional_id) || 0 }))
       .sort((a: any, b: any) => b.total_votes - a.total_votes)
@@ -155,19 +165,16 @@ export async function GET(
       }))
     }
 
-    // プルーフ別トップメンバー集計
-    const memberProIds = uniqueMembers
-      .map((m: any) => m.professional_id)
-      .filter(Boolean)
+    // プルーフ別トップメンバー集計（professionalIdsを直接使用、org_members JOINを排除）
     let proofTopMembers: any[] = []
     let topStrengthItems: { label: string; count: number }[] = []
 
-    if (memberProIds.length > 0) {
-      // メンバーの投票でselected_proof_idsがある投票を取得
+    if (professionalIds.length > 0) {
+      // メンバーの投票でselected_proof_idsがある投票を取得（professionalIdsから直接）
       const { data: votesWithProofs } = await supabase
         .from('votes')
         .select('professional_id, selected_proof_ids')
-        .in('professional_id', memberProIds)
+        .in('professional_id', professionalIds)
         .not('selected_proof_ids', 'is', null)
 
       if (votesWithProofs && votesWithProofs.length > 0) {
@@ -194,13 +201,17 @@ export async function GET(
 
           const labelMap = new Map((proofItems || []).map((p: any) => [p.id, p.label]))
 
-          // プロ情報マップ
-          const proMap = new Map(
-            uniqueMembers.map((m: any) => [
-              m.professional_id,
-              { name: m.professionals?.name || '', photo_url: m.professionals?.photo_url || null },
-            ])
-          )
+          // プロ情報マップ（allOrgMembersから構築、professionalIds全員をカバー）
+          const proMap = new Map<string, { name: string; photo_url: string | null }>()
+          for (const m of allOrgMembers) {
+            if (m.professional_id && !proMap.has(m.professional_id)) {
+              const pro = m.professionals as any
+              proMap.set(m.professional_id, {
+                name: pro?.name || '',
+                photo_url: pro?.photo_url || null,
+              })
+            }
+          }
 
           // 各proof_itemでトップのprofessionalを特定
           const rankings = proofItemIds
