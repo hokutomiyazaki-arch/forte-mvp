@@ -25,7 +25,7 @@ export async function GET(
 
     const { data: orgMembersData } = await supabase
       .from('org_members')
-      .select('id, professional_id, credential_level_id, status, professionals(id, name, photo_url)')
+      .select('id, professional_id, credential_level_id, status, professionals(id, name, photo_url, title)')
       .eq('organization_id', orgId)
       .eq('status', 'active')
 

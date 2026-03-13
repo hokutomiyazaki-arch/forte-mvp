@@ -267,38 +267,17 @@ export default function OrgPublicPage() {
         </div>
       )}
 
-      {/* メンバー一覧 */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6">
-        <h2 className="text-sm font-bold text-[#1A1A2E] mb-4">{L.members}</h2>
-
-        {members.length === 0 ? (
-          <p className="text-gray-400 text-sm text-center py-4">{L.empty}</p>
-        ) : (
-          <div className="space-y-3">
-            {members.map((m: any) => (
-              <a
-                key={m.professional_id}
-                href={`/card/${m.professional_id}`}
-                className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition"
-              >
-                {m.professionals?.photo_url ? (
-                  <img src={m.professionals.photo_url} alt="" className="w-10 h-10 rounded-full object-cover" />
-                ) : (
-                  <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-sm text-gray-400">
-                    {m.professionals?.name?.charAt(0) || '?'}
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-[#1A1A2E] truncate">
-                    {m.professionals?.name || ''}
-                  </div>
-                </div>
-                <span className="text-gray-300 text-sm">→</span>
-              </a>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* メンバー一覧リンク */}
+      {members.length > 0 && (
+        <div className="mb-6">
+          <a
+            href={`/org/${orgId}/members`}
+            className="block bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:border-[#C4A35A] transition text-center"
+          >
+            <span className="text-sm font-medium text-[#C4A35A]">{L.members}一覧を見る →</span>
+          </a>
+        </div>
+      )}
 
       {/* リンク */}
       <div className="flex gap-3">
