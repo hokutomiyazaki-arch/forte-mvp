@@ -35,14 +35,25 @@ export async function POST() {
     return NextResponse.json({ success: true, action: 'reactivated' })
   }
 
-  // 新規作成
+  // 新規作成 — clientsからlast_name/first_nameを取得してコピー
   const user = await currentUser()
   const clerkImageUrl = user?.imageUrl || null
-  const displayName = user?.firstName || user?.username || ''
+
+  const { data: clientData } = await supabase
+    .from('clients')
+    .select('last_name, first_name')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  const lastName = clientData?.last_name || ''
+  const firstName = clientData?.first_name || ''
+  const fullName = lastName && firstName ? `${lastName} ${firstName}` : (user?.firstName || user?.username || '')
 
   const { data: newPro } = await supabase.from('professionals').insert({
     user_id: userId,
-    name: displayName || '', // name は NOT NULL
+    name: fullName, // name は NOT NULL
+    last_name: lastName || null,
+    first_name: firstName || null,
     title: '', // title は NOT NULL、ダッシュボードで後から設定
     photo_url: clerkImageUrl,
   }).select('id').maybeSingle()
