@@ -68,6 +68,8 @@ export default function OrgDashboardPage() {
   const [resourceForm, setResourceForm] = useState({ title: '', url: '', description: '', credential_level_id: '' })
   const [resourceSaving, setResourceSaving] = useState(false)
   const [resourceBadges, setResourceBadges] = useState<{ id: string; name: string }[]>([])
+  const [ownerAccordionOpen, setOwnerAccordionOpen] = useState<Record<string, boolean>>({})
+  const [sortingResourceId, setSortingResourceId] = useState<string | null>(null)
   const [editingOrg, setEditingOrg] = useState(false)
   const [editOrgName, setEditOrgName] = useState('')
   const [editOrgDescription, setEditOrgDescription] = useState('')
@@ -297,6 +299,16 @@ export default function OrgDashboardPage() {
       if (resRes.ok) {
         const data = await resRes.json()
         setResources(data)
+        // アコーディオン初期化（既存の開閉状態を保持、新しいキーはデフォルト開く）
+        setOwnerAccordionOpen(prev => {
+          const openState: Record<string, boolean> = { ...prev }
+          const keys = new Set<string>()
+          for (const r of data) {
+            keys.add(r.credential_level_id || '__all__')
+          }
+          keys.forEach(k => { if (openState[k] === undefined) openState[k] = true })
+          return openState
+        })
       }
       if (badgeRes.ok) {
         const badgeData = await badgeRes.json()
@@ -403,6 +415,80 @@ export default function OrgDashboardPage() {
       }
     } catch (err) {
       console.error('Delete error:', err)
+    }
+  }
+
+  // オーナー用: リソースをバッジ別グループに変換（sort_order順）
+  function getOwnerResourceGroups() {
+    const grouped = new Map<string, any[]>()
+    for (const r of resources) {
+      const key = r.credential_level_id || '__all__'
+      if (!grouped.has(key)) grouped.set(key, [])
+      grouped.get(key)!.push(r)
+    }
+    // 各グループ内をsort_order順にソート
+    grouped.forEach(arr => {
+      arr.sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+    })
+    const groups: { key: string; badgeName: string; resources: any[] }[] = []
+    // 「全メンバー向け」を先頭
+    if (grouped.has('__all__')) {
+      groups.push({ key: '__all__', badgeName: '全メンバー向け', resources: grouped.get('__all__')! })
+    }
+    grouped.forEach((res, key) => {
+      if (key !== '__all__') {
+        const badgeName = res[0]?.credential_level_name || 'バッジ'
+        groups.push({ key, badgeName: `${badgeName} 専用`, resources: res })
+      }
+    })
+    return groups
+  }
+
+  // リソース並び替え（同グループ内のみ）
+  async function moveResource(resourceId: string, direction: 'up' | 'down', groupResources: any[]) {
+    if (!org || sortingResourceId) return
+    const idx = groupResources.findIndex((r: any) => r.id === resourceId)
+    if (idx < 0) return
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+    if (swapIdx < 0 || swapIdx >= groupResources.length) return
+
+    const current = groupResources[idx]
+    const swap = groupResources[swapIdx]
+
+    // ローカルstateを即座に更新
+    setResources(prev => prev.map(r => {
+      if (r.id === current.id) return { ...r, sort_order: swap.sort_order }
+      if (r.id === swap.id) return { ...r, sort_order: current.sort_order }
+      return r
+    }))
+
+    // APIでsort_orderを更新（バックグラウンド）
+    setSortingResourceId(resourceId)
+    try {
+      const [res1, res2] = await Promise.all([
+        fetch(`/api/organizations/${org.id}/resources/${current.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sort_order: swap.sort_order }),
+        }),
+        fetch(`/api/organizations/${org.id}/resources/${swap.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sort_order: current.sort_order }),
+        }),
+      ])
+      if (!res1.ok || !res2.ok) {
+        console.error('Sort order update failed')
+        // 失敗時はリロード
+        setResourcesLoaded(false)
+        loadResources()
+      }
+    } catch (err) {
+      console.error('Sort error:', err)
+      setResourcesLoaded(false)
+      loadResources()
+    } finally {
+      setSortingResourceId(null)
     }
   }
 
@@ -646,45 +732,125 @@ export default function OrgDashboardPage() {
                 <p className="text-gray-300 text-xs">上のボタンから資料を追加しましょう</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {resources.map((r: any) => (
-                  <div key={r.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <h3 className="text-sm font-semibold text-[#1A1A2E] flex-1">{r.title}</h3>
-                      <div className="flex gap-2 flex-shrink-0">
-                        <button
-                          onClick={() => openResourceModal(r)}
-                          className="text-xs text-gray-400 border border-gray-200 rounded-md px-2 py-0.5 hover:border-[#C4A35A] hover:text-[#C4A35A] transition"
-                        >
-                          編集
-                        </button>
-                        <button
-                          onClick={() => handleResourceDelete(r)}
-                          className="text-xs text-gray-400 border border-gray-200 rounded-md px-2 py-0.5 hover:border-red-400 hover:text-red-400 transition"
-                        >
-                          削除
-                        </button>
-                      </div>
-                    </div>
-                    <p className="text-xs text-gray-400 truncate mb-1">{r.url}</p>
-                    {r.description && (
-                      <p className="text-xs text-gray-500 mb-2 line-clamp-2">{r.description}</p>
-                    )}
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-gray-400">
-                        対象: {r.credential_level_name || '全メンバー'}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {getOwnerResourceGroups().map(group => (
+                  <div key={group.key}>
+                    {/* アコーディオンヘッダー */}
+                    <button
+                      onClick={() => setOwnerAccordionOpen(prev => ({ ...prev, [group.key]: !prev[group.key] }))}
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '10px 14px', background: '#F3F4F6', borderRadius: 10,
+                        border: 'none', cursor: 'pointer', marginBottom: ownerAccordionOpen[group.key] ? 8 : 0,
+                      }}
+                    >
+                      <span style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>
+                        <span style={{ color: '#6B7280', marginRight: 6 }}>{ownerAccordionOpen[group.key] ? '▼' : '▶'}</span>
+                        {group.badgeName}
                       </span>
-                      <button
-                        onClick={() => handleResourceToggle(r)}
-                        className={`text-xs px-3 py-1 rounded-full border transition ${
-                          r.is_active
-                            ? 'bg-green-50 text-green-600 border-green-200'
-                            : 'bg-gray-50 text-gray-400 border-gray-200'
-                        }`}
-                      >
-                        {r.is_active ? '● 公開中' : '○ 非公開'}
-                      </button>
-                    </div>
+                      <span style={{ fontSize: 13, color: '#9CA3AF' }}>({group.resources.length}件)</span>
+                    </button>
+                    {/* アコーディオンコンテンツ */}
+                    {ownerAccordionOpen[group.key] && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {group.resources.map((r: any, rIdx: number) => (
+                          <div key={r.id} style={{
+                            display: 'flex', gap: 8, alignItems: 'flex-start',
+                          }}>
+                            {/* ↑↓ 並び替えボタン */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0, paddingTop: 12 }}>
+                              <button
+                                onClick={() => moveResource(r.id, 'up', group.resources)}
+                                disabled={rIdx === 0 || sortingResourceId === r.id}
+                                style={{
+                                  width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 6,
+                                  cursor: rIdx === 0 ? 'not-allowed' : 'pointer',
+                                  color: rIdx === 0 ? '#D1D5DB' : '#6B7280',
+                                  fontSize: 14, fontWeight: 700,
+                                  transition: 'color 0.2s, border-color 0.2s',
+                                }}
+                                onMouseEnter={e => { if (rIdx !== 0) { e.currentTarget.style.color = '#1A1A2E'; e.currentTarget.style.borderColor = '#1A1A2E' } }}
+                                onMouseLeave={e => { if (rIdx !== 0) { e.currentTarget.style.color = '#6B7280'; e.currentTarget.style.borderColor = '#E5E7EB' } }}
+                                title="上へ移動"
+                              >
+                                ↑
+                              </button>
+                              <button
+                                onClick={() => moveResource(r.id, 'down', group.resources)}
+                                disabled={rIdx === group.resources.length - 1 || sortingResourceId === r.id}
+                                style={{
+                                  width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 6,
+                                  cursor: rIdx === group.resources.length - 1 ? 'not-allowed' : 'pointer',
+                                  color: rIdx === group.resources.length - 1 ? '#D1D5DB' : '#6B7280',
+                                  fontSize: 14, fontWeight: 700,
+                                  transition: 'color 0.2s, border-color 0.2s',
+                                }}
+                                onMouseEnter={e => { if (rIdx !== group.resources.length - 1) { e.currentTarget.style.color = '#1A1A2E'; e.currentTarget.style.borderColor = '#1A1A2E' } }}
+                                onMouseLeave={e => { if (rIdx !== group.resources.length - 1) { e.currentTarget.style.color = '#6B7280'; e.currentTarget.style.borderColor = '#E5E7EB' } }}
+                                title="下へ移動"
+                              >
+                                ↓
+                              </button>
+                            </div>
+                            {/* リソースカード */}
+                            <div style={{
+                              flex: 1, background: '#fff', borderRadius: 14, padding: '14px 16px',
+                              border: '1px solid #E5E7EB',
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                                <h4 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', flex: 1 }}>{r.title}</h4>
+                                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                                  <button
+                                    onClick={() => openResourceModal(r)}
+                                    style={{
+                                      fontSize: 12, color: '#9CA3AF', border: '1px solid #E5E7EB',
+                                      borderRadius: 6, padding: '2px 8px', background: 'transparent', cursor: 'pointer',
+                                      transition: 'color 0.2s, border-color 0.2s',
+                                    }}
+                                    onMouseEnter={e => { e.currentTarget.style.color = '#C4A35A'; e.currentTarget.style.borderColor = '#C4A35A' }}
+                                    onMouseLeave={e => { e.currentTarget.style.color = '#9CA3AF'; e.currentTarget.style.borderColor = '#E5E7EB' }}
+                                  >
+                                    編集
+                                  </button>
+                                  <button
+                                    onClick={() => handleResourceDelete(r)}
+                                    style={{
+                                      fontSize: 12, color: '#9CA3AF', border: '1px solid #E5E7EB',
+                                      borderRadius: 6, padding: '2px 8px', background: 'transparent', cursor: 'pointer',
+                                      transition: 'color 0.2s, border-color 0.2s',
+                                    }}
+                                    onMouseEnter={e => { e.currentTarget.style.color = '#EF4444'; e.currentTarget.style.borderColor = '#FCA5A5' }}
+                                    onMouseLeave={e => { e.currentTarget.style.color = '#9CA3AF'; e.currentTarget.style.borderColor = '#E5E7EB' }}
+                                  >
+                                    削除
+                                  </button>
+                                </div>
+                              </div>
+                              <p style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.url}</p>
+                              {r.description && (
+                                <p style={{ fontSize: 12, color: '#6B7280', marginBottom: 8, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any, overflow: 'hidden' }}>{r.description}</p>
+                              )}
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                                <button
+                                  onClick={() => handleResourceToggle(r)}
+                                  style={{
+                                    fontSize: 12, padding: '3px 12px', borderRadius: 20,
+                                    border: r.is_active ? '1px solid #BBF7D0' : '1px solid #E5E7EB',
+                                    background: r.is_active ? '#F0FDF4' : '#F9FAFB',
+                                    color: r.is_active ? '#16A34A' : '#9CA3AF',
+                                    cursor: 'pointer', transition: 'all 0.2s',
+                                  }}
+                                >
+                                  {r.is_active ? '● 公開中' : '○ 非公開'}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
