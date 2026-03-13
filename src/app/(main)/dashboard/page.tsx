@@ -12,6 +12,7 @@ import CertificationModal from '@/components/CertificationModal'
 import ImageCropper from '@/components/ImageCropper'
 import CardModeSwitch from '@/components/CardModeSwitch'
 import MyProofTab from '@/components/MyProofTab'
+import InstallPrompt from '@/components/InstallPrompt'
 import { PREFECTURES } from '@/lib/prefectures'
 
 // バッジ階層: FNTはBDCの上位資格。同レベルのFNTを持っていたらBDCは非表示
@@ -2619,6 +2620,7 @@ export default function DashboardPage() {
         />
       )}
 
+      <InstallPrompt />
     </div>
   )
 }

@@ -8,6 +8,7 @@ import RewardContent from '@/components/RewardContent'
 import CardModeSwitch from '@/components/CardModeSwitch'
 import PhotoCropper from '@/components/PhotoCropper'
 import MyProofTab from '@/components/MyProofTab'
+import InstallPrompt from '@/components/InstallPrompt'
 import { Suspense } from 'react'
 
 interface RewardWithPro {
@@ -1441,6 +1442,7 @@ function MyCardContent() {
         </div>
       )}
 
+      <InstallPrompt />
     </div>
   )
 }
