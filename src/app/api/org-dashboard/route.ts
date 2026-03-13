@@ -145,6 +145,7 @@ export async function GET() {
     // 5. メンバーの強みデータ取得（投票内訳 + proof_itemsマスタ）
     const allProIds = mergedMembers.map((m: any) => m.professional_id).filter(Boolean)
     let strengthDistribution: { tab: string; count: number }[] = []
+    let topStrengthItems: { label: string; count: number }[] = []
 
     if (allProIds.length > 0) {
       const [{ data: votesRaw }, { data: proofItems }] = await Promise.all([
@@ -155,17 +156,18 @@ export async function GET() {
           .not('selected_proof_ids', 'is', null),
         supabase
           .from('proof_items')
-          .select('id, strength_label, tab'),
+          .select('id, label, strength_label, tab'),
       ])
 
-      const piMap = new Map<string, { strength_label: string; tab: string }>()
+      const piMap = new Map<string, { label: string; strength_label: string; tab: string }>()
       for (const pi of proofItems || []) {
-        piMap.set(pi.id, { strength_label: pi.strength_label || '', tab: pi.tab || '' })
+        piMap.set(pi.id, { label: pi.label || '', strength_label: pi.strength_label || '', tab: pi.tab || '' })
       }
 
       // professional_id別 × proof_item_id別の集計
       const proStrengthMap = new Map<string, Map<string, number>>()
       const tabTotalMap: Record<string, number> = {}
+      const proofItemCountMap: Record<string, number> = {}
 
       for (const v of votesRaw || []) {
         const pids: string[] = v.selected_proof_ids || []
@@ -182,6 +184,9 @@ export async function GET() {
           if (piInfo?.tab) {
             tabTotalMap[piInfo.tab] = (tabTotalMap[piInfo.tab] || 0) + 1
           }
+
+          // proof_item_id別集計（個別強みランキング用）
+          proofItemCountMap[pid] = (proofItemCountMap[pid] || 0) + 1
         }
       }
 
@@ -208,6 +213,16 @@ export async function GET() {
       strengthDistribution = Object.entries(tabTotalMap)
         .map(([tab, count]) => ({ tab, count }))
         .sort((a, b) => b.count - a.count)
+
+      // 個別強みランキング（proof_item_id別、label使用）
+      topStrengthItems = Object.entries(proofItemCountMap)
+        .map(([proofItemId, count]) => {
+          const piInfo = piMap.get(proofItemId)
+          return { label: piInfo?.label || '', count }
+        })
+        .filter(item => item.label)
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10)
     }
 
     // 6. バッジにholders（取得者リスト）を紐づけ
@@ -241,6 +256,7 @@ export async function GET() {
       badgeHolders,
       badgeMembers: uniqueMembers,
       strengthDistribution,
+      topStrengthItems,
     })
   } catch (error: any) {
     console.error('[org-dashboard API] error:', error)

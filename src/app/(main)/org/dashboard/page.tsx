@@ -56,6 +56,7 @@ export default function OrgDashboardPage() {
   const [credentialLevels, setCredentialLevels] = useState<{ id: string; name: string }[]>([])
   const [activeTab, setActiveTab] = useState<'overview' | 'analytics'>('overview')
   const [strengthDistribution, setStrengthDistribution] = useState<any[]>([])
+  const [topStrengthItems, setTopStrengthItems] = useState<{ label: string; count: number }[]>([])
   const [error, setError] = useState('')
   const [editingOrg, setEditingOrg] = useState(false)
   const [editOrgName, setEditOrgName] = useState('')
@@ -90,6 +91,7 @@ export default function OrgDashboardPage() {
       setMembers(data.members || [])
       setAggregate(data.aggregate || null)
       setStrengthDistribution(data.strengthDistribution || [])
+      setTopStrengthItems(data.topStrengthItems || [])
     } catch (err: any) {
       setError(err.message || 'データの取得に失敗しました')
     }
@@ -475,6 +477,7 @@ export default function OrgDashboardPage() {
                 }),
               }}
               strengthDistributionData={strengthChartData}
+              topStrengthItems={topStrengthItems}
             />
           </>
         )

@@ -284,21 +284,27 @@ function ProofRanking({ data }: { data: any[] }) {
     )
   }
 
+  const chartData = data.map(d => ({
+    ...d,
+    displayLabel: d.label.length > 8 ? d.label.substring(0, 8) + '…' : d.label,
+    fullLabel: d.label,
+  }))
+
   return (
     <div style={{ marginBottom: '32px' }}>
       <h4 style={{ color: '#1A1A2E', fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>
         強みランキング TOP{data.length}
       </h4>
-      <div style={{ width: '100%', height: Math.max(200, data.length * 40) }}>
+      <div style={{ width: '100%', height: Math.max(200, chartData.length * 40) }}>
         <ResponsiveContainer>
-          <BarChart data={data} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+          <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#E5E5E0" />
             <XAxis type="number" tick={{ fill: '#888', fontSize: 12 }} allowDecimals={false} />
             <YAxis
               type="category"
-              dataKey="label"
+              dataKey="displayLabel"
               tick={{ fill: '#1A1A2E', fontSize: 12 }}
-              width={80}
+              width={100}
             />
             <Tooltip
               contentStyle={{
@@ -307,7 +313,7 @@ function ProofRanking({ data }: { data: any[] }) {
               }}
               formatter={(value: any, name: any, props: any) => [
                 `${props.payload.count}票`,
-                props.payload.label
+                props.payload.fullLabel
               ]}
             />
             <Bar dataKey="count" fill="#C4A35A" radius={[0, 4, 4, 0]} />
@@ -398,7 +404,7 @@ function MemberStrengthsTable({ data }: { data: any[] }) {
   )
 }
 
-export default function RechartsCharts({ analytics, strengthDistributionData }: { analytics: AnalyticsData | null; strengthDistributionData?: { label: string; count: number }[] }) {
+export default function RechartsCharts({ analytics, strengthDistributionData, topStrengthItems }: { analytics: AnalyticsData | null; strengthDistributionData?: { label: string; count: number }[]; topStrengthItems?: { label: string; count: number }[] }) {
   if (!analytics) {
     return (
       <div style={{ padding: '32px', textAlign: 'center', color: '#888' }}>
@@ -446,9 +452,11 @@ export default function RechartsCharts({ analytics, strengthDistributionData }: 
       {/* チャート */}
       <MemberRanking data={analytics.memberProofCounts || []} />
       <ProofRanking data={
-        (analytics.topProofItems && analytics.topProofItems.length > 0)
-          ? analytics.topProofItems
-          : (strengthDistributionData || [])
+        (topStrengthItems && topStrengthItems.length > 0)
+          ? topStrengthItems
+          : (analytics.topProofItems && analytics.topProofItems.length > 0)
+            ? analytics.topProofItems
+            : (strengthDistributionData || [])
       } />
       <MemberStrengthsTable data={analytics.memberStrengths || []} />
       <StrengthRadar data={
