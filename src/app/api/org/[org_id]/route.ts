@@ -23,22 +23,49 @@ export async function GET(
     if (orgError) throw orgError
     if (!org) return NextResponse.json({ error: '団体が見つかりません' }, { status: 404 })
 
-    const [orgMembersResult, aggResult] = await Promise.all([
-      supabase
-        .from('org_members')
-        .select('id, professional_id, credential_level_id, status, professionals(id, name, photo_url)')
-        .eq('organization_id', orgId)
-        .eq('status', 'active'),
+    const { data: orgMembersData } = await supabase
+      .from('org_members')
+      .select('id, professional_id, credential_level_id, status, professionals(id, name, photo_url)')
+      .eq('organization_id', orgId)
+      .eq('status', 'active')
 
-      supabase
-        .from('org_aggregate')
-        .select('*')
-        .eq('organization_id', orgId)
-        .maybeSingle(),
-    ])
+    const allOrgMembers = orgMembersData || []
 
-    const allOrgMembers = orgMembersResult.data || []
-    const aggregate = aggResult.data
+    // org_aggregate VIEWの代わりに直接計算（Vercelキャッシュ問題回避）
+    const { data: memberCountData } = await supabase
+      .from('org_members')
+      .select('professional_id')
+      .eq('organization_id', orgId)
+      .eq('status', 'active')
+      .not('professional_id', 'is', null)
+
+    const uniqueProIds = new Set((memberCountData || []).map((m: any) => m.professional_id))
+    const professionalIds = Array.from(uniqueProIds)
+
+    let totalVotes = 0
+    let recentVotes = 0
+    if (professionalIds.length > 0) {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+      const [totalResult, recentResult] = await Promise.all([
+        supabase
+          .from('votes')
+          .select('id', { count: 'exact', head: true })
+          .in('professional_id', professionalIds),
+        supabase
+          .from('votes')
+          .select('id', { count: 'exact', head: true })
+          .in('professional_id', professionalIds)
+          .gte('created_at', thirtyDaysAgo),
+      ])
+      totalVotes = totalResult.count || 0
+      recentVotes = recentResult.count || 0
+    }
+
+    const aggregate = {
+      active_member_count: uniqueProIds.size,
+      total_org_votes: totalVotes,
+      votes_last_30_days: recentVotes,
+    }
 
     // 重複排除（同一プロが複数バッジを持つ場合）+ 投票数マージ
     const uniqueMembers = Array.from(
