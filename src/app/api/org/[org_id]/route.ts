@@ -254,7 +254,38 @@ export async function GET(
       }
     }
 
-    return NextResponse.json({ org, members, aggregate, levelAggregates, general_count: uniqueUserIds.length, generals: generalMembers, proofTopMembers, topStrengthItems })
+    // 最新コメント取得（professional_idベースで直接、org_members JOINなし）
+    let recentComments: any[] = []
+    if (professionalIds.length > 0) {
+      const { data: commentsRaw } = await supabase
+        .from('votes')
+        .select('comment, professional_id, created_at')
+        .in('professional_id', professionalIds)
+        .not('comment', 'is', null)
+        .neq('comment', '')
+        .order('created_at', { ascending: false })
+        .limit(4)
+
+      if (commentsRaw && commentsRaw.length > 0) {
+        // プロ情報マップ（allOrgMembersから構築済みのデータを再利用）
+        const commentProMap = new Map<string, string>()
+        for (const m of allOrgMembers) {
+          if (m.professional_id && !commentProMap.has(m.professional_id)) {
+            const pro = m.professionals as any
+            commentProMap.set(m.professional_id, pro?.name || '')
+          }
+        }
+
+        recentComments = commentsRaw.map((c: any) => ({
+          comment: c.comment,
+          professional_name: commentProMap.get(c.professional_id) || '',
+          professional_id: c.professional_id,
+          created_at: c.created_at,
+        }))
+      }
+    }
+
+    return NextResponse.json({ org, members, aggregate, levelAggregates, general_count: uniqueUserIds.length, generals: generalMembers, proofTopMembers, topStrengthItems, recentComments })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }

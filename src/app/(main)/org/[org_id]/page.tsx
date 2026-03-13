@@ -34,6 +34,7 @@ export default function OrgPublicPage() {
   const [generalCount, setGeneralCount] = useState(0)
   const [proofTopMembers, setProofTopMembers] = useState<any[]>([])
   const [topStrengthItems, setTopStrengthItems] = useState<{ label: string; count: number }[]>([])
+  const [recentComments, setRecentComments] = useState<any[]>([])
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -55,6 +56,7 @@ export default function OrgPublicPage() {
       setGeneralCount(data.general_count || 0)
       setProofTopMembers(data.proofTopMembers || [])
       setTopStrengthItems(data.topStrengthItems || [])
+      setRecentComments(data.recentComments || [])
     } catch (err: any) {
       setError(err.message || 'データの取得に失敗しました')
     }
@@ -275,6 +277,32 @@ export default function OrgPublicPage() {
             className="block bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:border-[#C4A35A] transition text-center"
           >
             <span className="text-sm font-medium text-[#C4A35A]">{L.members}一覧を見る →</span>
+          </a>
+        </div>
+      )}
+
+      {/* 最新コメント */}
+      {recentComments.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6">
+          <h2 className="text-sm font-bold text-[#1A1A2E] mb-4">最新のコメント</h2>
+          <div className="space-y-4">
+            {recentComments.map((c: any, i: number) => (
+              <div key={i} className={i < recentComments.length - 1 ? 'pb-4 border-b border-gray-50' : ''}>
+                <p className="text-sm text-gray-700 leading-relaxed mb-2">{c.comment}</p>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-[#C4A35A] font-medium">{c.professional_name} へ</span>
+                  <span className="text-xs text-gray-300">
+                    {new Date(c.created_at).toLocaleDateString('ja-JP', { year: 'numeric', month: 'short', day: 'numeric' })}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <a
+            href={`/org/${orgId}/comments`}
+            className="block text-center text-sm font-medium text-[#C4A35A] mt-4 pt-3 border-t border-gray-100 hover:opacity-80 transition"
+          >
+            コメント一覧を見る →
           </a>
         </div>
       )}
