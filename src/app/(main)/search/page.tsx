@@ -19,6 +19,7 @@ interface ProData {
   is_cross_expert: boolean
   is_triple_expert: boolean
   is_cross_master: boolean
+  store_name: string | null
 }
 
 export default function SearchPage() {
@@ -36,7 +37,7 @@ export default function SearchPage() {
     async function load() {
       const [prosRes, voteRes, proofRes] = await Promise.all([
         (supabase as any).from('professionals')
-          .select('id, name, title, photo_url, prefecture, area_description, is_online_available, is_founding_member, is_double_expert, is_cross_expert, is_triple_expert, is_cross_master')
+          .select('id, name, title, photo_url, prefecture, area_description, is_online_available, is_founding_member, is_double_expert, is_cross_expert, is_triple_expert, is_cross_master, store_name')
           .not('name', 'is', null).neq('name', '').is('deactivated_at', null),
         (supabase as any).from('vote_summary')
           .select('professional_id, proof_id, vote_count')
@@ -215,6 +216,9 @@ export default function SearchPage() {
                         }}>XM</span>
                       )}
                     </div>
+                    {p.store_name && (
+                      <div style={{ fontSize: 11, color: '#888', marginTop: 1 }}>{p.store_name}</div>
+                    )}
                     <div style={{ fontSize: 11, color: T.gold, fontWeight: 600, marginTop: 2 }}>{p.title}</div>
                     <div style={{ fontSize: 10, color: T.textMuted, marginTop: 2 }}>
                       {p.prefecture}{p.area_description ? ` · ${p.area_description}` : ''}

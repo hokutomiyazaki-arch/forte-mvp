@@ -267,6 +267,9 @@ export default function CardPage() {
           <div style={{ flex: 1, minWidth: 0 }}>
             {/* 名前（上の行、フル幅） */}
             <div style={{ fontSize: 20, fontWeight: 900, color: T.dark }}>{pro.name}</div>
+            {pro.store_name && (
+              <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>{pro.store_name}</div>
+            )}
             {/* タイトル + ブックマークボタン（同じ行） */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 2 }}>
               <div style={{ fontSize: 12, color: T.gold, fontWeight: 700, flex: 1, minWidth: 0 }}>{pro.title}</div>

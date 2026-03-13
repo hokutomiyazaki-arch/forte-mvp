@@ -1464,9 +1464,12 @@ function VoteForm() {
               )}
             </div>
 
-            <div style={{ color: "#C4A35A", fontWeight: 700, fontSize: 18, marginBottom: 6 }}>
+            <div style={{ color: "#C4A35A", fontWeight: 700, fontSize: 18, marginBottom: 2 }}>
               {pro.name}さんへ
             </div>
+            {pro.store_name && (
+              <div style={{ color: "rgba(250,250,247,0.6)", fontSize: 12, marginBottom: 6 }}>{pro.store_name}</div>
+            )}
             <div style={{ color: "#FAFAF7", fontSize: 15, marginBottom: 20 }}>
               プルーフ投票
             </div>
