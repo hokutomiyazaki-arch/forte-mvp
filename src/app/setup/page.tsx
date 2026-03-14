@@ -347,7 +347,7 @@ export default function SetupPage() {
   // === バリデーション ===
   const profileReady = !!(form.last_name.trim() && form.first_name.trim() && form.title.trim() && form.prefecture)
   const proofsReady = isExactNine
-  const rewardsReady = rewards.filter(r => r.content.trim()).length >= 1
+  const rewardsReady = true
 
   // ローディング
   if (loading) {
@@ -718,7 +718,7 @@ export default function SetupPage() {
               投票してくれた方へのお返しを設定しましょう
             </h2>
             <p className="text-sm text-[#9CA3AF] mb-6 text-center">
-              プロの秘密やおすすめを共有して、信頼を深めましょう
+              プロの秘密やおすすめを共有して、信頼を深めましょう（後からでも設定できます）
             </p>
 
             {/* プログレス */}
