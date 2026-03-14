@@ -2,22 +2,13 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { getRewardLabel } from '@/lib/types'
-import RewardContent from '@/components/RewardContent'
+import RewardReveal from '@/components/RewardReveal'
 import { Suspense } from 'react'
 
 interface RewardInfo {
   reward_type: string
   content: string
   title: string
-}
-
-function getRewardIcon(rewardType: string): string {
-  const icons: Record<string, string> = {
-    coupon: '🎟️', secret: '🤫', selfcare: '🧘', book: '📚',
-    spot: '📍', media: '🎬', surprise: '🎁', freeform: '✨',
-  }
-  return icons[rewardType] || '🎁'
 }
 
 type Phase = 'processing' | 'confirmed'
@@ -158,27 +149,7 @@ function VoteProcessingContent() {
 
         {/* ===== セクション2: リワード ===== */}
         {reward && (
-          <div className="bg-white rounded-2xl shadow-sm border border-[#C4A35A]/25 overflow-hidden">
-            <div className="bg-[#C4A35A]/10 px-6 py-4 border-b border-[#C4A35A]/20">
-              <p className="text-xl font-bold text-[#C4A35A] text-center">
-                🎁 こちらがリワードです
-              </p>
-            </div>
-            <div className="px-6 py-6">
-              <div className="flex items-center gap-3 mb-3">
-                <span className="text-3xl">{getRewardIcon(reward.reward_type)}</span>
-                <p className="text-lg font-bold text-[#1A1A2E]">
-                  {reward.title || getRewardLabel(reward.reward_type)}
-                </p>
-              </div>
-              {reward.content && (
-                <RewardContent
-                  content={reward.content}
-                  className="text-lg text-[#333333] leading-relaxed"
-                />
-              )}
-            </div>
-          </div>
+          <RewardReveal reward={reward} proName={proName || ''} />
         )}
 
         {/* ===== セクション3: 今後のリワードの見方 ===== */}
