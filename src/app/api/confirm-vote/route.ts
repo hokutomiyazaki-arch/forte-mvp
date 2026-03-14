@@ -212,7 +212,10 @@ export async function GET(req: NextRequest) {
     let hasAccount = false
     try {
       const clerk = await clerkClient()
-      const users = await clerk.users.getUserList({ emailAddress: [vote.voter_email] })
+      const isPhone = vote.voter_email?.startsWith('+')
+      const users = isPhone
+        ? await clerk.users.getUserList({ phoneNumber: [vote.voter_email] })
+        : await clerk.users.getUserList({ emailAddress: [vote.voter_email] })
       hasAccount = users.data.length > 0
     } catch (e) {
       console.error('[confirm-vote] Clerk user check failed:', e)

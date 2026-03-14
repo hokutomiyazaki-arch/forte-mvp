@@ -39,6 +39,8 @@ export async function POST(request: Request) {
       // LINE投票はclient_user_id=nullだがvoter_emailで照合可能
       const user = await currentUser()
       const userEmail = user?.emailAddresses?.[0]?.emailAddress || ''
+      const phone = user?.phoneNumbers?.[0]?.phoneNumber || ''
+      const identifier = userEmail || phone
 
       let vote = null
 
@@ -53,12 +55,12 @@ export async function POST(request: Request) {
 
       vote = voteById
 
-      // 見つからなければvoter_emailで検索
-      if (!vote && userEmail) {
+      // 見つからなければvoter_email（メール or 電話番号）で検索
+      if (!vote && identifier) {
         const { data: voteByEmail } = await supabase
           .from('votes')
           .select('id')
-          .eq('voter_email', userEmail)
+          .eq('voter_email', identifier)
           .eq('professional_id', professional_id)
           .eq('status', 'confirmed')
           .limit(1)

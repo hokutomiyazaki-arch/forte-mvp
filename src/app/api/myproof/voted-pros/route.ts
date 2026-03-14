@@ -17,9 +17,11 @@ export async function GET() {
 
     const supabase = getSupabaseAdmin()
 
-    // ユーザーのメールアドレスを取得
+    // ユーザーのメールアドレス・電話番号を取得
     const user = await currentUser()
     const userEmail = user?.emailAddresses?.[0]?.emailAddress || ''
+    const phone = user?.phoneNumbers?.[0]?.phoneNumber || ''
+    const identifier = userEmail || phone
 
     // client_user_id OR voter_email で投票を検索
     // LINE投票はclient_user_id=nullだがvoter_emailにLINEのメールが入っている
@@ -29,11 +31,11 @@ export async function GET() {
         .eq('client_user_id', userId)
         .eq('status', 'confirmed'),
     ]
-    if (userEmail) {
+    if (identifier) {
       votesQueries.push(
         supabase.from('votes')
           .select('professional_id')
-          .eq('voter_email', userEmail)
+          .eq('voter_email', identifier)
           .eq('status', 'confirmed')
       )
     }

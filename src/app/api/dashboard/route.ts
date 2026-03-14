@@ -53,9 +53,11 @@ export async function GET() {
 
     const supabase = getSupabaseAdmin()
 
-    // Clerkからメールアドレスを取得（外部API不要）
+    // Clerkからメールアドレス・電話番号を取得（外部API不要）
     const user = await currentUser()
     const userEmail = user?.emailAddresses?.[0]?.emailAddress || ''
+    const phone = user?.phoneNumbers?.[0]?.phoneNumber || ''
+    const identifier = userEmail || phone
 
     // ────────────────────────────────────────
     // Phase 1: プロフィール + マスターデータ を並列取得
@@ -179,11 +181,11 @@ export async function GET() {
       supabase.from('certification_applications')
         .select('category_slug, status')
         .eq('professional_id', proId),
-      // 受け取ったリワード: client_emailマッチ
-      userEmail
+      // 受け取ったリワード: client_emailマッチ（メール or 電話番号）
+      identifier
         ? supabase.from('client_rewards')
             .select('id, reward_id, professional_id, status, created_at')
-            .eq('client_email', userEmail)
+            .eq('client_email', identifier)
             .in('status', ['active', 'used'])
             .order('created_at', { ascending: false })
         : Promise.resolve({ data: null, error: null }),
