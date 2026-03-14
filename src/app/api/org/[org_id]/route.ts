@@ -10,7 +10,13 @@ export async function GET(
   try {
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        global: {
+          fetch: (url, options = {}) =>
+            fetch(url, { ...options, cache: 'no-store' }),
+        },
+      }
     )
     const orgId = params.org_id
 
@@ -102,33 +108,70 @@ export async function GET(
       const levelIds = (levels || []).map((cl: any) => cl.id)
       const { data: levelMembersRaw } = await supabase
         .from('org_members')
-        .select('professional_id, credential_level_id, professionals(id, name, photo_url)')
+        .select('professional_id, user_id, credential_level_id, professionals(id, name, photo_url)')
         .eq('organization_id', orgId)
         .eq('status', 'active')
         .not('credential_level_id', 'is', null)
         .in('credential_level_id', levelIds)
 
-      // credential_level_id別にグループ化 + professional_id重複排除
+      // 一般会員のuser_idsを収集してclientsから名前・写真を取得
+      const generalUserIdsInLevels = (levelMembersRaw || [])
+        .filter((m: any) => !m.professional_id && m.user_id)
+        .map((m: any) => m.user_id)
+      const uniqueGeneralUserIds = Array.from(new Set(generalUserIdsInLevels))
+
+      let levelClientMap = new Map<string, any>()
+      if (uniqueGeneralUserIds.length > 0) {
+        const { data: clientData } = await supabase
+          .from('clients')
+          .select('user_id, nickname, photo_url')
+          .in('user_id', uniqueGeneralUserIds)
+        for (const c of (clientData || [])) {
+          levelClientMap.set(c.user_id, c)
+        }
+      }
+
+      // credential_level_id別にグループ化（プロ+一般の両方を含める）
       const membersByLevelId = new Map<string, Map<string, any>>()
       for (const m of levelMembersRaw || []) {
-        if (!m.credential_level_id || !m.professional_id) continue
+        if (!m.credential_level_id) continue  // credential_level_idなしはスキップ（バッジなし）
+        // キーはprofessional_id（プロ）またはuser_id（一般）
+        const memberKey = m.professional_id || m.user_id
+        if (!memberKey) continue  // 両方NULLは無視
         if (!membersByLevelId.has(m.credential_level_id)) {
           membersByLevelId.set(m.credential_level_id, new Map())
         }
         const levelMap = membersByLevelId.get(m.credential_level_id)!
-        if (!levelMap.has(m.professional_id)) {
-          levelMap.set(m.professional_id, m)
+        if (!levelMap.has(memberKey)) {
+          levelMap.set(memberKey, m)
         }
       }
 
       levelAggregates = (levels || []).map((cl: any) => {
         const levelMap = membersByLevelId.get(cl.id)
         const membersInLevel = levelMap ? Array.from(levelMap.values()) : []
-        const memberDetails = membersInLevel.map((m: any) => ({
-          professional_id: m.professional_id,
-          name: m.professionals?.name || '',
-          photo_url: m.professionals?.photo_url || null,
-        }))
+        const memberDetails = membersInLevel.map((m: any) => {
+          if (m.professional_id) {
+            // プロ会員
+            return {
+              professional_id: m.professional_id,
+              user_id: null,
+              is_pro: true,
+              name: m.professionals?.name || '',
+              photo_url: m.professionals?.photo_url || null,
+            }
+          } else {
+            // 一般会員
+            const client = m.user_id ? levelClientMap.get(m.user_id) : null
+            return {
+              professional_id: null,
+              user_id: m.user_id,
+              is_pro: false,
+              name: client?.nickname || '一般会員',
+              photo_url: client?.photo_url || null,
+            }
+          }
+        })
         return {
           level_id: cl.id,
           organization_id: cl.organization_id,

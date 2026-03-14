@@ -81,7 +81,7 @@ export default function LevelDetailPage() {
       {/* 統計 */}
       <div className="grid grid-cols-2 gap-3 mb-8">
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
-          <div className="text-2xl font-bold text-[#1A1A2E]">{members.length}</div>
+          <div className="text-2xl font-bold text-[#1A1A2E]">{members.length + generals.length}</div>
           <div className="text-xs text-gray-400 mt-1">
             {org.type === 'credential' ? '認定者' : '修了者'}
           </div>
@@ -99,7 +99,7 @@ export default function LevelDetailPage() {
         {org.type === 'credential' ? '認定者一覧' : '修了者一覧'}
       </h2>
 
-      {members.length === 0 ? (
+      {members.length === 0 && generals.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 text-center">
           <p className="text-gray-400 text-sm">まだ取得者がいません</p>
         </div>
@@ -141,33 +141,37 @@ export default function LevelDetailPage() {
               </div>
             </a>
           ))}
-        </div>
-      )}
-
-      {/* 一般認定者まとめカード */}
-      {generalCount > 0 && (
-        <div className="mt-6">
-          <a
-            href={`/org/${orgId}/level/${levelId}/generals`}
-            className="block p-4 rounded-xl transition-shadow hover:shadow-md"
-            style={{ backgroundColor: '#F5F5F0', border: '1px solid #E5E5E0' }}
-          >
-            <div className="flex flex-col items-center text-center">
-              <div className="w-16 h-16 rounded-full mb-2 flex items-center justify-center"
-                   style={{ backgroundColor: '#E5E5E0' }}>
-                <span style={{ fontSize: '20px', color: '#888' }}>👥</span>
+          {/* 一般会員カード（リンクなし） */}
+          {generals.map((g: any, i: number) => (
+            <div
+              key={`general-${g.user_id || i}`}
+              className="p-4 rounded-xl"
+              style={{ backgroundColor: '#FAFAF7', border: '1px solid #E5E5E0' }}
+            >
+              <div className="flex flex-col items-center text-center">
+                {g.photo_url ? (
+                  <img
+                    src={g.photo_url}
+                    alt={g.display_name}
+                    className="w-16 h-16 rounded-full object-cover mb-2"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-full mb-2 flex items-center justify-center"
+                       style={{ backgroundColor: '#E5E5E0' }}>
+                    <span style={{ fontSize: '24px', color: '#888' }}>
+                      {g.display_name?.charAt(0) || '?'}
+                    </span>
+                  </div>
+                )}
+                <p style={{ fontSize: '14px', fontWeight: 600, color: '#1A1A2E' }}>
+                  {g.display_name}
+                </p>
+                <p style={{ fontSize: '11px', color: '#888', marginTop: '4px' }}>
+                  一般会員
+                </p>
               </div>
-              <p style={{ fontSize: '14px', fontWeight: 600, color: '#1A1A2E' }}>
-                一般認定者
-              </p>
-              <p style={{ fontSize: '12px', color: '#888', marginTop: '2px' }}>
-                {generalCount}名
-              </p>
-              <p style={{ fontSize: '11px', color: '#C4A35A', marginTop: '4px', fontWeight: 600 }}>
-                一覧を見る →
-              </p>
             </div>
-          </a>
+          ))}
         </div>
       )}
     </div>
