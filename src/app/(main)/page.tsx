@@ -260,7 +260,7 @@ export default function Home() {
               fontWeight: 500,
               marginBottom: '24px',
             }}>
-              信頼を資産に変える、ただ一つの証明。
+              あなたの実績を、クライアントの声で証明に変える。
             </div>
 
             {/* ヒーローコピー */}
@@ -275,9 +275,10 @@ export default function Home() {
               marginBottom: '36px',
               maxWidth: '520px',
             }}>
-              「あなたに出会えてよかった」<br />
+              信頼を資産に変える、ただ一つの証明。<br />
               <span style={{ fontSize: 'clamp(22px, 3vw, 30px)', fontWeight: 400, opacity: 0.85 }}>
-                ——でもその言葉、誰も知らない。
+                「あなたに出会えてよかった」<br />
+                ——その信頼、今どこにありますか？
               </span>
             </h1>
 
@@ -307,9 +308,9 @@ export default function Home() {
                 fontSize: '12px',
                 color: 'rgba(250,250,247,0.5)',
                 letterSpacing: '0.03em',
+                textAlign: 'center',
               }}>
-                通常 <span style={{ textDecoration: 'line-through' }}>¥2,980/月</span> が、今は無料。
-                <span style={{ margin: '0 8px', opacity: 0.5 }}>·</span>
+                通常 <span style={{ textDecoration: 'line-through' }}>¥2,980/月</span> が、今は無料。<br />
                 クレジットカード不要。
               </p>
             </div>
@@ -334,7 +335,7 @@ export default function Home() {
             letterSpacing: '1.5px',
             fontWeight: 500,
           }}>
-            信頼を資産に変える、ただ一つの証明。
+            あなたの実績を、クライアントの声で証明に変える。
           </div>
           {/* コピー + CTA（画像の下半分に重なる位置） */}
           <div style={{
@@ -354,9 +355,10 @@ export default function Home() {
               lineHeight: 1.5,
               marginBottom: '20px',
             }}>
-              「あなたに出会えてよかった」<br />
+              信頼を資産に変える、ただ一つの証明。<br />
               <span style={{ fontSize: 'clamp(17px, 4.5vw, 24px)', fontWeight: 400, opacity: 0.85 }}>
-                ——でもその言葉、誰も知らない。
+                「あなたに出会えてよかった」<br />
+                ——その信頼、今どこにありますか？
               </span>
             </h1>
             <div style={{ display: 'flex', justifyContent: 'center' }}>
@@ -385,8 +387,7 @@ export default function Home() {
               color: 'rgba(250,250,247,0.45)',
               textAlign: 'center',
             }}>
-              通常 <span style={{ textDecoration: 'line-through' }}>¥2,980/月</span> が、今は無料。
-              <span style={{ margin: '0 6px', opacity: 0.5 }}>·</span>
+              通常 <span style={{ textDecoration: 'line-through' }}>¥2,980/月</span> が、今は無料。<br />
               クレジットカード不要。
             </p>
             <div className="scroll-bounce" style={{ marginTop: '16px', opacity: heroLoaded ? 0.5 : 0, transition: 'opacity 1s ease-out 1.5s', display: 'flex', justifyContent: 'center' }}>
@@ -409,20 +410,6 @@ export default function Home() {
       {/* ═══ S2: PAIN ═══ */}
       <section className="relative" style={{ ...sectionPad, backgroundColor: '#FAFAF7', marginTop: '-80px', zIndex: 2, borderRadius: '24px 24px 0 0' }}>
         <div className={inner}>
-          <Reveal>
-            <div className="text-center mb-10">
-              <h2 style={{ color: '#1A1A2E', fontSize: '22px', fontWeight: 700, marginBottom: '16px' }}>
-                積み上げた信頼こそがあなたの資産。
-              </h2>
-              <p style={{ color: '#1A1A2E', fontSize: '15px', marginBottom: '8px' }}>
-                セッションのたびに届く感謝の言葉。<br />
-                紹介してくれるクライアント。信頼のサイン。
-              </p>
-              <p style={{ color: '#1A1A2E', fontSize: '15px', fontWeight: 700 }}>
-                今、それは空気中に消えている。
-              </p>
-            </div>
-          </Reveal>
           <Reveal delay={0.2}>
             <div className="hidden md:grid md:grid-cols-2 md:gap-6">
               <PainCard type="vanish" /><PainCard type="save" />
