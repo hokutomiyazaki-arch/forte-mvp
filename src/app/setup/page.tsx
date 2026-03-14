@@ -325,9 +325,17 @@ export default function SetupPage() {
 
     // セットアップ完了フラグ
     try {
-      await fetch('/api/setup/complete', { method: 'POST' })
-    } catch {
-      setRewardError('完了処理に失敗しました。もう一度お試しください。')
+      const res = await fetch('/api/setup/complete', { method: 'POST' })
+      if (!res.ok) {
+        const body = await res.text()
+        console.error('[setup] complete API failed:', res.status, body)
+        setRewardError('完了処理に失敗しました。もう一度お試しください。')
+        setRewardSaving(false)
+        return
+      }
+    } catch (err) {
+      console.error('[setup] complete API network error:', err)
+      setRewardError('ネットワークエラーが発生しました。もう一度お試しください。')
       setRewardSaving(false)
       return
     }
