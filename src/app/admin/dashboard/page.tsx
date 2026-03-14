@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { createClientComponentClient } from '@/lib/supabase-client'
 
 // ============================================================
 // カラー定数
@@ -21,12 +22,67 @@ const C = {
 }
 
 // ============================================================
-// サンプルデータ（Supabase接続後にリアルデータに差し替え）
+// 型定義
 // ============================================================
 
-// TODO: Supabase接続後は以下のViewからデータ取得:
-//   const { data: goNogo } = await supabase.from('admin_go_nogo').select('*').maybeSingle()
-const SAMPLE_GO = {
+interface GoNogoData {
+  total_pros: number
+  complete_profiles: number
+  pros_who_showed_qr: number
+  total_votes: number
+  avg_votes_per_active_pro: number
+  verdict: string
+}
+
+interface ProData {
+  id: string | number
+  n: string
+  ps: string
+  rw: number
+  qr: number
+  v: number
+  s1: number
+  s2: number
+  s3: number
+  spv: number
+  pv: number
+  eng: string
+  lv: string | null
+}
+
+interface ChannelData {
+  ch: string
+  scans: number
+  votes: number
+  pct: number
+}
+
+interface FunnelStep {
+  label: string
+  value: number
+}
+
+interface ShareData {
+  s1: number
+  s2: number
+  s3: number
+  pv1: number
+  pv2: number
+  pv3: number
+}
+
+interface DailyData {
+  date: string
+  votes: number
+  views: number
+  shares: number
+}
+
+// ============================================================
+// サンプルデータ（フォールバック用）
+// ============================================================
+
+const SAMPLE_GO: GoNogoData = {
   total_pros: 14,
   complete_profiles: 4,
   pros_who_showed_qr: 4,
@@ -35,9 +91,7 @@ const SAMPLE_GO = {
   verdict: 'MONITORING',
 }
 
-// TODO: Supabase接続後は以下のViewからデータ取得:
-//   const { data: proStatus } = await supabase.from('admin_pro_status').select('*')
-const SAMPLE_PROS = [
+const SAMPLE_PROS: ProData[] = [
   { id: 1, n: 'トッププロ', ps: 'complete', rw: 3, qr: 15, v: 10, s1: 2, s2: 1, s3: 0, spv: 8, pv: 22, eng: 'active', lv: '2026-03-11' },
   { id: 2, n: '土井さん', ps: 'complete', rw: 2, qr: 8, v: 5, s1: 0, s2: 0, s3: 0, spv: 0, pv: 10, eng: 'active', lv: '2026-03-08' },
   { id: 3, n: '水田さん', ps: 'complete', rw: 2, qr: 4, v: 3, s1: 0, s2: 1, s3: 0, spv: 2, pv: 5, eng: 'active', lv: '2026-03-13' },
@@ -46,9 +100,7 @@ const SAMPLE_PROS = [
   { id: 6, n: 'NFC報告者', ps: 'complete', rw: 1, qr: 3, v: 0, s1: 0, s2: 0, s3: 0, spv: 0, pv: 3, eng: 'cooling', lv: null },
 ]
 
-// TODO: Supabase接続後は以下のViewからデータ取得:
-//   const { data: voteFunnel } = await supabase.from('admin_vote_funnel').select('*').maybeSingle()
-const SAMPLE_FUNNEL = [
+const SAMPLE_FUNNEL: FunnelStep[] = [
   { label: 'QRスキャン', value: 32 },
   { label: '「投票する」タップ', value: 26 },
   { label: 'メール/SMS入力', value: 20 },
@@ -56,21 +108,15 @@ const SAMPLE_FUNNEL = [
   { label: 'リワード閲覧', value: 15 },
 ]
 
-// TODO: Supabase接続後は以下のViewからデータ取得:
-//   const { data: channelFunnel } = await supabase.from('admin_channel_funnel').select('*')
-const SAMPLE_CHANNELS = [
+const SAMPLE_CHANNELS: ChannelData[] = [
   { ch: 'QR', scans: 28, votes: 16, pct: 57.1 },
   { ch: 'NFC', scans: 0, votes: 0, pct: 0 },
   { ch: 'Direct', scans: 4, votes: 2, pct: 50.0 },
 ]
 
-// TODO: Supabase接続後は以下のViewからデータ取得:
-//   const { data: shareAnalytics } = await supabase.from('admin_share_analytics').select('*').maybeSingle()
-const SAMPLE_SHARES = { s1: 2, s2: 1, s3: 0, pv1: 8, pv2: 3, pv3: 0 }
+const SAMPLE_SHARES: ShareData = { s1: 2, s2: 1, s3: 0, pv1: 8, pv2: 3, pv3: 0 }
 
-// TODO: Supabase接続後は以下のViewからデータ取得:
-//   const { data: dailyTrend } = await supabase.from('admin_daily_trend').select('*')
-const SAMPLE_DAILY = Array.from({ length: 14 }, (_, i) => ({
+const SAMPLE_DAILY: DailyData[] = Array.from({ length: 14 }, (_, i) => ({
   date: `3/${i + 1}`,
   votes: Math.floor(Math.random() * 4),
   views: Math.floor(Math.random() * 6 + 1),
@@ -133,7 +179,7 @@ function VB({ verdict }: { verdict: string }) {
   )
 }
 
-function Funnel({ steps }: { steps: { label: string; value: number }[] }) {
+function Funnel({ steps }: { steps: FunnelStep[] }) {
   const max = Math.max(...steps.map(s => s.value), 1)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -176,7 +222,7 @@ function Bdg({ text, color }: { text: string; color: string }) {
   )
 }
 
-function ProTbl({ pros }: { pros: typeof SAMPLE_PROS }) {
+function ProTbl({ pros }: { pros: ProData[] }) {
   const sm: Record<string, { c: string; t: string }> = {
     complete: { c: C.green, t: '完了' },
     partial: { c: C.amber, t: '途中' },
@@ -280,29 +326,153 @@ function MiniBar({ data, dk, color, h = 80 }: {
 }
 
 // ============================================================
+// データ取得 & マッピング
+// ============================================================
+
+async function fetchDashboardData() {
+  const supabase = createClientComponentClient()
+
+  const [goRes, proRes, chRes, funnelRes, shareRes, dailyRes] = await Promise.all([
+    supabase.from('admin_go_nogo').select('*').maybeSingle(),
+    supabase.from('admin_pro_status').select('*'),
+    supabase.from('admin_channel_funnel').select('*'),
+    supabase.from('admin_vote_funnel').select('*').maybeSingle(),
+    supabase.from('admin_share_analytics').select('*').maybeSingle(),
+    supabase.from('admin_daily_trend').select('*'),
+  ])
+
+  // Go/No-Go マッピング
+  let goNogo: GoNogoData | null = null
+  if (goRes.data && !goRes.error) {
+    const d = goRes.data
+    goNogo = {
+      total_pros: Number(d.total_pros) || 0,
+      complete_profiles: Number(d.complete_profiles) || 0,
+      pros_who_showed_qr: Number(d.pros_who_showed_qr) || 0,
+      total_votes: Number(d.total_votes) || 0,
+      avg_votes_per_active_pro: Number(d.avg_votes_per_active_pro) || 0,
+      verdict: d.verdict || 'MONITORING',
+    }
+  }
+
+  // プロ一覧マッピング
+  let pros: ProData[] | null = null
+  if (proRes.data && !proRes.error && Array.isArray(proRes.data) && proRes.data.length > 0) {
+    pros = proRes.data.map((d: any) => ({
+      id: d.id,
+      n: d.display_name || '—',
+      ps: d.profile_status || 'empty',
+      rw: Number(d.reward_count) || 0,
+      qr: Number(d.qr_scans) || 0,
+      v: Number(d.total_votes) || 0,
+      s1: Number(d.self_shares) || 0,
+      s2: Number(d.card_shares) || 0,
+      s3: Number(d.voice_shares) || 0,
+      spv: Number(d.share_driven_views) || 0,
+      pv: Number(d.profile_views) || 0,
+      eng: d.engagement_status || 'never',
+      lv: d.last_vote_at || null,
+    }))
+  }
+
+  // チャネル別マッピング
+  let channels: ChannelData[] | null = null
+  if (chRes.data && !chRes.error && Array.isArray(chRes.data) && chRes.data.length > 0) {
+    channels = chRes.data.map((d: any) => ({
+      ch: d.channel || 'unknown',
+      scans: Number(d.scans) || 0,
+      votes: Number(d.votes_submitted) || 0,
+      pct: Number(d.conversion_pct) || 0,
+    }))
+  }
+
+  // 投票ファネルマッピング
+  let funnel: FunnelStep[] | null = null
+  if (funnelRes.data && !funnelRes.error) {
+    const d = funnelRes.data
+    funnel = [
+      { label: 'QRスキャン', value: Number(d.qr_scans) || 0 },
+      { label: '「投票する」タップ', value: Number(d.vote_starts) || 0 },
+      { label: 'メール/SMS入力', value: Number(d.emails_entered) || 0 },
+      { label: '投票完了', value: Number(d.votes_submitted) || 0 },
+      { label: 'リワード閲覧', value: Number(d.rewards_viewed) || 0 },
+    ]
+  }
+
+  // シェア分析マッピング
+  let shares: ShareData | null = null
+  if (shareRes.data && !shareRes.error) {
+    const d = shareRes.data
+    shares = {
+      s1: Number(d.s1_self_shares) || 0,
+      s2: Number(d.s2_card_shares) || 0,
+      s3: Number(d.s3_voice_shares) || 0,
+      pv1: Number(d.pv_from_s1) || 0,
+      pv2: Number(d.pv_from_s2) || 0,
+      pv3: Number(d.pv_from_s3) || 0,
+    }
+  }
+
+  // 日別トレンドマッピング
+  let daily: DailyData[] | null = null
+  if (dailyRes.data && !dailyRes.error && Array.isArray(dailyRes.data) && dailyRes.data.length > 0) {
+    daily = dailyRes.data.map((d: any) => {
+      const dt = new Date(d.view_date)
+      return {
+        date: `${dt.getMonth() + 1}/${dt.getDate()}`,
+        votes: Number(d.vote_flow_views) || 0,
+        views: Number(d.profile_views) || 0,
+        shares: Number(d.share_events) || 0,
+      }
+    })
+  }
+
+  return { goNogo, pros, channels, funnel, shares, daily }
+}
+
+// ============================================================
 // メインダッシュボード
 // ============================================================
 
 export default function AdminDashboard() {
-  const g = SAMPLE_GO
-  const pr = Math.round((g.complete_profiles / g.total_pros) * 100)
-  const qr = Math.round((g.pros_who_showed_qr / g.total_pros) * 100)
-  const sh = SAMPLE_SHARES
+  const [loading, setLoading] = useState(true)
+  const [dataSource, setDataSource] = useState<'live' | 'sample'>('sample')
+  const [goNogo, setGoNogo] = useState<GoNogoData>(SAMPLE_GO)
+  const [pros, setPros] = useState<ProData[]>(SAMPLE_PROS)
+  const [channels, setChannels] = useState<ChannelData[]>(SAMPLE_CHANNELS)
+  const [funnel, setFunnel] = useState<FunnelStep[]>(SAMPLE_FUNNEL)
+  const [shares, setShares] = useState<ShareData>(SAMPLE_SHARES)
+  const [daily, setDaily] = useState<DailyData[]>(SAMPLE_DAILY)
 
-  // TODO: Supabase接続後:
-  // useEffect(() => {
-  //   trackPageView('admin_dashboard')
-  //   fetchDashboardData()
-  // }, [])
-  //
-  // async function fetchDashboardData() {
-  //   const supabase = createClientComponentClient()
-  //   const [goNogo, proStatus, ...] = await Promise.all([
-  //     supabase.from('admin_go_nogo').select('*').maybeSingle(),
-  //     supabase.from('admin_pro_status').select('*'),
-  //     ...
-  //   ])
-  // }
+  const loadData = useCallback(async () => {
+    try {
+      const result = await fetchDashboardData()
+      let hasLiveData = false
+
+      if (result.goNogo) { setGoNogo(result.goNogo); hasLiveData = true }
+      if (result.pros) { setPros(result.pros); hasLiveData = true }
+      if (result.channels) { setChannels(result.channels); hasLiveData = true }
+      if (result.funnel) { setFunnel(result.funnel); hasLiveData = true }
+      if (result.shares) { setShares(result.shares); hasLiveData = true }
+      if (result.daily) { setDaily(result.daily); hasLiveData = true }
+
+      setDataSource(hasLiveData ? 'live' : 'sample')
+    } catch (e) {
+      console.error('Dashboard data fetch failed, using sample data:', e)
+      setDataSource('sample')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  const g = goNogo
+  const pr = g.total_pros > 0 ? Math.round((g.complete_profiles / g.total_pros) * 100) : 0
+  const qr = g.total_pros > 0 ? Math.round((g.pros_who_showed_qr / g.total_pros) * 100) : 0
+  const sh = shares
 
   return (
     <div style={{
@@ -323,6 +493,14 @@ export default function AdminDashboard() {
           <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>MVP Dashboard</h1>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          {/* データソース表示 */}
+          <div style={{
+            fontSize: 10, color: dataSource === 'live' ? C.green : C.amber,
+            background: (dataSource === 'live' ? C.green : C.amber) + '18',
+            padding: '4px 10px', borderRadius: 5, fontWeight: 500,
+          }}>
+            {loading ? '読み込み中...' : dataSource === 'live' ? '● LIVE DATA' : '● SAMPLE DATA'}
+          </div>
           <a
             href="/downloads/REALPROOF_クライアント説明チラシ.pdf"
             download
@@ -367,7 +545,7 @@ export default function AdminDashboard() {
             </tr>
           </thead>
           <tbody>
-            {SAMPLE_CHANNELS.map(r => (
+            {channels.map(r => (
               <tr key={r.ch} style={{ borderBottom: `1px solid ${C.grayDark}22` }}>
                 <td style={{ padding: '10px 14px', color: C.cream, fontWeight: 500 }}>{r.ch}</td>
                 <td style={{ padding: '10px 14px', color: C.cream }}>{r.scans}</td>
@@ -389,13 +567,15 @@ export default function AdminDashboard() {
       <Sec>投票ファネル — Layer 3 離脱分析</Sec>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div style={{ background: C.surface, borderRadius: 10, padding: 20 }}>
-          <Funnel steps={SAMPLE_FUNNEL} />
-          <div style={{
-            marginTop: 12, padding: '8px 12px', background: C.bg,
-            borderRadius: 6, color: C.gray, fontSize: 11,
-          }}>
-            ※ トラッキング実装後にリアルデータ表示
-          </div>
+          <Funnel steps={funnel} />
+          {dataSource === 'sample' && (
+            <div style={{
+              marginTop: 12, padding: '8px 12px', background: C.bg,
+              borderRadius: 6, color: C.gray, fontSize: 11,
+            }}>
+              ※ サンプルデータ表示中（Viewsが未作成の場合）
+            </div>
+          )}
         </div>
         <div style={{ background: C.surface, borderRadius: 10, padding: 20 }}>
           <div style={{ color: C.gray, fontSize: 11, marginBottom: 10 }}>認証方式別 完了率</div>
@@ -447,7 +627,7 @@ export default function AdminDashboard() {
       {/* [E] Pro List */}
       <Sec>プロ一覧 — 個別ステータス</Sec>
       <div style={{ background: C.surface, borderRadius: 10, padding: 18 }}>
-        <ProTbl pros={SAMPLE_PROS} />
+        <ProTbl pros={pros} />
       </div>
 
       {/* [F] Bottleneck */}
@@ -478,15 +658,15 @@ export default function AdminDashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
         <div style={{ background: C.surface, borderRadius: 10, padding: 16 }}>
           <div style={{ color: C.gray, fontSize: 11, marginBottom: 8 }}>投票数</div>
-          <MiniBar data={SAMPLE_DAILY} dk="votes" color={C.gold} />
+          <MiniBar data={daily} dk="votes" color={C.gold} />
         </div>
         <div style={{ background: C.surface, borderRadius: 10, padding: 16 }}>
           <div style={{ color: C.gray, fontSize: 11, marginBottom: 8 }}>プロフィール閲覧</div>
-          <MiniBar data={SAMPLE_DAILY} dk="views" color={C.green} />
+          <MiniBar data={daily} dk="views" color={C.green} />
         </div>
         <div style={{ background: C.surface, borderRadius: 10, padding: 16 }}>
           <div style={{ color: C.gray, fontSize: 11, marginBottom: 8 }}>シェア数</div>
-          <MiniBar data={SAMPLE_DAILY} dk="shares" color={C.amber} />
+          <MiniBar data={daily} dk="shares" color={C.amber} />
         </div>
       </div>
 
