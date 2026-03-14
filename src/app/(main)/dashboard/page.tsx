@@ -190,6 +190,12 @@ export default function DashboardPage() {
           return
         }
 
+        // セットアップ未完了のプロは /setup へリダイレクト
+        if (data.role === 'professional' && data.setupCompleted === false) {
+          window.location.href = '/setup'
+          return
+        }
+
         // マスターデータ
         if (data.proofItems) setProofItems(data.proofItems)
 

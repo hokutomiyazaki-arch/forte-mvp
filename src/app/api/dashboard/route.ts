@@ -105,6 +105,7 @@ export async function GET() {
         ownedOrg: ownedOrgResult.data || null,
         myProofQrToken: myProofCardResult.data?.qr_token || null,
         clientProfile: clientResult.data || null,
+        setupCompleted: true,
       })
     }
 
@@ -291,6 +292,7 @@ export async function GET() {
     return NextResponse.json({
       role: 'professional',
       professional: proData,
+      setupCompleted: proData.setup_completed ?? false,
       proofItems,
       rewards: (rewardsResult.data || []).map((r: any) => ({
         id: r.id,
