@@ -16,6 +16,10 @@ export async function POST(request: Request) {
 
   const supabase = getSupabaseAdmin()
   const clerkImageUrl = user?.imageUrl || null
+  const clerkLastName = user?.lastName || ''
+  const clerkFirstName = user?.firstName || ''
+  const clerkFullName = (clerkLastName + ' ' + clerkFirstName).trim()
+  const displayName = clerkFullName || user?.username || '未設定'
 
   // 全員 clients レコードを作成
   const { data: existingClient } = await supabase
@@ -27,9 +31,9 @@ export async function POST(request: Request) {
   if (!existingClient) {
     await supabase.from('clients').insert({
       user_id: userId,
-      nickname: '未設定',
-      last_name: '未設定',
-      first_name: '',
+      nickname: displayName,
+      last_name: clerkLastName || '未設定',
+      first_name: clerkFirstName || '',
       photo_url: clerkImageUrl,
     })
   }
@@ -45,9 +49,9 @@ export async function POST(request: Request) {
     if (!existingPro) {
       await supabase.from('professionals').insert({
         user_id: userId,
-        name: '未設定', // /setup の Step 1 で上書き
-        last_name: '未設定',
-        first_name: '',
+        name: displayName, // /setup の Step 1 で上書き
+        last_name: clerkLastName || '未設定',
+        first_name: clerkFirstName || '',
         store_name: null,
         title: '', // /setup の Step 1 で上書き
         photo_url: clerkImageUrl,
