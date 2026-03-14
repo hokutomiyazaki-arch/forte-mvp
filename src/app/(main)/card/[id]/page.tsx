@@ -745,7 +745,7 @@ export default function CardPage() {
           </a>
         )}
         {pro.contact_email && (
-          <a href={`mailto:${pro.contact_email}?subject=${encodeURIComponent(`REAL PROOFを見て相談：${pro.name}さん`)}&body=${encodeURIComponent(`${pro.name}さん\n\nREAL PROOFであなたのプロフィールを拝見し、ご相談したくご連絡しました。\n\n`)}`}
+          <a href={(() => { const subject = encodeURIComponent(`REAL PROOFを見て相談：${pro.name}さん`); const body = encodeURIComponent(`${pro.name}さん\n\nREAL PROOFであなたのプロフィールを拝見し、ご相談したくご連絡しました。\n\n`); return `mailto:${pro.contact_email}?subject=${subject}&body=${body}` })()}
             style={{
               display: 'block', textAlign: 'center', padding: 14, borderRadius: 14,
               background: 'transparent', border: `1.5px solid ${T.dark}`, color: T.dark,
