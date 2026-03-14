@@ -1250,6 +1250,27 @@ export default function DashboardPage() {
                 「このQRで投票してもらうと、私からのちょっとしたプレゼントが開封できるんです。何が出るかはお楽しみ！30秒で終わるので試してみてください」
               </p>
             </div>
+
+            {/* クライアント提示用資料 */}
+            <div className="mt-6 pt-4 border-t border-gray-200">
+              <p className="text-xs text-gray-500 mb-3">
+                クライアントに見せられる説明資料を用意しました
+              </p>
+              <a
+                href="/docs/REALPROOF_%E3%82%AF%E3%83%A9%E3%82%A4%E3%82%A2%E3%83%B3%E3%83%88%E8%AA%AC%E6%98%8E%E3%83%81%E3%83%A9%E3%82%B7.pdf"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition bg-[#1A1A2E] text-[#C4A35A] hover:bg-[#16213E]"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="12" y1="18" x2="12" y2="12"/>
+                  <polyline points="9 15 12 18 15 15"/>
+                </svg>
+                クライアント説明用チラシ（PDF）
+              </a>
+            </div>
           </div>
         )}
       </div>
