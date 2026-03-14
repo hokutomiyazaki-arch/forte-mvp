@@ -275,7 +275,8 @@ export default function Home() {
               marginBottom: '36px',
               maxWidth: '520px',
             }}>
-              信頼を資産に変える、ただ一つの証明。
+              信頼を資産に変える、<br />
+              ただひとつの証明。
             </h1>
 
             {/* CTA */}
@@ -351,7 +352,8 @@ export default function Home() {
               lineHeight: 1.5,
               marginBottom: '20px',
             }}>
-              信頼を資産に変える、ただ一つの証明。
+              信頼を資産に変える、<br />
+              ただひとつの証明。
             </h1>
             <div style={{ display: 'flex', justifyContent: 'center' }}>
               <button onClick={() => { window.location.href = isSignedIn ? '/auth-redirect' : '/sign-in'; }} style={{
