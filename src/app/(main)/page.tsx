@@ -280,7 +280,7 @@ export default function Home() {
             </h1>
 
             {/* CTA */}
-            <div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', maxWidth: '340px' }}>
               <button onClick={() => { window.location.href = isSignedIn ? '/auth-redirect' : '/sign-in'; }} style={{
                 opacity: heroLoaded ? 1 : 0,
                 transition: 'opacity 0.6s ease-out 0.9s',
