@@ -258,7 +258,7 @@ export default function Home() {
               fontSize: '16px',
               letterSpacing: '1.5px',
               fontWeight: 500,
-              marginBottom: '24px',
+              marginBottom: '48px',
             }}>
               あなたの実績を、クライアントの声で証明に変える。
             </div>
@@ -275,11 +275,7 @@ export default function Home() {
               marginBottom: '36px',
               maxWidth: '520px',
             }}>
-              信頼を資産に変える、ただ一つの証明。<br />
-              <span style={{ fontSize: 'clamp(22px, 3vw, 30px)', fontWeight: 400, opacity: 0.85 }}>
-                「あなたに出会えてよかった」<br />
-                ——その信頼、今どこにありますか？
-              </span>
+              信頼を資産に変える、ただ一つの証明。
             </h1>
 
             {/* CTA */}
@@ -340,7 +336,7 @@ export default function Home() {
           {/* コピー + CTA（画像の下半分に重なる位置） */}
           <div style={{
             position: 'absolute',
-            bottom: '140px',
+            bottom: '100px',
             left: '24px',
             right: '24px',
             textAlign: 'center',
@@ -355,11 +351,7 @@ export default function Home() {
               lineHeight: 1.5,
               marginBottom: '20px',
             }}>
-              信頼を資産に変える、ただ一つの証明。<br />
-              <span style={{ fontSize: 'clamp(17px, 4.5vw, 24px)', fontWeight: 400, opacity: 0.85 }}>
-                「あなたに出会えてよかった」<br />
-                ——その信頼、今どこにありますか？
-              </span>
+              信頼を資産に変える、ただ一つの証明。
             </h1>
             <div style={{ display: 'flex', justifyContent: 'center' }}>
               <button onClick={() => { window.location.href = isSignedIn ? '/auth-redirect' : '/sign-in'; }} style={{
@@ -410,6 +402,16 @@ export default function Home() {
       {/* ═══ S2: PAIN ═══ */}
       <section className="relative" style={{ ...sectionPad, backgroundColor: '#FAFAF7', marginTop: '-80px', zIndex: 2, borderRadius: '24px 24px 0 0' }}>
         <div className={inner}>
+          <Reveal>
+            <div className="text-center" style={{ marginBottom: '48px' }}>
+              <h2 style={{ color: '#1A1A2E', fontSize: 'clamp(24px, 5vw, 32px)', fontWeight: 700, marginBottom: '12px' }}>
+                「あなたに出会えてよかった」
+              </h2>
+              <p style={{ color: '#9A9A9A', fontSize: 'clamp(14px, 3.5vw, 18px)' }}>
+                ——その信頼、今どこにありますか？
+              </p>
+            </div>
+          </Reveal>
           <Reveal delay={0.2}>
             <div className="hidden md:grid md:grid-cols-2 md:gap-6">
               <PainCard type="vanish" /><PainCard type="save" />
