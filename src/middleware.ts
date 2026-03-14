@@ -12,6 +12,7 @@ const isProtectedRoute = createRouteMatcher([
   '/org/dashboard(.*)',
   '/org/register(.*)',
   '/onboarding(.*)',
+  '/setup(.*)',
   '/auth-redirect(.*)',
 ])
 
