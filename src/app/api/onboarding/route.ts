@@ -16,10 +16,17 @@ export async function POST(request: Request) {
 
   const supabase = getSupabaseAdmin()
   const clerkImageUrl = user?.imageUrl || null
-  const clerkLastName = user?.lastName || ''
   const clerkFirstName = user?.firstName || ''
-  const clerkFullName = (clerkLastName + ' ' + clerkFirstName).trim()
-  const displayName = clerkFullName || user?.username || '未設定'
+  const clerkLastName = user?.lastName || ''
+  // LINE等で姓が取れない場合、firstName にフルネーム全体が入ってる
+  // その場合は firstName を last_name に入れて、first_name は空にする
+  let finalLastName = clerkLastName
+  let finalFirstName = clerkFirstName
+  if (!clerkLastName && clerkFirstName) {
+    finalLastName = clerkFirstName
+    finalFirstName = ''
+  }
+  const displayName = (finalLastName + ' ' + finalFirstName).trim() || user?.username || '未設定'
 
   // 全員 clients レコードを作成
   const { data: existingClient } = await supabase
@@ -32,8 +39,8 @@ export async function POST(request: Request) {
     await supabase.from('clients').insert({
       user_id: userId,
       nickname: displayName,
-      last_name: clerkLastName || '未設定',
-      first_name: clerkFirstName || '',
+      last_name: finalLastName || '未設定',
+      first_name: finalFirstName,
       photo_url: clerkImageUrl,
     })
   }
@@ -50,8 +57,8 @@ export async function POST(request: Request) {
       await supabase.from('professionals').insert({
         user_id: userId,
         name: displayName, // /setup の Step 1 で上書き
-        last_name: clerkLastName || '未設定',
-        first_name: clerkFirstName || '',
+        last_name: finalLastName || '未設定',
+        first_name: finalFirstName,
         store_name: null,
         title: '', // /setup の Step 1 で上書き
         photo_url: clerkImageUrl,

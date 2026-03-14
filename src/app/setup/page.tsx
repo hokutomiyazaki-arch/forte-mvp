@@ -256,6 +256,13 @@ export default function SetupPage() {
       setProId(savedData.id)
     }
 
+    // clients テーブルにも名前を同期
+    await db.update('clients', {
+      last_name: record.last_name,
+      first_name: record.first_name,
+      nickname: record.name,
+    }, { user_id: clerkUserId })
+
     setSaving(false)
     setCurrentStep(2)
   }
