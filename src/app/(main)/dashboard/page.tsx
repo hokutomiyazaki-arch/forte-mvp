@@ -1252,7 +1252,7 @@ export default function DashboardPage() {
             </div>
 
             {/* クライアント提示用資料 */}
-            <div className="mt-6 pt-4 border-t border-gray-200">
+            <div className="mt-6 pt-4 border-t border-gray-200 text-center">
               <p className="text-xs text-gray-500 mb-3">
                 クライアントに見せられる説明資料を用意しました
               </p>
