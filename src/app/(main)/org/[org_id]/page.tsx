@@ -35,6 +35,8 @@ export default function OrgPublicPage() {
   const [proofTopMembers, setProofTopMembers] = useState<any[]>([])
   const [topStrengthItems, setTopStrengthItems] = useState<{ label: string; count: number }[]>([])
   const [recentComments, setRecentComments] = useState<any[]>([])
+  const [isMember, setIsMember] = useState(false)
+  const [resources, setResources] = useState<any[]>([])
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -57,6 +59,8 @@ export default function OrgPublicPage() {
       setProofTopMembers(data.proofTopMembers || [])
       setTopStrengthItems(data.topStrengthItems || [])
       setRecentComments(data.recentComments || [])
+      setIsMember(data.is_member || false)
+      setResources(data.resources || [])
     } catch (err: any) {
       setError(err.message || 'データの取得に失敗しました')
     }
@@ -103,6 +107,46 @@ export default function OrgPublicPage() {
       {org.description && (
         <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 mb-6">
           <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">{org.description}</p>
+        </div>
+      )}
+
+      {/* メンバー限定リソース（ログイン済みメンバーのみ） */}
+      {isMember && resources.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6">
+          <div className="flex items-center gap-2 mb-4">
+            <span style={{ fontSize: '14px' }}>🔒</span>
+            <h2 className="text-sm font-bold text-[#1A1A2E]">メンバー限定リソース</h2>
+          </div>
+          <div className="space-y-3">
+            {resources.map((r: any) => (
+              <div key={r.id} className="border-b border-gray-50 last:border-0 pb-3 last:pb-0">
+                <div className="flex items-start gap-2">
+                  <div className="flex-1 min-w-0">
+                    <a
+                      href={r.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-medium hover:opacity-70 transition"
+                      style={{ color: '#C4A35A', textDecoration: 'none' }}
+                    >
+                      {r.title} ↗
+                    </a>
+                    {r.description && (
+                      <p className="text-xs text-gray-500 mt-1">{r.description}</p>
+                    )}
+                  </div>
+                  {r.level_name && (
+                    <span
+                      className="flex-shrink-0 text-xs px-2 py-0.5 rounded"
+                      style={{ backgroundColor: '#F0EDE4', color: '#1A1A2E', fontWeight: 500 }}
+                    >
+                      {r.level_name}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
