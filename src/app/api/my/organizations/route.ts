@@ -18,7 +18,7 @@ export async function GET() {
 
     const supabase = getSupabaseAdmin()
 
-    // 1. このユーザーのprofessional_idを取得
+    // 1. このユーザーのprofessional_idを取得（プロ会員の場合）
     const { data: pro } = await supabase
       .from('professionals')
       .select('id')
@@ -26,22 +26,33 @@ export async function GET() {
       .is('deactivated_at', null)
       .maybeSingle()
 
-    if (!pro) {
-      return NextResponse.json([])
+    const uniqueOrgs = new Map<string, any>()
+
+    // 2a. プロ会員: professional_id で検索
+    if (pro) {
+      const { data: proMemberships, error } = await supabase
+        .from('org_members')
+        .select('organization_id, organizations(id, name, description, logo_url)')
+        .eq('professional_id', pro.id)
+        .eq('status', 'active')
+      if (error) throw error
+      for (const m of proMemberships || []) {
+        const org = m.organizations as any
+        if (org && !uniqueOrgs.has(m.organization_id)) {
+          uniqueOrgs.set(m.organization_id, org)
+        }
+      }
     }
 
-    // 2. org_membersから所属団体を取得
-    const { data: memberships, error } = await supabase
+    // 2b. 一般会員: user_id で検索（professional_id が NULL のレコード）
+    const { data: generalMemberships, error: genError } = await supabase
       .from('org_members')
       .select('organization_id, organizations(id, name, description, logo_url)')
-      .eq('professional_id', pro.id)
+      .eq('user_id', userId)
+      .is('professional_id', null)
       .eq('status', 'active')
-
-    if (error) throw error
-
-    // 3. organization_id で重複排除（Map使用）
-    const uniqueOrgs = new Map<string, any>()
-    for (const m of memberships || []) {
+    if (genError) throw genError
+    for (const m of generalMemberships || []) {
       const org = m.organizations as any
       if (org && !uniqueOrgs.has(m.organization_id)) {
         uniqueOrgs.set(m.organization_id, org)
