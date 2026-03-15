@@ -49,8 +49,8 @@ interface CustomProof {
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
-  basic: '基本',
   body_pro: 'ボディプロ',
+  therapy: '治療・改善',
   yoga: 'ヨガ',
   pilates: 'ピラティス',
   esthe: 'エステ',
@@ -105,7 +105,7 @@ export default function DashboardPage() {
   const [proofItems, setProofItems] = useState<ProofItem[]>([])
   const [selectedProofIds, setSelectedProofIds] = useState<Set<string>>(new Set())
   const [customProofs, setCustomProofs] = useState<CustomProof[]>([])
-  const [activeTab, setActiveTab] = useState('basic')
+  const [activeTab, setActiveTab] = useState('body_pro')
   const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'card' | 'org' | 'myorgs'>('profile')
   // userRole removed: /api/dashboard の role レスポンスで判定
   const [proofSaving, setProofSaving] = useState(false)
@@ -1996,7 +1996,7 @@ export default function DashboardPage() {
                         </div>
                         <div>
                           <span className="text-sm text-[#1A1A2E]">{item.label}</span>
-                          <span className="text-xs text-[#9CA3AF] ml-2">{item.strength_label}</span>
+                          <span className="text-xs text-[#9CA3AF] ml-2">{CATEGORY_LABELS[item.tab] || item.tab}</span>
                         </div>
                       </label>
                     )
@@ -2032,7 +2032,7 @@ export default function DashboardPage() {
                     .filter(p => selectedProofIds.has(p.id))
                     .map(p => (
                       <span key={p.id} className="px-3 py-1 bg-[#C4A35A]/10 text-[#1A1A2E] text-xs rounded-full">
-                        {p.strength_label}
+                        {p.label}
                       </span>
                     ))}
                   {customProofs

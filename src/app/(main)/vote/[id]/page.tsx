@@ -10,6 +10,7 @@ import { Suspense } from 'react'
 interface ProofItem {
   id: string
   label: string
+  tab: string
   strength_label: string
   sort_order: number
 }
@@ -491,7 +492,7 @@ function VoteForm() {
 
         const [piResult, rewardResult] = await Promise.all([
           regularProofIds.length > 0
-            ? (supabase as any).from('proof_items').select('id, label, strength_label, sort_order').in('id', regularProofIds).order('sort_order')
+            ? (supabase as any).from('proof_items').select('id, label, tab, strength_label, sort_order').in('id', regularProofIds).order('sort_order')
             : Promise.resolve({ data: [] }),
           (supabase as any).from('rewards').select('id, reward_type, title').eq('professional_id', proId).order('sort_order'),
         ])

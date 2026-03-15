@@ -5,8 +5,8 @@ import { PREFECTURES } from '@/lib/prefectures'
 
 const CATEGORY_TABS: { key: string; label: string }[] = [
   { key: 'all', label: '総合' },
-  { key: 'basic', label: '基本' },
   { key: 'body_pro', label: 'ボディプロ' },
+  { key: 'therapy', label: '治療・改善' },
   { key: 'yoga', label: 'ヨガ' },
   { key: 'pilates', label: 'ピラティス' },
   { key: 'esthe', label: 'エステ' },
