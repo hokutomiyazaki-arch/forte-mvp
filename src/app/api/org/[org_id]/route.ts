@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { auth } from '@clerk/nextjs/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -329,96 +328,7 @@ export async function GET(
       }
     }
 
-    // メンバー判定 + リソース取得（ログイン済みユーザーのみ）
-    let isMember = false
-    let memberResources: any[] = []
-    try {
-      const { userId } = await auth()
-      if (userId) {
-        // プロ会員としてのprofessional_idを取得
-        const { data: proData } = await supabase
-          .from('professionals')
-          .select('id')
-          .eq('user_id', userId)
-          .maybeSingle()
-        const myProId = proData?.id || null
-
-        // org_membersでメンバーかチェック（プロ or 一般）
-        let memberLevelIds: string[] = []
-
-        if (myProId) {
-          const { data: proMemberships } = await supabase
-            .from('org_members')
-            .select('credential_level_id')
-            .eq('organization_id', orgId)
-            .eq('professional_id', myProId)
-            .eq('status', 'active')
-          if (proMemberships && proMemberships.length > 0) {
-            isMember = true
-            memberLevelIds = proMemberships
-              .map((m: any) => m.credential_level_id)
-              .filter(Boolean)
-          }
-        }
-
-        if (!isMember) {
-          const { data: generalMemberships } = await supabase
-            .from('org_members')
-            .select('credential_level_id')
-            .eq('organization_id', orgId)
-            .eq('user_id', userId)
-            .is('professional_id', null)
-            .eq('status', 'active')
-          if (generalMemberships && generalMemberships.length > 0) {
-            isMember = true
-            memberLevelIds = generalMemberships
-              .map((m: any) => m.credential_level_id)
-              .filter(Boolean)
-          }
-        }
-
-        // メンバーならリソースを取得
-        if (isMember) {
-          const { data: resourcesRaw } = await supabase
-            .from('org_resources')
-            .select('id, title, url, description, credential_level_id, sort_order')
-            .eq('organization_id', orgId)
-            .order('sort_order', { ascending: true })
-
-          // credential_level_id が NULL（全員向け）または本人のバッジIDに一致するものだけ
-          memberResources = (resourcesRaw || []).filter((r: any) => {
-            if (!r.credential_level_id) return true // 全員向け
-            return memberLevelIds.includes(r.credential_level_id)
-          })
-
-          // credential_level名を付与
-          if (memberResources.length > 0) {
-            const resLevelIds = memberResources
-              .map((r: any) => r.credential_level_id)
-              .filter(Boolean)
-            const uniqueResLevelIds = Array.from(new Set(resLevelIds))
-            let resLevelMap = new Map<string, string>()
-            if (uniqueResLevelIds.length > 0) {
-              const { data: resLevels } = await supabase
-                .from('credential_levels')
-                .select('id, name, image_url')
-                .in('id', uniqueResLevelIds)
-              for (const lv of (resLevels || [])) {
-                resLevelMap.set(lv.id, lv.name)
-              }
-            }
-            memberResources = memberResources.map((r: any) => ({
-              ...r,
-              level_name: r.credential_level_id ? resLevelMap.get(r.credential_level_id) || null : null,
-            }))
-          }
-        }
-      }
-    } catch {
-      // auth() 失敗は無視（未ログインユーザー）
-    }
-
-    return NextResponse.json({ org, members, aggregate, levelAggregates, general_count: uniqueUserIds.length, generals: generalMembers, proofTopMembers, topStrengthItems, recentComments, is_member: isMember, resources: memberResources })
+    return NextResponse.json({ org, members, aggregate, levelAggregates, general_count: uniqueUserIds.length, generals: generalMembers, proofTopMembers, topStrengthItems, recentComments })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }

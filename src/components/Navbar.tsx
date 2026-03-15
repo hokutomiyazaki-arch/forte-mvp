@@ -1,27 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { SignInButton, SignedIn, SignedOut, UserButton, useUser, useAuth } from '@clerk/nextjs'
+import { useState } from 'react'
+import { SignInButton, SignedIn, SignedOut, UserButton, useUser } from '@clerk/nextjs'
 import { useProStatus } from '@/lib/useProStatus'
 
 export default function Navbar() {
   const { isLoaded } = useUser()
-  const { isLoaded: authLoaded, userId } = useAuth()
   const { isPro } = useProStatus()
   const [menuOpen, setMenuOpen] = useState(false)
-  const [hasOrgs, setHasOrgs] = useState(false)
-
-  useEffect(() => {
-    if (!authLoaded || !userId) return
-    fetch('/api/my-orgs')
-      .then(res => res.json())
-      .then(data => {
-        if (data.organizations && data.organizations.length > 0) {
-          setHasOrgs(true)
-        }
-      })
-      .catch(() => {})
-  }, [authLoaded, userId])
 
   return (
     <nav style={{
@@ -53,9 +39,6 @@ export default function Navbar() {
                 <a href="/dashboard" style={{ color: '#fff', textDecoration: 'none' }}>プロメニュー</a>
               )}
               <a href="/mycard" style={{ color: '#fff', textDecoration: 'none' }}>一般メニュー</a>
-              {hasOrgs && (
-                <a href="/my-orgs" style={{ color: '#fff', textDecoration: 'none' }}>団体ページ</a>
-              )}
               <UserButton
                 appearance={{
                   elements: {
@@ -115,10 +98,6 @@ export default function Navbar() {
             )}
             <a href="/mycard" style={{ color: '#fff', textDecoration: 'none' }}
               onClick={() => setMenuOpen(false)}>一般メニュー</a>
-            {hasOrgs && (
-              <a href="/my-orgs" style={{ color: '#fff', textDecoration: 'none' }}
-                onClick={() => setMenuOpen(false)}>団体ページ</a>
-            )}
             <UserButton
               appearance={{
                 elements: {
