@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { TAB_DISPLAY_NAMES } from '@/lib/constants'
 
 export const dynamic = 'force-dynamic'
 
@@ -203,7 +204,7 @@ export async function GET() {
             }
           })
           const piInfo = piMap.get(topPid)
-          m.top_strength = piInfo?.strength_label || ''
+          m.top_strength = (piInfo?.tab ? TAB_DISPLAY_NAMES[piInfo.tab] : '') || ''
         } else {
           m.top_strength = ''
         }

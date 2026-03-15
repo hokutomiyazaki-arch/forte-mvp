@@ -14,3 +14,19 @@ export const PROVEN_GRADIENT = 'linear-gradient(135deg, #1A1A2E, #2A1F0A)';
 
 /** 運営メール送信先（認定申請通知用） */
 export const OPS_EMAIL = process.env.OPS_NOTIFICATION_EMAIL || 'bodydiscoverystudio@gmail.com';
+
+// ===== プルーフ項目カテゴリ表示名 =====
+
+/** proof_items.tab → 表示名マッピング */
+export const TAB_DISPLAY_NAMES: Record<string, string> = {
+  body_pro: 'ボディプロ',
+  therapy: '治療・改善',
+  yoga: 'ヨガ',
+  pilates: 'ピラティス',
+  esthe: 'エステ',
+  sports: 'スポーツ',
+  education: '教育',
+  coaching: 'コーチング',
+  nutrition: '栄養',
+  specialist: 'スペシャリスト',
+};

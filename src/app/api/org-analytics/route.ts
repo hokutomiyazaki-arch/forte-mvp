@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { TAB_DISPLAY_NAMES } from '@/lib/constants'
 
 export const dynamic = 'force-dynamic'
 
@@ -119,10 +120,7 @@ export async function GET(request: NextRequest) {
     ])
 
     // 強み分布集計（selected_proof_ids → proof_items.tab で集計）
-    const TAB_LABELS: Record<string, string> = {
-      basic: '基本', body_pro: 'ボディプロ', yoga: 'ヨガ', pilates: 'ピラティス',
-      esthe: 'エステ', sports: 'スポーツ', education: '教育', coaching: 'コーチング', nutrition: '栄養',
-    }
+    const TAB_LABELS = TAB_DISPLAY_NAMES
     const piMap = new Map<string, { tab: string; strength_label: string }>()
     for (const pi of proofItemsResult.data || []) {
       piMap.set(pi.id, { tab: pi.tab, strength_label: pi.strength_label })

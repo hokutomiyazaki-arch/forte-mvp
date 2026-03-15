@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { TAB_DISPLAY_NAMES } from '@/lib/constants'
 
 export const dynamic = 'force-dynamic'
 
@@ -81,11 +82,11 @@ export async function GET(request: NextRequest) {
     // proof_items マスタ取得
     const { data: proofItems } = await supabase
       .from('proof_items')
-      .select('id, label, strength_label')
+      .select('id, label, tab, strength_label')
 
-    const proofMap = new Map<string, { label: string; strength_label: string }>()
+    const proofMap = new Map<string, { label: string; tab: string; strength_label: string }>()
     for (const pi of proofItems || []) {
-      proofMap.set(pi.id, { label: pi.label, strength_label: pi.strength_label || '' })
+      proofMap.set(pi.id, { label: pi.label, tab: pi.tab || '', strength_label: pi.strength_label || '' })
     }
 
     // vote_summary ビューから団体メンバーのデータを取得
@@ -123,7 +124,7 @@ export async function GET(request: NextRequest) {
         return {
           proof_id,
           label: info?.label || proof_id,
-          strength_label: info?.strength_label || '',
+          strength_label: (info?.tab ? TAB_DISPLAY_NAMES[info.tab] : '') || info?.strength_label || '',
           count,
         }
       })
