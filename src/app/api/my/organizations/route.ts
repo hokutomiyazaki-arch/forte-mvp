@@ -18,12 +18,11 @@ export async function GET() {
 
     const supabase = getSupabaseAdmin()
 
-    // 1. このユーザーのprofessional_idを取得（プロ会員の場合）
+    // 1. このユーザーのprofessional_idを取得（プロ解除済みでもバッジは残るため deactivated_at を問わない）
     const { data: pro } = await supabase
       .from('professionals')
       .select('id')
       .eq('user_id', userId)
-      .is('deactivated_at', null)
       .maybeSingle()
 
     const uniqueOrgs = new Map<string, any>()
