@@ -23,35 +23,54 @@ export async function GET(
     const supabase = getSupabaseAdmin()
     const { orgId } = params
 
-    // 1. professional_id取得
+    // 1. professional_id取得（プロ解除済みでもバッジは残るため deactivated_at を問わない）
     const { data: pro } = await supabase
       .from('professionals')
       .select('id')
       .eq('user_id', userId)
-      .is('deactivated_at', null)
       .maybeSingle()
 
-    if (!pro) {
-      return NextResponse.json({ error: 'プロとして登録されていません' }, { status: 403 })
+    let allMemberships: any[] = []
+
+    // 2a. プロ会員: professional_id で検索
+    if (pro) {
+      const { data: proMemberships, error: memError } = await supabase
+        .from('org_members')
+        .select('credential_level_id')
+        .eq('professional_id', pro.id)
+        .eq('organization_id', orgId)
+        .eq('status', 'active')
+      if (memError) throw memError
+      allMemberships = proMemberships || []
     }
 
-    // 2. この団体のアクティブメンバーか確認 + 持っているバッジIDを全取得
-    const { data: memberships, error: memError } = await supabase
+    // 2b. 一般会員: user_id で検索（professional_id が NULL のレコード）
+    const { data: generalMemberships, error: genError } = await supabase
       .from('org_members')
       .select('credential_level_id')
-      .eq('professional_id', pro.id)
+      .eq('user_id', userId)
+      .is('professional_id', null)
       .eq('organization_id', orgId)
       .eq('status', 'active')
+    if (genError) throw genError
 
-    if (memError) throw memError
+    // マージ（重複排除）
+    const seenLevels = new Set(allMemberships.map((m: any) => m.credential_level_id || '__null__'))
+    for (const gm of (generalMemberships || [])) {
+      const key = gm.credential_level_id || '__null__'
+      if (!seenLevels.has(key)) {
+        allMemberships.push(gm)
+        seenLevels.add(key)
+      }
+    }
 
-    if (!memberships || memberships.length === 0) {
+    if (allMemberships.length === 0) {
       return NextResponse.json({ error: 'この団体のメンバーではありません' }, { status: 403 })
     }
 
     // 3. メンバーが持つバッジIDの配列
-    const myBadgeIds = memberships
-      .map(m => m.credential_level_id)
+    const myBadgeIds = allMemberships
+      .map((m: any) => m.credential_level_id)
       .filter(Boolean) as string[]
 
     // 4. リソース取得: is_active=true（credential_levelsのnameもJOIN）
