@@ -55,24 +55,28 @@ export default function ForteChart({ votes, personalityVotes = [], professional,
               const hasApplied = !!appStatus
               return (
                 <div key={v.category}>
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-sm font-medium text-[#1A1A2E]">
-                      {v.strength_label || v.category}
-                      {v.strength_label && (
-                        <span className="text-[11px] text-[#9CA3AF] ml-1.5">
-                          {v.category}
+                  <div className="mb-1">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-[#1A1A2E]">
+                        {v.strength_label || v.category}
+                      </span>
+                      {showLabels && (
+                        <span className="text-sm font-bold" style={{ color: isProven ? PROVEN_GOLD : '#1A1A2E' }}>
+                          {v.vote_count}{mark}
                         </span>
                       )}
-                      {v.tab && TAB_DISPLAY_NAMES[v.tab] && (
-                        <span className="text-[10px] font-semibold ml-1.5" style={{ color: 'rgba(196,163,90,0.6)' }}>
+                    </div>
+                    {v.strength_label && (
+                      <div className="text-[11px] text-[#9CA3AF] mt-0.5">
+                        {v.category}
+                      </div>
+                    )}
+                    {v.tab && TAB_DISPLAY_NAMES[v.tab] && (
+                      <div className="mt-1">
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded" style={{ color: 'rgba(196,163,90,0.6)', background: 'rgba(196,163,90,0.08)' }}>
                           {TAB_DISPLAY_NAMES[v.tab]}
                         </span>
-                      )}
-                    </span>
-                    {showLabels && (
-                      <span className="text-sm font-bold" style={{ color: isProven ? PROVEN_GOLD : '#1A1A2E' }}>
-                        {v.vote_count}{mark}
-                      </span>
+                      </div>
                     )}
                   </div>
                   <div className="w-full bg-gray-100 rounded-full h-3">

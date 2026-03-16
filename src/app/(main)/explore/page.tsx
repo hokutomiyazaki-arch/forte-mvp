@@ -248,21 +248,25 @@ export default function ExplorePage() {
                       : 'bg-white rounded-xl shadow-sm hover:shadow-md'
                   }`}
                 >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-gray-400 text-xs">{isExpanded ? '▼' : '▶'}</span>
-                    <span className="text-sm font-medium text-[#1A1A2E] truncate">
-                      {item.strength_label || item.label}
+                  <div className="flex items-start gap-2 min-w-0 flex-1">
+                    <span className="text-gray-400 text-xs mt-1">{isExpanded ? '▼' : '▶'}</span>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-[#1A1A2E]">
+                        {item.strength_label || item.label}
+                      </div>
                       {item.strength_label && (
-                        <span className="text-[11px] text-[#9CA3AF] ml-1.5">
+                        <div className="text-[11px] text-[#9CA3AF] mt-0.5">
                           {item.label}
-                        </span>
+                        </div>
                       )}
                       {selectedTab === 'all' && item.tab && TAB_DISPLAY_NAMES[item.tab] && (
-                        <span className="text-[10px] font-semibold ml-1.5" style={{ color: 'rgba(196,163,90,0.6)' }}>
-                          {TAB_DISPLAY_NAMES[item.tab]}
-                        </span>
+                        <div className="mt-1">
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded" style={{ color: 'rgba(196,163,90,0.6)', background: 'rgba(196,163,90,0.08)' }}>
+                            {TAB_DISPLAY_NAMES[item.tab]}
+                          </span>
+                        </div>
                       )}
-                    </span>
+                    </div>
                   </div>
                   <span className="text-[#C4A35A] font-bold text-sm ml-4 flex-shrink-0">{item.totalVotes}票</span>
                 </div>

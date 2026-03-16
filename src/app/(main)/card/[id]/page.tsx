@@ -490,23 +490,25 @@ export default function CardPage() {
                             </span>
                           </div>
                         )}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, gap: 8 }}>
-                          <div style={{ minWidth: 0 }}>
+                        <div style={{ marginBottom: 6 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
                             <span style={{ fontSize: 15, fontWeight: 700, color: labelColor, lineHeight: 1.5, overflowWrap: 'anywhere' as const }}>
                               {v.strength_label || v.category}
                             </span>
-                            {v.strength_label && (
-                              <span style={{ fontSize: 11, color: tier === 'normal' ? T.textMuted : 'rgba(255,255,255,0.55)', marginLeft: 6 }}>
-                                {v.category}
-                              </span>
-                            )}
-                            {v.tab && TAB_DISPLAY_NAMES[v.tab] && (
-                              <span style={{ fontSize: 10, fontWeight: 600, color: 'rgba(196,163,90,0.6)', marginLeft: 6 }}>
+                            <span style={{ fontSize: 16, fontWeight: 'bold', color: countColor, fontFamily: T.fontMono, flexShrink: 0 }}>{v.vote_count}</span>
+                          </div>
+                          {v.strength_label && (
+                            <div style={{ fontSize: 11, color: tier === 'normal' ? T.textMuted : 'rgba(255,255,255,0.55)', marginTop: 2 }}>
+                              {v.category}
+                            </div>
+                          )}
+                          {v.tab && TAB_DISPLAY_NAMES[v.tab] && (
+                            <div style={{ marginTop: 4 }}>
+                              <span style={{ fontSize: 10, fontWeight: 600, color: 'rgba(196,163,90,0.6)', background: 'rgba(196,163,90,0.08)', padding: '2px 8px', borderRadius: 4 }}>
                                 {TAB_DISPLAY_NAMES[v.tab]}
                               </span>
-                            )}
-                          </div>
-                          <span style={{ fontSize: 16, fontWeight: 'bold', color: countColor, fontFamily: T.fontMono, flexShrink: 0 }}>{v.vote_count}</span>
+                            </div>
+                          )}
                         </div>
                         <div style={{ width: '100%', height: 8, background: barTrack, borderRadius: 99 }}>
                           <div style={{
@@ -537,23 +539,25 @@ export default function CardPage() {
                               </span>
                             </div>
                           )}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4, gap: 8 }}>
-                            <div style={{ minWidth: 0 }}>
+                          <div style={{ marginBottom: 4 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
                               <span style={{ fontSize: 13, fontWeight: 600, color: isProven ? PROVEN_GOLD : T.text, lineHeight: 1.5, overflowWrap: 'anywhere' as const }}>
                                 {v.strength_label || v.category}
                               </span>
-                              {v.strength_label && (
-                                <span style={{ fontSize: 10, color: T.textMuted, marginLeft: 6 }}>
-                                  {v.category}
-                                </span>
-                              )}
-                              {v.tab && TAB_DISPLAY_NAMES[v.tab] && (
-                                <span style={{ fontSize: 10, fontWeight: 600, color: 'rgba(196,163,90,0.6)', marginLeft: 6 }}>
+                              <span style={{ fontSize: 13, color: isProven ? PROVEN_GOLD : T.textMuted, fontFamily: T.fontMono, flexShrink: 0 }}>{v.vote_count}</span>
+                            </div>
+                            {v.strength_label && (
+                              <div style={{ fontSize: 10, color: T.textMuted, marginTop: 2 }}>
+                                {v.category}
+                              </div>
+                            )}
+                            {v.tab && TAB_DISPLAY_NAMES[v.tab] && (
+                              <div style={{ marginTop: 3 }}>
+                                <span style={{ fontSize: 10, fontWeight: 600, color: 'rgba(196,163,90,0.6)', background: 'rgba(196,163,90,0.08)', padding: '2px 8px', borderRadius: 4 }}>
                                   {TAB_DISPLAY_NAMES[v.tab]}
                                 </span>
-                              )}
-                            </div>
-                            <span style={{ fontSize: 13, color: isProven ? PROVEN_GOLD : T.textMuted, fontFamily: T.fontMono, flexShrink: 0 }}>{v.vote_count}</span>
+                              </div>
+                            )}
                           </div>
                           <div style={{ width: '100%', height: 5, background: '#F0EDE6', borderRadius: 99 }}>
                             <div style={{
