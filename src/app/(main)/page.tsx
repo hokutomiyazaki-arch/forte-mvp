@@ -260,7 +260,7 @@ export default function Home() {
               fontWeight: 500,
               marginBottom: '48px',
             }}>
-              あなたの実績を、クライアントの声で証明に変える。
+              施術家・トレーナー・インストラクター・エステティシャン——体と向き合うすべてのプロへ。
             </div>
 
             {/* ヒーローコピー */}
