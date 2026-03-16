@@ -255,12 +255,12 @@ export default function Home() {
               transform: heroLoaded ? 'translateY(0)' : 'translateY(12px)',
               transition: 'all 0.6s ease-out 0.1s',
               color: '#C4A35A',
-              fontSize: '16px',
+              fontSize: '14px',
               letterSpacing: '1.5px',
               fontWeight: 500,
               marginBottom: '48px',
             }}>
-              施術家・トレーナー・インストラクター・エステティシャン——体と向き合うすべてのプロへ。
+              施術家・トレーナー・インストラクター・エステティシャン——<br />体と向き合うすべてのプロへ。
             </div>
 
             {/* ヒーローコピー */}
@@ -328,11 +328,11 @@ export default function Home() {
             transform: heroLoaded ? 'translateY(0)' : 'translateY(12px)',
             transition: 'all 0.6s ease-out 0.1s',
             color: '#C4A35A',
-            fontSize: '13px',
+            fontSize: '11px',
             letterSpacing: '1.5px',
             fontWeight: 500,
           }}>
-            施術家・トレーナー・インストラクター・エステティシャン——体と向き合うすべてのプロへ。
+            施術家・トレーナー・インストラクター・エステティシャン——<br />体と向き合うすべてのプロへ。
           </div>
           {/* コピー + CTA（画像の下半分に重なる位置） */}
           <div style={{
