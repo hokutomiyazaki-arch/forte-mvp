@@ -204,32 +204,14 @@ export async function GET() {
     const isDeactivatedPro = !!(proCheck.data && proCheck.data.deactivated_at)
     const proId = proCheck.data?.id || null
 
-    // バッジ取得 + セッション回数集計を並列実行
+    // バッジ取得
     let credentialBadges: any[] = []
-    const [badgeResult, sessionCountResult] = await Promise.all([
-      supabase.from('org_members')
-        .select('credential_level_id, credential_levels(id, name, description, image_url), organizations(id, name)')
-        .eq('user_id', userId)
-        .eq('status', 'active')
-        .not('credential_level_id', 'is', null),
-      proId
-        ? supabase.from('votes')
-            .select('session_count')
-            .eq('professional_id', proId)
-            .eq('status', 'confirmed')
-        : Promise.resolve({ data: null, error: null }),
-    ])
+    const badgeResult = await supabase.from('org_members')
+      .select('credential_level_id, credential_levels(id, name, description, image_url), organizations(id, name)')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .not('credential_level_id', 'is', null)
     const badgeData = badgeResult.data
-
-    // セッション回数集計（クライアント構成バー用）
-    const sessionCounts = { first: 0, repeat: 0, regular: 0 }
-    if (sessionCountResult.data) {
-      for (const v of sessionCountResult.data) {
-        if (v.session_count && v.session_count in sessionCounts) {
-          (sessionCounts as any)[v.session_count]++
-        }
-      }
-    }
 
     if (badgeData) {
       credentialBadges = badgeData
@@ -258,7 +240,6 @@ export async function GET() {
       voteHistory,
       bookmarks: bookmarksData.data || [],
       credentialBadges,
-      sessionCounts,
     })
   } catch (err: any) {
     console.error('[api/mycard] error:', err)

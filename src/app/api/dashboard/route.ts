@@ -133,6 +133,8 @@ export async function GET() {
       certApplicationsResult,
       // 受け取ったリワード: emailマッチ
       crByEmailResult,
+      // セッション回数（クライアント構成バー用）
+      sessionCountResult,
     ] = await Promise.all([
       // リワード
       supabase.from('rewards').select('*').eq('professional_id', proId).order('sort_order'),
@@ -189,6 +191,11 @@ export async function GET() {
             .in('status', ['active', 'used'])
             .order('created_at', { ascending: false })
         : Promise.resolve({ data: null, error: null }),
+      // セッション回数集計
+      supabase.from('votes')
+        .select('session_count')
+        .eq('professional_id', proId)
+        .eq('status', 'confirmed'),
     ])
 
     if (isDev) console.log('[Dashboard API] Phase 2 done:', Date.now() - startTime, 'ms')
@@ -289,6 +296,16 @@ export async function GET() {
       })
     }
 
+    // セッション回数集計（クライアント構成バー用）
+    const sessionCounts = { first: 0, repeat: 0, regular: 0 }
+    if (sessionCountResult.data) {
+      for (const v of sessionCountResult.data) {
+        if (v.session_count && v.session_count in sessionCounts) {
+          (sessionCounts as any)[v.session_count]++
+        }
+      }
+    }
+
     if (isDev) console.log('[Dashboard API] Total:', Date.now() - startTime, 'ms')
 
     return NextResponse.json({
@@ -318,6 +335,7 @@ export async function GET() {
       bookmarks: bookmarksResult.data || [],
       certApplications: certApplicationsResult.data || [],
       receivedRewards,
+      sessionCounts,
     })
   } catch (err: any) {
     console.error('[api/dashboard] error:', err)
