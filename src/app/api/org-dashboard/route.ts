@@ -146,7 +146,7 @@ export async function GET() {
     // 5. メンバーの強みデータ取得（投票内訳 + proof_itemsマスタ）
     const allProIds = mergedMembers.map((m: any) => m.professional_id).filter(Boolean)
     let strengthDistribution: { tab: string; count: number }[] = []
-    let topStrengthItems: { label: string; count: number }[] = []
+    let topStrengthItems: { label: string; strength_label: string; count: number }[] = []
 
     if (allProIds.length > 0) {
       const [{ data: votesRaw }, { data: proofItems }] = await Promise.all([
@@ -219,7 +219,7 @@ export async function GET() {
       topStrengthItems = Object.entries(proofItemCountMap)
         .map(([proofItemId, count]) => {
           const piInfo = piMap.get(proofItemId)
-          return { label: piInfo?.label || '', count }
+          return { label: piInfo?.label || '', strength_label: piInfo?.strength_label || '', count }
         })
         .filter(item => item.label)
         .sort((a, b) => b.count - a.count)

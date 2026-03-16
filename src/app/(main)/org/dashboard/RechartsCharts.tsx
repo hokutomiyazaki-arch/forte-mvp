@@ -55,6 +55,25 @@ function MemberRanking({ data }: { data: any[] }) {
   )
 }
 
+// 6文字で折り返すカスタムTick（レーダーチャート用）
+function CustomTick({ payload, x, y, textAnchor }: any) {
+  const text = payload?.value || ''
+  const LINE_LIMIT = 6
+  const lines: string[] = []
+  for (let i = 0; i < text.length; i += LINE_LIMIT) {
+    lines.push(text.substring(i, i + LINE_LIMIT))
+  }
+  return (
+    <text x={x} y={y} textAnchor={textAnchor} fill="#1A1A2E" fontSize={11}>
+      {lines.map((line, i) => (
+        <tspan key={i} x={x} dy={i === 0 ? 0 : 14}>
+          {line}
+        </tspan>
+      ))}
+    </text>
+  )
+}
+
 function StrengthRadar({ data }: { data: any[] }) {
   if (!data || data.length === 0) {
     return (
@@ -64,9 +83,11 @@ function StrengthRadar({ data }: { data: any[] }) {
     )
   }
 
-  const chartData = data.map(d => ({
+  // 個別項目 Top8 を使用、strength_label優先で表示
+  const top8 = data.slice(0, 8)
+  const chartData = top8.map(d => ({
     ...d,
-    displayLabel: d.label.length > 8 ? d.label.substring(0, 8) + '…' : d.label,
+    displayLabel: d.strength_label || d.label || '',
   }))
 
   // 3項目未満は横棒グラフ、3項目以上はレーダーチャート
@@ -102,13 +123,13 @@ function StrengthRadar({ data }: { data: any[] }) {
       <h4 style={{ color: '#1A1A2E', fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>
         団体全体の強み分布
       </h4>
-      <div style={{ width: '100%', height: 300 }}>
+      <div style={{ width: '100%', height: 320 }}>
         <ResponsiveContainer>
-          <RadarChart data={chartData}>
+          <RadarChart data={chartData} outerRadius="70%">
             <PolarGrid stroke="#E5E5E0" />
             <PolarAngleAxis
               dataKey="displayLabel"
-              tick={{ fill: '#1A1A2E', fontSize: 11 }}
+              tick={<CustomTick />}
             />
             <Tooltip
               contentStyle={{
@@ -404,7 +425,7 @@ function MemberStrengthsTable({ data }: { data: any[] }) {
   )
 }
 
-export default function RechartsCharts({ analytics, strengthDistributionData, topStrengthItems }: { analytics: AnalyticsData | null; strengthDistributionData?: { label: string; count: number }[]; topStrengthItems?: { label: string; count: number }[] }) {
+export default function RechartsCharts({ analytics, strengthDistributionData, topStrengthItems }: { analytics: AnalyticsData | null; strengthDistributionData?: { label: string; count: number }[]; topStrengthItems?: { label: string; strength_label?: string; count: number }[] }) {
   if (!analytics) {
     return (
       <div style={{ padding: '32px', textAlign: 'center', color: '#888' }}>
@@ -453,13 +474,7 @@ export default function RechartsCharts({ analytics, strengthDistributionData, to
       <MemberRanking data={analytics.memberProofCounts || []} />
       <ProofRanking data={topStrengthItems || []} />
       <MemberStrengthsTable data={analytics.memberStrengths || []} />
-      <StrengthRadar data={
-        (analytics?.strengthDistribution && analytics.strengthDistribution.length > 0)
-          ? analytics.strengthDistribution
-          : (strengthDistributionData && strengthDistributionData.length > 0)
-            ? strengthDistributionData
-            : []
-      } />
+      <StrengthRadar data={topStrengthItems || []} />
       <MonthlyTrend data={analytics.monthlyTrend || []} />
       <DailyTrend data={analytics.dailyTrend || []} />
       <CommentFeed data={analytics.recentComments || []} />

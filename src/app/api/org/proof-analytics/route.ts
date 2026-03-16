@@ -124,7 +124,7 @@ export async function GET(request: NextRequest) {
         return {
           proof_id,
           label: info?.label || proof_id,
-          strength_label: (info?.tab ? TAB_DISPLAY_NAMES[info.tab] : '') || info?.strength_label || '',
+          strength_label: info?.strength_label || (info?.tab ? TAB_DISPLAY_NAMES[info.tab] : '') || '',
           count,
         }
       })

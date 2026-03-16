@@ -57,7 +57,7 @@ export default function OrgDashboardPage() {
   const [credentialLevels, setCredentialLevels] = useState<{ id: string; name: string }[]>([])
   const [activeTab, setActiveTab] = useState<'overview' | 'analytics' | 'resources'>('overview')
   const [strengthDistribution, setStrengthDistribution] = useState<any[]>([])
-  const [topStrengthItems, setTopStrengthItems] = useState<{ label: string; count: number }[]>([])
+  const [topStrengthItems, setTopStrengthItems] = useState<{ label: string; strength_label?: string; count: number }[]>([])
   const [error, setError] = useState('')
 
   // 共有資料 state
@@ -178,6 +178,7 @@ export default function OrgDashboardPage() {
         setTopStrengthItems(
           proofData.topProofItems.map((item: any) => ({
             label: item.label,
+            strength_label: item.strength_label || '',
             count: item.count,
           }))
         )
@@ -219,6 +220,7 @@ export default function OrgDashboardPage() {
       setTopStrengthItems(
         (proofData.topProofItems || []).map((item: any) => ({
           label: item.label,
+          strength_label: item.strength_label || '',
           count: item.count,
         }))
       )
