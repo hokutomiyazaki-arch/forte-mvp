@@ -673,6 +673,17 @@ function MyCardContent() {
 
   return (
     <div className="max-w-lg mx-auto px-4 py-8">
+      {/* プロ管理画面ボタン */}
+      {isPro && (
+        <button
+          onClick={() => { window.location.href = '/dashboard' }}
+          className="w-full mb-4 py-3 rounded-lg text-sm font-semibold text-white"
+          style={{ backgroundColor: '#C4A35A' }}
+        >
+          プロ管理画面へ
+        </button>
+      )}
+
       {/* マイプルーフ QRコード */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-6 text-center">
         <h2 className="text-base font-bold text-[#1A1A2E] mb-1">マイプルーフ QRコード</h2>
