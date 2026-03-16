@@ -112,6 +112,27 @@ export default function CardPage() {
   const [bookmarkCount, setBookmarkCount] = useState(0)
   const [orgs, setOrgs] = useState<{id: string; name: string; type: string}[]>([])
   const [credentialBadges, setCredentialBadges] = useState<{id: string; name: string; description: string | null; image_url: string | null; org_name: string; org_id: string}[]>([])
+  const [expandedProofId, setExpandedProofId] = useState<string | null>(null)
+  const [proofDatesCache, setProofDatesCache] = useState<Record<string, string[]>>({})
+  const [proofDatesLoading, setProofDatesLoading] = useState<string | null>(null)
+
+  const toggleProofDates = async (proofId: string) => {
+    if (expandedProofId === proofId) {
+      setExpandedProofId(null)
+      return
+    }
+    setExpandedProofId(proofId)
+    if (proofDatesCache[proofId]) return // already cached
+    setProofDatesLoading(proofId)
+    try {
+      const res = await fetch(`/api/proof-votes/${id}/${proofId}`)
+      const data = await res.json()
+      setProofDatesCache(prev => ({ ...prev, [proofId]: data.dates || [] }))
+    } catch {
+      setProofDatesCache(prev => ({ ...prev, [proofId]: [] }))
+    }
+    setProofDatesLoading(null)
+  }
 
   useEffect(() => {
     async function load() {
@@ -482,7 +503,8 @@ export default function CardPage() {
                     const barTrack = tier === 'normal' ? '#F0EDE6' : '#2A2A3E'
                     const barFill = isProven ? PROVEN_GOLD : getBarColor(i)
                     return (
-                      <div key={v.category} style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 14, padding: 18 }}>
+                      <div key={v.category} style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 14, padding: 18, cursor: 'pointer' }}
+                        onClick={() => v.proof_id && toggleProofDates(v.proof_id)}>
                         {isProven && (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
                             <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, color: PROVEN_GOLD }}>
@@ -517,6 +539,25 @@ export default function CardPage() {
                             transition: `width 1.2s ease ${i * 0.08}s`,
                           }} />
                         </div>
+                        {/* 日付アコーディオン */}
+                        {v.proof_id && expandedProofId === v.proof_id && (
+                          <div style={{ marginTop: 10, borderTop: `1px solid ${tier === 'normal' ? T.divider : '#3A3A4E'}`, paddingTop: 10 }}>
+                            {proofDatesLoading === v.proof_id ? (
+                              <div style={{ fontSize: 11, color: tier === 'normal' ? T.textMuted : 'rgba(255,255,255,0.5)' }}>読み込み中...</div>
+                            ) : (proofDatesCache[v.proof_id] || []).length > 0 ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: tier === 'normal' ? T.textMuted : 'rgba(255,255,255,0.5)', letterSpacing: 1, marginBottom: 2 }}>投票日</div>
+                                {(proofDatesCache[v.proof_id] || []).map((date, di) => (
+                                  <div key={di} style={{ fontSize: 11, color: tier === 'normal' ? T.textSub : 'rgba(255,255,255,0.7)', fontFamily: T.fontMono }}>
+                                    {date}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: 11, color: tier === 'normal' ? T.textMuted : 'rgba(255,255,255,0.5)' }}>日付データなし</div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )
                   })}
@@ -531,7 +572,8 @@ export default function CardPage() {
                       const pct = (v.vote_count / maxVotes) * 100
                       const isProven = v.vote_count >= PROVEN_THRESHOLD
                       return (
-                        <div key={v.category} style={{ width: '100%' }}>
+                        <div key={v.category} style={{ width: '100%', cursor: 'pointer' }}
+                          onClick={() => v.proof_id && toggleProofDates(v.proof_id)}>
                           {isProven && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
                               <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: PROVEN_GOLD }}>
@@ -566,6 +608,25 @@ export default function CardPage() {
                               transition: `width 1.2s ease ${(i + 3) * 0.08}s`,
                             }} />
                           </div>
+                          {/* 日付アコーディオン */}
+                          {v.proof_id && expandedProofId === v.proof_id && (
+                            <div style={{ marginTop: 8, borderTop: `1px solid ${T.divider}`, paddingTop: 8 }}>
+                              {proofDatesLoading === v.proof_id ? (
+                                <div style={{ fontSize: 11, color: T.textMuted }}>読み込み中...</div>
+                              ) : (proofDatesCache[v.proof_id] || []).length > 0 ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                  <div style={{ fontSize: 10, fontWeight: 700, color: T.textMuted, letterSpacing: 1, marginBottom: 2 }}>投票日</div>
+                                  {(proofDatesCache[v.proof_id] || []).map((date, di) => (
+                                    <div key={di} style={{ fontSize: 11, color: T.textSub, fontFamily: T.fontMono }}>
+                                      {date}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div style={{ fontSize: 11, color: T.textMuted }}>日付データなし</div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )
                     })}

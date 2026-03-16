@@ -1,4 +1,5 @@
 'use client'
+import { useState } from 'react'
 import { VoteSummary, Professional } from '@/lib/types'
 import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, PROVEN_GOLD, TAB_DISPLAY_NAMES } from '@/lib/constants'
 
@@ -21,6 +22,29 @@ interface Props {
 }
 
 export default function ForteChart({ votes, personalityVotes = [], professional, showLabels = true, certApplications = [] }: Props) {
+  const [expandedProofId, setExpandedProofId] = useState<string | null>(null)
+  const [proofDatesCache, setProofDatesCache] = useState<Record<string, string[]>>({})
+  const [proofDatesLoading, setProofDatesLoading] = useState<string | null>(null)
+
+  const toggleProofDates = async (proofId: string) => {
+    if (!professional?.id) return
+    if (expandedProofId === proofId) {
+      setExpandedProofId(null)
+      return
+    }
+    setExpandedProofId(proofId)
+    if (proofDatesCache[proofId]) return
+    setProofDatesLoading(proofId)
+    try {
+      const res = await fetch(`/api/proof-votes/${professional.id}/${proofId}`)
+      const data = await res.json()
+      setProofDatesCache(prev => ({ ...prev, [proofId]: data.dates || [] }))
+    } catch {
+      setProofDatesCache(prev => ({ ...prev, [proofId]: [] }))
+    }
+    setProofDatesLoading(null)
+  }
+
   const sortedResults = [...votes].sort((a, b) => b.vote_count - a.vote_count)
   const sortedPersonality = [...personalityVotes].sort((a, b) => b.vote_count - a.vote_count)
   const rawMax = Math.max(
@@ -54,7 +78,7 @@ export default function ForteChart({ votes, personalityVotes = [], professional,
               const appStatus = certMap.get(slug)
               const hasApplied = !!appStatus
               return (
-                <div key={v.category}>
+                <div key={v.category} className="cursor-pointer" onClick={() => v.proof_id && toggleProofDates(v.proof_id)}>
                   <div className="mb-1">
                     <div className="flex justify-between items-center">
                       <span className="text-sm font-medium text-[#1A1A2E]">
@@ -90,6 +114,25 @@ export default function ForteChart({ votes, personalityVotes = [], professional,
                     <span className="mt-1 inline-block text-xs" style={{ color: PROVEN_GOLD }}>
                       認定済み — {appStatus === 'shipped' ? '発送済み' : '発送準備中'}
                     </span>
+                  )}
+                  {/* 日付アコーディオン */}
+                  {v.proof_id && expandedProofId === v.proof_id && (
+                    <div className="mt-2 pt-2 border-t border-gray-100">
+                      {proofDatesLoading === v.proof_id ? (
+                        <div className="text-[11px] text-gray-400">読み込み中...</div>
+                      ) : (proofDatesCache[v.proof_id] || []).length > 0 ? (
+                        <div className="flex flex-col gap-1">
+                          <div className="text-[10px] font-bold text-gray-400 tracking-wider mb-0.5">投票日</div>
+                          {(proofDatesCache[v.proof_id] || []).map((date, di) => (
+                            <div key={di} className="text-[11px] text-gray-500 font-mono">
+                              {date}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-gray-400">日付データなし</div>
+                      )}
+                    </div>
                   )}
                 </div>
               )
