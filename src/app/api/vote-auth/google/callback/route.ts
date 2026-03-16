@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { clerkClient } from '@clerk/nextjs/server'
 import { checkExpertBadges } from '@/lib/expert-badges'
+import { normalizeEmail } from '@/lib/normalize-email'
 
 export const dynamic = 'force-dynamic'
 
@@ -142,7 +143,7 @@ export async function GET(request: NextRequest) {
       .from('votes')
       .select('id')
       .eq('professional_id', professional_id)
-      .eq('voter_email', email)
+      .eq('normalized_email', normalizeEmail(email))
       .maybeSingle()
 
     if (existingVote) {
@@ -220,6 +221,7 @@ export async function GET(request: NextRequest) {
       .insert({
         professional_id,
         voter_email: email,
+        normalized_email: normalizeEmail(email),
         client_user_id: null,
         session_count: voteData.session_count || 'first',
         vote_weight: voteData.session_count === 'first' ? 0.5 : 1.0,

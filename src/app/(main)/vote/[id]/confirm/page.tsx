@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
+import { normalizeEmail } from '@/lib/normalize-email';
 import { Suspense } from 'react';
 
 function VoteConfirmForm() {
@@ -40,6 +41,7 @@ function VoteConfirmForm() {
         const { data: voteData, error: voteError } = await (supabase as any).from('votes').insert({
           professional_id: professional_id,
           voter_email: voter_email,
+          normalized_email: normalizeEmail(voter_email),
           client_user_id: null,
           session_count: pendingVote.session_count || 'first',
           vote_type: pendingVote.vote_type || 'proof',
