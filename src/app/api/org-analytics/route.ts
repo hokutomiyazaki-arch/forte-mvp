@@ -6,9 +6,9 @@ import { TAB_DISPLAY_NAMES } from '@/lib/constants'
 export const dynamic = 'force-dynamic'
 
 /**
- * GET /api/org-analytics?orgId=xxx
+ * GET /api/org-analytics?orgId=xxx&credential_level_id=yyy
  * 分析タブ用データを遅延取得。
- * メインダッシュボードAPIから分離して高速化。
+ * credential_level_id が指定された場合、そのバッジを持つメンバーのみに絞り込む。
  */
 export async function GET(request: NextRequest) {
   try {
@@ -21,6 +21,8 @@ export async function GET(request: NextRequest) {
     if (!orgId) {
       return NextResponse.json({ error: 'orgId is required' }, { status: 400 })
     }
+
+    const credentialLevelId = request.nextUrl.searchParams.get('credential_level_id')
 
     const supabase = getSupabaseAdmin()
 
@@ -38,39 +40,75 @@ export async function GET(request: NextRequest) {
     }
 
     // メンバーリスト取得（professional_id一覧 + 名前マップ用）
+    // credential_level_idが指定された場合、そのバッジを持つメンバーに絞る
+    let holdersQuery = supabase
+      .from('org_members')
+      .select('professional_id, professionals(id, name, photo_url)')
+      .eq('organization_id', orgId)
+      .eq('status', 'active')
+
+    if (credentialLevelId) {
+      holdersQuery = holdersQuery.eq('credential_level_id', credentialLevelId)
+    } else {
+      holdersQuery = holdersQuery.not('credential_level_id', 'is', null)
+    }
+
     const [proofResult, holdersResult] = await Promise.all([
       supabase
         .from('org_proof_summary')
         .select('professional_id, professional_name, photo_url, total_votes')
         .eq('organization_id', orgId),
-      supabase
-        .from('org_members')
-        .select('professional_id, professionals(id, name, photo_url)')
-        .eq('organization_id', orgId)
-        .eq('status', 'active')
-        .not('credential_level_id', 'is', null),
+      holdersQuery,
     ])
 
-    // メンバー統合（org_proof_summary + バッジ取得者）
+    // メンバー統合
     const proofMembers = proofResult.data || []
     const badgeHolders = holdersResult.data || []
 
+    // バッジフィルタ時: バッジ保有者のprofessional_idセットを作る
+    const badgeHolderIds = new Set(badgeHolders.map(h => h.professional_id))
+
     const memberMap = new Map<string, { name: string; photo_url: string | null; total_votes: number }>()
-    for (const m of proofMembers) {
-      memberMap.set(m.professional_id, {
-        name: m.professional_name || '不明',
-        photo_url: m.photo_url || null,
-        total_votes: m.total_votes || 0,
-      })
-    }
-    for (const h of badgeHolders) {
-      const pro = h.professionals as any
-      if (pro && !memberMap.has(h.professional_id)) {
-        memberMap.set(h.professional_id, {
-          name: pro.name || '不明',
-          photo_url: pro.photo_url || null,
-          total_votes: 0,
+
+    if (credentialLevelId) {
+      // フィルタ時: バッジ保有者のみ。org_proof_summaryから投票数を取得
+      const proofMap = new Map<string, { name: string; photo_url: string | null; total_votes: number }>()
+      for (const m of proofMembers) {
+        proofMap.set(m.professional_id, {
+          name: m.professional_name || '不明',
+          photo_url: m.photo_url || null,
+          total_votes: m.total_votes || 0,
         })
+      }
+      for (const h of badgeHolders) {
+        const pro = h.professionals as any
+        const proofInfo = proofMap.get(h.professional_id)
+        if (!memberMap.has(h.professional_id)) {
+          memberMap.set(h.professional_id, {
+            name: proofInfo?.name || pro?.name || '不明',
+            photo_url: proofInfo?.photo_url || pro?.photo_url || null,
+            total_votes: proofInfo?.total_votes || 0,
+          })
+        }
+      }
+    } else {
+      // 全メンバー: 既存ロジック
+      for (const m of proofMembers) {
+        memberMap.set(m.professional_id, {
+          name: m.professional_name || '不明',
+          photo_url: m.photo_url || null,
+          total_votes: m.total_votes || 0,
+        })
+      }
+      for (const h of badgeHolders) {
+        const pro = h.professionals as any
+        if (pro && !memberMap.has(h.professional_id)) {
+          memberMap.set(h.professional_id, {
+            name: pro.name || '不明',
+            photo_url: pro.photo_url || null,
+            total_votes: 0,
+          })
+        }
       }
     }
 

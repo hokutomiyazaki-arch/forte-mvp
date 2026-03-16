@@ -200,23 +200,26 @@ export default function OrgDashboardPage() {
     loadAnalytics()
   }
 
-  // バッジフィルタ変更時にproof-analyticsを再取得（Fix 3）
+  // バッジフィルタ変更時にproof-analytics + org-analyticsを再取得
   async function handleBadgeFilter(badgeId: string | null) {
     setSelectedBadgeId(badgeId)
     if (!org) return
     try {
-      const url = badgeId
-        ? `/api/org/proof-analytics?orgId=${org.id}&credential_level_id=${badgeId}`
-        : `/api/org/proof-analytics?orgId=${org.id}`
-      const res = await fetch(url)
-      if (!res.ok) return
-      const proofData = await res.json()
+      const credParam = badgeId ? `&credential_level_id=${badgeId}` : ''
+      const [proofRes, analyticsRes] = await Promise.all([
+        fetch(`/api/org/proof-analytics?orgId=${org.id}${credParam}`),
+        fetch(`/api/org-analytics?orgId=${org.id}${credParam}`),
+      ])
+      const proofData = proofRes.ok ? await proofRes.json() : {}
+      const analyticsData = analyticsRes.ok ? await analyticsRes.json() : {}
+
       setAnalytics((prev: any) => ({
         ...prev,
         topProofItems: proofData.topProofItems || [],
         memberStrengths: proofData.memberStrengths || [],
+        ...(analyticsData.analytics || {}),
       }))
-      // Bug 1 fix: topStrengthItemsもフィルタ結果で更新する
+      // topStrengthItemsもフィルタ結果で更新する
       setTopStrengthItems(
         (proofData.topProofItems || []).map((item: any) => ({
           label: item.label,
