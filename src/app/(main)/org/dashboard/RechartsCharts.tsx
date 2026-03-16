@@ -58,7 +58,7 @@ function MemberRanking({ data }: { data: any[] }) {
 // 6文字で折り返すカスタムTick（レーダーチャート用）
 function CustomTick({ payload, x, y, textAnchor }: any) {
   const text = payload?.value || ''
-  const LINE_LIMIT = 6
+  const LINE_LIMIT = 4
   const lines: string[] = []
   for (let i = 0; i < text.length; i += LINE_LIMIT) {
     lines.push(text.substring(i, i + LINE_LIMIT))
