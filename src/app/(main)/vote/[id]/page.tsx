@@ -156,6 +156,7 @@ function SplashScreen({ onDone }: { onDone: () => void }) {
 type VoteStep =
   | "intro"
   | "confirm"
+  | "session_count"
   | "reward"
   | "proofs"
   | "personality"
@@ -310,7 +311,7 @@ function VoteForm() {
   const voteMethodRef = useRef<'session' | 'email'>('email')
 
   // フォーム state
-  const [sessionCount, setSessionCount] = useState<'first' | 'repeat' | ''>('')
+  const [sessionCount, setSessionCount] = useState<'first' | 'repeat' | 'regular' | ''>('')
   const [voterEmail, setVoterEmail] = useState('')
   const [comment, setComment] = useState('')
   const [selectedRewardId, setSelectedRewardId] = useState('')
@@ -1520,9 +1521,8 @@ function VoteForm() {
 
             <button
               onClick={() => {
-                setSessionCount('first')
                 setSessionConfirmed(true)
-                goToWithHistory(hasRewards ? "reward" : "proofs")
+                goToWithHistory("session_count")
               }}
               style={S.primaryBtn}
             >
@@ -1538,6 +1538,54 @@ function VoteForm() {
             >
               まだですが、気になっています
             </button>
+          </div>
+        </StepWrapper>
+      )}
+
+      {/* ── セッション回数選択（3択） ── */}
+      {voteStep === "session_count" && (
+        <StepWrapper isTransitioning={isTransitioning} showBack={false}>
+          <div style={{ textAlign: "center", width: "100%" }}>
+            <div style={{ fontSize: 32, marginBottom: 16 }}>📋</div>
+            <div style={S.title}>
+              <span style={{ color: "#C4A35A" }}>{pro.name}</span>さんの
+              <br />セッションは何回目ですか？
+            </div>
+            <div style={{ height: 28 }} />
+
+            <div style={{ display: "flex", gap: 8, width: "100%" }}>
+              {([
+                { value: 'first' as const, label: 'はじめて' },
+                { value: 'repeat' as const, label: '何度か受けた' },
+                { value: 'regular' as const, label: '5回以上' },
+              ]).map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => {
+                    setSessionCount(opt.value)
+                    goToWithHistory(hasRewards ? "reward" : "proofs")
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: "14px 4px",
+                    borderRadius: 14,
+                    background: sessionCount === opt.value
+                      ? "linear-gradient(135deg, #C4A35A, #D4B56A)"
+                      : "rgba(255,255,255,0.03)",
+                    border: sessionCount === opt.value
+                      ? "1.5px solid #C4A35A"
+                      : "1.5px solid rgba(255,255,255,0.12)",
+                    color: sessionCount === opt.value ? "#1A1A2E" : "#FAFAF7",
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    transition: "all 0.2s",
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
         </StepWrapper>
       )}
