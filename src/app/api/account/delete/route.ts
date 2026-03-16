@@ -32,9 +32,6 @@ export async function POST() {
   // ブックマーク
   await supabase.from('bookmarks').delete().eq('user_id', userId)
 
-  // 投票関連（votesテーブルは client_user_id カラム）
-  await supabase.from('votes').delete().eq('client_user_id', userId)
-
   // プロ関連テーブル（professional_id で紐づく）
   if (pro) {
     await supabase.from('rewards').delete().eq('professional_id', pro.id)

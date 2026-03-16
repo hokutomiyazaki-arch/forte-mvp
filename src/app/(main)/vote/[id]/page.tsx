@@ -4,6 +4,7 @@ import { useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { useUser, useSignUp, useSignIn } from '@clerk/nextjs'
 import { Professional, getRewardLabel } from '@/lib/types'
+import { normalizeEmail } from '@/lib/normalize-email'
 import { Suspense } from 'react'
 // AuthMethodSelector は login ページで使用。投票ページはフォーム内のためインライン実装
 
@@ -524,7 +525,7 @@ function VoteForm() {
           .from('votes')
           .select('id')
           .eq('professional_id', proId)
-          .eq('voter_email', sessionUserEmail)
+          .eq('normalized_email', normalizeEmail(sessionUserEmail))
           .maybeSingle()
         if (existing) setAlreadyVoted(true)
       } else {
@@ -535,7 +536,7 @@ function VoteForm() {
             .from('votes')
             .select('id')
             .eq('professional_id', proId)
-            .eq('voter_email', savedEmail)
+            .eq('normalized_email', normalizeEmail(savedEmail))
             .maybeSingle()
           if (existing) setAlreadyVoted(true)
         }
@@ -634,6 +635,7 @@ function VoteForm() {
       await (supabase as any).from('votes').insert({
         professional_id: proId,
         voter_email: null,
+        normalized_email: null,
         client_user_id: null,
         vote_type: 'hopeful',
         selected_proof_ids: null,
@@ -701,7 +703,7 @@ function VoteForm() {
         .from('votes')
         .select('id')
         .eq('professional_id', proId)
-        .eq('voter_email', formattedPhone)
+        .eq('normalized_email', normalizeEmail(formattedPhone))
         .maybeSingle()
 
       if (existingVote) {
@@ -798,6 +800,7 @@ function VoteForm() {
       const { data: insertedVote, error: voteError } = await (supabase as any).from('votes').insert({
         professional_id: proId,
         voter_email: formattedPhone,
+        normalized_email: normalizeEmail(formattedPhone),
         client_user_id: null,
         session_count: voteData.session_count,
         vote_weight: voteData.session_count === 'first' ? 0.5 : 1.0,
@@ -882,7 +885,7 @@ function VoteForm() {
     const { data: existingVote } = await (supabase as any).from('votes')
       .select('id')
       .eq('professional_id', proId)
-      .eq('voter_email', formattedPhone)
+      .eq('normalized_email', normalizeEmail(formattedPhone))
       .maybeSingle()
 
     if (existingVote) {
@@ -895,6 +898,7 @@ function VoteForm() {
     const { data: insertedVote, error: voteError } = await (supabase as any).from('votes').insert({
       professional_id: proId,
       voter_email: formattedPhone, // 電話番号を識別子として使用
+      normalized_email: normalizeEmail(formattedPhone),
       client_user_id: null,
       session_count: voteData.session_count,
       vote_weight: voteData.session_count === 'first' ? 0.5 : 1.0,
@@ -1040,6 +1044,7 @@ function VoteForm() {
     const { data: voteData, error: voteError } = await (supabase as any).from('votes').insert({
       professional_id: proId,
       voter_email: email,
+      normalized_email: normalizeEmail(email) || null,
       client_user_id: null,
       session_count: sessionCount,
       vote_weight: sessionCount === 'first' ? 0.5 : 1.0,
