@@ -451,13 +451,7 @@ export default function RechartsCharts({ analytics, strengthDistributionData, to
 
       {/* チャート */}
       <MemberRanking data={analytics.memberProofCounts || []} />
-      <ProofRanking data={
-        (topStrengthItems && topStrengthItems.length > 0)
-          ? topStrengthItems
-          : (analytics.topProofItems && analytics.topProofItems.length > 0)
-            ? analytics.topProofItems
-            : (strengthDistributionData || [])
-      } />
+      <ProofRanking data={topStrengthItems || []} />
       <MemberStrengthsTable data={analytics.memberStrengths || []} />
       <StrengthRadar data={
         (analytics?.strengthDistribution && analytics.strengthDistribution.length > 0)

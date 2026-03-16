@@ -173,6 +173,15 @@ export default function OrgDashboardPage() {
           memberStrengths: proofData.memberStrengths || [],
         })
       }
+      // topStrengthItemsをproof-analyticsの結果で同期（Bug 1 fix）
+      if (proofData.topProofItems && proofData.topProofItems.length > 0) {
+        setTopStrengthItems(
+          proofData.topProofItems.map((item: any) => ({
+            label: item.label,
+            count: item.count,
+          }))
+        )
+      }
       // バッジ一覧をセット（Fix 3）
       if (proofData.credentialLevels) {
         setCredentialLevels(proofData.credentialLevels)
@@ -206,6 +215,13 @@ export default function OrgDashboardPage() {
         topProofItems: proofData.topProofItems || [],
         memberStrengths: proofData.memberStrengths || [],
       }))
+      // Bug 1 fix: topStrengthItemsもフィルタ結果で更新する
+      setTopStrengthItems(
+        (proofData.topProofItems || []).map((item: any) => ({
+          label: item.label,
+          count: item.count,
+        }))
+      )
     } catch (err) {
       console.error('Badge filter error:', err)
     }
