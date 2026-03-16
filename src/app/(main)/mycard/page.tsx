@@ -67,6 +67,7 @@ function MyCardContent() {
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
   const [changingPassword, setChangingPassword] = useState(false)
   const [isPro, setIsPro] = useState(false)
+  const [sessionCounts, setSessionCounts] = useState<{ first: number; repeat: number; regular: number }>({ first: 0, repeat: 0, regular: 0 })
   const [bookmarkedPros, setBookmarkedPros] = useState<any[]>([])
   const [bookmarkCount, setBookmarkCount] = useState(0)
   const [userEmail, setUserEmail] = useState('')
@@ -148,6 +149,7 @@ function MyCardContent() {
         setBookmarkCount(data.bookmarks.length)
       }
       if (data.credentialBadges) setCredentialBadges(data.credentialBadges)
+      if (data.sessionCounts) setSessionCounts(data.sessionCounts)
 
       // 所属団体一覧を取得（バッジ持ちユーザー用）
       try {
@@ -983,6 +985,40 @@ function MyCardContent() {
           {message}
         </div>
       )}
+
+      {/* クライアント構成バー（プロのみ） */}
+      {isPro && (() => {
+        const total = sessionCounts.first + sessionCounts.repeat + sessionCounts.regular
+        if (total === 0) return null
+        const pFirst = Math.round((sessionCounts.first / total) * 100)
+        const pRepeat = Math.round((sessionCounts.repeat / total) * 100)
+        const pRegular = 100 - pFirst - pRepeat
+        const segments = [
+          { key: 'first', label: '初回', count: sessionCounts.first, pct: pFirst, bg: '#E8E4D9', color: '#444441' },
+          { key: 'repeat', label: 'リピーター', count: sessionCounts.repeat, pct: pRepeat, bg: '#C4A35A', color: '#412402' },
+          { key: 'regular', label: '常連', count: sessionCounts.regular, pct: pRegular, bg: '#1A1A2E', color: '#C4A35A' },
+        ]
+        return (
+          <div style={{ marginBottom: 16, padding: '16px', background: '#fff', borderRadius: 14, border: '1px solid #E5E7EB' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#6B7280', marginBottom: 10 }}>クライアント構成</div>
+            <div style={{ display: 'flex', height: 28, borderRadius: 6, overflow: 'hidden' }}>
+              {segments.map(s => s.pct > 0 ? (
+                <div key={s.key} style={{ width: `${s.pct}%`, background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {s.pct >= 10 && <span style={{ fontSize: 11, fontWeight: 700, color: s.color }}>{s.pct}%</span>}
+                </div>
+              ) : null)}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 10, flexWrap: 'wrap' }}>
+              {segments.map(s => (
+                <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#6B7280' }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.bg, display: 'inline-block', border: s.key === 'first' ? '1px solid #ccc' : 'none' }} />
+                  {s.label} <span style={{ fontWeight: 700, color: '#1F2937' }}>{s.count}人</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* タブ */}
       <div style={{

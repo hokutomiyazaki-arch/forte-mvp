@@ -112,6 +112,7 @@ export default function CardPage() {
   const [bookmarkCount, setBookmarkCount] = useState(0)
   const [orgs, setOrgs] = useState<{id: string; name: string; type: string}[]>([])
   const [credentialBadges, setCredentialBadges] = useState<{id: string; name: string; description: string | null; image_url: string | null; org_name: string; org_id: string}[]>([])
+  const [sessionCounts, setSessionCounts] = useState<{ first: number; repeat: number; regular: number }>({ first: 0, repeat: 0, regular: 0 })
   const [expandedProofId, setExpandedProofId] = useState<string | null>(null)
   const [proofDatesCache, setProofDatesCache] = useState<Record<string, string[]>>({})
   const [proofDatesLoading, setProofDatesLoading] = useState<string | null>(null)
@@ -206,6 +207,7 @@ export default function CardPage() {
             }))
           )
         }
+        if (data.sessionCounts) setSessionCounts(data.sessionCounts)
       } catch (err) {
         console.error('Card load error:', err)
       }
@@ -654,6 +656,44 @@ export default function CardPage() {
               </div>
             </>
           )}
+
+          {/* CLIENT COMPOSITION BAR */}
+          {(() => {
+            const total = sessionCounts.first + sessionCounts.repeat + sessionCounts.regular
+            if (total === 0) return null
+            const pFirst = Math.round((sessionCounts.first / total) * 100)
+            const pRepeat = Math.round((sessionCounts.repeat / total) * 100)
+            const pRegular = 100 - pFirst - pRepeat
+            const segments = [
+              { key: 'first', label: '初回', count: sessionCounts.first, pct: pFirst, bg: '#E8E4D9', color: '#444441' },
+              { key: 'repeat', label: 'リピーター', count: sessionCounts.repeat, pct: pRepeat, bg: '#C4A35A', color: '#412402' },
+              { key: 'regular', label: '常連', count: sessionCounts.regular, pct: pRegular, bg: '#1A1A2E', color: '#C4A35A' },
+            ]
+            return (
+              <>
+                <div style={{ fontSize: 10, fontWeight: 700, color: T.textMuted, letterSpacing: 2, textTransform: 'uppercase', fontFamily: T.fontMono, marginBottom: 10, marginTop: 16 }}>
+                  CLIENT COMPOSITION
+                </div>
+                <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: 18 }}>
+                  <div style={{ display: 'flex', height: 28, borderRadius: 6, overflow: 'hidden' }}>
+                    {segments.map(s => s.pct > 0 ? (
+                      <div key={s.key} style={{ width: `${s.pct}%`, background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {s.pct >= 10 && <span style={{ fontSize: 11, fontWeight: 700, color: s.color }}>{s.pct}%</span>}
+                      </div>
+                    ) : null)}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 12, flexWrap: 'wrap' }}>
+                    {segments.map(s => (
+                      <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: T.textSub }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.bg, display: 'inline-block', border: s.key === 'first' ? '1px solid #ccc' : 'none' }} />
+                        {s.label} <span style={{ fontWeight: 700, color: T.text }}>{s.count}人</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )
+          })()}
 
           {/* BOOKMARK ENGAGEMENT */}
           {bookmarkCount > 0 && (
