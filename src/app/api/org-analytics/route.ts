@@ -112,14 +112,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const memberProIds = Array.from(memberMap.keys())
+    const memberProIds = Array.from(memberMap.keys()).filter((id): id is string => id != null && id !== 'null')
 
     if (memberProIds.length === 0) {
       return NextResponse.json({ analytics: null })
     }
-
-    console.log('[DEBUG org-analytics] credentialLevelId:', credentialLevelId)
-    console.log('[DEBUG org-analytics] memberProIds count:', memberProIds.length)
 
     const sixMonthsAgo = new Date()
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
@@ -159,13 +156,6 @@ export async function GET(request: NextRequest) {
         .in('professional_id', memberProIds)
         .gte('created_at', sixMonthsAgo.toISOString()),
     ])
-
-    console.log('[DEBUG org-analytics] strengthResult error:', strengthResult.error)
-    console.log('[DEBUG org-analytics] strengthResult data count:', strengthResult.data?.length)
-    console.log('[DEBUG org-analytics] commentsResult error:', commentsResult.error)
-    console.log('[DEBUG org-analytics] commentsResult data count:', commentsResult.data?.length)
-    console.log('[DEBUG org-analytics] monthlyResult error:', monthlyResult.error)
-    console.log('[DEBUG org-analytics] monthlyResult data count:', monthlyResult.data?.length)
 
     // 強み分布集計（selected_proof_ids → proof_items.tab で集計）
     const TAB_LABELS = TAB_DISPLAY_NAMES
