@@ -62,3 +62,14 @@
 - **Phase 1A**: 店舗オーナーのコア機能（団体登録、メンバー招待、ダッシュボード、公開ページ）
 - **Phase 1B**: Badge Self-Service（credential_levels、claim URL、バッジ管理ダッシュボード）
 - **Phase 2**: Analytics + Search + 有料プラン
+## 教訓: org_members重複削除事故 (2026-03-13)
+
+org_membersは1プロ=複数行（バッジごとに1行）の設計。
+重複削除で DISTINCT ON (organization_id, professional_id) を使うと、
+正当なバッジ行（advance/master/TBU）まで消す。
+
+重複削除が必要な場合は必ず：
+DISTINCT ON (organization_id, professional_id, credential_level_id)
+の3カラムで行うこと。
+
+2026-03-13にadvance/master/TBUデータ消失→手動INSERT復旧。

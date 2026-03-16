@@ -332,7 +332,7 @@ export default function Home() {
             letterSpacing: '1.5px',
             fontWeight: 500,
           }}>
-            あなたの実績を、クライアントの声で証明に変える。
+            施術家・トレーナー・インストラクター・エステティシャン——体と向き合うすべてのプロへ。
           </div>
           {/* コピー + CTA（画像の下半分に重なる位置） */}
           <div style={{
