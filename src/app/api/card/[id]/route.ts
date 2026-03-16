@@ -33,6 +33,7 @@ export async function GET(
       bookmarkCountResult,
       orgMembersResult,
       badgeMembersResult,
+      sessionCountResult,
     ] = await Promise.all([
       // 1. プロ情報
       supabase.from('professionals').select('*').eq('id', proId).maybeSingle(),
@@ -64,6 +65,11 @@ export async function GET(
         .select('credential_level_id, credential_levels(id, name, description, image_url), organizations(id, name)')
         .eq('professional_id', proId).eq('status', 'active')
         .not('credential_level_id', 'is', null),
+      // 11. セッション回数（クライアント構成バー用）
+      supabase.from('votes')
+        .select('session_count')
+        .eq('professional_id', proId)
+        .eq('status', 'confirmed'),
     ])
 
     // ブックマーク状態（ログイン中のみ）
@@ -76,6 +82,16 @@ export async function GET(
         .eq('professional_id', proId)
         .maybeSingle()
       isBookmarked = !!bookmark
+    }
+
+    // セッション回数集計（クライアント構成バー用）
+    const sessionCounts = { first: 0, repeat: 0, regular: 0 }
+    if (sessionCountResult.data) {
+      for (const v of sessionCountResult.data) {
+        if (v.session_count && v.session_count in sessionCounts) {
+          sessionCounts[v.session_count as keyof typeof sessionCounts]++
+        }
+      }
     }
 
     return NextResponse.json({
@@ -91,6 +107,7 @@ export async function GET(
       currentUserId,
       orgMembers: orgMembersResult.data || [],
       badgeMembers: badgeMembersResult.data || [],
+      sessionCounts,
     })
   } catch (err) {
     console.error('[api/card] Error:', err)
