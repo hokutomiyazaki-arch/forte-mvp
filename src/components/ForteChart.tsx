@@ -1,6 +1,6 @@
 'use client'
 import { VoteSummary, Professional } from '@/lib/types'
-import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, PROVEN_GOLD } from '@/lib/constants'
+import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, PROVEN_GOLD, TAB_DISPLAY_NAMES } from '@/lib/constants'
 
 interface PersonalitySummary {
   category: string
@@ -57,7 +57,17 @@ export default function ForteChart({ votes, personalityVotes = [], professional,
                 <div key={v.category}>
                   <div className="flex justify-between items-center mb-1">
                     <span className="text-sm font-medium text-[#1A1A2E]">
-                      {v.category}
+                      {v.strength_label || v.category}
+                      {v.strength_label && (
+                        <span className="text-[11px] text-[#9CA3AF] ml-1.5">
+                          {v.category}
+                        </span>
+                      )}
+                      {v.tab && TAB_DISPLAY_NAMES[v.tab] && (
+                        <span className="text-[10px] font-semibold ml-1.5" style={{ color: 'rgba(196,163,90,0.6)' }}>
+                          {TAB_DISPLAY_NAMES[v.tab]}
+                        </span>
+                      )}
                     </span>
                     {showLabels && (
                       <span className="text-sm font-bold" style={{ color: isProven ? PROVEN_GOLD : '#1A1A2E' }}>

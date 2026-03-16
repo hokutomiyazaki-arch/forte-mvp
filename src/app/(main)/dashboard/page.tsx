@@ -5,7 +5,7 @@ import { db, uploadFile } from '@/lib/db'
 import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYPES, getRewardType, FNT_NEURO_APPS } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import ForteChart from '@/components/ForteChart'
-import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, PROVEN_GOLD, PROVEN_GRADIENT } from '@/lib/constants'
+import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, PROVEN_GOLD, PROVEN_GRADIENT, TAB_ORDER, TAB_DISPLAY_NAMES } from '@/lib/constants'
 import VoiceShareModal from '@/components/VoiceShareCard'
 import CertificationModal from '@/components/CertificationModal'
 import ImageCropper from '@/components/ImageCropper'
@@ -48,19 +48,8 @@ interface CustomProof {
   label: string
 }
 
-const CATEGORY_LABELS: Record<string, string> = {
-  body_pro: 'ボディプロ',
-  therapy: '治療・改善',
-  yoga: 'ヨガ',
-  pilates: 'ピラティス',
-  esthe: 'エステ',
-  sports: 'スポーツ',
-  education: '教育',
-  coaching: 'コーチング',
-  nutrition: '栄養',
-  specialist: 'スペシャリスト',
-}
-const CATEGORY_KEYS = Object.keys(CATEGORY_LABELS)
+const CATEGORY_LABELS = TAB_DISPLAY_NAMES
+const CATEGORY_KEYS = TAB_ORDER
 
 export default function DashboardPage() {
   const { signOut } = useClerk()
@@ -105,7 +94,7 @@ export default function DashboardPage() {
   const [proofItems, setProofItems] = useState<ProofItem[]>([])
   const [selectedProofIds, setSelectedProofIds] = useState<Set<string>>(new Set())
   const [customProofs, setCustomProofs] = useState<CustomProof[]>([])
-  const [activeTab, setActiveTab] = useState('body_pro')
+  const [activeTab, setActiveTab] = useState('healing')
   const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'card' | 'org' | 'myorgs'>('profile')
   // userRole removed: /api/dashboard の role レスポンスで判定
   const [proofSaving, setProofSaving] = useState(false)
@@ -786,9 +775,6 @@ export default function DashboardPage() {
 
   // カテゴリごとの選択数を算出
   function getCategorySelectedCount(tab: string): number {
-    if (tab === 'specialist') {
-      return customProofs.filter(c => c.label.trim() && selectedProofIds.has(c.id)).length
-    }
     return proofItems.filter(p => p.tab === tab && selectedProofIds.has(p.id)).length
   }
 
@@ -1888,79 +1874,6 @@ export default function DashboardPage() {
             </div>
 
             {/* 項目リスト */}
-            {activeTab === 'specialist' ? (
-              /* スペシャリストタブ: カスタム項目の管理 */
-              <div className="space-y-2 mb-6">
-                <p className="text-xs text-[#9CA3AF] mb-3">
-                  あなた独自の強み項目を作成し、チェックで投票対象に追加できます（最大3個）
-                </p>
-
-                {customProofs.map((cp, idx) => {
-                  const isChecked = selectedProofIds.has(cp.id)
-                  const isDisabled = !isChecked && isMaxSelected
-                  const voteCount = customProofVoteCounts.get(cp.id) || 0
-                  const hasLabel = cp.label.trim().length > 0
-
-                  return (
-                    <div key={cp.id} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                      isChecked ? 'bg-[#FAFAF7]' : ''
-                    }`}>
-                      {/* チェックボックス */}
-                      <div
-                        className={`relative flex-shrink-0 ${hasLabel ? 'cursor-pointer' : 'opacity-30 cursor-not-allowed'}`}
-                        onClick={() => hasLabel && !isDisabled && toggleCustomProofSelection(cp.id)}
-                      >
-                        <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
-                          isChecked
-                            ? 'bg-[#C4A35A] border-[#C4A35A]'
-                            : 'bg-white border-[#E5E7EB]'
-                        }`}>
-                          {isChecked && (
-                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* ラベル入力 */}
-                      <input
-                        value={cp.label}
-                        onChange={e => updateCustomProofLabel(idx, e.target.value)}
-                        className="flex-1 px-3 py-1.5 bg-white border border-[#E5E7EB] rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#C4A35A] focus:border-[#C4A35A]"
-                        placeholder="例：独自のアプローチがある"
-                      />
-
-                      {/* 票数 */}
-                      {voteCount > 0 && (
-                        <span className="text-xs text-[#C4A35A] font-medium flex-shrink-0">{voteCount}票</span>
-                      )}
-
-                      {/* 削除ボタン */}
-                      <button
-                        type="button"
-                        onClick={() => deleteCustomProof(idx)}
-                        className="px-2 py-1.5 text-[#9CA3AF] hover:text-red-500 transition-colors text-sm flex-shrink-0"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  )
-                })}
-
-                {/* カスタム項目追加ボタン */}
-                {customProofs.length < 3 && (
-                  <button
-                    type="button"
-                    onClick={addCustomProof}
-                    className="w-full py-2 border-2 border-dashed border-[#E5E7EB] rounded-lg text-sm text-[#9CA3AF] hover:border-[#C4A35A] hover:text-[#C4A35A] transition-colors"
-                  >
-                    + カスタム項目を追加（残り{3 - customProofs.length}枠）
-                  </button>
-                )}
-              </div>
-            ) : (
-              /* 通常タブ: 既存プルーフ項目 */
               <div className="space-y-2 mb-6">
                 {proofItems
                   .filter(p => p.tab === activeTab)
@@ -1995,14 +1908,13 @@ export default function DashboardPage() {
                           </div>
                         </div>
                         <div>
-                          <span className="text-sm text-[#1A1A2E]">{item.label}</span>
-                          <span className="text-xs text-[#9CA3AF] ml-2">{CATEGORY_LABELS[item.tab] || item.tab}</span>
+                          <span className="text-sm font-medium text-[#1A1A2E]">{item.strength_label}</span>
+                          <span className="text-xs text-[#9CA3AF] ml-2">{item.label}</span>
                         </div>
                       </label>
                     )
                   })}
               </div>
-            )}
 
             {/* 注記 */}
             <p className="text-xs text-[#9CA3AF] mb-4">
@@ -2032,14 +1944,7 @@ export default function DashboardPage() {
                     .filter(p => selectedProofIds.has(p.id))
                     .map(p => (
                       <span key={p.id} className="px-3 py-1 bg-[#C4A35A]/10 text-[#1A1A2E] text-xs rounded-full">
-                        {p.label}
-                      </span>
-                    ))}
-                  {customProofs
-                    .filter(c => c.label.trim() && selectedProofIds.has(c.id))
-                    .map(c => (
-                      <span key={c.id} className="px-3 py-1 bg-[#C4A35A] text-white text-xs rounded-full">
-                        {c.label}
+                        {p.strength_label}
                       </span>
                     ))}
                 </div>

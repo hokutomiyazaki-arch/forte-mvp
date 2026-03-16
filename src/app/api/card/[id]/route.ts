@@ -39,7 +39,7 @@ export async function GET(
       // 2. 投票サマリー
       supabase.from('vote_summary').select('*').eq('professional_id', proId),
       // 3. プルーフ項目マスタ
-      supabase.from('proof_items').select('id, label'),
+      supabase.from('proof_items').select('id, label, tab, strength_label'),
       // 4. 人柄サマリー
       supabase.from('personality_summary').select('*').eq('professional_id', proId),
       // 5. 人柄項目マスタ

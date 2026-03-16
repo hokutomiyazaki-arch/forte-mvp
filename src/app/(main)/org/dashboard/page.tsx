@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useUser } from '@clerk/nextjs'
 import dynamic from 'next/dynamic'
 import { RESULT_FORTES } from '@/lib/types'
+import { TAB_DISPLAY_NAMES } from '@/lib/constants'
 import ImageCropper from '@/components/ImageCropper'
 
 // recharts を dynamic import（SSR無効化）
@@ -139,19 +140,8 @@ export default function OrgDashboardPage() {
   const maxVotes = Math.max(...members.map(m => m.total_votes || 0), 1)
 
   // tabキーを日本語ラベルに変換（org-dashboardのstrengthDistribution用）
-  const TAB_LABELS: Record<string, string> = {
-    basic: '基本',
-    body_pro: 'ボディプロ',
-    yoga: 'ヨガ',
-    pilates: 'ピラティス',
-    esthe: 'エステ',
-    sports: 'スポーツ',
-    education: '教育',
-    coaching: 'コーチング',
-    nutrition: '栄養',
-  }
   const strengthChartData = strengthDistribution.map((d: any) => ({
-    label: TAB_LABELS[d.tab] || d.tab,
+    label: TAB_DISPLAY_NAMES[d.tab] || d.tab,
     count: d.count,
   }))
 

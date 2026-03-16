@@ -70,6 +70,8 @@ export interface VoteSummary {
   category: string
   vote_count: number
   proof_id?: string
+  tab?: string
+  strength_label?: string
 }
 
 export interface QrToken {

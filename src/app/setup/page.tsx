@@ -5,6 +5,7 @@ import { db, uploadFile } from '@/lib/db'
 import { REWARD_TYPES, getRewardType, FNT_NEURO_APPS } from '@/lib/types'
 import { PREFECTURES } from '@/lib/prefectures'
 import ImageCropper from '@/components/ImageCropper'
+import { TAB_ORDER, TAB_DISPLAY_NAMES } from '@/lib/constants'
 
 // プルーフ項目の型
 interface ProofItem {
@@ -20,19 +21,8 @@ interface CustomProof {
   label: string
 }
 
-const CATEGORY_LABELS: Record<string, string> = {
-  body_pro: 'ボディプロ',
-  therapy: '治療・改善',
-  yoga: 'ヨガ',
-  pilates: 'ピラティス',
-  esthe: 'エステ',
-  sports: 'スポーツ',
-  education: '教育',
-  coaching: 'コーチング',
-  nutrition: '栄養',
-  specialist: 'スペシャリスト',
-}
-const CATEGORY_KEYS = Object.keys(CATEGORY_LABELS)
+const CATEGORY_LABELS = TAB_DISPLAY_NAMES
+const CATEGORY_KEYS = TAB_ORDER
 
 export default function SetupPage() {
   const { user: clerkUser, isLoaded: authLoaded } = useUser()
@@ -58,7 +48,7 @@ export default function SetupPage() {
   // === Step 2: プルーフ選択 ===
   const [selectedProofIds, setSelectedProofIds] = useState<Set<string>>(new Set())
   const [customProofs, setCustomProofs] = useState<CustomProof[]>([])
-  const [activeTab, setActiveTab] = useState('body_pro')
+  const [activeTab, setActiveTab] = useState('healing')
   const [proofSaving, setProofSaving] = useState(false)
   const [proofError, setProofError] = useState('')
 
@@ -174,9 +164,6 @@ export default function SetupPage() {
   }
 
   function getCategorySelectedCount(tab: string): number {
-    if (tab === 'specialist') {
-      return customProofs.filter(c => c.label.trim() && selectedProofIds.has(c.id)).length
-    }
     return proofItems.filter(p => p.tab === tab && selectedProofIds.has(p.id)).length
   }
 
@@ -572,52 +559,6 @@ export default function SetupPage() {
             </div>
 
             {/* 項目リスト */}
-            {activeTab === 'specialist' ? (
-              <div className="space-y-2 mb-6">
-                <p className="text-xs text-[#9CA3AF] mb-3">
-                  あなた独自の強み項目を作成し、チェックで投票対象に追加（最大3個）
-                </p>
-                {customProofs.map((cp, idx) => {
-                  const isChecked = selectedProofIds.has(cp.id)
-                  const isDisabled = !isChecked && isMaxSelected
-                  const hasLabel = cp.label.trim().length > 0
-                  return (
-                    <div key={cp.id} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${isChecked ? 'bg-[#FAFAF7]' : ''}`}>
-                      <div
-                        className={`relative flex-shrink-0 ${hasLabel && !isDisabled ? 'cursor-pointer' : 'opacity-30 cursor-not-allowed'}`}
-                        onClick={() => hasLabel && !isDisabled && toggleCustomProofSelection(cp.id)}
-                      >
-                        <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
-                          isChecked ? 'bg-[#C4A35A] border-[#C4A35A]' : 'bg-white border-[#E5E7EB]'
-                        }`}>
-                          {isChecked && (
-                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </div>
-                      </div>
-                      <input
-                        value={cp.label}
-                        onChange={e => updateCustomProofLabel(idx, e.target.value)}
-                        className="flex-1 px-3 py-1.5 bg-white border border-[#E5E7EB] rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#C4A35A]"
-                        placeholder="例：独自のアプローチがある"
-                      />
-                      <button type="button" onClick={() => removeCustomProof(idx)}
-                        className="px-2 py-1.5 text-[#9CA3AF] hover:text-red-500 transition-colors text-sm flex-shrink-0">
-                        ✕
-                      </button>
-                    </div>
-                  )
-                })}
-                {customProofs.length < 3 && (
-                  <button type="button" onClick={addCustomProof}
-                    className="w-full py-2 border-2 border-dashed border-[#E5E7EB] rounded-lg text-sm text-[#9CA3AF] hover:border-[#C4A35A] hover:text-[#C4A35A] transition-colors">
-                    + カスタム項目を追加（残り{3 - customProofs.length}枠）
-                  </button>
-                )}
-              </div>
-            ) : (
               <div className="space-y-2 mb-6">
                 {proofItems
                   .filter(p => p.tab === activeTab)
@@ -650,14 +591,13 @@ export default function SetupPage() {
                           </div>
                         </div>
                         <div>
-                          <span className="text-sm text-[#1A1A2E]">{item.label}</span>
-                          <span className="text-xs text-[#9CA3AF] ml-2">{CATEGORY_LABELS[item.tab] || item.tab}</span>
+                          <span className="text-sm font-medium text-[#1A1A2E]">{item.strength_label}</span>
+                          <span className="text-xs text-[#9CA3AF] ml-2">{item.label}</span>
                         </div>
                       </label>
                     )
                   })}
               </div>
-            )}
 
             <p className="text-xs text-[#9CA3AF] mb-4">
               ※ 「期待できそう！」はすべてのプロに自動で表示されます
@@ -672,14 +612,7 @@ export default function SetupPage() {
                     .filter(p => selectedProofIds.has(p.id))
                     .map(p => (
                       <span key={p.id} className="px-3 py-1 bg-[#C4A35A]/10 text-[#1A1A2E] text-xs rounded-full">
-                        {p.label}
-                      </span>
-                    ))}
-                  {customProofs
-                    .filter(c => c.label.trim() && selectedProofIds.has(c.id))
-                    .map(c => (
-                      <span key={c.id} className="px-3 py-1 bg-[#C4A35A] text-white text-xs rounded-full">
-                        {c.label}
+                        {p.strength_label}
                       </span>
                     ))}
                 </div>

@@ -18,11 +18,15 @@ interface LabeledSummary {
   category: string
   vote_count: number
   proof_id?: string
+  tab?: string
+  strength_label?: string
 }
 
 interface ProofItem {
   id: string
   label: string
+  tab?: string
+  strength_label?: string
 }
 
 interface PersonalityItem {
@@ -46,9 +50,9 @@ export function resolveProofLabels(
   proofItems: ProofItem[],
   customProofs: CustomProof[],
 ): LabeledSummary[] {
-  const proofMap = new Map<string, string>()
+  const proofMap = new Map<string, { label: string; tab?: string; strength_label?: string }>()
   for (const item of proofItems) {
-    proofMap.set(item.id, item.label)
+    proofMap.set(item.id, { label: item.label, tab: item.tab, strength_label: item.strength_label })
   }
 
   const customMap = new Map<string, string>()
@@ -58,12 +62,17 @@ export function resolveProofLabels(
     }
   }
 
-  return rawVotes.map(v => ({
-    professional_id: v.professional_id,
-    category: proofMap.get(v.proof_id) || customMap.get(v.proof_id) || '-',
-    vote_count: v.vote_count,
-    proof_id: v.proof_id,
-  }))
+  return rawVotes.map(v => {
+    const pi = proofMap.get(v.proof_id)
+    return {
+      professional_id: v.professional_id,
+      category: pi?.label || customMap.get(v.proof_id) || '-',
+      vote_count: v.vote_count,
+      proof_id: v.proof_id,
+      tab: pi?.tab,
+      strength_label: pi?.strength_label,
+    }
+  })
 }
 
 /**

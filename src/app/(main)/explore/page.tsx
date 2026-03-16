@@ -2,19 +2,11 @@
 import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase'
 import { PREFECTURES } from '@/lib/prefectures'
+import { TAB_DISPLAY_NAMES, TAB_ORDER } from '@/lib/constants'
 
 const CATEGORY_TABS: { key: string; label: string }[] = [
   { key: 'all', label: '総合' },
-  { key: 'body_pro', label: 'ボディプロ' },
-  { key: 'therapy', label: '治療・改善' },
-  { key: 'yoga', label: 'ヨガ' },
-  { key: 'pilates', label: 'ピラティス' },
-  { key: 'esthe', label: 'エステ' },
-  { key: 'sports', label: 'スポーツ' },
-  { key: 'education', label: '教育' },
-  { key: 'coaching', label: 'コーチング' },
-  { key: 'nutrition', label: '栄養' },
-  { key: 'specialist', label: 'スペシャリスト' },
+  ...TAB_ORDER.map(key => ({ key, label: TAB_DISPLAY_NAMES[key] })),
 ]
 
 export default function ExplorePage() {
@@ -123,11 +115,8 @@ export default function ExplorePage() {
     if (selectedTab === 'all') {
       return null // フィルタなし
     }
-    if (selectedTab === 'specialist') {
-      return new Set(filteredVotes.map(v => v.proof_id).filter(id => !proofItemIdSet.has(id)))
-    }
     return new Set(proofItems.filter(p => p.tab === selectedTab).map(p => p.id))
-  }, [selectedTab, proofItems, filteredVotes, proofItemIdSet])
+  }, [selectedTab, proofItems])
 
   // 4. 項目ごとの集計（レベル2表示用）
   const itemRankings = useMemo(() => {
@@ -140,14 +129,19 @@ export default function ExplorePage() {
       totals.set(v.proof_id, (totals.get(v.proof_id) || 0) + v.vote_count)
     }
 
-    const items = Array.from(totals.entries()).map(([proofId, total]) => ({
-      proofId,
-      label: proofItemIdSet.has(proofId)
-        ? proofItems.find(p => p.id === proofId)?.label || '-'
-        : getCustomProofLabel(proofId),
-      totalVotes: total,
-      isCustom: !proofItemIdSet.has(proofId),
-    }))
+    const items = Array.from(totals.entries()).map(([proofId, total]) => {
+      const pi = proofItems.find(p => p.id === proofId)
+      return {
+        proofId,
+        label: proofItemIdSet.has(proofId)
+          ? pi?.label || '-'
+          : getCustomProofLabel(proofId),
+        strength_label: pi?.strength_label || '',
+        tab: pi?.tab || '',
+        totalVotes: total,
+        isCustom: !proofItemIdSet.has(proofId),
+      }
+    })
 
     items.sort((a, b) => b.totalVotes - a.totalVotes)
     return items.filter(i => i.totalVotes > 0)
@@ -256,7 +250,19 @@ export default function ExplorePage() {
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="text-gray-400 text-xs">{isExpanded ? '▼' : '▶'}</span>
-                    <span className="text-sm font-medium text-[#1A1A2E] truncate">{item.label}</span>
+                    <span className="text-sm font-medium text-[#1A1A2E] truncate">
+                      {item.strength_label || item.label}
+                      {item.strength_label && (
+                        <span className="text-[11px] text-[#9CA3AF] ml-1.5">
+                          {item.label}
+                        </span>
+                      )}
+                      {selectedTab === 'all' && item.tab && TAB_DISPLAY_NAMES[item.tab] && (
+                        <span className="text-[10px] font-semibold ml-1.5" style={{ color: 'rgba(196,163,90,0.6)' }}>
+                          {TAB_DISPLAY_NAMES[item.tab]}
+                        </span>
+                      )}
+                    </span>
                   </div>
                   <span className="text-[#C4A35A] font-bold text-sm ml-4 flex-shrink-0">{item.totalVotes}票</span>
                 </div>

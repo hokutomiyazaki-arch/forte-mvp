@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation'
 import { Professional, VoteSummary, Vote } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import { COLORS, FONTS } from '@/lib/design-tokens'
-import { PROVEN_THRESHOLD, PROVEN_GOLD } from '@/lib/constants'
+import { PROVEN_THRESHOLD, PROVEN_GOLD, TAB_DISPLAY_NAMES } from '@/lib/constants'
 // VoiceShareModal removed — public card is view-only
 import RelatedPros from '@/components/RelatedPros'
 
@@ -491,7 +491,21 @@ export default function CardPage() {
                           </div>
                         )}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, gap: 8 }}>
-                          <span style={{ fontSize: 14, fontWeight: 700, color: labelColor, lineHeight: 1.5, overflowWrap: 'anywhere' as const, minWidth: 0 }}>{v.category}</span>
+                          <div style={{ minWidth: 0 }}>
+                            <span style={{ fontSize: 15, fontWeight: 700, color: labelColor, lineHeight: 1.5, overflowWrap: 'anywhere' as const }}>
+                              {v.strength_label || v.category}
+                            </span>
+                            {v.strength_label && (
+                              <span style={{ fontSize: 11, color: tier === 'normal' ? T.textMuted : 'rgba(255,255,255,0.55)', marginLeft: 6 }}>
+                                {v.category}
+                              </span>
+                            )}
+                            {v.tab && TAB_DISPLAY_NAMES[v.tab] && (
+                              <span style={{ fontSize: 10, fontWeight: 600, color: 'rgba(196,163,90,0.6)', marginLeft: 6 }}>
+                                {TAB_DISPLAY_NAMES[v.tab]}
+                              </span>
+                            )}
+                          </div>
                           <span style={{ fontSize: 16, fontWeight: 'bold', color: countColor, fontFamily: T.fontMono, flexShrink: 0 }}>{v.vote_count}</span>
                         </div>
                         <div style={{ width: '100%', height: 8, background: barTrack, borderRadius: 99 }}>
@@ -524,7 +538,21 @@ export default function CardPage() {
                             </div>
                           )}
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4, gap: 8 }}>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: isProven ? PROVEN_GOLD : T.text, lineHeight: 1.5, overflowWrap: 'anywhere' as const, minWidth: 0 }}>{v.category}</span>
+                            <div style={{ minWidth: 0 }}>
+                              <span style={{ fontSize: 13, fontWeight: 600, color: isProven ? PROVEN_GOLD : T.text, lineHeight: 1.5, overflowWrap: 'anywhere' as const }}>
+                                {v.strength_label || v.category}
+                              </span>
+                              {v.strength_label && (
+                                <span style={{ fontSize: 10, color: T.textMuted, marginLeft: 6 }}>
+                                  {v.category}
+                                </span>
+                              )}
+                              {v.tab && TAB_DISPLAY_NAMES[v.tab] && (
+                                <span style={{ fontSize: 10, fontWeight: 600, color: 'rgba(196,163,90,0.6)', marginLeft: 6 }}>
+                                  {TAB_DISPLAY_NAMES[v.tab]}
+                                </span>
+                              )}
+                            </div>
                             <span style={{ fontSize: 13, color: isProven ? PROVEN_GOLD : T.textMuted, fontFamily: T.fontMono, flexShrink: 0 }}>{v.vote_count}</span>
                           </div>
                           <div style={{ width: '100%', height: 5, background: '#F0EDE6', borderRadius: 99 }}>
