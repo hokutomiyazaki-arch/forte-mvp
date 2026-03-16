@@ -839,7 +839,6 @@ export default function OrgDashboardPage() {
                                   </button>
                                 </div>
                               </div>
-                              <p style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.url}</p>
                               {r.description && (
                                 <p style={{ fontSize: 12, color: '#6B7280', marginBottom: 8, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any, overflow: 'hidden' }}>{r.description}</p>
                               )}
