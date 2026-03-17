@@ -24,6 +24,10 @@ export async function GET(req: NextRequest) {
 
   const supabase = getSupabaseAdmin()
 
+  // テストモード判定
+  const isTest = req.nextUrl.searchParams.get('test') === 'true'
+  const testProfessionalId = req.nextUrl.searchParams.get('professionalId')
+
   try {
     // 2. 今週のコンテンツ取得（管理画面で入力されたHIGHLIGHT/TIPS）
     const now = new Date()
@@ -37,9 +41,86 @@ export async function GET(req: NextRequest) {
     const content = await getWeeklyReportContent(weekStartStr)
 
     // 3. 全プロのデータ集計
-    console.log('[weekly-report] Generating reports...')
+    console.log(`[weekly-report] Generating reports...${isTest ? ' (TEST MODE)' : ''}`)
     const allReports = await generateAllWeeklyReports()
     console.log(`[weekly-report] Generated ${allReports.length} reports`)
+
+    // ── テストモード: ドライラン（professionalId指定なし） ──
+    if (isTest && !testProfessionalId) {
+      let wouldSendEmail = 0
+      let wouldSendLine = 0
+      let wouldSkip = 0
+      for (const data of allReports) {
+        if (data.line_messaging_user_id) wouldSendLine++
+        else if (data.contact_email) wouldSendEmail++
+        else wouldSkip++
+      }
+      return NextResponse.json({
+        test: true,
+        dryRun: true,
+        total: allReports.length,
+        wouldSendEmail,
+        wouldSendLine,
+        wouldSkip,
+        week_start: weekStartStr,
+      })
+    }
+
+    // ── テストモード: 1人指定 ──
+    if (isTest && testProfessionalId) {
+      const target = allReports.find(r => r.professional_id === testProfessionalId)
+      if (!target) {
+        return NextResponse.json({
+          test: true,
+          error: `Professional ${testProfessionalId} not found in reports`,
+        }, { status: 404 })
+      }
+
+      // LINE優先で送信
+      if (target.line_messaging_user_id) {
+        const lineResult = await sendWeeklyLineMessage(
+          target.line_messaging_user_id,
+          target,
+          content,
+        )
+        console.log(`[weekly-report][TEST] LINE ${lineResult.success ? 'sent' : 'failed'}: ${target.name}`)
+        return NextResponse.json({
+          test: true,
+          professionalId: testProfessionalId,
+          name: target.name,
+          channel: 'line',
+          status: lineResult.success ? 'sent' : 'failed',
+          error: lineResult.error || undefined,
+        })
+      } else if (target.contact_email) {
+        const emailHtml = generateEmailHTML(target, content)
+        const emailResult = await sendWeeklyEmail(
+          target.contact_email,
+          target.name,
+          emailHtml,
+        )
+        console.log(`[weekly-report][TEST] Email ${emailResult.success ? 'sent' : 'failed'}: ${target.name}`)
+        return NextResponse.json({
+          test: true,
+          professionalId: testProfessionalId,
+          name: target.name,
+          channel: 'email',
+          status: emailResult.success ? 'sent' : 'failed',
+          error: emailResult.error || undefined,
+        })
+      } else {
+        return NextResponse.json({
+          test: true,
+          professionalId: testProfessionalId,
+          name: target.name,
+          channel: 'none',
+          status: 'skipped',
+          error: 'No contact method (no email, no LINE)',
+        })
+      }
+    }
+
+    // ── 通常モード: 全プロに配信 ──
 
     // 4. 配信ログ
     const results: Array<{
