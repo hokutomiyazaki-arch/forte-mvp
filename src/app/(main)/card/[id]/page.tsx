@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import { Professional, VoteSummary, Vote } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import { COLORS, FONTS } from '@/lib/design-tokens'
+import { trackPageView } from '@/lib/tracking'
 import { PROVEN_THRESHOLD, PROVEN_GOLD, TAB_DISPLAY_NAMES } from '@/lib/constants'
 // VoiceShareModal removed — public card is view-only
 import RelatedPros from '@/components/RelatedPros'
@@ -914,6 +915,12 @@ export default function CardPage() {
         <button
           onClick={async () => {
             const url = `${window.location.origin}/card/${id}`
+            // S1(自分のカード) vs S2(他者のカード) 判定
+            const isSelf = !!(currentUserId && pro && currentUserId === pro.user_id)
+            trackPageView(
+              isSelf ? 'share_profile_self' : 'share_profile_other',
+              id
+            )
             if (navigator.share) {
               try {
                 await navigator.share({ title: `${pro.name}のカード`, url })

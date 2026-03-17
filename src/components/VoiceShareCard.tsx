@@ -4,6 +4,7 @@ import { useState, useRef, useCallback } from 'react'
 import html2canvas from 'html2canvas'
 import { createClient } from '@/lib/supabase'
 import { REALPROOF_LOGO_BASE64 } from '@/lib/logoBase64'
+import { trackPageView } from '@/lib/tracking'
 import {
   VoiceCardTheme, hexToRgba,
   VOICE_CARD_PRESETS, resolveTheme, buildCustomTheme,
@@ -225,6 +226,7 @@ export default function VoiceShareModal({
           title: 'REALPROOF',
           text: '強みが、あなたを定義する。',
         })
+        trackPageView('share_voice', proId, voice.id)
         const hash = crypto.randomUUID().replace(/-/g, '').slice(0, 12)
         await (supabase as any).from('voice_shares').insert({
           vote_id: voice.id,
@@ -248,6 +250,7 @@ export default function VoiceShareModal({
     a.click()
     URL.revokeObjectURL(url)
 
+    trackPageView('share_voice', proId, voice.id)
     const hash = crypto.randomUUID().replace(/-/g, '').slice(0, 12)
     await (supabase as any).from('voice_shares').insert({
       vote_id: voice.id,
