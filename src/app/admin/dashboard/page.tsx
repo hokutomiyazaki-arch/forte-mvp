@@ -50,6 +50,13 @@ interface ProData {
   lv: string | null
 }
 
+interface ChannelData {
+  ch: string
+  tokens: number
+  votes: number
+  pct: number
+}
+
 interface AuthMethodData {
   auth_method: string
   count: number
@@ -293,7 +300,7 @@ async function fetchDashboardData() {
   const fourteenDaysAgo = new Date()
   fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
 
-  const [goRes, proRes, authRes, trendRes, proofRes] = await Promise.all([
+  const [goRes, proRes, authRes, trendRes, proofRes, qrTokensRes, votesForChRes] = await Promise.all([
     supabase.from('admin_go_nogo').select('*').maybeSingle(),
     supabase.from('admin_pro_status').select('*'),
     // 認証方式別
@@ -302,6 +309,10 @@ async function fetchDashboardData() {
     supabase.from('votes').select('created_at, professional_id').gte('created_at', thirtyDaysAgo.toISOString()),
     // 日別プルーフ獲得者 (14日)
     supabase.from('votes').select('created_at, professional_id, professionals(name, last_name, first_name)').gte('created_at', fourteenDaysAgo.toISOString()),
+    // チャネル別: qr_tokens
+    supabase.from('qr_tokens').select('token'),
+    // チャネル別: votes の qr_token
+    supabase.from('votes').select('id, qr_token'),
   ])
 
   // Go/No-Go マッピング
@@ -402,7 +413,36 @@ async function fetchDashboardData() {
       .sort((a, b) => b.dateRaw.localeCompare(a.dateRaw) || b.daily_votes - a.daily_votes)
   }
 
-  return { goNogo, pros, authMethods, dailyTrend, dailyProofs }
+  // チャネル別マッピング (QR vs NFC)
+  let channels: ChannelData[] | null = null
+  if (qrTokensRes.data && !qrTokensRes.error && Array.isArray(qrTokensRes.data)) {
+    // トークンをチャネル別に分類（ハイフン含む→QR、含まない→NFC）
+    const tokensByChannel: Record<string, Set<string>> = { QR: new Set(), NFC: new Set() }
+    qrTokensRes.data.forEach((row: any) => {
+      const token = row.token || ''
+      const ch = token.includes('-') ? 'QR' : 'NFC'
+      tokensByChannel[ch].add(token)
+    })
+
+    // 投票をチャネル別にカウント
+    const votesByChannel: Record<string, Set<string>> = { QR: new Set(), NFC: new Set() }
+    if (votesForChRes.data && !votesForChRes.error && Array.isArray(votesForChRes.data)) {
+      votesForChRes.data.forEach((row: any) => {
+        if (!row.qr_token) return
+        const ch = row.qr_token.includes('-') ? 'QR' : 'NFC'
+        votesByChannel[ch].add(row.id)
+      })
+    }
+
+    channels = ['QR', 'NFC'].map(ch => {
+      const tokens = tokensByChannel[ch].size
+      const votes = votesByChannel[ch].size
+      const pct = tokens > 0 ? Math.round((votes / tokens) * 1000) / 10 : 0
+      return { ch, tokens, votes, pct }
+    })
+  }
+
+  return { goNogo, pros, authMethods, dailyTrend, dailyProofs, channels }
 }
 
 // ============================================================
@@ -414,6 +454,7 @@ export default function AdminDashboard() {
   const [dataSource, setDataSource] = useState<'live' | 'sample'>('sample')
   const [goNogo, setGoNogo] = useState<GoNogoData>(SAMPLE_GO)
   const [pros, setPros] = useState<ProData[]>(SAMPLE_PROS)
+  const [channels, setChannels] = useState<ChannelData[]>([])
   const [authMethods, setAuthMethods] = useState<AuthMethodData[]>([])
   const [dailyTrend, setDailyTrend] = useState<DailyTrendData[]>([])
   const [dailyProofs, setDailyProofs] = useState<DailyProofData[]>([])
@@ -425,6 +466,7 @@ export default function AdminDashboard() {
 
       if (result.goNogo) { setGoNogo(result.goNogo); hasLiveData = true }
       if (result.pros) { setPros(result.pros); hasLiveData = true }
+      if (result.channels) { setChannels(result.channels) }
       if (result.authMethods) { setAuthMethods(result.authMethods) }
       if (result.dailyTrend) { setDailyTrend(result.dailyTrend) }
       if (result.dailyProofs) { setDailyProofs(result.dailyProofs) }
@@ -512,9 +554,41 @@ export default function AdminDashboard() {
         <MC label="総投票数" value={g.total_votes} sub="累計" />
       </div>
 
-      {/* [B] Channel — placeholder */}
-      <Sec>チャネル別（QR vs NFC vs Direct）</Sec>
-      <Placeholder message="トラッキング実装後に表示" />
+      {/* [B] Channel */}
+      <Sec>チャネル別（QR vs NFC）</Sec>
+      {channels.length === 0 ? (
+        <Placeholder message="データなし" />
+      ) : (
+        <div style={{ background: C.surface, borderRadius: 10, padding: 18 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: `1px solid ${C.grayDark}` }}>
+                {['チャネル', 'トークン発行数', '投票完了', '転換率'].map(h => (
+                  <th key={h} style={{ textAlign: 'left', padding: '10px 14px', color: C.gray, fontWeight: 500, fontSize: 11 }}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {channels.map(r => (
+                <tr key={r.ch} style={{ borderBottom: `1px solid ${C.grayDark}22` }}>
+                  <td style={{ padding: '10px 14px', color: C.cream, fontWeight: 500 }}>{r.ch}</td>
+                  <td style={{ padding: '10px 14px', color: C.cream }}>{r.tokens}</td>
+                  <td style={{ padding: '10px 14px', color: C.cream }}>{r.votes}</td>
+                  <td style={{
+                    padding: '10px 14px',
+                    color: r.pct >= 50 ? C.green : r.pct > 0 ? C.amber : C.gray,
+                    fontWeight: 600,
+                  }}>
+                    {r.pct > 0 ? `${r.pct}%` : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* [C] Funnel + Auth Method */}
       <Sec>投票ファネル — Layer 3 離脱分析</Sec>
