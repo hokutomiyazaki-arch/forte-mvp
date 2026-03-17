@@ -50,32 +50,22 @@ interface ProData {
   lv: string | null
 }
 
-interface ChannelData {
-  ch: string
-  scans: number
-  votes: number
-  pct: number
+interface AuthMethodData {
+  auth_method: string
+  count: number
 }
 
-interface FunnelStep {
-  label: string
-  value: number
-}
-
-interface ShareData {
-  s1: number
-  s2: number
-  s3: number
-  pv1: number
-  pv2: number
-  pv3: number
-}
-
-interface DailyData {
+interface DailyTrendData {
   date: string
   votes: number
-  views: number
-  shares: number
+  active_pros: number
+}
+
+interface DailyProofData {
+  date: string
+  dateRaw: string
+  pro_name: string
+  daily_votes: number
 }
 
 // ============================================================
@@ -100,28 +90,15 @@ const SAMPLE_PROS: ProData[] = [
   { id: 6, n: 'NFC報告者', ps: 'complete', rw: 1, qr: 3, v: 0, s1: 0, s2: 0, s3: 0, spv: 0, pv: 3, eng: 'cooling', lv: null },
 ]
 
-const SAMPLE_FUNNEL: FunnelStep[] = [
-  { label: 'QRスキャン', value: 32 },
-  { label: '「投票する」タップ', value: 26 },
-  { label: 'メール/SMS入力', value: 20 },
-  { label: '投票完了', value: 18 },
-  { label: 'リワード閲覧', value: 15 },
-]
-
-const SAMPLE_CHANNELS: ChannelData[] = [
-  { ch: 'QR', scans: 28, votes: 16, pct: 57.1 },
-  { ch: 'NFC', scans: 0, votes: 0, pct: 0 },
-  { ch: 'Direct', scans: 4, votes: 2, pct: 50.0 },
-]
-
-const SAMPLE_SHARES: ShareData = { s1: 2, s2: 1, s3: 0, pv1: 8, pv2: 3, pv3: 0 }
-
-const SAMPLE_DAILY: DailyData[] = Array.from({ length: 14 }, (_, i) => ({
-  date: `3/${i + 1}`,
-  votes: Math.floor(Math.random() * 4),
-  views: Math.floor(Math.random() * 6 + 1),
-  shares: Math.floor(Math.random() * 2),
-}))
+// ============================================================
+// 認証方式ラベル
+// ============================================================
+const AUTH_METHOD_LABELS: Record<string, string> = {
+  email: 'メール認証',
+  sms: 'SMS認証',
+  line: 'LINE認証',
+  google: 'Google認証',
+}
 
 // ============================================================
 // サブコンポーネント
@@ -179,34 +156,13 @@ function VB({ verdict }: { verdict: string }) {
   )
 }
 
-function Funnel({ steps }: { steps: FunnelStep[] }) {
-  const max = Math.max(...steps.map(s => s.value), 1)
+function Placeholder({ message }: { message: string }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {steps.map((s, i) => {
-        const w = (s.value / max) * 100
-        const prev = i > 0 ? steps[i - 1].value : null
-        const rate = prev ? Math.round((s.value / prev) * 100) : null
-        const rc = rate !== null ? (rate < 50 ? C.red : rate < 70 ? C.amber : C.green) : C.gray
-        return (
-          <div key={s.label}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, fontSize: 12 }}>
-              <span style={{ color: C.cream }}>{s.label}</span>
-              <span style={{ color: C.gray }}>
-                {s.value}
-                {rate !== null && <span style={{ color: rc, marginLeft: 8 }}>({rate}%)</span>}
-              </span>
-            </div>
-            <div style={{ height: 24, background: C.bg, borderRadius: 5, overflow: 'hidden' }}>
-              <div style={{
-                height: '100%', width: `${w}%`,
-                background: `linear-gradient(90deg,${C.gold},${C.gold}66)`,
-                borderRadius: 5,
-              }} />
-            </div>
-          </div>
-        )
-      })}
+    <div style={{
+      background: C.surface, borderRadius: 10, padding: 32,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div style={{ color: C.gray, fontSize: 13, textAlign: 'center' }}>{message}</div>
     </div>
   )
 }
@@ -234,7 +190,7 @@ function ProTbl({ pros }: { pros: ProData[] }) {
     at_risk: { c: C.red, t: '離脱危険' },
     never: { c: C.gray, t: '未訪問' },
   }
-  const hds = ['名前', '設定', 'RW', 'QR', '投票', 'Self', 'Card', 'Voice', '→PV', '閲覧', '状態', '最終投票']
+  const hds = ['名前', '設定', 'リワード', 'QR', '投票', 'Self', 'Card', 'Voice', '→PV', '閲覧', '状態', '最終投票']
   return (
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -332,13 +288,20 @@ function MiniBar({ data, dk, color, h = 80 }: {
 async function fetchDashboardData() {
   const supabase = createClientComponentClient()
 
-  const [goRes, proRes, chRes, funnelRes, shareRes, dailyRes] = await Promise.all([
+  const thirtyDaysAgo = new Date()
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+  const fourteenDaysAgo = new Date()
+  fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
+
+  const [goRes, proRes, authRes, trendRes, proofRes] = await Promise.all([
     supabase.from('admin_go_nogo').select('*').maybeSingle(),
     supabase.from('admin_pro_status').select('*'),
-    supabase.from('admin_channel_funnel').select('*'),
-    supabase.from('admin_vote_funnel').select('*').maybeSingle(),
-    supabase.from('admin_share_analytics').select('*').maybeSingle(),
-    supabase.from('admin_daily_trend').select('*'),
+    // 認証方式別
+    supabase.from('votes').select('auth_method'),
+    // 日別トレンド (30日)
+    supabase.from('votes').select('created_at, professional_id').gte('created_at', thirtyDaysAgo.toISOString()),
+    // 日別プルーフ獲得者 (14日)
+    supabase.from('votes').select('created_at, professional_id, professionals(name, last_name, first_name)').gte('created_at', fourteenDaysAgo.toISOString()),
   ])
 
   // Go/No-Go マッピング
@@ -375,59 +338,71 @@ async function fetchDashboardData() {
     }))
   }
 
-  // チャネル別マッピング
-  let channels: ChannelData[] | null = null
-  if (chRes.data && !chRes.error && Array.isArray(chRes.data) && chRes.data.length > 0) {
-    channels = chRes.data.map((d: any) => ({
-      ch: d.channel || 'unknown',
-      scans: Number(d.scans) || 0,
-      votes: Number(d.votes_submitted) || 0,
-      pct: Number(d.conversion_pct) || 0,
-    }))
-  }
-
-  // 投票ファネルマッピング
-  let funnel: FunnelStep[] | null = null
-  if (funnelRes.data && !funnelRes.error) {
-    const d = funnelRes.data
-    funnel = [
-      { label: 'QRスキャン', value: Number(d.qr_scans) || 0 },
-      { label: '「投票する」タップ', value: Number(d.vote_starts) || 0 },
-      { label: 'メール/SMS入力', value: Number(d.emails_entered) || 0 },
-      { label: '投票完了', value: Number(d.votes_submitted) || 0 },
-      { label: 'リワード閲覧', value: Number(d.rewards_viewed) || 0 },
-    ]
-  }
-
-  // シェア分析マッピング
-  let shares: ShareData | null = null
-  if (shareRes.data && !shareRes.error) {
-    const d = shareRes.data
-    shares = {
-      s1: Number(d.s1_self_shares) || 0,
-      s2: Number(d.s2_card_shares) || 0,
-      s3: Number(d.s3_voice_shares) || 0,
-      pv1: Number(d.pv_from_s1) || 0,
-      pv2: Number(d.pv_from_s2) || 0,
-      pv3: Number(d.pv_from_s3) || 0,
-    }
-  }
-
-  // 日別トレンドマッピング
-  let daily: DailyData[] | null = null
-  if (dailyRes.data && !dailyRes.error && Array.isArray(dailyRes.data) && dailyRes.data.length > 0) {
-    daily = dailyRes.data.map((d: any) => {
-      const dt = new Date(d.view_date)
-      return {
-        date: `${dt.getMonth() + 1}/${dt.getDate()}`,
-        votes: Number(d.vote_flow_views) || 0,
-        views: Number(d.profile_views) || 0,
-        shares: Number(d.share_events) || 0,
-      }
+  // 認証方式別マッピング
+  let authMethods: AuthMethodData[] | null = null
+  if (authRes.data && !authRes.error && Array.isArray(authRes.data)) {
+    const counts: Record<string, number> = {}
+    authRes.data.forEach((row: any) => {
+      const method = row.auth_method || 'unknown'
+      counts[method] = (counts[method] || 0) + 1
     })
+    authMethods = Object.entries(counts)
+      .map(([auth_method, count]) => ({ auth_method, count }))
+      .sort((a, b) => b.count - a.count)
   }
 
-  return { goNogo, pros, channels, funnel, shares, daily }
+  // 日別トレンドマッピング (30日)
+  let dailyTrend: DailyTrendData[] | null = null
+  if (trendRes.data && !trendRes.error && Array.isArray(trendRes.data)) {
+    const byDate: Record<string, { votes: number; pros: Set<string> }> = {}
+    trendRes.data.forEach((row: any) => {
+      const date = row.created_at ? row.created_at.split('T')[0] : null
+      if (!date) return
+      if (!byDate[date]) byDate[date] = { votes: 0, pros: new Set() }
+      byDate[date].votes++
+      byDate[date].pros.add(row.professional_id)
+    })
+    dailyTrend = Object.entries(byDate)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, data]) => {
+        const dt = new Date(date)
+        return {
+          date: `${dt.getMonth() + 1}/${dt.getDate()}`,
+          votes: data.votes,
+          active_pros: data.pros.size,
+        }
+      })
+  }
+
+  // 日別プルーフ獲得者マッピング (14日)
+  let dailyProofs: DailyProofData[] | null = null
+  if (proofRes.data && !proofRes.error && Array.isArray(proofRes.data)) {
+    const byDatePro: Record<string, { pro_name: string; count: number; dateRaw: string }> = {}
+    proofRes.data.forEach((row: any) => {
+      const date = row.created_at ? row.created_at.split('T')[0] : null
+      if (!date) return
+      const pro = row.professionals as any
+      const proName = pro
+        ? ((pro.last_name && pro.first_name) ? `${pro.last_name} ${pro.first_name}` : pro.name || '—')
+        : '—'
+      const key = `${date}_${row.professional_id}`
+      if (!byDatePro[key]) byDatePro[key] = { pro_name: proName, count: 0, dateRaw: date }
+      byDatePro[key].count++
+    })
+    dailyProofs = Object.entries(byDatePro)
+      .map(([, data]) => {
+        const dt = new Date(data.dateRaw)
+        return {
+          date: `${dt.getMonth() + 1}/${dt.getDate()}`,
+          dateRaw: data.dateRaw,
+          pro_name: data.pro_name,
+          daily_votes: data.count,
+        }
+      })
+      .sort((a, b) => b.dateRaw.localeCompare(a.dateRaw) || b.daily_votes - a.daily_votes)
+  }
+
+  return { goNogo, pros, authMethods, dailyTrend, dailyProofs }
 }
 
 // ============================================================
@@ -439,10 +414,9 @@ export default function AdminDashboard() {
   const [dataSource, setDataSource] = useState<'live' | 'sample'>('sample')
   const [goNogo, setGoNogo] = useState<GoNogoData>(SAMPLE_GO)
   const [pros, setPros] = useState<ProData[]>(SAMPLE_PROS)
-  const [channels, setChannels] = useState<ChannelData[]>(SAMPLE_CHANNELS)
-  const [funnel, setFunnel] = useState<FunnelStep[]>(SAMPLE_FUNNEL)
-  const [shares, setShares] = useState<ShareData>(SAMPLE_SHARES)
-  const [daily, setDaily] = useState<DailyData[]>(SAMPLE_DAILY)
+  const [authMethods, setAuthMethods] = useState<AuthMethodData[]>([])
+  const [dailyTrend, setDailyTrend] = useState<DailyTrendData[]>([])
+  const [dailyProofs, setDailyProofs] = useState<DailyProofData[]>([])
 
   const loadData = useCallback(async () => {
     try {
@@ -451,10 +425,9 @@ export default function AdminDashboard() {
 
       if (result.goNogo) { setGoNogo(result.goNogo); hasLiveData = true }
       if (result.pros) { setPros(result.pros); hasLiveData = true }
-      if (result.channels) { setChannels(result.channels); hasLiveData = true }
-      if (result.funnel) { setFunnel(result.funnel); hasLiveData = true }
-      if (result.shares) { setShares(result.shares); hasLiveData = true }
-      if (result.daily) { setDaily(result.daily); hasLiveData = true }
+      if (result.authMethods) { setAuthMethods(result.authMethods) }
+      if (result.dailyTrend) { setDailyTrend(result.dailyTrend) }
+      if (result.dailyProofs) { setDailyProofs(result.dailyProofs) }
 
       setDataSource(hasLiveData ? 'live' : 'sample')
     } catch (e) {
@@ -472,7 +445,15 @@ export default function AdminDashboard() {
   const g = goNogo
   const pr = g.total_pros > 0 ? Math.round((g.complete_profiles / g.total_pros) * 100) : 0
   const qr = g.total_pros > 0 ? Math.round((g.pros_who_showed_qr / g.total_pros) * 100) : 0
-  const sh = shares
+  const totalAuthVotes = authMethods.reduce((sum, a) => sum + a.count, 0)
+
+  // Group daily proofs by date for rendering
+  const proofsByDate: Record<string, DailyProofData[]> = {}
+  dailyProofs.forEach(dp => {
+    if (!proofsByDate[dp.dateRaw]) proofsByDate[dp.dateRaw] = []
+    proofsByDate[dp.dateRaw].push(dp)
+  })
+  const proofDates = Object.keys(proofsByDate).sort((a, b) => b.localeCompare(a))
 
   return (
     <div style={{
@@ -531,97 +512,87 @@ export default function AdminDashboard() {
         <MC label="総投票数" value={g.total_votes} sub="累計" />
       </div>
 
-      {/* [B] Channel */}
+      {/* [B] Channel — placeholder */}
       <Sec>チャネル別（QR vs NFC vs Direct）</Sec>
-      <div style={{ background: C.surface, borderRadius: 10, padding: 18 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <thead>
-            <tr style={{ borderBottom: `1px solid ${C.grayDark}` }}>
-              {['チャネル', 'スキャン数', '投票完了', '転換率'].map(h => (
-                <th key={h} style={{ textAlign: 'left', padding: '10px 14px', color: C.gray, fontWeight: 500, fontSize: 11 }}>
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {channels.map(r => (
-              <tr key={r.ch} style={{ borderBottom: `1px solid ${C.grayDark}22` }}>
-                <td style={{ padding: '10px 14px', color: C.cream, fontWeight: 500 }}>{r.ch}</td>
-                <td style={{ padding: '10px 14px', color: C.cream }}>{r.scans}</td>
-                <td style={{ padding: '10px 14px', color: C.cream }}>{r.votes}</td>
-                <td style={{
-                  padding: '10px 14px',
-                  color: r.pct >= 50 ? C.green : r.pct > 0 ? C.amber : C.gray,
-                  fontWeight: 600,
-                }}>
-                  {r.pct > 0 ? `${r.pct}%` : '—'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Placeholder message="トラッキング実装後に表示" />
 
-      {/* [C] Funnel */}
+      {/* [C] Funnel + Auth Method */}
       <Sec>投票ファネル — Layer 3 離脱分析</Sec>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <div style={{ background: C.surface, borderRadius: 10, padding: 20 }}>
-          <Funnel steps={funnel} />
-          {dataSource === 'sample' && (
-            <div style={{
-              marginTop: 12, padding: '8px 12px', background: C.bg,
-              borderRadius: 6, color: C.gray, fontSize: 11,
-            }}>
-              ※ サンプルデータ表示中（Viewsが未作成の場合）
-            </div>
-          )}
-        </div>
+        {/* Left: Funnel placeholder */}
+        <Placeholder message="トラッキング実装後に表示" />
+        {/* Right: Auth method real data */}
         <div style={{ background: C.surface, borderRadius: 10, padding: 20 }}>
           <div style={{ color: C.gray, fontSize: 11, marginBottom: 10 }}>認証方式別 完了率</div>
-          {[
-            { m: 'SMS認証', n: '新規追加' },
-            { m: 'メール入力のみ', n: '新規追加' },
-            { m: 'LINE認証', n: '従来方式' },
-            { m: 'Google認証', n: '従来方式' },
-          ].map(x => (
-            <div key={x.m} style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: '9px 0', borderBottom: `1px solid ${C.grayDark}15`,
-            }}>
-              <span style={{ color: C.cream, fontSize: 13 }}>{x.m}</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ color: C.gray, fontSize: 11 }}>{x.n}</span>
-                <span style={{ color: C.cream, fontWeight: 600, fontSize: 14 }}>—</span>
-              </div>
-            </div>
-          ))}
+          {authMethods.length === 0 ? (
+            <div style={{ color: C.gray, fontSize: 13, textAlign: 'center', padding: 20 }}>データなし</div>
+          ) : (
+            authMethods.map(x => {
+              const pct = totalAuthVotes > 0 ? Math.round((x.count / totalAuthVotes) * 100) : 0
+              const label = AUTH_METHOD_LABELS[x.auth_method] || x.auth_method
+              return (
+                <div key={x.auth_method} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '9px 0', borderBottom: `1px solid ${C.grayDark}15`,
+                }}>
+                  <span style={{ color: C.cream, fontSize: 13 }}>{label}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ color: C.gray, fontSize: 11 }}>{pct}%</span>
+                    <span style={{ color: C.cream, fontWeight: 600, fontSize: 14 }}>{x.count}</span>
+                  </div>
+                </div>
+              )
+            })
+          )}
         </div>
       </div>
 
-      {/* [D] Share */}
+      {/* [D] Share — placeholder */}
       <Sec>シェア分析（S1 / S2 / S3）</Sec>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
-        {[
-          { l: 'S1: プロ自身', d: 'プロフィールをシェア', c: sh.s1, p: sh.pv1 },
-          { l: 'S2: カードシェア', d: '他者がプロのカードをシェア', c: sh.s2, p: sh.pv2 },
-          { l: 'S3: Voiceシェア', d: '投票コメントをシェア', c: sh.s3, p: sh.pv3 },
-        ].map(x => (
-          <div key={x.l} style={{ background: C.surface, borderRadius: 10, padding: 18 }}>
-            <div style={{ color: C.gold, fontSize: 11, fontWeight: 600, marginBottom: 4 }}>{x.l}</div>
-            <div style={{ color: C.gray, fontSize: 11, marginBottom: 10 }}>{x.d}</div>
-            <div style={{ display: 'flex', gap: 20 }}>
-              <div>
-                <div style={{ color: C.gray, fontSize: 10, marginBottom: 2 }}>シェア数</div>
-                <div style={{ color: C.cream, fontSize: 24, fontWeight: 700 }}>{x.c}</div>
-              </div>
-              <div>
-                <div style={{ color: C.gray, fontSize: 10, marginBottom: 2 }}>→ PV</div>
-                <div style={{ color: x.p > 0 ? C.gold : C.grayDark, fontSize: 24, fontWeight: 700 }}>{x.p}</div>
-              </div>
-            </div>
+      <Placeholder message="トラッキング実装後に表示" />
+
+      {/* [D2] Daily Proof Gainers */}
+      <Sec>日別プルーフ獲得者（直近14日）</Sec>
+      <div style={{ background: C.surface, borderRadius: 10, padding: 18 }}>
+        {dailyProofs.length === 0 ? (
+          <div style={{ color: C.gray, fontSize: 13, textAlign: 'center', padding: 20 }}>データなし</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.grayDark}` }}>
+                  {['日付', 'プロ名', '投票数'].map(h => (
+                    <th key={h} style={{
+                      textAlign: 'left', padding: '10px 12px', color: C.gray,
+                      fontWeight: 500, fontSize: 10, letterSpacing: '0.04em',
+                    }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {proofDates.map(dateRaw => (
+                  proofsByDate[dateRaw].map((dp, i) => (
+                    <tr key={`${dateRaw}-${i}`} style={{ borderBottom: `1px solid ${C.grayDark}15` }}>
+                      <td style={{ padding: '10px 12px', color: C.gray, fontSize: 11 }}>
+                        {i === 0 ? dp.date : ''}
+                      </td>
+                      <td style={{ padding: '10px 12px', color: C.cream, fontWeight: 500 }}>{dp.pro_name}</td>
+                      <td style={{
+                        padding: '10px 12px',
+                        color: dp.daily_votes >= 3 ? C.gold : C.cream,
+                        fontWeight: dp.daily_votes >= 3 ? 700 : 400,
+                      }}>
+                        {dp.daily_votes}
+                      </td>
+                    </tr>
+                  ))
+                ))}
+              </tbody>
+            </table>
           </div>
-        ))}
+        )}
       </div>
 
       {/* [E] Pro List */}
@@ -653,22 +624,22 @@ export default function AdminDashboard() {
         />
       </div>
 
-      {/* [G] Trend */}
-      <Sec>日別トレンド（直近14日）</Sec>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-        <div style={{ background: C.surface, borderRadius: 10, padding: 16 }}>
-          <div style={{ color: C.gray, fontSize: 11, marginBottom: 8 }}>投票数</div>
-          <MiniBar data={daily} dk="votes" color={C.gold} />
+      {/* [G] Trend (30 days) */}
+      <Sec>日別トレンド（直近30日）</Sec>
+      {dailyTrend.length === 0 ? (
+        <Placeholder message="データなし" />
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ background: C.surface, borderRadius: 10, padding: 16 }}>
+            <div style={{ color: C.gray, fontSize: 11, marginBottom: 8 }}>投票数</div>
+            <MiniBar data={dailyTrend} dk="votes" color={C.gold} />
+          </div>
+          <div style={{ background: C.surface, borderRadius: 10, padding: 16 }}>
+            <div style={{ color: C.gray, fontSize: 11, marginBottom: 8 }}>アクティブプロ数</div>
+            <MiniBar data={dailyTrend} dk="active_pros" color={C.green} />
+          </div>
         </div>
-        <div style={{ background: C.surface, borderRadius: 10, padding: 16 }}>
-          <div style={{ color: C.gray, fontSize: 11, marginBottom: 8 }}>プロフィール閲覧</div>
-          <MiniBar data={daily} dk="views" color={C.green} />
-        </div>
-        <div style={{ background: C.surface, borderRadius: 10, padding: 16 }}>
-          <div style={{ color: C.gray, fontSize: 11, marginBottom: 8 }}>シェア数</div>
-          <MiniBar data={daily} dk="shares" color={C.amber} />
-        </div>
-      </div>
+      )}
 
       {/* Footer */}
       <div style={{
