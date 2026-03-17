@@ -66,6 +66,7 @@ export default function DashboardPage() {
   const [uploading, setUploading] = useState(false)
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [hideLineBanner, setHideLineBanner] = useState(true) // default hidden until checked
 
   const [form, setForm] = useState({
     name: '', last_name: '', first_name: '', store_name: '',
@@ -196,6 +197,12 @@ export default function DashboardPage() {
         }
 
         setPro(proData)
+
+        // LINE バナー表示判定
+        if (!proData.line_messaging_user_id && !document.cookie.includes('hide_line_banner=1')) {
+          setHideLineBanner(false)
+        }
+
         setForm({
           name: proData.name || '',
           last_name: proData.last_name || '',
@@ -1124,6 +1131,58 @@ export default function DashboardPage() {
 
   return (
     <div className="max-w-3xl mx-auto">
+      {/* LINE 週次レポートバナー */}
+      {!hideLineBanner && process.env.NEXT_PUBLIC_LINE_FRIEND_URL && (
+        <div style={{
+          background: '#1A1A2E',
+          border: '0.5px solid rgba(196,163,90,0.3)',
+          borderRadius: 12,
+          padding: '16px 20px',
+          marginBottom: 16,
+          position: 'relative',
+        }}>
+          <button
+            onClick={() => {
+              setHideLineBanner(true)
+              document.cookie = 'hide_line_banner=1; path=/; max-age=604800'
+            }}
+            style={{
+              position: 'absolute', top: 12, right: 14,
+              background: 'none', border: 'none',
+              color: 'rgba(250,250,247,0.3)', fontSize: 18,
+              cursor: 'pointer', lineHeight: 1,
+            }}
+            aria-label="閉じる"
+          >×</button>
+          <div style={{ color: '#C4A35A', fontSize: 12, fontWeight: 500, letterSpacing: 0.5, marginBottom: 8 }}>
+            WEEKLY REPORT
+          </div>
+          <div style={{ color: '#FAFAF7', fontSize: 14, fontWeight: 500, marginBottom: 4 }}>
+            毎週月曜、あなたの成績レポートが届きます
+          </div>
+          <div style={{ color: 'rgba(250,250,247,0.5)', fontSize: 12, marginBottom: 12 }}>
+            投票数・PROVEN進捗・クライアントの声をLINEでお届け
+          </div>
+          <a
+            href={process.env.NEXT_PUBLIC_LINE_FRIEND_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'inline-block',
+              background: '#06C755',
+              color: 'white',
+              fontSize: 13,
+              fontWeight: 500,
+              padding: '8px 20px',
+              borderRadius: 6,
+              textDecoration: 'none',
+            }}
+          >
+            LINEで受け取る
+          </a>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold text-[#1A1A2E]">ダッシュボード</h1>
