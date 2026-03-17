@@ -62,6 +62,15 @@ interface AuthMethodData {
   count: number
 }
 
+interface ShareAnalytics {
+  s1: number
+  s2: number
+  s3: number
+  pv1: number
+  pv2: number
+  pv3: number
+}
+
 interface DailyTrendData {
   date: string
   votes: number
@@ -300,7 +309,7 @@ async function fetchDashboardData() {
   const fourteenDaysAgo = new Date()
   fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
 
-  const [goRes, proRes, authRes, trendRes, proofRes, qrTokensRes, votesForChRes] = await Promise.all([
+  const [goRes, proRes, authRes, trendRes, proofRes, qrTokensRes, votesForChRes, shareCountRes, sharePvRes] = await Promise.all([
     supabase.from('admin_go_nogo').select('*').maybeSingle(),
     supabase.from('admin_pro_status').select('*'),
     // 認証方式別
@@ -313,6 +322,10 @@ async function fetchDashboardData() {
     supabase.from('qr_tokens').select('token'),
     // チャネル別: votes の qr_token
     supabase.from('votes').select('id, qr_token'),
+    // シェア分析: シェア数
+    supabase.from('page_views').select('page_type').in('page_type', ['share_profile_self', 'share_profile_other', 'share_voice']),
+    // シェア分析: シェア経由PV
+    supabase.from('page_views').select('source').eq('page_type', 'pro_profile').in('source', ['pro_share', 'client_share', 'voice_share']),
   ])
 
   // Go/No-Go マッピング
@@ -442,7 +455,24 @@ async function fetchDashboardData() {
     })
   }
 
-  return { goNogo, pros, authMethods, dailyTrend, dailyProofs, channels }
+  // シェア分析マッピング
+  const shares: ShareAnalytics = { s1: 0, s2: 0, s3: 0, pv1: 0, pv2: 0, pv3: 0 }
+  if (shareCountRes.data && !shareCountRes.error && Array.isArray(shareCountRes.data)) {
+    shareCountRes.data.forEach((row: any) => {
+      if (row.page_type === 'share_profile_self') shares.s1++
+      else if (row.page_type === 'share_profile_other') shares.s2++
+      else if (row.page_type === 'share_voice') shares.s3++
+    })
+  }
+  if (sharePvRes.data && !sharePvRes.error && Array.isArray(sharePvRes.data)) {
+    sharePvRes.data.forEach((row: any) => {
+      if (row.source === 'pro_share') shares.pv1++
+      else if (row.source === 'client_share') shares.pv2++
+      else if (row.source === 'voice_share') shares.pv3++
+    })
+  }
+
+  return { goNogo, pros, authMethods, dailyTrend, dailyProofs, channels, shares }
 }
 
 // ============================================================
@@ -458,6 +488,7 @@ export default function AdminDashboard() {
   const [authMethods, setAuthMethods] = useState<AuthMethodData[]>([])
   const [dailyTrend, setDailyTrend] = useState<DailyTrendData[]>([])
   const [dailyProofs, setDailyProofs] = useState<DailyProofData[]>([])
+  const [shares, setShares] = useState<ShareAnalytics>({ s1: 0, s2: 0, s3: 0, pv1: 0, pv2: 0, pv3: 0 })
 
   const loadData = useCallback(async () => {
     try {
@@ -470,6 +501,7 @@ export default function AdminDashboard() {
       if (result.authMethods) { setAuthMethods(result.authMethods) }
       if (result.dailyTrend) { setDailyTrend(result.dailyTrend) }
       if (result.dailyProofs) { setDailyProofs(result.dailyProofs) }
+      if (result.shares) { setShares(result.shares) }
 
       setDataSource(hasLiveData ? 'live' : 'sample')
     } catch (e) {
@@ -621,9 +653,30 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* [D] Share — placeholder */}
+      {/* [D] Share */}
       <Sec>シェア分析（S1 / S2 / S3）</Sec>
-      <Placeholder message="トラッキング実装後に表示" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
+        {[
+          { l: 'S1: プロ自身', d: 'プロフィールをシェア', c: shares.s1, p: shares.pv1 },
+          { l: 'S2: カードシェア', d: '他者がプロのカードをシェア', c: shares.s2, p: shares.pv2 },
+          { l: 'S3: Voiceシェア', d: '投票コメントをシェア', c: shares.s3, p: shares.pv3 },
+        ].map(x => (
+          <div key={x.l} style={{ background: C.surface, borderRadius: 10, padding: 18 }}>
+            <div style={{ color: C.gold, fontSize: 11, fontWeight: 600, marginBottom: 4 }}>{x.l}</div>
+            <div style={{ color: C.gray, fontSize: 11, marginBottom: 10 }}>{x.d}</div>
+            <div style={{ display: 'flex', gap: 20 }}>
+              <div>
+                <div style={{ color: C.gray, fontSize: 10, marginBottom: 2 }}>シェア数</div>
+                <div style={{ color: C.cream, fontSize: 24, fontWeight: 700 }}>{x.c}</div>
+              </div>
+              <div>
+                <div style={{ color: C.gray, fontSize: 10, marginBottom: 2 }}>→ PV</div>
+                <div style={{ color: x.p > 0 ? C.gold : C.grayDark, fontSize: 24, fontWeight: 700 }}>{x.p}</div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* [D2] Daily Proof Gainers */}
       <Sec>日別プルーフ獲得者（直近14日）</Sec>
