@@ -646,6 +646,7 @@ function VoteForm() {
         status: 'confirmed',
         session_count: 'first',
         vote_weight: 0.5,
+        auth_method: 'hopeful',
       })
     } catch (e) {
       console.error('hopeful vote error:', e)
@@ -811,6 +812,7 @@ function VoteForm() {
         comment: voteData.comment,
         qr_token: voteData.qr_token,
         status: 'confirmed',
+        auth_method: 'sms',
       }).select().maybeSingle()
 
       if (voteError) {
@@ -909,6 +911,7 @@ function VoteForm() {
       comment: `[FB:${fallbackName.trim()}] ${voteData.comment || ''}`.trim(),
       qr_token: voteData.qr_token,
       status: 'confirmed', // フォールバックは即確定（後で認証を促す）
+      auth_method: 'sms_fallback',
     }).select().maybeSingle()
 
     if (voteError) {
@@ -1055,6 +1058,7 @@ function VoteForm() {
       comment: comment.trim() || null,
       qr_token: qrToken,
       status: voteStatus,
+      auth_method: 'email',
     }).select().maybeSingle()
 
     if (voteError) {
