@@ -6,6 +6,7 @@
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { clerkClient } from '@clerk/nextjs/server'
 import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD } from '@/lib/constants'
 
 const MASTER_THRESHOLD = 50
@@ -329,10 +330,10 @@ export async function generateAllWeeklyReports(): Promise<WeeklyProData[]> {
     allVotesRes,
     praiseRes,
   ] = await Promise.all([
-    // 1. アクティブなプロ全員
+    // 1. アクティブなプロ全員（user_id含む: Clerkメール取得用）
     supabase
       .from('professionals')
-      .select('id, name, last_name, first_name, title, contact_email, line_messaging_user_id, selected_proofs')
+      .select('id, user_id, name, last_name, first_name, title, contact_email, line_messaging_user_id, selected_proofs')
       .is('deactivated_at', null),
     // 2. 全期間の投票サマリー（weighted / per-item）
     supabase
@@ -442,6 +443,30 @@ export async function generateAllWeeklyReports(): Promise<WeeklyProData[]> {
     templatesByPattern.get(t.pattern_type)!.push(t.template_text)
   })
 
+  // ── Clerk Backend API でプロのメールアドレスを取得 ──
+  // contact_email はクライアント向け公開連絡先なので、通知先としては不適切。
+  // Clerk に登録されたメールを優先し、なければ contact_email をフォールバック。
+  const clerkEmailByProId = new Map<string, string>()
+  try {
+    const clerk = await clerkClient()
+    for (const pro of professionals) {
+      const userId = pro.user_id as string
+      if (!userId) continue
+      try {
+        const user = await clerk.users.getUser(userId)
+        const email = user.emailAddresses?.[0]?.emailAddress
+        if (email) {
+          clerkEmailByProId.set(pro.id as string, email)
+        }
+      } catch (err) {
+        // ユーザーが見つからない場合はスキップ（contact_emailフォールバック）
+        console.warn(`[weekly-report] Clerk user not found for pro=${pro.id}, userId=${userId}`)
+      }
+    }
+  } catch (err) {
+    console.error('[weekly-report] Clerk API error, falling back to contact_email:', err)
+  }
+
   // ── 各プロの WeeklyProData を組み立て ──
 
   const results: WeeklyProData[] = []
@@ -535,7 +560,7 @@ export async function generateAllWeeklyReports(): Promise<WeeklyProData[]> {
       professional_id: proId,
       name,
       title,
-      contact_email: (pro.contact_email as string) || null,
+      contact_email: clerkEmailByProId.get(proId) || (pro.contact_email as string) || null,
       line_messaging_user_id: (pro.line_messaging_user_id as string) || null,
       new_proofs_this_week: newProofsThisWeek,
       total_proofs: totalVoteCount,
