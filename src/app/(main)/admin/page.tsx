@@ -18,6 +18,13 @@ export default function AdminPage() {
   const [badgeLabel, setBadgeLabel] = useState('')
   const [badgeUrl, setBadgeUrl] = useState('')
 
+  // Weekly Report Content
+  const [wrWeekStart, setWrWeekStart] = useState('')
+  const [wrHighlight, setWrHighlight] = useState('')
+  const [wrTips, setWrTips] = useState('')
+  const [wrSaving, setWrSaving] = useState(false)
+  const [wrToast, setWrToast] = useState('')
+
   const { user: clerkUser, isLoaded: authLoaded } = useUser()
 
   useEffect(() => {
@@ -72,7 +79,67 @@ export default function AdminPage() {
       setLoading(false)
     }
     load()
+    loadWeeklyReportContent()
   }, [authLoaded, clerkUser])
+
+  // 今週の月曜日を計算
+  function getCurrentMonday(): string {
+    const now = new Date()
+    const day = now.getDay()
+    const diff = day === 0 ? -6 : 1 - day
+    const monday = new Date(now)
+    monday.setDate(now.getDate() + diff)
+    return monday.toISOString().split('T')[0]
+  }
+
+  // Weekly Report Content をロード
+  async function loadWeeklyReportContent() {
+    try {
+      const res = await fetch('/api/admin/weekly-report-content')
+      if (res.ok) {
+        const result = await res.json()
+        if (result.data) {
+          setWrWeekStart(result.data.week_start || getCurrentMonday())
+          setWrHighlight(result.data.highlight_text || '')
+          setWrTips(result.data.tips_text || '')
+          return
+        }
+      }
+    } catch (e) {
+      console.error('Weekly report content load failed:', e)
+    }
+    // データなしの場合、今週の月曜をデフォルト
+    setWrWeekStart(getCurrentMonday())
+  }
+
+  // Weekly Report Content を保存
+  async function saveWeeklyReportContent() {
+    setWrSaving(true)
+    setWrToast('')
+    try {
+      const res = await fetch('/api/admin/weekly-report-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          week_start: wrWeekStart,
+          highlight_text: wrHighlight,
+          tips_text: wrTips,
+        }),
+      })
+      if (res.ok) {
+        const result = await res.json()
+        setWrToast(result.action === 'updated' ? '更新しました' : '保存しました')
+        setTimeout(() => setWrToast(''), 3000)
+      } else {
+        const err = await res.json()
+        setWrToast(`エラー: ${err.error}`)
+      }
+    } catch (e) {
+      setWrToast('保存に失敗しました')
+    } finally {
+      setWrSaving(false)
+    }
+  }
 
   async function addBadge() {
     if (!selectedPro || !badgeLabel) return
@@ -195,6 +262,71 @@ export default function AdminPage() {
               {v.comment && <span className="text-gray-400 text-xs truncate max-w-[200px]">{v.comment}</span>}
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Weekly Report Content */}
+      <div className="bg-white rounded-xl p-6 shadow-sm mt-8">
+        <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">Weekly Report コンテンツ</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          毎週月曜に配信されるWeekly Proof Reportの「HIGHLIGHT」と「TIPS」を入力してください。
+        </p>
+
+        <div className="space-y-4">
+          {/* week_start */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">対象週（月曜日）</label>
+            <input
+              type="date"
+              value={wrWeekStart}
+              onChange={e => setWrWeekStart(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm w-48"
+            />
+          </div>
+
+          {/* highlight_text */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              HIGHLIGHT（成功事例・トピック）
+            </label>
+            <textarea
+              rows={5}
+              value={wrHighlight}
+              onChange={e => setWrHighlight(e.target.value)}
+              placeholder="あるプロが1週間で7件のプルーフを獲得。秘訣は「施術後にカードを見せるだけ」というシンプルな習慣でした。"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-vertical"
+            />
+          </div>
+
+          {/* tips_text */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              TIPS（アドバイス）
+            </label>
+            <textarea
+              rows={3}
+              value={wrTips}
+              onChange={e => setWrTips(e.target.value)}
+              placeholder="施術後、お客様が「ありがとう」と言った瞬間がベストタイミング。「感想を記録してもらえませんか？」の一言で、あなたのプルーフが1つ増えます。"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-vertical"
+            />
+          </div>
+
+          {/* Save button + Toast */}
+          <div className="flex items-center gap-4">
+            <button
+              onClick={saveWeeklyReportContent}
+              disabled={wrSaving}
+              className="px-6 py-2 bg-[#1A1A2E] text-white rounded-lg hover:bg-[#2a2a4e] disabled:opacity-50 text-sm font-medium"
+            >
+              {wrSaving ? '保存中...' : '保存'}
+            </button>
+            {wrToast && (
+              <span className={`text-sm font-medium ${wrToast.startsWith('エラー') ? 'text-red-500' : 'text-green-600'}`}>
+                {wrToast}
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </div>
