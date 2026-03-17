@@ -110,11 +110,16 @@ const SAMPLE_PROS: ProData[] = [
 // 認証方式ラベル
 // ============================================================
 const AUTH_METHOD_LABELS: Record<string, string> = {
-  email: 'メール認証',
+  hopeful: '気になる投票',
   sms: 'SMS認証',
+  sms_fallback: 'SMSフォールバック',
+  email: 'メール認証',
   line: 'LINE認証',
   google: 'Google認証',
 }
+
+// 固定表示順
+const AUTH_METHOD_ORDER = ['hopeful', 'sms', 'sms_fallback', 'email', 'line', 'google']
 
 // ============================================================
 // サブコンポーネント
@@ -630,26 +635,24 @@ export default function AdminDashboard() {
         {/* Right: Auth method real data */}
         <div style={{ background: C.surface, borderRadius: 10, padding: 20 }}>
           <div style={{ color: C.gray, fontSize: 11, marginBottom: 10 }}>認証方式別 完了率</div>
-          {authMethods.length === 0 ? (
-            <div style={{ color: C.gray, fontSize: 13, textAlign: 'center', padding: 20 }}>データなし</div>
-          ) : (
-            authMethods.map(x => {
-              const pct = totalAuthVotes > 0 ? Math.round((x.count / totalAuthVotes) * 100) : 0
-              const label = AUTH_METHOD_LABELS[x.auth_method] || x.auth_method
-              return (
-                <div key={x.auth_method} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '9px 0', borderBottom: `1px solid ${C.grayDark}15`,
-                }}>
-                  <span style={{ color: C.cream, fontSize: 13 }}>{label}</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ color: C.gray, fontSize: 11 }}>{pct}%</span>
-                    <span style={{ color: C.cream, fontWeight: 600, fontSize: 14 }}>{x.count}</span>
-                  </div>
+          {AUTH_METHOD_ORDER.map(method => {
+            const found = authMethods.find(a => a.auth_method === method)
+            const count = found ? found.count : 0
+            const pct = totalAuthVotes > 0 ? Math.round((count / totalAuthVotes) * 100) : 0
+            const label = AUTH_METHOD_LABELS[method] || method
+            return (
+              <div key={method} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '9px 0', borderBottom: `1px solid ${C.grayDark}15`,
+              }}>
+                <span style={{ color: C.cream, fontSize: 13 }}>{label}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ color: C.gray, fontSize: 11 }}>{pct}%</span>
+                  <span style={{ color: count > 0 ? C.cream : C.grayDark, fontWeight: 600, fontSize: 14 }}>{count}</span>
                 </div>
-              )
-            })
-          )}
+              </div>
+            )
+          })}
         </div>
       </div>
 
