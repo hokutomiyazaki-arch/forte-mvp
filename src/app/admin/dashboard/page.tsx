@@ -495,6 +495,17 @@ export default function AdminDashboard() {
   const [dailyProofs, setDailyProofs] = useState<DailyProofData[]>([])
   const [shares, setShares] = useState<ShareAnalytics>({ s1: 0, s2: 0, s3: 0, pv1: 0, pv2: 0, pv3: 0 })
 
+  // Broadcast state
+  const [bcTarget, setBcTarget] = useState<'all' | 'line' | 'email' | 'professional'>('all')
+  const [bcProId, setBcProId] = useState('')
+  const [bcChannel, setBcChannel] = useState<'auto' | 'line' | 'email'>('auto')
+  const [bcTemplate, setBcTemplate] = useState<'custom' | 'founding' | 'achievement'>('custom')
+  const [bcSubject, setBcSubject] = useState('')
+  const [bcBody, setBcBody] = useState('')
+  const [bcSending, setBcSending] = useState(false)
+  const [bcToast, setBcToast] = useState('')
+  const [bcPreviewResult, setBcPreviewResult] = useState<any>(null)
+
   const loadData = useCallback(async () => {
     try {
       const result = await fetchDashboardData()
@@ -520,6 +531,92 @@ export default function AdminDashboard() {
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  // Broadcast テンプレート定義
+  const BROADCAST_TEMPLATES: Record<string, { subject: string; body: string }> = {
+    founding: {
+      subject: '【REALPROOF】ファウンディングメンバー特典のご案内',
+      body: `{{name}}さん\n\nREALPROOFをご利用いただきありがとうございます。\n\n現在、初期にご登録いただいたプロフェッショナルの方限定で\n「ファウンディングメンバー」特典をご用意しています。\n\n詳しくはダッシュボードをご確認ください。`,
+    },
+    achievement: {
+      subject: '【REALPROOF】プルーフ達成のお知らせ',
+      body: `{{name}}さん\n\nおめでとうございます！\nあなたの累計プルーフが{{votes}}件に到達しました。\n\n引き続き、あなたの強みを証明していきましょう。`,
+    },
+  }
+
+  function onBcTemplateChange(tpl: 'custom' | 'founding' | 'achievement') {
+    setBcTemplate(tpl)
+    if (tpl !== 'custom' && BROADCAST_TEMPLATES[tpl]) {
+      setBcSubject(BROADCAST_TEMPLATES[tpl].subject)
+      setBcBody(BROADCAST_TEMPLATES[tpl].body)
+    }
+  }
+
+  async function broadcastPreview() {
+    setBcSending(true)
+    setBcToast('')
+    setBcPreviewResult(null)
+    try {
+      const res = await fetch('/api/admin/broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target: bcTarget,
+          professionalId: bcTarget === 'professional' ? bcProId : undefined,
+          channel: bcChannel,
+          subject: bcSubject,
+          body: bcBody,
+          preview: true,
+        }),
+      })
+      const result = await res.json()
+      if (res.ok) {
+        setBcPreviewResult(result)
+      } else {
+        setBcToast(`エラー: ${result.error}`)
+      }
+    } catch {
+      setBcToast('プレビューに失敗しました')
+    } finally {
+      setBcSending(false)
+    }
+  }
+
+  async function broadcastSend() {
+    const targetLabel = bcTarget === 'all' ? '全プロ' : bcTarget === 'line' ? 'LINE連携済み' : bcTarget === 'email' ? 'メールのみ' : '個別指定'
+    const channelLabel = bcChannel === 'auto' ? '自動（LINE優先）' : bcChannel
+    if (!confirm(`本当に送信しますか？\n\n対象: ${targetLabel}\nチャネル: ${channelLabel}\n\nこの操作は取り消せません。`)) {
+      return
+    }
+    setBcSending(true)
+    setBcToast('')
+    setBcPreviewResult(null)
+    try {
+      const res = await fetch('/api/admin/broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target: bcTarget,
+          professionalId: bcTarget === 'professional' ? bcProId : undefined,
+          channel: bcChannel,
+          subject: bcSubject,
+          body: bcBody,
+          preview: false,
+        }),
+      })
+      const result = await res.json()
+      if (res.ok) {
+        setBcToast(`送信完了: LINE ${result.sent?.line || 0}件, メール ${result.sent?.email || 0}件, 失敗 ${result.failed || 0}件, スキップ ${result.skipped || 0}件`)
+        setTimeout(() => setBcToast(''), 8000)
+      } else {
+        setBcToast(`エラー: ${result.error}`)
+      }
+    } catch {
+      setBcToast('送信に失敗しました')
+    } finally {
+      setBcSending(false)
+    }
+  }
 
   const g = goNogo
   const pr = g.total_pros > 0 ? Math.round((g.complete_profiles / g.total_pros) * 100) : 0
@@ -770,6 +867,204 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+
+      {/* [H] Broadcast — 一斉送信 */}
+      <Sec>一斉送信（メール / LINE）</Sec>
+      <div style={{ background: C.surface, borderRadius: 10, padding: 24 }}>
+        <div style={{ color: C.gray, fontSize: 12, marginBottom: 16 }}>
+          プロフェッショナルにメール/LINEで一斉メッセージを送信。
+          <code style={{ background: C.surfaceLight, padding: '1px 6px', borderRadius: 4, fontSize: 11 }}>{'{{name}}'}</code> と
+          <code style={{ background: C.surfaceLight, padding: '1px 6px', borderRadius: 4, fontSize: 11 }}>{'{{votes}}'}</code> が変数として使えます。
+        </div>
+
+        {/* 対象 + チャネル */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+          <div>
+            <div style={{ color: C.gray, fontSize: 11, marginBottom: 4 }}>対象</div>
+            <select
+              value={bcTarget}
+              onChange={e => setBcTarget(e.target.value as any)}
+              style={{
+                width: '100%', padding: '8px 12px', borderRadius: 7,
+                background: C.surfaceLight, color: C.cream, border: `1px solid ${C.grayDark}`,
+                fontSize: 13,
+              }}
+            >
+              <option value="all">全プロ</option>
+              <option value="line">LINE連携済みのみ</option>
+              <option value="email">メールのみ</option>
+              <option value="professional">個別指定</option>
+            </select>
+          </div>
+          <div>
+            <div style={{ color: C.gray, fontSize: 11, marginBottom: 4 }}>送信チャネル</div>
+            <select
+              value={bcChannel}
+              onChange={e => setBcChannel(e.target.value as any)}
+              style={{
+                width: '100%', padding: '8px 12px', borderRadius: 7,
+                background: C.surfaceLight, color: C.cream, border: `1px solid ${C.grayDark}`,
+                fontSize: 13,
+              }}
+            >
+              <option value="auto">自動（LINE優先）</option>
+              <option value="line">LINEのみ</option>
+              <option value="email">メールのみ</option>
+            </select>
+          </div>
+        </div>
+
+        {/* 個別指定 */}
+        {bcTarget === 'professional' && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ color: C.gray, fontSize: 11, marginBottom: 4 }}>プロを選択</div>
+            <select
+              value={bcProId}
+              onChange={e => setBcProId(e.target.value)}
+              style={{
+                width: '100%', padding: '8px 12px', borderRadius: 7,
+                background: C.surfaceLight, color: C.cream, border: `1px solid ${C.grayDark}`,
+                fontSize: 13,
+              }}
+            >
+              <option value="">選択してください</option>
+              {pros.map(p => (
+                <option key={p.id} value={p.id}>{p.n}（{p.v}票）</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* テンプレート */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ color: C.gray, fontSize: 11, marginBottom: 4 }}>テンプレート</div>
+          <select
+            value={bcTemplate}
+            onChange={e => onBcTemplateChange(e.target.value as any)}
+            style={{
+              width: '100%', padding: '8px 12px', borderRadius: 7,
+              background: C.surfaceLight, color: C.cream, border: `1px solid ${C.grayDark}`,
+              fontSize: 13,
+            }}
+          >
+            <option value="custom">カスタム（自由入力）</option>
+            <option value="founding">Founding Member告知</option>
+            <option value="achievement">達成おめでとう</option>
+          </select>
+        </div>
+
+        {/* 件名 */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ color: C.gray, fontSize: 11, marginBottom: 4 }}>件名（メール用）</div>
+          <input
+            type="text"
+            value={bcSubject}
+            onChange={e => setBcSubject(e.target.value)}
+            placeholder="【REALPROOF】お知らせ"
+            style={{
+              width: '100%', padding: '8px 12px', borderRadius: 7,
+              background: C.surfaceLight, color: C.cream, border: `1px solid ${C.grayDark}`,
+              fontSize: 13, boxSizing: 'border-box',
+            }}
+          />
+        </div>
+
+        {/* 本文 */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ color: C.gray, fontSize: 11, marginBottom: 4 }}>本文</div>
+          <textarea
+            rows={8}
+            value={bcBody}
+            onChange={e => setBcBody(e.target.value)}
+            placeholder={`{{name}}さん\n\nメッセージ本文をここに入力...\n\n{{votes}}件のプルーフありがとうございます。`}
+            style={{
+              width: '100%', padding: '10px 12px', borderRadius: 7,
+              background: C.surfaceLight, color: C.cream, border: `1px solid ${C.grayDark}`,
+              fontSize: 13, fontFamily: 'monospace', resize: 'vertical', boxSizing: 'border-box',
+              lineHeight: 1.6,
+            }}
+          />
+        </div>
+
+        {/* プレビュー結果 */}
+        {bcPreviewResult && (
+          <div style={{
+            background: C.surfaceLight, borderRadius: 10, padding: 16, marginBottom: 14,
+            border: `1px solid ${C.gold}33`,
+          }}>
+            <div style={{ color: C.gold, fontSize: 12, fontWeight: 600, marginBottom: 10 }}>プレビュー結果</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, textAlign: 'center', marginBottom: 12 }}>
+              <div>
+                <div style={{ color: C.cream, fontSize: 24, fontWeight: 700 }}>{bcPreviewResult.total}</div>
+                <div style={{ color: C.gray, fontSize: 10 }}>対象者</div>
+              </div>
+              <div>
+                <div style={{ color: C.green, fontSize: 24, fontWeight: 700 }}>{bcPreviewResult.wouldSendLine}</div>
+                <div style={{ color: C.gray, fontSize: 10 }}>LINE送信</div>
+              </div>
+              <div>
+                <div style={{ color: C.gold, fontSize: 24, fontWeight: 700 }}>{bcPreviewResult.wouldSendEmail}</div>
+                <div style={{ color: C.gray, fontSize: 10 }}>メール送信</div>
+              </div>
+              <div>
+                <div style={{ color: C.grayDark, fontSize: 24, fontWeight: 700 }}>{bcPreviewResult.wouldSkip}</div>
+                <div style={{ color: C.gray, fontSize: 10 }}>スキップ</div>
+              </div>
+            </div>
+            {bcPreviewResult.sampleRecipients?.length > 0 && (
+              <div>
+                <div style={{ color: C.gray, fontSize: 10, marginBottom: 4 }}>サンプル受信者:</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {bcPreviewResult.sampleRecipients.map((r: any, i: number) => (
+                    <span key={i} style={{
+                      fontSize: 11, padding: '2px 10px', borderRadius: 99, fontWeight: 500,
+                      background: r.channel === 'line' ? C.green + '20' : C.gold + '20',
+                      color: r.channel === 'line' ? C.green : C.gold,
+                    }}>
+                      {r.name}（{r.channel === 'line' ? 'LINE' : 'メール'}）
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ボタン + Toast */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button
+            onClick={broadcastPreview}
+            disabled={bcSending || !bcBody}
+            style={{
+              padding: '9px 22px', borderRadius: 7, border: 'none', cursor: 'pointer',
+              background: C.gold, color: '#fff', fontSize: 13, fontWeight: 600,
+              opacity: (bcSending || !bcBody) ? 0.5 : 1,
+            }}
+          >
+            {bcSending ? '処理中...' : 'プレビュー'}
+          </button>
+          <button
+            onClick={broadcastSend}
+            disabled={bcSending || !bcBody}
+            style={{
+              padding: '9px 22px', borderRadius: 7, border: `1px solid ${C.red}`,
+              cursor: 'pointer', background: 'transparent', color: C.red,
+              fontSize: 13, fontWeight: 600,
+              opacity: (bcSending || !bcBody) ? 0.5 : 1,
+            }}
+          >
+            {bcSending ? '送信中...' : '送信実行'}
+          </button>
+          {bcToast && (
+            <span style={{
+              fontSize: 12, fontWeight: 500,
+              color: bcToast.includes('エラー') || bcToast.includes('失敗') ? C.red : C.green,
+            }}>
+              {bcToast}
+            </span>
+          )}
+        </div>
+      </div>
 
       {/* Footer */}
       <div style={{
