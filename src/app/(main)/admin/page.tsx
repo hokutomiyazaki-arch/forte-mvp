@@ -25,6 +25,17 @@ export default function AdminPage() {
   const [wrSaving, setWrSaving] = useState(false)
   const [wrToast, setWrToast] = useState('')
 
+  // Broadcast
+  const [bcTarget, setBcTarget] = useState<'all' | 'line' | 'email' | 'professional'>('all')
+  const [bcProId, setBcProId] = useState('')
+  const [bcChannel, setBcChannel] = useState<'auto' | 'line' | 'email'>('auto')
+  const [bcTemplate, setBcTemplate] = useState<'custom' | 'founding' | 'achievement'>('custom')
+  const [bcSubject, setBcSubject] = useState('')
+  const [bcBody, setBcBody] = useState('')
+  const [bcSending, setBcSending] = useState(false)
+  const [bcToast, setBcToast] = useState('')
+  const [bcPreviewResult, setBcPreviewResult] = useState<any>(null)
+
   const { user: clerkUser, isLoaded: authLoaded } = useUser()
 
   useEffect(() => {
@@ -165,6 +176,103 @@ export default function AdminPage() {
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a'); a.href = url; a.download = 'proof_pros.csv'; a.click()
+  }
+
+  // Broadcast テンプレート定義
+  const BROADCAST_TEMPLATES: Record<string, { subject: string; body: string }> = {
+    founding: {
+      subject: '【REALPROOF】ファウンディングメンバー特典のご案内',
+      body: `{{name}}さん
+
+REALPROOFをご利用いただきありがとうございます。
+
+現在、初期にご登録いただいたプロフェッショナルの方限定で
+「ファウンディングメンバー」特典をご用意しています。
+
+詳しくはダッシュボードをご確認ください。`,
+    },
+    achievement: {
+      subject: '【REALPROOF】プルーフ達成のお知らせ',
+      body: `{{name}}さん
+
+おめでとうございます！
+あなたの累計プルーフが{{votes}}件に到達しました。
+
+引き続き、あなたの強みを証明していきましょう。`,
+    },
+  }
+
+  function onTemplateChange(tpl: 'custom' | 'founding' | 'achievement') {
+    setBcTemplate(tpl)
+    if (tpl !== 'custom' && BROADCAST_TEMPLATES[tpl]) {
+      setBcSubject(BROADCAST_TEMPLATES[tpl].subject)
+      setBcBody(BROADCAST_TEMPLATES[tpl].body)
+    }
+  }
+
+  async function broadcastPreview() {
+    setBcSending(true)
+    setBcToast('')
+    setBcPreviewResult(null)
+    try {
+      const res = await fetch('/api/admin/broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target: bcTarget,
+          professionalId: bcTarget === 'professional' ? bcProId : undefined,
+          channel: bcChannel,
+          subject: bcSubject,
+          body: bcBody,
+          preview: true,
+        }),
+      })
+      const result = await res.json()
+      if (res.ok) {
+        setBcPreviewResult(result)
+      } else {
+        setBcToast(`エラー: ${result.error}`)
+      }
+    } catch (e) {
+      setBcToast('プレビューに失敗しました')
+    } finally {
+      setBcSending(false)
+    }
+  }
+
+  async function broadcastSend() {
+    if (!confirm(`本当に送信しますか？\n\n対象: ${bcTarget === 'all' ? '全プロ' : bcTarget === 'line' ? 'LINE連携済み' : bcTarget === 'email' ? 'メールのみ' : '個別指定'}\nチャネル: ${bcChannel === 'auto' ? '自動（LINE優先）' : bcChannel}\n\nこの操作は取り消せません。`)) {
+      return
+    }
+    setBcSending(true)
+    setBcToast('')
+    setBcPreviewResult(null)
+    try {
+      const res = await fetch('/api/admin/broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target: bcTarget,
+          professionalId: bcTarget === 'professional' ? bcProId : undefined,
+          channel: bcChannel,
+          subject: bcSubject,
+          body: bcBody,
+          preview: false,
+        }),
+      })
+      const result = await res.json()
+      if (res.ok) {
+        const msg = `送信完了: LINE ${result.sent?.line || 0}件, メール ${result.sent?.email || 0}件, 失敗 ${result.failed || 0}件, スキップ ${result.skipped || 0}件`
+        setBcToast(msg)
+        setTimeout(() => setBcToast(''), 8000)
+      } else {
+        setBcToast(`エラー: ${result.error}`)
+      }
+    } catch (e) {
+      setBcToast('送信に失敗しました')
+    } finally {
+      setBcSending(false)
+    }
   }
 
   if (loading) return <div className="text-center py-16 text-gray-400">読み込み中...</div>
@@ -324,6 +432,164 @@ export default function AdminPage() {
             {wrToast && (
               <span className={`text-sm font-medium ${wrToast.startsWith('エラー') ? 'text-red-500' : 'text-green-600'}`}>
                 {wrToast}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Broadcast — 一斉送信 */}
+      <div className="bg-white rounded-xl p-6 shadow-sm mt-8">
+        <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">一斉送信</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          プロフェッショナルにメール/LINEで一斉メッセージを送信します。
+          <code className="text-xs bg-gray-100 px-1 rounded">{'{{name}}'}</code> と
+          <code className="text-xs bg-gray-100 px-1 rounded">{'{{votes}}'}</code> が使えます。
+        </p>
+
+        <div className="space-y-4">
+          {/* 対象選択 */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">対象</label>
+              <select
+                value={bcTarget}
+                onChange={e => setBcTarget(e.target.value as any)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              >
+                <option value="all">全プロ</option>
+                <option value="line">LINE連携済みのみ</option>
+                <option value="email">メールのみ</option>
+                <option value="professional">個別指定</option>
+              </select>
+            </div>
+
+            {/* チャネル */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">送信チャネル</label>
+              <select
+                value={bcChannel}
+                onChange={e => setBcChannel(e.target.value as any)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              >
+                <option value="auto">自動（LINE優先）</option>
+                <option value="line">LINEのみ</option>
+                <option value="email">メールのみ</option>
+              </select>
+            </div>
+          </div>
+
+          {/* 個別指定の場合のプロ選択 */}
+          {bcTarget === 'professional' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">プロを選択</label>
+              <select
+                value={bcProId}
+                onChange={e => setBcProId(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              >
+                <option value="">選択してください</option>
+                {pros.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}（{p.total_votes}票）</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* テンプレート */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">テンプレート</label>
+            <select
+              value={bcTemplate}
+              onChange={e => onTemplateChange(e.target.value as any)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            >
+              <option value="custom">カスタム（自由入力）</option>
+              <option value="founding">Founding Member告知</option>
+              <option value="achievement">達成おめでとう</option>
+            </select>
+          </div>
+
+          {/* 件名 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">件名（メール用）</label>
+            <input
+              type="text"
+              value={bcSubject}
+              onChange={e => setBcSubject(e.target.value)}
+              placeholder="【REALPROOF】お知らせ"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            />
+          </div>
+
+          {/* 本文 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">本文</label>
+            <textarea
+              rows={8}
+              value={bcBody}
+              onChange={e => setBcBody(e.target.value)}
+              placeholder={`{{name}}さん\n\nメッセージ本文をここに入力...\n\n{{votes}}件のプルーフありがとうございます。`}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-vertical font-mono"
+            />
+          </div>
+
+          {/* プレビュー結果 */}
+          {bcPreviewResult && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm">
+              <div className="font-medium text-blue-800 mb-2">プレビュー結果</div>
+              <div className="grid grid-cols-4 gap-2 text-center mb-3">
+                <div>
+                  <div className="text-2xl font-bold text-blue-900">{bcPreviewResult.total}</div>
+                  <div className="text-xs text-blue-600">対象者</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-green-600">{bcPreviewResult.wouldSendLine}</div>
+                  <div className="text-xs text-blue-600">LINE送信</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-blue-600">{bcPreviewResult.wouldSendEmail}</div>
+                  <div className="text-xs text-blue-600">メール送信</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-gray-400">{bcPreviewResult.wouldSkip}</div>
+                  <div className="text-xs text-blue-600">スキップ</div>
+                </div>
+              </div>
+              {bcPreviewResult.sampleRecipients?.length > 0 && (
+                <div>
+                  <div className="text-xs text-blue-600 mb-1">サンプル受信者:</div>
+                  <div className="flex flex-wrap gap-1">
+                    {bcPreviewResult.sampleRecipients.map((r: any, i: number) => (
+                      <span key={i} className={`text-xs px-2 py-0.5 rounded-full ${r.channel === 'line' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                        {r.name}（{r.channel === 'line' ? 'LINE' : 'メール'}）
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ボタン + Toast */}
+          <div className="flex items-center gap-4">
+            <button
+              onClick={broadcastPreview}
+              disabled={bcSending || !bcBody}
+              className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
+            >
+              {bcSending ? '処理中...' : 'プレビュー'}
+            </button>
+            <button
+              onClick={broadcastSend}
+              disabled={bcSending || !bcBody}
+              className="px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 text-sm font-medium"
+            >
+              {bcSending ? '送信中...' : '送信実行'}
+            </button>
+            {bcToast && (
+              <span className={`text-sm font-medium ${bcToast.startsWith('エラー') || bcToast.includes('失敗') ? 'text-red-500' : 'text-green-600'}`}>
+                {bcToast}
               </span>
             )}
           </div>
