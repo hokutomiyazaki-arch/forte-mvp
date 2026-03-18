@@ -66,7 +66,12 @@ export default function DashboardPage() {
   const [uploading, setUploading] = useState(false)
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [hideLineBanner, setHideLineBanner] = useState(true) // default hidden until checked
+  // LINE連携バナー状態
+  const [lineBannerState, setLineBannerState] = useState<'hidden' | 'show_banner' | 'show_code_input' | 'linked'>('hidden')
+  const [linkCode, setLinkCode] = useState('')
+  const [codeInput, setCodeInput] = useState(['', '', '', ''])
+  const [codeError, setCodeError] = useState('')
+  const [codeLoading, setCodeLoading] = useState(false)
 
   const [form, setForm] = useState({
     name: '', last_name: '', first_name: '', store_name: '',
@@ -199,8 +204,10 @@ export default function DashboardPage() {
         setPro(proData)
 
         // LINE バナー表示判定
-        if (!proData.line_messaging_user_id && !document.cookie.includes('hide_line_banner=1')) {
-          setHideLineBanner(false)
+        if (proData.line_messaging_user_id) {
+          setLineBannerState('hidden')
+        } else if (!document.cookie.includes('hide_line_banner=1')) {
+          setLineBannerState('show_banner')
         }
 
         setForm({
@@ -1132,7 +1139,7 @@ export default function DashboardPage() {
   return (
     <div className="max-w-3xl mx-auto">
       {/* LINE 週次レポートバナー */}
-      {!hideLineBanner && process.env.NEXT_PUBLIC_LINE_FRIEND_URL && (
+      {lineBannerState === 'show_banner' && process.env.NEXT_PUBLIC_LINE_FRIEND_URL && (
         <div style={{
           background: '#1A1A2E',
           border: '0.5px solid rgba(196,163,90,0.3)',
@@ -1143,7 +1150,7 @@ export default function DashboardPage() {
         }}>
           <button
             onClick={() => {
-              setHideLineBanner(true)
+              setLineBannerState('hidden')
               document.cookie = 'hide_line_banner=1; path=/; max-age=604800'
             }}
             style={{
@@ -1163,10 +1170,29 @@ export default function DashboardPage() {
           <div style={{ color: 'rgba(250,250,247,0.5)', fontSize: 12, marginBottom: 12 }}>
             投票数・PROVEN進捗・クライアントの声をLINEでお届け
           </div>
-          <a
-            href={process.env.NEXT_PUBLIC_LINE_FRIEND_URL}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            onClick={async () => {
+              if (!pro) return
+              setCodeLoading(true)
+              try {
+                const res = await fetch('/api/line/link/generate', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ professionalId: pro.id }),
+                })
+                const data = await res.json()
+                if (data.code) {
+                  setLinkCode(data.code)
+                  setLineBannerState('show_code_input')
+                  window.open(process.env.NEXT_PUBLIC_LINE_FRIEND_URL, '_blank')
+                }
+              } catch (err) {
+                console.error('[line-banner] Generate error:', err)
+              } finally {
+                setCodeLoading(false)
+              }
+            }}
+            disabled={codeLoading}
             style={{
               display: 'inline-block',
               background: '#06C755',
@@ -1175,11 +1201,181 @@ export default function DashboardPage() {
               fontWeight: 500,
               padding: '8px 20px',
               borderRadius: 6,
-              textDecoration: 'none',
+              border: 'none',
+              cursor: codeLoading ? 'wait' : 'pointer',
+              opacity: codeLoading ? 0.6 : 1,
             }}
           >
-            LINEで受け取る
-          </a>
+            {codeLoading ? '処理中...' : 'LINEで受け取る'}
+          </button>
+        </div>
+      )}
+
+      {/* LINE連携: コード入力 */}
+      {lineBannerState === 'show_code_input' && (
+        <div style={{
+          background: '#1A1A2E',
+          border: '0.5px solid rgba(196,163,90,0.3)',
+          borderRadius: 12,
+          padding: '16px 20px',
+          marginBottom: 16,
+          position: 'relative',
+        }}>
+          <button
+            onClick={() => {
+              setLineBannerState('hidden')
+              document.cookie = 'hide_line_banner=1; path=/; max-age=604800'
+            }}
+            style={{
+              position: 'absolute', top: 12, right: 14,
+              background: 'none', border: 'none',
+              color: 'rgba(250,250,247,0.3)', fontSize: 18,
+              cursor: 'pointer', lineHeight: 1,
+            }}
+            aria-label="閉じる"
+          >×</button>
+          <div style={{ color: '#C4A35A', fontSize: 12, fontWeight: 500, letterSpacing: 0.5, marginBottom: 8 }}>
+            LINE連携
+          </div>
+          <div style={{ color: '#FAFAF7', fontSize: 14, fontWeight: 500, marginBottom: 12 }}>
+            LINEに届いた4桁のコードを入力してください
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            {[0, 1, 2, 3].map((i) => (
+              <input
+                key={i}
+                id={`code-input-${i}`}
+                type="text"
+                inputMode="numeric"
+                maxLength={1}
+                value={codeInput[i]}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '')
+                  const next = [...codeInput]
+                  next[i] = val
+                  setCodeInput(next)
+                  setCodeError('')
+                  if (val && i < 3) {
+                    document.getElementById(`code-input-${i + 1}`)?.focus()
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Backspace' && !codeInput[i] && i > 0) {
+                    document.getElementById(`code-input-${i - 1}`)?.focus()
+                  }
+                }}
+                style={{
+                  width: 40, height: 48,
+                  background: 'rgba(250,250,247,0.1)',
+                  border: '1px solid rgba(196,163,90,0.3)',
+                  borderRadius: 8,
+                  color: '#FAFAF7',
+                  fontSize: 20, fontWeight: 700,
+                  textAlign: 'center',
+                  outline: 'none',
+                }}
+              />
+            ))}
+            <button
+              onClick={async () => {
+                const code = codeInput.join('')
+                if (code.length !== 4) { setCodeError('4桁のコードを入力してください'); return }
+                if (!pro) return
+                setCodeLoading(true)
+                setCodeError('')
+                try {
+                  const res = await fetch('/api/line/link/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ professionalId: pro.id, code }),
+                  })
+                  const result = await res.json()
+                  if (result.success) {
+                    setLineBannerState('linked')
+                    setTimeout(() => setLineBannerState('hidden'), 3000)
+                  } else if (result.error === 'not_yet_added') {
+                    setCodeError('まずLINEで友達追加してください')
+                  } else if (result.error === 'expired') {
+                    setCodeError('コードが期限切れです。再発行してください')
+                  } else {
+                    setCodeError('コードが正しくありません')
+                  }
+                } catch (err) {
+                  setCodeError('エラーが発生しました')
+                } finally {
+                  setCodeLoading(false)
+                }
+              }}
+              disabled={codeLoading}
+              style={{
+                background: '#06C755',
+                color: 'white',
+                fontSize: 13, fontWeight: 500,
+                padding: '8px 20px',
+                borderRadius: 6,
+                border: 'none',
+                cursor: codeLoading ? 'wait' : 'pointer',
+                opacity: codeLoading ? 0.6 : 1,
+              }}
+            >
+              {codeLoading ? '確認中...' : '確認'}
+            </button>
+          </div>
+          {codeError && (
+            <div style={{ color: '#ff6b6b', fontSize: 12, marginBottom: 4 }}>{codeError}</div>
+          )}
+          <button
+            onClick={async () => {
+              if (!pro) return
+              setCodeLoading(true)
+              setCodeInput(['', '', '', ''])
+              setCodeError('')
+              try {
+                const res = await fetch('/api/line/link/generate', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ professionalId: pro.id }),
+                })
+                const data = await res.json()
+                if (data.code) {
+                  setLinkCode(data.code)
+                  setCodeError('')
+                }
+              } catch (err) {
+                console.error('[line-banner] Regenerate error:', err)
+              } finally {
+                setCodeLoading(false)
+              }
+            }}
+            style={{
+              background: 'none', border: 'none',
+              color: 'rgba(250,250,247,0.5)', fontSize: 12,
+              cursor: 'pointer', textDecoration: 'underline',
+              padding: 0,
+            }}
+          >
+            コードが届かない場合は再発行
+          </button>
+        </div>
+      )}
+
+      {/* LINE連携: 完了 */}
+      {lineBannerState === 'linked' && (
+        <div style={{
+          background: '#1A1A2E',
+          border: '0.5px solid rgba(6,199,85,0.5)',
+          borderRadius: 12,
+          padding: '16px 20px',
+          marginBottom: 16,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+        }}>
+          <span style={{ color: '#06C755', fontSize: 20 }}>✓</span>
+          <div>
+            <div style={{ color: '#FAFAF7', fontSize: 14, fontWeight: 500 }}>LINE連携が完了しました</div>
+            <div style={{ color: 'rgba(250,250,247,0.5)', fontSize: 12 }}>毎週月曜にレポートをお届けします</div>
+          </div>
         </div>
       )}
 

@@ -62,7 +62,13 @@ export async function POST(req: NextRequest) {
     console.log(`[line-webhook] Follow event: userId=${lineUserId}`)
 
     try {
-      await linkLineUserToProfessional(lineUserId)
+      // 1. Clerk自動紐付け（既存ロジック）
+      const linked = await linkLineUserToProfessional(lineUserId)
+
+      // 2. Clerk紐付け失敗 → コード方式にフォールバック
+      if (!linked) {
+        await handleCodeLinking(lineUserId, event.replyToken)
+      }
     } catch (err) {
       console.error(`[line-webhook] Link error for ${lineUserId}:`, err)
     }
@@ -72,8 +78,9 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ status: 'ok' })
 }
 
-// ── LINE user_id を professional に紐付け ──
-async function linkLineUserToProfessional(lineUserId: string): Promise<void> {
+// ── LINE user_id を professional に紐付け（Clerk方式） ──
+// 成功したら true、紐付けできなければ false
+async function linkLineUserToProfessional(lineUserId: string): Promise<boolean> {
   const supabase = getSupabaseAdmin()
 
   // 既に紐付け済みかチェック
@@ -85,7 +92,7 @@ async function linkLineUserToProfessional(lineUserId: string): Promise<void> {
 
   if (existingPro) {
     console.log(`[line-webhook] Already linked: lineUserId=${lineUserId} → pro=${existingPro.id}`)
-    return
+    return true
   }
 
   // Clerk Backend API で LINE 外部アカウントを持つユーザーを検索
@@ -115,8 +122,8 @@ async function linkLineUserToProfessional(lineUserId: string): Promise<void> {
   }
 
   if (!matchedClerkUserId) {
-    console.log(`[line-webhook] No Clerk user found for lineUserId=${lineUserId}. Manual linking required.`)
-    return
+    console.log(`[line-webhook] No Clerk user found for lineUserId=${lineUserId}. Falling back to code linking.`)
+    return false
   }
 
   // Clerk user_id → professionals.user_id で検索
@@ -128,7 +135,7 @@ async function linkLineUserToProfessional(lineUserId: string): Promise<void> {
 
   if (!pro) {
     console.log(`[line-webhook] Clerk user ${matchedClerkUserId} found but no professional record. lineUserId=${lineUserId}`)
-    return
+    return false
   }
 
   // 紐付け
@@ -139,8 +146,74 @@ async function linkLineUserToProfessional(lineUserId: string): Promise<void> {
 
   if (error) {
     console.error(`[line-webhook] Update error: pro=${pro.id}`, error.message)
-    return
+    return false
   }
 
   console.log(`[line-webhook] Linked: lineUserId=${lineUserId} → pro=${pro.id}`)
+  return true
+}
+
+// ── コード方式フォールバック ──
+// pendingレコードを検索し、line_user_idを保存 → LINEでコードを返信
+async function handleCodeLinking(lineUserId: string, replyToken: string): Promise<void> {
+  const supabase = getSupabaseAdmin()
+  const accessToken = process.env.LINE_MESSAGING_CHANNEL_ACCESS_TOKEN
+
+  // 直近5分以内の最新 pending レコードを検索
+  const { data: pendingRecord } = await supabase
+    .from('line_link_codes')
+    .select('id, code')
+    .eq('status', 'pending')
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (pendingRecord) {
+    // pending レコードあり → line_user_id を保存して waiting に
+    await supabase
+      .from('line_link_codes')
+      .update({ line_user_id: lineUserId, status: 'waiting' })
+      .eq('id', pendingRecord.id)
+
+    console.log(`[line-webhook] Code linking: set waiting for code=${pendingRecord.code}, lineUserId=${lineUserId}`)
+
+    // LINEで4桁コードを返信
+    if (accessToken && replyToken) {
+      await fetch('https://api.line.me/v2/bot/message/reply', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          replyToken,
+          messages: [{
+            type: 'text',
+            text: `REALPROOFへようこそ！\n\n認証コード: ${pendingRecord.code}\n\nダッシュボードに戻って、このコードを入力してください。\n（5分間有効）`,
+          }],
+        }),
+      })
+    }
+  } else {
+    // pending レコードなし → ウェルカムメッセージのみ
+    console.log(`[line-webhook] No pending code for lineUserId=${lineUserId}. Sending welcome message.`)
+
+    if (accessToken && replyToken) {
+      await fetch('https://api.line.me/v2/bot/message/reply', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          replyToken,
+          messages: [{
+            type: 'text',
+            text: 'REALPROOFへようこそ！\nダッシュボードから「LINEで受け取る」を押して連携を完了してください。',
+          }],
+        }),
+      })
+    }
+  }
 }
