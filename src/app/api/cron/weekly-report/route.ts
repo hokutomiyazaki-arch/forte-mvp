@@ -157,6 +157,22 @@ export async function GET(req: NextRequest) {
         })
 
         console.log(`[weekly-report] LINE ${lineResult.success ? 'sent' : 'failed'}: ${data.name}`)
+      } else if (data.weekly_report_unsubscribed) {
+        // メール配信停止中 → スキップ
+        results.push({
+          professional_id: data.professional_id,
+          channel: 'email',
+          status: 'skipped',
+          error_message: 'Unsubscribed',
+        })
+        await supabase.from('weekly_report_logs').insert({
+          professional_id: data.professional_id,
+          week_start: weekStartStr,
+          channel: 'email',
+          status: 'skipped',
+          error_message: 'Unsubscribed from email',
+        })
+        console.log(`[weekly-report] Skipped (unsubscribed): ${data.name}`)
       } else if (data.contact_email) {
         // メール送信
         const emailHtml = generateEmailHTML(data, content)

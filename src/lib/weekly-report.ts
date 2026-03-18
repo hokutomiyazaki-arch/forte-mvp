@@ -31,6 +31,7 @@ export interface WeeklyProData {
   title: string
   contact_email: string | null
   line_messaging_user_id: string | null
+  weekly_report_unsubscribed: boolean
 
   // 数値カード
   new_proofs_this_week: number
@@ -333,7 +334,7 @@ export async function generateAllWeeklyReports(): Promise<WeeklyProData[]> {
     // 1. アクティブなプロ全員（user_id含む: Clerkメール取得用）
     supabase
       .from('professionals')
-      .select('id, user_id, name, last_name, first_name, title, contact_email, line_messaging_user_id, selected_proofs')
+      .select('id, user_id, name, last_name, first_name, title, contact_email, line_messaging_user_id, selected_proofs, weekly_report_unsubscribed')
       .is('deactivated_at', null),
     // 2. 全期間の投票サマリー（weighted / per-item）
     supabase
@@ -562,6 +563,7 @@ export async function generateAllWeeklyReports(): Promise<WeeklyProData[]> {
       title,
       contact_email: clerkEmailByProId.get(proId) || (pro.contact_email as string) || null,
       line_messaging_user_id: (pro.line_messaging_user_id as string) || null,
+      weekly_report_unsubscribed: !!(pro.weekly_report_unsubscribed),
       new_proofs_this_week: newProofsThisWeek,
       total_proofs: totalVoteCount,
       top_strength_label: topStrengthLabel,

@@ -20,7 +20,7 @@ export const OPS_EMAIL = process.env.OPS_NOTIFICATION_EMAIL || 'bodydiscoverystu
 /** proof_items.tab → 表示名マッピング */
 export const TAB_DISPLAY_NAMES: Record<string, string> = {
   healing: '治療・回復',
-  body: '身体づくり',
+  body: '体の機能改善',
   performance: 'パフォーマンス',
   mind: 'マインド',
   discovery: '発見・気づき',

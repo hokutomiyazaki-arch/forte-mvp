@@ -72,6 +72,13 @@ export default function DashboardPage() {
   const [codeInput, setCodeInput] = useState(['', '', '', ''])
   const [codeError, setCodeError] = useState('')
   const [codeLoading, setCodeLoading] = useState(false)
+  const [weeklyEmailEnabled, setWeeklyEmailEnabled] = useState(true)
+  const [emailToggleSaving, setEmailToggleSaving] = useState(false)
+  // プロフィール編集内LINE連携状態
+  const [profileLineState, setProfileLineState] = useState<'unlinked' | 'code_input' | 'linked'>('unlinked')
+  const [profileCodeInput, setProfileCodeInput] = useState(['', '', '', ''])
+  const [profileCodeError, setProfileCodeError] = useState('')
+  const [profileCodeLoading, setProfileCodeLoading] = useState(false)
 
   const [form, setForm] = useState({
     name: '', last_name: '', first_name: '', store_name: '',
@@ -206,9 +213,18 @@ export default function DashboardPage() {
         // LINE バナー表示判定
         if (proData.line_messaging_user_id) {
           setLineBannerState('hidden')
-        } else if (!document.cookie.includes('hide_line_banner=1')) {
+        } else if (document.cookie.includes('hide_line_banner_permanent=true')) {
+          setLineBannerState('hidden')
+        } else if (document.cookie.includes('hide_line_banner_dismiss=')) {
+          setLineBannerState('hidden')
+        } else {
           setLineBannerState('show_banner')
         }
+
+        // プロフィール編集内LINE状態
+        setProfileLineState(proData.line_messaging_user_id ? 'linked' : 'unlinked')
+        // メール通知状態
+        setWeeklyEmailEnabled(!proData.weekly_report_unsubscribed)
 
         setForm({
           name: proData.name || '',
@@ -397,6 +413,21 @@ export default function DashboardPage() {
     } else {
       setCustomPersonalityFortes(customPersonalityFortes.filter((_, i) => i !== idx))
     }
+  }
+
+  function dismissLineBanner() {
+    // カウント取得
+    const countMatch = document.cookie.match(/hide_line_banner_count=(\d+)/)
+    const count = countMatch ? parseInt(countMatch[1], 10) + 1 : 1
+    // カウント更新（無期限）
+    document.cookie = `hide_line_banner_count=${count}; path=/; max-age=31536000`
+    // 7日間非表示
+    document.cookie = 'hide_line_banner_dismiss=1; path=/; max-age=604800'
+    // 2回以上なら永久非表示
+    if (count >= 2) {
+      document.cookie = 'hide_line_banner_permanent=true; path=/; max-age=31536000'
+    }
+    setLineBannerState('hidden')
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -1065,6 +1096,187 @@ export default function DashboardPage() {
           </div>
           {/* パスワードはClerkで管理 */}
 
+          {/* ── 通知設定 ── */}
+          {pro && (
+            <div className="border-t border-gray-200 pt-4 mt-4">
+              <h3 className="text-sm font-bold text-gray-700 mb-3">通知設定</h3>
+
+              {/* LINE通知設定 */}
+              <div className="bg-gray-50 rounded-lg p-4 mb-3">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-medium text-gray-700">LINE通知</span>
+                  {profileLineState === 'linked' ? (
+                    <span className="text-xs text-green-600 font-medium">✓ 連携済み</span>
+                  ) : (
+                    <span className="text-xs text-gray-400">未連携</span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-400 mb-2">毎週月曜に週次レポートをLINEでお届けします</p>
+
+                {profileLineState === 'unlinked' && process.env.NEXT_PUBLIC_LINE_FRIEND_URL && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setProfileCodeLoading(true)
+                      try {
+                        const res = await fetch('/api/line/link/generate', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ professionalId: pro.id }),
+                        })
+                        const data = await res.json()
+                        if (data.code) {
+                          setProfileLineState('code_input')
+                          window.open(process.env.NEXT_PUBLIC_LINE_FRIEND_URL, '_blank')
+                        }
+                      } catch (err) {
+                        console.error('[profile-line] Generate error:', err)
+                      } finally {
+                        setProfileCodeLoading(false)
+                      }
+                    }}
+                    disabled={profileCodeLoading}
+                    className="text-sm font-medium text-white px-4 py-2 rounded-md"
+                    style={{ background: '#06C755', opacity: profileCodeLoading ? 0.6 : 1 }}
+                  >
+                    {profileCodeLoading ? '処理中...' : 'LINEで受け取る'}
+                  </button>
+                )}
+
+                {profileLineState === 'code_input' && (
+                  <div>
+                    <p className="text-xs text-gray-600 mb-2">LINEに届いた4桁コードを入力</p>
+                    <div className="flex items-center gap-2">
+                      {[0, 1, 2, 3].map((i) => (
+                        <input
+                          key={i}
+                          id={`profile-code-${i}`}
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={1}
+                          value={profileCodeInput[i]}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, '')
+                            const next = [...profileCodeInput]
+                            next[i] = val
+                            setProfileCodeInput(next)
+                            setProfileCodeError('')
+                            if (val && i < 3) document.getElementById(`profile-code-${i + 1}`)?.focus()
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Backspace' && !profileCodeInput[i] && i > 0)
+                              document.getElementById(`profile-code-${i - 1}`)?.focus()
+                          }}
+                          className="w-10 h-12 text-center text-lg font-bold border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
+                        />
+                      ))}
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const code = profileCodeInput.join('')
+                          if (code.length !== 4) { setProfileCodeError('4桁入力してください'); return }
+                          setProfileCodeLoading(true)
+                          setProfileCodeError('')
+                          try {
+                            const res = await fetch('/api/line/link/verify', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ professionalId: pro.id, code }),
+                            })
+                            const result = await res.json()
+                            if (result.success) {
+                              setProfileLineState('linked')
+                              setLineBannerState('hidden')
+                            } else if (result.error === 'not_yet_added') {
+                              setProfileCodeError('まずLINEで友達追加してください')
+                            } else if (result.error === 'expired') {
+                              setProfileCodeError('期限切れ。再発行してください')
+                            } else {
+                              setProfileCodeError('コードが正しくありません')
+                            }
+                          } catch { setProfileCodeError('エラーが発生しました') }
+                          finally { setProfileCodeLoading(false) }
+                        }}
+                        disabled={profileCodeLoading}
+                        className="text-sm font-medium text-white px-3 py-2 rounded-md"
+                        style={{ background: '#06C755', opacity: profileCodeLoading ? 0.6 : 1 }}
+                      >
+                        確認
+                      </button>
+                    </div>
+                    {profileCodeError && <p className="text-red-500 text-xs mt-1">{profileCodeError}</p>}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setProfileCodeLoading(true)
+                        setProfileCodeInput(['', '', '', ''])
+                        setProfileCodeError('')
+                        try {
+                          await fetch('/api/line/link/generate', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ professionalId: pro.id }),
+                          })
+                        } catch {}
+                        finally { setProfileCodeLoading(false) }
+                      }}
+                      className="text-xs text-gray-400 underline mt-2"
+                    >
+                      コード再発行
+                    </button>
+                  </div>
+                )}
+
+                {profileLineState === 'linked' && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!confirm('LINE連携を解除しますか？週次レポートがメールに切り替わります。')) return
+                      await db.update('professionals', { line_messaging_user_id: null }, { id: pro.id })
+                      setProfileLineState('unlinked')
+                    }}
+                    className="text-xs text-gray-400 underline"
+                  >
+                    連携を解除
+                  </button>
+                )}
+              </div>
+
+              {/* メール通知設定 */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-medium text-gray-700">メール週次レポート</span>
+                    <p className="text-xs text-gray-400">LINE未連携の場合、メールでレポートを配信</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setEmailToggleSaving(true)
+                      const newVal = !weeklyEmailEnabled
+                      try {
+                        await db.update('professionals', { weekly_report_unsubscribed: !newVal }, { id: pro.id })
+                        setWeeklyEmailEnabled(newVal)
+                      } catch (err) {
+                        console.error('[email-toggle] error:', err)
+                      } finally {
+                        setEmailToggleSaving(false)
+                      }
+                    }}
+                    disabled={emailToggleSaving}
+                    className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
+                    style={{ background: weeklyEmailEnabled ? '#06C755' : '#D1D5DB', opacity: emailToggleSaving ? 0.5 : 1 }}
+                  >
+                    <span
+                      className="inline-block h-4 w-4 rounded-full bg-white transition-transform"
+                      style={{ transform: weeklyEmailEnabled ? 'translateX(24px)' : 'translateX(4px)' }}
+                    />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {formError && <p className="text-red-500 text-sm">{formError}</p>}
           <button type="submit" disabled={uploading || saving}
             className="w-full py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition disabled:opacity-50 disabled:cursor-not-allowed">
@@ -1149,10 +1361,7 @@ export default function DashboardPage() {
           position: 'relative',
         }}>
           <button
-            onClick={() => {
-              setLineBannerState('hidden')
-              document.cookie = 'hide_line_banner=1; path=/; max-age=604800'
-            }}
+            onClick={dismissLineBanner}
             style={{
               position: 'absolute', top: 12, right: 14,
               background: 'none', border: 'none',
@@ -1222,10 +1431,7 @@ export default function DashboardPage() {
           position: 'relative',
         }}>
           <button
-            onClick={() => {
-              setLineBannerState('hidden')
-              document.cookie = 'hide_line_banner=1; path=/; max-age=604800'
-            }}
+            onClick={dismissLineBanner}
             style={{
               position: 'absolute', top: 12, right: 14,
               background: 'none', border: 'none',

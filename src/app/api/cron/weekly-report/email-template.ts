@@ -7,6 +7,7 @@
 
 import { WeeklyProData, WeeklyReportContent } from '@/lib/weekly-report'
 import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD } from '@/lib/constants'
+import { generateUnsubscribeToken } from '@/lib/unsubscribe-token'
 
 const MASTER_THRESHOLD = 50
 
@@ -72,10 +73,14 @@ function ctaBlock(): string {
 </td></tr>`
 }
 
-function footerBlock(): string {
+function footerBlock(professionalId?: string): string {
+  const unsubLink = professionalId
+    ? `<div style="margin-top:8px;"><a href="${APP_URL}/api/email/unsubscribe?token=${generateUnsubscribeToken(professionalId)}" style="color:rgba(250,250,247,0.3);font-size:10px;text-decoration:underline;">このメールの配信を停止する</a></div>`
+    : ''
   return `<tr><td style="padding:20px 32px 28px;text-align:center;border-top:1px solid ${GRAY_DARK};">
   <div style="color:${GRAY};font-size:11px;">REALPROOF | 強みが、あなたを定義する。</div>
   <div style="color:${GRAY_DARK};font-size:10px;margin-top:4px;">このメールはREALPROOFに登録されたプロフェッショナルの方にお送りしています。</div>
+  ${unsubLink}
 </td></tr>`
 }
 
@@ -225,7 +230,7 @@ function generateNormalEmailHTML(data: WeeklyProData, content: WeeklyReportConte
     commentBlock,
     highlightTipsBlock(content),
     ctaBlock(),
-    footerBlock(),
+    footerBlock(data.professional_id),
   ].join('')
 
   return emailWrapper(body)
@@ -298,7 +303,7 @@ function generateStartingEmailHTML(data: WeeklyProData, content: WeeklyReportCon
     firstStepBlock,
     highlightTipsBlock(content),
     ctaBlock(),
-    footerBlock(),
+    footerBlock(data.professional_id),
   ].join('')
 
   return emailWrapper(body)
@@ -376,7 +381,7 @@ function generateStalledEmailHTML(data: WeeklyProData, content: WeeklyReportCont
     provenProgressBlock,
     highlightTipsBlock(content),
     ctaBlock(),
-    footerBlock(),
+    footerBlock(data.professional_id),
   ].join('')
 
   return emailWrapper(body)
