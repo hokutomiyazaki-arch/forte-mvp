@@ -17,7 +17,6 @@ function ConfirmedContent() {
   const proId = searchParams.get('pro') || searchParams.get('proId') || ''
   const voteId = searchParams.get('vote_id') || ''
   const rewardParam = searchParams.get('reward') || ''
-  const authMethod = searchParams.get('auth_method') || ''
   const hasAccount = searchParams.get('has_account') === 'true'
   const roleParam = searchParams.get('role')
   const rid = searchParams.get('rid') || ''
@@ -316,8 +315,8 @@ function ConfirmedContent() {
           </>
         )}
 
-        {/* ===== セクション2.5: リワード受け取り確認 or アカウント登録CTA ===== */}
-        {hasAccount ? (
+        {/* ===== セクション2.5: リワード受け取り確認 ===== */}
+        {hasAccount && (
           <div className="bg-[#1A1A2E] rounded-2xl p-6 text-center">
             <p className="text-white text-lg font-bold mb-2">
               {isProUser ? 'ダッシュボードに戻る' : 'リワードを受け取りました'}
@@ -356,49 +355,19 @@ function ConfirmedContent() {
                 {proId && (
                   <button
                     onClick={handleShare}
-                    className="text-sm text-gray-400 hover:text-[#C4A35A] transition"
-                    style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#C4A35A',
+                      textDecoration: 'underline',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      padding: '8px 0',
+                    }}
                   >
                     このプロを友達に紹介する
                   </button>
                 )}
-              </>
-            )}
-          </div>
-        ) : (
-          <div className="bg-[#1A1A2E] rounded-2xl p-6 text-center">
-            <p className="text-white text-lg font-bold mb-2">
-              アカウントを作ると便利
-            </p>
-            <p className="text-gray-400 text-sm mb-5 leading-relaxed">
-              リワードの保存・他のプロの発見が
-              <br />いつでもできるようになります
-            </p>
-
-            {authMethod === 'line' ? (
-              <>
-                <a
-                  href="/sign-up"
-                  className="block w-full py-4 rounded-xl font-bold text-lg text-white transition"
-                  style={{ background: '#06C755' }}
-                >
-                  LINEで登録する →
-                </a>
-                <p className="text-gray-500 text-xs mt-3">
-                  さっきのLINEアカウントで、そのまま登録できます
-                </p>
-              </>
-            ) : (
-              <>
-                <a
-                  href="/sign-up"
-                  className="block w-full py-4 rounded-xl font-bold text-lg text-[#1A1A2E] bg-[#C4A35A] hover:bg-[#b3923f] transition"
-                >
-                  10秒で無料登録 →
-                </a>
-                <p className="text-gray-500 text-xs mt-3">
-                  LINE・Google・メールで登録できます
-                </p>
               </>
             )}
           </div>
@@ -415,8 +384,15 @@ function ConfirmedContent() {
             </a>
             <button
               onClick={handleShare}
-              className="text-sm text-[#666666] hover:text-[#C4A35A] transition"
-              style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#C4A35A',
+                textDecoration: 'underline',
+                cursor: 'pointer',
+                fontSize: '14px',
+                padding: '8px 0',
+              }}
             >
               このプロを友達に紹介する
             </button>
