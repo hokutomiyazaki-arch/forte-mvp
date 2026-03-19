@@ -281,7 +281,7 @@ export default function Home() {
 
             {/* CTA */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', maxWidth: '340px' }}>
-              <button onClick={() => { window.location.href = isSignedIn ? '/auth-redirect' : '/sign-in'; }} style={{
+              <button onClick={() => { window.location.href = isSignedIn ? '/auth-redirect' : '/sign-up'; }} style={{
                 opacity: heroLoaded ? 1 : 0,
                 transition: 'opacity 0.6s ease-out 0.9s',
                 backgroundColor: '#C4A35A',
@@ -356,7 +356,7 @@ export default function Home() {
               ただひとつの証明。
             </h1>
             <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <button onClick={() => { window.location.href = isSignedIn ? '/auth-redirect' : '/sign-in'; }} style={{
+              <button onClick={() => { window.location.href = isSignedIn ? '/auth-redirect' : '/sign-up'; }} style={{
                 opacity: heroLoaded ? 1 : 0,
                 transition: 'opacity 0.6s ease-out 0.9s',
                 backgroundColor: '#C4A35A',
@@ -1084,7 +1084,7 @@ export default function Home() {
             <h2 style={{ color: '#FAFAF7', fontSize: '22px', fontWeight: 700, marginBottom: '32px' }}>
               REALPROOFは、<br />今日から誰でも使えます。
             </h2>
-            <button onClick={() => { window.location.href = isSignedIn ? '/auth-redirect' : '/sign-in'; }} style={{ backgroundColor: '#C4A35A', color: '#1A1A2E', fontWeight: 700, fontSize: '16px',
+            <button onClick={() => { window.location.href = isSignedIn ? '/auth-redirect' : '/sign-up'; }} style={{ backgroundColor: '#C4A35A', color: '#1A1A2E', fontWeight: 700, fontSize: '16px',
               padding: '18px 32px', borderRadius: '8px', border: 'none', cursor: 'pointer',
               width: '100%', fontFamily: "'Noto Sans JP', sans-serif" }}>
               プロとして登録する →
@@ -1141,7 +1141,7 @@ export default function Home() {
             </div>
 
             <div className="flex justify-center">
-              <button onClick={() => { window.location.href = isSignedIn ? '/auth-redirect' : '/sign-in'; }} style={{ backgroundColor: 'transparent', color: '#C4A35A', fontWeight: 700, fontSize: '16px',
+              <button onClick={() => { window.location.href = isSignedIn ? '/auth-redirect' : '/sign-up'; }} style={{ backgroundColor: 'transparent', color: '#C4A35A', fontWeight: 700, fontSize: '16px',
                 padding: '16px 32px', borderRadius: '8px', border: '1.5px solid #C4A35A', cursor: 'pointer',
                 width: '100%', maxWidth: '340px', fontFamily: "'Noto Sans JP', sans-serif" }}>
                 Founding Memberに挑戦する →
