@@ -223,6 +223,9 @@ export async function GET(req: NextRequest) {
 
     // vote_id ベースのリダイレクト（リワード情報はフロントがDBから取得）
     const redirectParams = new URLSearchParams({ pro: professionalId, vote_id: vote.id, has_account: hasAccount ? 'true' : 'false' })
+    if (clientReward?.id) {
+      redirectParams.set('rid', clientReward.id)
+    }
 
     return NextResponse.redirect(
       new URL(`/vote-confirmed?${redirectParams.toString()}`, req.url)

@@ -112,7 +112,6 @@ export const PERSONALITY_FORTES: { key: string; label: string; desc: string }[] 
 // リワードタイプ
 // ============================================
 export const REWARD_TYPES = [
-  { id: 'coupon',    label: '次回特典',           description: '延長15分無料、オプション無料追加など', hasTitle: false },
   { id: 'secret',    label: 'プロの秘密',         description: 'あなただけが知っている専門知識やテクニック', hasTitle: false },
   { id: 'selfcare',  label: '自宅でできる○○',    description: 'セルフケア・セルフワークを教える', hasTitle: true },
   { id: 'book',      label: 'おすすめの一冊',     description: 'あなたの人生を変えた本', hasTitle: false },
@@ -127,7 +126,6 @@ export const FNT_NEURO_APPS = [
   { id: 'okn',            name: 'OKNアプリ',               url: 'https://hokutomiyazaki-arch.github.io/OKN/' },
   { id: 'random_saccade', name: 'ランダムサッカード',       url: 'https://hokutomiyazaki-arch.github.io/randum-saccade/' },
   { id: 'find_number',    name: '周辺視野課題（数字探し）', url: 'https://hokutomiyazaki-arch.github.io/find-number/' },
-  { id: 'interoception',  name: '内受容覚テスト',           url: 'https://hokutomiyazaki-arch.github.io/interoception/' },
 ] as const
 
 export function getRewardLabel(rewardType: string): string {

@@ -200,7 +200,7 @@ export default function RewardReveal({ reward, proName }: { reward: any; proName
         @keyframes letter-appear{0%{opacity:0;transform:scale(.92)}100%{opacity:1;transform:scale(1)}}
       `}</style>
 
-      <div style={{ position: 'relative', width: 300, height: 260, margin: '0 auto', overflow: 'visible' }}>
+      <div style={{ position: 'relative', width: 300, height: 260, margin: '0 auto', overflow: 'hidden' }}>
 
         {/* Light burst */}
         <div id="light-burst" style={{
@@ -330,7 +330,7 @@ export default function RewardReveal({ reward, proName }: { reward: any; proName
               <div style={{ fontSize: 11, color: '#999', marginBottom: 14 }}>
                 {proName}さんからのおすすめ
               </div>
-              <div style={{ background: '#F5F0E5', border: '1px dashed #C4A35A', borderRadius: 8, padding: 16 }}>
+              <div style={{ background: '#F5F0E5', border: '1px dashed #C4A35A', borderRadius: 8, padding: 16, wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                 <RewardContent content={reward?.content || ''} />
               </div>
               <div style={{ width: 32, height: 1, background: '#C4A35A', margin: '14px auto 0', opacity: 0.5 }} />

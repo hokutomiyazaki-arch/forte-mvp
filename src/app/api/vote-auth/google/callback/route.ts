@@ -269,17 +269,19 @@ export async function GET(request: NextRequest) {
     }
 
     // Step 9: リワード処理
+    let googleRid = ''
     if (voteData.selected_reward_id) {
-      const { error: rewardError } = await supabaseAdmin.from('client_rewards').insert({
+      const { data: crData, error: rewardError } = await supabaseAdmin.from('client_rewards').insert({
         vote_id: insertedVote.id,
         reward_id: voteData.selected_reward_id,
         professional_id,
         client_email: email,
         status: 'active',
-      })
+      }).select('id').maybeSingle()
       if (rewardError) {
         console.error('[vote-auth/google/callback] client_rewards INSERT error:', rewardError)
       }
+      if (crData?.id) googleRid = crData.id
     }
 
     // Step 9b: リワード通知メール送信
@@ -516,6 +518,7 @@ export async function GET(request: NextRequest) {
       has_account: hasAccount ? 'true' : 'false',
       role: voterIsPro ? 'pro' : 'client',
     })
+    if (googleRid) redirectParams.set('rid', googleRid)
 
     console.log('[vote-auth/google/callback] Success! Redirecting to vote-confirmed')
     return NextResponse.redirect(

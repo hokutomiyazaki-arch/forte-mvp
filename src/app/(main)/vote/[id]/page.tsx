@@ -825,17 +825,19 @@ function VoteForm() {
         return
       }
 
+      let clientRewardId = ''
       if (selectedRewardId && insertedVote) {
-        await (supabase as any).from('client_rewards').insert({
+        const { data: crData } = await (supabase as any).from('client_rewards').insert({
           vote_id: insertedVote.id,
           reward_id: selectedRewardId,
           professional_id: proId,
           client_email: formattedPhone,
           status: 'active',
-        })
+        }).select('id').maybeSingle()
+        if (crData?.id) clientRewardId = crData.id
       }
 
-      window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${insertedVote.id}&has_account=true`
+      window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${insertedVote.id}&has_account=true${clientRewardId ? `&rid=${clientRewardId}` : ''}`
     } catch (err: any) {
       console.error('[handlePhoneVerify] Full error:', JSON.stringify(err, null, 2))
       console.error('[handlePhoneVerify] Error type:', typeof err)
@@ -923,17 +925,19 @@ function VoteForm() {
       return
     }
 
+    let clientRewardId2 = ''
     if (selectedRewardId && insertedVote) {
-      await (supabase as any).from('client_rewards').insert({
+      const { data: crData } = await (supabase as any).from('client_rewards').insert({
         vote_id: insertedVote.id,
         reward_id: selectedRewardId,
         professional_id: proId,
         client_email: formattedPhone,
         status: 'pending', // フォールバックはpending（後で認証したらactiveに）
-      })
+      }).select('id').maybeSingle()
+      if (crData?.id) clientRewardId2 = crData.id
     }
 
-    window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${insertedVote.id}&has_account=false`
+    window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${insertedVote.id}&has_account=false${clientRewardId2 ? `&rid=${clientRewardId2}` : ''}`
   }
 
   // ── 投票送信（メール認証用） ──
@@ -1099,22 +1103,24 @@ function VoteForm() {
     }
 
     // リワード選択をclient_rewardsに保存
+    let submittedRid = ''
     if (selectedRewardId && voteData) {
-      const { error: rewardInsertError } = await (supabase as any).from('client_rewards').insert({
+      const { data: crData, error: rewardInsertError } = await (supabase as any).from('client_rewards').insert({
         vote_id: voteData.id,
         reward_id: selectedRewardId,
         professional_id: proId,
         client_email: email,
         status: isSessionVote ? 'active' : 'pending',
-      })
+      }).select('id').maybeSingle()
       if (rewardInsertError) {
         console.error('[handleSubmit] client_rewards INSERT error:', rewardInsertError)
       }
+      if (crData?.id) submittedRid = crData.id
     }
 
     // ── ログイン済み（Clerk認証済み）: メール認証不要 → 完了画面へ直接遷移 ──
     if (isSessionVote) {
-      window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${voteData.id}&has_account=true`
+      window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${voteData.id}&has_account=true${submittedRid ? `&rid=${submittedRid}` : ''}`
       return
     }
 

@@ -20,6 +20,7 @@ function ConfirmedContent() {
   const authMethod = searchParams.get('auth_method') || ''
   const hasAccount = searchParams.get('has_account') === 'true'
   const roleParam = searchParams.get('role')
+  const rid = searchParams.get('rid') || ''
   const supabase = createClient()
   const { isPro } = useProStatus()
   // OAuth後はClerk未認証のためisPro判定不可。URLパラメータをフォールバック
@@ -29,6 +30,8 @@ function ConfirmedContent() {
   const [reward, setReward] = useState<RewardInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [nearbyPros, setNearbyPros] = useState<any[]>([])
+  const [currentRid, setCurrentRid] = useState(rid)
+  const [copyToast, setCopyToast] = useState('')
 
   // PWA インストール
   const [installPrompt, setInstallPrompt] = useState<any>(null)
@@ -70,6 +73,55 @@ function ConfirmedContent() {
     } catch (e) {
       console.warn('[vote-confirmed] reward param decode failed:', e)
       return null
+    }
+  }
+
+  // シェア: プロを友達に紹介
+  const handleShare = async () => {
+    const shareData = {
+      title: `${proName} | REALPROOF`,
+      text: `${proName}さん、おすすめです！`,
+      url: `${window.location.origin}/card/${proId}`
+    }
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData)
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          console.error('Share failed:', err)
+        }
+      }
+    } else {
+      await navigator.clipboard.writeText(shareData.url)
+      setCopyToast('URLをコピーしました')
+      setTimeout(() => setCopyToast(''), 3000)
+    }
+  }
+
+  // シェア: リワードページを保存
+  const handleSaveReward = async () => {
+    const url = currentRid
+      ? `${window.location.origin}/vote-confirmed?pro=${proId}&rid=${currentRid}`
+      : window.location.href
+    const shareData = {
+      title: `${proName}さんからのリワード | REALPROOF`,
+      text: `${proName}さんからのリワード`,
+      url,
+    }
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData)
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          console.error('Share failed:', err)
+        }
+      }
+    } else {
+      await navigator.clipboard.writeText(shareData.url)
+      setCopyToast('URLをコピーしました')
+      setTimeout(() => setCopyToast(''), 3000)
     }
   }
 
@@ -125,33 +177,62 @@ function ConfirmedContent() {
         }
       }
 
-      // リワード: クエリパラメータから優先取得
-      const paramReward = decodeRewardParam()
-      if (paramReward) {
-        setReward(paramReward)
+      // リワード取得: ridがあればAPIから取得
+      if (rid) {
+        try {
+          const res = await fetch(`/api/reward/${rid}`)
+          if (res.ok) {
+            const data = await res.json()
+            setReward({
+              reward_type: data.reward_type || '',
+              content: data.content || '',
+              title: data.title || '',
+            })
+            if (data.proName && !proId) {
+              setProName(data.proName)
+            }
+            setCurrentRid(rid)
+          }
+        } catch (err) {
+          console.error('[vote-confirmed] rid fetch failed:', err)
+        }
       }
 
-      // フォールバック: DBから取得
-      if (voteId && !paramReward) {
-        const { data: vote } = await (supabase as any)
-          .from('votes')
-          .select('selected_reward_id')
-          .eq('id', voteId)
-          .maybeSingle()
+      // フォールバック: クエリパラメータから取得
+      if (!rid) {
+        const paramReward = decodeRewardParam()
+        if (paramReward) {
+          setReward(paramReward)
+        }
 
-        if (vote?.selected_reward_id) {
-          const { data: rewardData } = await (supabase as any)
-            .from('rewards')
-            .select('reward_type, content, title')
-            .eq('id', vote.selected_reward_id)
+        // フォールバック: DBから取得 + ridを取得してURL更新
+        if (voteId && !paramReward) {
+          const { data: crData } = await (supabase as any)
+            .from('client_rewards')
+            .select('id, reward_id')
+            .eq('vote_id', voteId)
             .maybeSingle()
 
-          if (rewardData) {
-            setReward({
-              reward_type: rewardData.reward_type || '',
-              content: rewardData.content || '',
-              title: rewardData.title || '',
-            })
+          if (crData) {
+            setCurrentRid(crData.id)
+            // URLにridを追加（ブックマーク可能に）
+            const url = new URL(window.location.href)
+            url.searchParams.set('rid', crData.id)
+            window.history.replaceState({}, '', url.toString())
+
+            const { data: rewardData } = await (supabase as any)
+              .from('rewards')
+              .select('reward_type, content, title')
+              .eq('id', crData.reward_id)
+              .maybeSingle()
+
+            if (rewardData) {
+              setReward({
+                reward_type: rewardData.reward_type || '',
+                content: rewardData.content || '',
+                title: rewardData.title || '',
+              })
+            }
           }
         }
       }
@@ -159,7 +240,7 @@ function ConfirmedContent() {
       setLoading(false)
     }
     load()
-  }, [proId, voteId])
+  }, [proId, voteId, rid])
 
   if (loading) {
     return (
@@ -176,7 +257,18 @@ function ConfirmedContent() {
   const isMobile = isIOS || isAndroid || !!installPrompt
 
   return (
-    <div className="min-h-screen bg-[#FAFAF7]">
+    <div className="min-h-screen bg-[#FAFAF7]" style={{ overflowX: 'hidden' }}>
+      {/* コピートースト */}
+      {copyToast && (
+        <div style={{
+          position: 'fixed', top: 24, left: '50%', transform: 'translateX(-50%)',
+          background: '#1A1A2E', color: '#fff', padding: '10px 24px',
+          borderRadius: 8, fontSize: 14, fontWeight: 600, zIndex: 9999,
+        }}>
+          {copyToast}
+        </div>
+      )}
+
       {/* ヘッダー: シンプルにロゴだけ */}
       <div className="bg-[#1A1A2E] py-4 px-6">
         <span className="text-white text-xl font-bold tracking-widest">
@@ -203,34 +295,75 @@ function ConfirmedContent() {
 
         {/* ===== セクション2: リワード ===== */}
         {reward && (
-          <RewardReveal reward={reward} proName={proName || ''} />
+          <>
+            <RewardReveal reward={reward} proName={proName || ''} />
+
+            {/* リワード保存導線 */}
+            {currentRid && (
+              <div className="text-center space-y-2">
+                <p className="text-xs text-gray-400">
+                  このページをブックマークすると、いつでもリワードを確認できます
+                </p>
+                <button
+                  onClick={handleSaveReward}
+                  className="text-sm text-[#C4A35A] font-medium hover:underline"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                >
+                  リワードページを保存する
+                </button>
+              </div>
+            )}
+          </>
         )}
 
-        {/* ===== セクション2.5: アカウント登録CTA or マイカード誘導 ===== */}
+        {/* ===== セクション2.5: リワード受け取り確認 or アカウント登録CTA ===== */}
         {hasAccount ? (
           <div className="bg-[#1A1A2E] rounded-2xl p-6 text-center">
             <p className="text-white text-lg font-bold mb-2">
-              {isProUser ? 'ダッシュボードに戻る' : 'リワードを保存しました'}
+              {isProUser ? 'ダッシュボードに戻る' : 'リワードを受け取りました'}
             </p>
-            <p className="text-gray-400 text-sm mb-5 leading-relaxed">
-              {isProUser ? 'プロダッシュボードで投票状況を確認できます' : 'マイカードからいつでもリワードを確認できます'}
-            </p>
-            <button
-              onClick={async () => {
-                try {
-                  const res = await fetch('/api/user/role')
-                  const data = await res.json()
-                  const isProResult = data.isPro || roleParam === 'pro'
-                  window.location.href = isProResult ? '/dashboard' : '/mycard'
-                } catch {
-                  // フォールバック: URLパラメータ → useProStatus の結果
-                  window.location.href = isProUser ? '/dashboard' : '/mycard'
-                }
-              }}
-              className="block w-full py-4 rounded-xl font-bold text-lg text-[#1A1A2E] bg-[#C4A35A] hover:bg-[#b3923f] transition cursor-pointer"
-            >
-              {isProUser ? 'ダッシュボードを見る →' : 'マイカードを見る →'}
-            </button>
+            {isProUser && (
+              <p className="text-gray-400 text-sm mb-5 leading-relaxed">
+                プロダッシュボードで投票状況を確認できます
+              </p>
+            )}
+            {isProUser ? (
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await fetch('/api/user/role')
+                    const data = await res.json()
+                    const isProResult = data.isPro || roleParam === 'pro'
+                    window.location.href = isProResult ? '/dashboard' : '/mycard'
+                  } catch {
+                    window.location.href = isProUser ? '/dashboard' : '/mycard'
+                  }
+                }}
+                className="block w-full py-4 rounded-xl font-bold text-lg text-[#1A1A2E] bg-[#C4A35A] hover:bg-[#b3923f] transition cursor-pointer"
+              >
+                ダッシュボードを見る →
+              </button>
+            ) : (
+              <>
+                {proId && (
+                  <a
+                    href={`/card/${proId}`}
+                    className="block w-full py-4 rounded-xl font-bold text-lg text-[#1A1A2E] bg-[#C4A35A] hover:bg-[#b3923f] transition mb-3"
+                  >
+                    {proName ? `${proName}さんのプロフィールを見る →` : 'プロフィールを見る →'}
+                  </a>
+                )}
+                {proId && (
+                  <button
+                    onClick={handleShare}
+                    className="text-sm text-gray-400 hover:text-[#C4A35A] transition"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                  >
+                    このプロを友達に紹介する
+                  </button>
+                )}
+              </>
+            )}
           </div>
         ) : (
           <div className="bg-[#1A1A2E] rounded-2xl p-6 text-center">
@@ -268,6 +401,25 @@ function ConfirmedContent() {
                 </p>
               </>
             )}
+          </div>
+        )}
+
+        {/* ===== プロフィール導線 + シェア（未ログインユーザー向け） ===== */}
+        {!hasAccount && proId && (
+          <div className="text-center space-y-3">
+            <a
+              href={`/card/${proId}`}
+              className="block w-full py-4 rounded-xl font-bold text-lg border-2 border-[#1A1A2E] text-[#1A1A2E]"
+            >
+              {proName ? `${proName}さんのプロフィールを見る →` : 'プロフィールを見る →'}
+            </a>
+            <button
+              onClick={handleShare}
+              className="text-sm text-[#666666] hover:text-[#C4A35A] transition"
+              style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+            >
+              このプロを友達に紹介する
+            </button>
           </div>
         )}
 
@@ -324,7 +476,7 @@ function ConfirmedContent() {
                   )}
 
                   {/* エリア */}
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-gray-500" style={{ wordBreak: 'break-word' }}>
                     {p.prefecture}
                     {p.is_online_available && (
                       <span className="ml-1 text-[#C4A35A] font-bold">● オンライン可</span>
@@ -344,19 +496,11 @@ function ConfirmedContent() {
           </div>
         )}
 
-        {/* ===== セクション5: プロのカード ===== */}
-        <div className="text-center space-y-4 pb-8">
-          {proId && (
-            <a
-              href={`/card/${proId}`}
-              className="block w-full py-4 rounded-xl font-bold text-lg border-2 border-[#1A1A2E] text-[#1A1A2E]"
-            >
-              {proName ? `${proName}さんのカードを見る →` : 'カードを見る →'}
-            </a>
-          )}
+        {/* 下部余白 */}
+        <div className="pb-8">
           <a
             href="/search"
-            className="block text-lg text-[#666666] underline"
+            className="block text-center text-lg text-[#666666] underline"
           >
             他のプロを探す
           </a>

@@ -3,24 +3,11 @@ import { useEffect, useState, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { useUser, useClerk } from '@clerk/nextjs'
-import { getRewardLabel, FNT_NEURO_APPS } from '@/lib/types'
-import RewardContent from '@/components/RewardContent'
 import CardModeSwitch from '@/components/CardModeSwitch'
 import PhotoCropper from '@/components/PhotoCropper'
 import MyProofTab from '@/components/MyProofTab'
 import InstallPrompt from '@/components/InstallPrompt'
 import { Suspense } from 'react'
-
-interface RewardWithPro {
-  id: string
-  reward_id: string
-  reward_type: string
-  title: string
-  content: string
-  status: string
-  professional_id: string
-  pro_name: string
-}
 
 interface VoteHistory {
   id: string
@@ -55,12 +42,9 @@ function MyCardContent() {
   const [checkingEmail, setCheckingEmail] = useState(false)
 
   // 通常のmycard用state
-  const [rewards, setRewards] = useState<RewardWithPro[]>([])
   const [voteHistory, setVoteHistory] = useState<VoteHistory[]>([])
   const [dataLoading, setDataLoading] = useState(false)
-  const [tab, setTab] = useState<'rewards' | 'history' | 'bookmarked' | 'myproof' | 'card' | 'myorgs'>('rewards')
-  const [confirmingId, setConfirmingId] = useState<string | null>(null)
-  const [redeeming, setRedeeming] = useState(false)
+  const [tab, setTab] = useState<'history' | 'bookmarked' | 'myproof' | 'card' | 'myorgs'>('myproof')
   const [message, setMessage] = useState('')
   const [showSettings, setShowSettings] = useState(false)
   const [newPassword, setNewPassword] = useState('')
@@ -141,7 +125,6 @@ function MyCardContent() {
       if (data.clientFirstName) setClientFirstName(data.clientFirstName)
       setUserEmail(data.email)
       setIsLineUser(data.isLine)
-      if (data.rewards) setRewards(data.rewards)
       if (data.voteHistory) setVoteHistory(data.voteHistory)
       if (data.bookmarks) {
         setBookmarkedPros(data.bookmarks)
@@ -358,31 +341,6 @@ function MyCardContent() {
   }
 
   // リワード使用/削除
-  async function handleRedeem(clientRewardId: string) {
-    setRedeeming(true)
-    setMessage('')
-
-    const reward = rewards.find(r => r.id === clientRewardId)
-    const isCoupon = reward?.reward_type === 'coupon'
-
-    const { error } = await (supabase as any)
-      .from('client_rewards')
-      .update({ status: 'used', used_at: new Date().toISOString() })
-      .eq('id', clientRewardId)
-
-    if (error) {
-      setMessage('エラーが発生しました。もう一度お試しください。')
-    } else {
-      setRewards(prev => prev.map(r =>
-        r.id === clientRewardId ? { ...r, status: 'used' } : r
-      ))
-      setMessage(isCoupon ? 'リワードを使用しました！' : 'リワードを削除しました。')
-    }
-
-    setRedeeming(false)
-    setConfirmingId(null)
-  }
-
   // パスワード変更 — Clerk handles password management via user profile
   async function handlePasswordChange(e: React.FormEvent) {
     e.preventDefault()
@@ -610,7 +568,7 @@ function MyCardContent() {
             </svg>
           </div>
           <h1 className="text-xl font-bold text-[#1A1A2E] mb-2">ログインが必要です</h1>
-          <p className="text-sm text-gray-500">リワードや投票履歴を確認できます</p>
+          <p className="text-sm text-gray-500">投票履歴やマイプルーフを確認できます</p>
         </div>
 
         <button
@@ -668,8 +626,6 @@ function MyCardContent() {
   }
 
   // ========== 通常のmycard表示 ==========
-  const activeRewards = rewards.filter(r => r.status === 'active')
-  const usedRewards = rewards.filter(r => r.status === 'used')
 
   return (
     <div className="max-w-lg mx-auto px-4 py-8">
@@ -1006,10 +962,9 @@ function MyCardContent() {
         gap: 0,
       }}>
         {([
-          { key: 'rewards' as const, label: 'リワード', count: activeRewards.length },
+          { key: 'myproof' as const, label: 'マイプルーフ', count: 0 },
           { key: 'history' as const, label: 'プルーフ済み', count: voteHistory.length },
           { key: 'bookmarked' as const, label: '気になる', count: bookmarkCount },
-          { key: 'myproof' as const, label: 'マイプルーフ', count: 0 },
           { key: 'card' as const, label: 'カード管理', count: 0 },
           ...(hasOrgMembership ? [{ key: 'myorgs' as const, label: '📋 団体', count: 0 }] : []),
         ]).map(t => (
@@ -1037,133 +992,6 @@ function MyCardContent() {
           </button>
         ))}
       </div>
-
-      {/* リワードタブ */}
-      {tab === 'rewards' && (
-        <div className="space-y-4">
-          {activeRewards.length === 0 && usedRewards.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-gray-400 text-sm">リワードはまだありません</p>
-              <p className="text-xs text-gray-300 mt-2">プロにプルーフを贈ると、リワードがもらえることがあります。</p>
-            </div>
-          ) : (
-            <>
-              {activeRewards.map(reward => {
-                const isCoupon = reward.reward_type === 'coupon'
-                return (
-                  <div key={reward.id} className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-                    {/* リワード情報エリア */}
-                    <div className="p-5">
-                      <p className="text-base text-[#C4A35A] font-semibold mb-3 text-center">
-                        {reward.title || getRewardLabel(reward.reward_type)}
-                      </p>
-                      {reward.reward_type === 'fnt_neuro_app' && reward.content ? (
-                        <div className="mb-4">
-                          <p className="text-sm text-[#666666] mb-3 text-center">
-                            トレーナーからのプレゼント：神経科学アプリを体験してみてください
-                          </p>
-                          <a
-                            href={reward.content}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="block w-full py-3 px-6 bg-[#C4A35A] text-[#1A1A2E] font-bold text-center rounded-lg hover:opacity-90 transition-opacity"
-                          >
-                            アプリを開く →
-                          </a>
-                          <p className="text-xs text-[#9CA3AF] mt-2 text-center">
-                            {FNT_NEURO_APPS.find(app => app.url === reward.content)?.name ?? 'FNT神経科学アプリ'}
-                          </p>
-                        </div>
-                      ) : (
-                        <RewardContent content={reward.content} className="text-lg font-bold text-[#1A1A2E] mb-4 text-center" />
-                      )}
-
-                      {confirmingId === reward.id ? (
-                        <div className="space-y-2">
-                          <p className="text-sm text-center text-orange-600 font-medium">
-                            {isCoupon ? '本当に使用しますか？この操作は取り消せません。' : 'このリワードを削除しますか？'}
-                          </p>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleRedeem(reward.id)}
-                              disabled={redeeming}
-                              className={`flex-1 py-2 text-white font-bold rounded-lg transition disabled:opacity-50 ${
-                                isCoupon ? 'bg-[#C4A35A] hover:bg-[#b3923f]' : 'bg-red-500 hover:bg-red-600'
-                              }`}
-                            >
-                              {redeeming ? '処理中...' : isCoupon ? '使用する' : '削除する'}
-                            </button>
-                            <button
-                              onClick={() => setConfirmingId(null)}
-                              className="flex-1 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition"
-                            >
-                              キャンセル
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => setConfirmingId(reward.id)}
-                          className={`w-full py-3 font-medium rounded-lg transition text-sm ${
-                            isCoupon
-                              ? 'bg-[#1A1A2E] text-white hover:bg-[#2a2a4e]'
-                              : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-                          }`}
-                        >
-                          {isCoupon ? '使用する' : '削除する'}
-                        </button>
-                      )}
-                    </div>
-
-                    {/* プロ情報エリア */}
-                    <div className="border-t border-gray-100 px-5 py-3 bg-[#FAFAF7] flex items-center justify-between">
-                      <p className="text-sm text-gray-500">{reward.pro_name}さん</p>
-                      {reward.professional_id && (
-                        <a
-                          href={`/card/${reward.professional_id}`}
-                          className="text-xs text-[#C4A35A] font-medium hover:underline transition"
-                        >
-                          このプロのカードを見る →
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-
-              {usedRewards.length > 0 && (
-                <div className="mt-4">
-                  <h2 className="text-sm font-medium text-gray-400 mb-3">使用済み / 削除済み</h2>
-                  {usedRewards.map(reward => (
-                    <div key={reward.id} className="bg-gray-50 text-gray-400 rounded-xl overflow-hidden mb-2">
-                      <div className="p-4">
-                        <p className="text-xs text-gray-300 mb-1">
-                          {reward.title || getRewardLabel(reward.reward_type)}
-                        </p>
-                        <RewardContent content={reward.content} className="text-sm" strikethrough />
-                        <p className="text-xs mt-1">
-                          {reward.reward_type === 'coupon' ? '使用済み' : '削除済み'}
-                        </p>
-                      </div>
-                      <div className="border-t border-gray-200 px-4 py-2 flex items-center justify-between">
-                        <p className="text-xs text-gray-300">{reward.pro_name}さん</p>
-                        {reward.professional_id && (
-                          <a
-                            href={`/card/${reward.professional_id}`}
-                            className="text-xs text-gray-400 hover:text-[#C4A35A] transition"
-                          >
-                            カードを見る →
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
 
       {/* 投票履歴タブ */}
       {tab === 'history' && (
@@ -1644,7 +1472,6 @@ function MyCardContent() {
             <ul className="text-sm text-gray-600 space-y-1 mb-6">
               <li>・マイプルーフのデータ</li>
               <li>・投票履歴</li>
-              <li>・コレクションしたリワード</li>
               <li>・アカウント情報</li>
             </ul>
             <div className="flex gap-3 justify-end">

@@ -2595,7 +2595,7 @@ export default function DashboardPage() {
                 <p className="text-sm font-medium text-[#1A1A2E] mb-3">カテゴリを選択</p>
                 <div className="space-y-2 mb-3">
                   {REWARD_TYPES
-                    .filter(rt => !rewards.some(r => r.reward_type === rt.id))
+                    .filter(rt => rt.id === 'freeform' || !rewards.some(r => r.reward_type === rt.id))
                     .map(rt => (
                       <button
                         key={rt.id}
