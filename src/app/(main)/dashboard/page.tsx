@@ -1118,6 +1118,8 @@ export default function DashboardPage() {
                     type="button"
                     onClick={async () => {
                       setProfileCodeLoading(true)
+                      // iOS Safari: window.openをawait前に呼ばないとポップアップブロックされる
+                      window.open(process.env.NEXT_PUBLIC_LINE_FRIEND_URL, '_blank')
                       try {
                         const res = await fetch('/api/line/link/generate', {
                           method: 'POST',
@@ -1127,7 +1129,6 @@ export default function DashboardPage() {
                         const data = await res.json()
                         if (data.code) {
                           setProfileLineState('code_input')
-                          window.open(process.env.NEXT_PUBLIC_LINE_FRIEND_URL, '_blank')
                         }
                       } catch (err) {
                         console.error('[profile-line] Generate error:', err)
@@ -1383,6 +1384,8 @@ export default function DashboardPage() {
             onClick={async () => {
               if (!pro) return
               setCodeLoading(true)
+              // iOS Safari: window.openをawait前に呼ばないとポップアップブロックされる
+              window.open(process.env.NEXT_PUBLIC_LINE_FRIEND_URL, '_blank')
               try {
                 const res = await fetch('/api/line/link/generate', {
                   method: 'POST',
@@ -1393,7 +1396,6 @@ export default function DashboardPage() {
                 if (data.code) {
                   setLinkCode(data.code)
                   setLineBannerState('show_code_input')
-                  window.open(process.env.NEXT_PUBLIC_LINE_FRIEND_URL, '_blank')
                 }
               } catch (err) {
                 console.error('[line-banner] Generate error:', err)
