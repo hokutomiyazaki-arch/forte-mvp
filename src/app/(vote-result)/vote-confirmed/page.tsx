@@ -156,20 +156,46 @@ function ConfirmedContent() {
             .limit(6)
 
           if (nearby && nearby.length > 0) {
-            const prosWithProofs = await Promise.all(
-              nearby.map(async (p: any) => {
-                const { count } = await (supabase as any)
-                  .from('votes')
-                  .select('*', { count: 'exact', head: true })
-                  .eq('professional_id', p.id)
-                  .eq('status', 'confirmed')
+            const proIds = nearby.map((p: any) => p.id)
 
-                return {
-                  ...p,
-                  totalProofs: count || 0,
+            // vote_summary + proof_items を一括取得（検索ページと同じパターン）
+            const [voteRes, proofRes] = await Promise.all([
+              (supabase as any)
+                .from('vote_summary')
+                .select('professional_id, proof_id, vote_count')
+                .in('professional_id', proIds)
+                .order('vote_count', { ascending: false }),
+              (supabase as any)
+                .from('proof_items')
+                .select('id, label'),
+            ])
+
+            // ラベルマップ
+            const labelMap = new Map<string, string>()
+            if (proofRes.data) {
+              for (const pi of proofRes.data) labelMap.set(pi.id, pi.label)
+            }
+
+            // プロごとのトップ1プルーフ + 合計票数
+            const topProofMap = new Map<string, { label: string; count: number }>()
+            const totalMap = new Map<string, number>()
+            if (voteRes.data) {
+              for (const v of voteRes.data) {
+                totalMap.set(v.professional_id, (totalMap.get(v.professional_id) || 0) + v.vote_count)
+                if (!topProofMap.has(v.professional_id)) {
+                  const label = labelMap.get(v.proof_id)
+                  if (label) {
+                    topProofMap.set(v.professional_id, { label, count: v.vote_count })
+                  }
                 }
-              })
-            )
+              }
+            }
+
+            const prosWithProofs = nearby.map((p: any) => ({
+              ...p,
+              totalProofs: totalMap.get(p.id) || 0,
+              topProof: topProofMap.get(p.id) || null,
+            }))
             prosWithProofs.sort((a: any, b: any) => b.totalProofs - a.totalProofs)
             setNearbyPros(prosWithProofs)
           }
@@ -442,12 +468,15 @@ function ConfirmedContent() {
                     </div>
                   </div>
 
-                  {/* プルーフ数 */}
-                  {p.totalProofs > 0 && (
-                    <div className="bg-[#C4A35A]/10 border border-[#C4A35A]/20 rounded-lg px-3 py-2 mb-2">
-                      <span className="text-xs font-bold text-[#1A1A2E]">
-                        {p.totalProofs} proofs
-                      </span>
+                  {/* トップ強み */}
+                  {p.topProof && (
+                    <div style={{
+                      fontSize: 11, color: '#C4A35A', background: 'rgba(196,163,90,0.06)',
+                      borderRadius: 99, padding: '2px 8px', fontWeight: 500,
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      maxWidth: '100%', marginBottom: 8,
+                    }}>
+                      {p.topProof.label} <span style={{ fontWeight: 'bold', fontFamily: 'ui-monospace, monospace' }}>{p.topProof.count}</span>
                     </div>
                   )}
 
