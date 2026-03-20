@@ -908,6 +908,66 @@ export default function AdminDashboard() {
         )}
       </div>
 
+      {/* 声かけ事例 */}
+      <Sec>クライアントへの声かけ事例</Sec>
+      <div className="voicekake-grid" style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, 1fr)',
+        gap: 12,
+      }}>
+        {/* カード1: 一番シンプル（推奨） */}
+        <div style={{
+          background: C.surface,
+          borderRadius: '0 0 10px 10px',
+          borderTop: `3px solid ${C.gold}`,
+          padding: '18px 20px',
+        }}>
+          <div style={{ color: C.gold, fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', marginBottom: 6 }}>一番シンプル</div>
+          <div style={{ background: C.goldBg, display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, color: C.gold, fontWeight: 600, marginBottom: 12 }}>★ おすすめ</div>
+          <p style={{ color: C.cream, fontSize: 15, lineHeight: 1.7, whiteSpace: 'pre-line' }}>
+{`「かんたんなアンケートに
+ご協力いただけますか？
+スマホをかざすだけで、
+30秒で終わります」`}
+          </p>
+        </div>
+
+        {/* カード2: 理由を添える */}
+        <div style={{
+          background: C.surface,
+          borderRadius: '0 0 10px 10px',
+          borderTop: `3px solid ${C.grayDark}`,
+          padding: '18px 20px',
+        }}>
+          <div style={{ color: C.gold, fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', marginBottom: 12 }}>理由を添える</div>
+          <p style={{ color: C.cream, fontSize: 15, lineHeight: 1.7, whiteSpace: 'pre-line' }}>
+{`「自分の技術を上げるために
+お客さんの声を集めてるんです。
+かんたんなアンケートなんですけど、
+ご協力いただけますか？」`}
+          </p>
+        </div>
+
+        {/* カード3: 常連のお客さんに */}
+        <div style={{
+          background: C.surface,
+          borderRadius: '0 0 10px 10px',
+          borderTop: `3px solid ${C.grayDark}`,
+          padding: '18px 20px',
+        }}>
+          <div style={{ color: C.gold, fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', marginBottom: 12 }}>常連のお客さんに</div>
+          <p style={{ color: C.cream, fontSize: 15, lineHeight: 1.7, whiteSpace: 'pre-line' }}>
+{`「○○さんにお聞きしたいんですけど、
+どんなところがよかったか、
+アンケートで教えてもらえますか？
+スマホかざすだけで大丈夫です」`}
+          </p>
+        </div>
+      </div>
+      <p style={{ color: C.gray, fontSize: 11, marginTop: 12, textAlign: 'center' }}>✕ 使わない言葉: 投票 / 評価 / 口コミ / レビュー / REALPROOF</p>
+
+      <style>{`@media (max-width: 768px) { .voicekake-grid { grid-template-columns: 1fr !important; } }`}</style>
+
       {/* [E] Pro List */}
       <Sec>プロ一覧 — 個別ステータス</Sec>
       <div style={{ background: C.surface, borderRadius: 10, padding: 18 }}>
