@@ -59,11 +59,13 @@ export default function ProofCalculator() {
 
   return (
     <section className="py-16 px-5 bg-[#FAFAF7]">
-      <div className="max-w-[520px] mx-auto">
-        {/* 見出し — コピー変更禁止 */}
-        <h2 className="text-xl font-medium text-[#1A1A2E] leading-relaxed mb-10">
-          積み上げた実績、<br />今いくつ残ってますか？
+      <div className="max-w-[520px] mx-auto bg-white rounded-2xl px-6 py-10 sm:px-10 shadow-sm border border-[#E8E8E8]">
+        <h2 className="text-xl font-medium text-[#1A1A2E] leading-relaxed mb-1">
+          実績簡単チェック
         </h2>
+        <p className="text-[14px] text-[#888] mb-10">
+          〜あなたの実績を入力してください〜
+        </p>
 
         {/* スライダー群 */}
         <Slider
@@ -103,18 +105,15 @@ export default function ProofCalculator() {
             {total.toLocaleString()}人
           </p>
 
-          <p className="text-[13px] text-[#888] mt-6 mb-1">
-            証明された実績の数
-          </p>
-          <p className="text-[48px] font-medium text-[#E24B4A] leading-tight">
-            0
-          </p>
+          <div className="mt-8 bg-[#FFF5F5] rounded-xl py-5 px-4">
+            <p className="text-[13px] font-medium text-[#E24B4A] mb-1">
+              証明された実績の数
+            </p>
+            <p className="text-[48px] font-bold text-[#E24B4A] leading-tight">
+              0
+            </p>
+          </div>
         </div>
-
-        {/* 締めコピー — コピー変更禁止 */}
-        <p className="text-[15px] text-[#888] text-center mt-10">
-          でも、誰もそれを知らない。
-        </p>
       </div>
     </section>
   );
