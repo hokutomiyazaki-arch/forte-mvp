@@ -403,7 +403,7 @@ export default function Home() {
       </section>
 
       {/* ═══ S2: PAIN ═══ */}
-      <section className="relative" style={{ ...sectionPad, backgroundColor: '#FAFAF7', marginTop: '-80px', zIndex: 2, borderRadius: '24px 24px 0 0' }}>
+      <section className="relative" style={{ ...sectionPad, paddingBottom: '24px', backgroundColor: '#FAFAF7', marginTop: '-80px', zIndex: 2, borderRadius: '24px 24px 0 0' }}>
         <div className={inner}>
           <Reveal>
             <div className="text-center" style={{ marginBottom: '48px' }}>

@@ -58,13 +58,13 @@ export default function ProofCalculator() {
   const total = Math.round(years * clients * 12 * (rate / 100));
 
   return (
-    <section className="py-16 px-5 bg-[#FAFAF7]">
+    <section className="pt-4 pb-16 px-5 bg-[#FAFAF7]">
       <div className="max-w-[520px] mx-auto bg-white rounded-2xl px-6 py-10 sm:px-10 shadow-sm border border-[#E8E8E8]">
         <h2 className="text-xl font-medium text-[#1A1A2E] leading-relaxed mb-1">
           実績簡単チェック
         </h2>
         <p className="text-[14px] text-[#888] mb-10">
-          〜あなたの実績を入力してください〜
+          〜あなたのプロとしての実績を入力して下さい〜
         </p>
 
         {/* スライダー群 */}
