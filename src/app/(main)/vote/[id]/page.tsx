@@ -1822,7 +1822,7 @@ function VoteForm() {
           onBack={goBack}
         >
           <div style={{ width: "100%" }}>
-            <div style={S.title}>ありがとうございます！</div>
+            <div style={S.title}>あと少しで届きます！</div>
             <div style={S.subtitle}>
               あなたの声を届けるために<br />
               確認をお願いしています。
