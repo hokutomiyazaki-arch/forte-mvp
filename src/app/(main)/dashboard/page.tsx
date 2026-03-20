@@ -1697,7 +1697,7 @@ export default function DashboardPage() {
               <p className="text-sm text-[#1A1A2E] leading-relaxed whitespace-pre-line">{`「○○さんにお聞きしたいんですけど、\nどんなところがよかったか、\nアンケートで教えてもらえますか？\nスマホかざすだけで大丈夫です」`}</p>
             </div>
 
-            <p className="text-xs text-gray-400 text-center mt-3">✕ 使わない言葉: 投票 / 評価 / 口コミ / レビュー / REALPROOF</p>
+
 
             {/* クライアント提示用資料 */}
             <div className="mt-6 pt-4 border-t border-gray-200 text-center">

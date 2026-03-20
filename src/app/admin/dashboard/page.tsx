@@ -964,7 +964,7 @@ export default function AdminDashboard() {
           </p>
         </div>
       </div>
-      <p style={{ color: C.gray, fontSize: 11, marginTop: 12, textAlign: 'center' }}>✕ 使わない言葉: 投票 / 評価 / 口コミ / レビュー / REALPROOF</p>
+
 
       <style>{`@media (max-width: 768px) { .voicekake-grid { grid-template-columns: 1fr !important; } }`}</style>
 
