@@ -1678,29 +1678,26 @@ export default function DashboardPage() {
           <div className="bg-white rounded-xl p-5 shadow-sm space-y-4">
             <p className="text-xs text-gray-400 mb-2">セッション後にQRを見せる時、こんなふうに声をかけてみてください</p>
 
-            {/* パターン1: カジュアル */}
+            {/* パターン1: 一番シンプル（推奨） */}
             <div className="border-l-2 border-[#C4A35A] pl-4">
-              <p className="text-xs font-medium text-[#C4A35A] mb-1">カジュアル</p>
-              <p className="text-sm text-[#1A1A2E] leading-relaxed">
-                「今日の感想、30秒だけ聞かせてもらえますか？QRかざすだけで終わります。お礼にちょっとした特典もお渡ししてます😊」
-              </p>
+              <p className="text-xs font-medium text-[#C4A35A] mb-1">一番シンプル</p>
+              <span className="inline-block text-xs bg-[#C9A84C15] text-[#C4A35A] px-2 py-0.5 rounded font-semibold mb-2">★ おすすめ</span>
+              <p className="text-sm text-[#1A1A2E] leading-relaxed whitespace-pre-line">{`「かんたんなアンケートに\nご協力いただけますか？\nスマホをかざすだけで、\n30秒で終わります」`}</p>
             </div>
 
-            {/* パターン2: 説明込み */}
-            <div className="border-l-2 border-[#C4A35A] pl-4">
-              <p className="text-xs font-medium text-[#C4A35A] mb-1">しっかり説明</p>
-              <p className="text-sm text-[#1A1A2E] leading-relaxed">
-                「REALPROOFっていう、クライアントさんが"この人の強みはこれだ"って投票できるサービスをやってるんです。よかったら私の強みに投票してもらえませんか？30秒で終わります。お礼に○○をお渡ししてます」
-              </p>
+            {/* パターン2: 理由を添える */}
+            <div className="border-l-2 border-gray-300 pl-4">
+              <p className="text-xs font-medium text-[#C4A35A] mb-1">理由を添える</p>
+              <p className="text-sm text-[#1A1A2E] leading-relaxed whitespace-pre-line">{`「自分の技術を上げるために\nお客さんの声を集めてるんです。\nかんたんなアンケートなんですけど、\nご協力いただけますか？」`}</p>
             </div>
 
-            {/* パターン3: リワード推し */}
-            <div className="border-l-2 border-[#C4A35A] pl-4">
-              <p className="text-xs font-medium text-[#C4A35A] mb-1">リワード推し</p>
-              <p className="text-sm text-[#1A1A2E] leading-relaxed">
-                「このQRで投票してもらうと、私からのちょっとしたプレゼントが開封できるんです。何が出るかはお楽しみ！30秒で終わるので試してみてください」
-              </p>
+            {/* パターン3: 常連のお客さんに */}
+            <div className="border-l-2 border-gray-300 pl-4">
+              <p className="text-xs font-medium text-[#C4A35A] mb-1">常連のお客さんに</p>
+              <p className="text-sm text-[#1A1A2E] leading-relaxed whitespace-pre-line">{`「○○さんにお聞きしたいんですけど、\nどんなところがよかったか、\nアンケートで教えてもらえますか？\nスマホかざすだけで大丈夫です」`}</p>
             </div>
+
+            <p className="text-xs text-gray-400 text-center mt-3">✕ 使わない言葉: 投票 / 評価 / 口コミ / レビュー / REALPROOF</p>
 
             {/* クライアント提示用資料 */}
             <div className="mt-6 pt-4 border-t border-gray-200 text-center">
