@@ -19,7 +19,7 @@ function VoteConfirmForm() {
         // sessionStorage から投票データを取得
         const pendingVoteStr = sessionStorage.getItem('pending_vote');
         if (!pendingVoteStr) {
-          setErrorMessage('投票データが見つかりません。もう一度お試しください。');
+          setErrorMessage('データが見つかりません。もう一度お試しください。');
           setStatus('error');
           return;
         }
@@ -47,7 +47,7 @@ function VoteConfirmForm() {
           vote_type: pendingVote.vote_type || 'proof',
           selected_proof_ids: pendingVote.selected_proof_ids || null,
           selected_personality_ids: pendingVote.selected_personality_ids || null,
-          selected_reward_id: pendingVote.selected_reward_id || null,
+          selected_reward_id: null,
           comment: pendingVote.comment || null,
           qr_token: qr_token,
           status: 'confirmed', // LINE/Google認証済みなのでメール確認不要
@@ -59,23 +59,12 @@ function VoteConfirmForm() {
         if (voteError) {
           console.error('Vote insert error:', voteError);
           if (voteError.code === '23505') {
-            setErrorMessage('既に投票済みです。');
+            setErrorMessage('既に回答済みです。');
           } else {
-            setErrorMessage('投票の保存に失敗しました。');
+            setErrorMessage('保存に失敗しました。');
           }
           setStatus('error');
           return;
-        }
-
-        // リワード選択がある場合、client_rewardsに保存
-        if (pendingVote.selected_reward_id && voteData) {
-          await (supabase as any).from('client_rewards').insert({
-            vote_id: voteData.id,
-            reward_id: pendingVote.selected_reward_id,
-            professional_id: professional_id,
-            client_email: voter_email,
-            status: 'pending',
-          });
         }
 
         // vote_emails にメアドを保存（分析用）
@@ -109,7 +98,7 @@ function VoteConfirmForm() {
       <div className="min-h-screen flex items-center justify-center bg-[#FAFAF7]">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#C4A35A] mx-auto mb-4"></div>
-          <p className="text-[#1A1A2E] text-lg">投票を送信しています...</p>
+          <p className="text-[#1A1A2E] text-lg">送信しています...</p>
         </div>
       </div>
     );

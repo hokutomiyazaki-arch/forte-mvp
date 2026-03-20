@@ -228,7 +228,7 @@ export async function GET(request: NextRequest) {
         vote_type: voteData.vote_type || 'personality_only',
         selected_proof_ids: voteData.selected_proof_ids || null,
         selected_personality_ids: voteData.selected_personality_ids || null,
-        selected_reward_id: voteData.selected_reward_id || null,
+        selected_reward_id: null,
         comment: voteData.comment || null,
         qr_token: qr_token || null,
         status: 'confirmed',
@@ -268,92 +268,7 @@ export async function GET(request: NextRequest) {
       // 失敗しても投票には影響しない
     }
 
-    // Step 9: リワード処理
-    let googleRid = ''
-    if (voteData.selected_reward_id) {
-      const { data: crData, error: rewardError } = await supabaseAdmin.from('client_rewards').insert({
-        vote_id: insertedVote.id,
-        reward_id: voteData.selected_reward_id,
-        professional_id,
-        client_email: email,
-        status: 'active',
-      }).select('id').maybeSingle()
-      if (rewardError) {
-        console.error('[vote-auth/google/callback] client_rewards INSERT error:', rewardError)
-      }
-      if (crData?.id) googleRid = crData.id
-    }
-
-    // Step 9b: リワード通知メール送信
-    if (voteData.selected_reward_id && email) {
-      try {
-        const { data: proInfo } = await supabaseAdmin
-          .from('professionals')
-          .select('name')
-          .eq('id', professional_id)
-          .maybeSingle()
-
-        const { data: rewardInfo } = await supabaseAdmin
-          .from('rewards')
-          .select('reward_type, content, title')
-          .eq('id', voteData.selected_reward_id)
-          .maybeSingle()
-
-        const resendKey = process.env.RESEND_API_KEY
-        if (resendKey && proInfo?.name && rewardInfo) {
-          const { getRewardLabel } = await import('@/lib/types')
-          const displayLabel = rewardInfo.title || getRewardLabel(rewardInfo.reward_type)
-          const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://realproof.jp'
-
-          const emailRes = await fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${resendKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              from: 'REALPROOF <info@proof-app.jp>',
-              to: email,
-              subject: `${proInfo.name}さんからリワードが届いています`,
-              html: `
-                <div style="max-width:480px;margin:0 auto;font-family:sans-serif;">
-                  <div style="background:#1A1A2E;padding:24px;border-radius:12px 12px 0 0;">
-                    <h1 style="color:#C4A35A;font-size:14px;margin:0;">REALPROOF</h1>
-                  </div>
-                  <div style="padding:24px;background:#fff;border:1px solid #eee;">
-                    <p style="color:#333;">プルーフありがとうございます！</p>
-                    <p style="color:#333;">${proInfo.name}さんからリワードが届いています。</p>
-                    <div style="background:#f8f6f0;border:2px dashed #C4A35A;border-radius:8px;padding:16px;text-align:center;margin:20px 0;">
-                      <p style="color:#666;font-size:12px;margin:0 0 4px;">${displayLabel}</p>
-                      <p style="color:#666;font-size:14px;margin:0;">リワードの中身は下のボタンから確認できます</p>
-                    </div>
-                    <div style="text-align:center;margin:24px 0;">
-                      <a href="${appUrl}/vote-confirmed?pro=${professional_id}&vote_id=${insertedVote.id}"
-                         style="display:inline-block;background:#C4A35A;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:14px;text-align:center;">
-                        リワードを確認する
-                      </a>
-                    </div>
-                  </div>
-                  <div style="padding:16px;text-align:center;background:#f9f9f9;border-radius:0 0 12px 12px;">
-                    <p style="color:#999;font-size:11px;margin:0;">REALPROOF — 強みで証明されたプロに出会う</p>
-                  </div>
-                </div>
-              `,
-            }),
-          })
-
-          if (!emailRes.ok) {
-            console.error('[vote-auth/google/callback] Reward email failed:', emailRes.status)
-          } else {
-            console.log('[vote-auth/google/callback] Reward email sent to:', email)
-          }
-        }
-      } catch (err) {
-        console.error('[vote-auth/google/callback] Reward email error:', err)
-      }
-    }
-
-    // Step 9d: PROVEN/SPECIALIST通知チェック（15票/30票到達時のメール通知）
+    // Step 9: PROVEN/SPECIALIST通知チェック（15票/30票到達時のメール通知）
     try {
       const PROVEN_THRESHOLD = 15
       const SPECIALIST_THRESHOLD = 30
@@ -518,8 +433,6 @@ export async function GET(request: NextRequest) {
       has_account: hasAccount ? 'true' : 'false',
       role: voterIsPro ? 'pro' : 'client',
     })
-    if (googleRid) redirectParams.set('rid', googleRid)
-
     console.log('[vote-auth/google/callback] Success! Redirecting to vote-confirmed')
     return NextResponse.redirect(
       new URL(`/vote-confirmed?${redirectParams.toString()}`, origin)

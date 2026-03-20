@@ -78,12 +78,12 @@ export default function VotePreparingPage() {
           {/* メインメッセージ */}
           <h1 className="text-xl font-bold text-[#1A1A2E] mb-3 leading-relaxed">
             現在 <span className="text-[#C4A35A]">{displayName}</span> さんは<br />
-            投票の準備中です
+            回答の準備中です
           </h1>
 
           <p className="text-sm text-gray-500 mb-10 leading-relaxed">
             {displayName}さんが設定を完了次第、<br />
-            投票できるようになります。
+            回答できるようになります。
           </p>
 
           {/* 区切り線 */}
@@ -95,7 +95,7 @@ export default function VotePreparingPage() {
               REALPROOFとは？
             </p>
             <p className="text-sm text-gray-500 leading-relaxed">
-              あなたが受けたサービスの「強み」に投票できるプラットフォームです。
+              あなたが受けたサービスの感想を伝えられるプラットフォームです。
               クライアントの声で、プロの実力が証明されます。
             </p>
           </div>

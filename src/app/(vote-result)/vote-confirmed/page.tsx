@@ -5,11 +5,19 @@ import { createClient } from '@/lib/supabase'
 import RewardReveal from '@/components/RewardReveal'
 import { Suspense } from 'react'
 import { useProStatus } from '@/lib/useProStatus'
+import { getRewardLabel } from '@/lib/types'
 
 interface RewardInfo {
   reward_type: string
   content: string
   title: string
+}
+
+interface AvailableReward {
+  id: string
+  reward_type: string
+  title: string
+  content: string
 }
 
 function ConfirmedContent() {
@@ -31,6 +39,11 @@ function ConfirmedContent() {
   const [nearbyPros, setNearbyPros] = useState<any[]>([])
   const [currentRid, setCurrentRid] = useState(rid)
   const [copyToast, setCopyToast] = useState('')
+
+  // リワード選択フェーズ: 'selecting' = 選択中, 'revealed' = 選択済み表示, 'none' = リワードなし
+  const [rewardPhase, setRewardPhase] = useState<'selecting' | 'revealed' | 'none'>('none')
+  const [proRewards, setProRewards] = useState<AvailableReward[]>([])
+  const [claimingReward, setClaimingReward] = useState(false)
 
   // PWA インストール
   const [installPrompt, setInstallPrompt] = useState<any>(null)
@@ -124,6 +137,63 @@ function ConfirmedContent() {
     }
   }
 
+  // リワード選択ハンドラ
+  const handleRewardSelect = async (rewardId: string) => {
+    if (!voteId || claimingReward) return
+    setClaimingReward(true)
+
+    try {
+      // 投票レコードからvoter_emailを取得
+      const { data: voteRecord } = await (supabase as any)
+        .from('votes')
+        .select('voter_email')
+        .eq('id', voteId)
+        .maybeSingle()
+
+      // client_rewards INSERT
+      const { data: crData } = await (supabase as any)
+        .from('client_rewards')
+        .insert({
+          vote_id: voteId,
+          reward_id: rewardId,
+          professional_id: proId,
+          client_email: voteRecord?.voter_email || '',
+          status: 'active',
+        })
+        .select('id')
+        .maybeSingle()
+
+      // votes.selected_reward_id を UPDATE
+      await (supabase as any)
+        .from('votes')
+        .update({ selected_reward_id: rewardId })
+        .eq('id', voteId)
+
+      // 選択したリワードの内容をセット
+      const selectedReward = proRewards.find(r => r.id === rewardId)
+      if (selectedReward) {
+        setReward({
+          reward_type: selectedReward.reward_type,
+          content: selectedReward.content || '',
+          title: selectedReward.title || '',
+        })
+      }
+
+      if (crData?.id) {
+        setCurrentRid(crData.id)
+        // URLにridを追加（ブックマーク可能に）
+        const url = new URL(window.location.href)
+        url.searchParams.set('rid', crData.id)
+        window.history.replaceState({}, '', url.toString())
+      }
+
+      setRewardPhase('revealed')
+    } catch (err) {
+      console.error('[vote-confirmed] reward claim error:', err)
+    }
+    setClaimingReward(false)
+  }
+
   useEffect(() => {
     async function load() {
       // プロ名取得（RLS問題なし）
@@ -202,7 +272,10 @@ function ConfirmedContent() {
         }
       }
 
-      // リワード取得: ridがあればAPIから取得
+      // ── リワード処理 ──
+      let rewardFound = false
+
+      // 1. ridパラメータがあればAPIから取得（既に選択済みの場合）
       if (rid) {
         try {
           const res = await fetch(`/api/reward/${rid}`)
@@ -217,20 +290,24 @@ function ConfirmedContent() {
               setProName(data.proName)
             }
             setCurrentRid(rid)
+            setRewardPhase('revealed')
+            rewardFound = true
           }
         } catch (err) {
           console.error('[vote-confirmed] rid fetch failed:', err)
         }
       }
 
-      // フォールバック: クエリパラメータから取得
-      if (!rid) {
+      // 2. フォールバック: クエリパラメータから取得
+      if (!rewardFound && !rid) {
         const paramReward = decodeRewardParam()
         if (paramReward) {
           setReward(paramReward)
+          setRewardPhase('revealed')
+          rewardFound = true
         }
 
-        // フォールバック: DBから取得 + ridを取得してURL更新
+        // 3. フォールバック: DBから既存client_rewardsを確認
         if (voteId && !paramReward) {
           const { data: crData } = await (supabase as any)
             .from('client_rewards')
@@ -258,7 +335,25 @@ function ConfirmedContent() {
                 title: rewardData.title || '',
               })
             }
+            setRewardPhase('revealed')
+            rewardFound = true
           }
+        }
+      }
+
+      // 4. リワードが未選択の場合: プロの利用可能リワードを取得して選択UIを表示
+      if (!rewardFound && proId) {
+        const { data: availableRewards } = await (supabase as any)
+          .from('rewards')
+          .select('id, reward_type, title, content')
+          .eq('professional_id', proId)
+          .order('sort_order')
+
+        if (availableRewards && availableRewards.length > 0) {
+          setProRewards(availableRewards)
+          setRewardPhase('selecting')
+        } else {
+          setRewardPhase('none')
         }
       }
 
@@ -303,7 +398,7 @@ function ConfirmedContent() {
 
       <div className="max-w-lg mx-auto px-6 py-8 space-y-8">
 
-        {/* ===== セクション1: 投票完了 ===== */}
+        {/* ===== セクション1: 完了メッセージ ===== */}
         <div className="text-center">
           <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-[#C4A35A]/20 flex items-center justify-center">
             <svg className="w-10 h-10 text-[#C4A35A]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -311,15 +406,65 @@ function ConfirmedContent() {
             </svg>
           </div>
           <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2">
-            プルーフが確定しました！
+            完了しました！ありがとうございます。
           </h1>
           <p className="text-lg text-[#666666]">
-            {proName ? `${proName}さんにあなたの声が届きました。` : 'プルーフが正常に確認されました。'}
+            {proName ? `${proName}さんにあなたの声が届きました。` : 'あなたの声が届きました。'}
           </p>
         </div>
 
-        {/* ===== セクション2: リワード ===== */}
-        {reward && (
+        {/* ===== セクション2: リワード選択（未選択の場合） ===== */}
+        {rewardPhase === 'selecting' && proRewards.length > 0 && (
+          <div className="text-center">
+            <p className="text-lg font-bold text-[#1A1A2E] mb-6">
+              {proName ? `${proName}さんからお礼が届いています` : 'お礼が届いています'} 🎁
+            </p>
+            <div className="space-y-3 mb-4">
+              {proRewards.map(r => {
+                const displayLabel = r.reward_type === 'surprise'
+                  ? 'シークレット — 何が出るかお楽しみ！'
+                  : r.title && (r.reward_type === 'selfcare' || r.reward_type === 'freeform')
+                    ? r.title
+                    : getRewardLabel(r.reward_type)
+                return (
+                  <button
+                    key={r.id}
+                    onClick={() => handleRewardSelect(r.id)}
+                    disabled={claimingReward}
+                    className="block w-full text-left"
+                    style={{
+                      padding: '16px 20px',
+                      borderRadius: 14,
+                      background: '#fff',
+                      border: '1.5px solid rgba(196,163,90,0.25)',
+                      cursor: claimingReward ? 'wait' : 'pointer',
+                      opacity: claimingReward ? 0.6 : 1,
+                      transition: 'border-color 0.2s',
+                    }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div style={{ color: '#1A1A2E', fontWeight: 600, fontSize: 15 }}>
+                          {displayLabel}
+                        </div>
+                        <div style={{ color: '#999', fontSize: 12, marginTop: 4 }}>
+                          タップして受け取る
+                        </div>
+                      </div>
+                      <span style={{ color: '#C4A35A', fontSize: 20, flexShrink: 0 }}>→</span>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-xs text-gray-400">
+              ※ リワードの受け取りは任意です。
+            </p>
+          </div>
+        )}
+
+        {/* ===== セクション2: リワード表示（選択済みの場合） ===== */}
+        {rewardPhase === 'revealed' && reward && (
           <>
             <RewardReveal reward={reward} proName={proName || ''} />
 
@@ -345,11 +490,11 @@ function ConfirmedContent() {
         {hasAccount && (
           <div className="bg-[#1A1A2E] rounded-2xl p-6 text-center">
             <p className="text-white text-lg font-bold mb-2">
-              {isProUser ? 'ダッシュボードに戻る' : 'リワードを受け取りました'}
+              {isProUser ? 'ダッシュボードに戻る' : 'ありがとうございました'}
             </p>
             {isProUser && (
               <p className="text-gray-400 text-sm mb-5 leading-relaxed">
-                プロダッシュボードで投票状況を確認できます
+                プロダッシュボードで状況を確認できます
               </p>
             )}
             {isProUser ? (
