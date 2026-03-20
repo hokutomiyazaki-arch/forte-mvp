@@ -462,6 +462,13 @@ function ConfirmedContent() {
               ))}
             </div>
 
+            {/* もっと見る */}
+            <a
+              href="/search"
+              className="block text-center text-base text-[#C4A35A] font-bold mt-2"
+            >
+              プロをもっと見る →
+            </a>
           </div>
         )}
 
