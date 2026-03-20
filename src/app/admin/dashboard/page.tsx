@@ -495,6 +495,91 @@ export default function AdminDashboard() {
   const [dailyProofs, setDailyProofs] = useState<DailyProofData[]>([])
   const [shares, setShares] = useState<ShareAnalytics>({ s1: 0, s2: 0, s3: 0, pv1: 0, pv2: 0, pv3: 0 })
 
+  // Announcements state
+  const [annList, setAnnList] = useState<any[]>([])
+  const [annModal, setAnnModal] = useState<any | null>(null) // null=閉じ, {}=新規, {id,...}=編集
+  const [annForm, setAnnForm] = useState({ title: '', body: '', banner_type: 'info', target: 'all', starts_at: '', expires_at: '', is_active: true, link_url: '', link_label: '' })
+  const [annSaving, setAnnSaving] = useState(false)
+
+  async function loadAnnouncements() {
+    try {
+      const res = await fetch('/api/admin/announcements')
+      if (res.ok) {
+        const data = await res.json()
+        setAnnList(data.announcements || [])
+      }
+    } catch {}
+  }
+
+  async function annToggle(id: string, current: boolean) {
+    await fetch(`/api/admin/announcements/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: !current }),
+    })
+    loadAnnouncements()
+  }
+
+  async function annDelete(id: string) {
+    if (!window.confirm('このお知らせを削除しますか？')) return
+    await fetch(`/api/admin/announcements/${id}`, { method: 'DELETE' })
+    loadAnnouncements()
+  }
+
+  function annOpenNew() {
+    setAnnForm({ title: '', body: '', banner_type: 'info', target: 'all', starts_at: new Date().toISOString().slice(0, 16), expires_at: '', is_active: true, link_url: '', link_label: '' })
+    setAnnModal({})
+  }
+
+  function annOpenEdit(a: any) {
+    setAnnForm({
+      title: a.title || '',
+      body: a.body || '',
+      banner_type: a.banner_type || 'info',
+      target: a.target || 'all',
+      starts_at: a.starts_at ? new Date(a.starts_at).toISOString().slice(0, 16) : '',
+      expires_at: a.expires_at ? new Date(a.expires_at).toISOString().slice(0, 16) : '',
+      is_active: a.is_active ?? true,
+      link_url: a.link_url || '',
+      link_label: a.link_label || '',
+    })
+    setAnnModal(a)
+  }
+
+  async function annSave() {
+    if (!annForm.title.trim()) return
+    setAnnSaving(true)
+    try {
+      const payload = {
+        title: annForm.title,
+        body: annForm.body || null,
+        banner_type: annForm.banner_type,
+        target: annForm.target,
+        starts_at: annForm.starts_at ? new Date(annForm.starts_at).toISOString() : new Date().toISOString(),
+        expires_at: annForm.expires_at ? new Date(annForm.expires_at).toISOString() : null,
+        is_active: annForm.is_active,
+        link_url: annForm.link_url || null,
+        link_label: annForm.link_label || null,
+      }
+      if (annModal?.id) {
+        await fetch(`/api/admin/announcements/${annModal.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+      } else {
+        await fetch('/api/admin/announcements', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+      }
+      setAnnModal(null)
+      loadAnnouncements()
+    } catch {}
+    setAnnSaving(false)
+  }
+
   // Broadcast state
   const [bcTarget, setBcTarget] = useState<'all' | 'line' | 'email' | 'professional'>('all')
   const [bcProId, setBcProId] = useState('')
@@ -530,6 +615,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     loadData()
+    loadAnnouncements()
   }, [loadData])
 
   // Broadcast テンプレート定義
@@ -864,6 +950,268 @@ export default function AdminDashboard() {
           <div style={{ background: C.surface, borderRadius: 10, padding: 16 }}>
             <div style={{ color: C.gray, fontSize: 11, marginBottom: 8 }}>アクティブプロ数</div>
             <MiniBar data={dailyTrend} dk="active_pros" color={C.green} />
+          </div>
+        </div>
+      )}
+
+      {/* [G] Announcements — お知らせ管理 */}
+      <Sec>お知らせ管理</Sec>
+      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          onClick={annOpenNew}
+          style={{
+            background: C.gold, color: C.bg, border: 'none', cursor: 'pointer',
+            padding: '8px 18px', borderRadius: 7, fontSize: 13, fontWeight: 600,
+          }}
+        >
+          ＋ 新規作成
+        </button>
+      </div>
+
+      {annList.length === 0 ? (
+        <div style={{ background: C.surface, borderRadius: 10, padding: 24, color: C.gray, textAlign: 'center', fontSize: 13 }}>
+          お知らせはありません
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {annList.map((a: any) => {
+            const targetLabel = a.target === 'all' ? '全員' : a.target === 'professionals' ? 'プロ' : a.target === 'founding_members' ? 'FM' : a.target?.startsWith('badge:') ? 'バッジ保有者' : a.target
+            const typeColor = a.banner_type === 'success' ? C.green : a.banner_type === 'warning' ? C.amber : C.gold
+            const startDate = a.starts_at ? new Date(a.starts_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'
+            const endDate = a.expires_at ? new Date(a.expires_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '無期限'
+            return (
+              <div key={a.id} style={{ background: C.surface, borderRadius: 10, padding: '16px 20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: a.is_active ? C.green : C.gray, display: 'inline-block', flexShrink: 0 }} />
+                  <span style={{ color: C.cream, fontSize: 14, fontWeight: 600, flex: 1 }}>{a.title}</span>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: typeColor, background: typeColor + '18', padding: '2px 8px', borderRadius: 4 }}>
+                    {a.banner_type}
+                  </span>
+                </div>
+                {a.body && (
+                  <div style={{ color: C.gray, fontSize: 12, marginBottom: 8, lineHeight: 1.5 }}>
+                    {a.body.length > 80 ? a.body.slice(0, 80) + '...' : a.body}
+                  </div>
+                )}
+                <div style={{ color: C.gray, fontSize: 11, marginBottom: 10 }}>
+                  対象: {targetLabel} ｜ 開始: {startDate} ｜ 終了: {endDate}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={() => annToggle(a.id, a.is_active)}
+                    style={{
+                      padding: '5px 12px', borderRadius: 5, border: 'none', cursor: 'pointer',
+                      fontSize: 11, fontWeight: 600,
+                      background: a.is_active ? C.green + '20' : C.gray + '20',
+                      color: a.is_active ? C.green : C.gray,
+                    }}
+                  >
+                    {a.is_active ? 'ON' : 'OFF'}
+                  </button>
+                  <button
+                    onClick={() => annOpenEdit(a)}
+                    style={{
+                      padding: '5px 12px', borderRadius: 5, border: `1px solid ${C.gold}`,
+                      background: 'transparent', color: C.gold, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                    }}
+                  >
+                    編集
+                  </button>
+                  <button
+                    onClick={() => annDelete(a.id)}
+                    style={{
+                      padding: '5px 12px', borderRadius: 5, border: `1px solid ${C.red}`,
+                      background: 'transparent', color: C.red, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                    }}
+                  >
+                    削除
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* お知らせ作成/編集モーダル */}
+      {annModal !== null && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+        }}
+          onClick={() => setAnnModal(null)}
+        >
+          <div
+            style={{
+              background: C.surface, borderRadius: 12, padding: 28, width: '90%', maxWidth: 480,
+              maxHeight: '85vh', overflowY: 'auto',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ color: C.cream, fontSize: 16, fontWeight: 700, marginBottom: 20 }}>
+              {annModal?.id ? 'お知らせを編集' : 'お知らせを作成'}
+            </div>
+
+            {/* タイトル */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ color: C.gray, fontSize: 11, marginBottom: 4 }}>タイトル *</div>
+              <input
+                value={annForm.title}
+                onChange={e => setAnnForm({ ...annForm, title: e.target.value.slice(0, 100) })}
+                placeholder="メンテナンスのお知らせ"
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: 7,
+                  border: `1px solid ${C.grayDark}`, background: C.surfaceLight,
+                  color: C.cream, fontSize: 14, boxSizing: 'border-box', outline: 'none',
+                }}
+              />
+            </div>
+
+            {/* 本文 */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ color: C.gray, fontSize: 11, marginBottom: 4 }}>メッセージ</div>
+              <textarea
+                value={annForm.body}
+                onChange={e => setAnnForm({ ...annForm, body: e.target.value.slice(0, 500) })}
+                placeholder="お知らせの詳細..."
+                rows={3}
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: 7,
+                  border: `1px solid ${C.grayDark}`, background: C.surfaceLight,
+                  color: C.cream, fontSize: 13, boxSizing: 'border-box', outline: 'none',
+                  resize: 'vertical',
+                }}
+              />
+            </div>
+
+            {/* バナータイプ */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ color: C.gray, fontSize: 11, marginBottom: 6 }}>バナータイプ</div>
+              <div style={{ display: 'flex', gap: 12 }}>
+                {(['info', 'success', 'warning'] as const).map(t => (
+                  <label key={t} style={{ display: 'flex', alignItems: 'center', gap: 4, color: C.cream, fontSize: 13, cursor: 'pointer' }}>
+                    <input
+                      type="radio" name="banner_type" checked={annForm.banner_type === t}
+                      onChange={() => setAnnForm({ ...annForm, banner_type: t })}
+                    />
+                    {t === 'info' ? '📢 info' : t === 'success' ? '✅ success' : '⚠️ warning'}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* 対象 */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ color: C.gray, fontSize: 11, marginBottom: 4 }}>対象</div>
+              <select
+                value={annForm.target}
+                onChange={e => setAnnForm({ ...annForm, target: e.target.value })}
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: 7,
+                  border: `1px solid ${C.grayDark}`, background: C.surfaceLight,
+                  color: C.cream, fontSize: 13, outline: 'none',
+                }}
+              >
+                <option value="all">全員</option>
+                <option value="professionals">プロフェッショナル</option>
+                <option value="founding_members">ファウンディングメンバー</option>
+              </select>
+            </div>
+
+            {/* リンクURL */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ color: C.gray, fontSize: 11, marginBottom: 4 }}>リンクURL（任意）</div>
+              <input
+                value={annForm.link_url}
+                onChange={e => setAnnForm({ ...annForm, link_url: e.target.value })}
+                placeholder="https://..."
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: 7,
+                  border: `1px solid ${C.grayDark}`, background: C.surfaceLight,
+                  color: C.cream, fontSize: 13, boxSizing: 'border-box', outline: 'none',
+                }}
+              />
+            </div>
+
+            {/* リンクラベル */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ color: C.gray, fontSize: 11, marginBottom: 4 }}>リンクラベル（任意）</div>
+              <input
+                value={annForm.link_label}
+                onChange={e => setAnnForm({ ...annForm, link_label: e.target.value })}
+                placeholder="詳細を見る"
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: 7,
+                  border: `1px solid ${C.grayDark}`, background: C.surfaceLight,
+                  color: C.cream, fontSize: 13, boxSizing: 'border-box', outline: 'none',
+                }}
+              />
+            </div>
+
+            {/* 開始日時 */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+              <div>
+                <div style={{ color: C.gray, fontSize: 11, marginBottom: 4 }}>表示開始</div>
+                <input
+                  type="datetime-local"
+                  value={annForm.starts_at}
+                  onChange={e => setAnnForm({ ...annForm, starts_at: e.target.value })}
+                  style={{
+                    width: '100%', padding: '8px 10px', borderRadius: 7,
+                    border: `1px solid ${C.grayDark}`, background: C.surfaceLight,
+                    color: C.cream, fontSize: 12, boxSizing: 'border-box', outline: 'none',
+                  }}
+                />
+              </div>
+              <div>
+                <div style={{ color: C.gray, fontSize: 11, marginBottom: 4 }}>表示終了（空=無期限）</div>
+                <input
+                  type="datetime-local"
+                  value={annForm.expires_at}
+                  onChange={e => setAnnForm({ ...annForm, expires_at: e.target.value })}
+                  style={{
+                    width: '100%', padding: '8px 10px', borderRadius: 7,
+                    border: `1px solid ${C.grayDark}`, background: C.surfaceLight,
+                    color: C.cream, fontSize: 12, boxSizing: 'border-box', outline: 'none',
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* 公開チェック */}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: C.cream, fontSize: 13, cursor: 'pointer' }}>
+                <input
+                  type="checkbox" checked={annForm.is_active}
+                  onChange={e => setAnnForm({ ...annForm, is_active: e.target.checked })}
+                />
+                {annModal?.id ? '公開中にする' : '作成後すぐに公開する'}
+              </label>
+            </div>
+
+            {/* ボタン */}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setAnnModal(null)}
+                style={{
+                  padding: '9px 20px', borderRadius: 7, border: `1px solid ${C.grayDark}`,
+                  background: 'transparent', color: C.gray, fontSize: 13, cursor: 'pointer',
+                }}
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={annSave}
+                disabled={annSaving || !annForm.title.trim()}
+                style={{
+                  padding: '9px 20px', borderRadius: 7, border: 'none',
+                  background: C.gold, color: C.bg, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  opacity: annSaving || !annForm.title.trim() ? 0.5 : 1,
+                }}
+              >
+                {annSaving ? '保存中...' : '保存'}
+              </button>
+            </div>
           </div>
         </div>
       )}
