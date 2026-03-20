@@ -128,13 +128,7 @@ function SplashScreen({ onDone }: { onDone: () => void }) {
             filter: "drop-shadow(0 0 24px rgba(196,163,90,0.55))",
           }}
         />
-        <div style={{
-          fontSize: 13, fontWeight: 500,
-          color: "rgba(196,163,90,0.75)",
-          letterSpacing: 2, textAlign: "center", lineHeight: 1.9,
-        }}>
-          技術を磨く本物が輝く社会へ
-        </div>
+        {/* ロゴのみ表示 */}
       </div>
 
       {/* ローディングバー */}
@@ -156,7 +150,6 @@ function SplashScreen({ onDone }: { onDone: () => void }) {
 // ── ステップ管理型 ──
 type VoteStep =
   | "intro"
-  | "confirm"
   | "session_count"
   | "reward"
   | "proofs"
@@ -422,25 +415,25 @@ function VoteForm() {
       if (authError === 'already_voted') {
         setAlreadyVoted(true)
       } else if (authError === 'self_vote') {
-        setError('ご自身のプルーフには投票できません')
+        setError('ご自身への回答はできません')
       } else if (authError === 'line_cancelled') {
         setError('LINE認証がキャンセルされました')
       } else if (authError === 'line_expired') {
         setError('認証の有効期限が切れました。もう一度お試しください。')
       } else if (authError === 'line_no_email') {
-        setError('LINEからメールアドレスを取得できませんでした。メールアドレスを入力して投票してください。')
+        setError('LINEからメールアドレスを取得できませんでした。メールアドレスを入力して回答してください。')
       } else if (authError === 'cooldown') {
-        setError('このプロへのプルーフは30分に1件まで。しばらくお待ちください。')
+        setError('このプロへの回答は30分に1件まで。しばらくお待ちください。')
       } else if (authError === 'vote_failed') {
-        setError('投票の送信に失敗しました。もう一度お試しください。')
+        setError('送信に失敗しました。もう一度お試しください。')
       } else if (authError === 'invalid_vote_data') {
-        setError('投票データが無効です。もう一度お試しください。')
+        setError('データが無効です。もう一度お試しください。')
       } else if (authError === 'google_cancelled') {
         setError('Google認証がキャンセルされました')
       } else if (authError === 'google_failed') {
         setError('Google認証に失敗しました。もう一度お試しください。')
       } else if (authError === 'google_no_email') {
-        setError('Googleアカウントからメールアドレスを取得できませんでした。メールアドレスで投票してください。')
+        setError('Googleアカウントからメールアドレスを取得できませんでした。メールアドレスで回答してください。')
       }
 
       // ── ウェーブ1: QRチェック・プロ情報・人柄を並列取得 ──
@@ -464,7 +457,7 @@ function VoteForm() {
       // プロ情報チェック
       const proData = proResult.data
       if (proData?.deactivated_at) {
-        setError('このプロは現在プルーフを受け付けていません')
+        setError('このプロは現在受け付けていません')
         setLoading(false)
         return
       }
@@ -708,7 +701,7 @@ function VoteForm() {
         .maybeSingle()
 
       if (existingVote) {
-        setError('この電話番号では既にこのプロに投票済みです')
+        setError('この電話番号では既にこのプロに回答済みです')
         setPhoneSending(false)
         return
       }
@@ -817,9 +810,9 @@ function VoteForm() {
 
       if (voteError) {
         if (voteError.code === '23505') {
-          setError('この電話番号では既に投票済みです')
+          setError('この電話番号では既に回答済みです')
         } else {
-          setError(`投票の送信に失敗しました: ${voteError.message}`)
+          setError(`送信に失敗しました: ${voteError.message}`)
         }
         setPhoneVerifying(false)
         return
@@ -893,7 +886,7 @@ function VoteForm() {
       .maybeSingle()
 
     if (existingVote) {
-      setError('この電話番号では既にこのプロに投票済みです')
+      setError('この電話番号では既にこのプロに回答済みです')
       return
     }
 
@@ -918,9 +911,9 @@ function VoteForm() {
 
     if (voteError) {
       if (voteError.code === '23505') {
-        setError('この電話番号では既に投票済みです')
+        setError('この電話番号では既に回答済みです')
       } else {
-        setError(`投票の送信に失敗しました: ${voteError.message}`)
+        setError(`送信に失敗しました: ${voteError.message}`)
       }
       return
     }
@@ -969,14 +962,14 @@ function VoteForm() {
     if (clerkUser && pro) {
       // user_id 照合
       if (clerkUser.id === pro.user_id) {
-        setError('ご自身のプルーフには投票できません')
+        setError('ご自身への回答はできません')
         return
       }
       // Clerkメールアドレス照合
       const clerkEmail = clerkUser.primaryEmailAddress?.emailAddress
       if (clerkEmail && pro.contact_email &&
           clerkEmail.toLowerCase() === pro.contact_email.toLowerCase()) {
-        setError('ご自身のプルーフには投票できません')
+        setError('ご自身への回答はできません')
         return
       }
     }
@@ -989,17 +982,17 @@ function VoteForm() {
         body: JSON.stringify({ email, proId }),
       })
       if (!checkRes.ok) {
-        setError('投票の確認中にエラーが発生しました。もう一度お試しください。')
+        setError('確認中にエラーが発生しました。もう一度お試しください。')
         return
       }
       const checkData = await checkRes.json()
       if (checkData.isSelf) {
-        setError('ご自身のプルーフには投票できません')
+        setError('ご自身への回答はできません')
         return
       }
     } catch (err) {
       console.error('[vote] check-email error:', err)
-      setError('投票の確認中にエラーが発生しました。もう一度お試しください。')
+      setError('確認中にエラーが発生しました。もう一度お試しください。')
       return
     }
 
@@ -1017,7 +1010,7 @@ function VoteForm() {
     if (recentVote) {
       const nextAvailable = new Date(new Date(recentVote.created_at).getTime() + 30 * 60 * 1000)
       const waitMin = Math.ceil((nextAvailable.getTime() - Date.now()) / 60000)
-      setError(`このプロへのプルーフは30分に1件まで。あと約${waitMin}分お待ちください。`)
+      setError(`このプロへの回答は30分に1件まで。あと約${waitMin}分お待ちください。`)
       return
     }
 
@@ -1085,7 +1078,7 @@ function VoteForm() {
         qr_token: qrToken,
       })
       if (voteError.code === '23505') {
-        setError('このメールアドレスでは既に投票済みです')
+        setError('このメールアドレスでは既に回答済みです')
       } else {
         setError(`送信に失敗しました (${voteError.code || 'unknown'}): ${voteError.message || '不明なエラー'}`)
       }
@@ -1195,8 +1188,8 @@ function VoteForm() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M12 3a9 9 0 100 18 9 9 0 000-18z" />
           </svg>
         </div>
-        <h1 className="text-xl font-bold text-[#1A1A2E] mb-2">ご自身のプロフィールには投票できません</h1>
-        <p className="text-gray-500 mb-6">クライアントにNFCカードを見せて、投票を依頼してください。</p>
+        <h1 className="text-xl font-bold text-[#1A1A2E] mb-2">ご自身のプロフィールには回答できません</h1>
+        <p className="text-gray-500 mb-6">クライアントにNFCカードを見せて、回答を依頼してください。</p>
         <a
           href="/dashboard"
           className="inline-block px-6 py-3 bg-[#1A1A2E] text-[#C4A35A] font-bold rounded-xl hover:opacity-90 transition"
@@ -1220,8 +1213,8 @@ function VoteForm() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        <h1 className="text-xl font-bold text-[#1A1A2E] mb-2">プルーフ済みです</h1>
-        <p className="text-gray-500 mb-6">{pro.name}さんへのプルーフは既に送信済みです。</p>
+        <h1 className="text-xl font-bold text-[#1A1A2E] mb-2">回答済みです</h1>
+        <p className="text-gray-500 mb-6">{pro.name}さんへの回答は既に送信済みです。</p>
         <a href={`/card/${pro.id}`} className="text-[#C4A35A] underline">
           {pro.name}さんのカードを見る
         </a>
@@ -1426,7 +1419,7 @@ function VoteForm() {
 
             {/* 警告メッセージ */}
             <p className="text-red-500 font-bold text-base">
-              ※ メールを確認するまで投票は完了しません
+              ※ メールを確認するまで回答は完了しません
             </p>
           </div>
         </div>
@@ -1436,7 +1429,7 @@ function VoteForm() {
 
   // ── ステップUI用の変数 ──
   const hasRewards = proRewards.length > 0
-  const totalSteps = hasRewards ? 6 : 5
+  const totalSteps = 5
 
   // 強みプルーフの表示項目（プロが設定した項目）
   const allProofDisplayItems = [
@@ -1446,9 +1439,7 @@ function VoteForm() {
 
   // ステップ番号計算（intro/confirm/hopeful_doneはundefined）
   const stepNum = (s: VoteStep): number | undefined => {
-    const order = hasRewards
-      ? ['reward', 'proofs', 'personality', 'comment', 'auth', 'done']
-      : ['proofs', 'personality', 'comment', 'auth', 'done']
+    const order = ['session_count', 'proofs', 'personality', 'comment', 'auth']
     const idx = order.indexOf(s)
     return idx >= 0 ? idx + 1 : undefined
   }
@@ -1491,8 +1482,9 @@ function VoteForm() {
             {pro.store_name && (
               <div style={{ color: "rgba(250,250,247,0.6)", fontSize: 12, marginBottom: 6 }}>{pro.store_name}</div>
             )}
-            <div style={{ color: "#FAFAF7", fontSize: 15, marginBottom: 20 }}>
-              プルーフ投票
+            <div style={{ color: "#FAFAF7", fontSize: 15, marginBottom: 20, lineHeight: 1.6 }}>
+              プロの技術向上のための<br />
+              かんたんアンケート
             </div>
 
             {/* 約30秒バッジ */}
@@ -1504,102 +1496,69 @@ function VoteForm() {
             }}>
               <span style={{ fontSize: 14 }}>⏱️</span>
               <span style={{ color: "#C4A35A", fontWeight: 700, fontSize: 13 }}>
-                約30秒で完了します
+                約30秒で終わります
               </span>
             </div>
 
             <div style={{ color: "#8B8B9A", fontSize: 12, lineHeight: 1.8, marginBottom: 32 }}>
-              セッションの感想を教えてください。<br />
-              お礼にリワードをお渡しします。
+              あなたが感じたことを<br />
+              そのまま伝えてください。
             </div>
 
             <button
-              onClick={() => goToWithHistory("confirm")}
+              onClick={() => goToWithHistory("session_count")}
               style={{ ...S.primaryBtn, fontSize: 16 }}
             >
-              プルーフ投票をはじめる →
+              はじめる →
             </button>
           </div>
         </StepWrapper>
       )}
 
-      {/* ── セッション確認 ── */}
-      {voteStep === "confirm" && (
-        <StepWrapper isTransitioning={isTransitioning} showBack={false}>
+      {/* ── ステップ1/5: 何回目（旧confirm+session_count統合） ── */}
+      {voteStep === "session_count" && (
+        <StepWrapper
+          isTransitioning={isTransitioning}
+          step={stepNum("session_count")} totalSteps={totalSteps}
+          onBack={goBack} showBack={false}
+        >
           <div style={{ textAlign: "center", width: "100%" }}>
             <div style={{ fontSize: 32, marginBottom: 16 }}>🙏</div>
             <div style={S.title}>
               <span style={{ color: "#C4A35A" }}>{pro.name}</span>さんの
-              <br />セッションを受けましたか？
+              <br />セッション・施術・レッスン・指導を
+              <br />受けたのは何回目ですか？
             </div>
             <div style={{ height: 28 }} />
 
-            <button
-              onClick={() => {
-                setSessionConfirmed(true)
-                goToWithHistory("session_count")
-              }}
-              style={S.primaryBtn}
-            >
-              はい、受けました！
-            </button>
-
-            <button
-              onClick={async () => {
-                await submitHopefulVote()
-                goTo("hopeful_done")
-              }}
-              style={S.secondaryBtn}
-            >
-              まだですが、気になっています
-            </button>
-          </div>
-        </StepWrapper>
-      )}
-
-      {/* ── セッション回数選択（3択） ── */}
-      {voteStep === "session_count" && (
-        <StepWrapper isTransitioning={isTransitioning} showBack={false}>
-          <div style={{ textAlign: "center", width: "100%" }}>
-            <div style={{ fontSize: 32, marginBottom: 16 }}>📋</div>
-            <div style={S.title}>
-              <span style={{ color: "#C4A35A" }}>{pro.name}</span>さんの
-              <br />セッションは何回目ですか？
-            </div>
-            <div style={{ height: 28 }} />
-
-            <div style={{ display: "flex", gap: 8, width: "100%" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}>
               {([
                 { value: 'first' as const, label: 'はじめて' },
-                { value: 'repeat' as const, label: '何度か受けた' },
+                { value: 'repeat' as const, label: '2〜4回目' },
                 { value: 'regular' as const, label: '5回以上' },
               ]).map((opt) => (
                 <button
                   key={opt.value}
                   onClick={() => {
+                    setSessionConfirmed(true)
                     setSessionCount(opt.value)
-                    goToWithHistory(hasRewards ? "reward" : "proofs")
+                    goToWithHistory("proofs")
                   }}
-                  style={{
-                    flex: 1,
-                    padding: "14px 4px",
-                    borderRadius: 14,
-                    background: sessionCount === opt.value
-                      ? "linear-gradient(135deg, #C4A35A, #D4B56A)"
-                      : "rgba(255,255,255,0.03)",
-                    border: sessionCount === opt.value
-                      ? "1.5px solid #C4A35A"
-                      : "1.5px solid rgba(255,255,255,0.12)",
-                    color: sessionCount === opt.value ? "#1A1A2E" : "#FAFAF7",
-                    fontSize: 14,
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    transition: "all 0.2s",
-                  }}
+                  style={S.primaryBtn}
                 >
                   {opt.label}
                 </button>
               ))}
+
+              <button
+                onClick={async () => {
+                  await submitHopefulVote()
+                  goTo("hopeful_done")
+                }}
+                style={S.secondaryBtn}
+              >
+                まだですが、気になっています
+              </button>
             </div>
           </div>
         </StepWrapper>
@@ -1614,7 +1573,7 @@ function VoteForm() {
         >
           <div style={{ width: "100%" }}>
             <div style={S.title}>リワードを選んでください 🎁</div>
-            <div style={S.subtitle}>投票完了後に内容が開示されます</div>
+            <div style={S.subtitle}>回答後に内容が開示されます</div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {proRewards.map(reward => {
@@ -1643,7 +1602,7 @@ function VoteForm() {
                         {displayLabel}
                       </div>
                       <div style={{ color: "#8B8B9A", fontSize: 12, marginTop: 2 }}>
-                        投票後に開示されます
+                        回答後に開示されます
                       </div>
                     </div>
                     <span style={{ color: "#C4A35A", fontSize: 18, flexShrink: 0 }}>›</span>
@@ -1664,9 +1623,9 @@ function VoteForm() {
         >
           <div style={{ width: "100%" }}>
             <div style={S.title}>
-              <span style={{ color: "#C4A35A" }}>強み</span>を選んでください
+              どんなところがよかったですか？
             </div>
-            <div style={S.subtitle}>最大3つ選べます</div>
+            <div style={S.subtitle}>あてはまるものを選んでください</div>
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 28 }}>
               {allProofDisplayItems.map(item => {
@@ -1742,9 +1701,9 @@ function VoteForm() {
         >
           <div style={{ width: "100%" }}>
             <div style={S.title}>
-              <span style={{ color: "#C4A35A" }}>人柄</span>はいかがでしたか？
+              <span style={{ color: "#C4A35A" }}>{pro.name?.split(/[\s　]/)[0]}</span>さんはどんな人でしたか？
             </div>
-            <div style={S.subtitle}>最大3つ（任意です）</div>
+            <div style={S.subtitle}>あてはまるものがあれば（任意）</div>
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 28 }}>
               {personalityItems.map(item => {
@@ -1845,10 +1804,10 @@ function VoteForm() {
           onBack={goBack}
         >
           <div style={{ width: "100%" }}>
-            <div style={S.title}>ほぼ完了です！🎉</div>
+            <div style={S.title}>ありがとうございます！</div>
             <div style={S.subtitle}>
-              本人確認をお願いします。<br />
-              プルーフの信頼性を守るためです。
+              あなたの声を届けるために<br />
+              確認をお願いしています。
             </div>
 
             {error && (
@@ -1869,7 +1828,7 @@ function VoteForm() {
                 }}
                 style={S.primaryBtn}
               >
-                このアカウントで投票する
+                このアカウントで回答する
               </button>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -1902,7 +1861,7 @@ function VoteForm() {
                       color: "#FAFAF7", fontSize: 16, fontWeight: 500, cursor: "pointer",
                     }}
                   >
-                    📱 電話番号で認証する
+                    📱 電話番号で確認する
                   </button>
                 )}
 
@@ -1913,7 +1872,7 @@ function VoteForm() {
                       color: "#8B8B9A", fontSize: 11, textAlign: "center",
                       marginBottom: 8,
                     }}>
-                      SMSで届く6桁のコードで本人確認します
+                      SMSで届く6桁のコードで確認します
                     </div>
                     <div style={{ position: "relative" }}>
                       <span style={{
@@ -1989,7 +1948,7 @@ function VoteForm() {
                         opacity: phoneVerifying || phoneCode.length < 6 ? 0.5 : 1,
                       }}
                     >
-                      {phoneVerifying ? '確認中...' : '認証して投票する'}
+                      {phoneVerifying ? '確認中...' : '認証して送信する'}
                     </button>
                     <button
                       onClick={() => { setPhoneStep('input'); setPhoneCode(''); setError(''); }}
@@ -2150,7 +2109,7 @@ function VoteForm() {
                         }}
                       />
                       <div style={{ color: "#8B8B9A", fontSize: 11, marginTop: 6, lineHeight: 1.6 }}>
-                        📨 投票完了後、この番号にアカウント登録のご案内をお送りします
+                        📨 回答後、この番号にアカウント登録のご案内をお送りします
                       </div>
                     </div>
 
@@ -2168,7 +2127,7 @@ function VoteForm() {
                         ) ? 0.4 : 1,
                       }}
                     >
-                      投票を完了する →
+                      回答を送信する →
                     </button>
                   </div>
                 )}
@@ -2177,7 +2136,7 @@ function VoteForm() {
 
             <div style={{ marginTop: 16, textAlign: "center" }}>
               <span style={{ color: "#8B8B9A", fontSize: 11 }}>
-                ※ プルーフは匿名です。プロにメールアドレスは公開されません。
+                ※ 匿名です。プロに連絡先は公開されません。
               </span>
             </div>
           </div>
@@ -2189,7 +2148,7 @@ function VoteForm() {
         <StepWrapper isTransitioning={isTransitioning} showBack={false}>
           <div style={{ textAlign: "center", width: "100%" }}>
             <div style={{ fontSize: 40, marginBottom: 16 }}>🎉</div>
-            <div style={S.title}>プルーフ投票が完了しました！</div>
+            <div style={S.title}>回答が完了しました！</div>
             <div style={S.subtitle}>
               あなたの声が、{pro.name}さんの<br />
               実力の証明になります。
@@ -2223,7 +2182,7 @@ function VoteForm() {
                     リワードを保存しませんか？
                   </div>
                   <div style={{ color: "#FAFAF7", fontSize: 13, lineHeight: 1.7 }}>
-                    アカウントを作ると、リワードや投票履歴をいつでも確認できます。
+                    アカウントを作ると、リワードをいつでも確認できます。
                   </div>
                 </div>
 
@@ -2317,7 +2276,7 @@ function VoteForm() {
             <div style={{
               color: "#FAFAF7", fontSize: 14, lineHeight: 1.9, marginBottom: 8,
             }}>
-              「期待できそう！」のプルーフを<br />
+              「期待できそう！」を<br />
               <span style={{ color: "#C4A35A", fontWeight: 600 }}>
                 {pro.name}
               </span>
@@ -2325,7 +2284,7 @@ function VoteForm() {
             </div>
             <div style={{ color: "#8B8B9A", fontSize: 12, lineHeight: 1.8 }}>
               ぜひ一度セッションを受けてみてください。<br />
-              受けた後にまたプルーフ投票できます ✨
+              受けた後にまた回答できます ✨
             </div>
           </div>
         </StepWrapper>
