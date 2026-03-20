@@ -400,9 +400,9 @@ function VoteForm() {
     const params = new URLSearchParams(window.location.search)
     if (params.has('error')) {
       // エラーパラメータだけ残してパスをクリーン化
-      window.history.replaceState(null, '', `/vote?error=${params.get('error')}`)
+      window.history.replaceState(null, '', `/vote/${proId}?error=${params.get('error')}`)
     } else {
-      window.history.replaceState(null, '', '/vote')
+      window.history.replaceState(null, '', `/vote/${proId}`)
     }
   }, [])
 
