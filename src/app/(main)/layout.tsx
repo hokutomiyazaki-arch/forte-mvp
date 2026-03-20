@@ -1,9 +1,11 @@
 import Navbar from '@/components/Navbar'
+import AnnouncementBanner from '@/components/AnnouncementBanner'
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
       <Navbar />
+      <AnnouncementBanner />
       <main className="max-w-5xl mx-auto px-4 py-8">
         {children}
       </main>

@@ -1,13 +1,42 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { SignInButton, SignedIn, SignedOut, UserButton, useUser } from '@clerk/nextjs'
 import { useProStatus } from '@/lib/useProStatus'
+
+function NotificationBell({ count }: { count: number }) {
+  return (
+    <a href="/announcements" style={{ position: 'relative', color: '#fff', textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
+      <span style={{ fontSize: 16 }}>🔔</span>
+      {count > 0 && (
+        <span style={{
+          position: 'absolute', top: -6, right: -8,
+          background: '#E24B4A', color: '#fff',
+          fontSize: 9, fontWeight: 700,
+          width: 16, height: 16, borderRadius: '50%',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          {count > 9 ? '9+' : count}
+        </span>
+      )}
+    </a>
+  )
+}
 
 export default function Navbar() {
   const { isLoaded } = useUser()
   const { isPro } = useProStatus()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  useEffect(() => {
+    fetch('/api/announcements')
+      .then(res => res.json())
+      .then(data => {
+        if (data.unread_count) setUnreadCount(data.unread_count)
+      })
+      .catch(() => {})
+  }, [])
 
   return (
     <nav style={{
@@ -39,6 +68,7 @@ export default function Navbar() {
                 <a href="/dashboard" style={{ color: '#fff', textDecoration: 'none' }}>プロメニュー</a>
               )}
               <a href="/mycard" style={{ color: '#fff', textDecoration: 'none' }}>一般メニュー</a>
+              <NotificationBell count={unreadCount} />
               <UserButton
                 appearance={{
                   elements: {
@@ -98,6 +128,19 @@ export default function Navbar() {
             )}
             <a href="/mycard" style={{ color: '#fff', textDecoration: 'none' }}
               onClick={() => setMenuOpen(false)}>一般メニュー</a>
+            <a href="/announcements" style={{ color: '#fff', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}
+              onClick={() => setMenuOpen(false)}>
+              🔔 お知らせ
+              {unreadCount > 0 && (
+                <span style={{
+                  background: '#E24B4A', color: '#fff',
+                  fontSize: 10, fontWeight: 700,
+                  padding: '1px 6px', borderRadius: 10,
+                }}>
+                  {unreadCount}
+                </span>
+              )}
+            </a>
             <UserButton
               appearance={{
                 elements: {
