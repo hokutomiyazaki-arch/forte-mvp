@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@clerk/nextjs'
+import ProofCalculator from '@/components/lp/ProofCalculator'
 
 // ─── Horizontal Swipe ───
 function SwipeSlider({ children, darkDots = false }: { children: React.ReactNode[]; darkDots?: boolean }) {
@@ -424,6 +425,9 @@ export default function Home() {
           </Reveal>
         </div>
       </section>
+
+      {/* 実績計算機 */}
+      <ProofCalculator />
 
       {/* ═══ S3: HOW IT WORKS ═══ */}
       <section style={{ backgroundColor: '#FAFAF7', padding: '0 24px 80px' }}>
