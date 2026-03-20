@@ -594,6 +594,7 @@ function VoteForm() {
       professional_id: proId,
       selected_proof_ids: proofIdsToSend,
       selected_personality_ids: selectedPersonalityIds.size > 0 ? Array.from(selectedPersonalityIds) : null,
+      selected_reward_id: selectedRewardId || null,
       comment: comment.trim() || null,
       vote_type: determineVoteType(),
       session_count: sessionCount,
@@ -612,6 +613,7 @@ function VoteForm() {
       professional_id: proId,
       selected_proof_ids: proofIdsToSend,
       selected_personality_ids: selectedPersonalityIds.size > 0 ? Array.from(selectedPersonalityIds) : null,
+      selected_reward_id: selectedRewardId || null,
       comment: comment.trim() || null,
       vote_type: determineVoteType(),
       session_count: sessionCount || 'first',
@@ -791,7 +793,7 @@ function VoteForm() {
         vote_type: voteData.vote_type,
         selected_proof_ids: voteData.selected_proof_ids,
         selected_personality_ids: voteData.selected_personality_ids,
-        selected_reward_id: null,
+        selected_reward_id: voteData.selected_reward_id,
         comment: voteData.comment,
         qr_token: voteData.qr_token,
         status: 'confirmed',
@@ -808,7 +810,19 @@ function VoteForm() {
         return
       }
 
-      window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${insertedVote.id}&has_account=true`
+      let clientRewardId = ''
+      if (selectedRewardId && insertedVote) {
+        const { data: crData } = await (supabase as any).from('client_rewards').insert({
+          vote_id: insertedVote.id,
+          reward_id: selectedRewardId,
+          professional_id: proId,
+          client_email: formattedPhone,
+          status: 'active',
+        }).select('id').maybeSingle()
+        if (crData?.id) clientRewardId = crData.id
+      }
+
+      window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${insertedVote.id}&has_account=true${clientRewardId ? `&rid=${clientRewardId}` : ''}`
     } catch (err: any) {
       console.error('[handlePhoneVerify] Full error:', JSON.stringify(err, null, 2))
       console.error('[handlePhoneVerify] Error type:', typeof err)
@@ -880,7 +894,7 @@ function VoteForm() {
       vote_type: voteData.vote_type,
       selected_proof_ids: voteData.selected_proof_ids,
       selected_personality_ids: voteData.selected_personality_ids,
-      selected_reward_id: null,
+      selected_reward_id: voteData.selected_reward_id,
       comment: `[FB:${fallbackName.trim()}] ${voteData.comment || ''}`.trim(),
       qr_token: voteData.qr_token,
       status: 'confirmed', // フォールバックは即確定（後で認証を促す）
@@ -896,7 +910,19 @@ function VoteForm() {
       return
     }
 
-    window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${insertedVote.id}&has_account=false`
+    let clientRewardId2 = ''
+    if (selectedRewardId && insertedVote) {
+      const { data: crData } = await (supabase as any).from('client_rewards').insert({
+        vote_id: insertedVote.id,
+        reward_id: selectedRewardId,
+        professional_id: proId,
+        client_email: formattedPhone,
+        status: 'pending',
+      }).select('id').maybeSingle()
+      if (crData?.id) clientRewardId2 = crData.id
+    }
+
+    window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${insertedVote.id}&has_account=false${clientRewardId2 ? `&rid=${clientRewardId2}` : ''}`
   }
 
   // ── 投票送信（メール認証用） ──
@@ -1017,7 +1043,7 @@ function VoteForm() {
       vote_type: voteType,
       selected_proof_ids: proofIdsToSend,
       selected_personality_ids: selectedPersonalityIds.size > 0 ? Array.from(selectedPersonalityIds) : null,
-      selected_reward_id: null,
+      selected_reward_id: selectedRewardId || null,
       comment: comment.trim() || null,
       qr_token: qrToken,
       status: voteStatus,
@@ -1040,6 +1066,7 @@ function VoteForm() {
         vote_type: voteType,
         selected_proof_ids: proofIdsToSend,
         selected_personality_ids: selectedPersonalityIds.size > 0 ? Array.from(selectedPersonalityIds) : null,
+        selected_reward_id: selectedRewardId || null,
         qr_token: qrToken,
       })
       if (voteError.code === '23505') {
@@ -1060,9 +1087,25 @@ function VoteForm() {
       console.error('[handleSubmit] vote_emails INSERT error:', emailInsertError)
     }
 
+    // リワード選択をclient_rewardsに保存
+    let submittedRid = ''
+    if (selectedRewardId && voteData) {
+      const { data: crData, error: rewardInsertError } = await (supabase as any).from('client_rewards').insert({
+        vote_id: voteData.id,
+        reward_id: selectedRewardId,
+        professional_id: proId,
+        client_email: email,
+        status: isSessionVote ? 'active' : 'pending',
+      }).select('id').maybeSingle()
+      if (rewardInsertError) {
+        console.error('[handleSubmit] client_rewards INSERT error:', rewardInsertError)
+      }
+      if (crData?.id) submittedRid = crData.id
+    }
+
     // ── ログイン済み（Clerk認証済み）: メール認証不要 → 完了画面へ直接遷移 ──
     if (isSessionVote) {
-      window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${voteData.id}&has_account=true`
+      window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${voteData.id}&has_account=true${submittedRid ? `&rid=${submittedRid}` : ''}`
       return
     }
 
@@ -1377,7 +1420,8 @@ function VoteForm() {
   }
 
   // ── ステップUI用の変数 ──
-  const totalSteps = 5
+  const hasRewards = proRewards.length > 0
+  const totalSteps = hasRewards ? 6 : 5
 
   // 強みプルーフの表示項目（プロが設定した項目）
   const allProofDisplayItems = [
@@ -1387,7 +1431,9 @@ function VoteForm() {
 
   // ステップ番号計算（intro/confirm/hopeful_doneはundefined）
   const stepNum = (s: VoteStep): number | undefined => {
-    const order = ['session_count', 'proofs', 'personality', 'comment', 'auth']
+    const order = hasRewards
+      ? ['session_count', 'proofs', 'personality', 'comment', 'reward', 'auth']
+      : ['session_count', 'proofs', 'personality', 'comment', 'auth']
     const idx = order.indexOf(s)
     return idx >= 0 ? idx + 1 : undefined
   }
@@ -1679,13 +1725,13 @@ function VoteForm() {
             </div>
 
             <button
-              onClick={() => goToWithHistory("auth")}
+              onClick={() => goToWithHistory(hasRewards ? "reward" : "auth")}
               style={S.primaryBtn}
             >
               次へ →
             </button>
             <button
-              onClick={() => goToWithHistory("auth")}
+              onClick={() => goToWithHistory(hasRewards ? "reward" : "auth")}
               style={{ ...S.skipBtn, display: "block", margin: "0 auto" }}
             >
               スキップ
@@ -1694,7 +1740,81 @@ function VoteForm() {
         </StepWrapper>
       )}
 
-      {/* ── STEP 5: 認証 ── */}
+      {/* ── STEP 5: リワード選択（リワードがあるプロのみ） ── */}
+      {voteStep === "reward" && (
+        <StepWrapper
+          isTransitioning={isTransitioning}
+          step={stepNum("reward")} totalSteps={totalSteps}
+          onBack={goBack}
+        >
+          <div style={{ width: "100%" }}>
+            <div style={S.title}>
+              {pro.name}さんからお礼が届いています 🎁
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+              {proRewards.map(reward => {
+                const displayLabel = reward.reward_type === 'surprise'
+                  ? 'シークレット — 何が出るかお楽しみ！'
+                  : reward.title && (reward.reward_type === 'selfcare' || reward.reward_type === 'freeform')
+                    ? reward.title
+                    : getRewardLabel(reward.reward_type)
+                const isSelected = selectedRewardId === reward.id
+                return (
+                  <button
+                    key={reward.id}
+                    onClick={() => {
+                      setSelectedRewardId(isSelected ? '' : reward.id)
+                    }}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 14,
+                      padding: "14px 16px", borderRadius: 14,
+                      border: isSelected
+                        ? "1.5px solid #C4A35A"
+                        : "1.5px solid rgba(196,163,90,0.22)",
+                      background: isSelected
+                        ? "rgba(196,163,90,0.12)"
+                        : "rgba(196,163,90,0.04)",
+                      cursor: "pointer", textAlign: "left",
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ color: "#FAFAF7", fontWeight: 600, fontSize: 14 }}>
+                        {displayLabel}
+                      </div>
+                    </div>
+                    {isSelected && (
+                      <span style={{ color: "#C4A35A", fontSize: 16, flexShrink: 0 }}>✓</span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+
+            <div style={{ color: "#8B8B9A", fontSize: 12, textAlign: "center", marginBottom: 20 }}>
+              ※ リワードの受け取りは任意です。
+            </div>
+
+            <button
+              onClick={() => goToWithHistory("auth")}
+              style={S.primaryBtn}
+            >
+              次へ →
+            </button>
+            <button
+              onClick={() => {
+                setSelectedRewardId('')
+                goToWithHistory("auth")
+              }}
+              style={{ ...S.skipBtn, display: "block", margin: "0 auto" }}
+            >
+              スキップ
+            </button>
+          </div>
+        </StepWrapper>
+      )}
+
+      {/* ── STEP 6: 認証 ── */}
       {voteStep === "auth" && (
         <StepWrapper
           isTransitioning={isTransitioning}

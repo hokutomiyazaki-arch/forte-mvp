@@ -222,7 +222,7 @@ export async function GET(request: NextRequest) {
         vote_type: voteData.vote_type || 'personality_only',
         selected_proof_ids: voteData.selected_proof_ids || null,
         selected_personality_ids: voteData.selected_personality_ids || null,
-        selected_reward_id: null,
+        selected_reward_id: voteData.selected_reward_id || null,
         comment: voteData.comment || null,
         qr_token: qr_token || null,
         status: 'confirmed',  // LINE認証済みなのでメール確認不要
@@ -255,7 +255,23 @@ export async function GET(request: NextRequest) {
       // vote_emails への記録は失敗しても投票自体には影響しない
     }
 
-    // Step 9: PROVEN/SPECIALIST通知チェック（15票/30票到達時のメール通知）
+    // Step 9: リワード処理
+    let lineRid = ''
+    if (voteData.selected_reward_id) {
+      const { data: crData, error: rewardError } = await supabaseAdmin.from('client_rewards').insert({
+        vote_id: insertedVote.id,
+        reward_id: voteData.selected_reward_id,
+        professional_id,
+        client_email: email,
+        status: 'active',
+      }).select('id').maybeSingle()
+      if (rewardError) {
+        console.error('[vote-auth/line/callback] client_rewards INSERT error:', rewardError)
+      }
+      if (crData?.id) lineRid = crData.id
+    }
+
+    // Step 9d: PROVEN/SPECIALIST通知チェック（15票/30票到達時のメール通知）
     try {
       const PROVEN_THRESHOLD = 15
       const SPECIALIST_THRESHOLD = 30
@@ -420,6 +436,8 @@ export async function GET(request: NextRequest) {
       has_account: hasAccount ? 'true' : 'false',
       role: voterIsPro ? 'pro' : 'client',
     })
+    if (lineRid) redirectParams.set('rid', lineRid)
+
     console.log('[vote-auth/line/callback] Success! Redirecting to vote-confirmed')
     return NextResponse.redirect(
       new URL(`/vote-confirmed?${redirectParams.toString()}`, origin)

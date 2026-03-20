@@ -47,7 +47,7 @@ function VoteConfirmForm() {
           vote_type: pendingVote.vote_type || 'proof',
           selected_proof_ids: pendingVote.selected_proof_ids || null,
           selected_personality_ids: pendingVote.selected_personality_ids || null,
-          selected_reward_id: null,
+          selected_reward_id: pendingVote.selected_reward_id || null,
           comment: pendingVote.comment || null,
           qr_token: qr_token,
           status: 'confirmed', // LINE/Google認証済みなのでメール確認不要
@@ -76,12 +76,25 @@ function VoteConfirmForm() {
           });
         }
 
+        // リワード選択がある場合、client_rewardsに保存
+        let confirmRid = '';
+        if (pendingVote.selected_reward_id && voteData) {
+          const { data: crData } = await (supabase as any).from('client_rewards').insert({
+            vote_id: voteData.id,
+            reward_id: pendingVote.selected_reward_id,
+            professional_id: professional_id,
+            client_email: voter_email,
+            status: 'active',
+          }).select('id').maybeSingle();
+          if (crData?.id) confirmRid = crData.id;
+        }
+
         // sessionStorage をクリア
         sessionStorage.removeItem('pending_vote');
 
-        // リワード画面にリダイレクト
+        // 完了画面にリダイレクト
         setStatus('success');
-        window.location.href = `/vote-confirmed?proId=${professional_id}&reward=1`;
+        window.location.href = `/vote-confirmed?proId=${professional_id}&vote_id=${voteData.id}${confirmRid ? `&rid=${confirmRid}` : ''}`;
 
       } catch (err) {
         console.error('Vote confirm error:', err);
