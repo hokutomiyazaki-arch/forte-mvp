@@ -3028,16 +3028,26 @@ export default function DashboardPage() {
       <div style={{ height: 16 }} />
 
       {/* Links */}
-      <div className="flex gap-4">
+      <div className="flex flex-col gap-3">
+        <div className="flex gap-4">
+          {pro && (
+            <a href={`/card/${pro.id}`} className="flex-1 text-center py-3 border-2 border-[#1A1A2E] text-[#1A1A2E] rounded-lg hover:bg-[#1A1A2E] hover:text-white transition">
+              カードを見る
+            </a>
+          )}
+          <button onClick={() => signOut({ redirectUrl: '/' })}
+            className="px-6 py-3 text-gray-500 hover:text-red-500 transition">
+            ログアウト
+          </button>
+        </div>
         {pro && (
-          <a href={`/card/${pro.id}`} className="flex-1 text-center py-3 border-2 border-[#1A1A2E] text-[#1A1A2E] rounded-lg hover:bg-[#1A1A2E] hover:text-white transition">
-            カードを見る
-          </a>
+          <button
+            onClick={() => window.open(`/vote/${pro.id}?preview=true`, '_blank')}
+            className="flex items-center justify-center gap-2 px-4 py-2 border border-[#C4A35A] text-[#C4A35A] rounded-lg hover:bg-[#C4A35A] hover:text-white transition-colors"
+          >
+            👁️ 投票画面を確認する
+          </button>
         )}
-        <button onClick={() => signOut({ redirectUrl: '/' })}
-          className="px-6 py-3 text-gray-500 hover:text-red-500 transition">
-          ログアウト
-        </button>
       </div>
 
       {/* 認定申請モーダル */}

@@ -279,6 +279,7 @@ function VoteForm() {
   const searchParams = useSearchParams()
   const proId = params.id as string
   const qrToken = searchParams.get('token')
+  const isPreview = searchParams.get('preview') === 'true'
   const supabase = createClient()
   const { user: clerkUser, isLoaded: authLoaded } = useUser()
   const { signUp, setActive: setSignUpActive } = useSignUp()
@@ -297,6 +298,7 @@ function VoteForm() {
   const [showEmailFix, setShowEmailFix] = useState(false)
   const [fixEmail, setFixEmail] = useState('')
   const [resending, setResending] = useState(false)
+  const [showPreviewBanner, setShowPreviewBanner] = useState(true)
   const [resendMessage, setResendMessage] = useState('')
 
   // セッション（ログイン済みユーザー）
@@ -392,7 +394,9 @@ function VoteForm() {
 
   // URLバーからトークンを消す（カジュアルな拡散への心理的摩擦）
   // ただし ?error= がある場合はsearchParamsが読まれるまで保持する
+  // プレビューモードではURLを保持する
   useEffect(() => {
+    if (isPreview) return // プレビューモードではURL変更しない
     const params = new URLSearchParams(window.location.search)
     if (params.has('error')) {
       // エラーパラメータだけ残してパスをクリーン化
@@ -438,18 +442,20 @@ function VoteForm() {
 
       // ── ウェーブ1: QRチェック・プロ情報・人柄を並列取得 ──
       const [tokenResult, proResult, persResult] = await Promise.all([
-        // QRトークン期限チェック
-        qrToken
-          ? (supabase as any).from('qr_tokens').select('expires_at').eq('token', qrToken).maybeSingle()
-          : Promise.resolve({ data: { expires_at: new Date(Date.now() + 86400000).toISOString() } }),
+        // QRトークン期限チェック（プレビューモードではスキップ）
+        isPreview
+          ? Promise.resolve({ data: { expires_at: new Date(Date.now() + 86400000).toISOString() } })
+          : qrToken
+            ? (supabase as any).from('qr_tokens').select('expires_at').eq('token', qrToken).maybeSingle()
+            : Promise.resolve({ data: { expires_at: new Date(Date.now() + 86400000).toISOString() } }),
         // プロ情報
         (supabase as any).from('professionals').select('*').eq('id', proId).maybeSingle(),
         // 人柄プルーフ（プロ情報に依存しない）
         (supabase as any).from('personality_items').select('id, label, personality_label, sort_order').order('sort_order'),
       ])
 
-      // QRチェック結果
-      if (qrToken) {
+      // QRチェック結果（プレビューモードではスキップ）
+      if (!isPreview && qrToken) {
         if (!tokenResult.data) { setTokenExpired(true); setLoading(false); return }
         if (new Date(tokenResult.data.expires_at) < new Date()) { setTokenExpired(true); setLoading(false); return }
       }
@@ -500,38 +506,40 @@ function VoteForm() {
         }
       }
 
-      // ── ウェーブ3: セッション確認・重複チェック ──
-      const sessionUserEmail = clerkUser?.primaryEmailAddress?.emailAddress
-      if (sessionUserEmail) {
-        setSessionEmail(sessionUserEmail)
-        setIsLoggedIn(true)
+      // ── ウェーブ3: セッション確認・重複チェック（プレビューモードではスキップ） ──
+      if (!isPreview) {
+        const sessionUserEmail = clerkUser?.primaryEmailAddress?.emailAddress
+        if (sessionUserEmail) {
+          setSessionEmail(sessionUserEmail)
+          setIsLoggedIn(true)
 
-        if (clerkUser?.id && proData?.user_id) {
-          if (clerkUser.id === proData.user_id) {
-            setIsSelfVote(true)
-            setLoading(false)
-            return
+          if (clerkUser?.id && proData?.user_id) {
+            if (clerkUser.id === proData.user_id) {
+              setIsSelfVote(true)
+              setLoading(false)
+              return
+            }
           }
-        }
 
-        const { data: existing } = await (supabase as any)
-          .from('votes')
-          .select('id')
-          .eq('professional_id', proId)
-          .eq('normalized_email', normalizeEmail(sessionUserEmail))
-          .maybeSingle()
-        if (existing) setAlreadyVoted(true)
-      } else {
-        const savedEmail = localStorage.getItem('proof_voter_email')
-        if (savedEmail) {
-          setVoterEmail(savedEmail)
           const { data: existing } = await (supabase as any)
             .from('votes')
             .select('id')
             .eq('professional_id', proId)
-            .eq('normalized_email', normalizeEmail(savedEmail))
+            .eq('normalized_email', normalizeEmail(sessionUserEmail))
             .maybeSingle()
           if (existing) setAlreadyVoted(true)
+        } else {
+          const savedEmail = localStorage.getItem('proof_voter_email')
+          if (savedEmail) {
+            setVoterEmail(savedEmail)
+            const { data: existing } = await (supabase as any)
+              .from('votes')
+              .select('id')
+              .eq('professional_id', proId)
+              .eq('normalized_email', normalizeEmail(savedEmail))
+              .maybeSingle()
+            if (existing) setAlreadyVoted(true)
+          }
         }
       }
 
@@ -624,6 +632,7 @@ function VoteForm() {
   // ── hopeful投票（「気になっている」用） ──
   const submitHopefulVote = async () => {
     if (!pro) return
+    if (isPreview) return // プレビューモードでは投票しない
     try {
       await (supabase as any).from('votes').insert({
         professional_id: proId,
@@ -649,6 +658,7 @@ function VoteForm() {
 
   // ── LINE認証で投票 ──
   function handleLineVote() {
+    if (isPreview) return // プレビューモードでは投票しない
     const effectiveSessionCount = sessionCount || 'first'
     setError('')
     // 投票データを構築してLINE認証に直接遷移（Clerkを使わない）
@@ -659,6 +669,7 @@ function VoteForm() {
 
   // ── Google認証で投票 ──
   function handleGoogleVote() {
+    if (isPreview) return // プレビューモードでは投票しない
     const effectiveSessionCount = sessionCount || 'first'
     setError('')
     // 投票データを構築してGoogle認証に直接遷移
@@ -669,6 +680,7 @@ function VoteForm() {
 
   // ── 電話番号認証: SMS送信 ──
   async function handlePhoneSend() {
+    if (isPreview) return // プレビューモードでは投票しない
     if (!phoneNumber.trim()) {
       setError('電話番号を入力してください')
       return
@@ -741,6 +753,7 @@ function VoteForm() {
 
   // ── 電話番号認証: コード確認 + 投票送信 ──
   async function handlePhoneVerify() {
+    if (isPreview) return // プレビューモードでは投票しない
     if (!phoneCode.trim() || phoneCode.length < 6) {
       setError('6桁の認証コードを入力してください')
       return
@@ -852,6 +865,7 @@ function VoteForm() {
 
   // ── フォールバック認証: 名前+生年月日+電話番号で認証なし投票 ──
   async function handleFallbackSubmit() {
+    if (isPreview) return // プレビューモードでは投票しない
     setError('')
 
     // バリデーション
@@ -928,6 +942,7 @@ function VoteForm() {
   // ── 投票送信（メール認証用） ──
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (isPreview) return // プレビューモードでは投票しない
     setError('')
 
     // バリデーション
@@ -1445,6 +1460,38 @@ function VoteForm() {
         main { padding: 0 !important; max-width: 100% !important; }
       `}</style>
 
+      {/* ── プレビューバナー ── */}
+      {isPreview && showPreviewBanner && (
+        <div style={{
+          position: "sticky", top: 0, zIndex: 50,
+          background: "#FFF8E1",
+          border: "1px solid #C4A35A",
+          padding: "12px 16px",
+          display: "flex", alignItems: "flex-start", justifyContent: "space-between",
+          gap: 12,
+        }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: "#1A1A2E", marginBottom: 4 }}>
+              👁️ これはプレビューです
+            </div>
+            <div style={{ fontSize: 12, color: "#1A1A2E", lineHeight: 1.6 }}>
+              クライアントに表示される投票画面を確認しています。<br />
+              実際の投票は反映されません。
+            </div>
+          </div>
+          <button
+            onClick={() => setShowPreviewBanner(false)}
+            style={{
+              background: "transparent", border: "none",
+              color: "#1A1A2E", fontSize: 16, cursor: "pointer",
+              padding: "2px 6px", flexShrink: 0,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* ── イントロ画面 ── */}
       {voteStep === "intro" && (
         <StepWrapper isTransitioning={isTransitioning} showBack={false}>
@@ -1822,6 +1869,30 @@ function VoteForm() {
           onBack={goBack}
         >
           <div style={{ width: "100%" }}>
+            {isPreview ? (
+              <>
+                <div style={{ fontSize: 40, marginBottom: 16, textAlign: "center" }}>👁️</div>
+                <div style={S.title}>プレビューはここまでです</div>
+                <div style={S.subtitle}>
+                  ここから先は認証ステップです。<br />
+                  クライアントはLINE・SMS・Googleなどで<br />
+                  本人確認をして回答を送信します。
+                </div>
+                <button
+                  onClick={() => window.close()}
+                  style={S.primaryBtn}
+                >
+                  プレビューを閉じる
+                </button>
+                <button
+                  onClick={goBack}
+                  style={{ ...S.skipBtn, display: "block", margin: "0 auto" }}
+                >
+                  ← 前のステップに戻る
+                </button>
+              </>
+            ) : (
+            <>
             <div style={S.title}>あと少しで届きます！</div>
             <div style={S.subtitle}>
               あなたの声を届けるために<br />
@@ -2157,6 +2228,8 @@ function VoteForm() {
                 ※ 匿名です。プロに連絡先は公開されません。
               </span>
             </div>
+            </>
+            )}
           </div>
         </StepWrapper>
       )}
