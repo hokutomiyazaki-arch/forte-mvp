@@ -444,26 +444,35 @@ export async function generateAllWeeklyReports(): Promise<WeeklyProData[]> {
     templatesByPattern.get(t.pattern_type)!.push(t.template_text)
   })
 
-  // ── Clerk Backend API でプロのメールアドレスを取得 ──
+  // ── Clerk Backend API でプロのメールアドレスを一括取得 ──
   // contact_email はクライアント向け公開連絡先なので、通知先としては不適切。
   // Clerk に登録されたメールを優先し、なければ contact_email をフォールバック。
   const clerkEmailByProId = new Map<string, string>()
   try {
     const clerk = await clerkClient()
-    for (const pro of professionals) {
-      const userId = pro.user_id as string
-      if (!userId) continue
-      try {
-        const user = await clerk.users.getUser(userId)
-        const email = user.emailAddresses?.[0]?.emailAddress
+    const userIds = professionals
+      .map(p => p.user_id as string)
+      .filter(Boolean)
+
+    // Clerk getUserList は最大100件ずつ → バッチ分割
+    for (let i = 0; i < userIds.length; i += 100) {
+      const batch = userIds.slice(i, i + 100)
+      const clerkUsers = await clerk.users.getUserList({
+        userId: batch,
+        limit: 100,
+      })
+      for (const u of clerkUsers.data) {
+        const email = u.emailAddresses?.[0]?.emailAddress
         if (email) {
-          clerkEmailByProId.set(pro.id as string, email)
+          // userId → proId のマッピング
+          const pro = professionals.find(p => p.user_id === u.id)
+          if (pro) {
+            clerkEmailByProId.set(pro.id as string, email)
+          }
         }
-      } catch (err) {
-        // ユーザーが見つからない場合はスキップ（contact_emailフォールバック）
-        console.warn(`[weekly-report] Clerk user not found for pro=${pro.id}, userId=${userId}`)
       }
     }
+    console.log(`[weekly-report] Clerk batch: ${clerkEmailByProId.size} emails resolved from ${userIds.length} userIds`)
   } catch (err) {
     console.error('[weekly-report] Clerk API error, falling back to contact_email:', err)
   }

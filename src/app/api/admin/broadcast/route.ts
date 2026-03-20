@@ -36,6 +36,63 @@ function expandVariables(
     .replace(/\{\{votes\}\}/g, String(votes))
 }
 
+// Recipient 型
+type Recipient = {
+  professional_id: string
+  name: string
+  total_proofs: number
+  sendChannel: 'line' | 'email' | 'skip'
+  lineUserId?: string
+  email?: string
+}
+
+// 個別プロのデータを軽量取得（generateAllWeeklyReports をスキップ）
+async function getSingleProRecipient(
+  professionalId: string,
+  channel: string,
+): Promise<Recipient | null> {
+  const supabase = getSupabaseAdmin()
+
+  const { data: pro } = await supabase
+    .from('professionals')
+    .select('id, name, last_name, first_name, contact_email, line_messaging_user_id')
+    .eq('id', professionalId)
+    .is('deactivated_at', null)
+    .maybeSingle()
+
+  if (!pro) return null
+
+  // 総投票数
+  const { count } = await supabase
+    .from('votes')
+    .select('id', { count: 'exact', head: true })
+    .eq('professional_id', professionalId)
+    .eq('status', 'confirmed')
+
+  const name = (pro.last_name && pro.first_name)
+    ? `${pro.last_name} ${pro.first_name}`
+    : (pro.name || '—')
+
+  let sendChannel: 'line' | 'email' | 'skip' = 'skip'
+  if (channel === 'auto') {
+    if (pro.line_messaging_user_id) sendChannel = 'line'
+    else if (pro.contact_email) sendChannel = 'email'
+  } else if (channel === 'line') {
+    if (pro.line_messaging_user_id) sendChannel = 'line'
+  } else if (channel === 'email') {
+    if (pro.contact_email) sendChannel = 'email'
+  }
+
+  return {
+    professional_id: pro.id,
+    name,
+    total_proofs: count || 0,
+    sendChannel,
+    lineUserId: pro.line_messaging_user_id || undefined,
+    email: pro.contact_email || undefined,
+  }
+}
+
 export async function POST(req: NextRequest) {
   // 1. 認証チェック
   const isAdmin = await checkAdminAuth()
@@ -69,55 +126,52 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // 2. 全プロデータ取得
-    console.log(`[broadcast] Generating pro data...`)
-    const allReports = await generateAllWeeklyReports()
-    console.log(`[broadcast] Got ${allReports.length} professionals`)
+    // 2. 受信者リスト構築
+    let recipients: Recipient[]
 
-    // 3. ターゲットフィルタリング
-    let targets = allReports
+    if (target === 'professional' && professionalId) {
+      // 個別送信: 全プロレポート生成をスキップ
+      console.log(`[broadcast] Single target: ${professionalId}`)
+      const single = await getSingleProRecipient(professionalId, channel)
+      recipients = single ? [single] : []
+      console.log(`[broadcast] Single target resolved: ${recipients.length > 0 ? recipients[0].name : 'not found'}`)
+    } else {
+      // 一斉送信: 全プロデータ取得
+      console.log(`[broadcast] Generating pro data...`)
+      const allReports = await generateAllWeeklyReports()
+      console.log(`[broadcast] Got ${allReports.length} professionals`)
 
-    if (target === 'line') {
-      targets = targets.filter(r => !!r.line_messaging_user_id)
-    } else if (target === 'email') {
-      targets = targets.filter(r => !!r.contact_email)
-    } else if (target === 'professional') {
-      targets = targets.filter(r => r.professional_id === professionalId)
-    }
-    // target === 'all' → フィルタなし
-
-    // 4. 送信チャネル決定
-    type Recipient = {
-      professional_id: string
-      name: string
-      total_proofs: number
-      sendChannel: 'line' | 'email' | 'skip'
-      lineUserId?: string
-      email?: string
-    }
-
-    const recipients: Recipient[] = targets.map(r => {
-      let sendChannel: 'line' | 'email' | 'skip' = 'skip'
-      if (channel === 'auto') {
-        if (r.line_messaging_user_id) sendChannel = 'line'
-        else if (r.contact_email) sendChannel = 'email'
-      } else if (channel === 'line') {
-        if (r.line_messaging_user_id) sendChannel = 'line'
-      } else if (channel === 'email') {
-        if (r.contact_email) sendChannel = 'email'
+      // ターゲットフィルタリング
+      let targets = allReports
+      if (target === 'line') {
+        targets = targets.filter(r => !!r.line_messaging_user_id)
+      } else if (target === 'email') {
+        targets = targets.filter(r => !!r.contact_email)
       }
 
-      return {
-        professional_id: r.professional_id,
-        name: r.name,
-        total_proofs: r.total_proofs,
-        sendChannel,
-        lineUserId: r.line_messaging_user_id || undefined,
-        email: r.contact_email || undefined,
-      }
-    })
+      recipients = targets.map(r => {
+        let sendChannel: 'line' | 'email' | 'skip' = 'skip'
+        if (channel === 'auto') {
+          if (r.line_messaging_user_id) sendChannel = 'line'
+          else if (r.contact_email) sendChannel = 'email'
+        } else if (channel === 'line') {
+          if (r.line_messaging_user_id) sendChannel = 'line'
+        } else if (channel === 'email') {
+          if (r.contact_email) sendChannel = 'email'
+        }
 
-    // 5. プレビューモード
+        return {
+          professional_id: r.professional_id,
+          name: r.name,
+          total_proofs: r.total_proofs,
+          sendChannel,
+          lineUserId: r.line_messaging_user_id || undefined,
+          email: r.contact_email || undefined,
+        }
+      })
+    }
+
+    // 3. プレビューモード
     if (preview) {
       const wouldSendLine = recipients.filter(r => r.sendChannel === 'line').length
       const wouldSendEmail = recipients.filter(r => r.sendChannel === 'email').length
@@ -139,7 +193,7 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // 6. 実送信モード
+    // 4. 実送信モード（5件ずつ並列）
     const supabase = getSupabaseAdmin()
     const emailSubject = subject || '【REALPROOF】お知らせ'
 
@@ -148,11 +202,20 @@ export async function POST(req: NextRequest) {
     let failed = 0
     let skipped = 0
     const errors: Array<{ name: string; error: string }> = []
+    const logs: Array<{
+      professional_id: string
+      channel: string
+      status: string
+      subject: string
+      body_preview: string
+      error_message: string | null
+    }> = []
 
-    for (const r of recipients) {
+    // 1件の受信者を送信する関数
+    const sendToRecipient = async (r: Recipient) => {
       if (r.sendChannel === 'skip') {
         skipped++
-        continue
+        return
       }
 
       const expandedBody = expandVariables(messageBody, r.name, r.total_proofs)
@@ -165,9 +228,7 @@ export async function POST(req: NextRequest) {
           failed++
           errors.push({ name: r.name, error: result.error || 'LINE send failed' })
         }
-
-        // ログ記録
-        await supabase.from('broadcast_logs').insert({
+        logs.push({
           professional_id: r.professional_id,
           channel: 'line',
           status: result.success ? 'sent' : 'failed',
@@ -175,7 +236,6 @@ export async function POST(req: NextRequest) {
           body_preview: expandedBody.substring(0, 200),
           error_message: result.error || null,
         })
-
         console.log(`[broadcast] LINE ${result.success ? 'sent' : 'failed'}: ${r.name}`)
       } else if (r.sendChannel === 'email' && r.email) {
         const emailHtml = generateBroadcastEmailHTML(r.name, expandedBody)
@@ -186,9 +246,7 @@ export async function POST(req: NextRequest) {
           failed++
           errors.push({ name: r.name, error: result.error || 'Email send failed' })
         }
-
-        // ログ記録
-        await supabase.from('broadcast_logs').insert({
+        logs.push({
           professional_id: r.professional_id,
           channel: 'email',
           status: result.success ? 'sent' : 'failed',
@@ -196,12 +254,23 @@ export async function POST(req: NextRequest) {
           body_preview: expandedBody.substring(0, 200),
           error_message: result.error || null,
         })
-
         console.log(`[broadcast] Email ${result.success ? 'sent' : 'failed'}: ${r.name}`)
       }
     }
 
-    // 7. サマリー
+    // 5件ずつ並列送信
+    const BATCH_SIZE = 5
+    for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
+      const batch = recipients.slice(i, i + BATCH_SIZE)
+      await Promise.allSettled(batch.map(r => sendToRecipient(r)))
+    }
+
+    // バッチINSERT（ログをまとめて記録）
+    if (logs.length > 0) {
+      await supabase.from('broadcast_logs').insert(logs)
+    }
+
+    // 5. サマリー
     const summary = {
       sent: { line: sentLine, email: sentEmail },
       failed,
