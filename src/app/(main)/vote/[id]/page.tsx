@@ -1425,7 +1425,7 @@ function VoteForm() {
 
   // 強みプルーフの表示項目（プロが設定した項目）
   const allProofDisplayItems = [
-    ...proofItems.map(p => ({ id: p.id, label: p.strength_label || p.label, isCustom: false })),
+    ...proofItems.map(p => ({ id: p.id, label: p.label, isCustom: false })),
     ...customProofs.filter(c => c.label?.trim()).map(c => ({ id: c.id, label: c.label, isCustom: true })),
   ]
 
