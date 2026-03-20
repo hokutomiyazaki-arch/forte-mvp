@@ -16,6 +16,7 @@ export default function AnnouncementBanner() {
   const [banner, setBanner] = useState<Announcement | null>(null)
   const [visible, setVisible] = useState(true)
   const [dismissing, setDismissing] = useState(false)
+  const [expanded, setExpanded] = useState(false)
 
   useEffect(() => {
     fetch('/api/announcements')
@@ -34,6 +35,8 @@ export default function AnnouncementBanner() {
     banner.banner_type === 'success' ? '#22C55E' :
     banner.banner_type === 'warning' ? '#F59E0B' :
     '#C4A35A'
+
+  const hasBody = !!banner.body
 
   async function handleDismiss() {
     setDismissing(true)
@@ -54,36 +57,26 @@ export default function AnnouncementBanner() {
       style={{
         background: '#1A1A2E',
         borderLeft: `4px solid ${borderColor}`,
-        padding: '10px 16px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 12,
-        minHeight: 44,
         opacity: dismissing ? 0 : 1,
         transition: 'opacity 0.3s ease',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-        <span style={{ fontSize: 14, flexShrink: 0 }}>
-          {banner.banner_type === 'success' ? '✅' : banner.banner_type === 'warning' ? '⚠️' : '📢'}
-        </span>
-        {banner.link_url ? (
-          <a
-            href={banner.link_url}
-            style={{
-              color: '#FAFAF7',
-              fontSize: 13,
-              fontWeight: 500,
-              textDecoration: 'none',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap' as const,
-            }}
-          >
-            {banner.title}
-          </a>
-        ) : (
+      <div
+        style={{
+          padding: '10px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          minHeight: 44,
+          cursor: hasBody ? 'pointer' : 'default',
+        }}
+        onClick={hasBody ? () => setExpanded(!expanded) : undefined}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+          <span style={{ fontSize: 14, flexShrink: 0 }}>
+            {banner.banner_type === 'success' ? '✅' : banner.banner_type === 'warning' ? '⚠️' : '📢'}
+          </span>
           <span
             style={{
               color: '#FAFAF7',
@@ -92,26 +85,65 @@ export default function AnnouncementBanner() {
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap' as const,
+              flex: 1,
             }}
           >
             {banner.title}
           </span>
-        )}
+          {hasBody && (
+            <span style={{ fontSize: 10, color: '#8B8B9A', flexShrink: 0, transition: 'transform 0.3s ease', transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+              ▼
+            </span>
+          )}
+        </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); handleDismiss() }}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: '#8B8B9A',
+            fontSize: 16,
+            cursor: 'pointer',
+            padding: '2px 4px',
+            flexShrink: 0,
+          }}
+        >
+          ✕
+        </button>
       </div>
-      <button
-        onClick={handleDismiss}
-        style={{
-          background: 'transparent',
-          border: 'none',
-          color: '#8B8B9A',
-          fontSize: 16,
-          cursor: 'pointer',
-          padding: '2px 4px',
-          flexShrink: 0,
-        }}
-      >
-        ✕
-      </button>
+
+      {hasBody && (
+        <div
+          style={{
+            maxHeight: expanded ? 200 : 0,
+            overflow: 'hidden',
+            transition: 'max-height 0.3s ease',
+          }}
+        >
+          <div style={{ padding: '0 16px 12px 38px' }}>
+            <p style={{ color: '#D1D5DB', fontSize: 13, lineHeight: 1.6, margin: 0, whiteSpace: 'pre-line' }}>
+              {banner.body}
+            </p>
+            {banner.link_url && (
+              <a
+                href={banner.link_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-block',
+                  marginTop: 8,
+                  color: '#C4A35A',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  textDecoration: 'none',
+                }}
+              >
+                {banner.link_label || '詳細を見る'} →
+              </a>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
