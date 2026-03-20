@@ -200,7 +200,7 @@ export default function RewardReveal({ reward, proName }: { reward: any; proName
         @keyframes letter-appear{0%{opacity:0;transform:scale(.92)}100%{opacity:1;transform:scale(1)}}
       `}</style>
 
-      <div style={{ position: 'relative', width: 300, height: 260, margin: '0 auto', overflowX: 'hidden', overflowY: 'visible' }}>
+      <div style={{ position: 'relative', width: 300, height: 260, margin: '0 auto', overflow: 'visible' }}>
 
         {/* Light burst */}
         <div id="light-burst" style={{
