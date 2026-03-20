@@ -126,7 +126,70 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // 2. 受信者リスト構築
+    // 2. プレビューモード（軽量クエリのみ、generateAllWeeklyReports をスキップ）
+    if (preview) {
+      console.log(`[broadcast] Preview mode (lightweight)`)
+      const supabasePreview = getSupabaseAdmin()
+
+      if (target === 'professional' && professionalId) {
+        const single = await getSingleProRecipient(professionalId, channel)
+        const recipients = single ? [single] : []
+        return NextResponse.json({
+          preview: true,
+          total: recipients.length,
+          wouldSendLine: recipients.filter(r => r.sendChannel === 'line').length,
+          wouldSendEmail: recipients.filter(r => r.sendChannel === 'email').length,
+          wouldSkip: recipients.filter(r => r.sendChannel === 'skip').length,
+          sampleRecipients: recipients
+            .filter(r => r.sendChannel !== 'skip')
+            .map(r => ({ name: r.name, channel: r.sendChannel })),
+        })
+      }
+
+      // 一斉プレビュー: プロ一覧から件数とサンプルだけ取得
+      const { data: pros } = await supabasePreview
+        .from('professionals')
+        .select('id, name, last_name, first_name, contact_email, line_messaging_user_id')
+        .is('deactivated_at', null)
+
+      const allPros = pros || []
+      let filtered = allPros
+      if (target === 'line') {
+        filtered = filtered.filter(p => !!p.line_messaging_user_id)
+      } else if (target === 'email') {
+        filtered = filtered.filter(p => !!p.contact_email)
+      }
+
+      const previewRecipients = filtered.map(p => {
+        let sendChannel: 'line' | 'email' | 'skip' = 'skip'
+        if (channel === 'auto') {
+          if (p.line_messaging_user_id) sendChannel = 'line'
+          else if (p.contact_email) sendChannel = 'email'
+        } else if (channel === 'line') {
+          if (p.line_messaging_user_id) sendChannel = 'line'
+        } else if (channel === 'email') {
+          if (p.contact_email) sendChannel = 'email'
+        }
+        const name = (p.last_name && p.first_name)
+          ? `${p.last_name} ${p.first_name}`
+          : (p.name || '—')
+        return { name, sendChannel }
+      })
+
+      return NextResponse.json({
+        preview: true,
+        total: previewRecipients.length,
+        wouldSendLine: previewRecipients.filter(r => r.sendChannel === 'line').length,
+        wouldSendEmail: previewRecipients.filter(r => r.sendChannel === 'email').length,
+        wouldSkip: previewRecipients.filter(r => r.sendChannel === 'skip').length,
+        sampleRecipients: previewRecipients
+          .filter(r => r.sendChannel !== 'skip')
+          .slice(0, 5)
+          .map(r => ({ name: r.name, channel: r.sendChannel })),
+      })
+    }
+
+    // 3. 受信者リスト構築（実送信時のみ）
     let recipients: Recipient[]
 
     if (target === 'professional' && professionalId) {
@@ -168,28 +231,6 @@ export async function POST(req: NextRequest) {
           lineUserId: r.line_messaging_user_id || undefined,
           email: r.contact_email || undefined,
         }
-      })
-    }
-
-    // 3. プレビューモード
-    if (preview) {
-      const wouldSendLine = recipients.filter(r => r.sendChannel === 'line').length
-      const wouldSendEmail = recipients.filter(r => r.sendChannel === 'email').length
-      const wouldSkip = recipients.filter(r => r.sendChannel === 'skip').length
-
-      // サンプル受信者（最大5名）
-      const sampleRecipients = recipients
-        .filter(r => r.sendChannel !== 'skip')
-        .slice(0, 5)
-        .map(r => ({ name: r.name, channel: r.sendChannel }))
-
-      return NextResponse.json({
-        preview: true,
-        total: recipients.length,
-        wouldSendLine,
-        wouldSendEmail,
-        wouldSkip,
-        sampleRecipients,
       })
     }
 
