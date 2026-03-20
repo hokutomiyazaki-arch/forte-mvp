@@ -1697,7 +1697,13 @@ export default function DashboardPage() {
               <p className="text-sm text-[#1A1A2E] leading-relaxed whitespace-pre-line">{`「○○さんにお聞きしたいんですけど、\nどんなところがよかったか、\nアンケートで教えてもらえますか？\nスマホかざすだけで大丈夫です」`}</p>
             </div>
 
+            {/* パターン4: 価値提供 */}
+            <div className="border-l-2 border-gray-300 pl-4">
+              <p className="text-xs font-medium text-[#C4A35A] mb-1">価値提供</p>
+              <p className="text-sm text-[#1A1A2E] leading-relaxed whitespace-pre-line">{`「かんたんなアンケートに答えてもらうと、\n私からのちょっとしたプレゼントが届くんです。\n30秒で終わるので、\nよかったら試してみてください」`}</p>
+            </div>
 
+            <p className="text-xs text-gray-400 text-center mt-3">✕ 使わない言葉: 投票 / 評価 / 口コミ / レビュー / REALPROOF</p>
 
             {/* クライアント提示用資料 */}
             <div className="mt-6 pt-4 border-t border-gray-200 text-center">
