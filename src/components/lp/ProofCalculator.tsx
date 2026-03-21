@@ -69,7 +69,7 @@ export default function ProofCalculator() {
       <div className="max-w-[520px] mx-auto">
         <div className="border border-[#E0E0E0] rounded-2xl p-6 sm:p-8 bg-white">
         <h2 className="text-xl font-medium text-[#1A1A2E] leading-relaxed mb-2 text-center">
-          積み上げた実績、<br />今いくつ残ってますか？
+          資格証は、壁にかざってある。<br />あなたの実績は、いくつ残ってる？
         </h2>
         <p className="text-sm text-[#888] text-center mb-10">
           〜あなたのプロとしての実績を入力して下さい〜
@@ -163,7 +163,7 @@ export default function ProofCalculator() {
 
         {/* 締めコピー */}
         <p className="text-[15px] text-[#888] text-center mt-8">
-          でも、誰もそれを知らない。
+          あなたが力になった人の記録、<br />このまま放置しますか？
         </p>
         </div>
       </div>
