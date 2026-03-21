@@ -65,11 +65,15 @@ export default function ProofCalculator() {
     : 2;
 
   return (
-    <section className="py-16 px-5 bg-[#FAFAF7]">
+    <section className="pt-4 pb-16 px-5 bg-[#FAFAF7]">
       <div className="max-w-[520px] mx-auto">
-        <h2 className="text-xl font-medium text-[#1A1A2E] leading-relaxed mb-10">
+        <div className="border border-[#E0E0E0] rounded-2xl p-6 sm:p-8 bg-white">
+        <h2 className="text-xl font-medium text-[#1A1A2E] leading-relaxed mb-2 text-center">
           積み上げた実績、<br />今いくつ残ってますか？
         </h2>
+        <p className="text-sm text-[#888] text-center mb-10">
+          〜あなたのプロとしての実績を入力して下さい〜
+        </p>
 
         {/* スライダー群 */}
         <Slider
@@ -161,6 +165,7 @@ export default function ProofCalculator() {
         <p className="text-[15px] text-[#888] text-center mt-8">
           でも、誰もそれを知らない。
         </p>
+        </div>
       </div>
     </section>
   );
