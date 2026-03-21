@@ -969,11 +969,10 @@ function MyCardContent() {
           { key: 'myproof' as const, label: 'プルーフカード', count: 0 },
           { key: 'history' as const, label: 'プルーフ済み', count: voteHistory.length },
           { key: 'bookmarked' as const, label: 'ブックマーク', count: bookmarkCount },
-          ...(hasOrgMembership ? [{ key: 'myorgs' as const, label: '📋 団体', count: 0 }] : []),
         ]).map(t => (
           <button
             key={t.key}
-            onClick={() => t.key === 'myorgs' ? handleMyOrgsTab() : setTab(t.key)}
+            onClick={() => setTab(t.key)}
             style={{
               flex: '0 0 auto',
               padding: '12px 14px',
