@@ -636,7 +636,7 @@ function MyCardContent() {
       {/* プルーフカードタブ以外: ← ホームに戻る */}
       {tab !== 'myproof' && (
         <a
-          href="/mycard"
+          href={isPro ? '/dashboard' : '/mycard'}
           className="inline-flex items-center gap-1 text-sm text-[#C4A35A] hover:text-[#b3923f] mb-4 transition-colors"
         >
           ← ホームに戻る
@@ -971,7 +971,8 @@ function MyCardContent() {
         </div>
       )}
 
-      {/* タブ */}
+      {/* タブ（URLパラメータでタブ指定されている場合は非表示） */}
+      {!tabParam && (
       <div style={{
         display: 'flex',
         overflowX: 'auto',
@@ -1008,6 +1009,7 @@ function MyCardContent() {
           </button>
         ))}
       </div>
+      )}
 
       {/* 投票履歴タブ */}
       {tab === 'history' && (
