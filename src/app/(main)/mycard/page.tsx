@@ -633,8 +633,18 @@ function MyCardContent() {
 
   return (
     <div className="max-w-lg mx-auto px-4 py-8">
-      {/* プロ管理画面ボタン */}
-      {isPro && (
+      {/* プルーフカードタブ以外: ← ホームに戻る */}
+      {tab !== 'myproof' && (
+        <a
+          href="/mycard"
+          className="inline-flex items-center gap-1 text-sm text-[#C4A35A] hover:text-[#b3923f] mb-4 transition-colors"
+        >
+          ← ホームに戻る
+        </a>
+      )}
+
+      {/* プロ管理画面ボタン（プルーフカードタブの時のみ） */}
+      {tab === 'myproof' && isPro && (
         <button
           onClick={() => { window.location.href = '/dashboard' }}
           className="w-full mb-4 py-3 rounded-lg text-sm font-semibold text-white"
@@ -644,7 +654,8 @@ function MyCardContent() {
         </button>
       )}
 
-      {/* マイプルーフ QRコード */}
+      {/* マイプルーフ QRコード（プルーフカードタブの時のみ） */}
+      {tab === 'myproof' && (
       <div className="bg-white rounded-xl p-6 shadow-sm mb-6 text-center">
         <h2 className="text-base font-bold text-[#1A1A2E] mb-1">プルーフカード QRコード</h2>
         <p className="text-xs text-gray-500 mb-4">
@@ -685,7 +696,10 @@ function MyCardContent() {
           </button>
         )}
       </div>
+      )}
 
+      {tab === 'myproof' && (
+      <>
       {isPasswordReset && !isLineUser && (
         <div className="bg-[#C4A35A]/10 border border-[#C4A35A] rounded-lg p-4 mb-4 text-center">
           <p className="text-sm font-bold text-[#1A1A2E]">パスワードを再設定してください</p>
@@ -945,6 +959,8 @@ function MyCardContent() {
             </button>
           </div>
         </div>
+      )}
+      </>
       )}
 
       {message && (
