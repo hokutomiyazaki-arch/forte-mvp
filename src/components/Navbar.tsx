@@ -90,7 +90,6 @@ export default function Navbar() {
           {!isPro && (
             <>
               <div style={menuGroupLabel}>設定</div>
-              <a href="/mycard?tab=myproof&edit=true" onClick={closeMenu} style={menuLinkStyle}>プロフィール編集</a>
               <a href="/mycard?tab=card" onClick={closeMenu} style={menuLinkStyle}>NFCカード</a>
             </>
           )}
