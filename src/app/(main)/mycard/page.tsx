@@ -964,7 +964,7 @@ function MyCardContent() {
         {([
           { key: 'myproof' as const, label: 'プルーフカード', count: 0 },
           { key: 'history' as const, label: 'プルーフ済み', count: voteHistory.length },
-          { key: 'bookmarked' as const, label: 'コレクション', count: bookmarkCount },
+          { key: 'bookmarked' as const, label: 'ブックマーク', count: bookmarkCount },
           { key: 'card' as const, label: 'カード管理', count: 0 },
           ...(hasOrgMembership ? [{ key: 'myorgs' as const, label: '📋 団体', count: 0 }] : []),
         ]).map(t => (
@@ -1063,7 +1063,7 @@ function MyCardContent() {
         </div>
       )}
 
-      {/* コレクションタブ */}
+      {/* ブックマークタブ */}
       {tab === 'bookmarked' && (
         <div>
           {bookmarkedPros.length === 0 ? (
