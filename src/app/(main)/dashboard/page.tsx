@@ -211,7 +211,7 @@ export default function DashboardPage() {
           window.location.href = '/onboarding'
           return
         }
-        if (data.role === 'client') {
+        if (data.role === 'client' && tabParam !== 'myorgs') {
           window.location.href = '/mycard'
           return
         }
@@ -226,11 +226,12 @@ export default function DashboardPage() {
         if (data.proofItems) setProofItems(data.proofItems)
 
         const proData = data.professional
-        if (!proData) {
+        if (!proData && tabParam !== 'myorgs') {
           setLoading(false)
           return
         }
 
+        if (proData) {
         setPro(proData)
 
         // LINE バナー表示判定
@@ -312,7 +313,9 @@ export default function DashboardPage() {
         // NFCカード
         if (data.nfcCard) setNfcCard(data.nfcCard)
 
-        // 団体関連
+        } // end if (proData)
+
+        // 団体関連（proData不要）
         if (data.pendingInvites) setPendingInvites(data.pendingInvites)
         if (data.activeOrgs) setActiveOrgs(data.activeOrgs)
         if (data.credentialBadges) setCredentialBadges(data.credentialBadges)
