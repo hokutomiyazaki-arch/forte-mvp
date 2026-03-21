@@ -10,8 +10,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         {children}
       </main>
       <footer className="text-center py-8 text-sm text-gray-500 space-y-2">
-        <div>
+        <div className="flex items-center justify-center gap-4">
           <a href="/legal" className="hover:text-[#C4A35A] transition">特定商取引法に基づく表記</a>
+          <span className="text-gray-300">|</span>
+          <a href="/bug-report" className="hover:text-[#C4A35A] transition">不具合・エラーのご報告</a>
         </div>
         <div>&copy; 2026 REAL PROOF｜株式会社Legrand chariot</div>
       </footer>
