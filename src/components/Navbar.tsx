@@ -158,6 +158,10 @@ export default function Navbar() {
               </button>
             </SignInButton>
           </SignedOut>
+          <div style={{ borderTop: '1px solid #333', paddingTop: 12, marginTop: 4 }}>
+            <a href="/bug-report" style={{ color: '#888', textDecoration: 'none', fontSize: 13 }}
+              onClick={() => setMenuOpen(false)}>不具合・エラーのご報告</a>
+          </div>
         </div>
       )}
     </nav>
