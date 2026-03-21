@@ -1,38 +1,35 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { SignInButton, SignedIn, SignedOut, useUser, useClerk } from '@clerk/nextjs'
+import { SignInButton, SignedIn, SignedOut, UserButton, useUser } from '@clerk/nextjs'
 import { useProStatus } from '@/lib/useProStatus'
 
-const menuLinkStyle: React.CSSProperties = {
-  display: 'block',
-  padding: '10px 16px',
-  fontSize: 14,
-  color: '#FAFAF7',
-  textDecoration: 'none',
-  cursor: 'pointer',
-}
-const menuGroupLabel: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 600,
-  color: '#9CA3AF',
-  letterSpacing: 1,
-  padding: '16px 16px 4px',
-  borderTop: '1px solid #333',
-  marginTop: 8,
-}
-const menuDivider: React.CSSProperties = {
-  borderTop: '1px solid #333',
-  marginTop: 8,
-  paddingTop: 8,
+function NotificationBell({ count }: { count: number }) {
+  return (
+    <a href="/announcements" style={{ position: 'relative', color: '#fff', textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
+      <span style={{ fontSize: 16 }}>🔔</span>
+      {count > 0 && (
+        <span style={{
+          position: 'absolute', top: -6, right: -8,
+          background: '#E24B4A', color: '#fff',
+          fontSize: 9, fontWeight: 700,
+          width: 16, height: 16, borderRadius: '50%',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          {count > 9 ? '9+' : count}
+        </span>
+      )}
+    </a>
+  )
 }
 
 export default function Navbar() {
   const { isLoaded, isSignedIn } = useUser()
   const { isPro } = useProStatus()
-  const { signOut } = useClerk()
   const [menuOpen, setMenuOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
+  const [ownedOrg, setOwnedOrg] = useState<{ id: string; name: string; type: string } | null>(null)
+  const [hasOrgMembership, setHasOrgMembership] = useState(false)
 
   useEffect(() => {
     fetch('/api/announcements')
@@ -43,83 +40,18 @@ export default function Navbar() {
       .catch(() => {})
   }, [])
 
-  const closeMenu = () => setMenuOpen(false)
-
-  function renderMenuItems() {
-    return (
-      <>
-        {/* トップレベルリンク */}
-        <SignedIn>
-          {isPro && (
-            <a href="/dashboard" onClick={closeMenu} style={menuLinkStyle}>ダッシュボード</a>
-          )}
-          <a href="/mycard" onClick={closeMenu} style={menuLinkStyle}>マイプルーフ</a>
-
-          {/* 設定（プロのみ） */}
-          {isPro && (
-            <>
-              <div style={menuGroupLabel}>設定</div>
-              <a href="/dashboard?tab=profile&edit=true" onClick={closeMenu} style={menuLinkStyle}>プロフィール編集</a>
-              <a href="/dashboard?tab=proofs" onClick={closeMenu} style={menuLinkStyle}>強み設定</a>
-              <a href="/dashboard?tab=rewards" onClick={closeMenu} style={menuLinkStyle}>リワード設定</a>
-              <a href="/dashboard?tab=card" onClick={closeMenu} style={menuLinkStyle}>NFCカード</a>
-            </>
-          )}
-        </SignedIn>
-
-        {/* 見つける（全員） */}
-        <div style={menuGroupLabel}>見つける</div>
-        <a href="/search" onClick={closeMenu} style={menuLinkStyle}>プロを探す</a>
-
-        {/* サポート（全員） */}
-        <div style={menuGroupLabel}>サポート</div>
-        <a href="/for-stores" onClick={closeMenu} style={menuLinkStyle}>店舗・団体の方へ</a>
-        <a href="/announcements" onClick={closeMenu} style={{ ...menuLinkStyle, display: 'flex', alignItems: 'center', gap: 6 }}>
-          🔔 お知らせ
-          {unreadCount > 0 && (
-            <span style={{
-              background: '#E24B4A', color: '#fff',
-              fontSize: 10, fontWeight: 700,
-              padding: '1px 6px', borderRadius: 10,
-            }}>
-              {unreadCount}
-            </span>
-          )}
-        </a>
-        <a href="/bug-report" onClick={closeMenu} style={{ ...menuLinkStyle, color: '#888', fontSize: 13 }}>不具合・エラーのご報告</a>
-
-        {/* ログアウト / ログイン */}
-        <div style={menuDivider}>
-          <SignedIn>
-            <button
-              onClick={() => { closeMenu(); signOut({ redirectUrl: '/' }); }}
-              style={{
-                ...menuLinkStyle,
-                border: 'none', background: 'none', width: '100%',
-                textAlign: 'left' as const, color: '#9CA3AF',
-              }}
-            >
-              ログアウト
-            </button>
-          </SignedIn>
-          <SignedOut>
-            <SignInButton mode="modal">
-              <button
-                onClick={closeMenu}
-                style={{
-                  ...menuLinkStyle,
-                  border: 'none', background: 'none', width: '100%',
-                  textAlign: 'left' as const, color: '#C4A35A', fontWeight: 600,
-                }}
-              >
-                ログイン
-              </button>
-            </SignInButton>
-          </SignedOut>
-        </div>
-      </>
-    )
-  }
+  // ownedOrg / hasOrgMembership を軽量APIで取得
+  const signedIn = isLoaded && isSignedIn
+  useEffect(() => {
+    if (!signedIn) return
+    fetch('/api/nav-context')
+      .then(res => res.json())
+      .then(data => {
+        if (data.ownedOrg) setOwnedOrg(data.ownedOrg)
+        if (data.hasOrgMembership) setHasOrgMembership(true)
+      })
+      .catch(() => {})
+  }, [signedIn])
 
   return (
     <nav style={{
@@ -137,21 +69,53 @@ export default function Navbar() {
         }}>REALPROOF</span>
       </a>
 
-      {/* Desktop: ハンバーガー + 通知ベル（640px以上） */}
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}
+      {/* Desktop メニュー（640px以上） */}
+      <div style={{ display: 'flex', gap: 16, alignItems: 'center', fontSize: 14 }}
            className="hidden-mobile">
-        <button
-          onClick={() => setMenuOpen(!menuOpen)}
-          style={{
-            color: '#fff', background: 'none', border: 'none',
-            fontSize: 22, cursor: 'pointer', padding: 4,
-          }}
-        >
-          {menuOpen ? '✕' : '☰'}
-        </button>
+        <a href="/for-stores" style={{ color: '#9A9A9A', textDecoration: 'none', fontSize: 13, border: '1px solid #444', padding: '4px 12px', borderRadius: 6, whiteSpace: 'nowrap' as const }}>店舗・団体の方へ</a>
+        <a href="/explore" style={{ color: '#fff', textDecoration: 'none' }}>プロを探す</a>
+        {!isLoaded ? (
+          <div style={{ width: 80 }} />
+        ) : (
+          <>
+            <SignedIn>
+              {ownedOrg && (
+                <a href="/org/dashboard" style={{ color: '#fff', textDecoration: 'none' }}>団体管理</a>
+              )}
+              {isPro && (
+                <a href="/dashboard" style={{ color: '#fff', textDecoration: 'none' }}>ダッシュボード</a>
+              )}
+              <a href="/mycard" style={{ color: '#fff', textDecoration: 'none' }}>マイプルーフ</a>
+              {hasOrgMembership && (
+                <a href="/dashboard?tab=myorgs" style={{ color: '#fff', textDecoration: 'none' }}>スキルアップ</a>
+              )}
+              <UserButton
+                appearance={{
+                  elements: {
+                    avatarBox: 'w-8 h-8',
+                    userButtonPopoverActionButton__manageAccount: {
+                      display: 'none',
+                    },
+                  }
+                }}
+              />
+            </SignedIn>
+            <SignedOut>
+              <SignInButton mode="modal">
+                <button style={{
+                  color: '#1A1A2E', background: '#C4A35A', border: 'none',
+                  cursor: 'pointer', fontSize: 14, padding: '6px 16px',
+                  borderRadius: 8, fontWeight: 600,
+                }}>
+                  ログイン
+                </button>
+              </SignInButton>
+            </SignedOut>
+          </>
+        )}
       </div>
 
-      {/* Mobile: ハンバーガー（639px以下） */}
+      {/* Mobile ハンバーガー（639px以下） */}
       <button onClick={() => setMenuOpen(!menuOpen)}
         className="show-mobile-only"
         style={{
@@ -161,17 +125,71 @@ export default function Navbar() {
         {menuOpen ? '✕' : '☰'}
       </button>
 
-      {/* 共通ドロップダウンメニュー（PC/モバイル同一） */}
+      {/* Mobile スライドメニュー */}
       {menuOpen && (
         <div style={{
           position: 'absolute', top: 56, right: 0,
-          background: '#1A1A2E', width: 220,
-          padding: '8px 0',
+          background: '#1A1A2E', width: 200,
+          padding: '16px 24px',
           borderRadius: '0 0 0 12px',
           boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
           zIndex: 100,
+          display: 'flex', flexDirection: 'column' as const, gap: 16,
+          fontSize: 15,
         }}>
-          {renderMenuItems()}
+          <a href="/for-stores" style={{ color: '#9A9A9A', textDecoration: 'none' }}
+            onClick={() => setMenuOpen(false)}>店舗・団体の方へ</a>
+          <a href="/explore" style={{ color: '#fff', textDecoration: 'none' }}
+            onClick={() => setMenuOpen(false)}>プロを探す</a>
+          <SignedIn>
+            {ownedOrg && (
+              <a href="/org/dashboard" style={{ color: '#fff', textDecoration: 'none' }}
+                onClick={() => setMenuOpen(false)}>団体管理</a>
+            )}
+            {isPro && (
+              <a href="/dashboard" style={{ color: '#fff', textDecoration: 'none' }}
+                onClick={() => setMenuOpen(false)}>ダッシュボード</a>
+            )}
+            <a href="/mycard" style={{ color: '#fff', textDecoration: 'none' }}
+              onClick={() => setMenuOpen(false)}>マイプルーフ</a>
+            {hasOrgMembership && (
+              <a href="/dashboard?tab=myorgs" style={{ color: '#fff', textDecoration: 'none' }}
+                onClick={() => setMenuOpen(false)}>スキルアップ</a>
+            )}
+            <a href="/announcements" style={{ color: '#fff', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}
+              onClick={() => setMenuOpen(false)}>
+              🔔 お知らせ
+              {unreadCount > 0 && (
+                <span style={{
+                  background: '#E24B4A', color: '#fff',
+                  fontSize: 10, fontWeight: 700,
+                  padding: '1px 6px', borderRadius: 10,
+                }}>
+                  {unreadCount}
+                </span>
+              )}
+            </a>
+            <UserButton
+              appearance={{
+                elements: {
+                  avatarBox: 'w-8 h-8',
+                }
+              }}
+            />
+          </SignedIn>
+          <SignedOut>
+            <SignInButton mode="modal">
+              <button onClick={() => setMenuOpen(false)}
+                style={{ color: '#fff', background: 'none', border: 'none',
+                  cursor: 'pointer', fontSize: 15, textAlign: 'left' as const, padding: 0 }}>
+                ログイン
+              </button>
+            </SignInButton>
+          </SignedOut>
+          <div style={{ borderTop: '1px solid #333', paddingTop: 12, marginTop: 4 }}>
+            <a href="/bug-report" style={{ color: '#888', textDecoration: 'none', fontSize: 13 }}
+              onClick={() => setMenuOpen(false)}>不具合・エラーのご報告</a>
+          </div>
         </div>
       )}
     </nav>
