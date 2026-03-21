@@ -33,6 +33,8 @@ export default function Navbar() {
   const { signOut } = useClerk()
   const [menuOpen, setMenuOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
+  const [ownedOrg, setOwnedOrg] = useState<{ id: string } | null>(null)
+  const [hasOrgMembership, setHasOrgMembership] = useState(false)
 
   useEffect(() => {
     fetch('/api/announcements')
@@ -43,6 +45,19 @@ export default function Navbar() {
       .catch(() => {})
   }, [])
 
+  // ownedOrg / hasOrgMembership を軽量APIで取得
+  const signedIn = isLoaded && isSignedIn
+  useEffect(() => {
+    if (!signedIn) return
+    fetch('/api/nav-context')
+      .then(res => res.json())
+      .then(data => {
+        if (data.ownedOrg) setOwnedOrg(data.ownedOrg)
+        if (data.hasOrgMembership) setHasOrgMembership(true)
+      })
+      .catch(() => {})
+  }, [signedIn])
+
   const closeMenu = () => setMenuOpen(false)
 
   function renderMenuItems() {
@@ -50,10 +65,16 @@ export default function Navbar() {
       <>
         {/* トップレベルリンク */}
         <SignedIn>
+          {ownedOrg && (
+            <a href="/org/dashboard" onClick={closeMenu} style={menuLinkStyle}>団体管理</a>
+          )}
           {isPro && (
             <a href="/dashboard" onClick={closeMenu} style={menuLinkStyle}>ダッシュボード</a>
           )}
           <a href="/mycard" onClick={closeMenu} style={menuLinkStyle}>マイプルーフ</a>
+          {hasOrgMembership && (
+            <a href="/dashboard?tab=myorgs" onClick={closeMenu} style={menuLinkStyle}>スキルアップ</a>
+          )}
 
           {/* 設定（プロのみ） */}
           {isPro && (
