@@ -54,18 +54,22 @@ export default function ProofCalculator() {
   const [years, setYears] = useState(10);
   const [clients, setClients] = useState(30);
   const [rate, setRate] = useState(30);
+  const [recorded, setRecorded] = useState(0);
 
   const total = Math.round(years * clients * 12 * (rate / 100));
 
+  const MAX_BAR = 160;
+  const totalBarH = MAX_BAR;
+  const recBarH = total > 0
+    ? Math.max(2, (recorded / total) * MAX_BAR)
+    : 2;
+
   return (
-    <section className="pt-4 pb-16 px-5 bg-[#FAFAF7]">
-      <div className="max-w-[520px] mx-auto bg-white rounded-2xl px-6 py-10 sm:px-10 shadow-sm border border-[#E8E8E8]">
-        <h2 className="text-xl font-medium text-[#1A1A2E] leading-relaxed mb-1">
-          実績簡単チェック
+    <section className="py-16 px-5 bg-[#FAFAF7]">
+      <div className="max-w-[520px] mx-auto">
+        <h2 className="text-xl font-medium text-[#1A1A2E] leading-relaxed mb-10">
+          積み上げた実績、<br />今いくつ残ってますか？
         </h2>
-        <p className="text-[14px] text-[#888] mb-10">
-          〜あなたのプロとしての実績を入力して下さい〜
-        </p>
 
         {/* スライダー群 */}
         <Slider
@@ -95,25 +99,68 @@ export default function ProofCalculator() {
           display={`${rate}%`}
           onChange={setRate}
         />
+        <div className="mb-10">
+          <Slider
+            label="そのうち、記録として残っている数"
+            value={recorded}
+            min={0}
+            max={50}
+            step={1}
+            display={`${recorded}件`}
+            onChange={setRecorded}
+          />
+        </div>
 
-        {/* 結果表示 — コピー変更禁止 */}
-        <div className="border-t border-[#E0E0E0] pt-8 text-center mt-10">
-          <p className="text-[13px] text-[#888] mb-1">
-            あなたが力になれた人
-          </p>
-          <p className="text-[48px] font-medium text-[#1A1A2E] leading-tight">
-            {total.toLocaleString()}人
-          </p>
+        {/* 棒グラフ */}
+        <div className="border-t border-[#E0E0E0] pt-8">
+          <div className="flex items-end justify-center gap-12 h-[220px]">
+            {/* 左バー: 力になれた人 */}
+            <div className="flex flex-col items-center justify-end h-full">
+              <span className="text-[28px] font-medium text-[#1A1A2E] mb-2"
+                    style={{ transition: 'opacity 0.2s ease' }}>
+                {total.toLocaleString()}
+              </span>
+              <div
+                style={{
+                  width: 80,
+                  height: totalBarH,
+                  background: '#C4A35A',
+                  borderRadius: '4px 4px 0 0',
+                  transition: 'height 0.4s ease',
+                }}
+              />
+              <span className="text-[12px] text-[#888] mt-2 text-center">
+                力になれた人
+              </span>
+            </div>
 
-          <div className="mt-8 bg-[#FFF5F5] rounded-xl py-5 px-4">
-            <p className="text-[13px] font-medium text-[#E24B4A] mb-1">
-              証明された実績の数
-            </p>
-            <p className="text-[48px] font-bold text-[#E24B4A] leading-tight">
-              0
-            </p>
+            {/* 右バー: 証明された実績 */}
+            <div className="flex flex-col items-center justify-end h-full">
+              <span className="text-[28px] font-medium text-[#E24B4A] mb-2"
+                    style={{ transition: 'opacity 0.2s ease' }}>
+                {recorded.toLocaleString()}
+              </span>
+              <div
+                style={{
+                  width: 80,
+                  height: recBarH,
+                  minHeight: 2,
+                  background: '#E24B4A',
+                  borderRadius: '4px 4px 0 0',
+                  transition: 'height 0.4s ease',
+                }}
+              />
+              <span className="text-[12px] text-[#888] mt-2 text-center">
+                証明された実績
+              </span>
+            </div>
           </div>
         </div>
+
+        {/* 締めコピー */}
+        <p className="text-[15px] text-[#888] text-center mt-8">
+          でも、誰もそれを知らない。
+        </p>
       </div>
     </section>
   );
