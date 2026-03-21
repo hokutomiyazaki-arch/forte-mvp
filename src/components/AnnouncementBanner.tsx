@@ -1,6 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useAuth } from '@clerk/nextjs'
+
+const LS_KEY = 'dismissed_announcements'
 
 interface Announcement {
   id: string
@@ -13,6 +16,7 @@ interface Announcement {
 }
 
 export default function AnnouncementBanner() {
+  const { userId } = useAuth()
   const [banner, setBanner] = useState<Announcement | null>(null)
   const [visible, setVisible] = useState(true)
   const [dismissing, setDismissing] = useState(false)
@@ -23,11 +27,20 @@ export default function AnnouncementBanner() {
       .then(res => res.json())
       .then(data => {
         if (data.latest) {
+          // 未ログイン → localStorageでdismiss済みをフィルタ
+          if (!userId) {
+            try {
+              const dismissed: string[] = JSON.parse(localStorage.getItem(LS_KEY) || '[]')
+              if (dismissed.includes(data.latest.id)) return
+            } catch {
+              // localStorage使えない場合はそのまま表示
+            }
+          }
           setBanner(data.latest)
         }
       })
       .catch(() => {})
-  }, [])
+  }, [userId])
 
   if (!banner || !visible) return null
 
@@ -40,14 +53,28 @@ export default function AnnouncementBanner() {
 
   async function handleDismiss() {
     setDismissing(true)
-    try {
-      await fetch('/api/announcements/dismiss', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ announcement_id: banner!.id }),
-      })
-    } catch {
-      // dismiss失敗でもUIは閉じる
+    if (userId) {
+      // ログイン済み → API経由でDB保存
+      try {
+        await fetch('/api/announcements/dismiss', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ announcement_id: banner!.id }),
+        })
+      } catch {
+        // dismiss失敗でもUIは閉じる
+      }
+    } else {
+      // 未ログイン → localStorageに保存（API呼ばない）
+      try {
+        const dismissed: string[] = JSON.parse(localStorage.getItem(LS_KEY) || '[]')
+        if (!dismissed.includes(banner!.id)) {
+          dismissed.push(banner!.id)
+          localStorage.setItem(LS_KEY, JSON.stringify(dismissed))
+        }
+      } catch {
+        // localStorage使えない場合は何もしない
+      }
     }
     setVisible(false)
   }
