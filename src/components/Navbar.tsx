@@ -24,10 +24,12 @@ function NotificationBell({ count }: { count: number }) {
 }
 
 export default function Navbar() {
-  const { isLoaded } = useUser()
+  const { isLoaded, isSignedIn } = useUser()
   const { isPro } = useProStatus()
   const [menuOpen, setMenuOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
+  const [ownedOrg, setOwnedOrg] = useState<{ id: string; name: string; type: string } | null>(null)
+  const [hasOrgMembership, setHasOrgMembership] = useState(false)
 
   useEffect(() => {
     fetch('/api/announcements')
@@ -37,6 +39,19 @@ export default function Navbar() {
       })
       .catch(() => {})
   }, [])
+
+  // ownedOrg / hasOrgMembership を軽量APIで取得
+  const signedIn = isLoaded && isSignedIn
+  useEffect(() => {
+    if (!signedIn) return
+    fetch('/api/nav-context')
+      .then(res => res.json())
+      .then(data => {
+        if (data.ownedOrg) setOwnedOrg(data.ownedOrg)
+        if (data.hasOrgMembership) setHasOrgMembership(true)
+      })
+      .catch(() => {})
+  }, [signedIn])
 
   return (
     <nav style={{
@@ -64,11 +79,16 @@ export default function Navbar() {
         ) : (
           <>
             <SignedIn>
-              {isPro && (
-                <a href="/dashboard" style={{ color: '#fff', textDecoration: 'none' }}>プロメニュー</a>
+              {ownedOrg && (
+                <a href="/org/dashboard" style={{ color: '#fff', textDecoration: 'none' }}>団体管理</a>
               )}
-              <a href="/mycard" style={{ color: '#fff', textDecoration: 'none' }}>一般メニュー</a>
-              <NotificationBell count={unreadCount} />
+              {isPro && (
+                <a href="/dashboard" style={{ color: '#fff', textDecoration: 'none' }}>ダッシュボード</a>
+              )}
+              <a href="/mycard" style={{ color: '#fff', textDecoration: 'none' }}>マイプルーフ</a>
+              {hasOrgMembership && (
+                <a href="/dashboard?tab=myorgs" style={{ color: '#fff', textDecoration: 'none' }}>スキルアップ</a>
+              )}
               <UserButton
                 appearance={{
                   elements: {
@@ -122,12 +142,20 @@ export default function Navbar() {
           <a href="/explore" style={{ color: '#fff', textDecoration: 'none' }}
             onClick={() => setMenuOpen(false)}>プロを探す</a>
           <SignedIn>
+            {ownedOrg && (
+              <a href="/org/dashboard" style={{ color: '#fff', textDecoration: 'none' }}
+                onClick={() => setMenuOpen(false)}>団体管理</a>
+            )}
             {isPro && (
               <a href="/dashboard" style={{ color: '#fff', textDecoration: 'none' }}
-                onClick={() => setMenuOpen(false)}>プロメニュー</a>
+                onClick={() => setMenuOpen(false)}>ダッシュボード</a>
             )}
             <a href="/mycard" style={{ color: '#fff', textDecoration: 'none' }}
-              onClick={() => setMenuOpen(false)}>一般メニュー</a>
+              onClick={() => setMenuOpen(false)}>マイプルーフ</a>
+            {hasOrgMembership && (
+              <a href="/dashboard?tab=myorgs" style={{ color: '#fff', textDecoration: 'none' }}
+                onClick={() => setMenuOpen(false)}>スキルアップ</a>
+            )}
             <a href="/announcements" style={{ color: '#fff', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}
               onClick={() => setMenuOpen(false)}>
               🔔 お知らせ
