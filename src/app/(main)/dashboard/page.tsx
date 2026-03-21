@@ -1762,8 +1762,12 @@ export default function DashboardPage() {
       {isSettingsTab && (
         <button
           onClick={() => {
-            setDashboardTab('profile')
-            window.history.replaceState(null, '', '/dashboard')
+            if (!pro) {
+              window.location.href = '/mycard'
+            } else {
+              setDashboardTab('profile')
+              window.history.replaceState(null, '', '/dashboard')
+            }
           }}
           className="flex items-center gap-2 text-sm text-[#C4A35A] hover:text-[#b3923f] mb-4 transition-colors"
         >
