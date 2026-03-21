@@ -967,8 +967,6 @@ function MyCardContent() {
       }}>
         {([
           { key: 'myproof' as const, label: 'プルーフカード', count: 0 },
-          { key: 'history' as const, label: 'プルーフ済み', count: voteHistory.length },
-          { key: 'bookmarked' as const, label: 'ブックマーク', count: bookmarkCount },
         ]).map(t => (
           <button
             key={t.key}

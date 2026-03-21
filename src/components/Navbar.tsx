@@ -98,6 +98,9 @@ export default function Navbar() {
         {/* 見つける（全員） */}
         <div style={menuGroupLabel}>見つける</div>
         <a href="/search" onClick={closeMenu} style={menuLinkStyle}>プロを探す</a>
+        <SignedIn>
+          <a href="/mycard?tab=bookmarked" onClick={closeMenu} style={menuLinkStyle}>ブックマーク</a>
+        </SignedIn>
 
         {/* サポート（全員） */}
         <div style={menuGroupLabel}>サポート</div>
