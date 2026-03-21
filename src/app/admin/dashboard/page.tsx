@@ -495,6 +495,10 @@ export default function AdminDashboard() {
   const [dailyProofs, setDailyProofs] = useState<DailyProofData[]>([])
   const [shares, setShares] = useState<ShareAnalytics>({ s1: 0, s2: 0, s3: 0, pv1: 0, pv2: 0, pv3: 0 })
 
+  // Bug Reports state
+  const [bugReports, setBugReports] = useState<any[]>([])
+  const [bugFilter, setBugFilter] = useState<'all' | 'new' | 'in_progress' | 'resolved' | 'wontfix'>('all')
+
   // Announcements state
   const [annList, setAnnList] = useState<any[]>([])
   const [annModal, setAnnModal] = useState<any | null>(null) // null=閉じ, {}=新規, {id,...}=編集
@@ -509,6 +513,25 @@ export default function AdminDashboard() {
         setAnnList(data.announcements || [])
       }
     } catch {}
+  }
+
+  async function loadBugReports() {
+    try {
+      const res = await fetch('/api/admin/bug-reports')
+      if (res.ok) {
+        const data = await res.json()
+        setBugReports(data.reports || [])
+      }
+    } catch {}
+  }
+
+  async function bugStatusChange(id: string, newStatus: string) {
+    await fetch(`/api/admin/bug-reports/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus }),
+    })
+    loadBugReports()
   }
 
   async function annToggle(id: string, current: boolean) {
@@ -616,6 +639,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     loadData()
     loadAnnouncements()
+    loadBugReports()
   }, [loadData])
 
   // Broadcast テンプレート定義
@@ -1276,7 +1300,109 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* [H] Broadcast — 一斉送信 */}
+      {/* [H] Bug Reports — 不具合報告 */}
+      <Sec>不具合報告</Sec>
+      <div style={{ background: C.surface, borderRadius: 10, padding: 24 }}>
+        {/* フィルター */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          {([['all', 'すべて'], ['new', '新規'], ['in_progress', '対応中'], ['resolved', '解決済'], ['wontfix', '対応不要']] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setBugFilter(key)}
+              style={{
+                padding: '5px 14px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                fontSize: 12, fontWeight: 500,
+                background: bugFilter === key ? C.gold : C.surfaceLight,
+                color: bugFilter === key ? '#fff' : C.gray,
+              }}
+            >
+              {label}
+              {key !== 'all' && (
+                <span style={{ marginLeft: 4, opacity: 0.7 }}>
+                  ({bugReports.filter(r => r.status === key).length})
+                </span>
+              )}
+              {key === 'all' && (
+                <span style={{ marginLeft: 4, opacity: 0.7 }}>({bugReports.length})</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* 一覧 */}
+        {bugReports.length === 0 ? (
+          <Placeholder message="不具合報告はまだありません" />
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {bugReports
+              .filter(r => bugFilter === 'all' || r.status === bugFilter)
+              .map((r: any) => {
+                const statusMap: Record<string, { label: string; color: string }> = {
+                  new: { label: '新規', color: C.red },
+                  in_progress: { label: '対応中', color: C.amber },
+                  resolved: { label: '解決済', color: C.green },
+                  wontfix: { label: '対応不要', color: C.gray },
+                }
+                const st = statusMap[r.status] || statusMap.new
+                return (
+                  <div key={r.id} style={{
+                    background: C.surfaceLight, borderRadius: 8, padding: 16,
+                    borderLeft: `3px solid ${st.color}`,
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                          <Bdg text={st.label} color={st.color} />
+                          {r.screen && (
+                            <span style={{ color: C.gray, fontSize: 11 }}>{r.screen}</span>
+                          )}
+                          <span style={{ color: C.grayDark, fontSize: 10 }}>
+                            {new Date(r.created_at).toLocaleString('ja-JP')}
+                          </span>
+                        </div>
+                        <div style={{ color: C.cream, fontSize: 13, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                          {r.description}
+                        </div>
+                        {r.email && (
+                          <div style={{ color: C.gray, fontSize: 11, marginTop: 6 }}>
+                            連絡先: {r.email}
+                          </div>
+                        )}
+                        {r.image_url && (
+                          <div style={{ marginTop: 8 }}>
+                            <a href={r.image_url} target="_blank" rel="noopener noreferrer">
+                              <img
+                                src={r.image_url}
+                                alt="スクリーンショット"
+                                style={{ maxHeight: 120, borderRadius: 6, border: `1px solid ${C.grayDark}` }}
+                              />
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                      {/* ステータス変更 */}
+                      <select
+                        value={r.status}
+                        onChange={(e) => bugStatusChange(r.id, e.target.value)}
+                        style={{
+                          background: C.surface, color: C.cream, border: `1px solid ${C.grayDark}`,
+                          borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer',
+                        }}
+                      >
+                        <option value="new">新規</option>
+                        <option value="in_progress">対応中</option>
+                        <option value="resolved">解決済</option>
+                        <option value="wontfix">対応不要</option>
+                      </select>
+                    </div>
+                  </div>
+                )
+              })}
+          </div>
+        )}
+      </div>
+
+      {/* [I] Broadcast — 一斉送信 */}
       <Sec>一斉送信（メール / LINE）</Sec>
       <div style={{ background: C.surface, borderRadius: 10, padding: 24 }}>
         <div style={{ color: C.gray, fontSize: 12, marginBottom: 16 }}>
