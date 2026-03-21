@@ -1453,16 +1453,6 @@ function MyCardContent() {
         </div>
       )}
 
-      {/* フッター */}
-      <div className="mt-8 space-y-3 text-center">
-        <a
-          href="/explore"
-          className="inline-block px-6 py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition"
-        >
-          他のプロを探す
-        </a>
-      </div>
-
       {/* アカウント削除確認モーダル */}
       {showDeleteAccountModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
