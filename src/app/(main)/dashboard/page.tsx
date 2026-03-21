@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useUser, useClerk } from '@clerk/nextjs'
+import { useSearchParams } from 'next/navigation'
 import { db, uploadFile } from '@/lib/db'
 import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYPES, getRewardType, FNT_NEURO_APPS } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
@@ -163,6 +164,28 @@ export default function DashboardPage() {
   const [dismissedCerts, setDismissedCerts] = useState<string[]>([])
 
   const { user: clerkUser, isLoaded: authLoaded } = useUser()
+  const searchParams = useSearchParams()
+
+  // URLパラメータによるタブ切替
+  const tabParam = searchParams.get('tab')
+  useEffect(() => {
+    if (!tabParam || loading) return
+    const validTabs = ['profile', 'proofs', 'rewards', 'voices', 'card', 'myorgs', 'org']
+    if (validTabs.includes(tabParam)) {
+      setDashboardTab(tabParam as any)
+      if (tabParam === 'myorgs' && selectedMemberOrgId) {
+        loadMemberResources(selectedMemberOrgId)
+      }
+    }
+  }, [tabParam, loading])
+
+  // プロフィール編集直接オープン
+  const editParam = searchParams.get('edit')
+  useEffect(() => {
+    if (editParam === 'true' && !loading && pro) {
+      setEditing(true)
+    }
+  }, [editParam, loading, pro])
 
   useEffect(() => {
     if (!authLoaded) return
@@ -1349,10 +1372,12 @@ export default function DashboardPage() {
 
   const daysSinceRegistration = getDaysSinceRegistration()
 
+  const isSettingsTab = ['proofs', 'rewards', 'card', 'myorgs', 'org'].includes(dashboardTab)
+
   return (
     <div className="max-w-3xl mx-auto">
       {/* LINE 週次レポートバナー */}
-      {lineBannerState === 'show_banner' && process.env.NEXT_PUBLIC_LINE_FRIEND_URL && (
+      {!isSettingsTab && lineBannerState === 'show_banner' && process.env.NEXT_PUBLIC_LINE_FRIEND_URL && (
         <div style={{
           background: '#1A1A2E',
           border: '0.5px solid rgba(196,163,90,0.3)',
@@ -1423,7 +1448,7 @@ export default function DashboardPage() {
       )}
 
       {/* LINE連携: コード入力 */}
-      {lineBannerState === 'show_code_input' && (
+      {!isSettingsTab && lineBannerState === 'show_code_input' && (
         <div style={{
           background: '#1A1A2E',
           border: '0.5px solid rgba(196,163,90,0.3)',
@@ -1568,7 +1593,7 @@ export default function DashboardPage() {
       )}
 
       {/* LINE連携: 完了 */}
-      {lineBannerState === 'linked' && (
+      {!isSettingsTab && lineBannerState === 'linked' && (
         <div style={{
           background: '#1A1A2E',
           border: '0.5px solid rgba(6,199,85,0.5)',
@@ -1596,9 +1621,6 @@ export default function DashboardPage() {
             </p>
           )}
         </div>
-        <button onClick={() => setEditing(true)} className="text-sm text-[#C4A35A] hover:underline">
-          プロフィール編集
-        </button>
       </div>
 
       {/* 姓名未設定バナー */}
@@ -1617,6 +1639,7 @@ export default function DashboardPage() {
       )}
 
       {/* QRコード（タブの上に配置） */}
+      {!isSettingsTab && (
       <div className="bg-white rounded-xl p-6 shadow-sm mb-6 text-center">
         <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">24時間限定 プルーフ用QRコード</h2>
         {(() => {
@@ -1664,8 +1687,10 @@ export default function DashboardPage() {
           )
         })()}
       </div>
+      )}
 
       {/* 声がけテンプレート */}
+      {!isSettingsTab && (
       <div className="mb-8">
         <button
           onClick={() => setShowKakegoe(!showKakegoe)}
@@ -1728,33 +1753,41 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+      )}
+
+      {/* ← ホームに戻る（設定モード時） */}
+      {isSettingsTab && (
+        <button
+          onClick={() => {
+            setDashboardTab('profile')
+            window.history.replaceState(null, '', '/dashboard')
+          }}
+          className="flex items-center gap-2 text-sm text-[#C4A35A] hover:text-[#b3923f] mb-4 transition-colors"
+        >
+          ← ホームに戻る
+        </button>
+      )}
 
       {/* ダッシュボードタブ */}
+      {!isSettingsTab && (
       <div style={{ display: 'flex', overflowX: 'auto', gap: 0, marginBottom: 24, borderBottom: '1px solid #E5E7EB', scrollbarWidth: 'none' as any }}>
         {([
-          { key: 'profile' as const, label: 'プロフィール' },
-          { key: 'proofs' as const, label: '強み設定' },
-          { key: 'rewards' as const, label: 'リワード設定' },
+          { key: 'profile' as const, label: 'ホーム' },
           { key: 'voices' as const, label: 'Voices' },
-          { key: 'card' as const, label: 'カード管理' },
-          ...(hasOrgMembership ? [{ key: 'myorgs' as const, label: '📋 団体' }] : []),
-          ...(ownedOrg ? [{ key: 'org' as const, label: '🏢 団体管理' }] : []),
         ]).map(tab => (
           <button
             key={tab.key}
-            onClick={() => tab.key === 'myorgs' ? handleMyOrgsTab() : setDashboardTab(tab.key)}
+            onClick={() => setDashboardTab(tab.key)}
             style={{
               flex: '0 0 auto',
               padding: '10px 14px',
               fontSize: 13,
               fontWeight: dashboardTab === tab.key ? 700 : 600,
-              color: (tab.key === 'org' || tab.key === 'myorgs')
-                ? (dashboardTab === tab.key ? '#C4A35A' : '#B8963E')
-                : (dashboardTab === tab.key ? '#1A1A2E' : '#9CA3AF'),
-              background: (tab.key === 'org' || tab.key === 'myorgs') && dashboardTab === tab.key ? 'rgba(196,163,90,0.06)' : 'transparent',
+              color: dashboardTab === tab.key ? '#1A1A2E' : '#9CA3AF',
+              background: 'transparent',
               border: 'none',
               borderBottom: dashboardTab === tab.key
-                ? (tab.key === 'org' ? '2px solid #C4A35A' : '2px solid #C4A35A')
+                ? '2px solid #C4A35A'
                 : '2px solid transparent',
               cursor: 'pointer',
               whiteSpace: 'nowrap' as const,
@@ -1765,6 +1798,7 @@ export default function DashboardPage() {
           </button>
         ))}
       </div>
+      )}
 
       {/* ═══ Tab: プロフィール ═══ */}
       {dashboardTab === 'profile' && (<>
@@ -3028,6 +3062,8 @@ export default function DashboardPage() {
         )}
       </>)}
 
+      {!isSettingsTab && (
+      <>
       <div style={{ height: 16 }} />
 
       {/* Links */}
@@ -3038,10 +3074,6 @@ export default function DashboardPage() {
               カードを見る
             </a>
           )}
-          <button onClick={() => signOut({ redirectUrl: '/' })}
-            className="px-6 py-3 text-gray-500 hover:text-red-500 transition">
-            ログアウト
-          </button>
         </div>
         {pro && (
           <button
@@ -3052,6 +3084,8 @@ export default function DashboardPage() {
           </button>
         )}
       </div>
+      </>
+      )}
 
       {/* 認定申請モーダル */}
       {certModal && pro && (
