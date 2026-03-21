@@ -47,6 +47,12 @@ export default function AnnouncementsPage() {
 
   return (
     <div className="max-w-2xl mx-auto">
+      <a
+        href="/dashboard"
+        className="inline-flex items-center gap-1 text-sm text-[#C4A35A] hover:text-[#b3923f] mb-4 transition-colors"
+      >
+        ← ホームに戻る
+      </a>
       <h1 className="text-2xl font-bold text-[#1A1A2E] mb-6">お知らせ</h1>
 
       {announcements.length === 0 ? (
