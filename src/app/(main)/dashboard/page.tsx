@@ -2253,7 +2253,10 @@ export default function DashboardPage() {
       {/* ═══ Tab: カード管理 ═══ */}
       {dashboardTab === 'card' && (<>
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
-        <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">プルーフカード</h2>
+        <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">プルーフカード</h2>
+        <p className="text-sm text-[#9CA3AF] mb-4">
+          カード裏面のIDを入力すると、お客さんがカードにスマホをかざすだけで投票ページに飛べるようになります。
+        </p>
 
         {nfcCard ? (
           <div>
@@ -2355,7 +2358,7 @@ export default function DashboardPage() {
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
         <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">強み設定</h2>
         <p className="text-sm text-[#9CA3AF] mb-4">
-          クライアントに投票してもらう「強み項目」を選んでください
+          お客さんがあなたに投票する時に表示される項目です。9つ選んでください。
         </p>
 
         {proofItems.length === 0 ? (
@@ -2499,10 +2502,7 @@ export default function DashboardPage() {
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
         <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">リワード設定</h2>
         <p className="text-sm text-[#9CA3AF] mb-4">
-          リワードは任意です。設定しなくても投票は受け付けられます。
-        </p>
-        <p className="text-sm text-[#9CA3AF] mb-4">
-          投票してくれたクライアントへのお礼を設定。プロの秘密やおすすめを共有して、信頼を深めましょう。
+          投票してくれたお客さんに見せる「お礼」です。任意ですが、設定すると投票率が上がります。
         </p>
 
         {/* プログレスバー */}
@@ -2696,6 +2696,10 @@ export default function DashboardPage() {
 
       {/* ═══ Tab: Voices ═══ */}
       {dashboardTab === 'voices' && (<>
+
+      <p className="text-sm text-[#9CA3AF] mb-4">
+        お客さんが投票時に書いてくれたコメントです。タップしてSNSでシェアできます。
+      </p>
 
       {/* シェア説明バナー */}
       <div className="mb-6 flex items-start gap-3 rounded-lg border-l-4 border-[#C4A35A] bg-[#1A1A2E] px-4 py-3">

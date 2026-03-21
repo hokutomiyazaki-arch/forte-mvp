@@ -568,7 +568,7 @@ function MyCardContent() {
             </svg>
           </div>
           <h1 className="text-xl font-bold text-[#1A1A2E] mb-2">ログインが必要です</h1>
-          <p className="text-sm text-gray-500">投票履歴やマイプルーフを確認できます</p>
+          <p className="text-sm text-gray-500">投票履歴やプルーフカードを確認できます</p>
         </div>
 
         <button
@@ -642,9 +642,9 @@ function MyCardContent() {
 
       {/* マイプルーフ QRコード */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-6 text-center">
-        <h2 className="text-base font-bold text-[#1A1A2E] mb-1">マイプルーフ QRコード</h2>
+        <h2 className="text-base font-bold text-[#1A1A2E] mb-1">プルーフカード QRコード</h2>
         <p className="text-xs text-gray-500 mb-4">
-          スキャンするとあなたのマイプルーフページが開きます（期限なし）
+          スキャンするとあなたのプルーフカードページが開きます（期限なし）
         </p>
         {myProofQrToken ? (
           <>
@@ -652,7 +652,7 @@ function MyCardContent() {
               <>
                 <img
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`${window.location.origin}/myproof/p/${myProofQrToken}`)}`}
-                  alt="マイプルーフ QR"
+                  alt="プルーフカード QR"
                   className="mx-auto mb-4"
                   style={{ width: 200, height: 200 }}
                 />
@@ -962,9 +962,9 @@ function MyCardContent() {
         gap: 0,
       }}>
         {([
-          { key: 'myproof' as const, label: 'マイプルーフ', count: 0 },
+          { key: 'myproof' as const, label: 'プルーフカード', count: 0 },
           { key: 'history' as const, label: 'プルーフ済み', count: voteHistory.length },
-          { key: 'bookmarked' as const, label: '気になる', count: bookmarkCount },
+          { key: 'bookmarked' as const, label: 'コレクション', count: bookmarkCount },
           { key: 'card' as const, label: 'カード管理', count: 0 },
           ...(hasOrgMembership ? [{ key: 'myorgs' as const, label: '📋 団体', count: 0 }] : []),
         ]).map(t => (
@@ -1063,7 +1063,7 @@ function MyCardContent() {
         </div>
       )}
 
-      {/* 気になるタブ */}
+      {/* コレクションタブ */}
       {tab === 'bookmarked' && (
         <div>
           {bookmarkedPros.length === 0 ? (
@@ -1178,7 +1178,7 @@ function MyCardContent() {
         </div>
       )}
 
-      {/* マイプルーフタブ */}
+      {/* プルーフカードタブ */}
       {tab === 'myproof' && (
         <>
           {/* 保有バッジ */}
@@ -1215,7 +1215,7 @@ function MyCardContent() {
               className="block w-full text-center py-3 mb-4 bg-white rounded-xl shadow-sm text-sm font-medium hover:bg-gray-50 transition"
               style={{ color: '#C4A35A' }}
             >
-              マイプルーフカードを確認する &#8594;
+              プルーフカードを確認する &#8594;
             </a>
           )}
           <MyProofTab />
@@ -1470,7 +1470,7 @@ function MyCardContent() {
             <h3 className="text-lg font-bold mb-2 text-red-600">アカウントを削除しますか？</h3>
             <p className="text-sm text-gray-600 mb-4">この操作は取り消せません。以下のデータが全て削除されます：</p>
             <ul className="text-sm text-gray-600 space-y-1 mb-6">
-              <li>・マイプルーフのデータ</li>
+              <li>・プルーフカードのデータ</li>
               <li>・投票履歴</li>
               <li>・アカウント情報</li>
             </ul>
