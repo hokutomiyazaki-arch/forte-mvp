@@ -4,25 +4,6 @@ import { useState, useEffect } from 'react'
 import { SignInButton, SignedIn, SignedOut, useUser, useClerk } from '@clerk/nextjs'
 import { useProStatus } from '@/lib/useProStatus'
 
-function NotificationBell({ count }: { count: number }) {
-  return (
-    <a href="/announcements" style={{ position: 'relative', color: '#fff', textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
-      <span style={{ fontSize: 16 }}>🔔</span>
-      {count > 0 && (
-        <span style={{
-          position: 'absolute', top: -6, right: -8,
-          background: '#E24B4A', color: '#fff',
-          fontSize: 9, fontWeight: 700,
-          width: 16, height: 16, borderRadius: '50%',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          {count > 9 ? '9+' : count}
-        </span>
-      )}
-    </a>
-  )
-}
-
 const menuLinkStyle: React.CSSProperties = {
   display: 'block',
   padding: '10px 16px',
@@ -159,9 +140,6 @@ export default function Navbar() {
       {/* Desktop: ハンバーガー + 通知ベル（640px以上） */}
       <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}
            className="hidden-mobile">
-        {isLoaded && isSignedIn && (
-          <NotificationBell count={unreadCount} />
-        )}
         <button
           onClick={() => setMenuOpen(!menuOpen)}
           style={{
