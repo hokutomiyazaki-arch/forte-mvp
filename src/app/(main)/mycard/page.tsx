@@ -44,7 +44,11 @@ function MyCardContent() {
   // 通常のmycard用state
   const [voteHistory, setVoteHistory] = useState<VoteHistory[]>([])
   const [dataLoading, setDataLoading] = useState(false)
-  const [tab, setTab] = useState<'history' | 'bookmarked' | 'myproof' | 'card' | 'myorgs'>('myproof')
+  const tabParam = searchParams.get('tab')
+  const [tab, setTab] = useState<'history' | 'bookmarked' | 'myproof' | 'card' | 'myorgs'>(
+    tabParam === 'card' || tabParam === 'history' || tabParam === 'bookmarked' || tabParam === 'myorgs'
+      ? tabParam : 'myproof'
+  )
   const [message, setMessage] = useState('')
   const [showSettings, setShowSettings] = useState(false)
   const [newPassword, setNewPassword] = useState('')
@@ -965,7 +969,6 @@ function MyCardContent() {
           { key: 'myproof' as const, label: 'プルーフカード', count: 0 },
           { key: 'history' as const, label: 'プルーフ済み', count: voteHistory.length },
           { key: 'bookmarked' as const, label: 'ブックマーク', count: bookmarkCount },
-          { key: 'card' as const, label: 'カード管理', count: 0 },
           ...(hasOrgMembership ? [{ key: 'myorgs' as const, label: '📋 団体', count: 0 }] : []),
         ]).map(t => (
           <button

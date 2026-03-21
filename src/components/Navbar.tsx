@@ -86,6 +86,13 @@ export default function Navbar() {
               <a href="/dashboard?tab=card" onClick={closeMenu} style={menuLinkStyle}>NFCカード</a>
             </>
           )}
+          {/* 設定（一般ユーザー） */}
+          {!isPro && (
+            <>
+              <div style={menuGroupLabel}>設定</div>
+              <a href="/mycard?tab=card" onClick={closeMenu} style={menuLinkStyle}>NFCカード</a>
+            </>
+          )}
         </SignedIn>
 
         {/* 見つける（全員） */}
