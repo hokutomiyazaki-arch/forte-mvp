@@ -32,7 +32,6 @@ export async function GET() {
         .from('professionals')
         .select('id')
         .eq('user_id', userId)
-        .is('deactivated_at', null)
         .maybeSingle(),
     ])
 
