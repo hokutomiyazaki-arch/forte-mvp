@@ -1,9 +1,10 @@
 import Navbar from '@/components/Navbar'
 import AnnouncementBanner from '@/components/AnnouncementBanner'
+import { SharedDataProvider } from '@/contexts/SharedDataContext'
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   return (
-    <>
+    <SharedDataProvider>
       <Navbar />
       <AnnouncementBanner />
       <main className="max-w-5xl mx-auto px-4 py-8">
@@ -17,6 +18,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         </div>
         <div>&copy; 2026 REAL PROOF｜株式会社Legrand chariot</div>
       </footer>
-    </>
+    </SharedDataProvider>
   )
 }

@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { SignInButton, SignedIn, SignedOut, useUser, useClerk } from '@clerk/nextjs'
 import { useProStatus } from '@/lib/useProStatus'
+import { useSharedData } from '@/contexts/SharedDataContext'
 
 const menuLinkStyle: React.CSSProperties = {
   display: 'block',
@@ -32,31 +33,7 @@ export default function Navbar() {
   const { isPro } = useProStatus()
   const { signOut } = useClerk()
   const [menuOpen, setMenuOpen] = useState(false)
-  const [unreadCount, setUnreadCount] = useState(0)
-  const [ownedOrg, setOwnedOrg] = useState<{ id: string } | null>(null)
-  const [hasOrgMembership, setHasOrgMembership] = useState(false)
-
-  useEffect(() => {
-    fetch('/api/announcements')
-      .then(res => res.json())
-      .then(data => {
-        if (data.unread_count) setUnreadCount(data.unread_count)
-      })
-      .catch(() => {})
-  }, [])
-
-  // ownedOrg / hasOrgMembership を軽量APIで取得
-  const signedIn = isLoaded && isSignedIn
-  useEffect(() => {
-    if (!signedIn) return
-    fetch('/api/nav-context')
-      .then(res => res.json())
-      .then(data => {
-        if (data.ownedOrg) setOwnedOrg(data.ownedOrg)
-        if (data.hasOrgMembership) setHasOrgMembership(true)
-      })
-      .catch(() => {})
-  }, [signedIn])
+  const { unreadCount, ownedOrg, hasOrgMembership } = useSharedData()
 
   const closeMenu = () => setMenuOpen(false)
 

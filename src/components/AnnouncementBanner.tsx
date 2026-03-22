@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useAuth } from '@clerk/nextjs'
+import { useSharedData } from '@/contexts/SharedDataContext'
 
 const LS_KEY = 'dismissed_announcements'
 
@@ -17,30 +18,25 @@ interface Announcement {
 
 export default function AnnouncementBanner() {
   const { userId } = useAuth()
+  const { latestBanner } = useSharedData()
   const [banner, setBanner] = useState<Announcement | null>(null)
   const [visible, setVisible] = useState(true)
   const [dismissing, setDismissing] = useState(false)
   const [expanded, setExpanded] = useState(false)
 
   useEffect(() => {
-    fetch('/api/announcements')
-      .then(res => res.json())
-      .then(data => {
-        if (data.latest) {
-          // 未ログイン → localStorageでdismiss済みをフィルタ
-          if (!userId) {
-            try {
-              const dismissed: string[] = JSON.parse(localStorage.getItem(LS_KEY) || '[]')
-              if (dismissed.includes(data.latest.id)) return
-            } catch {
-              // localStorage使えない場合はそのまま表示
-            }
-          }
-          setBanner(data.latest)
-        }
-      })
-      .catch(() => {})
-  }, [userId])
+    if (!latestBanner) return
+    // 未ログイン → localStorageでdismiss済みをフィルタ
+    if (!userId) {
+      try {
+        const dismissed: string[] = JSON.parse(localStorage.getItem(LS_KEY) || '[]')
+        if (dismissed.includes(latestBanner.id)) return
+      } catch {
+        // localStorage使えない場合はそのまま表示
+      }
+    }
+    setBanner(latestBanner)
+  }, [latestBanner, userId])
 
   if (!banner || !visible) return null
 
