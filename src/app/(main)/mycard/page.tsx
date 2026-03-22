@@ -459,15 +459,24 @@ function MyCardContent() {
   async function handleUpgradeToPro() {
     try {
       const res = await fetch('/api/professional/register', { method: 'POST' })
+      console.log('[mycard] register response status:', res.status)
+      if (!res.ok) {
+        console.error('[mycard] register HTTP error:', res.status)
+        alert('プロ登録に失敗しました。もう一度お試しください。')
+        return
+      }
       const data = await res.json()
-      if (data.success) {
+      console.log('[mycard] register response data:', data)
+      if (data.success && (data.action === 'created' || data.action === 'reactivated')) {
+        window.location.href = '/setup'
+      } else if (data.success && data.action === 'already_active') {
         window.location.href = '/dashboard'
       } else {
-        alert('プロ登録に失敗しました。')
+        alert('プロ登録に失敗しました。もう一度お試しください。')
       }
     } catch (err) {
       console.error('[mycard] upgrade to pro error:', err)
-      alert('プロ登録に失敗しました。')
+      alert('通信エラーが発生しました。もう一度お試しください。')
     }
   }
 
