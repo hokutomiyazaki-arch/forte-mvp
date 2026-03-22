@@ -50,7 +50,7 @@ export default function Navbar() {
           )}
           <a href="/mycard" onClick={closeMenu} style={menuLinkStyle}>マイプルーフ</a>
           {(hasOrgMembership || ownedOrg) && (
-            <a href="/dashboard?tab=myorgs" onClick={closeMenu} style={menuLinkStyle}>スキルアップ</a>
+            <a href={isPro ? "/dashboard?tab=myorgs" : "/mycard?tab=myorgs"} onClick={closeMenu} style={menuLinkStyle}>スキルアップ</a>
           )}
 
           {/* 設定（プロのみ） */}

@@ -35,7 +35,7 @@ export async function GET() {
         .maybeSingle(),
     ])
 
-    // hasOrgMembership: プロIDがある場合のみチェック
+    // hasOrgMembership: プロIDがある場合はprofessional_idで検索、なければuser_idでフォールバック
     let hasOrgMembership = false
     if (proResult.data) {
       const membershipResult = await supabase
@@ -46,6 +46,20 @@ export async function GET() {
         .limit(1)
         .maybeSingle()
       hasOrgMembership = !!membershipResult.data
+    }
+
+    // フォールバック: professional_idで見つからない場合、user_idで検索（一般会員のバッジclaim等）
+    if (!hasOrgMembership) {
+      const userOrgResult = await supabase
+        .from('org_members')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .limit(1)
+        .maybeSingle()
+      if (userOrgResult.data) {
+        hasOrgMembership = true
+      }
     }
 
     return NextResponse.json({
