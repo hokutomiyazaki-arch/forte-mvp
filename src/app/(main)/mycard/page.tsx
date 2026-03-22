@@ -51,19 +51,14 @@ function MyCardContent() {
   )
   const [message, setMessage] = useState('')
   const [showSettings, setShowSettings] = useState(false)
-  const [newPassword, setNewPassword] = useState('')
-  const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
-  const [changingPassword, setChangingPassword] = useState(false)
   const [isPro, setIsPro] = useState(false)
   const [bookmarkedPros, setBookmarkedPros] = useState<any[]>([])
   const [bookmarkCount, setBookmarkCount] = useState(0)
   const [userEmail, setUserEmail] = useState('')
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [timedOut, setTimedOut] = useState(false)
-  const [isPasswordReset, setIsPasswordReset] = useState(false)
   const [resetLinkError, setResetLinkError] = useState(false)
   const [isLineUser, setIsLineUser] = useState(false)
-  const passwordSectionRef = useRef<HTMLDivElement>(null)
   const [myProofQrUrl, setMyProofQrUrl] = useState('')
   const [myProofQrToken, setMyProofQrToken] = useState('')
   const [showMyProofQR, setShowMyProofQR] = useState(false)
@@ -279,10 +274,6 @@ function MyCardContent() {
         setResetLinkError(true)
         window.location.hash = ''
       }
-      if (hash.includes('type=recovery')) {
-        setIsPasswordReset(true)
-        setShowSettings(true)
-      }
 
       if (isSignedIn && authUser) {
         // ロールチェック: DBにレコードなし → /onboarding
@@ -312,14 +303,6 @@ function MyCardContent() {
     checkSession()
   }, [authLoaded, clerkUser?.id])
 
-  // パスワードリセット着地時にスクロール
-  useEffect(() => {
-    if (isPasswordReset && authMode === 'ready') {
-      setTimeout(() => {
-        passwordSectionRef.current?.scrollIntoView({ behavior: 'smooth' })
-      }, 300)
-    }
-  }, [isPasswordReset, authMode])
 
   // 既存ユーザーチェック
   async function checkExistingEmail(emailToCheck: string) {
@@ -343,37 +326,6 @@ function MyCardContent() {
     window.location.href = '/sign-in?redirect_url=/mycard'
   }
 
-  // リワード使用/削除
-  // パスワード変更 — Clerk handles password management via user profile
-  async function handlePasswordChange(e: React.FormEvent) {
-    e.preventDefault()
-    setChangingPassword(true)
-    setMessage('')
-
-    if (newPassword.length < 6) {
-      setMessage('エラー：パスワードは6文字以上で入力してください')
-      setChangingPassword(false)
-      return
-    }
-    if (newPassword !== newPasswordConfirm) {
-      setMessage('エラー：パスワードが一致しません')
-      setChangingPassword(false)
-      return
-    }
-
-    try {
-      if (clerkUser) {
-        await clerkUser.updatePassword({ newPassword, currentPassword: '' })
-        setMessage('パスワードを変更しました。')
-        setNewPassword('')
-        setNewPasswordConfirm('')
-        setShowSettings(false)
-      }
-    } catch {
-      setMessage('エラー：パスワードの変更に失敗しました。')
-    }
-    setChangingPassword(false)
-  }
 
   // アカウント削除
   async function handleDeleteAccount() {
@@ -699,12 +651,6 @@ function MyCardContent() {
 
       {tab === 'myproof' && (
       <>
-      {isPasswordReset && !isLineUser && (
-        <div className="bg-[#C4A35A]/10 border border-[#C4A35A] rounded-lg p-4 mb-4 text-center">
-          <p className="text-sm font-bold text-[#1A1A2E]">パスワードを再設定してください</p>
-          <p className="text-xs text-gray-500 mt-1">下のパスワード変更欄から新しいパスワードを設定できます</p>
-        </div>
-      )}
       <div className="flex items-center justify-between mb-2">
         <h1 className="text-2xl font-bold text-[#1A1A2E]">ダッシュボード</h1>
         <button
@@ -741,7 +687,7 @@ function MyCardContent() {
 
       {/* 設定パネル */}
       {showSettings && (
-        <div ref={passwordSectionRef} className="bg-white border border-gray-200 rounded-xl p-5 mb-6 shadow-sm space-y-6">
+        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 shadow-sm space-y-6">
 
           {/* プロフィール */}
           <div>
@@ -909,43 +855,11 @@ function MyCardContent() {
             </div>
           )}
 
-          {/* パスワード変更 */}
-          {isLineUser ? (
+          {isLineUser && (
             <div className="text-center">
               <p className="text-sm text-green-600 font-medium mb-1">LINE連携済み</p>
               <p className="text-xs text-gray-500">LINEアカウントでログインしています</p>
             </div>
-          ) : (
-          <div>
-            <h2 className="text-sm font-bold text-[#1A1A2E] mb-3">パスワード変更</h2>
-            <form onSubmit={handlePasswordChange} className="space-y-3">
-              <input
-                type="password"
-                value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
-                required
-                minLength={6}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
-                placeholder="新しいパスワード（6文字以上）"
-              />
-              <input
-                type="password"
-                value={newPasswordConfirm}
-                onChange={e => setNewPasswordConfirm(e.target.value)}
-                required
-                minLength={6}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none text-sm"
-                placeholder="新しいパスワード（確認）"
-              />
-              <button
-                type="submit"
-                disabled={changingPassword}
-                className="w-full py-2 bg-[#1A1A2E] text-white text-sm font-medium rounded-lg hover:bg-[#2a2a4e] transition disabled:opacity-50"
-              >
-                {changingPassword ? '変更中...' : 'パスワードを変更'}
-              </button>
-            </form>
-          </div>
           )}
 
           {/* アカウント削除 */}
