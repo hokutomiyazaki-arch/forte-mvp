@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { SignInButton, SignedIn, SignedOut, useUser, useClerk } from '@clerk/nextjs'
+import { SignInButton, SignedIn, SignedOut, UserButton, useUser, useClerk } from '@clerk/nextjs'
 import { useProStatus } from '@/lib/useProStatus'
 import { useSharedData } from '@/contexts/SharedDataContext'
 
@@ -145,9 +145,17 @@ export default function Navbar() {
         }}>REALPROOF</span>
       </a>
 
-      {/* Desktop: ハンバーガー + 通知ベル（640px以上） */}
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}
-           className="hidden-mobile">
+      {/* 右側: UserButton + ハンバーガー */}
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+        <SignedIn>
+          <UserButton
+            appearance={{
+              elements: {
+                avatarBox: 'w-8 h-8',
+              }
+            }}
+          />
+        </SignedIn>
         <button
           onClick={() => setMenuOpen(!menuOpen)}
           style={{
@@ -158,16 +166,6 @@ export default function Navbar() {
           {menuOpen ? '✕' : '☰'}
         </button>
       </div>
-
-      {/* Mobile: ハンバーガー（639px以下） */}
-      <button onClick={() => setMenuOpen(!menuOpen)}
-        className="show-mobile-only"
-        style={{
-          color: '#fff', background: 'none', border: 'none',
-          fontSize: 22, cursor: 'pointer', padding: 4,
-        }}>
-        {menuOpen ? '✕' : '☰'}
-      </button>
 
       {/* 共通ドロップダウンメニュー（PC/モバイル同一） */}
       {menuOpen && (
