@@ -509,8 +509,10 @@ function VoteForm() {
       // ── ウェーブ3: セッション確認・重複チェック（プレビューモードではスキップ） ──
       if (!isPreview) {
         const sessionUserEmail = clerkUser?.primaryEmailAddress?.emailAddress
-        if (sessionUserEmail) {
-          setSessionEmail(sessionUserEmail)
+        const sessionUserPhone = clerkUser?.primaryPhoneNumber?.phoneNumber
+        const sessionIdentifier = sessionUserEmail || sessionUserPhone
+        if (sessionIdentifier) {
+          setSessionEmail(sessionIdentifier) // メールまたは電話番号を識別子としてセット
           setIsLoggedIn(true)
 
           if (clerkUser?.id && proData?.user_id) {
@@ -525,7 +527,7 @@ function VoteForm() {
             .from('votes')
             .select('id')
             .eq('professional_id', proId)
-            .eq('normalized_email', normalizeEmail(sessionUserEmail))
+            .eq('normalized_email', normalizeEmail(sessionIdentifier))
             .maybeSingle()
           if (existing) setAlreadyVoted(true)
         } else {
@@ -956,13 +958,17 @@ function VoteForm() {
       ? sessionEmail.trim().toLowerCase()
       : voterEmail.trim().toLowerCase()
 
-    if (!email || !email.includes('@')) {
-      setError('メールアドレスを入力してください')
-      return
-    }
-    if (/https?:\/\/|www\./i.test(email)) {
-      setError('正しいメールアドレスを入力してください')
-      return
+    // セッション投票（電話番号の場合あり）はメール形式チェックをスキップ
+    const isSessionVoteAttempt = voteMethodRef.current === 'session' && isLoggedIn
+    if (!isSessionVoteAttempt) {
+      if (!email || !email.includes('@')) {
+        setError('メールアドレスを入力してください')
+        return
+      }
+      if (/https?:\/\/|www\./i.test(email)) {
+        setError('正しいメールアドレスを入力してください')
+        return
+      }
     }
 
     // 自己投票チェック（Clerkユーザー直接照合）
