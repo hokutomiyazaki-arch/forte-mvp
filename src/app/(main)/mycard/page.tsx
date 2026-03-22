@@ -286,6 +286,7 @@ function MyCardContent() {
 
       if (isSignedIn && authUser) {
         // ロールチェック: DBにレコードなし → /onboarding
+        // NOTE: onboarding判定は /api/mycard では不可のため role API を残す
         try {
           const roleRes = await fetch('/api/user/role')
           const roleData = await roleRes.json()
@@ -293,9 +294,7 @@ function MyCardContent() {
             window.location.href = '/onboarding'
             return
           }
-          if (roleData.proDeactivated) {
-            setProDeactivated(true)
-          }
+          // proDeactivated は /api/mycard からも取得するため、ここでは省略
         } catch (e) {
           console.error('[mycard] role check error:', e)
         }
@@ -648,9 +647,9 @@ function MyCardContent() {
         <button
           onClick={() => { window.location.href = '/dashboard' }}
           className="w-full mb-4 py-3 rounded-lg text-sm font-semibold text-white"
-          style={{ backgroundColor: '#C4A35A' }}
+          style={{ backgroundColor: '#1A1A2E' }}
         >
-          プロ管理画面へ
+          プロダッシュボードへ
         </button>
       )}
 
