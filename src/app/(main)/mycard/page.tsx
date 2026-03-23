@@ -140,6 +140,7 @@ function MyCardContent() {
             setMemberOrgs(orgsData)
             setHasOrgMembership(true)
             setSelectedMemberOrgId(orgsData[0].id)
+            loadMemberResources(orgsData[0].id)
           }
         }
       } catch (e) {
