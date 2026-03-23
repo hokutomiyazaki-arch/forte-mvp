@@ -34,11 +34,11 @@ export const TAB_DISPLAY_NAMES: Record<string, string> = {
 export const TAB_ORDER: string[] = [
   'healing',
   'body',
+  'bodymake',
   'performance',
   'mind',
   'discovery',
   'guidance',
   'beauty',
   'nutrition',
-  'bodymake',
 ];
