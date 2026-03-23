@@ -330,6 +330,7 @@ export default function DashboardPage() {
               setMemberOrgs(orgsData)
               setHasOrgMembership(true)
               setSelectedMemberOrgId(orgsData[0].id)
+              if (tabParam === 'myorgs') loadMemberResources(orgsData[0].id)
             }
           }
         } catch (err) {
