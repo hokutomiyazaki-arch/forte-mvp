@@ -805,7 +805,26 @@ export default function DashboardPage() {
     setRewardSaving(true)
     setRewardError('')
 
-    // 既存リワードを削除
+    // ① バリデーション（DELETE前に実行！）
+    const fntWithoutApp = rewards.find(r => r.reward_type === 'fnt_neuro_app' && !r.content.trim())
+    if (fntWithoutApp) {
+      setRewardError('FNT神経科学アプリを選択してください。')
+      setRewardSaving(false)
+      return
+    }
+
+    // ② 有効なリワードを事前に準備
+    const validRewards = rewards.filter(r => r.reward_type && r.content.trim())
+
+    // ③ 空contentのリワードがある場合に警告（データ消失防止）
+    const emptyRewards = rewards.filter(r => r.reward_type && !r.content.trim())
+    if (emptyRewards.length > 0 && validRewards.length === 0) {
+      setRewardError('リワードの内容を入力してください。')
+      setRewardSaving(false)
+      return
+    }
+
+    // ④ 既存リワードを削除
     const { error: delError } = await db.delete('rewards', { professional_id: pro.id })
     if (delError) {
       console.error('[handleSaveRewards] delete error:', delError.message)
@@ -814,16 +833,7 @@ export default function DashboardPage() {
       return
     }
 
-    // FNTアプリの未選択チェック
-    const fntWithoutApp = rewards.find(r => r.reward_type === 'fnt_neuro_app' && !r.content.trim())
-    if (fntWithoutApp) {
-      setRewardError('FNT神経科学アプリを選択してください。')
-      setRewardSaving(false)
-      return
-    }
-
-    // 有効なリワードのみ保存
-    const validRewards = rewards.filter(r => r.reward_type && r.content.trim())
+    // ⑤ 有効なリワードをINSERT
     if (validRewards.length > 0) {
       const { error: insertError } = await db.insert('rewards',
         validRewards.map((r, idx) => ({
