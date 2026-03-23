@@ -1215,7 +1215,7 @@ export default function DashboardPage() {
                               setProfileLineState('linked')
                               setLineBannerState('hidden')
                             } else if (result.error === 'not_yet_added') {
-                              setProfileCodeError('まずLINEで友達追加してください')
+                              setProfileCodeError('「コード再発行」を押してください。LINEに新しいコードが届きます。')
                             } else if (result.error === 'expired') {
                               setProfileCodeError('期限切れ。再発行してください')
                             } else {
@@ -1239,11 +1239,17 @@ export default function DashboardPage() {
                         setProfileCodeInput(['', '', '', ''])
                         setProfileCodeError('')
                         try {
-                          await fetch('/api/line/link/generate', {
+                          const res = await fetch('/api/line/link/generate', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ professionalId: pro.id }),
                           })
+                          const data = await res.json()
+                          if (data.pushed) {
+                            setProfileCodeError('✅ LINEに新しいコードを送信しました')
+                          } else if (data.code) {
+                            setProfileCodeError('LINE公式アカウントにメッセージを送ってください')
+                          }
                         } catch {}
                         finally { setProfileCodeLoading(false) }
                       }}
@@ -1530,7 +1536,7 @@ export default function DashboardPage() {
                     setLineBannerState('linked')
                     setTimeout(() => setLineBannerState('hidden'), 3000)
                   } else if (result.error === 'not_yet_added') {
-                    setCodeError('まずLINEで友達追加してください')
+                    setCodeError('「コードを再送する」を押してください。LINEに新しいコードが届きます。')
                   } else if (result.error === 'expired') {
                     setCodeError('コードが期限切れです。再発行してください')
                   } else {
@@ -1575,7 +1581,14 @@ export default function DashboardPage() {
                 const data = await res.json()
                 if (data.code) {
                   setLinkCode(data.code)
-                  setCodeError('')
+                  if (data.pushed) {
+                    setCodeError('')
+                    setCodeInput(['', '', '', ''])
+                    // pushed成功のフィードバック（エラー表示エリアを流用）
+                    setCodeError('✅ LINEに新しいコードを送信しました')
+                  } else {
+                    setCodeError('LINE公式アカウントにメッセージを送ってください')
+                  }
                 }
               } catch (err) {
                 console.error('[line-banner] Regenerate error:', err)
@@ -1590,7 +1603,7 @@ export default function DashboardPage() {
               padding: 0,
             }}
           >
-            コードが届かない場合は再発行
+            コードを再送する
           </button>
         </div>
       )}
