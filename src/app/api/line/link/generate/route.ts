@@ -46,12 +46,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  // 既存のpending/waitingレコードからline_user_idを取得（expiredにする前に）
+  // 過去のレコードからline_user_idを取得（expired/completedも含む）
   const { data: existingRecord } = await supabase
     .from('line_link_codes')
     .select('line_user_id')
     .eq('professional_id', professionalId)
-    .in('status', ['pending', 'waiting'])
+    .in('status', ['pending', 'waiting', 'expired', 'completed'])
     .not('line_user_id', 'is', null)
     .order('created_at', { ascending: false })
     .limit(1)
