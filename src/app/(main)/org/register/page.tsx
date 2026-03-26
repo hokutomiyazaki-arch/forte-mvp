@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { db } from '@/lib/db'
 
@@ -10,7 +10,10 @@ const ORG_TYPES = [
 ]
 
 export default function OrgRegisterPage() {
-  const [step, setStep] = useState<'type' | 'form'>('type')
+  const [step, setStep] = useState<'password' | 'type' | 'form'>('password')
+  const [orgPassword, setOrgPassword] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+  const [checkingAuth, setCheckingAuth] = useState(true)
   const [orgType, setOrgType] = useState('')
   const [name, setName] = useState('')
   const [location, setLocation] = useState('')
@@ -22,6 +25,35 @@ export default function OrgRegisterPage() {
 
   const { user: clerkUser } = useUser()
   const authUser = clerkUser ? { id: clerkUser.id } : null
+
+  useEffect(() => {
+    const hasAuth = document.cookie.split(';').some(c => c.trim().startsWith('rp_org_auth='))
+    if (hasAuth) {
+      setStep('type')
+    }
+    setCheckingAuth(false)
+  }, [])
+
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setPasswordError('')
+
+    try {
+      const res = await fetch('/api/auth/org', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: orgPassword }),
+      })
+
+      if (res.ok) {
+        setStep('type')
+      } else {
+        setPasswordError('パスワードが正しくありません')
+      }
+    } catch {
+      setPasswordError('エラーが発生しました。もう一度お試しください。')
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -70,6 +102,50 @@ export default function OrgRegisterPage() {
       setError(err.message || '登録に失敗しました')
     }
     setSubmitting(false)
+  }
+
+  // Step 0: 認証チェック中 or パスワード入力
+  if (checkingAuth) {
+    return (
+      <div className="flex justify-center items-center min-h-[200px]">
+        <div className="text-gray-500">確認中...</div>
+      </div>
+    )
+  }
+
+  if (step === 'password') {
+    return (
+      <div className="max-w-md mx-auto px-4 py-12">
+        <div className="bg-white rounded-xl p-8 shadow-sm">
+          <h2 className="text-xl font-bold text-[#1A1A2E] mb-2 text-center">
+            団体登録
+          </h2>
+          <p className="text-sm text-gray-500 mb-6 text-center">
+            団体登録にはパスワードが必要です
+          </p>
+          <form onSubmit={handlePasswordSubmit}>
+            <input
+              type="password"
+              value={orgPassword}
+              onChange={e => setOrgPassword(e.target.value)}
+              placeholder="パスワードを入力"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none mb-4"
+              required
+              autoFocus
+            />
+            {passwordError && (
+              <p className="text-red-500 text-sm mb-4">{passwordError}</p>
+            )}
+            <button
+              type="submit"
+              className="w-full py-3 bg-[#1A1A2E] text-white rounded-lg font-medium hover:bg-[#2a2a4e] transition-colors"
+            >
+              確認
+            </button>
+          </form>
+        </div>
+      </div>
+    )
   }
 
   // Step 1: 団体タイプ選択
