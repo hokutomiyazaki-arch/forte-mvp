@@ -13,6 +13,7 @@ import ImageCropper from '@/components/ImageCropper'
 import CardModeSwitch from '@/components/CardModeSwitch'
 import InstallPrompt from '@/components/InstallPrompt'
 import { PREFECTURES } from '@/lib/prefectures'
+import XDayCountdown from '@/components/XDayCountdown'
 
 // バッジ階層: FNTはBDCの上位資格。同レベルのFNTを持っていたらBDCは非表示
 const BADGE_ORDER: Record<string, number> = {
@@ -1833,6 +1834,35 @@ export default function DashboardPage() {
 
       {/* ═══ Tab: プロフィール ═══ */}
       {dashboardTab === 'profile' && (<>
+
+      {/* Xデーカウントダウン */}
+      {(() => {
+        // strength_label ごとに vote_count を合算
+        const strengthCounts: Record<string, number> = {}
+        for (const v of votes) {
+          const sl = v.strength_label
+          if (sl) {
+            strengthCounts[sl] = (strengthCounts[sl] || 0) + v.vote_count
+          }
+        }
+        const entries = Object.entries(strengthCounts)
+        const totalProofVotes = entries.reduce((sum, [, c]) => sum + c, 0)
+        let topLabel: string | null = null
+        let topVotes = 0
+        for (const [label, count] of entries) {
+          if (count > topVotes) {
+            topLabel = label
+            topVotes = count
+          }
+        }
+        return (
+          <XDayCountdown
+            proofVoteCount={totalProofVotes}
+            topStrengthLabel={topLabel}
+            topStrengthVotes={topVotes}
+          />
+        )
+      })()}
 
       {/* 承認完了メッセージ */}
       {inviteAccepted && (
