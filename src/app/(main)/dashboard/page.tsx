@@ -1724,11 +1724,12 @@ export default function DashboardPage() {
           onClick={() => setShowKakegoe(!showKakegoe)}
           className="w-full text-center py-3 text-sm text-[#C4A35A] hover:text-[#B08D3E] transition-colors"
         >
-          {showKakegoe ? '▲ 閉じる' : '💡 クライアントへの声がけ例を見る'}
+          {showKakegoe ? '▲ 閉じる' : '▶ プルーフの仕組みとルール'}
         </button>
 
         {showKakegoe && (
           <div className="bg-white rounded-xl p-5 shadow-sm space-y-4">
+            <p className="text-xs font-semibold text-[#C4A35A] mb-3">クライアントへの声がけ例</p>
             <p className="text-xs text-gray-400 mb-2">セッション後にQRを見せる時、こんなふうに声をかけてみてください</p>
 
             {/* パターン1: 一番シンプル（推奨） */}
@@ -1777,6 +1778,28 @@ export default function DashboardPage() {
                 </svg>
                 クライアント説明用チラシ（PDF）
               </a>
+            </div>
+
+            {/* プルーフの仕組みとルール FAQ */}
+            <div className="mt-6 pt-4 border-t border-gray-200">
+              <p className="text-xs font-semibold text-[#C4A35A] mb-3">お客さんが「回答できない」と言われたら</p>
+              <p className="text-xs text-gray-500 mb-3">プルーフには不正防止のため、いくつかの制限があります。</p>
+              <div className="space-y-3 text-sm text-[#1A1A2E]">
+                <div className="border-l-2 border-[#C4A35A] pl-3">
+                  <p className="leading-relaxed">同じお客さんからは<strong>30分に1回</strong>まで受けられます</p>
+                  <p className="text-xs text-gray-400 mt-0.5">→ 少し時間を置いてから再度お願いしてみてください。</p>
+                </div>
+                <div className="border-l-2 border-[#C4A35A] pl-3">
+                  <p className="leading-relaxed">1人のお客さんが1日に回答できるのは<strong>最大3名のプロ</strong>までです</p>
+                  <p className="text-xs text-gray-400 mt-0.5">→ 翌日以降にお願いしてみてください。</p>
+                </div>
+                <div className="border-l-2 border-[#C4A35A] pl-3">
+                  <p className="leading-relaxed">同じお客さんからの回答は、前回から<strong>約3ヶ月</strong>空ける必要があります</p>
+                  <p className="text-xs text-gray-400 mt-0.5">→ 次回のご来店時にまたお願いしてみてください。</p>
+                  <p className="text-xs text-gray-400">リピーターの方からの継続的な声は、あなたの強みの証明をさらに確かなものにします。</p>
+                </div>
+              </div>
+              <p className="text-xs text-gray-400 mt-3 pt-3 border-t border-gray-100">これらの仕組みは、プルーフの信頼性を守るためのものです。</p>
             </div>
           </div>
         )}
@@ -3127,43 +3150,6 @@ export default function DashboardPage() {
         )}
       </>)}
 
-      {/* プルーフの仕組み（アコーディオン） */}
-      {!isSettingsTab && (
-        <details style={{
-          marginTop: 20, background: '#F8F7F4', borderRadius: 12,
-          border: '1px solid #E8E5DE', overflow: 'hidden',
-        }}>
-          <summary style={{
-            padding: '14px 18px', cursor: 'pointer', fontSize: 14, fontWeight: 600,
-            color: '#1A1A2E', listStyle: 'none', display: 'flex', alignItems: 'center', gap: 8,
-          }}>
-            <span style={{ fontSize: 13, transition: 'transform 0.2s' }}>▶</span>
-            プルーフの仕組みとルール
-          </summary>
-          <div style={{ padding: '0 18px 18px', fontSize: 13, lineHeight: 1.8, color: '#374151' }}>
-            <p style={{ marginBottom: 12 }}>アンケートには不正防止のため、いくつかの制限があります。</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingLeft: 2 }}>
-              <div>
-                <span style={{ color: '#C4A35A', fontWeight: 600 }}>・</span>同じお客さんからは<strong>30分に1回</strong>まで受けられます<br />
-                <span style={{ color: '#6B7280', fontSize: 12, paddingLeft: 14, display: 'inline-block' }}>→ 少し時間を置いてから再度お願いしてみてください。</span>
-              </div>
-              <div>
-                <span style={{ color: '#C4A35A', fontWeight: 600 }}>・</span>1人のお客さんが1日に回答できるのは<strong>最大3名のプロ</strong>までです<br />
-                <span style={{ color: '#6B7280', fontSize: 12, paddingLeft: 14, display: 'inline-block' }}>→ 翌日以降にお願いしてみてください。</span>
-              </div>
-              <div>
-                <span style={{ color: '#C4A35A', fontWeight: 600 }}>・</span>同じお客さんからの回答は、前回から<strong>約3ヶ月</strong>空ける必要があります<br />
-                <span style={{ color: '#6B7280', fontSize: 12, paddingLeft: 14, display: 'inline-block' }}>→ 次回のご来店時にまたお願いしてみてください。</span><br />
-                <span style={{ color: '#6B7280', fontSize: 12, paddingLeft: 14, display: 'inline-block' }}>リピーターの方からの継続的な声は、</span><br />
-                <span style={{ color: '#6B7280', fontSize: 12, paddingLeft: 14, display: 'inline-block' }}>あなたの強みの証明をさらに確かなものにします。</span>
-              </div>
-            </div>
-            <p style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #E8E5DE', color: '#6B7280', fontSize: 12 }}>
-              これらの仕組みは、プルーフの信頼性を守るためのものです。
-            </p>
-          </div>
-        </details>
-      )}
 
       {!isSettingsTab && (
       <>
