@@ -1569,7 +1569,7 @@ function VoteForm() {
             <div style={S.title}>
               どんなところがよかったですか？
             </div>
-            <div style={S.subtitle}>あてはまるものを選んでください</div>
+            <div style={S.subtitle}>あてはまるものを選んでください（最大3つ）</div>
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 28 }}>
               {allProofDisplayItems.map(item => {
@@ -1647,7 +1647,7 @@ function VoteForm() {
             <div style={S.title}>
               <span style={{ color: "#C4A35A" }}>{pro.name?.split(/[\s　]/)[0]}</span>さんはどんな人でしたか？
             </div>
-            <div style={S.subtitle}>あてはまるものがあれば（任意）</div>
+            <div style={S.subtitle}>あてはまるものがあれば（任意・最大3つ）</div>
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 28 }}>
               {personalityItems.map(item => {
