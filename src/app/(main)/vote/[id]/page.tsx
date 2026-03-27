@@ -368,6 +368,12 @@ function VoteForm() {
   const [fallbackPhone, setFallbackPhone] = useState('')
   const [isFallbackVote, setIsFallbackVote] = useState(false)
 
+  // ── ユニバーサルデザインモード ──
+  const [largeMode, setLargeMode] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('realproof_large_mode') === 'true'
+  })
+
   const goTo = (next: VoteStep) => {
     setIsTransitioning(true)
     setTimeout(() => {
@@ -391,6 +397,11 @@ function VoteForm() {
     stepHistory.current.push(voteStep)
     goTo(next)
   }
+
+  // ── largeMode変更時にlocalStorageに保存 ──
+  useEffect(() => {
+    localStorage.setItem('realproof_large_mode', largeMode ? 'true' : 'false')
+  }, [largeMode])
 
   // URLバーからトークンを消す（カジュアルな拡散への心理的摩擦）
   // ただし ?error= がある場合はsearchParamsが読まれるまで保持する
@@ -1357,12 +1368,49 @@ function VoteForm() {
     return idx >= 0 ? idx + 1 : undefined
   }
 
+  // ── 文字サイズ切替ボタン ──
+  const fontSizeToggle = (
+    <button
+      onClick={() => setLargeMode(!largeMode)}
+      aria-label={largeMode ? '標準の文字サイズに戻す' : '文字を大きくする'}
+      style={{
+        position: 'fixed',
+        bottom: 20,
+        right: 20,
+        zIndex: 100,
+        width: 48,
+        height: 48,
+        borderRadius: '50%',
+        border: '1.5px solid rgba(196,163,90,0.4)',
+        background: largeMode ? 'rgba(196,163,90,0.2)' : 'rgba(26,26,46,0.85)',
+        backdropFilter: 'blur(8px)',
+        color: '#C4A35A',
+        fontSize: 16,
+        fontWeight: 700,
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        boxShadow: '0 2px 12px rgba(0,0,0,0.3)',
+        transition: 'background 0.2s ease, transform 0.15s ease',
+      }}
+    >
+      {largeMode ? 'Aa' : 'Aa+'}
+    </button>
+  )
+
   return (
     <>
       <style>{`
         nav, footer { display: none !important; }
         main { padding: 0 !important; max-width: 100% !important; }
       `}</style>
+
+      {/* ── 文字サイズ切替ボタン（固定位置） ── */}
+      {!showSplash && !loading && fontSizeToggle}
+
+      {/* ── zoom ラッパー ── */}
+      <div style={{ zoom: largeMode ? 1.25 : 1, transition: 'zoom 0.2s ease' }}>
 
       {/* ── プレビューバナー ── */}
       {isPreview && showPreviewBanner && (
@@ -2337,6 +2385,8 @@ function VoteForm() {
           </div>
         </StepWrapper>
       )}
+
+      </div>{/* zoom ラッパー閉じ */}
     </>
   )
 }
