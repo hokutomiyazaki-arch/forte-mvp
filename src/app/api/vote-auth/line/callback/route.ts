@@ -128,12 +128,21 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // メールが取れない場合（email権限未承認）→ 投票ページに戻して手動入力
+    // メールが取れない場合（email権限未承認）→ LINE userIdをフォールバック
     if (!email) {
-      console.log('[vote-auth/line/callback] No email from LINE - redirecting back to vote page')
-      return NextResponse.redirect(
-        new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=line_no_email`, origin)
-      )
+      const profileRes = await fetch('https://api.line.me/v2/profile', {
+        headers: { 'Authorization': `Bearer ${tokenData.access_token}` },
+      })
+      if (profileRes.ok) {
+        const profile = await profileRes.json()
+        email = `line_${profile.userId}@line.realproof.jp`
+        console.log('[vote-auth/line/callback] Using LINE userId as email fallback:', email)
+      } else {
+        console.error('[vote-auth/line/callback] Failed to get LINE profile')
+        return NextResponse.redirect(
+          new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=line_no_email`, origin)
+        )
+      }
     }
 
     email = email.trim().toLowerCase()
