@@ -1069,7 +1069,7 @@ export default function AdminDashboard() {
 
       {/* よくある質問 */}
       <div style={{ marginTop: 16 }}>
-        <div style={{ color: C.gold, fontSize: 13, fontWeight: 600, letterSpacing: '0.05em', marginBottom: 12 }}>よくある質問</div>
+        <div style={{ color: C.gold, fontSize: 13, fontWeight: 600, letterSpacing: '0.05em', marginBottom: 12 }}>プルーフの仕組みとルール</div>
         <div style={{ background: C.surface, borderRadius: 10, padding: '18px 20px' }}>
           <div style={{ color: C.gold, fontSize: 12, fontWeight: 600, marginBottom: 10 }}>Q: お客さんが「回答できない」と言われた</div>
           <div style={{ color: C.cream, fontSize: 13, lineHeight: 1.7, marginBottom: 14 }}>

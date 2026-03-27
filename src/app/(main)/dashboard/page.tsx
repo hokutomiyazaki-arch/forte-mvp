@@ -3127,6 +3127,44 @@ export default function DashboardPage() {
         )}
       </>)}
 
+      {/* プルーフの仕組み（アコーディオン） */}
+      {!isSettingsTab && (
+        <details style={{
+          marginTop: 20, background: '#F8F7F4', borderRadius: 12,
+          border: '1px solid #E8E5DE', overflow: 'hidden',
+        }}>
+          <summary style={{
+            padding: '14px 18px', cursor: 'pointer', fontSize: 14, fontWeight: 600,
+            color: '#1A1A2E', listStyle: 'none', display: 'flex', alignItems: 'center', gap: 8,
+          }}>
+            <span style={{ fontSize: 13, transition: 'transform 0.2s' }}>▶</span>
+            プルーフの仕組みとルール
+          </summary>
+          <div style={{ padding: '0 18px 18px', fontSize: 13, lineHeight: 1.8, color: '#374151' }}>
+            <p style={{ marginBottom: 12 }}>アンケートには不正防止のため、いくつかの制限があります。</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingLeft: 2 }}>
+              <div>
+                <span style={{ color: '#C4A35A', fontWeight: 600 }}>・</span>同じお客さんからは<strong>30分に1回</strong>まで受けられます<br />
+                <span style={{ color: '#6B7280', fontSize: 12, paddingLeft: 14, display: 'inline-block' }}>→ 少し時間を置いてから再度お願いしてみてください。</span>
+              </div>
+              <div>
+                <span style={{ color: '#C4A35A', fontWeight: 600 }}>・</span>1人のお客さんが1日に回答できるのは<strong>最大3名のプロ</strong>までです<br />
+                <span style={{ color: '#6B7280', fontSize: 12, paddingLeft: 14, display: 'inline-block' }}>→ 翌日以降にお願いしてみてください。</span>
+              </div>
+              <div>
+                <span style={{ color: '#C4A35A', fontWeight: 600 }}>・</span>同じお客さんからの回答は、前回から<strong>約3ヶ月</strong>空ける必要があります<br />
+                <span style={{ color: '#6B7280', fontSize: 12, paddingLeft: 14, display: 'inline-block' }}>→ 次回のご来店時にまたお願いしてみてください。</span><br />
+                <span style={{ color: '#6B7280', fontSize: 12, paddingLeft: 14, display: 'inline-block' }}>リピーターの方からの継続的な声は、</span><br />
+                <span style={{ color: '#6B7280', fontSize: 12, paddingLeft: 14, display: 'inline-block' }}>あなたの強みの証明をさらに確かなものにします。</span>
+              </div>
+            </div>
+            <p style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #E8E5DE', color: '#6B7280', fontSize: 12 }}>
+              これらの仕組みは、プルーフの信頼性を守るためのものです。
+            </p>
+          </div>
+        </details>
+      )}
+
       {!isSettingsTab && (
       <>
       <div style={{ height: 16 }} />
