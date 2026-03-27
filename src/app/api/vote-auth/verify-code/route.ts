@@ -56,6 +56,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'cooldown' }, { status: 429 })
     }
 
+    // ── 90日リピートチェック（同じプロに対して） ──
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+    const { data: recentRepeatVote } = await supabase
+      .from('votes')
+      .select('id, created_at')
+      .eq('normalized_email', normalizeEmail(email))
+      .eq('professional_id', professional_id)
+      .eq('status', 'confirmed')
+      .gt('created_at', ninetyDaysAgo)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (recentRepeatVote) {
+      return NextResponse.json({ error: 'already_voted' }, { status: 409 })
+    }
+
     // 投票をINSERT（status=confirmed で直接保存）
     const { data: insertedVote, error: voteError } = await supabase
       .from('votes')

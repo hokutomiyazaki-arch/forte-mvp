@@ -162,15 +162,20 @@ export async function GET(request: NextRequest) {
 
     const supabaseAdmin = getSupabaseAdmin()
 
-    // Step 4: 重複投票チェック
-    const { data: existingVote } = await supabaseAdmin
+    // Step 4: 90日リピートチェック
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+    const { data: recentRepeatVote } = await supabaseAdmin
       .from('votes')
-      .select('id')
+      .select('id, created_at')
       .eq('professional_id', professional_id)
       .eq('normalized_email', normalizeEmail(email))
+      .eq('status', 'confirmed')
+      .gt('created_at', ninetyDaysAgo)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle()
 
-    if (existingVote) {
+    if (recentRepeatVote) {
       return NextResponse.redirect(
         new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=already_voted`, origin)
       )
