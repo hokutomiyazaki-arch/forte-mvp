@@ -368,10 +368,11 @@ function VoteForm() {
   const [fallbackPhone, setFallbackPhone] = useState('')
   const [isFallbackVote, setIsFallbackVote] = useState(false)
 
-  // ── ユニバーサルデザインモード ──
+  // ── ユニバーサルデザインモード（デフォルトON） ──
   const [largeMode, setLargeMode] = useState(() => {
-    if (typeof window === 'undefined') return false
-    return localStorage.getItem('realproof_large_mode') === 'true'
+    if (typeof window === 'undefined') return true
+    const stored = localStorage.getItem('realproof_large_mode')
+    return stored === null ? true : stored === 'true'
   })
 
   const goTo = (next: VoteStep) => {
