@@ -795,6 +795,26 @@ function VoteForm() {
       }
 
       // 認証成功 → 投票送信
+
+      // ── 30分クールダウンチェック（全プロ横断） ──
+      const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString()
+      const { data: recentCooldownVote } = await (supabase as any)
+        .from('votes')
+        .select('created_at')
+        .eq('normalized_email', normalizeEmail(formattedPhone))
+        .eq('status', 'confirmed')
+        .gt('created_at', thirtyMinAgo)
+        .limit(1)
+        .maybeSingle()
+
+      if (recentCooldownVote) {
+        const nextAvailable = new Date(new Date(recentCooldownVote.created_at).getTime() + 30 * 60 * 1000)
+        const waitMin = Math.ceil((nextAvailable.getTime() - Date.now()) / 60000)
+        setError(`回答は30分に1件まで。あと約${waitMin}分お待ちください。`)
+        setPhoneVerifying(false)
+        return
+      }
+
       await new Promise(resolve => setTimeout(resolve, 500))
       const voteData = buildVoteData()
 
@@ -895,6 +915,24 @@ function VoteForm() {
 
     if (existingVote) {
       setError('この電話番号では既にこのプロに回答済みです')
+      return
+    }
+
+    // ── 30分クールダウンチェック（全プロ横断） ──
+    const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString()
+    const { data: recentCooldownVote } = await (supabase as any)
+      .from('votes')
+      .select('created_at')
+      .eq('normalized_email', normalizeEmail(formattedPhone))
+      .eq('status', 'confirmed')
+      .gt('created_at', thirtyMinAgo)
+      .limit(1)
+      .maybeSingle()
+
+    if (recentCooldownVote) {
+      const nextAvailable = new Date(new Date(recentCooldownVote.created_at).getTime() + 30 * 60 * 1000)
+      const waitMin = Math.ceil((nextAvailable.getTime() - Date.now()) / 60000)
+      setError(`回答は30分に1件まで。あと約${waitMin}分お待ちください。`)
       return
     }
 
@@ -1009,21 +1047,21 @@ function VoteForm() {
       return
     }
 
-    // 30分クールダウン
+    // 30分クールダウン（全プロ横断: 同一ユーザーは30分に1投票のみ）
     const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString()
     const { data: recentVote } = await (supabase as any)
       .from('votes')
       .select('created_at')
-      .eq('professional_id', proId)
+      .eq('normalized_email', normalizeEmail(email))
+      .eq('status', 'confirmed')
       .gt('created_at', thirtyMinAgo)
-      .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
 
     if (recentVote) {
       const nextAvailable = new Date(new Date(recentVote.created_at).getTime() + 30 * 60 * 1000)
       const waitMin = Math.ceil((nextAvailable.getTime() - Date.now()) / 60000)
-      setError(`このプロへの回答は30分に1件まで。あと約${waitMin}分お待ちください。`)
+      setError(`回答は30分に1件まで。あと約${waitMin}分お待ちください。`)
       return
     }
 

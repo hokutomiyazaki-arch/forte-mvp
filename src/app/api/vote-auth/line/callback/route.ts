@@ -230,14 +230,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Step 6: 30分クールダウンチェック
+    // Step 6: 30分クールダウンチェック（全プロ横断）
     const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString()
     const { data: recentVote } = await supabaseAdmin
       .from('votes')
       .select('created_at')
-      .eq('professional_id', professional_id)
+      .eq('normalized_email', normalizeEmail(email))
+      .eq('status', 'confirmed')
       .gt('created_at', thirtyMinAgo)
-      .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
 
