@@ -81,6 +81,31 @@ export async function GET(request: NextRequest) {
     if (!tokenRes.ok) {
       const errBody = await tokenRes.text()
       console.error('[vote-auth/line/callback] Token exchange failed:', tokenRes.status, errBody)
+
+      // invalid_grant = codeが既に使用済み → 1回目のcallbackで投票成功済みの可能性
+      if (errBody.includes('invalid_grant')) {
+        try {
+          const supabaseCheck = getSupabaseAdmin()
+          const { data: existingVote } = await supabaseCheck
+            .from('votes')
+            .select('id')
+            .eq('professional_id', professional_id)
+            .eq('status', 'confirmed')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
+          if (existingVote) {
+            console.log('[vote-auth/line/callback] invalid_grant but vote already exists, redirecting to vote-confirmed')
+            return NextResponse.redirect(
+              new URL(`/vote-confirmed?pro=${professional_id}&vote_id=${existingVote.id}&auth_method=line`, origin)
+            )
+          }
+        } catch (e) {
+          console.error('[vote-auth/line/callback] Recovery check failed:', e)
+        }
+      }
+
       return NextResponse.redirect(new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=line_expired`, origin))
     }
 
