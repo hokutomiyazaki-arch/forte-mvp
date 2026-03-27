@@ -288,18 +288,18 @@ function VoteForm() {
   // 基本 state
   const [pro, setPro] = useState<Professional | null>(null)
   const [loading, setLoading] = useState(true)
-  const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
   const [alreadyVoted, setAlreadyVoted] = useState(false)
   const [tokenExpired, setTokenExpired] = useState(false)
   const [isSelfVote, setIsSelfVote] = useState(false)
-  const [submittedVoteId, setSubmittedVoteId] = useState('')
-  const [submittedToken, setSubmittedToken] = useState('')
-  const [showEmailFix, setShowEmailFix] = useState(false)
-  const [fixEmail, setFixEmail] = useState('')
-  const [resending, setResending] = useState(false)
   const [showPreviewBanner, setShowPreviewBanner] = useState(true)
-  const [resendMessage, setResendMessage] = useState('')
+
+  // メール確認コード認証（新フロー）
+  const [emailCodeStep, setEmailCodeStep] = useState<'input' | 'verify'>('input')
+  const [emailCode, setEmailCode] = useState('')
+  const [emailCodeSending, setEmailCodeSending] = useState(false)
+  const [emailCodeVerifying, setEmailCodeVerifying] = useState(false)
+  const [emailResendCooldown, setEmailResendCooldown] = useState(0)
 
   // セッション（ログイン済みユーザー）
   const [sessionEmail, setSessionEmail] = useState<string | null>(null)
@@ -1130,43 +1130,107 @@ function VoteForm() {
       return
     }
 
-    // ── 未ログイン（メール投票）: 従来通りメール確認フロー ──
-    // 確認トークンを作成
-    const { data: confirmation, error: confirmError } = await (supabase as any)
-      .from('vote_confirmations')
-      .insert({ vote_id: voteData.id })
-      .select()
-      .maybeSingle()
+    // メール投票は新フロー（send-code → verify-code）に移行済み
+    // handleSubmitはセッション投票専用。ここに到達することは想定外。
+    console.error('[handleSubmit] Unexpected: non-session vote reached end of handleSubmit')
+    setError('予期しないエラーが発生しました。もう一度お試しください。')
+  }
 
-    if (confirmError) {
-      console.error('[handleSubmit] vote_confirmations INSERT error:', confirmError)
-    }
+  // ── メール確認コード送信ハンドラー（新フロー） ──
+  async function handleEmailSendCode() {
+    const email = voterEmail.trim().toLowerCase()
+    if (!email || !email.includes('@')) return
+    setError('')
+    setEmailCodeSending(true)
 
-    // 確認メール送信
-    if (confirmation) {
-      setSubmittedVoteId(voteData.id)
-      setSubmittedToken(confirmation.token)
-      try {
-        const emailRes = await fetch('/api/send-confirmation', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email,
-            proName: pro!.name,
-            token: confirmation.token,
-          }),
-        })
-        if (!emailRes.ok) {
-          console.error('[handleSubmit] send-confirmation API error:', emailRes.status, await emailRes.text())
-        }
-      } catch (err) {
-        console.error('[handleSubmit] Confirmation email send failed:', err)
+    try {
+      const res = await fetch('/api/vote-auth/send-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, professional_id: proId }),
+      })
+
+      if (res.ok) {
+        localStorage.setItem('proof_voter_email', email)
+        setEmailCodeStep('verify')
+        // 30秒クールダウン開始
+        setEmailResendCooldown(30)
+        const timer = setInterval(() => {
+          setEmailResendCooldown(prev => {
+            if (prev <= 1) { clearInterval(timer); return 0 }
+            return prev - 1
+          })
+        }, 1000)
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setError(data.error || '確認コードの送信に失敗しました')
       }
-    } else {
-      console.error('[handleSubmit] No confirmation created - skipping email send')
+    } catch {
+      setError('エラーが発生しました。もう一度お試しください。')
     }
+    setEmailCodeSending(false)
+  }
 
-    setSubmitted(true)
+  // ── メール確認コード検証ハンドラー（新フロー） ──
+  async function handleEmailVerifyCode() {
+    const email = voterEmail.trim().toLowerCase()
+    if (!email || emailCode.length < 6) return
+    setError('')
+    setEmailCodeVerifying(true)
+
+    // 投票データを組み立て
+    const allSelectedProofIds = Array.from(selectedProofIds)
+    const hasProofs = allSelectedProofIds.length > 0
+    let voteType = 'personality_only'
+    if (isHopeful) {
+      voteType = 'hopeful'
+    } else if (hasProofs) {
+      voteType = 'proof'
+    }
+    const proofIdsToSend = isHopeful ? null : (hasProofs ? allSelectedProofIds : null)
+
+    try {
+      const res = await fetch('/api/vote-auth/verify-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          code: emailCode,
+          professional_id: proId,
+          vote_data: {
+            session_count: sessionCount,
+            vote_type: voteType,
+            selected_proof_ids: proofIdsToSend,
+            selected_personality_ids: selectedPersonalityIds.size > 0 ? Array.from(selectedPersonalityIds) : null,
+            selected_reward_id: selectedRewardId || null,
+            comment: comment.trim() || null,
+            qr_token: qrToken,
+          },
+        }),
+      })
+
+      const data = await res.json().catch(() => ({}))
+
+      if (res.ok && data.success) {
+        const rid = data.client_reward_id || ''
+        window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${data.vote_id}${rid ? `&rid=${rid}` : ''}`
+        return
+      }
+
+      // エラーハンドリング
+      if (data.error === 'invalid_code') {
+        setError('確認コードが正しくありません')
+      } else if (data.error === 'expired_code') {
+        setError('確認コードの有効期限が切れました。再送信してください。')
+      } else if (data.error === 'already_voted') {
+        setError('このメールアドレスでは既に回答済みです')
+      } else {
+        setError(data.error || '認証に失敗しました。もう一度お試しください。')
+      }
+    } catch {
+      setError('エラーが発生しました。もう一度お試しください。')
+    }
+    setEmailCodeVerifying(false)
   }
 
   // ── スプラッシュ（データはバックグラウンドで読み込み中） ──
@@ -1235,210 +1299,6 @@ function VoteForm() {
     )
   }
 
-  // ── メールアドレス修正+再送信 ──
-  async function handleResend() {
-    const newEmail = fixEmail.trim().toLowerCase()
-    if (!newEmail || !newEmail.includes('@')) return
-    setResending(true)
-    setResendMessage('')
-
-    const { error: updateError } = await (supabase as any)
-      .from('votes')
-      .update({ voter_email: newEmail })
-      .eq('id', submittedVoteId)
-    if (updateError) {
-      setResendMessage('メールアドレスの更新に失敗しました。')
-      setResending(false)
-      return
-    }
-
-    localStorage.setItem('proof_voter_email', newEmail)
-    setVoterEmail(newEmail)
-
-    try {
-      await fetch('/api/send-confirmation', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: newEmail,
-          proName: pro!.name,
-          token: submittedToken,
-        }),
-      })
-      setResendMessage('再送信しました。新しいメールアドレスをご確認ください。')
-      setShowEmailFix(false)
-    } catch {
-      setResendMessage('再送信に失敗しました。もう一度お試しください。')
-    }
-    setResending(false)
-  }
-
-  // ── 投票完了画面 ──
-  if (submitted) {
-    const displayEmail = isLoggedIn ? sessionEmail : voterEmail
-    const emailDomain = (displayEmail || '').split('@')[1] || ''
-
-    const MAIL_LINKS: Record<string, { label: string; url: string }> = {
-      'gmail.com': { label: 'Gmailを開く', url: 'https://mail.google.com' },
-      'yahoo.co.jp': { label: 'Yahoo!メールを開く', url: 'https://mail.yahoo.co.jp' },
-      'icloud.com': { label: 'iCloudメールを開く', url: 'https://www.icloud.com/mail' },
-      'outlook.com': { label: 'Outlookを開く', url: 'https://outlook.live.com' },
-      'hotmail.com': { label: 'Outlookを開く', url: 'https://outlook.live.com' },
-      'docomo.ne.jp': { label: 'ドコモメールを開く', url: 'https://mail.smt.docomo.ne.jp' },
-      'softbank.ne.jp': { label: 'ソフトバンクメールを開く', url: 'https://webmail.softbank.jp' },
-      'ezweb.ne.jp': { label: 'auメールを開く', url: 'mailto:' },
-      'au.com': { label: 'auメールを開く', url: 'mailto:' },
-    }
-    const mailLink = MAIL_LINKS[emailDomain]
-
-    return (
-      <>
-        {/* ナビバー・フッターを非表示にする */}
-        <style>{`
-          nav, footer { display: none !important; }
-          main { padding: 0 !important; max-width: 100% !important; }
-        `}</style>
-
-        <div className="min-h-screen bg-[#FAFAF7] flex items-center justify-center px-4">
-          <div className="max-w-md w-full text-center">
-            {/* メールアイコン */}
-            <div className="text-6xl mb-6">✉️</div>
-
-            <h1 className="text-2xl font-bold text-[#1A1A2E] mb-3">
-              メールを確認してください
-            </h1>
-
-            <p className="text-base text-gray-600 mb-6">
-              <span className="font-bold text-[#1A1A2E]">{displayEmail}</span><br />
-              宛に確認メールを送りました
-            </p>
-
-            {/* ステップ説明 */}
-            <div className="bg-white rounded-xl shadow-sm p-6 mb-6 text-left">
-              <div className="space-y-4">
-                <div className="flex items-start gap-4">
-                  <div className="w-8 h-8 rounded-full bg-[#1A1A2E] text-[#C4A35A] flex items-center justify-center flex-shrink-0 font-bold text-sm">1</div>
-                  <p className="text-base text-[#1A1A2E] pt-1">メールアプリを開く</p>
-                </div>
-                <div className="flex items-start gap-4">
-                  <div className="w-8 h-8 rounded-full bg-[#1A1A2E] text-[#C4A35A] flex items-center justify-center flex-shrink-0 font-bold text-sm">2</div>
-                  <p className="text-base text-[#1A1A2E] pt-1">REALPROOFからのメールを見つける</p>
-                </div>
-                <div className="flex items-start gap-4">
-                  <div className="w-8 h-8 rounded-full bg-[#1A1A2E] text-[#C4A35A] flex items-center justify-center flex-shrink-0 font-bold text-sm">3</div>
-                  <p className="text-base text-[#1A1A2E] pt-1">メール内のボタンを押す</p>
-                </div>
-              </div>
-            </div>
-
-            {/* メールアプリへの直接リンクボタン */}
-            {mailLink ? (
-              <a
-                href={mailLink.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block w-full py-4 bg-[#C4A35A] text-white text-lg font-bold rounded-xl hover:bg-[#b3923f] transition mb-6 shadow-lg"
-              >
-                {mailLink.label} →
-              </a>
-            ) : (
-              <p className="text-base text-gray-500 mb-6">メールアプリを開いてください</p>
-            )}
-
-            {/* メールが届かない場合 */}
-            <div className="bg-white rounded-xl p-4 mb-6 text-left text-sm text-gray-500 space-y-2">
-              <p className="font-medium text-[#1A1A2E]">メールが届かない場合:</p>
-              <ul className="list-disc list-inside space-y-1">
-                <li>迷惑メールフォルダを確認してください</li>
-              </ul>
-
-              {/* 未ログイン: メアド修正+再送信 */}
-              {!isLoggedIn && (
-                <>
-                  {!showEmailFix ? (
-                    <button
-                      onClick={() => { setShowEmailFix(true); setFixEmail(voterEmail) }}
-                      className="text-[#C4A35A] underline font-medium mt-2 inline-block"
-                    >
-                      メールを再送信する
-                    </button>
-                  ) : (
-                    <div className="mt-3 bg-[#FAFAF7] rounded-lg p-3">
-                      <p className="text-sm font-medium text-[#1A1A2E] mb-2">メールアドレスを修正して再送信</p>
-                      <input
-                        type="email"
-                        value={fixEmail}
-                        onChange={e => setFixEmail(e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none mb-2 text-base"
-                        placeholder="正しいメールアドレス"
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          onClick={handleResend}
-                          disabled={resending || !fixEmail.trim()}
-                          className="flex-1 py-2 bg-[#C4A35A] text-white text-sm font-medium rounded-lg hover:bg-[#b3923f] transition disabled:opacity-50"
-                        >
-                          {resending ? '送信中...' : '再送信する'}
-                        </button>
-                        <button
-                          onClick={() => setShowEmailFix(false)}
-                          className="px-4 py-2 bg-gray-200 text-gray-600 text-sm rounded-lg hover:bg-gray-300 transition"
-                        >
-                          閉じる
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* ログイン済み: 再送信のみ */}
-              {isLoggedIn && (
-                <button
-                  onClick={async () => {
-                    setResending(true)
-                    setResendMessage('')
-                    try {
-                      await fetch('/api/send-confirmation', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          email: sessionEmail,
-                          proName: pro!.name,
-                          token: submittedToken,
-                        }),
-                      })
-                      setResendMessage('再送信しました。メールをご確認ください。')
-                    } catch {
-                      setResendMessage('再送信に失敗しました。')
-                    }
-                    setResending(false)
-                  }}
-                  disabled={resending}
-                  className="text-[#C4A35A] underline font-medium mt-2 inline-block disabled:opacity-50"
-                >
-                  {resending ? '送信中...' : 'メールを再送信する'}
-                </button>
-              )}
-
-              {resendMessage && (
-                <div className={`mt-2 p-2 rounded-lg text-sm ${
-                  resendMessage.includes('再送信しました') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-                }`}>
-                  {resendMessage}
-                </div>
-              )}
-            </div>
-
-            {/* 警告メッセージ */}
-            <p className="text-red-500 font-bold text-base">
-              ※ メールを確認するまで回答は完了しません
-            </p>
-          </div>
-        </div>
-      </>
-    )
-  }
 
   // ── ステップUI用の変数 ──
   const hasRewards = proRewards.length > 0
@@ -1928,7 +1788,7 @@ function VoteForm() {
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {/* LINE */}
-                {!showFallback && (
+                {!showFallback && emailCodeStep === 'input' && (
                   <button
                     onClick={() => handleLineVote()}
                     style={{
@@ -1946,7 +1806,7 @@ function VoteForm() {
                 )}
 
                 {/* ── 電話番号認証（ボタン） ── */}
-                {!showPhoneInput && phoneStep === 'input' && !showFallback && (
+                {!showPhoneInput && phoneStep === 'input' && !showFallback && emailCodeStep === 'input' && (
                   <button
                     onClick={() => { setShowPhoneInput(true); setShowFallback(false); }}
                     style={{
@@ -1961,7 +1821,7 @@ function VoteForm() {
                 )}
 
                 {/* ── 電話番号入力フォーム ── */}
-                {showPhoneInput && phoneStep === 'input' && !showFallback && (
+                {showPhoneInput && phoneStep === 'input' && !showFallback && emailCodeStep === 'input' && (
                   <div style={{ animation: "fadeUp .18s ease" }}>
                     <div style={{
                       color: "#8B8B9A", fontSize: 11, textAlign: "center",
@@ -2003,8 +1863,8 @@ function VoteForm() {
                   </div>
                 )}
 
-                {/* ── 認証コード入力 ── */}
-                {phoneStep === 'verify' && !showFallback && (
+                {/* ── 認証コード入力（SMS） ── */}
+                {phoneStep === 'verify' && !showFallback && emailCodeStep === 'input' && (
                   <div style={{ animation: "fadeUp .18s ease" }}>
                     <div style={{
                       color: "#C4A35A", fontSize: 14, fontWeight: 600,
@@ -2055,7 +1915,7 @@ function VoteForm() {
                 )}
 
                 {/* Google */}
-                {!showFallback && (
+                {!showFallback && emailCodeStep === 'input' && (
                   <button
                     onClick={() => handleGoogleVote()}
                     style={{
@@ -2075,7 +1935,7 @@ function VoteForm() {
                 )}
 
                 {/* ── 区切り線 ── */}
-                {!showFallback && (
+                {!showFallback && emailCodeStep === 'input' && (
                   <div style={{
                     display: "flex", alignItems: "center", gap: 12,
                     margin: "10px 0 6px",
@@ -2086,8 +1946,8 @@ function VoteForm() {
                   </div>
                 )}
 
-                {/* メール入力 */}
-                {!showFallback && (
+                {/* メール認証（確認コード方式） */}
+                {!showFallback && emailCodeStep === 'input' && (
                   !showEmailInput ? (
                     <button
                       onClick={() => setShowEmailInput(true)}
@@ -2117,24 +1977,93 @@ function VoteForm() {
                         }}
                       />
                       <button
-                        onClick={() => {
-                          voteMethodRef.current = 'email'
-                          handleSubmit({ preventDefault: () => {} } as React.FormEvent)
-                        }}
-                        disabled={!voterEmail.trim() || !voterEmail.includes('@')}
+                        onClick={handleEmailSendCode}
+                        disabled={emailCodeSending || !voterEmail.trim() || !voterEmail.includes('@')}
                         style={{
                           ...S.primaryBtn,
-                          opacity: !voterEmail.trim() || !voterEmail.includes('@') ? 0.4 : 1,
+                          opacity: emailCodeSending || !voterEmail.trim() || !voterEmail.includes('@') ? 0.4 : 1,
                         }}
                       >
-                        メールで送信する
+                        {emailCodeSending ? '送信中...' : '確認コードを送信'}
                       </button>
                     </div>
                   )
                 )}
 
+                {/* メール確認コード入力 */}
+                {!showFallback && emailCodeStep === 'verify' && (
+                  <div style={{ animation: "fadeUp .18s ease" }}>
+                    <div style={{
+                      color: "#C4A35A", fontSize: 14, fontWeight: 600,
+                      textAlign: "center", marginBottom: 6,
+                    }}>
+                      確認コードを送信しました
+                    </div>
+                    <div style={{
+                      color: "#8B8B9A", fontSize: 12, textAlign: "center",
+                      marginBottom: 16,
+                    }}>
+                      {voterEmail} に届いた6桁のコードを入力
+                    </div>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={emailCode}
+                      onChange={e => setEmailCode(e.target.value.replace(/\D/g, ''))}
+                      placeholder="123456"
+                      autoFocus
+                      style={{
+                        width: "100%", padding: "14px", borderRadius: 12,
+                        border: "1.5px solid rgba(196,163,90,0.27)",
+                        background: "#16213E", color: "#FAFAF7",
+                        fontSize: 24, textAlign: "center",
+                        letterSpacing: 8, marginBottom: 10,
+                        boxSizing: "border-box", outline: "none",
+                      }}
+                    />
+                    <button
+                      onClick={handleEmailVerifyCode}
+                      disabled={emailCodeVerifying || emailCode.length < 6}
+                      style={{
+                        ...S.primaryBtn,
+                        opacity: emailCodeVerifying || emailCode.length < 6 ? 0.5 : 1,
+                      }}
+                    >
+                      {emailCodeVerifying ? '確認中...' : '認証して送信する'}
+                    </button>
+                    <div style={{ display: "flex", justifyContent: "center", gap: 16, marginTop: 8 }}>
+                      <button
+                        onClick={() => {
+                          if (emailResendCooldown > 0) return
+                          handleEmailSendCode()
+                        }}
+                        disabled={emailResendCooldown > 0 || emailCodeSending}
+                        style={{
+                          background: "transparent", border: "none",
+                          color: emailResendCooldown > 0 ? "#555" : "#C4A35A",
+                          fontSize: 13, cursor: emailResendCooldown > 0 ? "default" : "pointer",
+                          textDecoration: "underline", padding: "4px",
+                        }}
+                      >
+                        {emailResendCooldown > 0 ? `再送信(${emailResendCooldown}秒)` : 'コードを再送信する'}
+                      </button>
+                      <button
+                        onClick={() => { setEmailCodeStep('input'); setEmailCode(''); setError(''); }}
+                        style={{
+                          background: "transparent", border: "none",
+                          color: "#8B8B9A", fontSize: 13, cursor: "pointer",
+                          padding: "4px",
+                        }}
+                      >
+                        メールアドレスを変更
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* ── フォールバック認証リンク ── */}
-                {!showFallback && phoneStep === 'input' && (
+                {!showFallback && phoneStep === 'input' && emailCodeStep === 'input' && (
                   <div style={{ textAlign: "center" }}>
                     <button
                       onClick={() => { setShowFallback(true); setShowPhoneInput(false); }}
