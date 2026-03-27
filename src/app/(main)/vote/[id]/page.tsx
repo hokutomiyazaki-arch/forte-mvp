@@ -439,7 +439,7 @@ function VoteForm() {
       } else if (authError === 'line_no_email') {
         setError('LINEからメールアドレスを取得できませんでした。メールアドレスを入力して回答してください。')
       } else if (authError === 'cooldown') {
-        setError('このプロへの回答は30分に1件まで。しばらくお待ちください。')
+        setError('ありがとうございます！次のアンケートは30分後から回答できます。')
       } else if (authError === 'vote_failed') {
         setError('送信に失敗しました。もう一度お試しください。')
       } else if (authError === 'invalid_vote_data') {
@@ -838,7 +838,7 @@ function VoteForm() {
       if (recentCooldownVote) {
         const nextAvailable = new Date(new Date(recentCooldownVote.created_at).getTime() + 30 * 60 * 1000)
         const waitMin = Math.ceil((nextAvailable.getTime() - Date.now()) / 60000)
-        setError(`回答は30分に1件まで。あと約${waitMin}分お待ちください。`)
+        setError('ありがとうございます！次のアンケートは30分後から回答できます。')
         setPhoneVerifying(false)
         return
       }
@@ -966,7 +966,7 @@ function VoteForm() {
     if (recentCooldownVote) {
       const nextAvailable = new Date(new Date(recentCooldownVote.created_at).getTime() + 30 * 60 * 1000)
       const waitMin = Math.ceil((nextAvailable.getTime() - Date.now()) / 60000)
-      setError(`回答は30分に1件まで。あと約${waitMin}分お待ちください。`)
+      setError('ありがとうございます！次のアンケートは30分後から回答できます。')
       return
     }
 
@@ -1095,7 +1095,7 @@ function VoteForm() {
     if (recentVote) {
       const nextAvailable = new Date(new Date(recentVote.created_at).getTime() + 30 * 60 * 1000)
       const waitMin = Math.ceil((nextAvailable.getTime() - Date.now()) / 60000)
-      setError(`回答は30分に1件まで。あと約${waitMin}分お待ちください。`)
+      setError('ありがとうございます！次のアンケートは30分後から回答できます。')
       return
     }
 
