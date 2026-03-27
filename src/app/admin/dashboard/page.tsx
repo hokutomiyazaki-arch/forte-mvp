@@ -1067,6 +1067,36 @@ export default function AdminDashboard() {
 
       <style>{`@media (max-width: 768px) { .voicekake-grid { grid-template-columns: 1fr !important; } }`}</style>
 
+      {/* よくある質問 */}
+      <div style={{ marginTop: 16 }}>
+        <div style={{ color: C.gold, fontSize: 13, fontWeight: 600, letterSpacing: '0.05em', marginBottom: 12 }}>よくある質問</div>
+        <div style={{ background: C.surface, borderRadius: 10, padding: '18px 20px' }}>
+          <div style={{ color: C.gold, fontSize: 12, fontWeight: 600, marginBottom: 10 }}>Q: お客さんが「回答できない」と言われた</div>
+          <div style={{ color: C.cream, fontSize: 13, lineHeight: 1.7, marginBottom: 14 }}>
+            アンケートには不正防止のため、いくつかの制限があります。
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingLeft: 4 }}>
+            <div style={{ color: C.cream, fontSize: 13, lineHeight: 1.7 }}>
+              <span style={{ color: C.gold }}>・</span>同じお客さんからは30分に1回まで受けられます<br />
+              <span style={{ color: C.gray, fontSize: 12, paddingLeft: 12, display: 'inline-block' }}>→ 少し時間を置いてから再度お願いしてみてください。</span>
+            </div>
+            <div style={{ color: C.cream, fontSize: 13, lineHeight: 1.7 }}>
+              <span style={{ color: C.gold }}>・</span>1人のお客さんが1日に回答できるのは最大3名のプロまでです<br />
+              <span style={{ color: C.gray, fontSize: 12, paddingLeft: 12, display: 'inline-block' }}>→ 翌日以降にお願いしてみてください。</span>
+            </div>
+            <div style={{ color: C.cream, fontSize: 13, lineHeight: 1.7 }}>
+              <span style={{ color: C.gold }}>・</span>同じお客さんからの回答は、前回から約3ヶ月空ける必要があります<br />
+              <span style={{ color: C.gray, fontSize: 12, paddingLeft: 12, display: 'inline-block' }}>→ 次回のご来店時にまたお願いしてみてください。</span><br />
+              <span style={{ color: C.gray, fontSize: 12, paddingLeft: 16, display: 'inline-block' }}>リピーターの方からの継続的な声は、</span><br />
+              <span style={{ color: C.gray, fontSize: 12, paddingLeft: 16, display: 'inline-block' }}>あなたの強みの証明をさらに確かなものにします。</span>
+            </div>
+          </div>
+          <div style={{ color: C.cream, fontSize: 13, lineHeight: 1.7, marginTop: 14, borderTop: `1px solid ${C.grayDark}`, paddingTop: 12 }}>
+            これらの仕組みは、プルーフの信頼性を守るためのものです。
+          </div>
+        </div>
+      </div>
+
       {/* [E] Pro List */}
       <Sec>プロ一覧 — 個別ステータス</Sec>
       <div style={{ background: C.surface, borderRadius: 10, padding: 18 }}>
