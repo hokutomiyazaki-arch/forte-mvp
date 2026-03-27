@@ -83,6 +83,9 @@ export async function GET(request: NextRequest) {
 
       // invalid_grant = codeが既に使用済み → 1回目のcallbackで投票成功済みの可能性
       if (errBody.includes('invalid_grant')) {
+        // 1回目のcallbackがINSERTを完了するのを待つ
+        await new Promise(resolve => setTimeout(resolve, 1500))
+
         try {
           const supabaseCheck = getSupabaseAdmin()
           const { data: existingVote } = await supabaseCheck
@@ -90,12 +93,13 @@ export async function GET(request: NextRequest) {
             .select('id')
             .eq('professional_id', professional_id)
             .eq('status', 'confirmed')
+            .gt('created_at', new Date(Date.now() - 30000).toISOString())
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle()
 
           if (existingVote) {
-            console.log('[vote-auth/google/callback] invalid_grant but vote already exists, redirecting to vote-confirmed')
+            console.log('[vote-auth/google/callback] invalid_grant but vote exists, redirecting to vote-confirmed')
             return NextResponse.redirect(
               new URL(`/vote-confirmed?pro=${professional_id}&vote_id=${existingVote.id}&auth_method=google`, origin)
             )
