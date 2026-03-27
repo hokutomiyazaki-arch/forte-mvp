@@ -41,6 +41,21 @@ export async function POST(req: NextRequest) {
       .update({ confirmed_at: new Date().toISOString() })
       .eq('id', confirmation.id)
 
+    // 30分クールダウンチェック（全プロ横断）
+    const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString()
+    const { data: recentVote } = await supabase
+      .from('votes')
+      .select('id')
+      .eq('voter_email', email)
+      .eq('status', 'confirmed')
+      .gt('created_at', thirtyMinAgo)
+      .limit(1)
+      .maybeSingle()
+
+    if (recentVote) {
+      return NextResponse.json({ error: 'cooldown' }, { status: 429 })
+    }
+
     // 投票をINSERT（status=confirmed で直接保存）
     const { data: insertedVote, error: voteError } = await supabase
       .from('votes')
