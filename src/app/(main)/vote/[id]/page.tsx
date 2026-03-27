@@ -535,22 +535,32 @@ function VoteForm() {
             }
           }
 
+          const ninetyDaysAgoInit = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
           const { data: existing } = await (supabase as any)
             .from('votes')
-            .select('id')
+            .select('id, created_at')
             .eq('professional_id', proId)
             .eq('normalized_email', normalizeEmail(sessionIdentifier))
+            .eq('status', 'confirmed')
+            .gt('created_at', ninetyDaysAgoInit)
+            .order('created_at', { ascending: false })
+            .limit(1)
             .maybeSingle()
           if (existing) setAlreadyVoted(true)
         } else {
           const savedEmail = localStorage.getItem('proof_voter_email')
           if (savedEmail) {
             setVoterEmail(savedEmail)
+            const ninetyDaysAgoSaved = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
             const { data: existing } = await (supabase as any)
               .from('votes')
-              .select('id')
+              .select('id, created_at')
               .eq('professional_id', proId)
               .eq('normalized_email', normalizeEmail(savedEmail))
+              .eq('status', 'confirmed')
+              .gt('created_at', ninetyDaysAgoSaved)
+              .order('created_at', { ascending: false })
+              .limit(1)
               .maybeSingle()
             if (existing) setAlreadyVoted(true)
           }
@@ -710,16 +720,22 @@ function VoteForm() {
     }
 
     try {
-      // ── 重複投票チェック（SMS送信前に確認） ──
-      const { data: existingVote } = await (supabase as any)
+      // ── 90日リピートチェック（SMS送信前に確認） ──
+      const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+      const { data: recentRepeatVote } = await (supabase as any)
         .from('votes')
-        .select('id')
-        .eq('professional_id', proId)
+        .select('id, created_at')
         .eq('normalized_email', normalizeEmail(formattedPhone))
+        .eq('professional_id', proId)
+        .eq('status', 'confirmed')
+        .gt('created_at', ninetyDaysAgo)
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle()
 
-      if (existingVote) {
-        setError('この電話番号では既にこのプロに回答済みです')
+      if (recentRepeatVote) {
+        const nextVoteDate = new Date(new Date(recentRepeatVote.created_at).getTime() + 90 * 24 * 60 * 60 * 1000)
+        setError(`このプロにはすでにアンケートを回答済みです。次回は${nextVoteDate.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}以降に再度回答できます。`)
         setPhoneSending(false)
         return
       }
@@ -918,15 +934,21 @@ function VoteForm() {
       formattedPhone = '+81' + formattedPhone.slice(1)
     }
 
-    // 重複投票チェック
-    const { data: existingVote } = await (supabase as any).from('votes')
-      .select('id')
-      .eq('professional_id', proId)
+    // 90日リピートチェック
+    const ninetyDaysAgoFb = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+    const { data: recentRepeatVoteFb } = await (supabase as any).from('votes')
+      .select('id, created_at')
       .eq('normalized_email', normalizeEmail(formattedPhone))
+      .eq('professional_id', proId)
+      .eq('status', 'confirmed')
+      .gt('created_at', ninetyDaysAgoFb)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle()
 
-    if (existingVote) {
-      setError('この電話番号では既にこのプロに回答済みです')
+    if (recentRepeatVoteFb) {
+      const nextVoteDateFb = new Date(new Date(recentRepeatVoteFb.created_at).getTime() + 90 * 24 * 60 * 60 * 1000)
+      setError(`このプロにはすでにアンケートを回答済みです。次回は${nextVoteDateFb.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}以降に再度回答できます。`)
       return
     }
 
@@ -1074,6 +1096,25 @@ function VoteForm() {
       const nextAvailable = new Date(new Date(recentVote.created_at).getTime() + 30 * 60 * 1000)
       const waitMin = Math.ceil((nextAvailable.getTime() - Date.now()) / 60000)
       setError(`回答は30分に1件まで。あと約${waitMin}分お待ちください。`)
+      return
+    }
+
+    // 90日リピートチェック（同じプロに対して）
+    const ninetyDaysAgoSubmit = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+    const { data: recentRepeatVoteSubmit } = await (supabase as any)
+      .from('votes')
+      .select('id, created_at')
+      .eq('normalized_email', normalizeEmail(email))
+      .eq('professional_id', proId)
+      .eq('status', 'confirmed')
+      .gt('created_at', ninetyDaysAgoSubmit)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (recentRepeatVoteSubmit) {
+      const nextVoteDateSubmit = new Date(new Date(recentRepeatVoteSubmit.created_at).getTime() + 90 * 24 * 60 * 60 * 1000)
+      setError(`このプロにはすでにアンケートを回答済みです。次回は${nextVoteDateSubmit.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}以降に再度回答できます。`)
       return
     }
 
