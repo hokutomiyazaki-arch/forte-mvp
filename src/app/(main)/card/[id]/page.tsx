@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation'
 import { Professional, VoteSummary, Vote } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import { COLORS, FONTS } from '@/lib/design-tokens'
-import { trackPageView } from '@/lib/tracking'
+import { trackPageView, trackEvent } from '@/lib/tracking'
 import { PROVEN_THRESHOLD, PROVEN_GOLD, TAB_DISPLAY_NAMES } from '@/lib/constants'
 // VoiceShareModal removed — public card is view-only
 import RelatedPros from '@/components/RelatedPros'
@@ -217,6 +217,13 @@ export default function CardPage() {
       setTimeout(() => setAnimated(true), 100)
     }
     load()
+  }, [id])
+
+  // カードページ PV トラッキング（tracking_events テーブル）
+  useEffect(() => {
+    if (id) {
+      trackEvent(id, 'card_view')
+    }
   }, [id])
 
   const handleBookmarkToggle = async () => {
@@ -870,6 +877,7 @@ export default function CardPage() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
         {pro.booking_url && (
           <a href={pro.booking_url} target="_blank" rel="noopener"
+            onClick={() => trackEvent(id, 'booking_click')}
             style={{
               display: 'block', textAlign: 'center', padding: 15, borderRadius: 14,
               background: T.dark, color: T.gold, fontWeight: 700, fontSize: 14,
@@ -880,6 +888,7 @@ export default function CardPage() {
         )}
         {pro.contact_email && (
           <a href={(() => { const subject = encodeURIComponent(`REAL PROOFを見て相談：${pro.name}さん`); const body = encodeURIComponent(`${pro.name}さん\n\nREAL PROOFであなたのプロフィールを拝見し、ご相談したくご連絡しました。\n\n`); return `mailto:${pro.contact_email}?subject=${subject}&body=${body}` })()}
+            onClick={() => trackEvent(id, 'consultation_click')}
             style={{
               display: 'block', textAlign: 'center', padding: 14, borderRadius: 14,
               background: 'transparent', border: `1.5px solid ${T.dark}`, color: T.dark,

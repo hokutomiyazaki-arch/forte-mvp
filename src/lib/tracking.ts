@@ -94,3 +94,45 @@ export async function trackPageView(
     console.error('Track page view failed:', e)
   }
 }
+
+// ============================================================
+// tracking_events テーブル用（PV・クリック計測）
+// ============================================================
+
+// ユニークビジターIDの取得/生成
+function getVisitorId(): string | null {
+  if (typeof window === 'undefined') return null
+  try {
+    let visitorId = localStorage.getItem('rp_visitor_id')
+    if (!visitorId) {
+      visitorId = crypto.randomUUID()
+      localStorage.setItem('rp_visitor_id', visitorId)
+    }
+    return visitorId
+  } catch {
+    // localStorage がブロックされている場合（プライベートブラウズ等）
+    return null
+  }
+}
+
+/**
+ * PV・クリックイベントを記録（tracking_events テーブル）
+ * fire-and-forget パターン: fetch の結果を await しない
+ */
+export function trackEvent(professionalId: string, eventType: string): void {
+  if (typeof window === 'undefined') return
+
+  const visitorId = getVisitorId()
+
+  fetch('/api/tracking', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      professional_id: professionalId,
+      event_type: eventType,
+      visitor_id: visitorId,
+    }),
+  }).catch(() => {
+    // トラッキング失敗は無視（UXに影響させない）
+  })
+}

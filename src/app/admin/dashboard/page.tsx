@@ -2,6 +2,16 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { createClientComponentClient } from '@/lib/supabase-client'
+import dynamic from 'next/dynamic'
+
+// Recharts（SSR無効化）
+const ScatterChart = dynamic(() => import('recharts').then(m => m.ScatterChart), { ssr: false })
+const Scatter = dynamic(() => import('recharts').then(m => m.Scatter), { ssr: false })
+const XAxis = dynamic(() => import('recharts').then(m => m.XAxis), { ssr: false })
+const YAxis = dynamic(() => import('recharts').then(m => m.YAxis), { ssr: false })
+const CartesianGrid = dynamic(() => import('recharts').then(m => m.CartesianGrid), { ssr: false })
+const RechartsTooltip = dynamic(() => import('recharts').then(m => m.Tooltip), { ssr: false })
+const ResponsiveContainer = dynamic(() => import('recharts').then(m => m.ResponsiveContainer), { ssr: false })
 
 // ============================================================
 // カラー定数
@@ -75,6 +85,27 @@ interface DailyTrendData {
   date: string
   votes: number
   active_pros: number
+}
+
+interface TrackingProStat {
+  professional_id: string
+  name: string
+  title: string
+  total_proofs: number
+  profile_views: number
+  profile_unique_visitors: number
+  card_views: number
+  card_unique_visitors: number
+  consultation_clicks: number
+  booking_clicks: number
+}
+
+interface TrackingSummary {
+  total_profile_views: number
+  total_card_views: number
+  total_consultation_clicks: number
+  total_booking_clicks: number
+  total_unique_visitors: number
 }
 
 interface DailyProofData {
@@ -495,6 +526,12 @@ export default function AdminDashboard() {
   const [dailyProofs, setDailyProofs] = useState<DailyProofData[]>([])
   const [shares, setShares] = useState<ShareAnalytics>({ s1: 0, s2: 0, s3: 0, pv1: 0, pv2: 0, pv3: 0 })
 
+  // Tracking state
+  const [trackingStats, setTrackingStats] = useState<TrackingProStat[]>([])
+  const [trackingSummary, setTrackingSummary] = useState<TrackingSummary | null>(null)
+  const [trackingSortKey, setTrackingSortKey] = useState<string>('total_proofs')
+  const [trackingSortAsc, setTrackingSortAsc] = useState(false)
+
   // Bug Reports state
   const [bugReports, setBugReports] = useState<any[]>([])
   const [bugFilter, setBugFilter] = useState<'all' | 'new' | 'in_progress' | 'resolved' | 'wontfix'>('all')
@@ -523,6 +560,43 @@ export default function AdminDashboard() {
         setBugReports(data.reports || [])
       }
     } catch {}
+  }
+
+  async function loadTracking() {
+    try {
+      const res = await fetch('/api/admin/tracking')
+      if (res.ok) {
+        const data = await res.json()
+        if (Array.isArray(data.proStats)) {
+          setTrackingStats(data.proStats.map((s: any) => ({
+            professional_id: s.professional_id,
+            name: s.name || '—',
+            title: s.title || '—',
+            total_proofs: Number(s.total_proofs) || 0,
+            profile_views: Number(s.profile_views) || 0,
+            profile_unique_visitors: Number(s.profile_unique_visitors) || 0,
+            card_views: Number(s.card_views) || 0,
+            card_unique_visitors: Number(s.card_unique_visitors) || 0,
+            consultation_clicks: Number(s.consultation_clicks) || 0,
+            booking_clicks: Number(s.booking_clicks) || 0,
+          })))
+        }
+        if (data.summary) {
+          const s = Array.isArray(data.summary) ? data.summary[0] : data.summary
+          if (s) {
+            setTrackingSummary({
+              total_profile_views: Number(s.total_profile_views) || 0,
+              total_card_views: Number(s.total_card_views) || 0,
+              total_consultation_clicks: Number(s.total_consultation_clicks) || 0,
+              total_booking_clicks: Number(s.total_booking_clicks) || 0,
+              total_unique_visitors: Number(s.total_unique_visitors) || 0,
+            })
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Tracking data fetch failed:', e)
+    }
   }
 
   async function bugStatusChange(id: string, newStatus: string) {
@@ -640,6 +714,7 @@ export default function AdminDashboard() {
     loadData()
     loadAnnouncements()
     loadBugReports()
+    loadTracking()
   }, [loadData])
 
   // Broadcast テンプレート定義
@@ -1599,6 +1674,163 @@ export default function AdminDashboard() {
           )}
         </div>
       </div>
+
+      {/* ═══ Tracking Section ═══ */}
+      <Sec>📊 トラッキング</Sec>
+
+      {/* サマリーカード */}
+      {trackingSummary && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,minmax(0,1fr))', gap: 10 }}>
+          <MC label="カードPV" value={trackingSummary.total_card_views} />
+          <MC label="ユニーク訪問者" value={trackingSummary.total_unique_visitors} />
+          <MC label="相談クリック" value={trackingSummary.total_consultation_clicks}
+            status={trackingSummary.total_consultation_clicks > 0 ? 'good' : 'neutral'} />
+          <MC label="予約クリック" value={trackingSummary.total_booking_clicks}
+            status={trackingSummary.total_booking_clicks > 0 ? 'good' : 'neutral'} />
+          <MC label="合計クリック" value={trackingSummary.total_consultation_clicks + trackingSummary.total_booking_clicks}
+            status={(trackingSummary.total_consultation_clicks + trackingSummary.total_booking_clicks) > 0 ? 'good' : 'neutral'} />
+        </div>
+      )}
+
+      {/* 散布図 */}
+      {trackingStats.length > 0 && (
+        <div style={{ background: C.surface, borderRadius: 10, padding: 20, marginTop: 14 }}>
+          <div style={{ color: C.cream, fontSize: 13, fontWeight: 600, marginBottom: 14 }}>
+            プルーフ数 × クリック数の相関
+          </div>
+          <div style={{ width: '100%', height: 350 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <ScatterChart margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={C.grayDark + '44'} />
+                <XAxis
+                  dataKey="proofs"
+                  name="プルーフ数"
+                  type="number"
+                  tick={{ fill: C.gray, fontSize: 11 }}
+                  axisLine={{ stroke: C.grayDark }}
+                  label={{ value: 'プルーフ数', position: 'insideBottom', offset: -10, fill: C.gray, fontSize: 11 }}
+                />
+                <YAxis
+                  dataKey="clicks"
+                  name="クリック数"
+                  type="number"
+                  tick={{ fill: C.gray, fontSize: 11 }}
+                  axisLine={{ stroke: C.grayDark }}
+                  label={{ value: 'クリック数', angle: -90, position: 'insideLeft', offset: 5, fill: C.gray, fontSize: 11 }}
+                />
+                <RechartsTooltip
+                  cursor={{ strokeDasharray: '3 3', stroke: C.gray }}
+                  content={({ payload }: any) => {
+                    if (!payload || !payload[0]) return null
+                    const d = payload[0].payload
+                    return (
+                      <div style={{
+                        background: C.surface, border: `1px solid ${C.grayDark}`,
+                        padding: '8px 12px', borderRadius: 6, fontSize: 12,
+                      }}>
+                        <div style={{ color: C.gold, fontWeight: 600, marginBottom: 4 }}>{d.name}</div>
+                        <div style={{ color: C.cream }}>プルーフ: {d.proofs}</div>
+                        <div style={{ color: C.cream }}>クリック: {d.clicks}</div>
+                      </div>
+                    )
+                  }}
+                />
+                <Scatter
+                  data={trackingStats.map(s => ({
+                    name: s.name,
+                    proofs: s.total_proofs,
+                    clicks: s.consultation_clicks + s.booking_clicks,
+                  }))}
+                  fill="#C4A35A"
+                />
+              </ScatterChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* テーブル */}
+      {trackingStats.length > 0 && (() => {
+        const sortedStats = Array.from(trackingStats).sort((a, b) => {
+          const aVal = (a as any)[trackingSortKey] ?? 0
+          const bVal = (b as any)[trackingSortKey] ?? 0
+          if (trackingSortKey === 'name' || trackingSortKey === 'title') {
+            return trackingSortAsc
+              ? String(aVal).localeCompare(String(bVal))
+              : String(bVal).localeCompare(String(aVal))
+          }
+          return trackingSortAsc ? Number(aVal) - Number(bVal) : Number(bVal) - Number(aVal)
+        })
+
+        const cols: { key: string; label: string }[] = [
+          { key: 'name', label: 'プロ名' },
+          { key: 'title', label: '職種' },
+          { key: 'total_proofs', label: 'プルーフ' },
+          { key: 'card_views', label: 'カードPV' },
+          { key: 'card_unique_visitors', label: 'UV' },
+          { key: 'consultation_clicks', label: '相談' },
+          { key: 'booking_clicks', label: '予約' },
+          { key: 'total_clicks', label: '合計' },
+        ]
+
+        function handleSort(key: string) {
+          if (trackingSortKey === key) {
+            setTrackingSortAsc(!trackingSortAsc)
+          } else {
+            setTrackingSortKey(key)
+            setTrackingSortAsc(false)
+          }
+        }
+
+        return (
+          <div style={{ background: C.surface, borderRadius: 10, padding: 20, marginTop: 14, overflowX: 'auto' }}>
+            <div style={{ color: C.cream, fontSize: 13, fontWeight: 600, marginBottom: 14 }}>
+              プロごとの詳細
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.grayDark}` }}>
+                  {cols.map(col => (
+                    <th
+                      key={col.key}
+                      onClick={() => handleSort(col.key)}
+                      style={{
+                        textAlign: col.key === 'name' || col.key === 'title' ? 'left' : 'right',
+                        padding: '10px 8px', color: trackingSortKey === col.key ? C.gold : C.gray,
+                        fontWeight: 500, fontSize: 10, letterSpacing: '0.04em',
+                        whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none',
+                      }}
+                    >
+                      {col.label} {trackingSortKey === col.key ? (trackingSortAsc ? '↑' : '↓') : ''}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sortedStats.map(s => {
+                  const totalClicks = s.consultation_clicks + s.booking_clicks
+                  return (
+                    <tr key={s.professional_id} style={{ borderBottom: `1px solid ${C.grayDark}15` }}>
+                      <td style={{ padding: '10px 8px', color: C.cream, fontWeight: 500 }}>{s.name}</td>
+                      <td style={{ padding: '10px 8px', color: C.gray, fontSize: 11 }}>{s.title}</td>
+                      <td style={{ padding: '10px 8px', color: s.total_proofs > 0 ? C.gold : C.grayDark, fontWeight: s.total_proofs >= 5 ? 700 : 400, textAlign: 'right' }}>{s.total_proofs}</td>
+                      <td style={{ padding: '10px 8px', color: C.cream, textAlign: 'right' }}>{s.card_views}</td>
+                      <td style={{ padding: '10px 8px', color: C.cream, textAlign: 'right' }}>{s.card_unique_visitors}</td>
+                      <td style={{ padding: '10px 8px', color: s.consultation_clicks > 0 ? C.green : C.grayDark, textAlign: 'right' }}>{s.consultation_clicks}</td>
+                      <td style={{ padding: '10px 8px', color: s.booking_clicks > 0 ? C.green : C.grayDark, textAlign: 'right' }}>{s.booking_clicks}</td>
+                      <td style={{ padding: '10px 8px', color: totalClicks > 0 ? C.gold : C.grayDark, fontWeight: totalClicks > 0 ? 700 : 400, textAlign: 'right' }}>{totalClicks}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )
+      })()}
+
+      {!trackingSummary && !loading && (
+        <Placeholder message="トラッキングデータがまだありません。RPC関数をSupabaseで作成してください。" />
+      )}
 
       {/* Footer */}
       <div style={{
