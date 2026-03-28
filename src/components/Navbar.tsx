@@ -81,6 +81,9 @@ export default function Navbar() {
 
         {/* サポート（全員） */}
         <div style={menuGroupLabel}>サポート</div>
+        {isPro && (
+          <a href="/dashboard?tab=guide" onClick={closeMenu} style={menuLinkStyle}>はじめかたガイド</a>
+        )}
         <a href="/for-stores" onClick={closeMenu} style={menuLinkStyle}>店舗・団体の方へ</a>
         <a href="/announcements" onClick={closeMenu} style={{ ...menuLinkStyle, display: 'flex', alignItems: 'center', gap: 6 }}>
           🔔 お知らせ
