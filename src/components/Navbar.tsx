@@ -28,14 +28,39 @@ const menuDivider: React.CSSProperties = {
   paddingTop: 8,
 }
 
+const ChevronIcon = ({ isOpen }: { isOpen: boolean }) => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"
+    style={{
+      transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+      transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+      flexShrink: 0,
+    }}
+  >
+    <path d="M6 3L11 8L6 13" stroke="#C4A35A" strokeWidth="1.5"
+      strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+
 export default function Navbar() {
   const { isLoaded, isSignedIn } = useUser()
   const { isPro } = useProStatus()
   const { signOut } = useClerk()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [openMenuGroups, setOpenMenuGroups] = useState<Record<string, boolean>>({
+    settings: false,
+    discover: false,
+    support: false,
+  })
   const { unreadCount, ownedOrg, hasOrgMembership } = useSharedData()
 
-  const closeMenu = () => setMenuOpen(false)
+  const toggleMenuGroup = (group: string) => {
+    setOpenMenuGroups(prev => ({ ...prev, [group]: !prev[group] }))
+  }
+
+  const closeMenu = () => {
+    setMenuOpen(false)
+    setOpenMenuGroups({ settings: false, discover: false, support: false })
+  }
 
   function renderMenuItems() {
     return (
@@ -56,48 +81,68 @@ export default function Navbar() {
           {/* 設定（プロのみ） */}
           {isPro && (
             <>
-              <div style={menuGroupLabel}>設定</div>
-              <a href="/dashboard?tab=profile&edit=true" onClick={closeMenu} style={menuLinkStyle}>プロフィール編集</a>
-              <a href="/dashboard?tab=proofs" onClick={closeMenu} style={menuLinkStyle}>強み設定</a>
-              <a href="/dashboard?tab=rewards" onClick={closeMenu} style={menuLinkStyle}>リワード設定</a>
-              <a href="/dashboard?tab=card" onClick={closeMenu} style={menuLinkStyle}>NFCカード</a>
+              <button onClick={() => toggleMenuGroup('settings')} style={{ ...menuGroupLabel, display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', background: 'none', border: 'none', cursor: 'pointer' }}>
+                <span>設定</span>
+                <ChevronIcon isOpen={!!openMenuGroups.settings} />
+              </button>
+              <div style={{ maxHeight: openMenuGroups.settings ? '500px' : '0px', overflow: 'hidden', transition: 'max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1)' }}>
+                <a href="/dashboard?tab=profile&edit=true" onClick={closeMenu} style={menuLinkStyle}>プロフィール編集</a>
+                <a href="/dashboard?tab=proofs" onClick={closeMenu} style={menuLinkStyle}>強み設定</a>
+                <a href="/dashboard?tab=rewards" onClick={closeMenu} style={menuLinkStyle}>リワード設定</a>
+                <a href="/dashboard?tab=card" onClick={closeMenu} style={menuLinkStyle}>NFCカード</a>
+              </div>
             </>
           )}
           {/* 設定（一般ユーザー） */}
           {!isPro && (
             <>
-              <div style={menuGroupLabel}>設定</div>
-              <a href="/mycard?tab=card" onClick={closeMenu} style={menuLinkStyle}>NFCカード</a>
+              <button onClick={() => toggleMenuGroup('settings')} style={{ ...menuGroupLabel, display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', background: 'none', border: 'none', cursor: 'pointer' }}>
+                <span>設定</span>
+                <ChevronIcon isOpen={!!openMenuGroups.settings} />
+              </button>
+              <div style={{ maxHeight: openMenuGroups.settings ? '500px' : '0px', overflow: 'hidden', transition: 'max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1)' }}>
+                <a href="/mycard?tab=card" onClick={closeMenu} style={menuLinkStyle}>NFCカード</a>
+              </div>
             </>
           )}
         </SignedIn>
 
         {/* 見つける（全員） */}
-        <div style={menuGroupLabel}>見つける</div>
-        <a href="/search" onClick={closeMenu} style={menuLinkStyle}>プロを探す</a>
-        <SignedIn>
-          <a href="/mycard?tab=bookmarked" onClick={closeMenu} style={menuLinkStyle}>ブックマーク</a>
-        </SignedIn>
+        <button onClick={() => toggleMenuGroup('discover')} style={{ ...menuGroupLabel, display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', background: 'none', border: 'none', cursor: 'pointer' }}>
+          <span>見つける</span>
+          <ChevronIcon isOpen={!!openMenuGroups.discover} />
+        </button>
+        <div style={{ maxHeight: openMenuGroups.discover ? '500px' : '0px', overflow: 'hidden', transition: 'max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1)' }}>
+          <a href="/search" onClick={closeMenu} style={menuLinkStyle}>プロを探す</a>
+          <SignedIn>
+            <a href="/mycard?tab=bookmarked" onClick={closeMenu} style={menuLinkStyle}>ブックマーク</a>
+          </SignedIn>
+        </div>
 
         {/* サポート（全員） */}
-        <div style={menuGroupLabel}>サポート</div>
-        {isPro && (
-          <a href="/dashboard?tab=guide" onClick={closeMenu} style={menuLinkStyle}>はじめかたガイド</a>
-        )}
-        <a href="/for-stores" onClick={closeMenu} style={menuLinkStyle}>店舗・団体の方へ</a>
-        <a href="/announcements" onClick={closeMenu} style={{ ...menuLinkStyle, display: 'flex', alignItems: 'center', gap: 6 }}>
-          🔔 お知らせ
-          {unreadCount > 0 && (
-            <span style={{
-              background: '#E24B4A', color: '#fff',
-              fontSize: 10, fontWeight: 700,
-              padding: '1px 6px', borderRadius: 10,
-            }}>
-              {unreadCount}
-            </span>
+        <button onClick={() => toggleMenuGroup('support')} style={{ ...menuGroupLabel, display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', background: 'none', border: 'none', cursor: 'pointer' }}>
+          <span>サポート</span>
+          <ChevronIcon isOpen={!!openMenuGroups.support} />
+        </button>
+        <div style={{ maxHeight: openMenuGroups.support ? '500px' : '0px', overflow: 'hidden', transition: 'max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1)' }}>
+          {isPro && (
+            <a href="/dashboard?tab=guide" onClick={closeMenu} style={menuLinkStyle}>はじめかたガイド</a>
           )}
-        </a>
-        <a href="/bug-report" onClick={closeMenu} style={{ ...menuLinkStyle, color: '#888', fontSize: 13 }}>不具合・エラーのご報告</a>
+          <a href="/for-stores" onClick={closeMenu} style={menuLinkStyle}>店舗・団体の方へ</a>
+          <a href="/announcements" onClick={closeMenu} style={{ ...menuLinkStyle, display: 'flex', alignItems: 'center', gap: 6 }}>
+            🔔 お知らせ
+            {unreadCount > 0 && (
+              <span style={{
+                background: '#E24B4A', color: '#fff',
+                fontSize: 10, fontWeight: 700,
+                padding: '1px 6px', borderRadius: 10,
+              }}>
+                {unreadCount}
+              </span>
+            )}
+          </a>
+          <a href="/bug-report" onClick={closeMenu} style={{ ...menuLinkStyle, color: '#888', fontSize: 13 }}>不具合・エラーのご報告</a>
+        </div>
 
         {/* ログアウト / ログイン */}
         <div style={menuDivider}>
