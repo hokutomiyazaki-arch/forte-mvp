@@ -111,7 +111,8 @@ export default function DashboardPage() {
   const [selectedProofIds, setSelectedProofIds] = useState<Set<string>>(new Set())
   const [customProofs, setCustomProofs] = useState<CustomProof[]>([])
   const [activeTab, setActiveTab] = useState('healing')
-  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'card' | 'org' | 'myorgs'>('profile')
+  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'card' | 'org' | 'myorgs' | 'guide'>('profile')
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set())
   // userRole removed: /api/dashboard の role レスポンスで判定
   const [proofSaving, setProofSaving] = useState(false)
   const [proofSaved, setProofSaved] = useState(false)
@@ -171,7 +172,7 @@ export default function DashboardPage() {
   const tabParam = searchParams.get('tab')
   useEffect(() => {
     if (!tabParam || loading) return
-    const validTabs = ['profile', 'proofs', 'rewards', 'voices', 'card', 'myorgs', 'org']
+    const validTabs = ['profile', 'proofs', 'rewards', 'voices', 'card', 'myorgs', 'org', 'guide']
     if (validTabs.includes(tabParam)) {
       setDashboardTab(tabParam as any)
       if (tabParam === 'myorgs' && selectedMemberOrgId) {
@@ -1393,7 +1394,16 @@ export default function DashboardPage() {
 
   const daysSinceRegistration = getDaysSinceRegistration()
 
-  const isSettingsTab = ['proofs', 'rewards', 'card', 'myorgs', 'org'].includes(dashboardTab)
+  const isSettingsTab = ['proofs', 'rewards', 'card', 'myorgs', 'org', 'guide'].includes(dashboardTab)
+
+  function toggleSection(id: string) {
+    setOpenSections(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -2941,6 +2951,327 @@ export default function DashboardPage() {
           </button>
         </div>
       </>)}
+
+      {/* ═══ Tab: はじめかたガイド ═══ */}
+      {dashboardTab === 'guide' && (
+      <div style={{ paddingBottom: 40 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 500, color: '#1A1A2E', marginBottom: 24 }}>はじめかたガイド</h2>
+
+        {/* ────── STEP 1 ────── */}
+        <div style={{ marginBottom: 8 }}>
+          <span style={{ background: '#C4A35A', color: '#1A1A2E', fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 4, marginRight: 8 }}>STEP 1</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>最初にやること</span>
+        </div>
+
+        {/* アコーディオン1: プロフィール */}
+        <div style={{ border: '1px solid #E5E7EB', borderRadius: 8, marginBottom: 8, overflow: 'hidden' }}>
+          <button onClick={() => toggleSection('profile')} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', background: 'white', border: 'none', cursor: 'pointer', textAlign: 'left' as const }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>プロフィールを整える</div>
+              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>35,000人に公開された時の第一印象を決める</div>
+            </div>
+            <span style={{ color: '#C4A35A', fontSize: 16, flexShrink: 0 }}>{openSections.has('profile') ? '▲' : '▼'}</span>
+          </button>
+          {openSections.has('profile') && (
+            <div style={{ background: '#F9FAFB', padding: '16px', borderTop: '1px solid #E5E7EB' }}>
+              <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 10 }}>
+                <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginBottom: 4 }}>名前</p>
+                  <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6 }}>本名を推奨。プルーフはあなた個人に紐づく一生の資産。店舗や屋号ではなく、個人名で蓄積することで、独立・転職しても消えない実力の証明になる。</p>
+                </div>
+                <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginBottom: 4 }}>写真</p>
+                  <p style={{ fontSize: 13, color: '#6B7280' }}>顔がはっきりわかるもの（施術中でもOK）</p>
+                </div>
+                <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginBottom: 4 }}>肩書き</p>
+                  <p style={{ fontSize: 13, color: '#6B7280' }}>お客さんに伝わる言葉で（例: 痛み改善の専門家）</p>
+                </div>
+                <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginBottom: 4 }}>活動エリア</p>
+                  <p style={{ fontSize: 13, color: '#6B7280' }}>都道府県 + 詳細（例: 渋谷・恵比寿 / 出張対応: 関東全域）</p>
+                </div>
+                <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginBottom: 4 }}>自己紹介文</p>
+                  <p style={{ fontSize: 13, color: '#6B7280' }}>あなたの想いや専門性を自由に</p>
+                </div>
+              </div>
+              <a href="/dashboard?tab=profile&edit=true" style={{ display: 'block', marginTop: 12, fontSize: 13, color: '#C4A35A', textDecoration: 'none' }}>→ メニュー ＞ 設定 ＞ プロフィール編集</a>
+            </div>
+          )}
+        </div>
+
+        {/* アコーディオン2: 強み */}
+        <div style={{ border: '1px solid #E5E7EB', borderRadius: 8, marginBottom: 8, overflow: 'hidden' }}>
+          <button onClick={() => toggleSection('strengths')} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', background: 'white', border: 'none', cursor: 'pointer', textAlign: 'left' as const }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>強みを選ぶ</div>
+              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>お客さんがアンケートで「この人の何が良かった？」と聞かれる項目</div>
+            </div>
+            <span style={{ color: '#C4A35A', fontSize: 16, flexShrink: 0 }}>{openSections.has('strengths') ? '▲' : '▼'}</span>
+          </button>
+          {openSections.has('strengths') && (
+            <div style={{ background: '#F9FAFB', padding: '16px', borderTop: '1px solid #E5E7EB' }}>
+              <p style={{ fontSize: 13, color: '#1A1A2E', marginBottom: 12, lineHeight: 1.6 }}>あなたがもっとも自信のあることを、85項目の中から <strong>9つ</strong> 選んでください。9つのカテゴリに分かれています:</p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 12 }}>
+                {['治療・回復', '体の機能改善', 'ボディメイク', 'パフォーマンス', 'マインド', '発見・気づき', '指導力', 'ビューティー', '栄養・生活'].map(cat => (
+                  <span key={cat} style={{ fontSize: 13, color: '#C4A35A', padding: '4px 8px', background: 'white', borderRadius: 4, border: '1px solid #E5E7EB' }}>{cat}</span>
+                ))}
+              </div>
+              <p style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.6 }}>選んだ項目はいつでも変更OK。その時に磨きたい強みに合わせて入れ替えられます。変更しても、過去にもらった票は消えません。</p>
+              <a href="/dashboard?tab=proofs" style={{ display: 'block', marginTop: 12, fontSize: 13, color: '#C4A35A', textDecoration: 'none' }}>→ メニュー ＞ 設定 ＞ 強み設定</a>
+            </div>
+          )}
+        </div>
+
+        {/* アコーディオン3: リワード */}
+        <div style={{ border: '1px solid #E5E7EB', borderRadius: 8, marginBottom: 8, overflow: 'hidden' }}>
+          <button onClick={() => toggleSection('rewards')} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', background: 'white', border: 'none', cursor: 'pointer', textAlign: 'left' as const }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>リワードを用意する</div>
+              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>アンケートへのお礼。設定すると回答率が上がる</div>
+            </div>
+            <span style={{ color: '#C4A35A', fontSize: 16, flexShrink: 0 }}>{openSections.has('rewards') ? '▲' : '▼'}</span>
+          </button>
+          {openSections.has('rewards') && (
+            <div style={{ background: '#F9FAFB', padding: '16px', borderTop: '1px solid #E5E7EB' }}>
+              <p style={{ fontSize: 13, color: '#1A1A2E', marginBottom: 12, lineHeight: 1.6 }}>8カテゴリから最大3つを選んで設定。お客さんには「種類」だけ見える。中身はアンケート後に開示。</p>
+              <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
+                {[
+                  ['次回特典', '延長15分無料、オプション追加など（値引きではなく価値の上乗せ）'],
+                  ['プロの秘密', 'あなただけが知っている専門知識'],
+                  ['自宅でできる○○', 'セルフケア・セルフワーク'],
+                  ['おすすめの一冊', 'あなたの人生を変えた本'],
+                  ['おすすめスポット', 'あなたの行きつけ'],
+                  ['おすすめ作品', '映画・音楽・Podcast'],
+                  ['シークレット', '種類すら非公開。好奇心が最大のトリガー'],
+                  ['自由記入', '何でもOK'],
+                ].map(([label, desc]) => (
+                  <div key={label} style={{ background: 'white', padding: '10px 12px', borderRadius: 6, border: '1px solid #E5E7EB' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#C4A35A' }}>{label}</span>
+                    <span style={{ fontSize: 13, color: '#6B7280' }}> — {desc}</span>
+                  </div>
+                ))}
+              </div>
+              <a href="/dashboard?tab=rewards" style={{ display: 'block', marginTop: 12, fontSize: 13, color: '#C4A35A', textDecoration: 'none' }}>→ メニュー ＞ 設定 ＞ リワード設定</a>
+            </div>
+          )}
+        </div>
+
+        {/* アコーディオン4: NFCカード */}
+        <div style={{ border: '1px solid #E5E7EB', borderRadius: 8, marginBottom: 24, overflow: 'hidden' }}>
+          <button onClick={() => toggleSection('nfc')} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', background: 'white', border: 'none', cursor: 'pointer', textAlign: 'left' as const }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>NFCカードを登録する</div>
+              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>お客さんがスマホをかざすだけでアンケートページへ</div>
+            </div>
+            <span style={{ color: '#C4A35A', fontSize: 16, flexShrink: 0 }}>{openSections.has('nfc') ? '▲' : '▼'}</span>
+          </button>
+          {openSections.has('nfc') && (
+            <div style={{ background: '#F9FAFB', padding: '16px', borderTop: '1px solid #E5E7EB' }}>
+              <p style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6 }}>カード裏面のID（RP-XXXX形式、ハイフンも入力）を入力。お客さんがカードにスマホをかざすだけでアンケートページに飛べるようになる。QRコードより手軽。紛失した場合は無効化→再発行が可能。</p>
+              <a href="/dashboard?tab=card" style={{ display: 'block', marginTop: 12, fontSize: 13, color: '#C4A35A', textDecoration: 'none' }}>→ メニュー ＞ 設定 ＞ NFCカード</a>
+            </div>
+          )}
+        </div>
+
+        {/* ────── STEP 2 ────── */}
+        <div style={{ marginBottom: 8 }}>
+          <span style={{ background: '#C4A35A', color: '#1A1A2E', fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 4, marginRight: 8 }}>STEP 2</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>毎日やること</span>
+        </div>
+
+        {/* アコーディオン5: 声かけ */}
+        <div style={{ border: '1px solid #E5E7EB', borderRadius: 8, marginBottom: 8, overflow: 'hidden' }}>
+          <button onClick={() => toggleSection('kakegoe')} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', background: 'white', border: 'none', cursor: 'pointer', textAlign: 'left' as const }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>お客さんへの声かけ</div>
+              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>セッション後にカードを見せるだけ。具体的な声かけ例</div>
+            </div>
+            <span style={{ color: '#C4A35A', fontSize: 16, flexShrink: 0 }}>{openSections.has('kakegoe') ? '▲' : '▼'}</span>
+          </button>
+          {openSections.has('kakegoe') && (
+            <div style={{ background: '#F9FAFB', padding: '16px', borderTop: '1px solid #E5E7EB' }}>
+              <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 10 }}>
+                <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
+                  <p style={{ fontSize: 12, fontWeight: 600, color: '#C4A35A', marginBottom: 4 }}>ベストタイミング</p>
+                  <p style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6 }}>お客さんが「ありがとう」と言った瞬間。感動が冷めないうちにNFCカードを渡す。</p>
+                </div>
+                <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
+                  <p style={{ fontSize: 12, fontWeight: 600, color: '#C4A35A', marginBottom: 4 }}>一番シンプル <span style={{ fontSize: 11, background: 'rgba(196,163,90,0.1)', color: '#C4A35A', padding: '1px 6px', borderRadius: 4 }}>★ おすすめ</span></p>
+                  <p style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6, whiteSpace: 'pre-line' }}>{`「かんたんなアンケートに\nご協力いただけますか？\nスマホをかざすだけで、\n30秒で終わります」`}</p>
+                </div>
+                <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
+                  <p style={{ fontSize: 12, fontWeight: 600, color: '#C4A35A', marginBottom: 4 }}>理由を添える</p>
+                  <p style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6, whiteSpace: 'pre-line' }}>{`「自分の技術を上げるために\nお客さんの声を集めてるんです。\nかんたんなアンケートなんですけど、\nご協力いただけますか？」`}</p>
+                </div>
+                <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
+                  <p style={{ fontSize: 12, fontWeight: 600, color: '#C4A35A', marginBottom: 4 }}>断られたら</p>
+                  <p style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6 }}>大丈夫。別のお客さんに、別のタイミングで。無理は禁物。</p>
+                </div>
+              </div>
+              <p style={{ fontSize: 11, color: '#9CA3AF', marginTop: 12, textAlign: 'center' as const }}>✕ 使わない言葉: 投票 / 評価 / 口コミ / レビュー / REALPROOF</p>
+            </div>
+          )}
+        </div>
+
+        {/* アコーディオン6: 配布資料 */}
+        <div style={{ border: '1px solid #E5E7EB', borderRadius: 8, marginBottom: 24, overflow: 'hidden' }}>
+          <button onClick={() => toggleSection('flyer')} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', background: 'white', border: 'none', cursor: 'pointer', textAlign: 'left' as const }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>配布資料</div>
+              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>「これ何？」と聞かれた時に渡せるチラシ</div>
+            </div>
+            <span style={{ color: '#C4A35A', fontSize: 16, flexShrink: 0 }}>{openSections.has('flyer') ? '▲' : '▼'}</span>
+          </button>
+          {openSections.has('flyer') && (
+            <div style={{ background: '#F9FAFB', padding: '16px', borderTop: '1px solid #E5E7EB' }}>
+              <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 12 }}>クライアント説明用チラシ（PDF） — 印刷して施術室に置いておく</p>
+              <a
+                href="/docs/REALPROOF-flyer.pdf"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, background: '#1A1A2E', color: '#C4A35A', textDecoration: 'none' }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="12" y1="18" x2="12" y2="12"/>
+                  <polyline points="9 15 12 18 15 15"/>
+                </svg>
+                クライアント説明用チラシ（PDF）
+              </a>
+            </div>
+          )}
+        </div>
+
+        {/* ────── STEP 3 ────── */}
+        <div style={{ marginBottom: 8 }}>
+          <span style={{ background: '#C4A35A', color: '#1A1A2E', fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 4, marginRight: 8 }}>STEP 3</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>知っておくと安心</span>
+        </div>
+
+        {/* アコーディオン7: プルーフの仕組みとルール */}
+        <div style={{ border: '1px solid #E5E7EB', borderRadius: 8, marginBottom: 8, overflow: 'hidden' }}>
+          <button onClick={() => toggleSection('rules')} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', background: 'white', border: 'none', cursor: 'pointer', textAlign: 'left' as const }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>プルーフの仕組みとルール</div>
+              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>公平性を保つためのルールと蓄積の仕組み</div>
+            </div>
+            <span style={{ color: '#C4A35A', fontSize: 16, flexShrink: 0 }}>{openSections.has('rules') ? '▲' : '▼'}</span>
+          </button>
+          {openSections.has('rules') && (
+            <div style={{ background: '#F9FAFB', padding: '16px', borderTop: '1px solid #E5E7EB' }}>
+              <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 10 }}>
+                <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginBottom: 6 }}>お客さんが回答する流れ</p>
+                  <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.8 }}>NFC/QRをスマホで読み取る → プロフィール表示 → 強みを最大3つ選択（任意） → 人柄を最大3つ（任意） → ひとこと（任意） → メールアドレス入力 → リワード選択 → 完了</p>
+                </div>
+                <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginBottom: 6 }}>回数のルール</p>
+                  <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
+                    <p style={{ fontSize: 13, color: '#6B7280' }}><span style={{ color: '#C4A35A', fontWeight: 600 }}>1回</span> — 同じお客さんからは1人につき1回</p>
+                    <p style={{ fontSize: 13, color: '#6B7280' }}><span style={{ color: '#C4A35A', fontWeight: 600 }}>1日3名</span> — お客さんが1日に回答できるのは最大3名</p>
+                    <p style={{ fontSize: 13, color: '#6B7280' }}><span style={{ color: '#C4A35A', fontWeight: 600 }}>30分</span> — 回答後、次の回答まで30分の間隔が必要</p>
+                  </div>
+                </div>
+                <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginBottom: 4 }}>プルーフの蓄積</p>
+                  <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6 }}>票はプロフィールページにリアルタイム反映。プルーフチャートであなたの多次元的な強みが可視化される。一度もらった票は一生消えない。</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* アコーディオン8: バッジと認定 */}
+        <div style={{ border: '1px solid #E5E7EB', borderRadius: 8, marginBottom: 8, overflow: 'hidden' }}>
+          <button onClick={() => toggleSection('badges')} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', background: 'white', border: 'none', cursor: 'pointer', textAlign: 'left' as const }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>バッジと認定</div>
+              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>プルーフを集めるほど、あなたのプロフィールが進化する</div>
+            </div>
+            <span style={{ color: '#C4A35A', fontSize: 16, flexShrink: 0 }}>{openSections.has('badges') ? '▲' : '▼'}</span>
+          </button>
+          {openSections.has('badges') && (
+            <div style={{ background: '#F9FAFB', padding: '16px', borderTop: '1px solid #E5E7EB' }}>
+              <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 10 }}>
+                <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginBottom: 6 }}>プルーフ数で解除されるレベル（1つの強み項目単位）</p>
+                  <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
+                    <p style={{ fontSize: 13, color: '#6B7280' }}><span style={{ color: '#C4A35A', fontWeight: 600 }}>15票 PROVEN</span> — プロフィールのバーがゴールドに輝く</p>
+                    <p style={{ fontSize: 13, color: '#6B7280' }}><span style={{ color: '#C4A35A', fontWeight: 600 }}>30票 SPECIALIST</span> — 表彰状と名前入りカードが届く</p>
+                    <p style={{ fontSize: 13, color: '#6B7280' }}><span style={{ color: '#C4A35A', fontWeight: 600 }}>50票 MASTER</span> — メタリックカードが届く</p>
+                  </div>
+                </div>
+                <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginBottom: 4 }}>極め方でバッジが変わる</p>
+                  <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6 }}>同じカテゴリ内で深く極めるか、複数カテゴリにわたって幅広く極めるかで、もらえるバッジが変わります。あなたのスタイルに合った成長の仕方を。</p>
+                </div>
+                <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginBottom: 4 }}>申請方法</p>
+                  <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6 }}>30票または50票に到達すると、ダッシュボードに申請フォームが自動で表示されます。フォームから申請するだけ。初回申請は無料です。</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* アコーディオン9: Voices */}
+        <div style={{ border: '1px solid #E5E7EB', borderRadius: 8, marginBottom: 8, overflow: 'hidden' }}>
+          <button onClick={() => toggleSection('voices')} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', background: 'white', border: 'none', cursor: 'pointer', textAlign: 'left' as const }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>Voices — お客さんの声をシェアする</div>
+              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>「自慢」ではなく「お礼」の文脈で信頼を広げる</div>
+            </div>
+            <span style={{ color: '#C4A35A', fontSize: 16, flexShrink: 0 }}>{openSections.has('voices') ? '▲' : '▼'}</span>
+          </button>
+          {openSections.has('voices') && (
+            <div style={{ background: '#F9FAFB', padding: '16px', borderTop: '1px solid #E5E7EB' }}>
+              <p style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.7 }}>お客さんがアンケートでひとことを書いてくれた場合、ダッシュボードのVoicesタブに表示されます。タップするとシェアカードが生成され、SNSで「この声にお礼する」形でシェアできます。主語がお客さんの声なので、「自慢」に見えずに信頼が静かに広がる仕組みです。</p>
+            </div>
+          )}
+        </div>
+
+        {/* アコーディオン10: LINE連携 */}
+        <div style={{ border: '1px solid #E5E7EB', borderRadius: 8, marginBottom: 32, overflow: 'hidden' }}>
+          <button onClick={() => toggleSection('line')} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', background: 'white', border: 'none', cursor: 'pointer', textAlign: 'left' as const }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>LINE連携（週次レポート）</div>
+              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>毎週月曜に成長レポートが届く</div>
+            </div>
+            <span style={{ color: '#C4A35A', fontSize: 16, flexShrink: 0 }}>{openSections.has('line') ? '▲' : '▼'}</span>
+          </button>
+          {openSections.has('line') && (
+            <div style={{ background: '#F9FAFB', padding: '16px', borderTop: '1px solid #E5E7EB' }}>
+              <p style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.7 }}>LINEを連携すると、毎週月曜朝に成長レポートが届きます: 今週の新規プルーフ数、累計と順位、PROVEN進捗（15票でゴールド認定）、届いた声のハイライト。メールでも届きますが、LINEの方が見逃しにくいです。</p>
+              <a href="/dashboard?tab=profile&edit=true" style={{ display: 'block', marginTop: 12, fontSize: 13, color: '#C4A35A', textDecoration: 'none' }}>→ メニュー ＞ 設定 ＞ LINE連携</a>
+            </div>
+          )}
+        </div>
+
+        {/* ────── COMING ────── */}
+        <div style={{ marginBottom: 8 }}>
+          <span style={{ background: 'rgba(196,163,90,0.15)', color: '#C4A35A', fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 4, marginRight: 8 }}>COMING</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>REALPROOFの今後</span>
+        </div>
+        <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, marginBottom: 16 }}>プルーフを集めるだけで終わりません。あなたの強みを活かしてクライアントを獲得し、ビジネスを成長させるための機能を順次追加していく予定です。</p>
+        <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
+          {[
+            ['悩み相談機能（仮）', 'お客さんが悩みを投稿 → あなたが提案を送れる。看板や広告費がなくても、強みだけでクライアントを獲得できる仕組み。'],
+            ['オンライン面談（仮）', '10分1,500円。「いきなり対面は不安」というお客さんが、まず画面越しにあなたと話せる。お客さんも安心、あなたにとっては集客導線。'],
+            ['予約機能（仮）', 'プロフィールページから直接予約。プルーフを見て「この人に頼みたい」と思ったお客さんが、すぐに行動できる。'],
+            ['AIプロ検索（仮）', '「肩が痛くて仕事に集中できない」と話しかけるだけで、AIがプルーフデータから最適なプロを提案。広告費ゼロであなたが見つけてもらえる。'],
+            ['知識・スキル販売（仮）', 'あなたの専門知識をコンテンツとして販売できる機能。対面セッション以外の収益源を作れる。'],
+          ].map(([title, desc]) => (
+            <div key={title} style={{ background: 'white', padding: '12px 16px', borderRadius: 8, border: '1px solid #E5E7EB' }}>
+              <p style={{ fontSize: 13, fontWeight: 600, color: '#C4A35A', marginBottom: 4 }}>{title}</p>
+              <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6 }}>{desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+      )}
 
       {/* ═══ Tab: 団体（メンバー用リソース閲覧） ═══ */}
       {dashboardTab === 'myorgs' && hasOrgMembership && (<>
