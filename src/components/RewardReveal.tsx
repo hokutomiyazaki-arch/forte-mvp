@@ -201,7 +201,7 @@ export default function RewardReveal({ reward, proName }: { reward: any; proName
         @keyframes letter-appear{0%{opacity:0;transform:scale(.92)}100%{opacity:1;transform:scale(1)}}
       `}</style>
 
-      <div style={{ position: 'relative', width: 300, height: 260, margin: '0 auto', overflow: 'visible' }}>
+      <div style={{ position: 'relative', width: 300, minHeight: 260, margin: '0 auto', overflow: 'visible' }}>
 
         {/* Light burst */}
         <div id="light-burst" style={{
@@ -318,7 +318,7 @@ export default function RewardReveal({ reward, proName }: { reward: any; proName
         {/* Letter (appears after envelope fades) */}
         {phase === 'revealed' && (
           <div style={{
-            position: 'absolute', top: 10, left: 16, right: 16,
+            position: 'relative', marginTop: 10, marginLeft: 16, marginRight: 16,
             background: '#FAFAF7', borderRadius: 12,
             border: '1px solid #E5E2D9', padding: '22px 18px',
             zIndex: 2,
