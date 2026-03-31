@@ -4,6 +4,7 @@ import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import RewardReveal from '@/components/RewardReveal'
 import { Suspense } from 'react'
+import Link from 'next/link'
 import { useProStatus } from '@/lib/useProStatus'
 interface RewardInfo {
   reward_type: string
@@ -296,9 +297,9 @@ function ConfirmedContent() {
 
       {/* ヘッダー: シンプルにロゴだけ */}
       <div className="bg-[#1A1A2E] py-4 px-6">
-        <span className="text-white text-xl font-bold tracking-widest">
+        <Link href="/" className="text-white text-xl font-bold tracking-widest no-underline">
           REALPROOF
-        </span>
+        </Link>
       </div>
 
       <div className="max-w-lg mx-auto px-6 py-8 space-y-8">
