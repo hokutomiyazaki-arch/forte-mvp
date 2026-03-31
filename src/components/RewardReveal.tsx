@@ -195,6 +195,7 @@ export default function RewardReveal({ reward, proName }: { reward: any; proName
     <>
       <style>{`
         @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.97)}}
+        @keyframes bounce-hint{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(-8px)}}
         @keyframes particle-out{0%{transform:translate(0,0) scale(.2);opacity:0}12%{opacity:1;transform:scale(1.1)}100%{transform:translate(var(--tx),var(--ty)) scale(0);opacity:0}}
         @keyframes float-drift{0%{transform:translate(0,0);opacity:0}8%{opacity:.9}70%{opacity:.3}100%{transform:translate(var(--tx),var(--ty));opacity:0}}
         @keyframes slit-pulse{0%{opacity:0;height:4px}40%{opacity:1;height:6px}100%{opacity:0;height:8px}}
@@ -313,6 +314,22 @@ export default function RewardReveal({ reward, proName }: { reward: any; proName
               zIndex: 4, opacity: 0, filter: 'blur(3px)', pointerEvents: 'none',
             }} />
           </div>
+
+          {/* Tap hint finger animation */}
+          {phase === 'sealed' && (
+            <div style={{
+              position: 'absolute',
+              bottom: 16,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              animation: 'bounce-hint 1.5s ease-in-out infinite',
+              fontSize: 28,
+              pointerEvents: 'none',
+              zIndex: 11,
+            }}>
+              👆
+            </div>
+          )}
         </div>
 
         {/* Letter (appears after envelope fades) */}
