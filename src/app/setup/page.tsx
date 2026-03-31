@@ -713,7 +713,7 @@ export default function SetupPage() {
               <div className="space-y-3 mb-4">
                 {rewards.map((reward, idx) => {
                   const rt = getRewardType(reward.reward_type)
-                  const displayLabel = rt?.label || reward.reward_type
+                  const displayLabel = reward.reward_type === 'org_app' ? (reward.title || 'アプリ') : (rt?.label || reward.reward_type)
                   const needsTitle = rt?.hasTitle || false
                   return (
                     <div key={idx} className="p-4 bg-[#FAFAF7] rounded-lg border border-[#E5E7EB]">
@@ -770,6 +770,21 @@ export default function SetupPage() {
                           })}
                           {!reward.content && <p className="text-xs text-red-400 mt-1">アプリを選択してください</p>}
                         </div>
+                      ) : reward.reward_type === 'org_app' ? (
+                        <div className="space-y-2">
+                          <p className="text-xs text-[#9CA3AF]">{reward.url}</p>
+                          <textarea
+                            value={reward.content}
+                            onChange={e => {
+                              const updated = [...rewards]
+                              updated[idx] = { ...updated[idx], content: e.target.value }
+                              setRewards(updated)
+                            }}
+                            rows={2}
+                            className="w-full px-3 py-2 bg-white border border-[#E5E7EB] rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#C4A35A] resize-none"
+                            placeholder="クライアントに表示される説明文（編集可能）"
+                          />
+                        </div>
                       ) : (
                         <textarea
                           value={reward.content}
@@ -797,6 +812,36 @@ export default function SetupPage() {
                     className="w-full py-2 text-sm text-[#C4A35A] font-medium hover:text-[#b3923f] transition-colors">
                     + リワードを追加（残り{3 - rewards.length}枠）
                   </button>
+                ) : showOrgAppPicker ? (
+                  <>
+                    <p className="text-sm font-medium text-[#1A1A2E] mb-3">追加するアプリを選択</p>
+                    <div className="space-y-2 mb-3">
+                      {availableApps.map((app: any) => (
+                        <button key={app.id} type="button"
+                          onClick={() => {
+                            setRewards([...rewards, {
+                              reward_type: 'org_app',
+                              title: app.title,
+                              url: app.url,
+                              content: app.description || '',
+                            }])
+                            setShowOrgAppPicker(false)
+                            setShowRewardPicker(false)
+                          }}
+                          className="w-full text-left px-3 py-2.5 rounded-lg border border-[#E5E7EB] hover:bg-[#FAFAF7] transition-colors">
+                          <span className="text-sm font-medium text-[#1A1A2E]">{app.title}</span>
+                          {app.description && (
+                            <span className="text-xs text-[#9CA3AF] ml-2">{app.description}</span>
+                          )}
+                          <span className="text-xs text-[#C4A35A] ml-2">追加する ＋</span>
+                        </button>
+                      ))}
+                    </div>
+                    <button type="button" onClick={() => setShowOrgAppPicker(false)}
+                      className="text-xs text-[#9CA3AF] hover:text-[#6B7280] transition-colors">
+                      ← カテゴリ一覧に戻る
+                    </button>
+                  </>
                 ) : (
                   <>
                     <p className="text-sm font-medium text-[#1A1A2E] mb-3">カテゴリを選択</p>
@@ -814,6 +859,14 @@ export default function SetupPage() {
                             <span className="text-xs text-[#9CA3AF] ml-2">{rt.description}</span>
                           </button>
                         ))}
+                      {availableAppsLoaded && availableApps.length > 0 && (
+                        <button type="button"
+                          onClick={() => setShowOrgAppPicker(true)}
+                          className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-[#FAFAF7] transition-colors">
+                          <span className="text-sm font-medium text-[#1A1A2E]">団体配布</span>
+                          <span className="text-xs text-[#9CA3AF] ml-2">所属団体のアプリをクライアントにプレゼント</span>
+                        </button>
+                      )}
                     </div>
                     <button type="button" onClick={() => setShowRewardPicker(false)}
                       className="text-xs text-[#9CA3AF] hover:text-[#6B7280] transition-colors">
@@ -824,97 +877,6 @@ export default function SetupPage() {
               </div>
             )}
 
-            {/* === 団体アプリセクション === */}
-            {availableAppsLoaded && availableApps.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-[#E5E7EB] mb-4">
-                <div className="flex items-center justify-between mb-1">
-                  <h3 className="text-sm font-bold text-[#1A1A2E]">団体アプリ</h3>
-                </div>
-                <p className="text-xs text-[#9CA3AF] mb-3">
-                  {availableApps[0]?.organizations?.name || '所属団体'}
-                </p>
-
-                {/* 登録済みorg_appリワード */}
-                {rewards.filter(r => r.reward_type === 'org_app').length > 0 && (
-                  <div className="space-y-2 mb-3">
-                    {rewards.map((reward, idx) => {
-                      if (reward.reward_type !== 'org_app') return null
-                      return (
-                        <div key={idx} className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-sm font-medium text-[#1A1A2E]">{reward.title}</span>
-                            <button type="button"
-                              onClick={() => setRewards(rewards.filter((_, i) => i !== idx))}
-                              className="text-xs text-[#9CA3AF] hover:text-red-500 transition-colors">
-                              削除
-                            </button>
-                          </div>
-                          <p className="text-xs text-blue-600 mb-2">{reward.url}</p>
-                          <textarea
-                            value={reward.content}
-                            onChange={e => {
-                              const updated = [...rewards]
-                              updated[idx] = { ...updated[idx], content: e.target.value }
-                              setRewards(updated)
-                            }}
-                            rows={2}
-                            className="w-full px-3 py-2 bg-white border border-blue-100 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#C4A35A] resize-none"
-                            placeholder="クライアントに表示される説明文（編集可能）"
-                          />
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-
-                {/* アプリ追加ボタン */}
-                {(() => {
-                  const addedUrls = rewards.filter(r => r.reward_type === 'org_app').map(r => r.url)
-                  const unaddedApps = availableApps.filter(app => !addedUrls.includes(app.url))
-                  if (unaddedApps.length === 0) return null
-                  return (
-                    <div className="border border-dashed border-blue-200 rounded-lg p-3">
-                      {!showOrgAppPicker ? (
-                        <button type="button"
-                          onClick={() => setShowOrgAppPicker(true)}
-                          className="w-full py-2 text-sm text-blue-600 font-medium hover:text-blue-800 transition-colors">
-                          + アプリを追加する
-                        </button>
-                      ) : (
-                        <>
-                          <p className="text-xs font-medium text-[#1A1A2E] mb-2">追加するアプリを選択</p>
-                          <div className="space-y-2 mb-2">
-                            {unaddedApps.map((app: any) => (
-                              <button key={app.id} type="button"
-                                onClick={() => {
-                                  setRewards([...rewards, {
-                                    reward_type: 'org_app',
-                                    title: app.title,
-                                    url: app.url,
-                                    content: app.description || '',
-                                  }])
-                                  setShowOrgAppPicker(false)
-                                }}
-                                className="w-full text-left px-3 py-2.5 rounded-lg border border-blue-100 hover:bg-blue-50 transition-colors">
-                                <span className="text-sm font-medium text-[#1A1A2E]">{app.title}</span>
-                                {app.description && (
-                                  <span className="text-xs text-[#9CA3AF] ml-2">{app.description}</span>
-                                )}
-                              </button>
-                            ))}
-                          </div>
-                          <button type="button"
-                            onClick={() => setShowOrgAppPicker(false)}
-                            className="text-xs text-[#9CA3AF] hover:text-[#6B7280] transition-colors">
-                            キャンセル
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  )
-                })()}
-              </div>
-            )}
 
             {rewardError && <p className="text-red-500 text-sm mb-2">{rewardError}</p>}
 
