@@ -188,7 +188,8 @@ export default function RewardReveal({ reward, proName }: { reward: any; proName
     }
   }, [])
 
-  const rewardTypeLabel = getRewardLabel(reward?.reward_type) || reward?.title || reward?.reward_type || 'リワード'
+  const isOrgApp = reward?.reward_type === 'org_app' || reward?.reward_type === 'fnt_neuro_app'
+  const rewardTypeLabel = isOrgApp ? 'アプリ' : (getRewardLabel(reward?.reward_type) || reward?.title || reward?.reward_type || 'リワード')
 
   return (
     <>
@@ -331,9 +332,45 @@ export default function RewardReveal({ reward, proName }: { reward: any; proName
               <div style={{ fontSize: 11, color: '#999', marginBottom: 14 }}>
                 {proName}さんからのおすすめ
               </div>
-              <div style={{ background: '#F5F0E5', border: '1px dashed #C4A35A', borderRadius: 8, padding: 16, wordBreak: 'break-word', overflowWrap: 'break-word' }}>
-                <RewardContent content={reward?.content || ''} />
-              </div>
+              {isOrgApp ? (
+                <>
+                  {reward?.title && (
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#1A1A2E', marginBottom: 8 }}>
+                      {reward.title}
+                    </div>
+                  )}
+                  {reward?.content && (
+                    <div style={{
+                      background: '#F0F4FF', borderLeft: '3px solid #3B82F6',
+                      borderRadius: 8, padding: '12px 14px', marginBottom: 12,
+                      textAlign: 'left', fontSize: 13, color: '#4B5563',
+                      wordBreak: 'break-word', overflowWrap: 'break-word',
+                    }}>
+                      {reward.content}
+                    </div>
+                  )}
+                  {reward?.url && (
+                    <a
+                      href={reward.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        gap: 6, width: '100%', padding: '12px 16px', borderRadius: 10,
+                        background: '#EFF6FF', border: '1px solid #BFDBFE',
+                        color: '#1D4ED8', fontSize: 15, fontWeight: 700,
+                        textDecoration: 'none', transition: 'background 0.2s',
+                      }}
+                    >
+                      アプリを開く →
+                    </a>
+                  )}
+                </>
+              ) : (
+                <div style={{ background: '#F5F0E5', border: '1px dashed #C4A35A', borderRadius: 8, padding: 16, wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+                  <RewardContent content={reward?.content || ''} />
+                </div>
+              )}
               <div style={{ width: 32, height: 1, background: '#C4A35A', margin: '14px auto 0', opacity: 0.5 }} />
             </div>
           </div>

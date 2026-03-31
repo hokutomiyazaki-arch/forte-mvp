@@ -28,7 +28,8 @@ export async function GET(
       rewards (
         reward_type,
         title,
-        content
+        content,
+        url
       ),
       professionals (
         name
@@ -54,6 +55,7 @@ export async function GET(
     reward_type: reward?.reward_type || '',
     title: reward?.title || '',
     content: reward?.content || '',
+    url: reward?.url || '',
     proName: pro?.name || '',
     professionalId: data.professional_id,
   })

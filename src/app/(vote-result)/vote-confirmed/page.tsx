@@ -10,6 +10,7 @@ interface RewardInfo {
   reward_type: string
   content: string
   title: string
+  url?: string
 }
 
 function ConfirmedContent() {
@@ -68,6 +69,7 @@ function ConfirmedContent() {
         reward_type: data.reward_type || '',
         content: data.content || '',
         title: data.title || '',
+        url: data.url || '',
       }
     } catch (e) {
       console.warn('[vote-confirmed] reward param decode failed:', e)
@@ -213,6 +215,7 @@ function ConfirmedContent() {
               reward_type: data.reward_type || '',
               content: data.content || '',
               title: data.title || '',
+              url: data.url || '',
             })
             if (data.proName && !proId) {
               setProName(data.proName)
@@ -248,7 +251,7 @@ function ConfirmedContent() {
 
             const { data: rewardData } = await (supabase as any)
               .from('rewards')
-              .select('reward_type, content, title')
+              .select('reward_type, content, title, url')
               .eq('id', crData.reward_id)
               .maybeSingle()
 
@@ -257,6 +260,7 @@ function ConfirmedContent() {
                 reward_type: rewardData.reward_type || '',
                 content: rewardData.content || '',
                 title: rewardData.title || '',
+                url: rewardData.url || '',
               })
             }
           }
