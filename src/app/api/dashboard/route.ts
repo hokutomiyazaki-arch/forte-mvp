@@ -318,6 +318,7 @@ export async function GET() {
         reward_type: r.reward_type,
         title: r.title || '',
         content: r.content || '',
+        url: r.url || '',
       })),
       voteSummary: voteSummaryResult.data || [],
       personalitySummary: personalitySummaryResult.data || [],
