@@ -67,7 +67,7 @@ export function SharedDataProvider({ children }: { children: ReactNode }) {
       setNavContextLoaded(true)
       return
     }
-    fetch('/api/nav-context')
+    fetch('/api/nav-context', { cache: 'no-store' })
       .then(res => res.json())
       .then(data => {
         if (data.ownedOrg) setOwnedOrg(data.ownedOrg)
