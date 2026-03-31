@@ -90,11 +90,14 @@ export default function DashboardPage() {
   })
   const [customResultFortes, setCustomResultFortes] = useState<CustomForte[]>([])
   const [customPersonalityFortes, setCustomPersonalityFortes] = useState<CustomForte[]>([])
-  const [rewards, setRewards] = useState<{ id?: string; reward_type: string; title: string; content: string }[]>([])
+  const [rewards, setRewards] = useState<{ id?: string; reward_type: string; title: string; content: string; url?: string }[]>([])
   const [showRewardPicker, setShowRewardPicker] = useState(false)
   const [rewardSaving, setRewardSaving] = useState(false)
   const [rewardSaved, setRewardSaved] = useState(false)
   const [rewardError, setRewardError] = useState('')
+  const [availableApps, setAvailableApps] = useState<any[]>([])
+  const [availableAppsLoaded, setAvailableAppsLoaded] = useState(false)
+  const [showOrgAppPicker, setShowOrgAppPicker] = useState(false)
   const [confirmingDeregister, setConfirmingDeregister] = useState(false)
   const [deregistering, setDeregistering] = useState(false)
   const [showDeactivateModal, setShowDeactivateModal] = useState(false)
@@ -270,6 +273,17 @@ export default function DashboardPage() {
 
         // リワード
         if (data.rewards) setRewards(data.rewards)
+
+        // 利用可能な団体アプリを取得
+        fetch('/api/professional/available-apps')
+          .then(r => r.ok ? r.json() : null)
+          .then(appData => {
+            if (appData?.availableApps) {
+              setAvailableApps(appData.availableApps)
+            }
+            setAvailableAppsLoaded(true)
+          })
+          .catch(() => setAvailableAppsLoaded(true))
 
         // vote_summary: proof_id → ラベル変換
         if (data.voteSummary && data.proofItems) {
@@ -815,8 +829,11 @@ export default function DashboardPage() {
       return
     }
 
-    // ② 有効なリワードを事前に準備
-    const validRewards = rewards.filter(r => r.reward_type && r.content.trim())
+    // ② 有効なリワードを事前に準備（org_appはurl必須、content任意）
+    const validRewards = rewards.filter(r => {
+      if (r.reward_type === 'org_app') return r.url?.trim()
+      return r.reward_type && r.content.trim()
+    })
 
     // ③ 空contentのリワードがある場合に警告（データ消失防止）
     const emptyRewards = rewards.filter(r => r.reward_type && !r.content.trim())
@@ -843,6 +860,7 @@ export default function DashboardPage() {
           reward_type: r.reward_type,
           title: r.title.trim() || '',
           content: r.content.trim(),
+          url: r.reward_type === 'org_app' ? (r.url || null) : null,
           sort_order: idx,
         }))
       )
@@ -2666,12 +2684,113 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* === 団体アプリセクション === */}
+        {availableAppsLoaded && availableApps.length > 0 && (
+          <div className="mt-6 pt-6 border-t border-[#E5E7EB]">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-sm font-bold text-[#1A1A2E]">団体アプリ</h3>
+            </div>
+            <p className="text-xs text-[#9CA3AF] mb-3">
+              {availableApps[0]?.organizations?.name || '所属団体'}
+            </p>
+
+            {/* 登録済みorg_appリワード一覧 */}
+            {rewards.filter(r => r.reward_type === 'org_app').length > 0 && (
+              <div className="space-y-2 mb-3">
+                {rewards.map((reward, idx) => {
+                  if (reward.reward_type !== 'org_app') return null
+                  return (
+                    <div key={idx} className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-medium text-[#1A1A2E]">{reward.title}</span>
+                        <button
+                          type="button"
+                          onClick={() => setRewards(rewards.filter((_, i) => i !== idx))}
+                          className="text-xs text-[#9CA3AF] hover:text-red-500 transition-colors"
+                        >
+                          削除
+                        </button>
+                      </div>
+                      <p className="text-xs text-blue-600 mb-2">{reward.url}</p>
+                      <textarea
+                        value={reward.content}
+                        onChange={e => {
+                          const updated = [...rewards]
+                          updated[idx] = { ...updated[idx], content: e.target.value }
+                          setRewards(updated)
+                        }}
+                        rows={2}
+                        className="w-full px-3 py-2 bg-white border border-blue-100 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#C4A35A] resize-none"
+                        placeholder="クライアントに表示される説明文（編集可能）"
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* アプリ追加ボタン */}
+            {(() => {
+              const addedUrls = rewards.filter(r => r.reward_type === 'org_app').map(r => r.url)
+              const unaddedApps = availableApps.filter(app => !addedUrls.includes(app.url))
+              if (unaddedApps.length === 0) return null
+              return (
+                <div className="border border-dashed border-blue-200 rounded-lg p-3">
+                  {!showOrgAppPicker ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowOrgAppPicker(true)}
+                      className="w-full py-2 text-sm text-blue-600 font-medium hover:text-blue-800 transition-colors"
+                    >
+                      + アプリを追加する
+                    </button>
+                  ) : (
+                    <>
+                      <p className="text-xs font-medium text-[#1A1A2E] mb-2">追加するアプリを選択</p>
+                      <div className="space-y-2 mb-2">
+                        {unaddedApps.map((app: any) => (
+                          <button
+                            key={app.id}
+                            type="button"
+                            onClick={() => {
+                              setRewards([...rewards, {
+                                reward_type: 'org_app',
+                                title: app.title,
+                                url: app.url,
+                                content: app.description || '',
+                              }])
+                              setShowOrgAppPicker(false)
+                            }}
+                            className="w-full text-left px-3 py-2.5 rounded-lg border border-blue-100 hover:bg-blue-50 transition-colors"
+                          >
+                            <span className="text-sm font-medium text-[#1A1A2E]">{app.title}</span>
+                            {app.description && (
+                              <span className="text-xs text-[#9CA3AF] ml-2">{app.description}</span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowOrgAppPicker(false)}
+                        className="text-xs text-[#9CA3AF] hover:text-[#6B7280] transition-colors"
+                      >
+                        キャンセル
+                      </button>
+                    </>
+                  )}
+                </div>
+              )
+            })()}
+          </div>
+        )}
+
         {/* 保存ボタン */}
-        {rewardError && <p className="text-red-500 text-sm mb-2">{rewardError}</p>}
+        {rewardError && <p className="text-red-500 text-sm mb-2 mt-4">{rewardError}</p>}
         <button
           onClick={handleSaveRewards}
           disabled={rewardSaving}
-          className={`w-full py-3 rounded-xl text-sm font-medium tracking-wider transition-colors ${
+          className={`w-full py-3 rounded-xl text-sm font-medium tracking-wider transition-colors mt-4 ${
             rewardSaved
               ? 'bg-green-500 text-white'
               : 'bg-[#1A1A2E] text-[#C4A35A] hover:bg-[#2a2a4e]'
@@ -2681,15 +2800,16 @@ export default function DashboardPage() {
         </button>
 
         {/* 設定済み一覧 */}
-        {rewards.filter(r => r.content.trim()).length > 0 && (
+        {rewards.filter(r => r.content.trim() || r.url?.trim()).length > 0 && (
           <div className="mt-4 pt-4 border-t border-[#E5E7EB]">
             <p className="text-xs text-[#9CA3AF] mb-2">設定中のリワード</p>
             <div className="flex flex-wrap gap-2">
-              {rewards.filter(r => r.content.trim()).map((r, idx) => {
+              {rewards.filter(r => r.content.trim() || r.url?.trim()).map((r, idx) => {
                 const rt = getRewardType(r.reward_type)
+                const label = r.reward_type === 'org_app' ? (r.title || 'アプリ') : (rt?.label || r.reward_type)
                 return (
                   <span key={idx} className="px-3 py-1 bg-[#C4A35A]/10 text-[#1A1A2E] text-xs rounded-full">
-                    {rt?.label || r.reward_type}
+                    {label}
                   </span>
                 )
               })}
