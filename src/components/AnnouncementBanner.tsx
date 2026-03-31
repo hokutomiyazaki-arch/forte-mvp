@@ -135,10 +135,27 @@ export default function AnnouncementBanner() {
         </button>
       </div>
 
+      {hasBody && !expanded && (
+        <div style={{ padding: '0 16px 8px 38px', cursor: 'pointer' }} onClick={() => setExpanded(true)}>
+          <p style={{
+            color: '#9CA3AF',
+            fontSize: 12,
+            lineHeight: 1.5,
+            margin: 0,
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical' as const,
+            overflow: 'hidden',
+          }}>
+            {banner.body}
+          </p>
+        </div>
+      )}
+
       {hasBody && (
         <div
           style={{
-            maxHeight: expanded ? 200 : 0,
+            maxHeight: expanded ? '2000px' : '0px',
             overflow: 'hidden',
             transition: 'max-height 0.3s ease',
           }}
@@ -152,16 +169,20 @@ export default function AnnouncementBanner() {
                 href={banner.link_url}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
                 style={{
                   display: 'inline-block',
-                  marginTop: 8,
-                  color: '#C4A35A',
+                  marginTop: 10,
+                  background: '#C4A35A',
+                  color: '#1A1A2E',
                   fontSize: 13,
-                  fontWeight: 500,
+                  fontWeight: 600,
                   textDecoration: 'none',
+                  padding: '8px 16px',
+                  borderRadius: 6,
                 }}
               >
-                {banner.link_label || '詳細を見る'} →
+                {banner.link_label || '詳しく見る'} →
               </a>
             )}
           </div>
