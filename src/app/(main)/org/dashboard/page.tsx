@@ -71,6 +71,15 @@ export default function OrgDashboardPage() {
   const [resourceBadges, setResourceBadges] = useState<{ id: string; name: string }[]>([])
   const [ownerAccordionOpen, setOwnerAccordionOpen] = useState<Record<string, boolean>>({})
   const [sortingResourceId, setSortingResourceId] = useState<string | null>(null)
+
+  // 配布アプリ state
+  const [apps, setApps] = useState<any[]>([])
+  const [appsLoaded, setAppsLoaded] = useState(false)
+  const [showAppModal, setShowAppModal] = useState(false)
+  const [editingApp, setEditingApp] = useState<any>(null)
+  const [appForm, setAppForm] = useState({ title: '', url: '', description: '', credential_level_id: '' })
+  const [appSaving, setAppSaving] = useState(false)
+
   const [editingOrg, setEditingOrg] = useState(false)
   const [editOrgName, setEditOrgName] = useState('')
   const [editOrgDescription, setEditOrgDescription] = useState('')
@@ -303,9 +312,10 @@ export default function OrgDashboardPage() {
     if (resourcesLoaded || resourcesLoading || !org) return
     setResourcesLoading(true)
     try {
-      const [resRes, badgeRes] = await Promise.all([
+      const [resRes, badgeRes, appsRes] = await Promise.all([
         fetch(`/api/organizations/${org.id}/resources`),
         fetch(`/api/org/proof-analytics?orgId=${org.id}`),
+        fetch(`/api/org/${org.id}/apps`),
       ])
       if (resRes.ok) {
         const data = await resRes.json()
@@ -326,6 +336,11 @@ export default function OrgDashboardPage() {
         if (badgeData.credentialLevels) {
           setResourceBadges(badgeData.credentialLevels)
         }
+      }
+      if (appsRes.ok) {
+        const appsData = await appsRes.json()
+        setApps(appsData.apps || [])
+        setAppsLoaded(true)
       }
       setResourcesLoaded(true)
     } catch (err) {
@@ -500,6 +515,97 @@ export default function OrgDashboardPage() {
       loadResources()
     } finally {
       setSortingResourceId(null)
+    }
+  }
+
+  // === 配布アプリ管理 ===
+  function openAppModal(app?: any) {
+    if (app) {
+      setEditingApp(app)
+      setAppForm({
+        title: app.title || '',
+        url: app.url || '',
+        description: app.description || '',
+        credential_level_id: app.credential_level_id || '',
+      })
+    } else {
+      setEditingApp(null)
+      setAppForm({ title: '', url: '', description: '', credential_level_id: '' })
+    }
+    setShowAppModal(true)
+  }
+
+  async function handleAppSave() {
+    if (!org) return
+    setAppSaving(true)
+    try {
+      const body = {
+        title: appForm.title.trim(),
+        url: appForm.url.trim(),
+        description: appForm.description.trim() || null,
+        credential_level_id: appForm.credential_level_id || null,
+      }
+
+      if (editingApp) {
+        const res = await fetch(`/api/org/${org.id}/apps/${editingApp.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...body, sort_order: editingApp.sort_order, is_active: editingApp.is_active }),
+        })
+        if (!res.ok) {
+          const err = await res.json()
+          alert(err.error || '更新に失敗しました')
+          return
+        }
+        const data = await res.json()
+        setApps(prev => prev.map(a => a.id === editingApp.id ? data.app : a))
+      } else {
+        const res = await fetch(`/api/org/${org.id}/apps`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+        if (!res.ok) {
+          const err = await res.json()
+          alert(err.error || '追加に失敗しました')
+          return
+        }
+        const data = await res.json()
+        setApps(prev => [...prev, data.app])
+      }
+      setShowAppModal(false)
+    } catch (err: any) {
+      alert(err.message || 'エラーが発生しました')
+    } finally {
+      setAppSaving(false)
+    }
+  }
+
+  async function handleAppToggle(app: any) {
+    if (!org) return
+    try {
+      const res = await fetch(`/api/org/${org.id}/apps/${app.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...app, is_active: !app.is_active }),
+      })
+      if (res.ok) {
+        setApps(prev => prev.map(a => a.id === app.id ? { ...a, is_active: !a.is_active } : a))
+      }
+    } catch (err) {
+      console.error('App toggle error:', err)
+    }
+  }
+
+  async function handleAppDelete(app: any) {
+    if (!org || !confirm(`「${app.title}」を削除しますか？`)) return
+    try {
+      const res = await fetch(`/api/org/${org.id}/apps/${app.id}`, { method: 'DELETE' })
+      if (res.ok) {
+        setApps(prev => prev.filter(a => a.id !== app.id))
+      }
+    } catch (err) {
+      console.error('App delete error:', err)
     }
   }
 
@@ -865,6 +971,99 @@ export default function OrgDashboardPage() {
                 ))}
               </div>
             )}
+
+            {/* === 配布アプリ管理セクション === */}
+            <div style={{ marginTop: 32, borderTop: '1px solid #E5E7EB', paddingTop: 24 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1A1A2E' }}>配布アプリ管理</h3>
+                <button
+                  onClick={() => openAppModal()}
+                  style={{
+                    fontSize: 13, padding: '6px 16px', borderRadius: 8,
+                    border: 'none', background: '#C4A35A', color: '#fff',
+                    fontWeight: 600, cursor: 'pointer',
+                  }}
+                >
+                  ＋ アプリを追加
+                </button>
+              </div>
+
+              {apps.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                  <p style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 4 }}>まだ配布アプリはありません</p>
+                  <p style={{ color: '#D1D5DB', fontSize: 12 }}>上のボタンからアプリを追加しましょう</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {apps.map((app: any) => (
+                    <div key={app.id} style={{
+                      background: '#fff', borderRadius: 14, padding: '14px 16px',
+                      border: '1px solid #E5E7EB',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                        <h4 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', flex: 1 }}>{app.title}</h4>
+                        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                          <button
+                            onClick={() => openAppModal(app)}
+                            style={{
+                              fontSize: 12, color: '#9CA3AF', border: '1px solid #E5E7EB',
+                              borderRadius: 6, padding: '2px 8px', background: 'transparent', cursor: 'pointer',
+                              transition: 'color 0.2s, border-color 0.2s',
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.color = '#C4A35A'; e.currentTarget.style.borderColor = '#C4A35A' }}
+                            onMouseLeave={e => { e.currentTarget.style.color = '#9CA3AF'; e.currentTarget.style.borderColor = '#E5E7EB' }}
+                          >
+                            編集
+                          </button>
+                          <button
+                            onClick={() => handleAppDelete(app)}
+                            style={{
+                              fontSize: 12, color: '#9CA3AF', border: '1px solid #E5E7EB',
+                              borderRadius: 6, padding: '2px 8px', background: 'transparent', cursor: 'pointer',
+                              transition: 'color 0.2s, border-color 0.2s',
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.color = '#EF4444'; e.currentTarget.style.borderColor = '#FCA5A5' }}
+                            onMouseLeave={e => { e.currentTarget.style.color = '#9CA3AF'; e.currentTarget.style.borderColor = '#E5E7EB' }}
+                          >
+                            削除
+                          </button>
+                        </div>
+                      </div>
+                      <a
+                        href={app.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ fontSize: 12, color: '#3B82F6', wordBreak: 'break-all' }}
+                      >
+                        {app.url}
+                      </a>
+                      {app.description && (
+                        <p style={{ fontSize: 12, color: '#6B7280', marginTop: 6, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any, overflow: 'hidden' }}>{app.description}</p>
+                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+                        <span style={{ fontSize: 11, color: '#9CA3AF' }}>
+                          {app.credential_level_id
+                            ? resourceBadges.find(b => b.id === app.credential_level_id)?.name || 'バッジ限定'
+                            : '全メンバー'}
+                        </span>
+                        <button
+                          onClick={() => handleAppToggle(app)}
+                          style={{
+                            fontSize: 12, padding: '3px 12px', borderRadius: 20,
+                            border: app.is_active ? '1px solid #BBF7D0' : '1px solid #E5E7EB',
+                            background: app.is_active ? '#F0FDF4' : '#F9FAFB',
+                            color: app.is_active ? '#16A34A' : '#9CA3AF',
+                            cursor: 'pointer', transition: 'all 0.2s',
+                          }}
+                        >
+                          {app.is_active ? '● 公開中' : '○ 非公開'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </>
         )
       )}
@@ -988,6 +1187,131 @@ export default function OrgDashboardPage() {
                 }}
               >
                 {resourceSaving ? '保存中...' : editingResource ? '更新する' : '追加する'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* アプリ追加/編集モーダル */}
+      {showAppModal && (
+        <div
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
+          }}
+          onClick={() => setShowAppModal(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#FAFAF7', borderRadius: '16px',
+              padding: '24px', maxWidth: '480px', width: '100%',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ color: '#1A1A2E', fontSize: '18px', fontWeight: 700, marginBottom: '20px' }}>
+              {editingApp ? 'アプリを編集' : 'アプリを追加'}
+            </h3>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '13px', color: '#666', marginBottom: '6px' }}>
+                アプリ名 <span style={{ color: '#C4A35A' }}>*</span>
+              </label>
+              <input
+                type="text"
+                value={appForm.title}
+                onChange={(e) => setAppForm(prev => ({ ...prev, title: e.target.value }))}
+                maxLength={100}
+                placeholder="例: 内受容覚テスト"
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: '8px',
+                  border: '1px solid #E5E5E0', fontSize: '14px', color: '#1A1A2E',
+                  backgroundColor: '#fff', boxSizing: 'border-box' as const,
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '13px', color: '#666', marginBottom: '6px' }}>
+                URL <span style={{ color: '#C4A35A' }}>*</span>
+              </label>
+              <input
+                type="url"
+                value={appForm.url}
+                onChange={(e) => setAppForm(prev => ({ ...prev, url: e.target.value }))}
+                maxLength={2000}
+                placeholder="https://"
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: '8px',
+                  border: '1px solid #E5E5E0', fontSize: '14px', color: '#1A1A2E',
+                  backgroundColor: '#fff', boxSizing: 'border-box' as const,
+                }}
+              />
+              <p style={{ fontSize: '11px', color: '#AAA', marginTop: '4px' }}>
+                ※ https:// で始まるURLを入力
+              </p>
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '13px', color: '#666', marginBottom: '6px' }}>
+                説明文（任意）
+              </label>
+              <textarea
+                value={appForm.description}
+                onChange={(e) => setAppForm(prev => ({ ...prev, description: e.target.value }))}
+                maxLength={500}
+                rows={3}
+                placeholder="クライアントに表示される説明文"
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: '8px',
+                  border: '1px solid #E5E5E0', fontSize: '14px', color: '#1A1A2E',
+                  backgroundColor: '#fff', resize: 'vertical' as const, boxSizing: 'border-box' as const,
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', fontSize: '13px', color: '#666', marginBottom: '6px' }}>
+                配布バッジ制限
+              </label>
+              <select
+                value={appForm.credential_level_id}
+                onChange={(e) => setAppForm(prev => ({ ...prev, credential_level_id: e.target.value }))}
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: '8px',
+                  border: '1px solid #E5E5E0', fontSize: '14px', color: '#1A1A2E',
+                  backgroundColor: '#fff', boxSizing: 'border-box' as const,
+                }}
+              >
+                <option value="">全メンバー</option>
+                {resourceBadges.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowAppModal(false)}
+                style={{
+                  padding: '10px 20px', borderRadius: '8px', border: '1px solid #E5E5E0',
+                  backgroundColor: '#fff', color: '#666', fontSize: '14px', cursor: 'pointer',
+                }}
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={handleAppSave}
+                disabled={appSaving || !appForm.title.trim() || !appForm.url.trim() || !appForm.url.startsWith('https://')}
+                style={{
+                  padding: '10px 20px', borderRadius: '8px', border: 'none',
+                  backgroundColor: '#C4A35A', color: '#fff', fontSize: '14px', fontWeight: 600,
+                  cursor: 'pointer',
+                  opacity: (appSaving || !appForm.title.trim() || !appForm.url.trim() || !appForm.url.startsWith('https://')) ? 0.5 : 1,
+                }}
+              >
+                {appSaving ? '保存中...' : editingApp ? '更新する' : '追加する'}
               </button>
             </div>
           </div>
