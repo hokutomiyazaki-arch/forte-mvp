@@ -1797,9 +1797,11 @@ function VoteForm() {
               {proRewards.map(reward => {
                 const displayLabel = reward.reward_type === 'surprise'
                   ? 'シークレット — 何が出るかお楽しみ！'
-                  : reward.title && (reward.reward_type === 'selfcare' || reward.reward_type === 'freeform')
-                    ? reward.title
-                    : getRewardLabel(reward.reward_type)
+                  : (reward.reward_type === 'org_app' || reward.reward_type === 'fnt_neuro_app')
+                    ? (reward.title || 'アプリ')
+                    : reward.title && (reward.reward_type === 'selfcare' || reward.reward_type === 'freeform')
+                      ? reward.title
+                      : getRewardLabel(reward.reward_type)
                 const isSelected = selectedRewardId === reward.id
                 return (
                   <button
