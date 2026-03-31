@@ -268,6 +268,7 @@ export async function GET(request: NextRequest) {
         selected_reward_id: voteData.selected_reward_id || null,
         comment: voteData.comment || null,
         qr_token: qr_token || null,
+        auth_method: 'line',
         status: 'confirmed',  // LINE認証済みなのでメール確認不要
       })
       .select()
