@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { useAuth } from '@clerk/nextjs'
 import { useSharedData } from '@/contexts/SharedDataContext'
 
@@ -17,6 +18,7 @@ interface Announcement {
 }
 
 export default function AnnouncementBanner() {
+  const pathname = usePathname()
   const { userId } = useAuth()
   const { latestBanner } = useSharedData()
   const [banner, setBanner] = useState<Announcement | null>(null)
@@ -38,7 +40,9 @@ export default function AnnouncementBanner() {
     setBanner(latestBanner)
   }, [latestBanner, userId])
 
-  if (!banner || !visible) return null
+  const isVotePage = pathname?.startsWith('/vote/')
+
+  if (!banner || !visible || isVotePage) return null
 
   const borderColor =
     banner.banner_type === 'success' ? '#22C55E' :
