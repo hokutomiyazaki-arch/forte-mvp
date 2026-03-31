@@ -245,6 +245,7 @@ export default function RewardReveal({ reward, proName }: { reward: any; proName
         {/* Envelope (fades out) */}
         <div id="envelope-group" style={{
           position: 'absolute', top: 0, left: 0, width: 300, height: 260,
+          maxHeight: 320,
           transition: 'opacity 1.2s ease, transform 1.2s ease',
         }}>
           <div
@@ -255,7 +256,7 @@ export default function RewardReveal({ reward, proName }: { reward: any; proName
             }}
           >
             {/* Envelope body */}
-            <svg viewBox="0 0 300 170" style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', height: 170, zIndex: 2, pointerEvents: 'none' }}>
+            <svg viewBox="0 0 300 170" style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', height: '100%', maxHeight: 240, zIndex: 2, pointerEvents: 'none' }}>
               <defs>
                 <pattern id="damask" x="0" y="0" width="30" height="30" patternUnits="userSpaceOnUse">
                   <rect width="30" height="30" fill="none" />
