@@ -89,6 +89,34 @@ export async function GET(request: Request) {
       }
     }
 
+    // パーソナリティ投票データ（全投票タイプ）
+    const { data: allVotes } = await supabase
+      .from('votes')
+      .select('professional_id, selected_personality_ids')
+      .in('professional_id', proIds)
+
+    // personality_items テーブル
+    const { data: personalityItems } = await supabase
+      .from('personality_items')
+      .select('id, label')
+
+    const personalityLabelMap: Record<string, string> = {}
+    for (const item of personalityItems || []) {
+      personalityLabelMap[item.id] = item.label
+    }
+
+    // プロごとのパーソナリティ集計
+    const proPersonalityCounts = new Map<string, Record<string, number>>()
+    for (const vote of allVotes || []) {
+      if (!vote.selected_personality_ids || vote.selected_personality_ids.length === 0) continue
+      const pid = vote.professional_id
+      if (!proPersonalityCounts.has(pid)) proPersonalityCounts.set(pid, {})
+      const counts = proPersonalityCounts.get(pid)!
+      for (const perId of vote.selected_personality_ids) {
+        counts[perId] = (counts[perId] || 0) + 1
+      }
+    }
+
     // 検索マッチング（voice + proof）
     const commentMatchProIds = new Set<string>()
     const voiceMatchMap: Record<string, string> = {} // proId -> matched comment snippet
@@ -269,6 +297,20 @@ export async function GET(request: Request) {
         }
       }
 
+      // topPersonality
+      let topPersonality: { label: string } | null = null
+      const perCounts = proPersonalityCounts.get(pro.id)
+      if (perCounts) {
+        let topId = ''
+        let topCount = 0
+        for (const [perId, count] of Object.entries(perCounts)) {
+          if (count > topCount) { topCount = count; topId = perId }
+        }
+        if (topId && personalityLabelMap[topId]) {
+          topPersonality = { label: personalityLabelMap[topId] }
+        }
+      }
+
       return {
         id: pro.id,
         name: pro.name,
@@ -295,6 +337,7 @@ export async function GET(request: Request) {
         matchedProofLabel: proofMatchMap[pro.id] || null,
         matchSource: voiceMatchMap[pro.id] ? 'voice' as const : proofMatchMap[pro.id] ? 'proof' as const : null,
         featuredProof,
+        topPersonality,
       }
     }).filter((p): p is NonNullable<typeof p> => p !== null)
 

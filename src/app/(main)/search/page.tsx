@@ -25,15 +25,6 @@ const SUB_CATEGORIES = [
   { id: 'top',        label: '\uD83C\uDFC6 総合力' },
 ]
 
-const MEDAL_ICONS = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'] // 🥇🥈🥉
-
-const SUB_CATEGORY_LABELS: Record<string, string> = {
-  rising: '急上昇',
-  specialist: 'この分野のプロ',
-  repeater: 'リピーター',
-  top: '総合力',
-}
-
 const BADGE_CONFIG = [
   { key: 'rising' as const, label: '\uD83D\uDD25 急上昇中', bg: '#FFF3E0', color: '#E65100', border: '#FFCC80' },
   { key: 'specialist' as const, label: '\u2B50 この道のプロ', bg: '#FFF8E1', color: '#F57F17', border: '#FFE082' },
@@ -68,6 +59,9 @@ interface SearchPro {
     strengthLabel: string
     label: string
     votes: number
+  } | null
+  topPersonality: {
+    label: string
   } | null
 }
 
@@ -259,13 +253,8 @@ export default function SearchPage() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {professionals.map((p, index) => {
+            {professionals.map((p) => {
               const activeBadges = getBadges(p.badges)
-              const rank = index + 1
-              const isMulti = category === 'none' || category === 'multi'
-              const categoryLabel = isMulti ? 'マルチスペシャリスト' : (CATEGORIES.find(c => c.id === category)?.label || '')
-              const subLabel = isMulti ? '' : (SUB_CATEGORY_LABELS[subCategory] || '')
-              const medal = rank === 1 ? MEDAL_ICONS[0] : null
               return (
                 <a
                   key={p.id}
@@ -278,16 +267,9 @@ export default function SearchPage() {
                   onMouseEnter={e => (e.currentTarget.style.borderColor = T.gold)}
                   onMouseLeave={e => (e.currentTarget.style.borderColor = T.cardBorder)}
                 >
-                  {/* メダル + バッジ */}
-                  {(medal || activeBadges.length > 0) && (
+                  {/* バッジ */}
+                  {activeBadges.length > 0 && (
                     <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                      {medal && (
-                        <span style={{
-                          fontSize: 11, fontWeight: 800, color: T.dark,
-                        }}>
-                          {medal} {categoryLabel}{subLabel ? `・${subLabel}` : ''} {rank}位
-                        </span>
-                      )}
                       {activeBadges.map(b => (
                         <span key={b.key} style={{
                           fontSize: 10, fontWeight: 700, padding: '2px 8px',
@@ -336,6 +318,15 @@ export default function SearchPage() {
                       <span style={{ fontSize: 10, color: T.gold, fontWeight: 600 }}>
                         ({p.featuredProof.votes}票)
                       </span>
+                    </div>
+                  )}
+
+                  {/* パーソナリティTOP */}
+                  {p.topPersonality && (
+                    <div style={{
+                      marginTop: 6, fontSize: 12, color: T.textSub, fontWeight: 600,
+                    }}>
+                      {'\uD83D\uDCAC'} {p.topPersonality.label}
                     </div>
                   )}
 
