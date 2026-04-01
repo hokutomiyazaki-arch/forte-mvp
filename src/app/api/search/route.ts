@@ -65,8 +65,10 @@ export async function GET(request: Request) {
       .select('id, tab, strength_label')
 
     const itemTabMap: Record<string, string> = {}
+    const itemLabelMap: Record<string, string> = {}
     for (const item of proofItems || []) {
       itemTabMap[item.id] = item.tab
+      if (item.strength_label) itemLabelMap[item.id] = item.strength_label
     }
 
     // featured_vote のコメント取得
@@ -85,12 +87,32 @@ export async function GET(request: Request) {
       }
     }
 
-    // コメント検索マッチング
+    // 検索マッチング（voice + proof）
     const commentMatchProIds = new Set<string>()
+    const voiceMatchMap: Record<string, string> = {} // proId -> matched comment snippet
+    const proofMatchMap: Record<string, string> = {} // proId -> matched strength_label
     if (query) {
+      // voice マッチ
       for (const v of votes || []) {
         if (v.comment && v.comment.includes(query)) {
           commentMatchProIds.add(v.professional_id)
+          if (!voiceMatchMap[v.professional_id]) {
+            const snippet = v.comment.length > 40 ? v.comment.slice(0, 40) + '...' : v.comment
+            voiceMatchMap[v.professional_id] = snippet
+          }
+        }
+      }
+      // proof マッチ（proof_items の strength_label に query が含まれるか）
+      for (const item of proofItems || []) {
+        if (item.strength_label && item.strength_label.includes(query)) {
+          // この proof_item を selected_proof_ids に持つプロを特定
+          for (const v of votes || []) {
+            if (v.selected_proof_ids?.includes(item.id)) {
+              if (!proofMatchMap[v.professional_id]) {
+                proofMatchMap[v.professional_id] = item.strength_label
+              }
+            }
+          }
         }
       }
     }
@@ -213,6 +235,9 @@ export async function GET(request: Request) {
         regularCount,
         voiceSnippet,
         recentCategoryCount: stat.recentCategoryCount,
+        matchedVoice: voiceMatchMap[pro.id] || null,
+        matchedProofLabel: proofMatchMap[pro.id] || null,
+        matchSource: voiceMatchMap[pro.id] ? 'voice' as const : proofMatchMap[pro.id] ? 'proof' as const : null,
       }
     }).filter((p): p is NonNullable<typeof p> => p !== null)
 
@@ -221,7 +246,8 @@ export async function GET(request: Request) {
       result = result.filter(p =>
         p.name?.includes(query) ||
         p.title?.includes(query) ||
-        commentMatchProIds.has(p.id)
+        commentMatchProIds.has(p.id) ||
+        !!proofMatchMap[p.id]
       )
     }
 

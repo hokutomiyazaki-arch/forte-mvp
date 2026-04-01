@@ -58,6 +58,9 @@ interface SearchPro {
   repeaterRate: number | null
   regularCount: number
   voiceSnippet: string | null
+  matchedVoice: string | null
+  matchedProofLabel: string | null
+  matchSource: 'voice' | 'proof' | null
 }
 
 export default function SearchPage() {
@@ -103,6 +106,22 @@ export default function SearchPage() {
   // バッジ表示（最大2つ、優先度順）
   const getBadges = (badges: SearchPro['badges']) => {
     return BADGE_CONFIG.filter(b => badges[b.key]).slice(0, 2)
+  }
+
+  // 検索ワードハイライト
+  const highlightQuery = (text: string) => {
+    if (!debouncedQuery || !text) return text
+    const idx = text.indexOf(debouncedQuery)
+    if (idx === -1) return text
+    return (
+      <>
+        {text.slice(0, idx)}
+        <mark style={{ background: 'rgba(196,163,90,0.13)', color: T.gold, padding: '0 1px' }}>
+          {text.slice(idx, idx + debouncedQuery.length)}
+        </mark>
+        {text.slice(idx + debouncedQuery.length)}
+      </>
+    )
   }
 
   // 空状態メッセージ
@@ -305,6 +324,18 @@ export default function SearchPage() {
                       <div style={{ fontSize: 10, color: T.gold, marginTop: 4, fontWeight: 600 }}>
                         続きはプロフィールで →
                       </div>
+                    </div>
+                  )}
+
+                  {/* 検索ハイライト */}
+                  {debouncedQuery && p.matchSource && (
+                    <div style={{ marginTop: 8, fontSize: 11, color: T.textSub, lineHeight: 1.5 }}>
+                      {p.matchSource === 'voice' && p.matchedVoice && (
+                        <span>{'\uD83D\uDCAC'} 「{highlightQuery(p.matchedVoice)}」</span>
+                      )}
+                      {p.matchSource === 'proof' && p.matchedProofLabel && (
+                        <span>{'\uD83D\uDD0D'} 「{highlightQuery(p.matchedProofLabel)}」にマッチ</span>
+                      )}
                     </div>
                   )}
 
