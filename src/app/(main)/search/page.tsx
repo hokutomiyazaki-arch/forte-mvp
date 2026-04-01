@@ -25,13 +25,6 @@ const SUB_CATEGORIES = [
   { id: 'top',        label: '\uD83C\uDFC6 総合力' },
 ]
 
-const BADGE_CONFIG = [
-  { key: 'rising' as const, label: '\uD83D\uDD25 急上昇中', bg: '#FFF3E0', color: '#E65100', border: '#FFCC80' },
-  { key: 'specialist' as const, label: '\u2B50 この道のプロ', bg: '#FFF8E1', color: '#F57F17', border: '#FFE082' },
-  { key: 'top' as const, label: '\uD83C\uDFC6 総合力', bg: '#FFF8E1', color: '#F57F17', border: '#FFE082' },
-  { key: 'multi' as const, label: '\uD83C\uDF10 マルチスペシャリスト', bg: '#F5F5F5', color: '#616161', border: '#BDBDBD' },
-]
-
 interface SearchPro {
   id: string
   name: string
@@ -104,11 +97,6 @@ export default function SearchPage() {
     }
     fetchPros()
   }, [category, subCategory, debouncedQuery, selectedPrefecture])
-
-  // バッジ表示（最大2つ、優先度順）
-  const getBadges = (badges: SearchPro['badges']) => {
-    return BADGE_CONFIG.filter(b => badges[b.key]).slice(0, 2)
-  }
 
   // 検索ワードハイライト
   const highlightQuery = (text: string) => {
@@ -253,9 +241,7 @@ export default function SearchPage() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {professionals.map((p) => {
-              const activeBadges = getBadges(p.badges)
-              return (
+            {professionals.map((p) => (
                 <a
                   key={p.id}
                   href={`/card/${p.id}`}
@@ -267,21 +253,6 @@ export default function SearchPage() {
                   onMouseEnter={e => (e.currentTarget.style.borderColor = T.gold)}
                   onMouseLeave={e => (e.currentTarget.style.borderColor = T.cardBorder)}
                 >
-                  {/* バッジ */}
-                  {activeBadges.length > 0 && (
-                    <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                      {activeBadges.map(b => (
-                        <span key={b.key} style={{
-                          fontSize: 10, fontWeight: 700, padding: '2px 8px',
-                          borderRadius: 99, background: b.bg, color: b.color,
-                          border: `1px solid ${b.border}`,
-                        }}>
-                          {b.label}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
                   {/* アイコン + 名前 + 職種 + エリア */}
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                     {p.photo_url ? (
@@ -392,8 +363,7 @@ export default function SearchPage() {
                     </div>
                   )}
                 </a>
-              )
-            })}
+            ))}
           </div>
         )}
 
