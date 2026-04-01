@@ -124,6 +124,8 @@ export default function DashboardPage() {
   const [showKakegoe, setShowKakegoe] = useState(false)
   const [featuredProofId, setFeaturedProofId] = useState<string | null>(null)
   const [featuredProofSaving, setFeaturedProofSaving] = useState(false)
+  const [featuredVoiceId, setFeaturedVoiceId] = useState<string | null>(null)
+  const [featuredVoiceSaving, setFeaturedVoiceSaving] = useState(false)
 
   // Voices用 state
   const [voiceComments, setVoiceComments] = useState<{ id: string; comment: string; created_at: string }[]>([])
@@ -241,6 +243,7 @@ export default function DashboardPage() {
         if (proData) {
         setPro(proData)
         setFeaturedProofId(proData.featured_proof_id || null)
+        setFeaturedVoiceId(proData.featured_vote_id || null)
 
         // LINE バナー表示判定
         if (proData.line_messaging_user_id) {
@@ -2814,6 +2817,61 @@ export default function DashboardPage() {
                   <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', lineHeight: 1.8, margin: '4px 0 10px' }}>{c.comment}</div>
                   <div style={{ fontSize: 11, color: '#888888', fontFamily: "'Inter', sans-serif" }}>
                     {new Date(c.created_at).toLocaleDateString('ja-JP')}
+                  </div>
+
+                  {/* 検索カード設定ボタン */}
+                  <div style={{ marginTop: 10 }} onClick={e => e.stopPropagation()}>
+                    {featuredVoiceId === c.id ? (
+                      <button
+                        disabled={featuredVoiceSaving}
+                        onClick={async () => {
+                          setFeaturedVoiceSaving(true)
+                          try {
+                            await fetch('/api/dashboard/set-featured-voice', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ vote_id: null }),
+                            })
+                            setFeaturedVoiceId(null)
+                          } catch {}
+                          setFeaturedVoiceSaving(false)
+                        }}
+                        style={{
+                          padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 600,
+                          background: 'rgba(196,163,90,0.1)', color: '#C4A35A',
+                          border: '1px solid #C4A35A', cursor: 'pointer',
+                          opacity: featuredVoiceSaving ? 0.5 : 1,
+                        }}
+                      >
+                        ✓ 検索カードに表示中
+                      </button>
+                    ) : (
+                      <button
+                        disabled={featuredVoiceSaving}
+                        onClick={async () => {
+                          setFeaturedVoiceSaving(true)
+                          try {
+                            await fetch('/api/dashboard/set-featured-voice', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ vote_id: c.id }),
+                            })
+                            setFeaturedVoiceId(c.id)
+                          } catch {}
+                          setFeaturedVoiceSaving(false)
+                        }}
+                        style={{
+                          padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 600,
+                          background: 'transparent', color: '#888888',
+                          border: '1px solid #D0CCC4', cursor: 'pointer',
+                          opacity: featuredVoiceSaving ? 0.5 : 1,
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#C4A35A'; e.currentTarget.style.color = '#C4A35A' }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#D0CCC4'; e.currentTarget.style.color = '#888888' }}
+                      >
+                        検索カードに設定
+                      </button>
+                    )}
                   </div>
 
                   {isExpanded && (
