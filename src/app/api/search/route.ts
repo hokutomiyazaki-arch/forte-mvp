@@ -95,6 +95,7 @@ export async function GET(request: Request) {
       totalProofs: number
       recentProofs: number
       categoryCount: Record<string, number>
+      recentCategoryCount: Record<string, number>
       voterCounts: Record<string, number>
       latestVoteComment: string
     }>()
@@ -106,6 +107,7 @@ export async function GET(request: Request) {
           totalProofs: 0,
           recentProofs: 0,
           categoryCount: {},
+          recentCategoryCount: {},
           voterCounts: {},
           latestVoteComment: '',
         })
@@ -113,7 +115,8 @@ export async function GET(request: Request) {
       const stat = proStats.get(pid)!
       stat.totalProofs++
 
-      if (new Date(vote.created_at) >= thirtyDaysAgo) {
+      const isRecent = new Date(vote.created_at) >= thirtyDaysAgo
+      if (isRecent) {
         stat.recentProofs++
       }
 
@@ -121,6 +124,9 @@ export async function GET(request: Request) {
         const tab = itemTabMap[itemId]
         if (tab) {
           stat.categoryCount[tab] = (stat.categoryCount[tab] || 0) + 1
+          if (isRecent) {
+            stat.recentCategoryCount[tab] = (stat.recentCategoryCount[tab] || 0) + 1
+          }
         }
       }
 
@@ -140,6 +146,7 @@ export async function GET(request: Request) {
         totalProofs: 0,
         recentProofs: 0,
         categoryCount: {},
+        recentCategoryCount: {},
         voterCounts: {},
         latestVoteComment: '',
       }
@@ -204,6 +211,7 @@ export async function GET(request: Request) {
         repeaterRate,
         regularCount,
         voiceSnippet,
+        recentCategoryCount: stat.recentCategoryCount,
       }
     }).filter((p): p is NonNullable<typeof p> => p !== null)
 
@@ -218,12 +226,21 @@ export async function GET(request: Request) {
 
     // サブカテゴリ別ソート
     switch (subCategory) {
-      case 'rising':
-        // 今月急上昇: 直近30日プルーフ数順
-        result.sort((a, b) => b.recentProofs - a.recentProofs)
-        // recentProofs = 0 は非表示
-        result = result.filter(p => p.recentProofs > 0)
+      case 'rising': {
+        // 今月急上昇: カテゴリ選択時はそのカテゴリの直近30日プルーフ数順
+        const risingTabs = CATEGORY_TAB_MAP[category] || []
+        const getRecentScore = (p: typeof result[number]) => {
+          if (category === 'all') return p.recentProofs
+          let score = 0
+          for (const tab of risingTabs) {
+            score += p.recentCategoryCount[tab] || 0
+          }
+          return score
+        }
+        result.sort((a, b) => getRecentScore(b) - getRecentScore(a))
+        result = result.filter(p => getRecentScore(p) > 0)
         break
+      }
 
       case 'specialist':
         // この分野のプロ: カテゴリスコア順（指導力0.5倍加算済み）
