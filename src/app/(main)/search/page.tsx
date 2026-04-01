@@ -224,7 +224,7 @@ export default function SearchPage() {
               return (
                 <a
                   key={p.id}
-                  href={`/pro/${p.id}`}
+                  href={`/card/${p.id}`}
                   style={{
                     display: 'block', background: T.cardBg,
                     border: `1px solid ${T.cardBorder}`, borderRadius: 14,
