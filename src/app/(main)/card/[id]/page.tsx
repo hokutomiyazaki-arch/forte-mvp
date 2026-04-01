@@ -117,6 +117,7 @@ export default function CardPage() {
   const [expandedProofId, setExpandedProofId] = useState<string | null>(null)
   const [proofDatesCache, setProofDatesCache] = useState<Record<string, string[]>>({})
   const [proofDatesLoading, setProofDatesLoading] = useState<string | null>(null)
+  const [topRank, setTopRank] = useState<{ categoryLabel: string; subLabel: string; rank: number } | null>(null)
 
   const toggleProofDates = async (proofId: string) => {
     if (expandedProofId === proofId) {
@@ -226,6 +227,19 @@ export default function CardPage() {
     }
   }, [id])
 
+  // 順位メダル取得
+  useEffect(() => {
+    if (!id) return
+    fetch(`/api/pro-rank/${id}`, { cache: 'no-store' })
+      .then(res => res.json())
+      .then(data => {
+        if (data.ranks && data.ranks.length > 0) {
+          setTopRank(data.ranks[0])
+        }
+      })
+      .catch(() => {})
+  }, [id])
+
   const handleBookmarkToggle = async () => {
     if (!currentUserId) {
       window.location.href = `/sign-in?redirect_url=/card/${id}`
@@ -298,6 +312,11 @@ export default function CardPage() {
           <div style={{ flex: 1, minWidth: 0 }}>
             {/* 名前（上の行、フル幅） */}
             <div style={{ fontSize: 20, fontWeight: 900, color: T.dark }}>{pro.name}</div>
+            {topRank && (
+              <div style={{ fontSize: 11, fontWeight: 800, color: T.dark, marginTop: 2 }}>
+                {topRank.rank === 1 ? '\uD83E\uDD47' : topRank.rank === 2 ? '\uD83E\uDD48' : '\uD83E\uDD49'} {topRank.categoryLabel}・{topRank.subLabel} {topRank.rank}位
+              </div>
+            )}
             {pro.store_name && (
               <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>{pro.store_name}</div>
             )}
