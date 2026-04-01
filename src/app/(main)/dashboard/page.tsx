@@ -190,6 +190,19 @@ export default function DashboardPage() {
     }
   }, [tabParam, loading])
 
+  // ハッシュスクロール（バッジクリックからの遷移用）
+  useEffect(() => {
+    const hash = window.location.hash.slice(1)
+    if (hash && dashboardTab === 'myorgs') {
+      setTimeout(() => {
+        const el = document.getElementById(hash)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+      }, 300)
+    }
+  }, [dashboardTab, memberResources])
+
   // プロフィール編集直接オープン
   const editParam = searchParams.get('edit')
   useEffect(() => {
@@ -2003,7 +2016,7 @@ export default function DashboardPage() {
             <div className="flex flex-wrap justify-center gap-6">
               {/* credential_levels経由のバッジ（新方式） */}
               {credentialBadges.map((badge) => (
-                <a key={badge.id} href={`/org/${badge.org_id}?tab=resources#${badge.id}`} className="flex flex-col items-center hover:opacity-70 transition">
+                <a key={badge.id} href={`/dashboard?tab=myorgs#${badge.id}`} className="flex flex-col items-center hover:opacity-70 transition">
                   {badge.image_url ? (
                     <img src={badge.image_url} alt={badge.name} loading="lazy" className="w-16 h-16 rounded-xl object-cover" />
                   ) : (
@@ -3458,7 +3471,7 @@ export default function DashboardPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {getMemberResourceGroups().map(group => (
-              <div key={group.key}>
+              <div key={group.key} id={group.key}>
                 {/* アコーディオンヘッダー */}
                 <button
                   onClick={() => setMemberAccordionOpen(prev => ({ ...prev, [group.key]: !prev[group.key] }))}
