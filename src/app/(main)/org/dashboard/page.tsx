@@ -55,7 +55,7 @@ export default function OrgDashboardPage() {
   const [analyticsLoaded, setAnalyticsLoaded] = useState(false)
   const [selectedBadgeId, setSelectedBadgeId] = useState<string | null>(null)
   const [credentialLevels, setCredentialLevels] = useState<{ id: string; name: string }[]>([])
-  const [activeTab, setActiveTab] = useState<'overview' | 'analytics' | 'resources'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'analytics' | 'resources' | 'rewards'>('overview')
   const [strengthDistribution, setStrengthDistribution] = useState<any[]>([])
   const [topStrengthItems, setTopStrengthItems] = useState<{ label: string; strength_label?: string; count: number }[]>([])
   const [error, setError] = useState('')
@@ -352,6 +352,11 @@ export default function OrgDashboardPage() {
 
   function handleResourcesTab() {
     setActiveTab('resources')
+    loadResources()
+  }
+
+  function handleRewardsTab() {
+    setActiveTab('rewards')
     loadResources()
   }
 
@@ -668,6 +673,16 @@ export default function OrgDashboardPage() {
         >
           共有資料
         </button>
+        <button
+          onClick={handleRewardsTab}
+          className={`flex-1 py-2 text-sm font-medium rounded-lg transition ${
+            activeTab === 'rewards'
+              ? 'bg-white text-[#1A1A2E] shadow-sm'
+              : 'text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          リワード
+        </button>
       </div>
 
       {/* サマリーカード（常に表示） */}
@@ -972,98 +987,108 @@ export default function OrgDashboardPage() {
               </div>
             )}
 
-            {/* === 団体リワード管理セクション === */}
-            <div style={{ marginTop: 32, borderTop: '1px solid #E5E7EB', paddingTop: 24 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1A1A2E' }}>団体リワード管理</h3>
-                <button
-                  onClick={() => openAppModal()}
-                  style={{
-                    fontSize: 13, padding: '6px 16px', borderRadius: 8,
-                    border: 'none', background: '#C4A35A', color: '#fff',
-                    fontWeight: 600, cursor: 'pointer',
-                  }}
-                >
-                  ＋ リワードを追加
-                </button>
-              </div>
+          </>
+        )
+      )}
 
-              {apps.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '32px 0' }}>
-                  <p style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 4 }}>まだ団体リワードはありません</p>
-                  <p style={{ color: '#D1D5DB', fontSize: 12 }}>上のボタンからリワードを追加しましょう</p>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {apps.map((app: any) => (
-                    <div key={app.id} style={{
-                      background: '#fff', borderRadius: 14, padding: '14px 16px',
-                      border: '1px solid #E5E7EB',
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
-                        <h4 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', flex: 1 }}>{app.title}</h4>
-                        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                          <button
-                            onClick={() => openAppModal(app)}
-                            style={{
-                              fontSize: 12, color: '#9CA3AF', border: '1px solid #E5E7EB',
-                              borderRadius: 6, padding: '2px 8px', background: 'transparent', cursor: 'pointer',
-                              transition: 'color 0.2s, border-color 0.2s',
-                            }}
-                            onMouseEnter={e => { e.currentTarget.style.color = '#C4A35A'; e.currentTarget.style.borderColor = '#C4A35A' }}
-                            onMouseLeave={e => { e.currentTarget.style.color = '#9CA3AF'; e.currentTarget.style.borderColor = '#E5E7EB' }}
-                          >
-                            編集
-                          </button>
-                          <button
-                            onClick={() => handleAppDelete(app)}
-                            style={{
-                              fontSize: 12, color: '#9CA3AF', border: '1px solid #E5E7EB',
-                              borderRadius: 6, padding: '2px 8px', background: 'transparent', cursor: 'pointer',
-                              transition: 'color 0.2s, border-color 0.2s',
-                            }}
-                            onMouseEnter={e => { e.currentTarget.style.color = '#EF4444'; e.currentTarget.style.borderColor = '#FCA5A5' }}
-                            onMouseLeave={e => { e.currentTarget.style.color = '#9CA3AF'; e.currentTarget.style.borderColor = '#E5E7EB' }}
-                          >
-                            削除
-                          </button>
-                        </div>
-                      </div>
-                      <a
-                        href={app.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ fontSize: 12, color: '#3B82F6', wordBreak: 'break-all' }}
-                      >
-                        {app.url}
-                      </a>
-                      {app.description && (
-                        <p style={{ fontSize: 12, color: '#6B7280', marginTop: 6, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any, overflow: 'hidden' }}>{app.description}</p>
-                      )}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
-                        <span style={{ fontSize: 11, color: '#9CA3AF' }}>
-                          {app.credential_level_id
-                            ? resourceBadges.find(b => b.id === app.credential_level_id)?.name || 'バッジ限定'
-                            : '全メンバー'}
-                        </span>
+      {/* === 団体リワード管理タブ === */}
+      {activeTab === 'rewards' && (
+        resourcesLoading ? (
+          <div className="text-center py-16">
+            <div className="animate-spin w-8 h-8 border-2 border-[#C4A35A] border-t-transparent rounded-full mx-auto" />
+            <p className="text-gray-400 mt-4 text-sm">読み込み中...</p>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1A1A2E' }}>団体リワード管理</h3>
+              <button
+                onClick={() => openAppModal()}
+                style={{
+                  fontSize: 13, padding: '6px 16px', borderRadius: 8,
+                  border: 'none', background: '#C4A35A', color: '#fff',
+                  fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                ＋ リワードを追加
+              </button>
+            </div>
+
+            {apps.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                <p style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 4 }}>まだ団体リワードはありません</p>
+                <p style={{ color: '#D1D5DB', fontSize: 12 }}>上のボタンからリワードを追加しましょう</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {apps.map((app: any) => (
+                  <div key={app.id} style={{
+                    background: '#fff', borderRadius: 14, padding: '14px 16px',
+                    border: '1px solid #E5E7EB',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                      <h4 style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', flex: 1 }}>{app.title}</h4>
+                      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                         <button
-                          onClick={() => handleAppToggle(app)}
+                          onClick={() => openAppModal(app)}
                           style={{
-                            fontSize: 12, padding: '3px 12px', borderRadius: 20,
-                            border: app.is_active ? '1px solid #BBF7D0' : '1px solid #E5E7EB',
-                            background: app.is_active ? '#F0FDF4' : '#F9FAFB',
-                            color: app.is_active ? '#16A34A' : '#9CA3AF',
-                            cursor: 'pointer', transition: 'all 0.2s',
+                            fontSize: 12, color: '#9CA3AF', border: '1px solid #E5E7EB',
+                            borderRadius: 6, padding: '2px 8px', background: 'transparent', cursor: 'pointer',
+                            transition: 'color 0.2s, border-color 0.2s',
                           }}
+                          onMouseEnter={e => { e.currentTarget.style.color = '#C4A35A'; e.currentTarget.style.borderColor = '#C4A35A' }}
+                          onMouseLeave={e => { e.currentTarget.style.color = '#9CA3AF'; e.currentTarget.style.borderColor = '#E5E7EB' }}
                         >
-                          {app.is_active ? '● 公開中' : '○ 非公開'}
+                          編集
+                        </button>
+                        <button
+                          onClick={() => handleAppDelete(app)}
+                          style={{
+                            fontSize: 12, color: '#9CA3AF', border: '1px solid #E5E7EB',
+                            borderRadius: 6, padding: '2px 8px', background: 'transparent', cursor: 'pointer',
+                            transition: 'color 0.2s, border-color 0.2s',
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.color = '#EF4444'; e.currentTarget.style.borderColor = '#FCA5A5' }}
+                          onMouseLeave={e => { e.currentTarget.style.color = '#9CA3AF'; e.currentTarget.style.borderColor = '#E5E7EB' }}
+                        >
+                          削除
                         </button>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                    <a
+                      href={app.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ fontSize: 12, color: '#3B82F6', wordBreak: 'break-all' }}
+                    >
+                      {app.url}
+                    </a>
+                    {app.description && (
+                      <p style={{ fontSize: 12, color: '#6B7280', marginTop: 6, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any, overflow: 'hidden' }}>{app.description}</p>
+                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+                      <span style={{ fontSize: 11, color: '#9CA3AF' }}>
+                        {app.credential_level_id
+                          ? resourceBadges.find(b => b.id === app.credential_level_id)?.name || 'バッジ限定'
+                          : '全メンバー'}
+                      </span>
+                      <button
+                        onClick={() => handleAppToggle(app)}
+                        style={{
+                          fontSize: 12, padding: '3px 12px', borderRadius: 20,
+                          border: app.is_active ? '1px solid #BBF7D0' : '1px solid #E5E7EB',
+                          background: app.is_active ? '#F0FDF4' : '#F9FAFB',
+                          color: app.is_active ? '#16A34A' : '#9CA3AF',
+                          cursor: 'pointer', transition: 'all 0.2s',
+                        }}
+                      >
+                        {app.is_active ? '● 公開中' : '○ 非公開'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         )
       )}
