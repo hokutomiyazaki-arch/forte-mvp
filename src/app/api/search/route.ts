@@ -279,11 +279,13 @@ export async function GET(request: Request) {
         result.sort((a, b) => (b.repeaterRate || 0) - (a.repeaterRate || 0))
         break
 
-      case 'top':
-        // トップクラス: badge_top = true のみ
-        result = result.filter(p => p.badges.top)
-        result.sort((a, b) => b.totalProofs - a.totalProofs)
+      case 'top': {
+        // トップクラス: 複合スコアでソート
+        const getTopScore = (p: typeof result[number]) =>
+          p.totalProofs * 1.0 + p.recentProofs * 1.5 + (p.repeaterRate || 0) * 0.5
+        result.sort((a, b) => getTopScore(b) - getTopScore(a))
         break
+      }
 
       default:
         result.sort((a, b) => b.recentProofs - a.recentProofs)
