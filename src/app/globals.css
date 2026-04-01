@@ -17,13 +17,11 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-@layer base {
-  body {
-    font-weight: 700;
-  }
-  * {
-    font-weight: 700;
-  }
+html, body {
+  font-weight: 700 !important;
+}
+* {
+  font-weight: inherit !important;
 }
 
 /* Navbar responsive */
