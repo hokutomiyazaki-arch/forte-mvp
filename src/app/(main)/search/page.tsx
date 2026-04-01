@@ -359,7 +359,7 @@ export default function SearchPage() {
                     <div style={{ marginTop: 8, fontSize: 11, color: T.textSub, lineHeight: 1.5 }}>
                       {p.matchSource === 'voice' && p.matchedVoice && (
                         <a
-                          href={`/card/${p.id}?tab=voices`}
+                          href={`/card/${p.id}?tab=voices&highlight=${encodeURIComponent(debouncedQuery)}`}
                           onClick={e => e.stopPropagation()}
                           style={{ textDecoration: 'none', color: T.textSub, display: 'block' }}
                         >

@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 // useUser removed — auth is now handled server-side in /api/card/[id]
 import { Professional, VoteSummary, Vote } from '@/lib/types'
@@ -99,6 +99,8 @@ export default function CardPage() {
   const searchParams = useSearchParams()
   const id = params.id as string
   const tabParam = searchParams.get('tab')
+  const highlightParam = searchParams.get('highlight') || ''
+  const highlightScrollRef = useRef(false)
   // Clerk auth removed from client — handled server-side in /api/card/[id]
   const [pro, setPro] = useState<Professional | null>(null)
   const [votes, setVotes] = useState<VoteSummary[]>([])
@@ -229,6 +231,17 @@ export default function CardPage() {
       trackEvent(id, 'card_view')
     }
   }, [id])
+
+  // ハイライトスクロール
+  useEffect(() => {
+    if (highlightParam && activeTab === 'voices' && !loading && !highlightScrollRef.current) {
+      highlightScrollRef.current = true
+      setTimeout(() => {
+        const el = document.querySelector('[data-highlight-match="true"]')
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 200)
+    }
+  }, [highlightParam, activeTab, loading])
 
   // 順位メダル取得（1つだけ）
   useEffect(() => {
@@ -816,24 +829,46 @@ export default function CardPage() {
           </div>
           {voiceCount > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {comments.map((c: Vote) => (
-                <div key={c.id}
-                  style={{
-                    background: 'linear-gradient(170deg, #FAF8F4 0%, #F3EFE7 100%)',
-                    border: '1px solid #E8E4DC',
-                    borderRadius: 14, padding: '20px',
-                  }}
-                >
-                  {/* 引用符 */}
-                  <div style={{ fontSize: 32, color: 'rgba(196, 163, 90, 0.3)', fontFamily: 'Georgia, serif', lineHeight: 1 }}>&ldquo;</div>
-                  {/* コメント */}
-                  <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', lineHeight: 1.8, margin: '4px 0 10px' }}>{c.comment}</div>
-                  {/* 日付 */}
-                  <div style={{ fontSize: 11, color: T.textMuted, fontFamily: T.fontMono }}>
-                    {new Date(c.created_at).toLocaleDateString('ja-JP')}
+              {comments.map((c: Vote) => {
+                const isMatch = highlightParam && c.comment?.includes(highlightParam)
+                return (
+                  <div key={c.id}
+                    data-highlight-match={isMatch ? 'true' : undefined}
+                    style={{
+                      background: isMatch
+                        ? 'linear-gradient(170deg, #FFF8E1 0%, #FFF3CD 100%)'
+                        : 'linear-gradient(170deg, #FAF8F4 0%, #F3EFE7 100%)',
+                      border: isMatch ? '1.5px solid #C4A35A' : '1px solid #E8E4DC',
+                      borderRadius: 14, padding: '20px',
+                    }}
+                  >
+                    {/* 引用符 */}
+                    <div style={{ fontSize: 32, color: 'rgba(196, 163, 90, 0.3)', fontFamily: 'Georgia, serif', lineHeight: 1 }}>&ldquo;</div>
+                    {/* コメント */}
+                    <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', lineHeight: 1.8, margin: '4px 0 10px' }}>
+                      {highlightParam && c.comment?.includes(highlightParam)
+                        ? (() => {
+                            const parts = c.comment.split(highlightParam)
+                            return parts.map((part, i) => (
+                              <span key={i}>
+                                {part}
+                                {i < parts.length - 1 && (
+                                  <mark style={{ background: 'rgba(196,163,90,0.25)', color: '#1A1A2E', padding: '0 2px', borderRadius: 2 }}>
+                                    {highlightParam}
+                                  </mark>
+                                )}
+                              </span>
+                            ))
+                          })()
+                        : c.comment}
+                    </div>
+                    {/* 日付 */}
+                    <div style={{ fontSize: 11, color: T.textMuted, fontFamily: T.fontMono }}>
+                      {new Date(c.created_at).toLocaleDateString('ja-JP')}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           ) : (
             <div style={{ textAlign: 'center', padding: '32px 0', color: T.textMuted, fontSize: 13 }}>
