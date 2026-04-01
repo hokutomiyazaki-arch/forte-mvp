@@ -352,8 +352,8 @@ async function fetchDashboardData() {
     supabase.from('votes').select('auth_method'),
     // 日別トレンド (30日)
     supabase.from('votes').select('created_at, professional_id').gte('created_at', thirtyDaysAgo.toISOString()),
-    // 日別プルーフ獲得者 (14日)
-    supabase.from('votes').select('created_at, professional_id, professionals(name, last_name, first_name)').gte('created_at', fourteenDaysAgo.toISOString()),
+    // 日別プルーフ獲得者 (14日) — JOINなし（proResから名前引き）
+    supabase.from('votes').select('created_at, professional_id').eq('status', 'confirmed').eq('vote_type', 'proof').gte('created_at', fourteenDaysAgo.toISOString()),
     // チャネル別: qr_tokens
     supabase.from('qr_tokens').select('token'),
     // チャネル別: votes の qr_token
@@ -434,17 +434,20 @@ async function fetchDashboardData() {
       })
   }
 
-  // 日別プルーフ獲得者マッピング (14日)
+  // 日別プルーフ獲得者マッピング (14日) — proResから名前引き
   let dailyProofs: DailyProofData[] | null = null
+  const proNameMap = new Map<string, string>()
+  if (proRes.data && Array.isArray(proRes.data)) {
+    proRes.data.forEach((d: any) => {
+      proNameMap.set(d.id, d.display_name || '—')
+    })
+  }
   if (proofRes.data && !proofRes.error && Array.isArray(proofRes.data)) {
     const byDatePro: Record<string, { pro_name: string; count: number; dateRaw: string }> = {}
     proofRes.data.forEach((row: any) => {
       const date = row.created_at ? row.created_at.split('T')[0] : null
       if (!date) return
-      const pro = row.professionals as any
-      const proName = pro
-        ? ((pro.last_name && pro.first_name) ? `${pro.last_name} ${pro.first_name}` : pro.name || '—')
-        : '—'
+      const proName = proNameMap.get(row.professional_id) || '—'
       const key = `${date}_${row.professional_id}`
       if (!byDatePro[key]) byDatePro[key] = { pro_name: proName, count: 0, dateRaw: date }
       byDatePro[key].count++
