@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { normalizeEmail } from '@/lib/normalize-email'
-import { checkExpertBadges } from '@/lib/expert-badges'
+
 
 export const dynamic = 'force-dynamic'
 
@@ -140,9 +140,6 @@ export async function POST(req: NextRequest) {
         .maybeSingle()
       if (crData?.id) clientRewardId = crData.id
     }
-
-    // エキスパートバッジ自動チェック
-    await checkExpertBadges(supabase, professional_id)
 
     console.log('[verify-code] Vote confirmed:', insertedVote.id, 'for pro:', professional_id)
     return NextResponse.json({

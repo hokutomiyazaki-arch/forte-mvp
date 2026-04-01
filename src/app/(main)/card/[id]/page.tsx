@@ -350,58 +350,6 @@ export default function CardPage() {
                 Founding Member
               </span>
             )}
-            {(pro as any).is_double_expert && (
-              <span style={{
-                display: 'inline-block', marginTop: 6, marginLeft: 4,
-                padding: '4px 10px',
-                fontSize: 11, fontWeight: 700,
-                color: '#C4A35A',
-                background: 'rgba(196,163,90,0.08)',
-                border: '1px solid rgba(196,163,90,0.2)',
-                borderRadius: 20,
-              }}>
-                ダブルエキスパート
-              </span>
-            )}
-            {(pro as any).is_cross_expert && (
-              <span style={{
-                display: 'inline-block', marginTop: 6, marginLeft: 4,
-                padding: '4px 10px',
-                fontSize: 11, fontWeight: 700,
-                color: '#C4A35A',
-                background: 'rgba(196,163,90,0.08)',
-                border: '1px solid rgba(196,163,90,0.2)',
-                borderRadius: 20,
-              }}>
-                クロスエキスパート
-              </span>
-            )}
-            {(pro as any).is_triple_expert && (
-              <span style={{
-                display: 'inline-block', marginTop: 6, marginLeft: 4,
-                padding: '4px 10px',
-                fontSize: 11, fontWeight: 700,
-                color: '#C4A35A',
-                background: 'rgba(196,163,90,0.08)',
-                border: '1px solid rgba(196,163,90,0.2)',
-                borderRadius: 20,
-              }}>
-                トリプルエキスパート
-              </span>
-            )}
-            {(pro as any).is_cross_master && (
-              <span style={{
-                display: 'inline-block', marginTop: 6, marginLeft: 4,
-                padding: '4px 10px',
-                fontSize: 11, fontWeight: 700,
-                color: '#C4A35A',
-                background: 'rgba(196,163,90,0.08)',
-                border: '1px solid rgba(196,163,90,0.2)',
-                borderRadius: 20,
-              }}>
-                クロスマスター
-              </span>
-            )}
             {orgs.length > 0 && (
               <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {orgs.map(o => (

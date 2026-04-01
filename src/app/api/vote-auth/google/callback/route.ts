@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { clerkClient } from '@clerk/nextjs/server'
-import { checkExpertBadges } from '@/lib/expert-badges'
+
 import { normalizeEmail } from '@/lib/normalize-email'
 
 export const dynamic = 'force-dynamic'
@@ -456,9 +456,6 @@ export async function GET(request: NextRequest) {
       console.error('[vote-auth/google/callback] PROVEN/SPECIALIST notification error:', err)
       // メール失敗で投票レスポンスをブロックしない
     }
-
-    // Step 9e: エキスパートバッジ自動チェック
-    await checkExpertBadges(supabaseAdmin, professional_id)
 
     // Step 9c: 投票者のロール判定（Clerk情報はStep 5で取得済み）
     let voterIsPro = false

@@ -295,18 +295,6 @@ export default function ExplorePage() {
                             {pro.is_founding_member && (
                               <span className="text-xs px-1.5 py-0.5 bg-[#C4A35A] text-white rounded-full leading-none">FM</span>
                             )}
-                            {pro.is_double_expert && (
-                              <span className="text-xs px-1.5 py-0.5 bg-[#C4A35A] text-white rounded-full leading-none">W</span>
-                            )}
-                            {pro.is_cross_expert && (
-                              <span className="text-xs px-1.5 py-0.5 bg-[#C4A35A] text-white rounded-full leading-none">X</span>
-                            )}
-                            {pro.is_triple_expert && (
-                              <span className="text-xs px-1.5 py-0.5 bg-[#C4A35A] text-white rounded-full leading-none">T</span>
-                            )}
-                            {pro.is_cross_master && (
-                              <span className="text-xs px-1.5 py-0.5 bg-[#C4A35A] text-white rounded-full leading-none">XM</span>
-                            )}
                           </div>
                           <div className="text-xs text-gray-500 truncate">
                             {[pro.title, pro.prefecture, pro.is_online_available ? 'オンライン対応' : null]

@@ -15,10 +15,6 @@ interface ProData {
   area_description: string | null
   is_online_available: boolean
   is_founding_member: boolean
-  is_double_expert: boolean
-  is_cross_expert: boolean
-  is_triple_expert: boolean
-  is_cross_master: boolean
   store_name: string | null
 }
 
@@ -37,7 +33,7 @@ export default function SearchPage() {
     async function load() {
       const [prosRes, voteRes, proofRes] = await Promise.all([
         (supabase as any).from('professionals')
-          .select('id, name, title, photo_url, prefecture, area_description, is_online_available, is_founding_member, is_double_expert, is_cross_expert, is_triple_expert, is_cross_master, store_name')
+          .select('id, name, title, photo_url, prefecture, area_description, is_online_available, is_founding_member, store_name')
           .not('name', 'is', null).neq('name', '').is('deactivated_at', null),
         (supabase as any).from('vote_summary')
           .select('professional_id, proof_id, vote_count')
@@ -190,30 +186,6 @@ export default function SearchPage() {
                           fontSize: 9, padding: '1px 6px', background: T.gold, color: '#fff',
                           borderRadius: 99, fontWeight: 600,
                         }}>FM</span>
-                      )}
-                      {p.is_double_expert && (
-                        <span style={{
-                          fontSize: 9, padding: '1px 6px', background: T.gold, color: '#fff',
-                          borderRadius: 99, fontWeight: 600,
-                        }}>W</span>
-                      )}
-                      {p.is_cross_expert && (
-                        <span style={{
-                          fontSize: 9, padding: '1px 6px', background: T.gold, color: '#fff',
-                          borderRadius: 99, fontWeight: 600,
-                        }}>X</span>
-                      )}
-                      {p.is_triple_expert && (
-                        <span style={{
-                          fontSize: 9, padding: '1px 6px', background: T.gold, color: '#fff',
-                          borderRadius: 99, fontWeight: 600,
-                        }}>T</span>
-                      )}
-                      {p.is_cross_master && (
-                        <span style={{
-                          fontSize: 9, padding: '1px 6px', background: T.gold, color: '#fff',
-                          borderRadius: 99, fontWeight: 600,
-                        }}>XM</span>
                       )}
                     </div>
                     {p.store_name && (
