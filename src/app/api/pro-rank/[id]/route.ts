@@ -12,11 +12,11 @@ const CATEGORY_TAB_MAP: Record<string, { tabs: string[]; label: string }> = {
   nutrition:   { tabs: ['nutrition'],          label: '栄養状態を改善したい' },
 }
 
-const SUB_CATEGORIES: { id: string; label: string }[] = [
-  { id: 'rising',     label: '急上昇' },
-  { id: 'specialist', label: 'この分野のプロ' },
-  { id: 'repeater',   label: 'リピーター' },
-  { id: 'top',        label: 'トップクラス' },
+const SUB_CATEGORIES: { id: string; label: string; priority: number }[] = [
+  { id: 'top',        label: '総合力',       priority: 1 },
+  { id: 'rising',     label: '急上昇',       priority: 2 },
+  { id: 'repeater',   label: 'リピーター',   priority: 3 },
+  { id: 'specialist', label: 'この分野のプロ', priority: 4 },
 ]
 
 export async function GET(
@@ -42,7 +42,6 @@ export async function GET(
     }
 
     const proIds = professionals.map(p => p.id)
-    const badgeTopSet = new Set(professionals.filter(p => p.badge_top).map(p => p.id))
 
     // 投票データ一括取得
     const { data: votes } = await supabase
@@ -100,17 +99,33 @@ export async function GET(
       }
     }
 
-    // 全カテゴリ × 全サブカテゴリで順位を計算
-    const ranks: { categoryLabel: string; subLabel: string; rank: number }[] = []
+    // 全カテゴリ × 全サブカテゴリで1位のみ収集
+    const firstPlaces: { categoryLabel: string; subLabel: string; rank: 1; priority: number; catScore: number }[] = []
 
     for (const [catKey, catConfig] of Object.entries(CATEGORY_TAB_MAP)) {
       for (const sub of SUB_CATEGORIES) {
-        // 各プロのスコアを計算
         const scored: { id: string; score: number }[] = []
 
         for (const pro of professionals) {
           const stat = proStats.get(pro.id)
           if (!stat || stat.totalProofs === 0) continue
+
+          // カテゴリフィルタ: 該当カテゴリにプルーフがあるプロのみ
+          const hasCategoryProof = catConfig.tabs.some(tab => (stat.categoryCount[tab] || 0) > 0)
+          if (!hasCategoryProof) continue
+
+          let catScore = 0
+          for (const tab of catConfig.tabs) {
+            catScore += stat.categoryCount[tab] || 0
+          }
+
+          const recentProofs = Object.values(stat.recentCategoryCount).reduce((s, v) => s + v, 0)
+          let repeaterRate = 0
+          if (stat.totalProofs >= 10) {
+            const totalVoters = Object.keys(stat.voterCounts).length
+            const repeaters = Object.values(stat.voterCounts).filter(c => c >= 2).length
+            repeaterRate = totalVoters > 0 ? (repeaters / totalVoters) * 100 : 0
+          }
 
           let score = 0
           switch (sub.id) {
@@ -122,23 +137,18 @@ export async function GET(
               break
             }
             case 'specialist': {
-              for (const tab of catConfig.tabs) {
-                score += stat.categoryCount[tab] || 0
-              }
+              score = catScore
               const guidanceCount = stat.categoryCount['guidance'] || 0
               score += guidanceCount * 0.5
               break
             }
             case 'repeater': {
               if (stat.totalProofs < 10) continue
-              const totalVoters = Object.keys(stat.voterCounts).length
-              const repeaterAndRegular = Object.values(stat.voterCounts).filter(c => c >= 2).length
-              score = totalVoters > 0 ? (repeaterAndRegular / totalVoters) * 100 : 0
+              score = catScore * 0.3 + repeaterRate * 0.7
               break
             }
             case 'top': {
-              if (!badgeTopSet.has(pro.id)) continue
-              score = stat.totalProofs
+              score = catScore * 0.5 + recentProofs * 1.5 + repeaterRate * 0.5
               break
             }
           }
@@ -148,22 +158,35 @@ export async function GET(
 
         scored.sort((a, b) => b.score - a.score)
 
-        // 対象プロが1〜3位に入っているか
-        const idx = scored.findIndex(s => s.id === targetProId)
-        if (idx >= 0 && idx < 3) {
-          ranks.push({
+        // 対象プロが1位か
+        if (scored.length > 0 && scored[0].id === targetProId) {
+          const targetStat = proStats.get(targetProId)
+          let catScore = 0
+          if (targetStat) {
+            for (const tab of catConfig.tabs) {
+              catScore += targetStat.categoryCount[tab] || 0
+            }
+          }
+          firstPlaces.push({
             categoryLabel: catConfig.label,
             subLabel: sub.label,
-            rank: idx + 1,
+            rank: 1,
+            priority: sub.priority,
+            catScore,
           })
         }
       }
     }
 
-    // ランクが低い順にソート（1位が最優先）
-    ranks.sort((a, b) => a.rank - b.rank)
+    // 優先度順にソート → 同優先度ならカテゴリスコアが高い方 → 1つだけ返す
+    firstPlaces.sort((a, b) => a.priority - b.priority || b.catScore - a.catScore)
+    const bestRank = firstPlaces.length > 0 ? {
+      categoryLabel: firstPlaces[0].categoryLabel,
+      subLabel: firstPlaces[0].subLabel,
+      rank: firstPlaces[0].rank,
+    } : null
 
-    return NextResponse.json({ ranks }, { headers: { 'Cache-Control': 'no-store' } })
+    return NextResponse.json({ rank: bestRank }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
     console.error('Pro rank API error:', error)
     return NextResponse.json({ error: 'Internal error' }, { status: 500 })

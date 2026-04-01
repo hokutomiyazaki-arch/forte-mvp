@@ -120,7 +120,7 @@ export default function CardPage() {
   const [expandedProofId, setExpandedProofId] = useState<string | null>(null)
   const [proofDatesCache, setProofDatesCache] = useState<Record<string, string[]>>({})
   const [proofDatesLoading, setProofDatesLoading] = useState<string | null>(null)
-  const [allRanks, setAllRanks] = useState<{ categoryLabel: string; subLabel: string; rank: number }[]>([])
+  const [topRank, setTopRank] = useState<{ categoryLabel: string; subLabel: string; rank: number } | null>(null)
 
   const toggleProofDates = async (proofId: string) => {
     if (expandedProofId === proofId) {
@@ -230,14 +230,14 @@ export default function CardPage() {
     }
   }, [id])
 
-  // 順位メダル取得（全件）
+  // 順位メダル取得（1つだけ）
   useEffect(() => {
     if (!id) return
     fetch(`/api/pro-rank/${id}`, { cache: 'no-store' })
       .then(res => res.json())
       .then(data => {
-        if (data.ranks && data.ranks.length > 0) {
-          setAllRanks(data.ranks)
+        if (data.rank) {
+          setTopRank(data.rank)
         }
       })
       .catch(() => {})
@@ -315,13 +315,9 @@ export default function CardPage() {
           <div style={{ flex: 1, minWidth: 0 }}>
             {/* 名前（上の行、フル幅） */}
             <div style={{ fontSize: 20, fontWeight: 900, color: T.dark }}>{pro.name}</div>
-            {allRanks.length > 0 && (
-              <div style={{ marginTop: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {allRanks.map((r, i) => (
-                  <div key={i} style={{ fontSize: 11, fontWeight: 800, color: T.dark }}>
-                    {r.rank === 1 ? '\uD83E\uDD47' : r.rank === 2 ? '\uD83E\uDD48' : '\uD83E\uDD49'} {r.categoryLabel}・{r.subLabel} {r.rank}位
-                  </div>
-                ))}
+            {topRank && (
+              <div style={{ fontSize: 11, fontWeight: 800, color: T.dark, marginTop: 2 }}>
+                {'\uD83E\uDD47'} {topRank.categoryLabel}・{topRank.subLabel} {topRank.rank}位
               </div>
             )}
             {pro.store_name && (
