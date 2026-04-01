@@ -14,6 +14,8 @@ const CATEGORIES = [
   { id: 'mind',        label: '心を整えたい' },
   { id: 'beauty',      label: '美しくなりたい' },
   { id: 'nutrition',   label: '栄養状態を改善したい' },
+  { id: 'relax',       label: 'リラックスしたい' },
+  { id: 'skill',       label: 'スキルを磨きたい' },
 ]
 
 const SUB_CATEGORIES = [

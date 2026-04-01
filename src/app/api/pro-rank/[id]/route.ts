@@ -10,6 +10,8 @@ const CATEGORY_TAB_MAP: Record<string, { tabs: string[]; label: string }> = {
   mind:        { tabs: ['mind', 'discovery'],  label: '心を整えたい' },
   beauty:      { tabs: ['beauty'],             label: '美しくなりたい' },
   nutrition:   { tabs: ['nutrition'],          label: '栄養状態を改善したい' },
+  relax:       { tabs: ['relax'],              label: 'リラックスしたい' },
+  skill:       { tabs: ['skill'],              label: 'スキルを磨きたい' },
 }
 
 const SUB_CATEGORIES: { id: string; label: string; priority: number }[] = [
@@ -118,6 +120,9 @@ export async function GET(
           for (const tab of catConfig.tabs) {
             catScore += stat.categoryCount[tab] || 0
           }
+          // 指導力を0.3倍で全カテゴリに加算
+          const guidanceCount = stat.categoryCount['guidance'] || 0
+          catScore += guidanceCount * 0.3
 
           const recentProofs = Object.values(stat.recentCategoryCount).reduce((s, v) => s + v, 0)
           let repeaterRate = 0
@@ -138,7 +143,7 @@ export async function GET(
             }
             case 'specialist': {
               score = catScore
-              const guidanceCount = stat.categoryCount['guidance'] || 0
+              // specialistはさらに0.5倍を追加（0.3は既にcatScoreに含む）
               score += guidanceCount * 0.5
               break
             }

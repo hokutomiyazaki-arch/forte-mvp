@@ -11,6 +11,8 @@ const CATEGORY_TAB_MAP: Record<string, string[]> = {
   mind: ['mind', 'discovery'],
   beauty: ['beauty'],
   nutrition: ['nutrition'],
+  relax: ['relax'],
+  skill: ['skill'],
 }
 
 export async function GET(request: Request) {
@@ -220,7 +222,9 @@ export async function GET(request: Request) {
       for (const tab of targetTabs) {
         categoryScore += stat.categoryCount[tab] || 0
       }
-      // 指導力を0.5倍で加算（「この分野のプロ」スコアのみ）
+      // 指導力を0.3倍で全カテゴリに加算
+      categoryScore += guidanceCount * 0.3
+      // specialistはさらに0.5倍を追加
       if (subCategory === 'specialist') {
         categoryScore += guidanceCount * 0.5
       }
