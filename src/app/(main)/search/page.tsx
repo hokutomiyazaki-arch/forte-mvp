@@ -53,6 +53,10 @@ interface SearchPro {
     label: string
     votes: number
   } | null
+  categoryTopProof: {
+    strengthLabel: string
+    votes: number
+  } | null
   topPersonality: {
     label: string
   } | null
@@ -276,21 +280,25 @@ export default function SearchPage() {
                     </div>
                   </div>
 
-                  {/* Featured Proof */}
-                  {p.featuredProof && (
-                    <div style={{
-                      marginTop: 10, padding: '6px 10px', background: 'rgba(196,163,90,0.06)',
-                      borderRadius: 8, display: 'flex', alignItems: 'center', gap: 6,
-                    }}>
-                      <span style={{ fontSize: 12 }}>{'\u2B50'}</span>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: T.dark }}>
-                        {p.featuredProof.strengthLabel}
-                      </span>
-                      <span style={{ fontSize: 10, color: T.gold, fontWeight: 600 }}>
-                        ({p.featuredProof.votes}票)
-                      </span>
-                    </div>
-                  )}
+                  {/* Featured Proof（カテゴリ別 or デフォルト） */}
+                  {(() => {
+                    const proof = (category !== 'multi' && p.categoryTopProof) || p.featuredProof
+                    if (!proof) return null
+                    return (
+                      <div style={{
+                        marginTop: 10, padding: '6px 10px', background: 'rgba(196,163,90,0.06)',
+                        borderRadius: 8, display: 'flex', alignItems: 'center', gap: 6,
+                      }}>
+                        <span style={{ fontSize: 12 }}>{'\u2B50'}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: T.dark }}>
+                          {proof.strengthLabel}
+                        </span>
+                        <span style={{ fontSize: 10, color: T.gold, fontWeight: 600 }}>
+                          ({proof.votes}票)
+                        </span>
+                      </div>
+                    )
+                  })()}
 
                   {/* パーソナリティTOP */}
                   {p.topPersonality && (

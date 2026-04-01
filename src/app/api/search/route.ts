@@ -297,6 +297,33 @@ export async function GET(request: Request) {
         }
       }
 
+      // categoryTopProof: カテゴリ別の最得票proof_item
+      let categoryTopProof: { strengthLabel: string; votes: number } | null = null
+      if (category !== 'multi' && category !== 'none' && targetTabs.length > 0) {
+        const categoryItemIds = new Set(
+          (proofItems || [])
+            .filter(i => targetTabs.includes(i.tab))
+            .map(i => i.id)
+        )
+        let bestId = ''
+        let bestCount = 0
+        for (const [itemId, count] of Object.entries(stat.proofItemCounts)) {
+          if (categoryItemIds.has(itemId) && count > bestCount) {
+            bestCount = count
+            bestId = itemId
+          }
+        }
+        if (bestId && bestCount >= 1) {
+          const item = (proofItems || []).find(i => i.id === bestId)
+          if (item) {
+            categoryTopProof = {
+              strengthLabel: item.strength_label || '',
+              votes: bestCount,
+            }
+          }
+        }
+      }
+
       // topPersonality
       let topPersonality: { label: string } | null = null
       const perCounts = proPersonalityCounts.get(pro.id)
@@ -337,6 +364,7 @@ export async function GET(request: Request) {
         matchedProofLabel: proofMatchMap[pro.id] || null,
         matchSource: voiceMatchMap[pro.id] ? 'voice' as const : proofMatchMap[pro.id] ? 'proof' as const : null,
         featuredProof,
+        categoryTopProof,
         topPersonality,
       }
     }).filter((p): p is NonNullable<typeof p> => p !== null)
