@@ -2003,7 +2003,7 @@ export default function DashboardPage() {
             <div className="flex flex-wrap justify-center gap-6">
               {/* credential_levels経由のバッジ（新方式） */}
               {credentialBadges.map((badge) => (
-                <a key={badge.id} href={`/org/${badge.org_id}`} className="flex flex-col items-center hover:opacity-70 transition">
+                <a key={badge.id} href={`/org/${badge.org_id}?tab=resources#${badge.id}`} className="flex flex-col items-center hover:opacity-70 transition">
                   {badge.image_url ? (
                     <img src={badge.image_url} alt={badge.name} loading="lazy" className="w-16 h-16 rounded-xl object-cover" />
                   ) : (

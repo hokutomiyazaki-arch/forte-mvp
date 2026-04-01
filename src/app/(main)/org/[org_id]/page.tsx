@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 
 const ORG_TYPE_LABELS: Record<string, { typeName: string; members: string; count: string; empty: string }> = {
   store: {
@@ -25,6 +25,7 @@ const ORG_TYPE_LABELS: Record<string, { typeName: string; members: string; count
 
 export default function OrgPublicPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const orgId = params.org_id as string
   const [loading, setLoading] = useState(true)
   const [org, setOrg] = useState<any>(null)
@@ -40,6 +41,20 @@ export default function OrgPublicPage() {
   useEffect(() => {
     load()
   }, [])
+
+  // ハッシュスクロール（バッジクリックからの遷移用）
+  useEffect(() => {
+    if (loading) return
+    const hash = window.location.hash.slice(1)
+    if (hash) {
+      setTimeout(() => {
+        const el = document.getElementById(hash)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+      }, 100)
+    }
+  }, [loading])
 
   async function load() {
     try {
@@ -173,6 +188,7 @@ export default function OrgPublicPage() {
           {levelAggregates.map((la: any) => (
             <a
               key={la.level_id}
+              id={la.level_id}
               href={`/org/${orgId}/level/${la.level_id}`}
               className="block bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:border-[#C4A35A] transition"
             >
