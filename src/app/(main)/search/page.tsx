@@ -19,7 +19,7 @@ const SUB_CATEGORIES = [
   { id: 'rising',     label: '\uD83D\uDD25 今月急上昇' },
   { id: 'specialist', label: '\u2B50 この分野のプロ' },
   { id: 'repeater',   label: '\uD83D\uDD04 リピーターが多い' },
-  { id: 'top',        label: '\uD83D\uDC51 トップクラス' },
+  { id: 'top',        label: '\uD83C\uDFC6 総合力' },
 ]
 
 const MEDAL_ICONS = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'] // 🥇🥈🥉
@@ -28,13 +28,13 @@ const SUB_CATEGORY_LABELS: Record<string, string> = {
   rising: '急上昇',
   specialist: 'この分野のプロ',
   repeater: 'リピーター',
-  top: 'トップクラス',
+  top: '総合力',
 }
 
 const BADGE_CONFIG = [
   { key: 'rising' as const, label: '\uD83D\uDD25 急上昇中', bg: '#FFF3E0', color: '#E65100', border: '#FFCC80' },
   { key: 'specialist' as const, label: '\u2B50 この道のプロ', bg: '#FFF8E1', color: '#F57F17', border: '#FFE082' },
-  { key: 'top' as const, label: '\uD83D\uDC51 トップクラス', bg: '#FFF8E1', color: '#F57F17', border: '#FFE082' },
+  { key: 'top' as const, label: '\uD83C\uDFC6 総合力', bg: '#FFF8E1', color: '#F57F17', border: '#FFE082' },
   { key: 'multi' as const, label: '\uD83C\uDF10 マルチスペシャリスト', bg: '#F5F5F5', color: '#616161', border: '#BDBDBD' },
 ]
 
@@ -64,7 +64,7 @@ interface SearchPro {
 }
 
 export default function SearchPage() {
-  const [category, setCategory] = useState('healing')
+  const [category, setCategory] = useState('none')
   const [subCategory, setSubCategory] = useState('rising')
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
@@ -178,7 +178,7 @@ export default function SearchPage() {
           {CATEGORIES.map(cat => (
             <button
               key={cat.id}
-              onClick={() => setCategory(cat.id)}
+              onClick={() => setCategory(category === cat.id ? 'none' : cat.id)}
               style={{
                 flexShrink: 0, padding: '6px 14px', borderRadius: 99, fontSize: 12, fontWeight: 600,
                 border: category === cat.id ? 'none' : `1px solid ${T.cardBorder}`,
@@ -192,26 +192,28 @@ export default function SearchPage() {
           ))}
         </div>
 
-        {/* サブカテゴリ（4つ横並び） */}
-        <div style={{
-          display: 'flex', gap: 4, overflowX: 'auto', paddingBottom: 8, marginBottom: 12,
-        }}>
-          {SUB_CATEGORIES.map(sub => (
-            <button
-              key={sub.id}
-              onClick={() => setSubCategory(sub.id)}
-              style={{
-                flexShrink: 0, padding: '5px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600,
-                border: subCategory === sub.id ? `1.5px solid ${T.gold}` : `1px solid ${T.cardBorder}`,
-                background: T.cardBg,
-                color: subCategory === sub.id ? T.gold : T.textMuted,
-                cursor: 'pointer', fontFamily: T.font,
-              }}
-            >
-              {sub.label}
-            </button>
-          ))}
-        </div>
+        {/* サブカテゴリ（カテゴリ選択時のみ表示） */}
+        {category !== 'none' && (
+          <div style={{
+            display: 'flex', gap: 4, overflowX: 'auto', paddingBottom: 8, marginBottom: 12,
+          }}>
+            {SUB_CATEGORIES.map(sub => (
+              <button
+                key={sub.id}
+                onClick={() => setSubCategory(sub.id)}
+                style={{
+                  flexShrink: 0, padding: '5px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600,
+                  border: subCategory === sub.id ? `1.5px solid ${T.gold}` : `1px solid ${T.cardBorder}`,
+                  background: T.cardBg,
+                  color: subCategory === sub.id ? T.gold : T.textMuted,
+                  cursor: 'pointer', fontFamily: T.font,
+                }}
+              >
+                {sub.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* 都道府県プルダウン */}
         <div style={{ marginBottom: 12 }}>
@@ -252,8 +254,8 @@ export default function SearchPage() {
             {professionals.map((p, index) => {
               const activeBadges = getBadges(p.badges)
               const rank = index + 1
-              const categoryLabel = CATEGORIES.find(c => c.id === category)?.label || ''
-              const subLabel = SUB_CATEGORY_LABELS[subCategory] || ''
+              const categoryLabel = category === 'none' ? 'マルチスペシャリスト' : (CATEGORIES.find(c => c.id === category)?.label || '')
+              const subLabel = category === 'none' ? '' : (SUB_CATEGORY_LABELS[subCategory] || '')
               const medal = rank <= 3 ? MEDAL_ICONS[rank - 1] : null
               return (
                 <a
@@ -274,7 +276,7 @@ export default function SearchPage() {
                         <span style={{
                           fontSize: 11, fontWeight: 800, color: T.dark,
                         }}>
-                          {medal} {categoryLabel}・{subLabel} {rank}位
+                          {medal} {categoryLabel}{subLabel ? `・${subLabel}` : ''} {rank}位
                         </span>
                       )}
                       {activeBadges.map(b => (

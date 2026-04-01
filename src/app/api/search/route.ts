@@ -15,7 +15,7 @@ const CATEGORY_TAB_MAP: Record<string, string[]> = {
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
-  const category = searchParams.get('category') || 'healing'
+  const category = searchParams.get('category') || 'none'
   const subCategory = searchParams.get('sub') || 'rising'
   const query = searchParams.get('q') || ''
   const prefecture = searchParams.get('prefecture') || ''
@@ -214,6 +214,11 @@ export async function GET(request: Request) {
         categoryScore += guidanceCount * 0.5
       }
 
+      // 対応カテゴリ数（5件以上のプルーフがあるカテゴリ、guidance除く）
+      const diverseCategoryCount = Object.entries(stat.categoryCount)
+        .filter(([tab, count]) => tab !== 'guidance' && count >= 5)
+        .length
+
       return {
         id: pro.id,
         name: pro.name,
@@ -224,6 +229,7 @@ export async function GET(request: Request) {
         totalProofs: stat.totalProofs,
         recentProofs: stat.recentProofs,
         categoryScore,
+        diverseCategoryCount,
         categoryCount: stat.categoryCount,
         badges: {
           rising: pro.badge_rising,
@@ -251,44 +257,60 @@ export async function GET(request: Request) {
       )
     }
 
-    // サブカテゴリ別ソート
-    switch (subCategory) {
-      case 'rising': {
-        // 今月急上昇: 選択カテゴリの直近30日プルーフ数順
-        const risingTabs = CATEGORY_TAB_MAP[category] || []
-        const getRecentScore = (p: typeof result[number]) => {
-          let score = 0
-          for (const tab of risingTabs) {
-            score += p.recentCategoryCount[tab] || 0
+    // ソート
+    if (category === 'none') {
+      // マルチスペシャリスト: 対応カテゴリ数ベースの複合スコア
+      const getMultiScore = (p: typeof result[number]) =>
+        p.diverseCategoryCount * 2.0
+        + p.totalProofs * 0.5
+        + p.recentProofs * 1.0
+        + (p.repeaterRate || 0) * 0.3
+      result.sort((a, b) => getMultiScore(b) - getMultiScore(a))
+    } else {
+      // サブカテゴリ別ソート（カテゴリ選択時）
+      switch (subCategory) {
+        case 'rising': {
+          // 今月急上昇: 選択カテゴリの直近30日プルーフ数順
+          const risingTabs = CATEGORY_TAB_MAP[category] || []
+          const getRecentScore = (p: typeof result[number]) => {
+            let score = 0
+            for (const tab of risingTabs) {
+              score += p.recentCategoryCount[tab] || 0
+            }
+            return score
           }
-          return score
+          result.sort((a, b) => getRecentScore(b) - getRecentScore(a))
+          result = result.filter(p => getRecentScore(p) > 0)
+          break
         }
-        result.sort((a, b) => getRecentScore(b) - getRecentScore(a))
-        result = result.filter(p => getRecentScore(p) > 0)
-        break
+
+        case 'specialist':
+          // この分野のプロ: カテゴリスコア順（指導力0.5倍加算済み）
+          result.sort((a, b) => b.categoryScore - a.categoryScore)
+          break
+
+        case 'repeater': {
+          // リピーターが多い: カテゴリ適合度 + リピーター率
+          result = result.filter(p => p.repeaterRate !== null)
+          const getRepeaterScore = (p: typeof result[number]) =>
+            p.categoryScore * 0.3 + (p.repeaterRate || 0) * 0.7
+          result.sort((a, b) => getRepeaterScore(b) - getRepeaterScore(a))
+          break
+        }
+
+        case 'top': {
+          // 総合力: カテゴリ適合度 + 最近の活動 + リピーター率
+          const getTopScore = (p: typeof result[number]) =>
+            p.categoryScore * 0.5
+            + p.recentProofs * 1.5
+            + (p.repeaterRate || 0) * 0.5
+          result.sort((a, b) => getTopScore(b) - getTopScore(a))
+          break
+        }
+
+        default:
+          result.sort((a, b) => b.recentProofs - a.recentProofs)
       }
-
-      case 'specialist':
-        // この分野のプロ: カテゴリスコア順（指導力0.5倍加算済み）
-        result.sort((a, b) => b.categoryScore - a.categoryScore)
-        break
-
-      case 'repeater':
-        // リピーターが多い: リピーター率順（10プルーフ以上のみ）
-        result = result.filter(p => p.repeaterRate !== null)
-        result.sort((a, b) => (b.repeaterRate || 0) - (a.repeaterRate || 0))
-        break
-
-      case 'top': {
-        // トップクラス: 複合スコアでソート
-        const getTopScore = (p: typeof result[number]) =>
-          p.totalProofs * 1.0 + p.recentProofs * 1.5 + (p.repeaterRate || 0) * 0.5
-        result.sort((a, b) => getTopScore(b) - getTopScore(a))
-        break
-      }
-
-      default:
-        result.sort((a, b) => b.recentProofs - a.recentProofs)
     }
 
     return NextResponse.json({
