@@ -3119,7 +3119,6 @@ export default function DashboardPage() {
               <p style={{ fontSize: 13, color: '#1A1A2E', marginBottom: 12, lineHeight: 1.6 }}>8カテゴリから最大3つを選んで設定。お客さんには「種類」だけ見える。中身はアンケート後に開示。</p>
               <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
                 {[
-                  ['次回特典', '延長15分無料、オプション追加など（値引きではなく価値の上乗せ）'],
                   ['プロの秘密', 'あなただけが知っている専門知識'],
                   ['自宅でできる○○', 'セルフケア・セルフワーク'],
                   ['おすすめの一冊', 'あなたの人生を変えた本'],
