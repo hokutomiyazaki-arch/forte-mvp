@@ -22,6 +22,15 @@ const SUB_CATEGORIES = [
   { id: 'top',        label: '\uD83D\uDC51 トップクラス' },
 ]
 
+const MEDAL_ICONS = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'] // 🥇🥈🥉
+
+const SUB_CATEGORY_LABELS: Record<string, string> = {
+  rising: '急上昇',
+  specialist: 'この分野のプロ',
+  repeater: 'リピーター',
+  top: 'トップクラス',
+}
+
 const BADGE_CONFIG = [
   { key: 'rising' as const, label: '\uD83D\uDD25 急上昇中', bg: '#FFF3E0', color: '#E65100', border: '#FFCC80' },
   { key: 'specialist' as const, label: '\u2B50 この道のプロ', bg: '#FFF8E1', color: '#F57F17', border: '#FFE082' },
@@ -221,8 +230,12 @@ export default function SearchPage() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {professionals.map(p => {
+            {professionals.map((p, index) => {
               const activeBadges = getBadges(p.badges)
+              const rank = index + 1
+              const categoryLabel = CATEGORIES.find(c => c.id === category)?.label || ''
+              const subLabel = SUB_CATEGORY_LABELS[subCategory] || ''
+              const medal = rank <= 3 ? MEDAL_ICONS[rank - 1] : null
               return (
                 <a
                   key={p.id}
@@ -235,9 +248,16 @@ export default function SearchPage() {
                   onMouseEnter={e => (e.currentTarget.style.borderColor = T.gold)}
                   onMouseLeave={e => (e.currentTarget.style.borderColor = T.cardBorder)}
                 >
-                  {/* バッジ（最大2つ） */}
-                  {activeBadges.length > 0 && (
-                    <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+                  {/* メダル + バッジ */}
+                  {(medal || activeBadges.length > 0) && (
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                      {medal && (
+                        <span style={{
+                          fontSize: 11, fontWeight: 800, color: T.dark,
+                        }}>
+                          {medal} {categoryLabel}・{subLabel} {rank}位
+                        </span>
+                      )}
                       {activeBadges.map(b => (
                         <span key={b.key} style={{
                           fontSize: 10, fontWeight: 700, padding: '2px 8px',
