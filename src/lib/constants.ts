@@ -21,13 +21,14 @@ export const OPS_EMAIL = process.env.OPS_NOTIFICATION_EMAIL || 'bodydiscoverystu
 export const TAB_DISPLAY_NAMES: Record<string, string> = {
   healing: '治療・回復',
   body: '体の機能改善',
+  bodymake: 'ボディメイク',
   performance: 'パフォーマンス',
   mind: 'マインド',
+  relax: 'リラックス',
   discovery: '発見・気づき',
   guidance: '指導力',
   beauty: 'ビューティー',
   nutrition: '栄養・生活',
-  bodymake: 'ボディメイク',
 };
 
 /** タブの表示順序 */
@@ -37,6 +38,7 @@ export const TAB_ORDER: string[] = [
   'bodymake',
   'performance',
   'mind',
+  'relax',
   'discovery',
   'guidance',
   'beauty',

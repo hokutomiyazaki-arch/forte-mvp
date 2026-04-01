@@ -10,6 +10,7 @@ const CATEGORIES = [
   { id: 'multi',       label: '\uD83C\uDF10 マルチスペシャリスト' },
   { id: 'healing',     label: '痛みを治したい' },
   { id: 'body',        label: '体を変えたい' },
+  { id: 'bodymake',    label: 'ボディメイクしたい' },
   { id: 'performance', label: '動きを高めたい' },
   { id: 'mind',        label: '心を整えたい' },
   { id: 'beauty',      label: '美しくなりたい' },

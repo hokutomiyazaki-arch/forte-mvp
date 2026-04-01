@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic'
 const CATEGORY_TAB_MAP: Record<string, string[]> = {
   healing: ['healing'],
   body: ['body', 'bodymake'],
+  bodymake: ['bodymake'],
   performance: ['performance'],
   mind: ['mind', 'discovery'],
   beauty: ['beauty'],
