@@ -2431,19 +2431,21 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Featured Proof 選択（PROVEN達成項目のみ） */}
+      {/* Featured Proof 選択（全項目対応） */}
       {(() => {
-        const provenItems = votes.filter(v => v.vote_count >= PROVEN_THRESHOLD)
-        if (provenItems.length === 0) return null
+        const votedItems = [...votes].filter(v => v.vote_count > 0).sort((a, b) => b.vote_count - a.vote_count)
+        if (votedItems.length === 0) return null
         return (
           <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
-            <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">カードに表示する強み</h2>
+            <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">検索カードに表示する強みを選ぶ</h2>
             <p className="text-sm text-[#9CA3AF] mb-4">
-              PROVEN達成した項目から1つ選んで、プロカードのトップに表示できます。
+              検索結果のプロカードに表示される強みを選べます。
+              {!featuredProofId && '選択しない場合は最も票数が多い項目が自動で表示されます。'}
             </p>
             <div className="space-y-2">
-              {provenItems.map(item => {
+              {votedItems.map(item => {
                 const isSelected = featuredProofId === item.proof_id
+                const isProven = item.vote_count >= PROVEN_THRESHOLD
                 return (
                   <button
                     key={item.proof_id || item.category}
@@ -2470,16 +2472,23 @@ export default function DashboardPage() {
                     } disabled:opacity-50`}
                   >
                     <div className="flex items-center gap-3">
-                      <span className="text-sm font-bold" style={{ color: isSelected ? '#C4A35A' : '#1A1A2E' }}>
+                      <span className="text-sm font-bold" style={{ color: isSelected ? '#C4A35A' : 'transparent', minWidth: 16 }}>
                         {isSelected ? '✓' : ''}
                       </span>
                       <div className="text-left">
-                        <div className="text-sm font-medium text-[#1A1A2E]">{item.strength_label || item.category}</div>
-                        <div className="text-xs text-[#9CA3AF]">{item.vote_count} proofs · PROVEN</div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-[#1A1A2E]">{item.strength_label || item.category}</span>
+                          {isProven && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(196,163,90,0.1)', color: '#C4A35A' }}>
+                              PROVEN
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-[#9CA3AF]">{item.vote_count} proofs</div>
                       </div>
                     </div>
                     <span className="text-xs font-medium" style={{ color: isSelected ? '#C4A35A' : '#9CA3AF' }}>
-                      {isSelected ? '表示中' : 'カードに表示する'}
+                      {isSelected ? '表示中' : '選択'}
                     </span>
                   </button>
                 )
