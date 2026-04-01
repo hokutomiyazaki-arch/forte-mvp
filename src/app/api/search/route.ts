@@ -15,7 +15,7 @@ const CATEGORY_TAB_MAP: Record<string, string[]> = {
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
-  const category = searchParams.get('category') || 'none'
+  const category = searchParams.get('category') || 'multi'
   const subCategory = searchParams.get('sub') || 'rising'
   const query = searchParams.get('q') || ''
   const prefecture = searchParams.get('prefecture') || ''
@@ -32,7 +32,7 @@ export async function GET(request: Request) {
         id, name, title, prefecture, area_description,
         photo_url, selected_proofs,
         badge_rising, badge_specialist, badge_multi, badge_top,
-        featured_vote_id, created_at
+        featured_vote_id, featured_proof_id, created_at
       `)
       .is('deactivated_at', null)
       .not('selected_proofs', 'is', null)
@@ -132,6 +132,7 @@ export async function GET(request: Request) {
       recentCategoryCount: Record<string, number>
       voterCounts: Record<string, number>
       latestVoteComment: string
+      proofItemCounts: Record<string, number>
     }>()
 
     for (const vote of votes || []) {
@@ -144,6 +145,7 @@ export async function GET(request: Request) {
           recentCategoryCount: {},
           voterCounts: {},
           latestVoteComment: '',
+          proofItemCounts: {},
         })
       }
       const stat = proStats.get(pid)!
@@ -162,6 +164,7 @@ export async function GET(request: Request) {
             stat.recentCategoryCount[tab] = (stat.recentCategoryCount[tab] || 0) + 1
           }
         }
+        stat.proofItemCounts[itemId] = (stat.proofItemCounts[itemId] || 0) + 1
       }
 
       const email = vote.normalized_email || ''
@@ -183,6 +186,7 @@ export async function GET(request: Request) {
         recentCategoryCount: {},
         voterCounts: {},
         latestVoteComment: '',
+        proofItemCounts: {},
       }
 
       // プルーフ0は除外
@@ -226,6 +230,41 @@ export async function GET(request: Request) {
         .filter(([tab, count]) => tab !== 'guidance' && count >= 5)
         .length
 
+      // Featured proof: featured_proof_id があればそれ、なければ最得票のproof_item
+      let featuredProof: { strengthLabel: string; label: string; votes: number } | null = null
+      const fpId = pro.featured_proof_id
+      if (fpId && stat.proofItemCounts[fpId] && stat.proofItemCounts[fpId] > 0) {
+        const item = (proofItems || []).find(i => i.id === fpId)
+        if (item) {
+          featuredProof = {
+            strengthLabel: item.strength_label || '',
+            label: item.tab || '',
+            votes: stat.proofItemCounts[fpId],
+          }
+        }
+      }
+      if (!featuredProof) {
+        // 最得票のproof_item（1票以上）
+        let bestId = ''
+        let bestCount = 0
+        for (const [itemId, count] of Object.entries(stat.proofItemCounts)) {
+          if (count > bestCount) {
+            bestCount = count
+            bestId = itemId
+          }
+        }
+        if (bestId && bestCount >= 1) {
+          const item = (proofItems || []).find(i => i.id === bestId)
+          if (item) {
+            featuredProof = {
+              strengthLabel: item.strength_label || '',
+              label: item.tab || '',
+              votes: bestCount,
+            }
+          }
+        }
+      }
+
       return {
         id: pro.id,
         name: pro.name,
@@ -251,6 +290,7 @@ export async function GET(request: Request) {
         matchedVoice: voiceMatchMap[pro.id] || null,
         matchedProofLabel: proofMatchMap[pro.id] || null,
         matchSource: voiceMatchMap[pro.id] ? 'voice' as const : proofMatchMap[pro.id] ? 'proof' as const : null,
+        featuredProof,
       }
     }).filter((p): p is NonNullable<typeof p> => p !== null)
 
@@ -273,7 +313,7 @@ export async function GET(request: Request) {
     }
 
     // ソート
-    if (category === 'none') {
+    if (category === 'none' || category === 'multi') {
       // マルチスペシャリスト: 対応カテゴリ数ベースの複合スコア
       const getMultiScore = (p: typeof result[number]) =>
         p.diverseCategoryCount * 2.0

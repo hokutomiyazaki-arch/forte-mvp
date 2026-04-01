@@ -426,49 +426,6 @@ export default function CardPage() {
         </div>
       )}
 
-      {/* ═══ Featured Proof ═══ */}
-      {(() => {
-        const provenVotes = sortedVotes.filter(v => v.vote_count >= PROVEN_THRESHOLD)
-        if (provenVotes.length === 0) return null
-        const featuredId = (pro as any).featured_proof_id
-        const featured = featuredId
-          ? provenVotes.find(v => v.proof_id === featuredId) || provenVotes[0]
-          : provenVotes[0]
-        if (!featured) return null
-        return (
-          <div style={{
-            background: '#1A1A2E',
-            borderRadius: 14,
-            padding: '16px 18px',
-            marginBottom: 12,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 14,
-          }}>
-            <div style={{
-              width: 44, height: 44, borderRadius: 12,
-              background: 'linear-gradient(135deg, #C4A35A, #D4B96A)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 18, flexShrink: 0,
-            }}>
-              🛡
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: PROVEN_GOLD, marginBottom: 2 }}>
-                PROVEN STRENGTH
-              </div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>
-                {featured.strength_label || featured.category}
-              </div>
-            </div>
-            <div style={{ textAlign: 'center', flexShrink: 0 }}>
-              <div style={{ fontSize: 22, fontWeight: 'bold', color: PROVEN_GOLD, fontFamily: T.fontMono }}>{featured.vote_count}</div>
-              <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.5)', fontWeight: 700 }}>proofs</div>
-            </div>
-          </div>
-        )
-      })()}
-
       {/* ═══ タブ切替 ═══ */}
       <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 12, padding: 3, display: 'flex', marginBottom: 12 }}>
         {([

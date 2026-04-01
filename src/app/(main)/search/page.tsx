@@ -7,6 +7,7 @@ import { COLORS, FONTS } from '@/lib/design-tokens'
 const T = { ...COLORS, font: FONTS.main }
 
 const CATEGORIES = [
+  { id: 'multi',       label: '\uD83C\uDF10 マルチスペシャリスト' },
   { id: 'healing',     label: '痛みを治したい' },
   { id: 'body',        label: '体を変えたい' },
   { id: 'performance', label: '動きを高めたい' },
@@ -61,10 +62,15 @@ interface SearchPro {
   matchedVoice: string | null
   matchedProofLabel: string | null
   matchSource: 'voice' | 'proof' | null
+  featuredProof: {
+    strengthLabel: string
+    label: string
+    votes: number
+  } | null
 }
 
 export default function SearchPage() {
-  const [category, setCategory] = useState('none')
+  const [category, setCategory] = useState('multi')
   const [subCategory, setSubCategory] = useState('rising')
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
@@ -178,7 +184,7 @@ export default function SearchPage() {
           {CATEGORIES.map(cat => (
             <button
               key={cat.id}
-              onClick={() => setCategory(category === cat.id ? 'none' : cat.id)}
+              onClick={() => setCategory(cat.id)}
               style={{
                 flexShrink: 0, padding: '6px 14px', borderRadius: 99, fontSize: 12, fontWeight: 600,
                 border: category === cat.id ? 'none' : `1px solid ${T.cardBorder}`,
@@ -192,8 +198,8 @@ export default function SearchPage() {
           ))}
         </div>
 
-        {/* サブカテゴリ（カテゴリ選択時のみ表示） */}
-        {category !== 'none' && (
+        {/* サブカテゴリ（カテゴリ選択時のみ表示、multi/noneでは非表示） */}
+        {category !== 'none' && category !== 'multi' && (
           <div style={{
             display: 'flex', gap: 4, overflowX: 'auto', paddingBottom: 8, marginBottom: 12,
           }}>
@@ -254,8 +260,9 @@ export default function SearchPage() {
             {professionals.map((p, index) => {
               const activeBadges = getBadges(p.badges)
               const rank = index + 1
-              const categoryLabel = category === 'none' ? 'マルチスペシャリスト' : (CATEGORIES.find(c => c.id === category)?.label || '')
-              const subLabel = category === 'none' ? '' : (SUB_CATEGORY_LABELS[subCategory] || '')
+              const isMulti = category === 'none' || category === 'multi'
+              const categoryLabel = isMulti ? 'マルチスペシャリスト' : (CATEGORIES.find(c => c.id === category)?.label || '')
+              const subLabel = isMulti ? '' : (SUB_CATEGORY_LABELS[subCategory] || '')
               const medal = rank === 1 ? MEDAL_ICONS[0] : null
               return (
                 <a
@@ -313,6 +320,22 @@ export default function SearchPage() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Featured Proof */}
+                  {p.featuredProof && (
+                    <div style={{
+                      marginTop: 10, padding: '6px 10px', background: 'rgba(196,163,90,0.06)',
+                      borderRadius: 8, display: 'flex', alignItems: 'center', gap: 6,
+                    }}>
+                      <span style={{ fontSize: 12 }}>{'\u2B50'}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: T.dark }}>
+                        {p.featuredProof.strengthLabel}
+                      </span>
+                      <span style={{ fontSize: 10, color: T.gold, fontWeight: 600 }}>
+                        ({p.featuredProof.votes}票)
+                      </span>
+                    </div>
+                  )}
 
                   {/* Voiceスニペット */}
                   {p.voiceSnippet && (
