@@ -92,13 +92,20 @@ export async function GET(request: Request) {
     const voiceMatchMap: Record<string, string> = {} // proId -> matched comment snippet
     const proofMatchMap: Record<string, string> = {} // proId -> matched strength_label
     if (query) {
-      // voice マッチ
+      // voice マッチ（前後20字の抜粋）
       for (const v of votes || []) {
         if (v.comment && v.comment.includes(query)) {
           commentMatchProIds.add(v.professional_id)
           if (!voiceMatchMap[v.professional_id]) {
-            const snippet = v.comment.length > 40 ? v.comment.slice(0, 40) + '...' : v.comment
-            voiceMatchMap[v.professional_id] = snippet
+            const idx = v.comment.indexOf(query)
+            if (idx !== -1) {
+              const start = Math.max(0, idx - 20)
+              const end = Math.min(v.comment.length, idx + query.length + 20)
+              const excerpt = v.comment.slice(start, end)
+              const prefix = start > 0 ? '...' : ''
+              const suffix = end < v.comment.length ? '...' : ''
+              voiceMatchMap[v.professional_id] = prefix + excerpt + suffix
+            }
           }
         }
       }

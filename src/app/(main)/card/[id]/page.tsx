@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 // useUser removed — auth is now handled server-side in /api/card/[id]
 import { Professional, VoteSummary, Vote } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
@@ -96,7 +96,9 @@ function RingChart({ label, count, max, size = 76 }: { label: string; count: num
 
 export default function CardPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const id = params.id as string
+  const tabParam = searchParams.get('tab')
   // Clerk auth removed from client — handled server-side in /api/card/[id]
   const [pro, setPro] = useState<Professional | null>(null)
   const [votes, setVotes] = useState<VoteSummary[]>([])
@@ -104,7 +106,8 @@ export default function CardPage() {
   const [comments, setComments] = useState<Vote[]>([])
   const [totalVotes, setTotalVotes] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'strengths' | 'certs' | 'voices'>('strengths')
+  const initialTab = (tabParam === 'voices' || tabParam === 'certs') ? tabParam : 'strengths'
+  const [activeTab, setActiveTab] = useState<'strengths' | 'certs' | 'voices'>(initialTab)
   const [animated, setAnimated] = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
   const [isBookmarked, setIsBookmarked] = useState(false)

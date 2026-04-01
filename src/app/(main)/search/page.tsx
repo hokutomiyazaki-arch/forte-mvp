@@ -333,7 +333,16 @@ export default function SearchPage() {
                   {debouncedQuery && p.matchSource && (
                     <div style={{ marginTop: 8, fontSize: 11, color: T.textSub, lineHeight: 1.5 }}>
                       {p.matchSource === 'voice' && p.matchedVoice && (
-                        <span>{'\uD83D\uDCAC'} 「{highlightQuery(p.matchedVoice)}」</span>
+                        <a
+                          href={`/card/${p.id}?tab=voices`}
+                          onClick={e => e.stopPropagation()}
+                          style={{ textDecoration: 'none', color: T.textSub, display: 'block' }}
+                        >
+                          <span>{'\uD83D\uDCAC'} 「{highlightQuery(p.matchedVoice)}」</span>
+                          <span style={{ fontSize: 10, color: T.gold, marginLeft: 6, fontWeight: 600 }}>
+                            続きはプロフィールで →
+                          </span>
+                        </a>
                       )}
                       {p.matchSource === 'proof' && p.matchedProofLabel && (
                         <span>{'\uD83D\uDD0D'} 「{highlightQuery(p.matchedProofLabel)}」にマッチ</span>
