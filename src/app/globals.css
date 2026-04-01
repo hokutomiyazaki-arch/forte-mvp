@@ -13,9 +13,17 @@ body {
   background-color: var(--forte-cream);
   color: var(--forte-dark);
   font-family: 'Noto Sans JP', sans-serif;
-  font-weight: 700;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+@layer base {
+  body {
+    font-weight: 700;
+  }
+  * {
+    font-weight: 700;
+  }
 }
 
 /* Navbar responsive */
