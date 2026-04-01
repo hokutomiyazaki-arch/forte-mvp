@@ -256,7 +256,7 @@ export default function SearchPage() {
               const rank = index + 1
               const categoryLabel = category === 'none' ? 'マルチスペシャリスト' : (CATEGORIES.find(c => c.id === category)?.label || '')
               const subLabel = category === 'none' ? '' : (SUB_CATEGORY_LABELS[subCategory] || '')
-              const medal = rank <= 3 ? MEDAL_ICONS[rank - 1] : null
+              const medal = rank === 1 ? MEDAL_ICONS[0] : null
               return (
                 <a
                   key={p.id}
