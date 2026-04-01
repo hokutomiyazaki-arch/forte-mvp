@@ -122,6 +122,8 @@ export default function DashboardPage() {
   const [proofError, setProofError] = useState('')
   const [customProofVoteCounts, setCustomProofVoteCounts] = useState<Map<string, number>>(new Map())
   const [showKakegoe, setShowKakegoe] = useState(false)
+  const [featuredProofId, setFeaturedProofId] = useState<string | null>(null)
+  const [featuredProofSaving, setFeaturedProofSaving] = useState(false)
 
   // Voices用 state
   const [voiceComments, setVoiceComments] = useState<{ id: string; comment: string; created_at: string }[]>([])
@@ -238,6 +240,7 @@ export default function DashboardPage() {
 
         if (proData) {
         setPro(proData)
+        setFeaturedProofId(proData.featured_proof_id || null)
 
         // LINE バナー表示判定
         if (proData.line_messaging_user_id) {
@@ -2427,6 +2430,64 @@ export default function DashboardPage() {
           </>
         )}
       </div>
+
+      {/* Featured Proof 選択（PROVEN達成項目のみ） */}
+      {(() => {
+        const provenItems = votes.filter(v => v.vote_count >= PROVEN_THRESHOLD)
+        if (provenItems.length === 0) return null
+        return (
+          <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
+            <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">カードに表示する強み</h2>
+            <p className="text-sm text-[#9CA3AF] mb-4">
+              PROVEN達成した項目から1つ選んで、プロカードのトップに表示できます。
+            </p>
+            <div className="space-y-2">
+              {provenItems.map(item => {
+                const isSelected = featuredProofId === item.proof_id
+                return (
+                  <button
+                    key={item.proof_id || item.category}
+                    disabled={featuredProofSaving}
+                    onClick={async () => {
+                      const newId = isSelected ? null : (item.proof_id || null)
+                      setFeaturedProofSaving(true)
+                      try {
+                        const res = await fetch('/api/dashboard/set-featured-proof', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ proofItemId: newId }),
+                        })
+                        if (res.ok) {
+                          setFeaturedProofId(newId)
+                        }
+                      } catch {}
+                      setFeaturedProofSaving(false)
+                    }}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-colors ${
+                      isSelected
+                        ? 'border-[#C4A35A] bg-[#C4A35A]/5'
+                        : 'border-[#E5E7EB] hover:border-[#C4A35A]/50'
+                    } disabled:opacity-50`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-bold" style={{ color: isSelected ? '#C4A35A' : '#1A1A2E' }}>
+                        {isSelected ? '✓' : ''}
+                      </span>
+                      <div className="text-left">
+                        <div className="text-sm font-medium text-[#1A1A2E]">{item.strength_label || item.category}</div>
+                        <div className="text-xs text-[#9CA3AF]">{item.vote_count} proofs · PROVEN</div>
+                      </div>
+                    </div>
+                    <span className="text-xs font-medium" style={{ color: isSelected ? '#C4A35A' : '#9CA3AF' }}>
+                      {isSelected ? '表示中' : 'カードに表示する'}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
 
       </>)}
 
