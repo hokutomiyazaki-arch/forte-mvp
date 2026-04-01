@@ -321,6 +321,9 @@ function ConfirmedContent() {
           <p className="text-lg text-[#666666]">
             {proName ? `${proName}さんにあなたの声が届きました。` : 'あなたの声が届きました。'}
           </p>
+          <p className="text-sm text-gray-400 mt-3">
+            次回のセッションでも、ぜひ声を届けてください。7日後からまた投票できます。
+          </p>
         </div>
 
         {/* ===== セクション2: リワード開示（選択済みの場合） ===== */}

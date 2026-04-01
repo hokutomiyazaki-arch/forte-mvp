@@ -56,15 +56,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'cooldown' }, { status: 429 })
     }
 
-    // ── 90日リピートチェック（同じプロに対して） ──
-    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+    // ── 7日リピートチェック（同じプロに対して） ──
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
     const { data: recentRepeatVote } = await supabase
       .from('votes')
       .select('id, created_at')
       .eq('normalized_email', normalizeEmail(email))
       .eq('professional_id', professional_id)
       .eq('status', 'confirmed')
-      .gt('created_at', ninetyDaysAgo)
+      .gt('created_at', sevenDaysAgo)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
@@ -81,9 +81,8 @@ export async function POST(req: NextRequest) {
         voter_email: email,
         normalized_email: normalizeEmail(email),
         client_user_id: null,
-        session_count: vote_data.session_count || 'first',
         vote_type: vote_data.vote_type || 'proof',
-        vote_weight: vote_data.session_count === 'first' ? 0.5 : 1.0,
+        vote_weight: 1.0,
         selected_proof_ids: vote_data.selected_proof_ids || null,
         selected_personality_ids: vote_data.selected_personality_ids || null,
         selected_reward_id: vote_data.selected_reward_id || null,

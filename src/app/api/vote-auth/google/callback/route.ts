@@ -167,15 +167,15 @@ export async function GET(request: NextRequest) {
 
     const supabaseAdmin = getSupabaseAdmin()
 
-    // Step 4: 90日リピートチェック
-    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+    // Step 4: 7日リピートチェック
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
     const { data: recentRepeatVote } = await supabaseAdmin
       .from('votes')
       .select('id, created_at')
       .eq('professional_id', professional_id)
       .eq('normalized_email', normalizeEmail(email))
       .eq('status', 'confirmed')
-      .gt('created_at', ninetyDaysAgo)
+      .gt('created_at', sevenDaysAgo)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
@@ -257,8 +257,7 @@ export async function GET(request: NextRequest) {
         voter_email: email,
         normalized_email: normalizeEmail(email),
         client_user_id: null,
-        session_count: voteData.session_count || 'first',
-        vote_weight: voteData.session_count === 'first' ? 0.5 : 1.0,
+        vote_weight: 1.0,
         vote_type: voteData.vote_type || 'personality_only',
         selected_proof_ids: voteData.selected_proof_ids || null,
         selected_personality_ids: voteData.selected_personality_ids || null,

@@ -150,7 +150,6 @@ function SplashScreen({ onDone }: { onDone: () => void }) {
 // ── ステップ管理型 ──
 type VoteStep =
   | "intro"
-  | "session_count"
   | "reward"
   | "proofs"
   | "personality"
@@ -629,7 +628,6 @@ function VoteForm() {
       selected_reward_id: selectedRewardId || null,
       comment: comment.trim() || null,
       vote_type: determineVoteType(),
-      session_count: sessionCount,
       qr_token: qrToken,
     }
     sessionStorage.setItem('pending_vote', JSON.stringify(voteData))
@@ -648,7 +646,6 @@ function VoteForm() {
       selected_reward_id: selectedRewardId || null,
       comment: comment.trim() || null,
       vote_type: determineVoteType(),
-      session_count: sessionCount || 'first',
       qr_token: qrToken,
     }
   }
@@ -670,7 +667,6 @@ function VoteForm() {
         comment: null,
         qr_token: qrToken || null,
         status: 'confirmed',
-        session_count: 'first',
         vote_weight: 0.5,
         auth_method: 'hopeful',
       })
@@ -683,7 +679,6 @@ function VoteForm() {
   // ── LINE認証で投票 ──
   function handleLineVote() {
     if (isPreview) return // プレビューモードでは投票しない
-    const effectiveSessionCount = sessionCount || 'first'
     setError('')
     // 投票データを構築してLINE認証に直接遷移（Clerkを使わない）
     const voteData = buildVoteData()
@@ -694,7 +689,6 @@ function VoteForm() {
   // ── Google認証で投票 ──
   function handleGoogleVote() {
     if (isPreview) return // プレビューモードでは投票しない
-    const effectiveSessionCount = sessionCount || 'first'
     setError('')
     // 投票データを構築してGoogle認証に直接遷移
     const voteData = buildVoteData()
@@ -720,21 +714,21 @@ function VoteForm() {
     }
 
     try {
-      // ── 90日リピートチェック（SMS送信前に確認） ──
-      const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+      // ── 7日リピートチェック（SMS送信前に確認） ──
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
       const { data: recentRepeatVote } = await (supabase as any)
         .from('votes')
         .select('id, created_at')
         .eq('normalized_email', normalizeEmail(formattedPhone))
         .eq('professional_id', proId)
         .eq('status', 'confirmed')
-        .gt('created_at', ninetyDaysAgo)
+        .gt('created_at', sevenDaysAgo)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
 
       if (recentRepeatVote) {
-        const nextVoteDate = new Date(new Date(recentRepeatVote.created_at).getTime() + 90 * 24 * 60 * 60 * 1000)
+        const nextVoteDate = new Date(new Date(recentRepeatVote.created_at).getTime() + 7 * 24 * 60 * 60 * 1000)
         setError(`このプロにはすでにアンケートを回答済みです。次回は${nextVoteDate.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}以降に再度回答できます。`)
         setPhoneSending(false)
         return
@@ -851,8 +845,7 @@ function VoteForm() {
         voter_email: formattedPhone,
         normalized_email: normalizeEmail(formattedPhone),
         client_user_id: null,
-        session_count: voteData.session_count,
-        vote_weight: voteData.session_count === 'first' ? 0.5 : 1.0,
+        vote_weight: 1.0,
         vote_type: voteData.vote_type,
         selected_proof_ids: voteData.selected_proof_ids,
         selected_personality_ids: voteData.selected_personality_ids,
@@ -934,20 +927,20 @@ function VoteForm() {
       formattedPhone = '+81' + formattedPhone.slice(1)
     }
 
-    // 90日リピートチェック
-    const ninetyDaysAgoFb = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+    // 7日リピートチェック
+    const sevenDaysAgoFb = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
     const { data: recentRepeatVoteFb } = await (supabase as any).from('votes')
       .select('id, created_at')
       .eq('normalized_email', normalizeEmail(formattedPhone))
       .eq('professional_id', proId)
       .eq('status', 'confirmed')
-      .gt('created_at', ninetyDaysAgoFb)
+      .gt('created_at', sevenDaysAgoFb)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
 
     if (recentRepeatVoteFb) {
-      const nextVoteDateFb = new Date(new Date(recentRepeatVoteFb.created_at).getTime() + 90 * 24 * 60 * 60 * 1000)
+      const nextVoteDateFb = new Date(new Date(recentRepeatVoteFb.created_at).getTime() + 7 * 24 * 60 * 60 * 1000)
       setError(`このプロにはすでにアンケートを回答済みです。次回は${nextVoteDateFb.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}以降に再度回答できます。`)
       return
     }
@@ -977,8 +970,7 @@ function VoteForm() {
       voter_email: formattedPhone, // 電話番号を識別子として使用
       normalized_email: normalizeEmail(formattedPhone),
       client_user_id: null,
-      session_count: voteData.session_count,
-      vote_weight: voteData.session_count === 'first' ? 0.5 : 1.0,
+      vote_weight: 1.0,
       vote_type: voteData.vote_type,
       selected_proof_ids: voteData.selected_proof_ids,
       selected_personality_ids: voteData.selected_personality_ids,
@@ -1018,12 +1010,6 @@ function VoteForm() {
     e.preventDefault()
     if (isPreview) return // プレビューモードでは投票しない
     setError('')
-
-    // バリデーション
-    if (!sessionCount) {
-      setError('セッション回数を選択してください')
-      return
-    }
 
     // メール: セッション投票ならセッションから、それ以外はフォーム入力値
     const email = (voteMethodRef.current === 'session' && isLoggedIn && sessionEmail)
@@ -1099,21 +1085,21 @@ function VoteForm() {
       return
     }
 
-    // 90日リピートチェック（同じプロに対して）
-    const ninetyDaysAgoSubmit = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+    // 7日リピートチェック（同じプロに対して）
+    const sevenDaysAgoSubmit = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
     const { data: recentRepeatVoteSubmit } = await (supabase as any)
       .from('votes')
       .select('id, created_at')
       .eq('normalized_email', normalizeEmail(email))
       .eq('professional_id', proId)
       .eq('status', 'confirmed')
-      .gt('created_at', ninetyDaysAgoSubmit)
+      .gt('created_at', sevenDaysAgoSubmit)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
 
     if (recentRepeatVoteSubmit) {
-      const nextVoteDateSubmit = new Date(new Date(recentRepeatVoteSubmit.created_at).getTime() + 90 * 24 * 60 * 60 * 1000)
+      const nextVoteDateSubmit = new Date(new Date(recentRepeatVoteSubmit.created_at).getTime() + 7 * 24 * 60 * 60 * 1000)
       setError(`このプロにはすでにアンケートを回答済みです。次回は${nextVoteDateSubmit.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}以降に再度回答できます。`)
       return
     }
@@ -1150,8 +1136,7 @@ function VoteForm() {
       voter_email: email,
       normalized_email: normalizeEmail(email) || null,
       client_user_id: null,
-      session_count: sessionCount,
-      vote_weight: sessionCount === 'first' ? 0.5 : 1.0,
+      vote_weight: 1.0,
       vote_type: voteType,
       selected_proof_ids: proofIdsToSend,
       selected_personality_ids: selectedPersonalityIds.size > 0 ? Array.from(selectedPersonalityIds) : null,
@@ -1174,7 +1159,6 @@ function VoteForm() {
       console.error('[handleSubmit] Vote payload:', {
         professional_id: proId,
         voter_email: email,
-        session_count: sessionCount,
         vote_type: voteType,
         selected_proof_ids: proofIdsToSend,
         selected_personality_ids: selectedPersonalityIds.size > 0 ? Array.from(selectedPersonalityIds) : null,
@@ -1289,7 +1273,6 @@ function VoteForm() {
           code: emailCode,
           professional_id: proId,
           vote_data: {
-            session_count: sessionCount,
             vote_type: voteType,
             selected_proof_ids: proofIdsToSend,
             selected_personality_ids: selectedPersonalityIds.size > 0 ? Array.from(selectedPersonalityIds) : null,
@@ -1393,7 +1376,7 @@ function VoteForm() {
 
   // ── ステップUI用の変数 ──
   const hasRewards = proRewards.length > 0
-  const totalSteps = hasRewards ? 6 : 5
+  const totalSteps = hasRewards ? 5 : 4
 
   // 強みプルーフの表示項目（プロが設定した項目）
   const allProofDisplayItems = [
@@ -1404,8 +1387,8 @@ function VoteForm() {
   // ステップ番号計算（intro/confirm/hopeful_doneはundefined）
   const stepNum = (s: VoteStep): number | undefined => {
     const order = hasRewards
-      ? ['session_count', 'proofs', 'personality', 'comment', 'reward', 'auth']
-      : ['session_count', 'proofs', 'personality', 'comment', 'auth']
+      ? ['proofs', 'personality', 'comment', 'reward', 'auth']
+      : ['proofs', 'personality', 'comment', 'auth']
     const idx = order.indexOf(s)
     return idx >= 0 ? idx + 1 : undefined
   }
@@ -1541,60 +1524,11 @@ function VoteForm() {
             </div>
 
             <button
-              onClick={() => goToWithHistory("session_count")}
+              onClick={() => goToWithHistory("proofs")}
               style={{ ...S.primaryBtn, fontSize: 16 }}
             >
               はじめる →
             </button>
-          </div>
-        </StepWrapper>
-      )}
-
-      {/* ── ステップ1/5: 何回目（旧confirm+session_count統合） ── */}
-      {voteStep === "session_count" && (
-        <StepWrapper
-          isTransitioning={isTransitioning}
-          step={stepNum("session_count")} totalSteps={totalSteps}
-          onBack={goBack} showBack={false}
-        >
-          <div style={{ textAlign: "center", width: "100%" }}>
-            <div style={{ fontSize: 32, marginBottom: 16 }}>🙏</div>
-            <div style={S.title}>
-              <span style={{ color: "#C4A35A" }}>{pro.name}</span>さんの
-              <br />セッション・施術・レッスン・指導を
-              <br />受けたのは何回目ですか？
-            </div>
-            <div style={{ height: 28 }} />
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}>
-              {([
-                { value: 'first' as const, label: 'はじめて' },
-                { value: 'repeat' as const, label: '2〜4回目' },
-                { value: 'regular' as const, label: '5回以上' },
-              ]).map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => {
-                    setSessionConfirmed(true)
-                    setSessionCount(opt.value)
-                    goToWithHistory("proofs")
-                  }}
-                  style={S.primaryBtn}
-                >
-                  {opt.label}
-                </button>
-              ))}
-
-              <button
-                onClick={async () => {
-                  await submitHopefulVote()
-                  goTo("hopeful_done")
-                }}
-                style={S.secondaryBtn}
-              >
-                まだですが、気になっています
-              </button>
-            </div>
           </div>
         </StepWrapper>
       )}

@@ -621,7 +621,7 @@ export default function CardPage() {
             const pRepeat = Math.round((sessionCounts.repeat / total) * 100)
             const pRegular = 100 - pFirst - pRepeat
             const segments = [
-              { key: 'first', label: '初回', count: sessionCounts.first, pct: pFirst, bg: '#E8E4D9', color: '#444441' },
+              { key: 'first', label: '初回投票', count: sessionCounts.first, pct: pFirst, bg: '#E8E4D9', color: '#444441' },
               { key: 'repeat', label: 'リピーター', count: sessionCounts.repeat, pct: pRepeat, bg: '#C4A35A', color: '#412402' },
               { key: 'regular', label: '常連', count: sessionCounts.regular, pct: pRegular, bg: '#1A1A2E', color: '#C4A35A' },
             ]

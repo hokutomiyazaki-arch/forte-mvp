@@ -43,7 +43,6 @@ function VoteConfirmForm() {
           voter_email: voter_email,
           normalized_email: normalizeEmail(voter_email),
           client_user_id: null,
-          session_count: pendingVote.session_count || 'first',
           vote_type: pendingVote.vote_type || 'proof',
           selected_proof_ids: pendingVote.selected_proof_ids || null,
           selected_personality_ids: pendingVote.selected_personality_ids || null,

@@ -2041,7 +2041,7 @@ export default function DashboardPage() {
         const pRepeat = Math.round((sessionCounts.repeat / total) * 100)
         const pRegular = 100 - pFirst - pRepeat
         const segments = [
-          { key: 'first', label: '初回', count: sessionCounts.first, pct: pFirst, bg: '#E8E4D9', color: '#444441' },
+          { key: 'first', label: '初回投票', count: sessionCounts.first, pct: pFirst, bg: '#E8E4D9', color: '#444441' },
           { key: 'repeat', label: 'リピーター', count: sessionCounts.repeat, pct: pRepeat, bg: '#C4A35A', color: '#412402' },
           { key: 'regular', label: '常連', count: sessionCounts.regular, pct: pRegular, bg: '#1A1A2E', color: '#C4A35A' },
         ]
@@ -3161,8 +3161,9 @@ export default function DashboardPage() {
                 <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
                   <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginBottom: 6 }}>回数のルール</p>
                   <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
-                    <p style={{ fontSize: 13, color: '#6B7280' }}><span style={{ color: '#C4A35A', fontWeight: 600 }}>1回</span> — 同じお客さんからは1人につき1回</p>
-                    <p style={{ fontSize: 13, color: '#6B7280' }}><span style={{ color: '#C4A35A', fontWeight: 600 }}>1日3名</span> — お客さんが1日に回答できるのは最大3名</p>
+                    <p style={{ fontSize: 13, color: '#6B7280' }}>来るたびに声を届けてもらえると嬉しいです</p>
+                    <p style={{ fontSize: 13, color: '#6B7280' }}>毎回、その時の正直な感想を記録してもらえます（<span style={{ color: '#C4A35A', fontWeight: 600 }}>7日後から再投票可能</span>）</p>
+                    <p style={{ fontSize: 13, color: '#6B7280' }}>2回以上投票してもらえたプロのページに「<span style={{ color: '#C4A35A', fontWeight: 600 }}>リピーター率</span>」が表示されます</p>
                     <p style={{ fontSize: 13, color: '#6B7280' }}><span style={{ color: '#C4A35A', fontWeight: 600 }}>30分</span> — 回答後、次の回答まで30分の間隔が必要</p>
                   </div>
                 </div>
