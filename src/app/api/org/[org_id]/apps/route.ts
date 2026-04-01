@@ -42,20 +42,14 @@ export async function POST(
 
   const supabase = getSupabase()
 
-  // オーナー権限チェック
+  // オーナー権限チェック（owner_id は Clerk userId）
   const { data: org } = await supabase
     .from('organizations')
     .select('owner_id')
     .eq('id', params.org_id)
     .maybeSingle()
 
-  const { data: pro } = await supabase
-    .from('professionals')
-    .select('id')
-    .eq('user_id', userId)
-    .maybeSingle()
-
-  if (!org || !pro || org.owner_id !== pro.id) {
+  if (!org || org.owner_id !== userId) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

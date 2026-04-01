@@ -14,20 +14,13 @@ function getSupabase() {
 
 async function checkOwner(userId: string, orgId: string): Promise<boolean> {
   const supabase = getSupabase()
-  const { data: pro } = await supabase
-    .from('professionals')
-    .select('id')
-    .eq('user_id', userId)
-    .maybeSingle()
-  if (!pro) return false
-
   const { data: org } = await supabase
     .from('organizations')
     .select('owner_id')
     .eq('id', orgId)
     .maybeSingle()
 
-  return org?.owner_id === pro.id
+  return org?.owner_id === userId
 }
 
 // PUT: 更新
