@@ -72,7 +72,7 @@ export default function OrgDashboardPage() {
   const [ownerAccordionOpen, setOwnerAccordionOpen] = useState<Record<string, boolean>>({})
   const [sortingResourceId, setSortingResourceId] = useState<string | null>(null)
 
-  // 配布アプリ state
+  // 団体リワード state
   const [apps, setApps] = useState<any[]>([])
   const [appsLoaded, setAppsLoaded] = useState(false)
   const [showAppModal, setShowAppModal] = useState(false)
@@ -518,7 +518,7 @@ export default function OrgDashboardPage() {
     }
   }
 
-  // === 配布アプリ管理 ===
+  // === 団体リワード管理 ===
   function openAppModal(app?: any) {
     if (app) {
       setEditingApp(app)
@@ -972,10 +972,10 @@ export default function OrgDashboardPage() {
               </div>
             )}
 
-            {/* === 配布アプリ管理セクション === */}
+            {/* === 団体リワード管理セクション === */}
             <div style={{ marginTop: 32, borderTop: '1px solid #E5E7EB', paddingTop: 24 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1A1A2E' }}>配布アプリ管理</h3>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1A1A2E' }}>団体リワード管理</h3>
                 <button
                   onClick={() => openAppModal()}
                   style={{
@@ -984,14 +984,14 @@ export default function OrgDashboardPage() {
                     fontWeight: 600, cursor: 'pointer',
                   }}
                 >
-                  ＋ アプリを追加
+                  ＋ リワードを追加
                 </button>
               </div>
 
               {apps.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '32px 0' }}>
-                  <p style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 4 }}>まだ配布アプリはありません</p>
-                  <p style={{ color: '#D1D5DB', fontSize: 12 }}>上のボタンからアプリを追加しましょう</p>
+                  <p style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 4 }}>まだ団体リワードはありません</p>
+                  <p style={{ color: '#D1D5DB', fontSize: 12 }}>上のボタンからリワードを追加しましょう</p>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1193,7 +1193,7 @@ export default function OrgDashboardPage() {
         </div>
       )}
 
-      {/* アプリ追加/編集モーダル */}
+      {/* リワード追加/編集モーダル */}
       {showAppModal && (
         <div
           style={{
@@ -1211,12 +1211,12 @@ export default function OrgDashboardPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <h3 style={{ color: '#1A1A2E', fontSize: '18px', fontWeight: 700, marginBottom: '20px' }}>
-              {editingApp ? 'アプリを編集' : 'アプリを追加'}
+              {editingApp ? 'リワードを編集' : 'リワードを追加'}
             </h3>
 
             <div style={{ marginBottom: '16px' }}>
               <label style={{ display: 'block', fontSize: '13px', color: '#666', marginBottom: '6px' }}>
-                アプリ名 <span style={{ color: '#C4A35A' }}>*</span>
+                リワード名 <span style={{ color: '#C4A35A' }}>*</span>
               </label>
               <input
                 type="text"

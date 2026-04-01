@@ -189,7 +189,7 @@ export default function RewardReveal({ reward, proName }: { reward: any; proName
   }, [])
 
   const isOrgApp = reward?.reward_type === 'org_app' || reward?.reward_type === 'fnt_neuro_app'
-  const rewardTypeLabel = isOrgApp ? 'アプリ' : (getRewardLabel(reward?.reward_type) || reward?.title || reward?.reward_type || 'リワード')
+  const rewardTypeLabel = isOrgApp ? '' : (getRewardLabel(reward?.reward_type) || reward?.title || reward?.reward_type || 'リワード')
 
   return (
     <>
@@ -343,9 +343,11 @@ export default function RewardReveal({ reward, proName }: { reward: any; proName
           }}>
             <div style={{ textAlign: 'center' }}>
               <div style={{ width: 32, height: 1, background: '#C4A35A', margin: '0 auto 12px', opacity: 0.5 }} />
-              <div style={{ fontSize: 13, color: '#C4A35A', fontWeight: 700, marginBottom: 4, letterSpacing: 1 }}>
-                {rewardTypeLabel}
-              </div>
+              {rewardTypeLabel && (
+                <div style={{ fontSize: 13, color: '#C4A35A', fontWeight: 700, marginBottom: 4, letterSpacing: 1 }}>
+                  {rewardTypeLabel}
+                </div>
+              )}
               <div style={{ fontSize: 11, color: '#999', marginBottom: 14 }}>
                 {proName}さんからのおすすめ
               </div>
@@ -379,7 +381,7 @@ export default function RewardReveal({ reward, proName }: { reward: any; proName
                         textDecoration: 'none', transition: 'background 0.2s',
                       }}
                     >
-                      アプリを開く →
+                      {reward?.reward_type === 'fnt_neuro_app' ? 'アプリを開く →' : 'リワードを開く →'}
                     </a>
                   )}
                 </>

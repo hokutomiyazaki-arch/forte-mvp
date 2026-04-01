@@ -104,7 +104,7 @@ export default function SetupPage() {
 
         if (data.rewards) setRewards(data.rewards)
 
-        // 利用可能な団体アプリを取得
+        // 利用可能な団体リワードを取得
         fetch('/api/professional/available-apps')
           .then(r => r.ok ? r.json() : null)
           .then(appData => {
@@ -299,7 +299,7 @@ export default function SetupPage() {
     // ① バリデーション（DELETE前に実行！）
     const fntWithoutApp = rewards.find(r => r.reward_type === 'fnt_neuro_app' && !r.content.trim())
     if (fntWithoutApp) {
-      setRewardError('FNT神経科学アプリを選択してください。')
+      setRewardError('FNT神経科学リワードを選択してください。')
       setRewardSaving(false)
       return
     }
@@ -713,7 +713,7 @@ export default function SetupPage() {
               <div className="space-y-3 mb-4">
                 {rewards.map((reward, idx) => {
                   const rt = getRewardType(reward.reward_type)
-                  const displayLabel = reward.reward_type === 'org_app' ? (reward.title || 'アプリ') : (rt?.label || reward.reward_type)
+                  const displayLabel = reward.reward_type === 'org_app' ? (reward.title || 'リワード') : (rt?.label || reward.reward_type)
                   const needsTitle = rt?.hasTitle || false
                   return (
                     <div key={idx} className="p-4 bg-[#FAFAF7] rounded-lg border border-[#E5E7EB]">
@@ -735,12 +735,12 @@ export default function SetupPage() {
                             setRewards(updated)
                           }}
                           className="w-full px-3 py-2 mb-2 bg-white border border-[#E5E7EB] rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#C4A35A]"
-                          placeholder={reward.reward_type === 'selfcare' ? 'タイトル（例：自宅でできる肩こり解消法）' : 'タイトル（例：FNTアプリドリル）'}
+                          placeholder={reward.reward_type === 'selfcare' ? 'タイトル（例：自宅でできる肩こり解消法）' : 'タイトル（例：FNTリワードドリル）'}
                         />
                       )}
                       {reward.reward_type === 'fnt_neuro_app' ? (
                         <div className="space-y-2">
-                          <p className="text-xs text-[#9CA3AF] mb-1">アプリを1つ選択してください</p>
+                          <p className="text-xs text-[#9CA3AF] mb-1">リワードを1つ選択してください</p>
                           {FNT_NEURO_APPS.map(app => {
                             const isAppSelected = reward.content === app.url
                             return (
@@ -768,7 +768,7 @@ export default function SetupPage() {
                               </div>
                             )
                           })}
-                          {!reward.content && <p className="text-xs text-red-400 mt-1">アプリを選択してください</p>}
+                          {!reward.content && <p className="text-xs text-red-400 mt-1">リワードを選択してください</p>}
                         </div>
                       ) : reward.reward_type === 'org_app' ? (
                         <div className="space-y-2">
@@ -814,7 +814,7 @@ export default function SetupPage() {
                   </button>
                 ) : showOrgAppPicker ? (
                   <>
-                    <p className="text-sm font-medium text-[#1A1A2E] mb-3">追加するアプリを選択</p>
+                    <p className="text-sm font-medium text-[#1A1A2E] mb-3">追加するリワードを選択</p>
                     <div className="space-y-2 mb-3">
                       {availableApps.map((app: any) => (
                         <button key={app.id} type="button"
@@ -864,7 +864,7 @@ export default function SetupPage() {
                           onClick={() => setShowOrgAppPicker(true)}
                           className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-[#FAFAF7] transition-colors">
                           <span className="text-sm font-medium text-[#1A1A2E]">団体配布</span>
-                          <span className="text-xs text-[#9CA3AF] ml-2">所属団体のアプリをクライアントにプレゼント</span>
+                          <span className="text-xs text-[#9CA3AF] ml-2">所属団体のリワードをクライアントにプレゼント</span>
                         </button>
                       )}
                     </div>
