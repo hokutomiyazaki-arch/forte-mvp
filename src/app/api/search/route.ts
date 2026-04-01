@@ -257,6 +257,14 @@ export async function GET(request: Request) {
       )
     }
 
+    // カテゴリフィルタ（カテゴリ選択時: 該当カテゴリにプルーフがあるプロのみ）
+    if (category !== 'none' && category !== 'multi') {
+      result = result.filter(p => {
+        const targetTabs = CATEGORY_TAB_MAP[category] || []
+        return targetTabs.some(tab => (p.categoryCount[tab] || 0) > 0)
+      })
+    }
+
     // ソート
     if (category === 'none') {
       // マルチスペシャリスト: 対応カテゴリ数ベースの複合スコア
