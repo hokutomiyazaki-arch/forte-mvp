@@ -123,6 +123,11 @@ export default function CardPage() {
   const [proofDatesCache, setProofDatesCache] = useState<Record<string, string[]>>({})
   const [proofDatesLoading, setProofDatesLoading] = useState<string | null>(null)
   const [topRank, setTopRank] = useState<{ categoryLabel: string; subLabel: string; rank: number } | null>(null)
+  const [recentProofs, setRecentProofs] = useState(0)
+  const [repeaterRate, setRepeaterRate] = useState<number | null>(null)
+  const [firstTimerCount, setFirstTimerCount] = useState(0)
+  const [repeaterCount, setRepeaterCount] = useState(0)
+  const [regularCount, setRegularCount] = useState(0)
 
   const toggleProofDates = async (proofId: string) => {
     if (expandedProofId === proofId) {
@@ -215,6 +220,11 @@ export default function CardPage() {
           )
         }
         if (data.sessionCounts) setSessionCounts(data.sessionCounts)
+        if (data.recentProofs !== undefined) setRecentProofs(data.recentProofs)
+        if (data.repeaterRate !== undefined) setRepeaterRate(data.repeaterRate)
+        if (data.firstTimerCount !== undefined) setFirstTimerCount(data.firstTimerCount)
+        if (data.repeaterCount !== undefined) setRepeaterCount(data.repeaterCount)
+        if (data.regularCount !== undefined) setRegularCount(data.regularCount)
       } catch (err) {
         console.error('Card load error:', err)
       }
@@ -475,6 +485,38 @@ export default function CardPage() {
       {/* ═══ タブコンテンツ: 強み ═══ */}
       {activeTab === 'strengths' && (
         <div style={{ marginBottom: 12 }}>
+          {/* Velocity・リピーター率・常連 */}
+          {(recentProofs >= 1 || repeaterRate !== null || regularCount > 0) && (
+            <div style={{
+              background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14,
+              padding: '14px 18px', marginBottom: 12,
+              display: 'flex', flexDirection: 'column', gap: 8,
+            }}>
+              {recentProofs >= 1 && (
+                <div style={{ fontSize: 12, color: '#2E7D32', fontWeight: 600 }}>
+                  {'\uD83D\uDFE2'} 今月 {recentProofs} プルーフ獲得中
+                </div>
+              )}
+              {repeaterRate !== null && (
+                <div>
+                  <div style={{ fontSize: 12, color: T.textSub, fontWeight: 600 }}>
+                    {'\uD83D\uDD04'} リピーター率 {repeaterRate}%
+                  </div>
+                  <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4, display: 'flex', gap: 12 }}>
+                    <span>はじめて {firstTimerCount}人</span>
+                    <span>リピーター {repeaterCount}人</span>
+                    <span>常連 {regularCount}人</span>
+                  </div>
+                </div>
+              )}
+              {repeaterRate === null && regularCount > 0 && (
+                <div style={{ fontSize: 12, color: T.gold, fontWeight: 600 }}>
+                  {'\u2728'} 常連 {regularCount}名
+                </div>
+              )}
+            </div>
+          )}
+
           {/* STRENGTH PROOFS */}
           {sortedVotes.length > 0 && (
             <>

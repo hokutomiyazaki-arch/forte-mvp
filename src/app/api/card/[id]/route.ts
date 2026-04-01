@@ -34,6 +34,7 @@ export async function GET(
       orgMembersResult,
       badgeMembersResult,
       sessionCountResult,
+      velocityResult,
     ] = await Promise.all([
       // 1. プロ情報
       supabase.from('professionals').select('*').eq('id', proId).maybeSingle(),
@@ -70,6 +71,11 @@ export async function GET(
         .select('session_count')
         .eq('professional_id', proId)
         .eq('status', 'confirmed'),
+      // 12. Velocity・リピーター率用データ
+      supabase.from('votes')
+        .select('created_at, normalized_email')
+        .eq('professional_id', proId)
+        .eq('status', 'confirmed'),
     ])
 
     // ブックマーク状態（ログイン中のみ）
@@ -94,6 +100,32 @@ export async function GET(
       }
     }
 
+    // Velocity・リピーター率集計
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    let recentProofs = 0
+    const voterCounts: Record<string, number> = {}
+    for (const v of velocityResult.data || []) {
+      if (new Date(v.created_at) >= thirtyDaysAgo) recentProofs++
+      const email = v.normalized_email || ''
+      if (email) voterCounts[email] = (voterCounts[email] || 0) + 1
+    }
+    const totalProofsForRate = velocityResult.data?.length || 0
+    let repeaterRate: number | null = null
+    let firstTimerCount = 0
+    let repeaterCount = 0
+    let regularCount = 0
+    if (totalProofsForRate >= 10) {
+      const totalVoters = Object.keys(voterCounts).length
+      const repeaters = Object.values(voterCounts).filter(c => c >= 2 && c < 5).length
+      const regulars = Object.values(voterCounts).filter(c => c >= 5).length
+      const firstTimers = Object.values(voterCounts).filter(c => c === 1).length
+      const repeaterAndRegular = Object.values(voterCounts).filter(c => c >= 2).length
+      repeaterRate = totalVoters > 0 ? Math.round((repeaterAndRegular / totalVoters) * 100) : 0
+      firstTimerCount = firstTimers
+      repeaterCount = repeaters
+      regularCount = regulars
+    }
+
     return NextResponse.json({
       pro: proResult.data,
       voteSummary: voteSummaryResult.data || [],
@@ -108,6 +140,11 @@ export async function GET(
       orgMembers: orgMembersResult.data || [],
       badgeMembers: badgeMembersResult.data || [],
       sessionCounts,
+      recentProofs,
+      repeaterRate,
+      firstTimerCount,
+      repeaterCount,
+      regularCount,
     })
   } catch (err) {
     console.error('[api/card] Error:', err)
