@@ -5,7 +5,6 @@ export const dynamic = 'force-dynamic'
 
 // カテゴリタブ → DBのtab値のマッピング
 const CATEGORY_TAB_MAP: Record<string, string[]> = {
-  all: [],
   healing: ['healing'],
   body: ['body', 'bodymake'],
   performance: ['performance'],
@@ -16,10 +15,10 @@ const CATEGORY_TAB_MAP: Record<string, string[]> = {
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
-  const category = searchParams.get('category') || 'all'
+  const category = searchParams.get('category') || 'healing'
   const subCategory = searchParams.get('sub') || 'rising'
   const query = searchParams.get('q') || ''
-  const showAll = searchParams.get('showAll') === 'true'
+  const prefecture = searchParams.get('prefecture') || ''
 
   const supabase = getSupabaseAdmin()
 
@@ -27,7 +26,7 @@ export async function GET(request: Request) {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
 
     // 全アクティブプロを取得（プルーフ0除外はあとでフィルタ）
-    const { data: professionals, error: prosError } = await supabase
+    let proQuery = supabase
       .from('professionals')
       .select(`
         id, name, title, prefecture, area_description,
@@ -37,6 +36,12 @@ export async function GET(request: Request) {
       `)
       .is('deactivated_at', null)
       .not('selected_proofs', 'is', null)
+
+    if (prefecture) {
+      proQuery = proQuery.eq('prefecture', prefecture)
+    }
+
+    const { data: professionals, error: prosError } = await proQuery
 
     if (prosError) throw prosError
     if (!professionals || professionals.length === 0) {
@@ -179,16 +184,12 @@ export async function GET(request: Request) {
       const guidanceCount = stat.categoryCount['guidance'] || 0
 
       let categoryScore = 0
-      if (category === 'all') {
-        categoryScore = stat.totalProofs
-      } else {
-        for (const tab of targetTabs) {
-          categoryScore += stat.categoryCount[tab] || 0
-        }
-        // 指導力を0.5倍で加算（「この分野のプロ」スコアのみ）
-        if (subCategory === 'specialist') {
-          categoryScore += guidanceCount * 0.5
-        }
+      for (const tab of targetTabs) {
+        categoryScore += stat.categoryCount[tab] || 0
+      }
+      // 指導力を0.5倍で加算（「この分野のプロ」スコアのみ）
+      if (subCategory === 'specialist') {
+        categoryScore += guidanceCount * 0.5
       }
 
       return {
@@ -227,10 +228,9 @@ export async function GET(request: Request) {
     // サブカテゴリ別ソート
     switch (subCategory) {
       case 'rising': {
-        // 今月急上昇: カテゴリ選択時はそのカテゴリの直近30日プルーフ数順
+        // 今月急上昇: 選択カテゴリの直近30日プルーフ数順
         const risingTabs = CATEGORY_TAB_MAP[category] || []
         const getRecentScore = (p: typeof result[number]) => {
-          if (category === 'all') return p.recentProofs
           let score = 0
           for (const tab of risingTabs) {
             score += p.recentCategoryCount[tab] || 0
@@ -263,16 +263,9 @@ export async function GET(request: Request) {
         result.sort((a, b) => b.recentProofs - a.recentProofs)
     }
 
-    // 「もっと見る」なし: 3件まで返す
-    const total = result.length
-    if (!showAll) {
-      result = result.slice(0, 3)
-    }
-
     return NextResponse.json({
       professionals: result,
-      total,
-      hasMore: total > 3,
+      total: result.length,
     }, {
       headers: { 'Cache-Control': 'no-store' }
     })

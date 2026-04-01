@@ -1,18 +1,18 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { PREFECTURES } from '@/lib/prefectures'
 import { COLORS, FONTS } from '@/lib/design-tokens'
 
 const T = { ...COLORS, font: FONTS.main }
 
 const CATEGORIES = [
-  { id: 'all',         label: 'すべて' },
   { id: 'healing',     label: '痛みを治したい' },
   { id: 'body',        label: '体を変えたい' },
   { id: 'performance', label: '動きを高めたい' },
   { id: 'mind',        label: '心を整えたい' },
   { id: 'beauty',      label: '美しくなりたい' },
-  { id: 'nutrition',   label: '健康的に食べたい' },
+  { id: 'nutrition',   label: '栄養状態を改善したい' },
 ]
 
 const SUB_CATEGORIES = [
@@ -52,14 +52,13 @@ interface SearchPro {
 }
 
 export default function SearchPage() {
-  const [category, setCategory] = useState('all')
+  const [category, setCategory] = useState('healing')
   const [subCategory, setSubCategory] = useState('rising')
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
+  const [selectedPrefecture, setSelectedPrefecture] = useState('')
   const [professionals, setProfessionals] = useState<SearchPro[]>([])
   const [loading, setLoading] = useState(true)
-  const [showAll, setShowAll] = useState(false)
-  const [hasMore, setHasMore] = useState(false)
   const [total, setTotal] = useState(0)
 
   // デバウンス（400ms）
@@ -72,17 +71,16 @@ export default function SearchPage() {
   useEffect(() => {
     const fetchPros = async () => {
       setLoading(true)
-      setShowAll(false)
       try {
         const params = new URLSearchParams({
           category,
           sub: subCategory,
           q: debouncedQuery,
         })
+        if (selectedPrefecture) params.set('prefecture', selectedPrefecture)
         const res = await fetch(`/api/search?${params}`)
         const data = await res.json()
         setProfessionals(data.professionals || [])
-        setHasMore(data.hasMore || false)
         setTotal(data.total || 0)
       } catch (e) {
         console.error(e)
@@ -91,21 +89,7 @@ export default function SearchPage() {
       }
     }
     fetchPros()
-  }, [category, subCategory, debouncedQuery])
-
-  // もっと見る
-  const handleShowAll = async () => {
-    const params = new URLSearchParams({
-      category,
-      sub: subCategory,
-      q: debouncedQuery,
-      showAll: 'true',
-    })
-    const res = await fetch(`/api/search?${params}`)
-    const data = await res.json()
-    setProfessionals(data.professionals || [])
-    setShowAll(true)
-  }
+  }, [category, subCategory, debouncedQuery, selectedPrefecture])
 
   // バッジ表示（最大2つ、優先度順）
   const getBadges = (badges: SearchPro['badges']) => {
@@ -199,6 +183,24 @@ export default function SearchPage() {
               {sub.label}
             </button>
           ))}
+        </div>
+
+        {/* 都道府県プルダウン */}
+        <div style={{ marginBottom: 12 }}>
+          <select
+            value={selectedPrefecture}
+            onChange={e => setSelectedPrefecture(e.target.value)}
+            style={{
+              padding: '6px 12px', borderRadius: 8, border: `1px solid ${T.cardBorder}`,
+              background: T.cardBg, fontSize: 12, fontFamily: T.font,
+              color: selectedPrefecture ? T.dark : T.textMuted, cursor: 'pointer', outline: 'none',
+            }}
+          >
+            <option value="">すべてのエリア</option>
+            {PREFECTURES.map(pref => (
+              <option key={pref} value={pref}>{pref}</option>
+            ))}
+          </select>
         </div>
 
         {/* 結果カウント */}
@@ -314,23 +316,6 @@ export default function SearchPage() {
                 </a>
               )
             })}
-          </div>
-        )}
-
-        {/* もっと見るボタン */}
-        {hasMore && !showAll && !loading && professionals.length > 0 && (
-          <div style={{ textAlign: 'center', marginTop: 16 }}>
-            <button
-              onClick={handleShowAll}
-              style={{
-                padding: '10px 24px', borderRadius: 99,
-                border: `1.5px solid ${T.gold}`, background: 'transparent',
-                color: T.gold, fontSize: 13, fontWeight: 700,
-                cursor: 'pointer', fontFamily: T.font,
-              }}
-            >
-              もっと見る（残り {total - 3} 名） →
-            </button>
           </div>
         )}
 
