@@ -133,8 +133,8 @@ export async function GET() {
       certApplicationsResult,
       // 受け取ったリワード: emailマッチ
       crByEmailResult,
-      // セッション回数（クライアント構成バー用）
-      sessionCountResult,
+      // クライアント構成（normalized_emailベース）
+      clientCompositionResult,
     ] = await Promise.all([
       // リワード
       supabase.from('rewards').select('*').eq('professional_id', proId).order('sort_order'),
@@ -191,9 +191,9 @@ export async function GET() {
             .in('status', ['active', 'used'])
             .order('created_at', { ascending: false })
         : Promise.resolve({ data: null, error: null }),
-      // セッション回数集計
+      // クライアント構成集計（normalized_emailベース）
       supabase.from('votes')
-        .select('session_count')
+        .select('normalized_email')
         .eq('professional_id', proId)
         .eq('status', 'confirmed'),
     ])
@@ -296,15 +296,15 @@ export async function GET() {
       })
     }
 
-    // セッション回数集計（クライアント構成バー用）
-    const sessionCounts = { first: 0, repeat: 0, regular: 0 }
-    if (sessionCountResult.data) {
-      for (const v of sessionCountResult.data) {
-        if (v.session_count && v.session_count in sessionCounts) {
-          (sessionCounts as any)[v.session_count]++
-        }
-      }
+    // クライアント構成集計（normalized_emailベース）
+    const voterCounts: Record<string, number> = {}
+    for (const v of clientCompositionResult.data || []) {
+      const email = v.normalized_email || ''
+      if (email) voterCounts[email] = (voterCounts[email] || 0) + 1
     }
+    const firstTimerCount = Object.values(voterCounts).filter(c => c === 1).length
+    const repeaterCount = Object.values(voterCounts).filter(c => c >= 2 && c < 5).length
+    const regularCount = Object.values(voterCounts).filter(c => c >= 5).length
 
     if (isDev) console.log('[Dashboard API] Total:', Date.now() - startTime, 'ms')
 
@@ -336,7 +336,9 @@ export async function GET() {
       bookmarks: bookmarksResult.data || [],
       certApplications: certApplicationsResult.data || [],
       receivedRewards,
-      sessionCounts,
+      firstTimerCount,
+      repeaterCount,
+      regularCount,
     })
   } catch (err: any) {
     console.error('[api/dashboard] error:', err)

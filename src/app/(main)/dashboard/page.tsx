@@ -61,7 +61,9 @@ export default function DashboardPage() {
   const [personalityVotes, setPersonalityVotes] = useState<{category: string, vote_count: number}[]>([])
   const [totalVotes, setTotalVotes] = useState(0)
   const [bookmarkCount, setBookmarkCount] = useState(0)
-  const [sessionCounts, setSessionCounts] = useState<{ first: number; repeat: number; regular: number }>({ first: 0, repeat: 0, regular: 0 })
+  const [firstTimerCount, setFirstTimerCount] = useState(0)
+  const [repeaterCount, setRepeaterCount] = useState(0)
+  const [regularCount, setRegularCount] = useState(0)
   const [qrUrl, setQrUrl] = useState('')
   const [qrRefreshed, setQrRefreshed] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -313,7 +315,9 @@ export default function DashboardPage() {
 
         setTotalVotes(data.totalVotes || 0)
         setBookmarkCount(data.bookmarkCount || 0)
-        if (data.sessionCounts) setSessionCounts(data.sessionCounts)
+        setFirstTimerCount(data.firstTimerCount || 0)
+        setRepeaterCount(data.repeaterCount || 0)
+        setRegularCount(data.regularCount || 0)
         // bookmarks removed (now in /mycard only)
 
         // プルーフ選択状態を復元
@@ -2041,15 +2045,15 @@ export default function DashboardPage() {
 
       {/* クライアント構成バー */}
       {(() => {
-        const total = sessionCounts.first + sessionCounts.repeat + sessionCounts.regular
+        const total = firstTimerCount + repeaterCount + regularCount
         if (total === 0) return null
-        const pFirst = Math.round((sessionCounts.first / total) * 100)
-        const pRepeat = Math.round((sessionCounts.repeat / total) * 100)
+        const pFirst = Math.round((firstTimerCount / total) * 100)
+        const pRepeat = Math.round((repeaterCount / total) * 100)
         const pRegular = 100 - pFirst - pRepeat
         const segments = [
-          { key: 'first', label: '初回投票', count: sessionCounts.first, pct: pFirst, bg: '#E8E4D9', color: '#444441' },
-          { key: 'repeat', label: 'リピーター', count: sessionCounts.repeat, pct: pRepeat, bg: '#C4A35A', color: '#412402' },
-          { key: 'regular', label: '常連', count: sessionCounts.regular, pct: pRegular, bg: '#1A1A2E', color: '#C4A35A' },
+          { key: 'first', label: '初回', count: firstTimerCount, pct: pFirst, bg: '#E8E4D9', color: '#444441' },
+          { key: 'repeat', label: 'リピーター', count: repeaterCount, pct: pRepeat, bg: '#C4A35A', color: '#412402' },
+          { key: 'regular', label: '常連', count: regularCount, pct: pRegular, bg: '#1A1A2E', color: '#C4A35A' },
         ]
         return (
           <div style={{ marginBottom: 16, padding: '16px', background: '#fff', borderRadius: 14, border: '1px solid #E5E7EB' }}>
