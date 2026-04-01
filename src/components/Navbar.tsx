@@ -74,10 +74,6 @@ export default function Navbar() {
             <a href="/dashboard" onClick={closeMenu} style={{ ...menuLinkStyle, color: '#C4A35A', fontWeight: 700 }}>ダッシュボード</a>
           )}
           <a href="/mycard" onClick={closeMenu} style={menuLinkStyle}>マイプルーフ</a>
-          {(hasOrgMembership || ownedOrg) && (
-            <a href={isPro ? "/dashboard?tab=myorgs" : "/mycard?tab=myorgs"} onClick={closeMenu} style={menuLinkStyle}>スキルアップ</a>
-          )}
-
           {/* 設定（プロのみ） */}
           {isPro && (
             <>
