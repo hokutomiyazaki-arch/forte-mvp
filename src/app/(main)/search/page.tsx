@@ -53,6 +53,7 @@ interface SearchPro {
   matchedProofLabel: string | null
   matchSource: 'voice' | 'proof' | null
   voiceMatchCount: number
+  profileMatchField: 'name' | 'title' | 'area' | 'prefecture' | null
   featuredProof: {
     strengthLabel: string
     label: string
@@ -110,7 +111,7 @@ export default function SearchPage() {
   // 検索ワードハイライト
   const highlightQuery = (text: string) => {
     if (!debouncedQuery || !text) return text
-    const idx = text.indexOf(debouncedQuery)
+    const idx = text.toLowerCase().indexOf(debouncedQuery.toLowerCase())
     if (idx === -1) return text
     return (
       <>
@@ -285,16 +286,24 @@ export default function SearchPage() {
                     )}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
-                        <div style={{ fontSize: 14, fontWeight: 800, color: T.dark }}>{p.name}</div>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: T.dark }}>
+                          {debouncedQuery && p.profileMatchField === 'name' ? highlightQuery(p.name) : p.name}
+                        </div>
                         {(p.recentProofs || 0) > 0 && (
                           <span style={{ fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0, color: T.textSub }}>
                             {(p.recentProofs || 0) >= 15 ? '\uD83D\uDD25' : '\uD83D\uDFE2'} 今月 {p.recentProofs}人に評価されています
                           </span>
                         )}
                       </div>
-                      <div style={{ fontSize: 11, color: T.gold, fontWeight: 600, marginTop: 1 }}>{p.title}</div>
+                      <div style={{ fontSize: 11, color: T.gold, fontWeight: 600, marginTop: 1 }}>
+                        {debouncedQuery && p.profileMatchField === 'title' ? highlightQuery(p.title) : p.title}
+                      </div>
                       <div style={{ fontSize: 10, color: T.textMuted, marginTop: 2 }}>
-                        {p.prefecture}{p.area_description ? ` · ${p.area_description}` : ''}
+                        {debouncedQuery && p.profileMatchField === 'prefecture' ? highlightQuery(p.prefecture || '') : p.prefecture}
+                        {p.area_description ? ` · ` : ''}
+                        {p.area_description && debouncedQuery && p.profileMatchField === 'area'
+                          ? highlightQuery(p.area_description)
+                          : p.area_description || ''}
                       </div>
                     </div>
                   </div>

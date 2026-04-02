@@ -422,6 +422,15 @@ export async function GET(request: Request) {
         matchedProofLabel: proofMatchMap[pro.id] || null,
         matchSource: voiceMatchMap[pro.id] ? 'voice' as const : proofMatchMap[pro.id] ? 'proof' as const : null,
         voiceMatchCount: voiceMatchCountMap[pro.id] || 0,
+        profileMatchField: (() => {
+          if (!query) return null
+          const q = query.toLowerCase()
+          if (pro.name?.toLowerCase().includes(q)) return 'name' as const
+          if (pro.title?.toLowerCase().includes(q)) return 'title' as const
+          if (pro.area_description?.toLowerCase().includes(q)) return 'area' as const
+          if (pro.prefecture?.toLowerCase().includes(q)) return 'prefecture' as const
+          return null
+        })(),
         featuredProof,
         categoryTopProof,
         topPersonality,
@@ -430,9 +439,12 @@ export async function GET(request: Request) {
 
     // テキスト検索フィルタ
     if (query) {
+      const q = query.toLowerCase()
       result = result.filter(p =>
-        p.name?.includes(query) ||
-        p.title?.includes(query) ||
+        p.name?.toLowerCase().includes(q) ||
+        p.title?.toLowerCase().includes(q) ||
+        p.area_description?.toLowerCase().includes(q) ||
+        p.prefecture?.toLowerCase().includes(q) ||
         commentMatchProIds.has(p.id) ||
         !!proofMatchMap[p.id]
       )
