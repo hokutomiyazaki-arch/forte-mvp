@@ -345,7 +345,7 @@ async function fetchDashboardData() {
   const fourteenDaysAgo = new Date()
   fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
 
-  const [goRes, proRes, authRes, trendRes, proofRes, qrTokensRes, votesForChRes, shareCountRes, sharePvRes, allVotesRes, totalProsRes] = await Promise.all([
+  const [goRes, proRes, authRes, trendRes, proofRes, qrTokensRes, votesForChRes, shareCountRes, sharePvRes, allVotesRes, totalProsRes, rewardCountsRes, orgMembersRes] = await Promise.all([
     supabase.from('admin_go_nogo').select('*').maybeSingle(),
     supabase.from('admin_pro_status').select('*'),
     // 認証方式別
@@ -366,6 +366,10 @@ async function fetchDashboardData() {
     supabase.from('votes').select('professional_id, created_at').eq('vote_type', 'proof'),
     // 全登録プロ数（deactivated除外）
     supabase.from('professionals').select('*', { count: 'exact', head: true }).is('deactivated_at', null),
+    // リワード設定数
+    supabase.from('rewards').select('professional_id').not('professional_id', 'is', null),
+    // 団体メンバーシップ
+    supabase.from('org_members').select('professional_id, organizations(name)').not('professional_id', 'is', null),
   ])
 
   // Go/No-Go マッピング
@@ -564,7 +568,29 @@ async function fetchDashboardData() {
     ? secondDayPlusVoteCounts.reduce((a, b) => a + b, 0) / secondDayPlusVoteCounts.length
     : 0
 
-  return { goNogo, pros, authMethods, dailyTrend, dailyProofs, channels, shares, activeProCount, inactiveProCount, activeProRate, avgVotesSecondDayPlus }
+  // プロ一覧をアクティブプロのみにフィルター
+  const activeProsSet = new Set(activeProsIds)
+  if (pros) {
+    pros = pros.filter(p => activeProsSet.has(String(p.id)))
+  }
+
+  // リワード設定数をproIDごとにカウント
+  const rewardCountMap: Record<string, number> = {}
+  rewardCountsRes.data?.forEach((r: any) => {
+    rewardCountMap[r.professional_id] = (rewardCountMap[r.professional_id] || 0) + 1
+  })
+
+  // 団体名をproIDごとにまとめる
+  const orgMap: Record<string, string[]> = {}
+  orgMembersRes.data?.forEach((m: any) => {
+    if (!orgMap[m.professional_id]) orgMap[m.professional_id] = []
+    const orgName = (m.organizations as any)?.name
+    if (orgName && !orgMap[m.professional_id].includes(orgName)) {
+      orgMap[m.professional_id].push(orgName)
+    }
+  })
+
+  return { goNogo, pros, authMethods, dailyTrend, dailyProofs, channels, shares, activeProCount, inactiveProCount, activeProRate, avgVotesSecondDayPlus, rewardCountMap, orgMap }
 }
 
 // ============================================================
@@ -585,6 +611,8 @@ export default function AdminDashboard() {
   const [inactiveProCount, setInactiveProCount] = useState(0)
   const [activeProRate, setActiveProRate] = useState(0)
   const [avgVotesSecondDayPlus, setAvgVotesSecondDayPlus] = useState(0)
+  const [rewardCountMap, setRewardCountMap] = useState<Record<string, number>>({})
+  const [orgMap, setOrgMap] = useState<Record<string, string[]>>({})
 
   // Tracking state
   const [trackingStats, setTrackingStats] = useState<TrackingProStat[]>([])
@@ -764,6 +792,8 @@ export default function AdminDashboard() {
       setInactiveProCount(result.inactiveProCount)
       setActiveProRate(result.activeProRate)
       setAvgVotesSecondDayPlus(result.avgVotesSecondDayPlus)
+      setRewardCountMap(result.rewardCountMap)
+      setOrgMap(result.orgMap)
 
       setDataSource(hasLiveData ? 'live' : 'sample')
     } catch (e) {
@@ -1777,9 +1807,19 @@ export default function AdminDashboard() {
       {/* テーブル */}
       {trackingStats.length > 0 && (() => {
         const sortedStats = Array.from(trackingStats).sort((a, b) => {
-          const aVal = (a as any)[trackingSortKey] ?? 0
-          const bVal = (b as any)[trackingSortKey] ?? 0
-          if (trackingSortKey === 'name' || trackingSortKey === 'title') {
+          let aVal: any
+          let bVal: any
+          if (trackingSortKey === 'reward_count') {
+            aVal = rewardCountMap[a.professional_id] ?? 0
+            bVal = rewardCountMap[b.professional_id] ?? 0
+          } else if (trackingSortKey === 'org_names') {
+            aVal = orgMap[a.professional_id]?.join(', ') ?? ''
+            bVal = orgMap[b.professional_id]?.join(', ') ?? ''
+          } else {
+            aVal = (a as any)[trackingSortKey] ?? 0
+            bVal = (b as any)[trackingSortKey] ?? 0
+          }
+          if (trackingSortKey === 'name' || trackingSortKey === 'title' || trackingSortKey === 'org_names') {
             return trackingSortAsc
               ? String(aVal).localeCompare(String(bVal))
               : String(bVal).localeCompare(String(aVal))
@@ -1796,6 +1836,8 @@ export default function AdminDashboard() {
           { key: 'consultation_clicks', label: '相談' },
           { key: 'booking_clicks', label: '予約' },
           { key: 'total_clicks', label: '合計' },
+          { key: 'reward_count', label: 'リワード' },
+          { key: 'org_names', label: '団体' },
         ]
 
         function handleSort(key: string) {
@@ -1820,7 +1862,7 @@ export default function AdminDashboard() {
                       key={col.key}
                       onClick={() => handleSort(col.key)}
                       style={{
-                        textAlign: col.key === 'name' || col.key === 'title' ? 'left' : 'right',
+                        textAlign: col.key === 'name' || col.key === 'title' || col.key === 'org_names' ? 'left' : 'right',
                         padding: '10px 8px', color: trackingSortKey === col.key ? C.gold : C.gray,
                         fontWeight: 500, fontSize: 10, letterSpacing: '0.04em',
                         whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none',
@@ -1844,6 +1886,8 @@ export default function AdminDashboard() {
                       <td style={{ padding: '10px 8px', color: s.consultation_clicks > 0 ? C.green : C.grayDark, textAlign: 'right' }}>{s.consultation_clicks}</td>
                       <td style={{ padding: '10px 8px', color: s.booking_clicks > 0 ? C.green : C.grayDark, textAlign: 'right' }}>{s.booking_clicks}</td>
                       <td style={{ padding: '10px 8px', color: totalClicks > 0 ? C.gold : C.grayDark, fontWeight: totalClicks > 0 ? 700 : 400, textAlign: 'right' }}>{totalClicks}</td>
+                      <td style={{ padding: '10px 8px', color: C.cream, textAlign: 'right' }}>{rewardCountMap[s.professional_id] ?? 0}</td>
+                      <td style={{ padding: '10px 8px', color: C.gray, fontSize: 11 }}>{orgMap[s.professional_id]?.join(', ') || '—'}</td>
                     </tr>
                   )
                 })}
