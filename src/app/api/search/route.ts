@@ -56,12 +56,14 @@ export async function GET(request: Request) {
     const proIds = professionals.map(p => p.id)
 
     // 投票データを一括取得（プルーフ投票: スコア計算用）
+    // Supabaseデフォルト1000行制限を回避
     const { data: proofVotes } = await supabase
       .from('votes')
       .select('id, professional_id, created_at, vote_type, comment, normalized_email, selected_proof_ids, selected_personality_ids')
       .in('professional_id', proIds)
       .eq('status', 'confirmed')
       .eq('vote_type', 'proof')
+      .limit(10000)
 
     // リピーター率用: 全投票のnormalized_emailを取得（card APIと同じ）
     const { data: allVotesForRepeater } = await supabase
@@ -69,6 +71,9 @@ export async function GET(request: Request) {
       .select('professional_id, normalized_email')
       .in('professional_id', proIds)
       .eq('status', 'confirmed')
+      .limit(10000)
+
+    console.log('allVotesForRepeater count:', allVotesForRepeater?.length, 'proofVotes count:', proofVotes?.length, 'proIds count:', proIds.length)
 
     // proof_items のtab情報を取得
     const { data: proofItems } = await supabase
@@ -250,6 +255,14 @@ export async function GET(request: Request) {
           ? Math.round((repeaterAndRegular / totalVoters) * 100)
           : 0
       }
+
+      console.log('repeaterRate debug:', pro.id, pro.name, {
+        totalVotes: stat.totalVotes,
+        totalProofs: stat.totalProofs,
+        voterCountsLen: Object.keys(stat.voterCounts).length,
+        repeaterRate,
+        regularCount,
+      })
 
       // Voiceスニペット（40字カット）
       const rawVoice = pro.featured_vote_id
