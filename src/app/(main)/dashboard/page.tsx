@@ -3300,8 +3300,14 @@ export default function DashboardPage() {
                   <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
                     <p style={{ fontSize: 13, color: '#6B7280' }}>来るたびに声を届けてもらえると嬉しいです</p>
                     <p style={{ fontSize: 13, color: '#6B7280' }}>毎回、その時の正直な感想を記録してもらえます（<span style={{ color: '#C4A35A', fontWeight: 600 }}>7日後から再投票可能</span>）</p>
-                    <p style={{ fontSize: 13, color: '#6B7280' }}>2回以上投票してもらえたプロのページに「<span style={{ color: '#C4A35A', fontWeight: 600 }}>リピーター率</span>」が表示されます</p>
                     <p style={{ fontSize: 13, color: '#6B7280' }}><span style={{ color: '#C4A35A', fontWeight: 600 }}>30分</span> — 回答後、次の回答まで30分の間隔が必要</p>
+                    <div style={{ marginTop: 8, padding: '8px 10px', background: '#F9FAFB', borderRadius: 6, border: '1px solid #E5E7EB' }}>
+                      <p style={{ fontSize: 12, fontWeight: 600, color: '#1A1A2E', marginBottom: 4 }}>クライアント構成の分類</p>
+                      <p style={{ fontSize: 12, color: '#6B7280' }}>◎ <strong>はじめて</strong> — 1回目のお客さん</p>
+                      <p style={{ fontSize: 12, color: '#6B7280' }}>● <strong>リピーター</strong> — 2回目のお客さん</p>
+                      <p style={{ fontSize: 12, color: '#6B7280' }}>● <strong>常連</strong> — 3回以上来てくれているお客さん</p>
+                      <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4 }}>プロフィールページと検索カードに「初回 / リピーター / 常連」の比率グラフが表示されます</p>
+                    </div>
                   </div>
                 </div>
                 <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
@@ -3341,6 +3347,77 @@ export default function DashboardPage() {
                   <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginBottom: 4 }}>申請方法</p>
                   <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6 }}>30票または50票に到達すると、ダッシュボードに申請フォームが自動で表示されます。フォームから申請するだけ。初回申請は無料です。</p>
                 </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* アコーディオン: 検索での見え方 */}
+        <div style={{ border: '1px solid #E5E7EB', borderRadius: 8, marginBottom: 8, overflow: 'hidden' }}>
+          <button onClick={() => toggleSection('search_algo')} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', background: 'white', border: 'none', cursor: 'pointer', textAlign: 'left' as const }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>
+                検索での見え方 — 上位に出るコツ
+                <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, color: '#1A1A2E', background: '#C4A35A', padding: '1px 6px', borderRadius: 3 }}>NEW</span>
+              </div>
+              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>プロを探す人にどう表示されるかを知っておく</div>
+            </div>
+            <span style={{ color: '#C4A35A', fontSize: 16, flexShrink: 0 }}>{openSections.has('search_algo') ? '▲' : '▼'}</span>
+          </button>
+          {openSections.has('search_algo') && (
+            <div style={{ background: '#F9FAFB', padding: '16px', borderTop: '1px solid #E5E7EB' }}>
+              <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 10 }}>
+
+                {/* 今月の評価バッジ */}
+                <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginBottom: 6 }}>名前の横に表示されるバッジ</p>
+                  <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6 }}>
+                    直近30日にプルーフをもらっている場合、検索カードの名前横に表示されます。
+                  </p>
+                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
+                    <p style={{ fontSize: 13, color: '#6B7280' }}>🔥 <strong style={{ color: '#1A1A2E' }}>今月 N人に評価されています</strong> — 今月15人以上のプルーフ</p>
+                    <p style={{ fontSize: 13, color: '#6B7280' }}>🟢 <strong style={{ color: '#1A1A2E' }}>今月 N人に評価されています</strong> — 今月1〜14人のプルーフ</p>
+                  </div>
+                </div>
+
+                {/* サブカテゴリタブ */}
+                <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginBottom: 6 }}>検索タブの種類と上位に出る条件</p>
+                  <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 6 }}>
+                    <div style={{ padding: '8px 10px', background: '#F9FAFB', borderRadius: 6 }}>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginBottom: 2 }}>🔥 今月急上昇</p>
+                      <p style={{ fontSize: 12, color: '#6B7280' }}>直近30日のプルーフ数が多い順。毎月リセットされるので、コンスタントに声かけを続けることが大切。</p>
+                    </div>
+                    <div style={{ padding: '8px 10px', background: '#F9FAFB', borderRadius: 6 }}>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginBottom: 2 }}>⭐ この分野のプロ</p>
+                      <p style={{ fontSize: 12, color: '#6B7280' }}>そのカテゴリの累計プルーフ数が多い順。積み上げが評価されるタブ。</p>
+                    </div>
+                    <div style={{ padding: '8px 10px', background: '#F9FAFB', borderRadius: 6 }}>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginBottom: 2 }}>🔄 リピーターが多い</p>
+                      <p style={{ fontSize: 12, color: '#6B7280' }}>常連（3回以上）の比率が高い順。何度も来てくれるお客さんが多いほど上位に出やすい。統計的な信頼性も加味されるため、母数が多いほど有利。ユニーク投票者が3人以上のプロのみ表示。</p>
+                    </div>
+                    <div style={{ padding: '8px 10px', background: '#F9FAFB', borderRadius: 6 }}>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginBottom: 2 }}>🌊 新規に強い</p>
+                      <p style={{ fontSize: 12, color: '#6B7280' }}>初回のお客さんにしっかり結果を出して声をもらえているプロが上位に。新規客を次々獲得するビジネスタイプに向いたタブ。投票者が5人以上のプロのみ表示。</p>
+                    </div>
+                    <div style={{ padding: '8px 10px', background: '#F9FAFB', borderRadius: 6 }}>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginBottom: 2 }}>🏆 総合力</p>
+                      <p style={{ fontSize: 12, color: '#6B7280' }}>累計プルーフ + 直近の勢い + リピーター率を総合した順。バランスよく積み上げているプロが評価される。</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Universalカテゴリ */}
+                <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginBottom: 6 }}>どのカテゴリでも加点される強み項目がある</p>
+                  <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6 }}>
+                    強み設定で選べる項目の中に、どの専門分野でも共通して評価される「ユニバーサル項目」があります。たとえば「分かり易い説明」「複数の悩みに対応」「セルフケア指導」など。
+                  </p>
+                  <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, marginTop: 6 }}>
+                    これらの項目への票は、<strong style={{ color: '#1A1A2E' }}>あなたが設定している全カテゴリのスコアに0.2倍のボーナス</strong>として加算されます。カテゴリを横断して検索されやすくなる効果があります。
+                  </p>
+                </div>
+
               </div>
             </div>
           )}
