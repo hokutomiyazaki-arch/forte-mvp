@@ -245,22 +245,22 @@ export async function GET(request: Request) {
 
       // カテゴリスコア計算
       const targetTabs = CATEGORY_TAB_MAP[category] || []
-      const guidanceCount = stat.categoryCount['guidance'] || 0
+      const skillCount = stat.categoryCount['skill'] || 0
 
       let categoryScore = 0
       for (const tab of targetTabs) {
         categoryScore += stat.categoryCount[tab] || 0
       }
-      // 指導力を0.3倍で全カテゴリに加算
-      categoryScore += guidanceCount * 0.3
+      // 指導力(skill)を0.3倍で全カテゴリに加算
+      categoryScore += skillCount * 0.3
       // specialistはさらに0.5倍を追加
       if (subCategory === 'specialist') {
-        categoryScore += guidanceCount * 0.5
+        categoryScore += skillCount * 0.5
       }
 
-      // 対応カテゴリ数（5件以上のプルーフがあるカテゴリ、guidance除く）
+      // 対応カテゴリ数（5件以上のプルーフがあるカテゴリ、skill除く）
       const diverseCategoryCount = Object.entries(stat.categoryCount)
-        .filter(([tab, count]) => tab !== 'guidance' && count >= 5)
+        .filter(([tab, count]) => tab !== 'skill' && count >= 5)
         .length
 
       // Featured proof: featured_proof_id があればそれ、なければ最得票のproof_item

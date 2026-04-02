@@ -121,9 +121,9 @@ export async function GET(
           for (const tab of catConfig.tabs) {
             catScore += stat.categoryCount[tab] || 0
           }
-          // 指導力を0.3倍で全カテゴリに加算
-          const guidanceCount = stat.categoryCount['guidance'] || 0
-          catScore += guidanceCount * 0.3
+          // 指導力(skill)を0.3倍で全カテゴリに加算
+          const skillCount = stat.categoryCount['skill'] || 0
+          catScore += skillCount * 0.3
 
           const recentProofs = Object.values(stat.recentCategoryCount).reduce((s, v) => s + v, 0)
           let repeaterRate = 0
@@ -145,7 +145,7 @@ export async function GET(
             case 'specialist': {
               score = catScore
               // specialistはさらに0.5倍を追加（0.3は既にcatScoreに含む）
-              score += guidanceCount * 0.5
+              score += skillCount * 0.5
               break
             }
             case 'repeater': {
