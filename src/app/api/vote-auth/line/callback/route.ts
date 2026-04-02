@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { clerkClient } from '@clerk/nextjs/server'
 
 import { normalizeEmail } from '@/lib/normalize-email'
+import { computeProofHash, generateNonce, GENESIS_HASH } from '@/lib/proof-chain'
 
 export const dynamic = 'force-dynamic'
 
@@ -252,6 +253,31 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // --- ハッシュチェーン処理 START ---
+    const { data: latestVote } = await supabaseAdmin
+      .from('votes')
+      .select('proof_hash')
+      .not('proof_hash', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    const prevHash = latestVote?.proof_hash || GENESIS_HASH
+    const nonce = generateNonce()
+    const createdAt = new Date().toISOString()
+
+    const proofHash = computeProofHash({
+      voter_email: normalizeEmail(email),
+      professional_id,
+      vote_type: voteData.vote_type || 'personality_only',
+      selected_proof_ids: voteData.selected_proof_ids || null,
+      comment: voteData.comment || null,
+      created_at: createdAt,
+      nonce,
+      prev_hash: prevHash,
+    })
+    // --- ハッシュチェーン処理 END ---
+
     // Step 7: 投票INSERT（LINEで認証済みなので status='confirmed'）
     const { data: insertedVote, error: voteError } = await supabaseAdmin
       .from('votes')
@@ -268,7 +294,11 @@ export async function GET(request: NextRequest) {
         comment: voteData.comment || null,
         qr_token: qr_token || null,
         auth_method: 'line',
-        status: 'confirmed',  // LINE認証済みなのでメール確認不要
+        status: 'confirmed',
+        created_at: createdAt,
+        proof_hash: proofHash,
+        prev_hash: prevHash,
+        proof_nonce: nonce,
       })
       .select()
       .maybeSingle()
