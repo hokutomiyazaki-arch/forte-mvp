@@ -49,7 +49,7 @@ interface SearchPro {
   matchedVoice: string | null
   matchedProofLabel: string | null
   matchSource: 'voice' | 'proof' | null
-  matchCount: number
+  voiceMatchCount: number
   featuredProof: {
     strengthLabel: string
     label: string
@@ -332,7 +332,7 @@ export default function SearchPage() {
                   )}
 
                   {/* 検索マッチ（Dパターン） */}
-                  {debouncedQuery && p.matchSource === 'voice' && p.matchedVoice && (
+                  {debouncedQuery && p.voiceMatchCount >= 1 && p.matchedVoice && (
                     <div style={{
                       marginTop: 10, background: '#1A1A2E', borderRadius: 12,
                       padding: '1rem 1.25rem',

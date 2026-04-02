@@ -122,13 +122,13 @@ export async function GET(request: Request) {
     const commentMatchProIds = new Set<string>()
     const voiceMatchMap: Record<string, string> = {} // proId -> matched comment snippet
     const proofMatchMap: Record<string, string> = {} // proId -> matched strength_label
-    const matchCountMap: Record<string, number> = {} // proId -> マッチしたコメント件数
+    const voiceMatchCountMap: Record<string, number> = {} // proId -> マッチしたコメント件数
     if (query) {
       // voice マッチ（前後20字の抜粋 + マッチ数集計）
       for (const v of votes || []) {
         if (v.comment && v.comment.includes(query)) {
           commentMatchProIds.add(v.professional_id)
-          matchCountMap[v.professional_id] = (matchCountMap[v.professional_id] || 0) + 1
+          voiceMatchCountMap[v.professional_id] = (voiceMatchCountMap[v.professional_id] || 0) + 1
           if (!voiceMatchMap[v.professional_id]) {
             const idx = v.comment.indexOf(query)
             if (idx !== -1) {
@@ -372,7 +372,7 @@ export async function GET(request: Request) {
         matchedVoice: voiceMatchMap[pro.id] || null,
         matchedProofLabel: proofMatchMap[pro.id] || null,
         matchSource: voiceMatchMap[pro.id] ? 'voice' as const : proofMatchMap[pro.id] ? 'proof' as const : null,
-        matchCount: matchCountMap[pro.id] || 0,
+        voiceMatchCount: voiceMatchCountMap[pro.id] || 0,
         featuredProof,
         categoryTopProof,
         topPersonality,
@@ -397,10 +397,10 @@ export async function GET(request: Request) {
       })
     }
 
-    // クエリがある場合: matchCount順でソート（マッチ多い順 → categoryScore順）
+    // クエリがある場合: voiceMatchCount順でソート（マッチ多い順 → categoryScore順）
     if (query) {
       result.sort((a, b) => {
-        if (b.matchCount !== a.matchCount) return b.matchCount - a.matchCount
+        if (b.voiceMatchCount !== a.voiceMatchCount) return b.voiceMatchCount - a.voiceMatchCount
         return b.categoryScore - a.categoryScore
       })
     }
