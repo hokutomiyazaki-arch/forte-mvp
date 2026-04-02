@@ -135,6 +135,11 @@ export default function SearchPage() {
         <h1 style={{ fontSize: 20, fontWeight: 800, color: T.dark, marginBottom: 4 }}>プロを探す</h1>
         <p style={{ fontSize: 12, color: T.textSub, marginBottom: 16 }}>プルーフで、あなたに合うプロを見つけよう</p>
 
+        {/* 説明テキスト */}
+        <p style={{ fontSize: 14, color: T.textSub, marginBottom: 8, lineHeight: 1.6 }}>
+          クライアントの声で証明されたプロが見つかります。悩みや不調をそのまま入力してみてください。
+        </p>
+
         {/* 統合検索ボックス */}
         <div style={{ position: 'relative', marginBottom: 12 }}>
           <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: T.textMuted }}>
@@ -144,7 +149,7 @@ export default function SearchPage() {
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="腰痛、産後ケア、田中さくら…"
+            placeholder="悩み・不調・改善したいこと・名前で探す"
             style={{
               width: '100%', padding: '10px 36px 10px 36px', borderRadius: 12,
               border: `1px solid ${T.cardBorder}`, background: T.cardBg,
