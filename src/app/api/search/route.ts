@@ -306,7 +306,7 @@ export async function GET(request: Request) {
       // categoryTopProof: カテゴリ別の最得票proof_item（universal含む）
       let categoryTopProof: { strengthLabel: string; votes: number } | null = null
       if (category !== 'multi' && category !== 'none' && targetTabs.length > 0) {
-        const topProofTabs = [...targetTabs, 'universal']
+        const topProofTabs = [...targetTabs]
         const categoryItemIds = new Set(
           (proofItems || [])
             .filter(i => topProofTabs.includes(i.tab))
