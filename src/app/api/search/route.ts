@@ -254,13 +254,13 @@ export async function GET(request: Request) {
       }
       // universal項目を0.2倍で全カテゴリに加算
       categoryScore += universalCount * 0.2
-      // 指導力(skill)を0.3倍で他カテゴリに加算（skillカテゴリ自身には二重加算しない）
+      // 指導力(skill)を0.2倍で他カテゴリに加算（skillカテゴリ自身には二重加算しない）
       if (category !== 'skill') {
-        categoryScore += skillCount * 0.3
+        categoryScore += skillCount * 0.2
       }
-      // specialistはさらに0.5倍を追加
+      // specialistはさらに0.2倍を追加
       if (subCategory === 'specialist') {
-        categoryScore += skillCount * 0.5
+        categoryScore += skillCount * 0.2
       }
 
       // 対応カテゴリ数（5件以上のプルーフがあるカテゴリ、skill/universal除く）
