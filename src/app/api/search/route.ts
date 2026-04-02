@@ -3,6 +3,17 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
+// Wilson Score（90%信頼区間の下限値）
+// 母数が少ないほど保守的な値を返す
+function wilsonScore(successes: number, total: number): number {
+  if (total === 0) return 0
+  const z = 1.645 // 90%信頼区間
+  const p = successes / total
+  const numerator = p + (z * z) / (2 * total) - z * Math.sqrt((p * (1 - p) + (z * z) / (4 * total)) / total)
+  const denominator = 1 + (z * z) / total
+  return Math.max(0, numerator / denominator)
+}
+
 // カテゴリタブ → DBのtab値のマッピング
 const CATEGORY_TAB_MAP: Record<string, string[]> = {
   healing: ['healing'],
@@ -261,8 +272,9 @@ export async function GET(request: Request) {
       const firstCount = sessionTotal > 0 ? stat.sessionCounts.first : counts.filter(c => c === 1).length
       const repeaterCount = sessionTotal > 0 ? stat.sessionCounts.repeat : counts.filter(c => c === 2).length
       const regularCount = sessionTotal > 0 ? stat.sessionCounts.regular : counts.filter(c => c >= 3).length
-      const repeaterRate = uniqueVoters >= 3
-        ? Math.round((regularCount / uniqueVoters) * 100)
+      const totalForRate = sessionTotal > 0 ? sessionTotal : uniqueVoters
+      const repeaterRate = totalForRate >= 3
+        ? Math.round(wilsonScore(regularCount, totalForRate) * 100)
         : null
 
       // Voiceスニペット（40字カット）
