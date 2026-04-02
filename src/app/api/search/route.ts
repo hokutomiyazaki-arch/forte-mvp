@@ -55,10 +55,18 @@ export async function GET(request: Request) {
 
     const proIds = professionals.map(p => p.id)
 
-    // 投票データを一括取得（全タイプ取得→JSでプルーフ判定）
-    const { data: votes } = await supabase
+    // 投票データを一括取得（プルーフ投票: スコア計算用）
+    const { data: proofVotes } = await supabase
       .from('votes')
       .select('id, professional_id, created_at, vote_type, comment, normalized_email, selected_proof_ids, selected_personality_ids')
+      .in('professional_id', proIds)
+      .eq('status', 'confirmed')
+      .eq('vote_type', 'proof')
+
+    // リピーター率用: 全投票のnormalized_emailを取得（card APIと同じ）
+    const { data: allVotesForRepeater } = await supabase
+      .from('votes')
+      .select('professional_id, normalized_email')
       .in('professional_id', proIds)
       .eq('status', 'confirmed')
 
@@ -102,7 +110,7 @@ export async function GET(request: Request) {
 
     // プロごとのパーソナリティ集計
     const proPersonalityCounts = new Map<string, Record<string, number>>()
-    for (const vote of votes || []) {
+    for (const vote of proofVotes || []) {
       if (!vote.selected_personality_ids || vote.selected_personality_ids.length === 0) continue
       const pid = vote.professional_id
       if (!proPersonalityCounts.has(pid)) proPersonalityCounts.set(pid, {})
@@ -119,7 +127,7 @@ export async function GET(request: Request) {
     const voiceMatchCountMap: Record<string, number> = {} // proId -> マッチしたコメント件数
     if (query) {
       // voice マッチ（前後20字の抜粋 + マッチ数集計）
-      for (const v of votes || []) {
+      for (const v of proofVotes || []) {
         if (v.comment && v.comment.includes(query)) {
           commentMatchProIds.add(v.professional_id)
           voiceMatchCountMap[v.professional_id] = (voiceMatchCountMap[v.professional_id] || 0) + 1
@@ -140,7 +148,7 @@ export async function GET(request: Request) {
       for (const item of proofItems || []) {
         if (item.strength_label && item.strength_label.includes(query)) {
           // この proof_item を selected_proof_ids に持つプロを特定
-          for (const v of votes || []) {
+          for (const v of proofVotes || []) {
             if (v.selected_proof_ids?.includes(item.id)) {
               if (!proofMatchMap[v.professional_id]) {
                 proofMatchMap[v.professional_id] = item.strength_label
@@ -163,8 +171,7 @@ export async function GET(request: Request) {
       proofItemCounts: Record<string, number>
     }>()
 
-    for (const vote of votes || []) {
-      const pid = vote.professional_id
+    const ensureStat = (pid: string) => {
       if (!proStats.has(pid)) {
         proStats.set(pid, {
           totalVotes: 0,
@@ -177,23 +184,27 @@ export async function GET(request: Request) {
           proofItemCounts: {},
         })
       }
-      const stat = proStats.get(pid)!
-      stat.totalVotes++
+      return proStats.get(pid)!
+    }
 
-      // voterCounts: 全投票タイプで集計（card APIと同じロジック）
-      const email = vote.normalized_email || ''
+    // 1) リピーター率用: 全投票からvoterCounts集計（card APIと同じ）
+    for (const v of allVotesForRepeater || []) {
+      const stat = ensureStat(v.professional_id)
+      stat.totalVotes++
+      const email = v.normalized_email || ''
       if (email) {
         stat.voterCounts[email] = (stat.voterCounts[email] || 0) + 1
       }
+    }
+
+    // 2) プルーフ投票からスコア・カテゴリ集計
+    for (const vote of proofVotes || []) {
+      const stat = ensureStat(vote.professional_id)
+      stat.totalProofs++
 
       if (vote.comment) {
         stat.latestVoteComment = vote.comment
       }
-
-      // プルーフ系の集計はvote_type='proof'のみ
-      if (vote.vote_type !== 'proof') continue
-
-      stat.totalProofs++
 
       const isRecent = new Date(vote.created_at) >= thirtyDaysAgo
       if (isRecent) {

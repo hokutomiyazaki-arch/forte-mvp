@@ -254,7 +254,10 @@ export default function SearchPage() {
             {professionals.map((p) => (
                 <a
                   key={p.id}
-                  href={`/card/${p.id}`}
+                  href={debouncedQuery && p.voiceMatchCount >= 1
+                    ? `/card/${p.id}?tab=voices&highlight=${encodeURIComponent(debouncedQuery)}`
+                    : `/card/${p.id}`
+                  }
                   style={{
                     display: 'block', background: T.cardBg,
                     border: `1px solid ${T.cardBorder}`, borderRadius: 14,
