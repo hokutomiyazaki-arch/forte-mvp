@@ -345,7 +345,7 @@ async function fetchDashboardData() {
   const fourteenDaysAgo = new Date()
   fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
 
-  const [goRes, proRes, authRes, trendRes, proofRes, qrTokensRes, votesForChRes, shareCountRes, sharePvRes] = await Promise.all([
+  const [goRes, proRes, authRes, trendRes, proofRes, qrTokensRes, votesForChRes, shareCountRes, sharePvRes, allVotesRes, totalProsRes] = await Promise.all([
     supabase.from('admin_go_nogo').select('*').maybeSingle(),
     supabase.from('admin_pro_status').select('*'),
     // 認証方式別
@@ -362,6 +362,10 @@ async function fetchDashboardData() {
     supabase.from('page_views').select('page_type').in('page_type', ['share_profile_self', 'share_profile_other', 'share_voice']),
     // シェア分析: シェア経由PV
     supabase.from('page_views').select('source').eq('page_type', 'pro_profile').in('source', ['pro_share', 'client_share', 'voice_share']),
+    // アクティブプロ判定用: 全proofタイプのvotes
+    supabase.from('votes').select('professional_id, created_at').eq('vote_type', 'proof'),
+    // 全登録プロ数（deactivated除外）
+    supabase.from('professionals').select('*', { count: 'exact', head: true }).is('deactivated_at', null),
   ])
 
   // Go/No-Go マッピング
@@ -511,7 +515,56 @@ async function fetchDashboardData() {
     })
   }
 
-  return { goNogo, pros, authMethods, dailyTrend, dailyProofs, channels, shares }
+  // ============================================================
+  // アクティブプロ判定（TBU除外ロジック）
+  // ============================================================
+  const allVotes = allVotesRes.data
+  const totalProsCount = totalProsRes.count ?? 0
+
+  const proVoteDates: Record<string, string[]> = {}
+  allVotes?.forEach(v => {
+    const dateStr = new Date(v.created_at)
+      .toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })
+    if (!proVoteDates[v.professional_id]) {
+      proVoteDates[v.professional_id] = []
+    }
+    if (!proVoteDates[v.professional_id].includes(dateStr)) {
+      proVoteDates[v.professional_id].push(dateStr)
+    }
+  })
+
+  // アクティブプロ = 2日以上投票日がある人
+  const activeProsIds = Object.entries(proVoteDates)
+    .filter(([_, dates]) => dates.length >= 2)
+    .map(([proId]) => proId)
+
+  const activeProCount = activeProsIds.length
+  const inactiveProCount = totalProsCount - activeProCount
+  const activeProRate = totalProsCount > 0
+    ? Math.round((activeProCount / totalProsCount) * 100)
+    : 0
+
+  // 各アクティブプロの初日を求め、2日目以降の票を集計
+  const proFirstDay: Record<string, string> = {}
+  activeProsIds.forEach(proId => {
+    proFirstDay[proId] = [...proVoteDates[proId]].sort()[0]
+  })
+
+  const secondDayPlusVoteCounts: number[] = []
+  activeProsIds.forEach(proId => {
+    const count = allVotes?.filter(v =>
+      v.professional_id === proId &&
+      new Date(v.created_at).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })
+      > proFirstDay[proId]
+    ).length ?? 0
+    secondDayPlusVoteCounts.push(count)
+  })
+
+  const avgVotesSecondDayPlus = secondDayPlusVoteCounts.length > 0
+    ? secondDayPlusVoteCounts.reduce((a, b) => a + b, 0) / secondDayPlusVoteCounts.length
+    : 0
+
+  return { goNogo, pros, authMethods, dailyTrend, dailyProofs, channels, shares, activeProCount, inactiveProCount, activeProRate, avgVotesSecondDayPlus }
 }
 
 // ============================================================
@@ -528,6 +581,10 @@ export default function AdminDashboard() {
   const [dailyTrend, setDailyTrend] = useState<DailyTrendData[]>([])
   const [dailyProofs, setDailyProofs] = useState<DailyProofData[]>([])
   const [shares, setShares] = useState<ShareAnalytics>({ s1: 0, s2: 0, s3: 0, pv1: 0, pv2: 0, pv3: 0 })
+  const [activeProCount, setActiveProCount] = useState(0)
+  const [inactiveProCount, setInactiveProCount] = useState(0)
+  const [activeProRate, setActiveProRate] = useState(0)
+  const [avgVotesSecondDayPlus, setAvgVotesSecondDayPlus] = useState(0)
 
   // Tracking state
   const [trackingStats, setTrackingStats] = useState<TrackingProStat[]>([])
@@ -703,6 +760,10 @@ export default function AdminDashboard() {
       if (result.dailyTrend) { setDailyTrend(result.dailyTrend) }
       if (result.dailyProofs) { setDailyProofs(result.dailyProofs) }
       if (result.shares) { setShares(result.shares) }
+      setActiveProCount(result.activeProCount)
+      setInactiveProCount(result.inactiveProCount)
+      setActiveProRate(result.activeProRate)
+      setAvgVotesSecondDayPlus(result.avgVotesSecondDayPlus)
 
       setDataSource(hasLiveData ? 'live' : 'sample')
     } catch (e) {
@@ -876,6 +937,31 @@ export default function AdminDashboard() {
         <MC label="総投票数" value={g.total_votes} sub="累計" />
       </div>
 
+      {/* [A2] アクティブプロ統計 */}
+      <Sec>アクティブプロ統計（TBU除外）</Sec>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,minmax(0,1fr))', gap: 10 }}>
+        <div style={{ background: 'white', borderRadius: 10, padding: '18px 20px', border: '1px solid rgba(26,26,46,0.1)' }}>
+          <div style={{ color: '#1A1A2E', fontSize: 13, fontWeight: 700, marginBottom: 4 }}>アクティブプロ</div>
+          <div style={{ color: '#1A1A2E', fontSize: 36, fontWeight: 700, lineHeight: 1 }}>{activeProCount}<span style={{ fontSize: 16 }}>人</span></div>
+          <div style={{ color: '#C4A35A', fontSize: 11, fontWeight: 700, marginTop: 6 }}>複数日に跨る使用者</div>
+        </div>
+        <div style={{ background: 'white', borderRadius: 10, padding: '18px 20px', border: '1px solid rgba(26,26,46,0.1)' }}>
+          <div style={{ color: '#1A1A2E', fontSize: 13, fontWeight: 700, marginBottom: 4 }}>非アクティブ</div>
+          <div style={{ color: '#1A1A2E', fontSize: 36, fontWeight: 700, lineHeight: 1 }}>{inactiveProCount}<span style={{ fontSize: 16 }}>人</span></div>
+          <div style={{ color: '#1A1A2E', fontSize: 11, fontWeight: 700, marginTop: 6 }}>初日のみ or 未投票</div>
+        </div>
+        <div style={{ background: 'white', borderRadius: 10, padding: '18px 20px', border: '1px solid rgba(26,26,46,0.1)' }}>
+          <div style={{ color: '#1A1A2E', fontSize: 13, fontWeight: 700, marginBottom: 4 }}>アクティブ率</div>
+          <div style={{ color: '#1A1A2E', fontSize: 36, fontWeight: 700, lineHeight: 1 }}>{activeProRate}<span style={{ fontSize: 16 }}>%</span></div>
+          <div style={{ color: '#1A1A2E', fontSize: 11, fontWeight: 700, marginTop: 6 }}>全登録プロ中の割合</div>
+        </div>
+        <div style={{ background: '#1A1A2E', borderRadius: 10, padding: '18px 20px' }}>
+          <div style={{ color: '#C4A35A', fontSize: 13, fontWeight: 700, marginBottom: 4 }}>平均投票数</div>
+          <div style={{ color: 'white', fontSize: 36, fontWeight: 700, lineHeight: 1 }}>{avgVotesSecondDayPlus.toFixed(1)}<span style={{ fontSize: 16 }}>票</span></div>
+          <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: 700, marginTop: 6 }}>2日目以降の実測値</div>
+        </div>
+      </div>
+
       {/* [B] Channel */}
       <Sec>チャネル別（QR vs NFC）</Sec>
       {channels.length === 0 ? (
@@ -1010,101 +1096,7 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* 声かけ事例 */}
-      <Sec>クライアントへの声かけ事例</Sec>
-      <div className="voicekake-grid" style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
-        gap: 12,
-      }}>
-        {/* カード1: 一番シンプル（推奨） */}
-        <div style={{
-          background: C.surface,
-          borderRadius: '0 0 10px 10px',
-          borderTop: `3px solid ${C.gold}`,
-          padding: '18px 20px',
-        }}>
-          <div style={{ color: C.gold, fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', marginBottom: 6 }}>一番シンプル</div>
-          <div style={{ background: C.goldBg, display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, color: C.gold, fontWeight: 600, marginBottom: 12 }}>★ おすすめ</div>
-          <p style={{ color: C.cream, fontSize: 15, lineHeight: 1.7, whiteSpace: 'pre-line' }}>
-{`「かんたんなアンケートに
-ご協力いただけますか？
-スマホをかざすだけで、
-30秒で終わります」`}
-          </p>
-        </div>
-
-        {/* カード2: 理由を添える */}
-        <div style={{
-          background: C.surface,
-          borderRadius: '0 0 10px 10px',
-          borderTop: `3px solid ${C.grayDark}`,
-          padding: '18px 20px',
-        }}>
-          <div style={{ color: C.gold, fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', marginBottom: 12 }}>理由を添える</div>
-          <p style={{ color: C.cream, fontSize: 15, lineHeight: 1.7, whiteSpace: 'pre-line' }}>
-{`「自分の技術を上げるために
-お客さんの声を集めてるんです。
-かんたんなアンケートなんですけど、
-ご協力いただけますか？」`}
-          </p>
-        </div>
-
-        {/* カード3: 常連のお客さんに */}
-        <div style={{
-          background: C.surface,
-          borderRadius: '0 0 10px 10px',
-          borderTop: `3px solid ${C.grayDark}`,
-          padding: '18px 20px',
-        }}>
-          <div style={{ color: C.gold, fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', marginBottom: 12 }}>常連のお客さんに</div>
-          <p style={{ color: C.cream, fontSize: 15, lineHeight: 1.7, whiteSpace: 'pre-line' }}>
-{`「○○さんにお聞きしたいんですけど、
-どんなところがよかったか、
-アンケートで教えてもらえますか？
-スマホかざすだけで大丈夫です」`}
-          </p>
-        </div>
-      </div>
-
-
-      <style>{`@media (max-width: 768px) { .voicekake-grid { grid-template-columns: 1fr !important; } }`}</style>
-
-      {/* よくある質問 */}
-      <div style={{ marginTop: 16 }}>
-        <div style={{ color: C.gold, fontSize: 13, fontWeight: 600, letterSpacing: '0.05em', marginBottom: 12 }}>プルーフの仕組みとルール</div>
-        <div style={{ background: C.surface, borderRadius: 10, padding: '18px 20px' }}>
-          <div style={{ color: C.gold, fontSize: 12, fontWeight: 600, marginBottom: 10 }}>Q: お客さんが「回答できない」と言われた</div>
-          <div style={{ color: C.cream, fontSize: 13, lineHeight: 1.7, marginBottom: 14 }}>
-            アンケートには不正防止のため、いくつかの制限があります。
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingLeft: 4 }}>
-            <div style={{ color: C.cream, fontSize: 13, lineHeight: 1.7 }}>
-              <span style={{ color: C.gold }}>・</span>同じお客さんからは30分に1回まで受けられます<br />
-              <span style={{ color: C.gray, fontSize: 12, paddingLeft: 12, display: 'inline-block' }}>→ 少し時間を置いてから再度お願いしてみてください。</span>
-            </div>
-            <div style={{ color: C.cream, fontSize: 13, lineHeight: 1.7 }}>
-              <span style={{ color: C.gold }}>・</span>1人のお客さんが1日に回答できるのは最大3名のプロまでです<br />
-              <span style={{ color: C.gray, fontSize: 12, paddingLeft: 12, display: 'inline-block' }}>→ 翌日以降にお願いしてみてください。</span>
-            </div>
-            <div style={{ color: C.cream, fontSize: 13, lineHeight: 1.7 }}>
-              <span style={{ color: C.gold }}>・</span>同じお客さんからの回答は、前回から約3ヶ月空ける必要があります<br />
-              <span style={{ color: C.gray, fontSize: 12, paddingLeft: 12, display: 'inline-block' }}>→ 次回のご来店時にまたお願いしてみてください。</span><br />
-              <span style={{ color: C.gray, fontSize: 12, paddingLeft: 16, display: 'inline-block' }}>リピーターの方からの継続的な声は、</span><br />
-              <span style={{ color: C.gray, fontSize: 12, paddingLeft: 16, display: 'inline-block' }}>あなたの強みの証明をさらに確かなものにします。</span>
-            </div>
-          </div>
-          <div style={{ color: C.cream, fontSize: 13, lineHeight: 1.7, marginTop: 14, borderTop: `1px solid ${C.grayDark}`, paddingTop: 12 }}>
-            これらの仕組みは、プルーフの信頼性を守るためのものです。
-          </div>
-        </div>
-      </div>
-
-      {/* [E] Pro List */}
-      <Sec>プロ一覧 — 個別ステータス</Sec>
-      <div style={{ background: C.surface, borderRadius: 10, padding: 18 }}>
-        <ProTbl pros={pros} />
-      </div>
+      {/* [声かけ事例・プルーフ仕組み・プロ一覧テーブル — コメントアウト済み（2026-04-02 管理者ダッシュボード改修）] */}
 
       {/* [F] Bottleneck */}
       <Sec>3層ボトルネック</Sec>
