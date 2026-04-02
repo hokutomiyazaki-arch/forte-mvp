@@ -43,7 +43,7 @@ export async function GET(request: Request) {
     let proQuery = supabase
       .from('professionals')
       .select(`
-        id, name, title, prefecture, area_description,
+        id, name, title, prefecture, area_description, bio,
         photo_url, selected_proofs,
         badge_rising, badge_specialist, badge_multi, badge_top,
         featured_vote_id, featured_proof_id, created_at
@@ -429,6 +429,7 @@ export async function GET(request: Request) {
           if (pro.title?.toLowerCase().includes(q)) return 'title' as const
           if (pro.area_description?.toLowerCase().includes(q)) return 'area' as const
           if (pro.prefecture?.toLowerCase().includes(q)) return 'prefecture' as const
+          if (pro.bio?.toLowerCase().includes(q)) return 'bio' as const
           return null
         })(),
         featuredProof,
@@ -445,6 +446,7 @@ export async function GET(request: Request) {
         p.title?.toLowerCase().includes(q) ||
         p.area_description?.toLowerCase().includes(q) ||
         p.prefecture?.toLowerCase().includes(q) ||
+        p.bio?.toLowerCase().includes(q) ||
         commentMatchProIds.has(p.id) ||
         !!proofMatchMap[p.id]
       )

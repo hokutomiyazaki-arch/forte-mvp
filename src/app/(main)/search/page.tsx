@@ -53,7 +53,7 @@ interface SearchPro {
   matchedProofLabel: string | null
   matchSource: 'voice' | 'proof' | null
   voiceMatchCount: number
-  profileMatchField: 'name' | 'title' | 'area' | 'prefecture' | null
+  profileMatchField: 'name' | 'title' | 'area' | 'prefecture' | 'bio' | null
   featuredProof: {
     strengthLabel: string
     label: string
