@@ -45,6 +45,8 @@ interface SearchPro {
   }
   repeaterRate: number | null
   regularCount: number
+  firstCount: number
+  repeaterCount: number
   voiceSnippet: string | null
   matchedVoice: string | null
   matchedProofLabel: string | null
@@ -281,7 +283,14 @@ export default function SearchPage() {
                       </div>
                     )}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 800, color: T.dark }}>{p.name}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: T.dark }}>{p.name}</div>
+                        {(p.recentProofs || 0) > 0 && (
+                          <span style={{ fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0, color: T.textSub }}>
+                            {(p.recentProofs || 0) >= 15 ? '\uD83D\uDD25' : '\uD83D\uDFE2'} 今月 {p.recentProofs}人に評価されています
+                          </span>
+                        )}
+                      </div>
                       <div style={{ fontSize: 11, color: T.gold, fontWeight: 600, marginTop: 1 }}>{p.title}</div>
                       <div style={{ fontSize: 10, color: T.textMuted, marginTop: 2 }}>
                         {p.prefecture}{p.area_description ? ` · ${p.area_description}` : ''}
@@ -366,24 +375,28 @@ export default function SearchPage() {
                     </div>
                   )}
 
-                  {/* メトリクス行 */}
-                  <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-                    {p.recentProofs >= 1 && (
-                      <span style={{ fontSize: 11, color: '#2E7D32', fontWeight: 600 }}>
-                        {'\uD83D\uDFE2'} 今月 {p.recentProofs} プルーフ獲得中
-                      </span>
-                    )}
-                    {p.regularCount > 0 && (
-                      <span style={{ fontSize: 11, color: T.gold, fontWeight: 600 }}>
-                        {'\u2728'} 常連 {p.regularCount}名
-                      </span>
-                    )}
-                    {p.repeaterRate !== null && (
-                      <span style={{ fontSize: 11, color: T.textSub, fontWeight: 500 }}>
-                        {'\uD83D\uDD04'} リピーター率 {p.repeaterRate}%
-                      </span>
-                    )}
-                  </div>
+                  {/* CLIENT COMPOSITION バー */}
+                  {(() => {
+                    const total = (p.firstCount || 0) + (p.repeaterCount || 0) + (p.regularCount || 0)
+                    if (total < 3) return null
+                    const firstPct = Math.round(((p.firstCount || 0) / total) * 100)
+                    const repeaterPct = Math.round(((p.repeaterCount || 0) / total) * 100)
+                    const regularPct = 100 - firstPct - repeaterPct
+                    return (
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{ display: 'flex', height: 8, borderRadius: 99, overflow: 'hidden' }}>
+                          <div style={{ background: '#E8E0D0', width: `${firstPct}%` }} />
+                          <div style={{ background: '#C4A35A', width: `${repeaterPct}%` }} />
+                          <div style={{ background: '#1A1A2E', width: `${regularPct}%` }} />
+                        </div>
+                        <div style={{ display: 'flex', gap: 12, marginTop: 4, fontSize: 10, color: T.textMuted }}>
+                          <span>{'\u25CB'} 初回 {p.firstCount || 0}人</span>
+                          <span style={{ color: '#C4A35A' }}>{'\u25CF'} リピーター {p.repeaterCount || 0}人</span>
+                          <span style={{ color: '#1A1A2E' }}>{'\u25CF'} 常連 {p.regularCount || 0}人</span>
+                        </div>
+                      </div>
+                    )
+                  })()}
 
                   {/* プルーフ総数 */}
                   {p.totalProofs > 0 && (

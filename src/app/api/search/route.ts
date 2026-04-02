@@ -68,7 +68,7 @@ export async function GET(request: Request) {
     // リピーター率用: 全投票のnormalized_emailを取得（card APIと同じ）
     const { data: allVotesForRepeater } = await supabase
       .from('votes')
-      .select('professional_id, normalized_email')
+      .select('professional_id, voter_email')
       .in('professional_id', proIds)
       .eq('status', 'confirmed')
       .limit(10000)
@@ -194,7 +194,7 @@ export async function GET(request: Request) {
     for (const v of allVotesForRepeater || []) {
       const stat = ensureStat(v.professional_id)
       stat.totalVotes++
-      const email = v.normalized_email || ''
+      const email = v.voter_email || ''
       if (email) {
         stat.voterCounts[email] = (stat.voterCounts[email] || 0) + 1
       }
@@ -244,7 +244,10 @@ export async function GET(request: Request) {
 
       // リピーター率: 常連(3回以上)の人数 / ユニーク投票者数
       const uniqueVoters = Object.keys(stat.voterCounts).length
-      const regularCount = Object.values(stat.voterCounts).filter(c => c >= 3).length
+      const counts = Object.values(stat.voterCounts)
+      const firstCount = counts.filter(c => c === 1).length
+      const repeaterCount = counts.filter(c => c === 2).length
+      const regularCount = counts.filter(c => c >= 3).length
       const repeaterRate = uniqueVoters >= 3
         ? Math.round((regularCount / uniqueVoters) * 100)
         : null
@@ -379,6 +382,8 @@ export async function GET(request: Request) {
         },
         repeaterRate,
         regularCount,
+        firstCount,
+        repeaterCount,
         voiceSnippet,
         recentCategoryCount: stat.recentCategoryCount,
         matchedVoice: voiceMatchMap[pro.id] || null,
