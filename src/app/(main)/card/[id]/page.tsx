@@ -336,8 +336,8 @@ export default function CardPage() {
             </div>
           )}
           <div style={{ flex: 1, minWidth: 0 }}>
-            {/* 名前（上の行、フル幅） */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* 名前（上の行、フル幅）+ velocity バッジ */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <div style={{ fontSize: 20, fontWeight: 900, color: T.dark }}>{pro.name}</div>
               {((pro as any).founding_member_status === 'achieved' || (pro as any).is_founding_member) && (
                 <img
@@ -345,6 +345,11 @@ export default function CardPage() {
                   alt="Founding Member"
                   style={{ width: 28, height: 28, objectFit: 'contain' }}
                 />
+              )}
+              {recentProofs > 0 && (
+                <span style={{ fontSize: 11, fontWeight: 600, color: recentProofs >= 15 ? '#E65100' : '#2E7D32' }}>
+                  {recentProofs >= 15 ? '\uD83D\uDD25' : '\uD83D\uDFE2'} 今月 {recentProofs}人に評価されています
+                </span>
               )}
             </div>
             {topRank && (
@@ -481,35 +486,15 @@ export default function CardPage() {
       {/* ═══ タブコンテンツ: 強み ═══ */}
       {activeTab === 'strengths' && (
         <div style={{ marginBottom: 12 }}>
-          {/* Velocity・リピーター率・常連 */}
-          {(recentProofs >= 1 || repeaterRate !== null || regularCount > 0) && (
+          {/* 常連表示（リピーター率行・velocity行は削除済み → CLIENT COMPOSITIONバーに統合） */}
+          {repeaterRate === null && regularCount > 0 && (
             <div style={{
               background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14,
               padding: '14px 18px', marginBottom: 12,
-              display: 'flex', flexDirection: 'column', gap: 8,
             }}>
-              {recentProofs >= 1 && (
-                <div style={{ fontSize: 12, color: '#2E7D32', fontWeight: 600 }}>
-                  {'\uD83D\uDFE2'} 今月 {recentProofs} プルーフ獲得中
-                </div>
-              )}
-              {repeaterRate !== null && (
-                <div>
-                  <div style={{ fontSize: 12, color: T.textSub, fontWeight: 600 }}>
-                    {'\uD83D\uDD04'} リピーター率 {repeaterRate}%
-                  </div>
-                  <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4, display: 'flex', gap: 12 }}>
-                    <span>はじめて {firstTimerCount}人</span>
-                    <span>リピーター {repeaterCount}人</span>
-                    <span>常連 {regularCount}人</span>
-                  </div>
-                </div>
-              )}
-              {repeaterRate === null && regularCount > 0 && (
-                <div style={{ fontSize: 12, color: T.gold, fontWeight: 600 }}>
-                  {'\u2728'} 常連 {regularCount}名
-                </div>
-              )}
+              <div style={{ fontSize: 12, color: T.gold, fontWeight: 600 }}>
+                {'\u2728'} 常連 {regularCount}名
+              </div>
             </div>
           )}
 
