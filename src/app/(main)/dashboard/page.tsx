@@ -1705,7 +1705,7 @@ export default function DashboardPage() {
                 <img
                   src="/images/founding-member-badge.png"
                   alt="Founding Member"
-                  style={{ width: 48, height: 48, objectFit: 'contain' }}
+                  style={{ width: 40, height: 40, objectFit: 'contain' }}
                 />
               </a>
             )}
@@ -1959,30 +1959,6 @@ export default function DashboardPage() {
       )}
 
       {/* Founding Member Challenge */}
-      {(pro as any)?.founding_member_status === 'achieved' && (
-        <div style={{
-          background: 'rgba(196,163,90,0.08)',
-          border: '1px solid rgba(196,163,90,0.3)',
-          borderRadius: 14,
-          padding: '16px 20px',
-          marginBottom: 20,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-        }}>
-          <span style={{ fontSize: 18 }}>✦</span>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 800, color: '#C4A35A' }}>
-              Founding Member
-            </div>
-            <div style={{ fontSize: 11, color: '#888' }}>
-              達成日: {(pro as any).founding_member_achieved_at
-                ? new Date((pro as any).founding_member_achieved_at).toLocaleDateString('ja-JP')
-                : '—'}
-            </div>
-          </div>
-        </div>
-      )}
       {(pro as any)?.founding_member_status !== 'achieved' &&
        (pro as any)?.founding_member_status !== 'expired' &&
        pro?.created_at && (() => {

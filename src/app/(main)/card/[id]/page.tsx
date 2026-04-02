@@ -337,7 +337,16 @@ export default function CardPage() {
           )}
           <div style={{ flex: 1, minWidth: 0 }}>
             {/* 名前（上の行、フル幅） */}
-            <div style={{ fontSize: 20, fontWeight: 900, color: T.dark }}>{pro.name}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ fontSize: 20, fontWeight: 900, color: T.dark }}>{pro.name}</div>
+              {((pro as any).founding_member_status === 'achieved' || (pro as any).is_founding_member) && (
+                <img
+                  src="/images/founding-member-badge.png"
+                  alt="Founding Member"
+                  style={{ width: 28, height: 28, objectFit: 'contain' }}
+                />
+              )}
+            </div>
             {topRank && (
               <div style={{ fontSize: 11, fontWeight: 800, color: T.dark, marginTop: 2 }}>
                 {'\uD83E\uDD47'} {topRank.categoryLabel}・{topRank.subLabel} {topRank.rank}位
@@ -382,19 +391,6 @@ export default function CardPage() {
               {pro.area_description && <span> · {pro.area_description}</span>}
               {pro.is_online_available && <span style={{ marginLeft: 6, color: T.gold }}>● オンライン対応</span>}
             </div>
-            {((pro as any).founding_member_status === 'achieved' || (pro as any).is_founding_member) && (
-              <span style={{
-                display: 'inline-block', marginTop: 6,
-                padding: '4px 10px',
-                fontSize: 11, fontWeight: 700,
-                color: '#C4A35A',
-                background: 'rgba(196,163,90,0.08)',
-                border: '1px solid rgba(196,163,90,0.2)',
-                borderRadius: 20,
-              }}>
-                Founding Member
-              </span>
-            )}
             {orgs.length > 0 && (
               <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {orgs.map(o => (
