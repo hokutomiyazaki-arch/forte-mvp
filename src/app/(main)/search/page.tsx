@@ -7,16 +7,16 @@ import { COLORS, FONTS } from '@/lib/design-tokens'
 const T = { ...COLORS, font: FONTS.main }
 
 const CATEGORIES = [
-  { id: 'multi',       label: '\uD83C\uDF10 マルチスペシャリスト' },
-  { id: 'healing',     label: '痛みを治したい' },
-  { id: 'body',        label: '体を変えたい' },
+  { id: 'multi',       label: '🌐 マルチスペシャリスト' },
+  { id: 'healing',     label: '痛みや不調を改善したい' },
+  { id: 'body',        label: '機能的な体を手に入れたい' },
   { id: 'bodymake',    label: 'ボディメイクしたい' },
-  { id: 'performance', label: '動きを高めたい' },
+  { id: 'performance', label: 'パフォーマンスを上げたい' },
   { id: 'mind',        label: '心を整えたい' },
+  { id: 'relax',       label: 'リラックスしたい' },
   { id: 'beauty',      label: '美しくなりたい' },
-  { id: 'nutrition',   label: '栄養状態を改善したい' },
-  { id: 'relax',       label: '癒されたい' },
-  { id: 'skill',       label: '指導力を高めたい' },
+  { id: 'nutrition',   label: '食事・栄養を改善したい' },
+  { id: 'skill',       label: '技術指導を受けたい' },
 ]
 
 const SUB_CATEGORIES = [
