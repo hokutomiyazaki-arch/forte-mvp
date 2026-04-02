@@ -49,6 +49,7 @@ interface SearchPro {
   matchedVoice: string | null
   matchedProofLabel: string | null
   matchSource: 'voice' | 'proof' | null
+  matchCount: number
   featuredProof: {
     strengthLabel: string
     label: string
@@ -111,7 +112,7 @@ export default function SearchPage() {
     return (
       <>
         {text.slice(0, idx)}
-        <mark style={{ background: 'rgba(196,163,90,0.13)', color: T.gold, padding: '0 1px' }}>
+        <mark style={{ background: 'none', color: T.gold, fontWeight: 700 }}>
           {text.slice(idx, idx + debouncedQuery.length)}
         </mark>
         {text.slice(idx + debouncedQuery.length)}
@@ -330,24 +331,36 @@ export default function SearchPage() {
                     </div>
                   )}
 
-                  {/* 検索ハイライト */}
-                  {debouncedQuery && p.matchSource && (
+                  {/* 検索マッチ（Dパターン） */}
+                  {debouncedQuery && p.matchSource === 'voice' && p.matchedVoice && (
+                    <div style={{
+                      marginTop: 10, background: '#1A1A2E', borderRadius: 12,
+                      padding: '1rem 1.25rem',
+                    }}>
+                      <p style={{
+                        fontSize: 11, color: T.gold, fontWeight: 500,
+                        letterSpacing: '0.06em', margin: '0 0 6px',
+                      }}>
+                        {'\uD83D\uDCAC'} VOICE MATCH
+                      </p>
+                      <p style={{
+                        fontSize: 17, fontWeight: 500, color: '#FAFAF7',
+                        lineHeight: 1.5, margin: '0 0 6px',
+                      }}>
+                        {highlightQuery(p.matchedVoice)}
+                      </p>
+                      <a
+                        href={`/card/${p.id}?tab=voices&highlight=${encodeURIComponent(debouncedQuery)}`}
+                        onClick={e => e.stopPropagation()}
+                        style={{ fontSize: 12, color: 'rgba(250,250,247,0.5)', textDecoration: 'none' }}
+                      >
+                        続きはプロフィールで →
+                      </a>
+                    </div>
+                  )}
+                  {debouncedQuery && p.matchSource === 'proof' && p.matchedProofLabel && (
                     <div style={{ marginTop: 8, fontSize: 11, color: T.textSub, lineHeight: 1.5 }}>
-                      {p.matchSource === 'voice' && p.matchedVoice && (
-                        <a
-                          href={`/card/${p.id}?tab=voices&highlight=${encodeURIComponent(debouncedQuery)}`}
-                          onClick={e => e.stopPropagation()}
-                          style={{ textDecoration: 'none', color: T.textSub, display: 'block' }}
-                        >
-                          <span>{'\uD83D\uDCAC'} 「{highlightQuery(p.matchedVoice)}」</span>
-                          <span style={{ fontSize: 10, color: T.gold, marginLeft: 6, fontWeight: 600 }}>
-                            続きはプロフィールで →
-                          </span>
-                        </a>
-                      )}
-                      {p.matchSource === 'proof' && p.matchedProofLabel && (
-                        <span>{'\uD83D\uDD0D'} 「{highlightQuery(p.matchedProofLabel)}」にマッチ</span>
-                      )}
+                      <span>{'\uD83D\uDD0D'} 「{highlightQuery(p.matchedProofLabel)}」にマッチ</span>
                     </div>
                   )}
 
