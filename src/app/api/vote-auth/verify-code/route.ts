@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { normalizeEmail } from '@/lib/normalize-email'
+import { computeProofHash, generateNonce, GENESIS_HASH } from '@/lib/proof-chain'
 
 
 export const dynamic = 'force-dynamic'
@@ -73,6 +74,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'already_voted' }, { status: 409 })
     }
 
+    // --- ハッシュチェーン処理 START ---
+    const { data: latestVote } = await supabase
+      .from('votes')
+      .select('proof_hash')
+      .not('proof_hash', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    const prevHash = latestVote?.proof_hash || GENESIS_HASH
+    const nonce = generateNonce()
+    const createdAt = new Date().toISOString()
+
+    const proofHash = computeProofHash({
+      voter_email: normalizeEmail(email),
+      professional_id: professional_id,
+      vote_type: vote_data.vote_type || 'proof',
+      selected_proof_ids: vote_data.selected_proof_ids || null,
+      comment: vote_data.comment || null,
+      created_at: createdAt,
+      nonce: nonce,
+      prev_hash: prevHash,
+    })
+    // --- ハッシュチェーン処理 END ---
+
     // 投票をINSERT（status=confirmed で直接保存）
     const { data: insertedVote, error: voteError } = await supabase
       .from('votes')
@@ -90,6 +116,10 @@ export async function POST(req: NextRequest) {
         qr_token: vote_data.qr_token || null,
         status: 'confirmed',
         auth_method: 'email_code',
+        created_at: createdAt,
+        proof_hash: proofHash,
+        prev_hash: prevHash,
+        proof_nonce: nonce,
       })
       .select()
       .maybeSingle()
