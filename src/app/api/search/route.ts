@@ -55,12 +55,12 @@ export async function GET(request: Request) {
 
     const proIds = professionals.map(p => p.id)
 
-    // 投票データを一括取得
+    // 投票データを一括取得（全タイプ取得→JSでプルーフ判定）
     const { data: votes } = await supabase
       .from('votes')
-      .select('id, professional_id, created_at, vote_type, comment, normalized_email, selected_proof_ids')
+      .select('id, professional_id, created_at, vote_type, comment, normalized_email, selected_proof_ids, selected_personality_ids')
       .in('professional_id', proIds)
-      .eq('vote_type', 'proof')
+      .eq('status', 'confirmed')
 
     // proof_items のtab情報を取得
     const { data: proofItems } = await supabase
@@ -90,12 +90,6 @@ export async function GET(request: Request) {
       }
     }
 
-    // パーソナリティ投票データ（全投票タイプ）
-    const { data: allVotes } = await supabase
-      .from('votes')
-      .select('professional_id, selected_personality_ids')
-      .in('professional_id', proIds)
-
     // personality_items テーブル
     const { data: personalityItems } = await supabase
       .from('personality_items')
@@ -108,7 +102,7 @@ export async function GET(request: Request) {
 
     // プロごとのパーソナリティ集計
     const proPersonalityCounts = new Map<string, Record<string, number>>()
-    for (const vote of allVotes || []) {
+    for (const vote of votes || []) {
       if (!vote.selected_personality_ids || vote.selected_personality_ids.length === 0) continue
       const pid = vote.professional_id
       if (!proPersonalityCounts.has(pid)) proPersonalityCounts.set(pid, {})
@@ -182,6 +176,20 @@ export async function GET(request: Request) {
         })
       }
       const stat = proStats.get(pid)!
+
+      // voterCounts: 全投票タイプで集計（card APIと同じロジック）
+      const email = vote.normalized_email || ''
+      if (email) {
+        stat.voterCounts[email] = (stat.voterCounts[email] || 0) + 1
+      }
+
+      if (vote.comment) {
+        stat.latestVoteComment = vote.comment
+      }
+
+      // プルーフ系の集計はvote_type='proof'のみ
+      if (vote.vote_type !== 'proof') continue
+
       stat.totalProofs++
 
       const isRecent = new Date(vote.created_at) >= thirtyDaysAgo
@@ -198,15 +206,6 @@ export async function GET(request: Request) {
           }
         }
         stat.proofItemCounts[itemId] = (stat.proofItemCounts[itemId] || 0) + 1
-      }
-
-      const email = vote.normalized_email || ''
-      if (email) {
-        stat.voterCounts[email] = (stat.voterCounts[email] || 0) + 1
-      }
-
-      if (vote.comment) {
-        stat.latestVoteComment = vote.comment
       }
     }
 
