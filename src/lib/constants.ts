@@ -28,6 +28,7 @@ export const TAB_DISPLAY_NAMES: Record<string, string> = {
   beauty: 'ビューティー',
   nutrition: '栄養・生活',
   skill: '指導力',
+  universal: 'ユニバーサル',
 };
 
 /** タブの表示順序 */
@@ -41,4 +42,5 @@ export const TAB_ORDER: string[] = [
   'beauty',
   'nutrition',
   'skill',
+  'universal',
 ];
