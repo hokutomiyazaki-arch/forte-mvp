@@ -73,8 +73,6 @@ export async function GET(request: Request) {
       .eq('status', 'confirmed')
       .limit(10000)
 
-    console.log('allVotesForRepeater count:', allVotesForRepeater?.length, 'proofVotes count:', proofVotes?.length, 'proIds count:', proIds.length)
-
     // proof_items のtab情報を取得
     const { data: proofItems } = await supabase
       .from('proof_items')
@@ -244,25 +242,12 @@ export async function GET(request: Request) {
       // プルーフ0は除外
       if (stat.totalProofs === 0) return null
 
-      // リピーター率（card APIと同じロジック: 全投票数10以上で算出）
-      let repeaterRate: number | null = null
-      let regularCount = 0
-      if (stat.totalVotes >= 10) {
-        const totalVoters = Object.keys(stat.voterCounts).length
-        const repeaterAndRegular = Object.values(stat.voterCounts).filter(c => c >= 2).length
-        regularCount = Object.values(stat.voterCounts).filter(c => c >= 3).length
-        repeaterRate = totalVoters > 0
-          ? Math.round((repeaterAndRegular / totalVoters) * 100)
-          : 0
-      }
-
-      console.log('repeaterRate debug:', pro.id, pro.name, {
-        totalVotes: stat.totalVotes,
-        totalProofs: stat.totalProofs,
-        voterCountsLen: Object.keys(stat.voterCounts).length,
-        repeaterRate,
-        regularCount,
-      })
+      // リピーター率: 常連(3回以上)の人数 / ユニーク投票者数
+      const uniqueVoters = Object.keys(stat.voterCounts).length
+      const regularCount = Object.values(stat.voterCounts).filter(c => c >= 3).length
+      const repeaterRate = uniqueVoters >= 3
+        ? Math.round((regularCount / uniqueVoters) * 100)
+        : null
 
       // Voiceスニペット（40字カット）
       const rawVoice = pro.featured_vote_id
