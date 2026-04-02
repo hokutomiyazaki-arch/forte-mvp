@@ -8,7 +8,7 @@ const CATEGORY_TAB_MAP: Record<string, { tabs: string[]; label: string }> = {
   body:        { tabs: ['body', 'bodymake'],   label: '体を変えたい' },
   bodymake:    { tabs: ['bodymake'],           label: 'ボディメイクしたい' },
   performance: { tabs: ['performance'],        label: '動きを高めたい' },
-  mind:        { tabs: ['mind', 'discovery'],  label: '心を整えたい' },
+  mind:        { tabs: ['mind'],               label: '心を整えたい' },
   beauty:      { tabs: ['beauty'],             label: '美しくなりたい' },
   nutrition:   { tabs: ['nutrition'],          label: '栄養状態を改善したい' },
   relax:       { tabs: ['relax'],              label: 'リラックスしたい' },

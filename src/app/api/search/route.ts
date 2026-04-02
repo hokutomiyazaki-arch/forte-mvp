@@ -9,7 +9,7 @@ const CATEGORY_TAB_MAP: Record<string, string[]> = {
   body: ['body', 'bodymake'],
   bodymake: ['bodymake'],
   performance: ['performance'],
-  mind: ['mind', 'discovery'],
+  mind: ['mind'],
   beauty: ['beauty'],
   nutrition: ['nutrition'],
   relax: ['relax'],
