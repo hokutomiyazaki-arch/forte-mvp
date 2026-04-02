@@ -1693,7 +1693,23 @@ export default function DashboardPage() {
 
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#1A1A2E]">ダッシュボード</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <h1 className="text-2xl font-bold text-[#1A1A2E]">ダッシュボード</h1>
+            {(pro as any)?.founding_member_status === 'achieved' && (
+              <a
+                href="https://line.me/R/ti/g/2C5JXJyc68"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Founding Memberグループに参加"
+              >
+                <img
+                  src="/images/founding-member-badge.png"
+                  alt="Founding Member"
+                  style={{ width: 48, height: 48, objectFit: 'contain' }}
+                />
+              </a>
+            )}
+          </div>
           {user?.email && (
             <p className="text-sm text-gray-400 mt-1 truncate max-w-[260px]">
               {user.email.startsWith('line_') && user.email.endsWith('@line.realproof.jp') ? 'LINE連携済み' : user.email}
