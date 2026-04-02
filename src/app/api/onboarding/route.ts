@@ -54,7 +54,7 @@ export async function POST(request: Request) {
       .maybeSingle()
 
     if (!existingPro) {
-      await supabase.from('professionals').insert({
+      const { data: newPro } = await supabase.from('professionals').insert({
         user_id: userId,
         name: displayName, // /setup の Step 1 で上書き
         last_name: finalLastName || '未設定',
@@ -62,7 +62,15 @@ export async function POST(request: Request) {
         store_name: null,
         title: '', // /setup の Step 1 で上書き
         photo_url: clerkImageUrl,
-      })
+      }).select('id').maybeSingle()
+
+      // org_membersにuser_idで仮登録されたレコードのprofessional_idを自動補完
+      if (newPro) {
+        await supabase.from('org_members')
+          .update({ professional_id: newPro.id })
+          .eq('user_id', userId)
+          .is('professional_id', null)
+      }
     }
   }
 

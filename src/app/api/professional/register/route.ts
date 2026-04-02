@@ -58,12 +58,18 @@ export async function POST() {
     photo_url: clerkImageUrl,
   }).select('id').maybeSingle()
 
-  // 既存NFCカードにprofessional_idを自動セット
   if (newPro) {
+    // 既存NFCカードにprofessional_idを自動セット
     await supabase.from('nfc_cards')
       .update({ professional_id: newPro.id, updated_at: new Date().toISOString() })
       .eq('user_id', userId)
       .eq('status', 'active')
+
+    // org_membersにuser_idで仮登録されたレコードのprofessional_idを自動補完
+    await supabase.from('org_members')
+      .update({ professional_id: newPro.id })
+      .eq('user_id', userId)
+      .is('professional_id', null)
   }
 
   return NextResponse.json({ success: true, action: 'created' })
