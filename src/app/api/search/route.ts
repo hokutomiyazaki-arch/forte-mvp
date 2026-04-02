@@ -229,7 +229,7 @@ export async function GET(request: Request) {
       if (stat.totalProofs >= 10) {
         const totalVoters = Object.keys(stat.voterCounts).length
         const repeaterAndRegular = Object.values(stat.voterCounts).filter(c => c >= 2).length
-        regularCount = Object.values(stat.voterCounts).filter(c => c >= 5).length
+        regularCount = Object.values(stat.voterCounts).filter(c => c >= 3).length
         repeaterRate = totalVoters > 0
           ? Math.round((repeaterAndRegular / totalVoters) * 100)
           : 0

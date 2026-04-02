@@ -303,8 +303,8 @@ export async function GET() {
       if (email) voterCounts[email] = (voterCounts[email] || 0) + 1
     }
     const firstTimerCount = Object.values(voterCounts).filter(c => c === 1).length
-    const repeaterCount = Object.values(voterCounts).filter(c => c >= 2 && c < 5).length
-    const regularCount = Object.values(voterCounts).filter(c => c >= 5).length
+    const repeaterCount = Object.values(voterCounts).filter(c => c === 2).length
+    const regularCount = Object.values(voterCounts).filter(c => c >= 3).length
 
     if (isDev) console.log('[Dashboard API] Total:', Date.now() - startTime, 'ms')
 

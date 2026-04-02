@@ -116,8 +116,8 @@ export async function GET(
     let regularCount = 0
     if (totalProofsForRate >= 10) {
       const totalVoters = Object.keys(voterCounts).length
-      const repeaters = Object.values(voterCounts).filter(c => c >= 2 && c < 5).length
-      const regulars = Object.values(voterCounts).filter(c => c >= 5).length
+      const repeaters = Object.values(voterCounts).filter(c => c === 2).length
+      const regulars = Object.values(voterCounts).filter(c => c >= 3).length
       const firstTimers = Object.values(voterCounts).filter(c => c === 1).length
       const repeaterAndRegular = Object.values(voterCounts).filter(c => c >= 2).length
       repeaterRate = totalVoters > 0 ? Math.round((repeaterAndRegular / totalVoters) * 100) : 0
