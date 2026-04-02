@@ -133,8 +133,7 @@ export default function SearchPage() {
       <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px' }}>
 
         {/* ヘッダー */}
-        <h1 style={{ fontSize: 20, fontWeight: 800, color: T.dark, marginBottom: 4 }}>プロを探す</h1>
-        <p style={{ fontSize: 12, color: T.textSub, marginBottom: 16 }}>プルーフで、あなたに合うプロを見つけよう</p>
+        <h1 style={{ fontSize: 20, fontWeight: 800, color: T.dark, marginBottom: 16 }}>プロを探す</h1>
 
         {/* 説明テキスト */}
         <p style={{ fontSize: 14, color: T.textSub, marginBottom: 8, lineHeight: 1.6 }}>
