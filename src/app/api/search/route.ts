@@ -246,11 +246,14 @@ export async function GET(request: Request) {
       // カテゴリスコア計算
       const targetTabs = CATEGORY_TAB_MAP[category] || []
       const skillCount = stat.categoryCount['skill'] || 0
+      const universalCount = stat.categoryCount['universal'] || 0
 
       let categoryScore = 0
       for (const tab of targetTabs) {
         categoryScore += stat.categoryCount[tab] || 0
       }
+      // universal項目を0.2倍で全カテゴリに加算
+      categoryScore += universalCount * 0.2
       // 指導力(skill)を0.3倍で他カテゴリに加算（skillカテゴリ自身には二重加算しない）
       if (category !== 'skill') {
         categoryScore += skillCount * 0.3
@@ -260,9 +263,9 @@ export async function GET(request: Request) {
         categoryScore += skillCount * 0.5
       }
 
-      // 対応カテゴリ数（5件以上のプルーフがあるカテゴリ、skill除く）
+      // 対応カテゴリ数（5件以上のプルーフがあるカテゴリ、skill/universal除く）
       const diverseCategoryCount = Object.entries(stat.categoryCount)
-        .filter(([tab, count]) => tab !== 'skill' && count >= 5)
+        .filter(([tab, count]) => tab !== 'skill' && tab !== 'universal' && count >= 5)
         .length
 
       // Featured proof: featured_proof_id があればそれ、なければ最得票のproof_item
@@ -300,12 +303,13 @@ export async function GET(request: Request) {
         }
       }
 
-      // categoryTopProof: カテゴリ別の最得票proof_item
+      // categoryTopProof: カテゴリ別の最得票proof_item（universal含む）
       let categoryTopProof: { strengthLabel: string; votes: number } | null = null
       if (category !== 'multi' && category !== 'none' && targetTabs.length > 0) {
+        const topProofTabs = [...targetTabs, 'universal']
         const categoryItemIds = new Set(
           (proofItems || [])
-            .filter(i => targetTabs.includes(i.tab))
+            .filter(i => topProofTabs.includes(i.tab))
             .map(i => i.id)
         )
         let bestId = ''
