@@ -153,6 +153,7 @@ export async function GET(request: Request) {
 
     // プロごとの集計
     const proStats = new Map<string, {
+      totalVotes: number
       totalProofs: number
       recentProofs: number
       categoryCount: Record<string, number>
@@ -166,6 +167,7 @@ export async function GET(request: Request) {
       const pid = vote.professional_id
       if (!proStats.has(pid)) {
         proStats.set(pid, {
+          totalVotes: 0,
           totalProofs: 0,
           recentProofs: 0,
           categoryCount: {},
@@ -176,6 +178,7 @@ export async function GET(request: Request) {
         })
       }
       const stat = proStats.get(pid)!
+      stat.totalVotes++
 
       // voterCounts: 全投票タイプで集計（card APIと同じロジック）
       const email = vote.normalized_email || ''
@@ -212,6 +215,7 @@ export async function GET(request: Request) {
     // プロデータの組み立て
     let result = professionals.map(pro => {
       const stat = proStats.get(pro.id) || {
+        totalVotes: 0,
         totalProofs: 0,
         recentProofs: 0,
         categoryCount: {},
@@ -224,10 +228,10 @@ export async function GET(request: Request) {
       // プルーフ0は除外
       if (stat.totalProofs === 0) return null
 
-      // リピーター率（10プルーフ以上）
+      // リピーター率（card APIと同じロジック: 全投票数10以上で算出）
       let repeaterRate: number | null = null
       let regularCount = 0
-      if (stat.totalProofs >= 10) {
+      if (stat.totalVotes >= 10) {
         const totalVoters = Object.keys(stat.voterCounts).length
         const repeaterAndRegular = Object.values(stat.voterCounts).filter(c => c >= 2).length
         regularCount = Object.values(stat.voterCounts).filter(c => c >= 3).length
