@@ -23,6 +23,7 @@ const SUB_CATEGORIES = [
   { id: 'rising',     label: '\uD83D\uDD25 今月急上昇' },
   { id: 'specialist', label: '\u2B50 この分野のプロ' },
   { id: 'repeater',   label: '\uD83D\uDD04 リピーターが多い' },
+  { id: 'new_client', label: '\uD83C\uDF0A 新規に強い' },
   { id: 'top',        label: '\uD83C\uDFC6 総合力' },
 ]
 

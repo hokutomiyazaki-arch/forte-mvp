@@ -277,6 +277,12 @@ export async function GET(request: Request) {
         ? Math.round(wilsonScore(regularCount, totalForRate) * 100)
         : null
 
+      // 新規に強いスコア
+      // 初回率が高く、かつ母数がある程度ある人が上位に来る
+      const newClientScore = totalForRate >= 5
+        ? Math.round((firstCount / totalForRate) * Math.log(totalForRate + 1) * 100) / 100
+        : null
+
       // Voiceスニペット（40字カット）
       const rawVoice = pro.featured_vote_id
         ? featuredVoteMap[pro.featured_vote_id] || stat.latestVoteComment
@@ -409,6 +415,7 @@ export async function GET(request: Request) {
         regularCount,
         firstCount,
         repeaterCount,
+        newClientScore,
         voiceSnippet,
         recentCategoryCount: stat.recentCategoryCount,
         matchedVoice: voiceMatchMap[pro.id] || null,
@@ -485,6 +492,18 @@ export async function GET(request: Request) {
           const getRepeaterScore = (p: typeof result[number]) =>
             p.categoryScore * 0.3 + (p.repeaterRate || 0) * 0.7
           result.sort((a, b) => getRepeaterScore(b) - getRepeaterScore(a))
+          break
+        }
+
+        case 'new_client': {
+          // 🌊 新規に強い: newClientScoreが高い順
+          result = result.filter(p => p.newClientScore !== null)
+          result.sort((a, b) => {
+            const scoreA = a.newClientScore || 0
+            const scoreB = b.newClientScore || 0
+            if (scoreB !== scoreA) return scoreB - scoreA
+            return b.categoryScore - a.categoryScore
+          })
           break
         }
 
