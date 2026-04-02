@@ -73,7 +73,7 @@ export async function GET(
         .eq('status', 'confirmed'),
       // 12. Velocity・リピーター率用データ
       supabase.from('votes')
-        .select('created_at, normalized_email')
+        .select('created_at, voter_email')
         .eq('professional_id', proId)
         .eq('status', 'confirmed'),
     ])
@@ -106,7 +106,7 @@ export async function GET(
     const voterCounts: Record<string, number> = {}
     for (const v of velocityResult.data || []) {
       if (new Date(v.created_at) >= thirtyDaysAgo) recentProofs++
-      const email = v.normalized_email || ''
+      const email = v.voter_email || ''
       if (email) voterCounts[email] = (voterCounts[email] || 0) + 1
     }
     const totalProofsForRate = velocityResult.data?.length || 0
