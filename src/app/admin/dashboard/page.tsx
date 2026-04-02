@@ -629,6 +629,7 @@ export default function AdminDashboard() {
   const [annModal, setAnnModal] = useState<any | null>(null) // null=閉じ, {}=新規, {id,...}=編集
   const [annForm, setAnnForm] = useState({ title: '', body: '', banner_type: 'info', target: 'all', starts_at: '', expires_at: '', is_active: true, link_url: '', link_label: '' })
   const [annSaving, setAnnSaving] = useState(false)
+  const [annOpen, setAnnOpen] = useState(false)
 
   async function loadAnnouncements() {
     try {
@@ -1168,83 +1169,98 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* [G] Announcements — お知らせ管理 */}
-      <Sec>お知らせ管理</Sec>
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
-        <button
-          onClick={annOpenNew}
-          style={{
-            background: C.gold, color: C.bg, border: 'none', cursor: 'pointer',
-            padding: '8px 18px', borderRadius: 7, fontSize: 13, fontWeight: 600,
-          }}
-        >
-          ＋ 新規作成
-        </button>
+      {/* [G] Announcements — お知らせ管理（折りたたみ） */}
+      <div
+        onClick={() => setAnnOpen(!annOpen)}
+        style={{
+          color: C.gold, fontSize: 12, fontWeight: 600, letterSpacing: '0.1em',
+          marginBottom: 14, marginTop: 36, textTransform: 'uppercase' as const,
+          cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, userSelect: 'none',
+        }}
+      >
+        お知らせ管理
+        <span style={{ fontSize: 10, color: C.gray }}>({annList.length}件)</span>
+        <span style={{ fontSize: 14 }}>{annOpen ? '▲' : '▼'}</span>
       </div>
+      {annOpen && (
+        <>
+          <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              onClick={annOpenNew}
+              style={{
+                background: C.gold, color: C.bg, border: 'none', cursor: 'pointer',
+                padding: '8px 18px', borderRadius: 7, fontSize: 13, fontWeight: 600,
+              }}
+            >
+              + 新規作成
+            </button>
+          </div>
 
-      {annList.length === 0 ? (
-        <div style={{ background: C.surface, borderRadius: 10, padding: 24, color: C.gray, textAlign: 'center', fontSize: 13 }}>
-          お知らせはありません
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {annList.map((a: any) => {
-            const targetLabel = a.target === 'all' ? '全員' : a.target === 'professionals' ? 'プロ' : a.target === 'founding_members' ? 'FM' : a.target?.startsWith('badge:') ? 'バッジ保有者' : a.target
-            const typeColor = a.banner_type === 'success' ? C.green : a.banner_type === 'warning' ? C.amber : C.gold
-            const startDate = a.starts_at ? new Date(a.starts_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'
-            const endDate = a.expires_at ? new Date(a.expires_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '無期限'
-            return (
-              <div key={a.id} style={{ background: C.surface, borderRadius: 10, padding: '16px 20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: a.is_active ? C.green : C.gray, display: 'inline-block', flexShrink: 0 }} />
-                  <span style={{ color: C.cream, fontSize: 14, fontWeight: 600, flex: 1 }}>{a.title}</span>
-                  <span style={{ fontSize: 10, fontWeight: 600, color: typeColor, background: typeColor + '18', padding: '2px 8px', borderRadius: 4 }}>
-                    {a.banner_type}
-                  </span>
-                </div>
-                {a.body && (
-                  <div style={{ color: C.gray, fontSize: 12, marginBottom: 8, lineHeight: 1.5 }}>
-                    {a.body.length > 80 ? a.body.slice(0, 80) + '...' : a.body}
+          {annList.length === 0 ? (
+            <div style={{ background: C.surface, borderRadius: 10, padding: 24, color: C.gray, textAlign: 'center', fontSize: 13 }}>
+              お知らせはありません
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {annList.map((a: any) => {
+                const targetLabel = a.target === 'all' ? '全員' : a.target === 'professionals' ? 'プロ' : a.target === 'founding_members' ? 'FM' : a.target?.startsWith('badge:') ? 'バッジ保有者' : a.target
+                const typeColor = a.banner_type === 'success' ? C.green : a.banner_type === 'warning' ? C.amber : C.gold
+                const startDate = a.starts_at ? new Date(a.starts_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'
+                const endDate = a.expires_at ? new Date(a.expires_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '無期限'
+                return (
+                  <div key={a.id} style={{ background: C.surface, borderRadius: 10, padding: '16px 20px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: a.is_active ? C.green : C.gray, display: 'inline-block', flexShrink: 0 }} />
+                      <span style={{ color: C.cream, fontSize: 14, fontWeight: 600, flex: 1 }}>{a.title}</span>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: typeColor, background: typeColor + '18', padding: '2px 8px', borderRadius: 4 }}>
+                        {a.banner_type}
+                      </span>
+                    </div>
+                    {a.body && (
+                      <div style={{ color: C.gray, fontSize: 12, marginBottom: 8, lineHeight: 1.5 }}>
+                        {a.body.length > 80 ? a.body.slice(0, 80) + '...' : a.body}
+                      </div>
+                    )}
+                    <div style={{ color: C.gray, fontSize: 11, marginBottom: 10 }}>
+                      対象: {targetLabel} ｜ 開始: {startDate} ｜ 終了: {endDate}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        onClick={() => annToggle(a.id, a.is_active)}
+                        style={{
+                          padding: '5px 12px', borderRadius: 5, border: 'none', cursor: 'pointer',
+                          fontSize: 11, fontWeight: 600,
+                          background: a.is_active ? C.green + '20' : C.gray + '20',
+                          color: a.is_active ? C.green : C.gray,
+                        }}
+                      >
+                        {a.is_active ? 'ON' : 'OFF'}
+                      </button>
+                      <button
+                        onClick={() => annOpenEdit(a)}
+                        style={{
+                          padding: '5px 12px', borderRadius: 5, border: `1px solid ${C.gold}`,
+                          background: 'transparent', color: C.gold, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                        }}
+                      >
+                        編集
+                      </button>
+                      <button
+                        onClick={() => annDelete(a.id)}
+                        style={{
+                          padding: '5px 12px', borderRadius: 5, border: `1px solid ${C.red}`,
+                          background: 'transparent', color: C.red, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                        }}
+                      >
+                        削除
+                      </button>
+                    </div>
                   </div>
-                )}
-                <div style={{ color: C.gray, fontSize: 11, marginBottom: 10 }}>
-                  対象: {targetLabel} ｜ 開始: {startDate} ｜ 終了: {endDate}
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    onClick={() => annToggle(a.id, a.is_active)}
-                    style={{
-                      padding: '5px 12px', borderRadius: 5, border: 'none', cursor: 'pointer',
-                      fontSize: 11, fontWeight: 600,
-                      background: a.is_active ? C.green + '20' : C.gray + '20',
-                      color: a.is_active ? C.green : C.gray,
-                    }}
-                  >
-                    {a.is_active ? 'ON' : 'OFF'}
-                  </button>
-                  <button
-                    onClick={() => annOpenEdit(a)}
-                    style={{
-                      padding: '5px 12px', borderRadius: 5, border: `1px solid ${C.gold}`,
-                      background: 'transparent', color: C.gold, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                    }}
-                  >
-                    編集
-                  </button>
-                  <button
-                    onClick={() => annDelete(a.id)}
-                    style={{
-                      padding: '5px 12px', borderRadius: 5, border: `1px solid ${C.red}`,
-                      background: 'transparent', color: C.red, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                    }}
-                  >
-                    削除
-                  </button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
+                )
+              })}
+            </div>
+          )}
+        </>
       )}
 
       {/* お知らせ作成/編集モーダル */}
