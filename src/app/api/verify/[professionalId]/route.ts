@@ -16,7 +16,7 @@ export async function GET(
     const { data: votes, error } = await supabase
       .from('votes')
       .select(
-        'voter_email, professional_id, vote_type, selected_proof_ids, comment, created_at, proof_nonce, proof_hash, prev_hash'
+        'voter_email, normalized_email, professional_id, vote_type, selected_proof_ids, comment, created_at, proof_nonce, proof_hash, prev_hash'
       )
       .eq('professional_id', professionalId)
       .eq('vote_type', 'proof')
@@ -35,7 +35,11 @@ export async function GET(
       }, { headers: { 'Cache-Control': 'no-store' } })
     }
 
-    const result = verifyChain(votes)
+    const fixedVotes = votes.map(v => ({
+      ...v,
+      voter_email: v.normalized_email || v.voter_email
+    }))
+    const result = verifyChain(fixedVotes)
 
     return NextResponse.json({
       professionalId,
