@@ -399,6 +399,7 @@ export async function GET(request: Request) {
         title: pro.title,
         prefecture: pro.prefecture,
         area_description: pro.area_description,
+        bio: pro.bio,
         photo_url: pro.photo_url,
         totalProofs: stat.totalProofs,
         recentProofs: stat.recentProofs,
