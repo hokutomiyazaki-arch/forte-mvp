@@ -47,7 +47,7 @@ export async function GET(
       // 5. 人柄項目マスタ
       supabase.from('personality_items').select('id, label'),
       // 6. コメント付き投票
-      supabase.from('votes').select('id, comment, created_at, voter_email')
+      supabase.from('votes').select('id, comment, created_at, normalized_email')
         .eq('professional_id', proId).eq('status', 'confirmed')
         .not('comment', 'is', null).neq('comment', '')
         .order('created_at', { ascending: false }),
@@ -70,7 +70,7 @@ export async function GET(
       Promise.resolve({ data: null, error: null }),
       // 12. Velocity・リピーター率・CLIENT COMPOSITION用データ
       supabase.from('votes')
-        .select('created_at, voter_email')
+        .select('created_at, normalized_email')
         .eq('professional_id', proId)
         .eq('status', 'confirmed'),
     ])
@@ -93,7 +93,7 @@ export async function GET(
     const voterCounts: Record<string, number> = {}
     for (const v of velocityResult.data || []) {
       if (new Date(v.created_at) >= thirtyDaysAgo) recentProofs++
-      const email = v.voter_email || ''
+      const email = v.normalized_email || ''
       if (email) voterCounts[email] = (voterCounts[email] || 0) + 1
     }
     const counts = Object.values(voterCounts)
@@ -118,11 +118,11 @@ export async function GET(
       proofItems: proofItemsResult.data || [],
       personalitySummary: personalitySummaryResult.data || [],
       personalityItems: personalityItemsResult.data || [],
-      comments: (commentsResult.data || []).map((c: { id: string; comment: string; created_at: string; voter_email: string }) => ({
+      comments: (commentsResult.data || []).map((c: { id: string; comment: string; created_at: string; normalized_email: string }) => ({
         id: c.id,
         comment: c.comment,
         created_at: c.created_at,
-        voter_vote_count: voterCounts[c.voter_email] || 1,
+        voter_vote_count: voterCounts[c.normalized_email] || 1,
       })),
       totalVotes: totalVotesResult.count || 0,
       bookmarkCount: bookmarkCountResult.count || 0,
