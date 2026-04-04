@@ -136,9 +136,11 @@ export async function GET(
       firstTimerCount,
       repeaterCount,
       regularCount,
+    }, {
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
     })
   } catch (err) {
     console.error('[api/card] Error:', err)
-    return NextResponse.json({ error: 'Failed to load card data' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to load card data' }, { status: 500, headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } })
   }
 }
