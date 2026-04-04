@@ -278,6 +278,7 @@ function VoteForm() {
   const searchParams = useSearchParams()
   const proId = params.id as string
   const qrToken = searchParams.get('token')
+  const channel = searchParams.get('channel') || 'unknown'
   const isPreview = searchParams.get('preview') === 'true'
   const supabase = createClient()
   const { user: clerkUser, isLoaded: authLoaded } = useUser()
@@ -629,6 +630,7 @@ function VoteForm() {
       comment: comment.trim() || null,
       vote_type: determineVoteType(),
       qr_token: qrToken,
+      channel,
     }
     sessionStorage.setItem('pending_vote', JSON.stringify(voteData))
   }
@@ -647,6 +649,7 @@ function VoteForm() {
       comment: comment.trim() || null,
       vote_type: determineVoteType(),
       qr_token: qrToken,
+      channel,
     }
   }
 
@@ -669,6 +672,7 @@ function VoteForm() {
         status: 'confirmed',
         vote_weight: 0.5,
         auth_method: 'hopeful',
+        channel,
       })
     } catch (e) {
       console.error('hopeful vote error:', e)
@@ -854,6 +858,7 @@ function VoteForm() {
         qr_token: voteData.qr_token,
         status: 'confirmed',
         auth_method: 'sms',
+        channel,
       }).select().maybeSingle()
 
       if (voteError) {
@@ -981,6 +986,7 @@ function VoteForm() {
       qr_token: voteData.qr_token,
       status: 'confirmed', // フォールバックは即確定（後で認証を促す）
       auth_method: 'sms_fallback',
+      channel,
     }).select().maybeSingle()
 
     if (voteError) {
@@ -1149,6 +1155,7 @@ function VoteForm() {
       qr_token: qrToken,
       status: voteStatus,
       auth_method: 'email',
+      channel,
     }).select().maybeSingle()
 
     if (voteError) {

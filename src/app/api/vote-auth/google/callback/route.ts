@@ -291,6 +291,7 @@ export async function GET(request: NextRequest) {
         comment: voteData.comment || null,
         qr_token: qr_token || null,
         status: 'confirmed',
+        channel: voteData.channel || 'unknown',
         created_at: createdAt,
         proof_hash: proofHash,
         prev_hash: prevHash,

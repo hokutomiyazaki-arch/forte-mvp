@@ -215,9 +215,9 @@ export async function GET(
       )
     }
 
-    // 6. 既存の投票ページにリダイレクト（/vote/{professional_id}?token={token}）
+    // 6. 既存の投票ページにリダイレクト（/vote/{professional_id}?token={token}&channel=nfc）
     return NextResponse.redirect(
-      new URL(`/vote/${card.professional_id}?token=${token}`, request.url)
+      new URL(`/vote/${card.professional_id}?token=${token}&channel=nfc`, request.url)
     )
 
   } catch (error) {

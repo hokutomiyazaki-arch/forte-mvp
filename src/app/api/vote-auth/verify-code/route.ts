@@ -116,6 +116,7 @@ export async function POST(req: NextRequest) {
         qr_token: vote_data.qr_token || null,
         status: 'confirmed',
         auth_method: 'email_code',
+        channel: vote_data.channel || 'unknown',
         created_at: createdAt,
         proof_hash: proofHash,
         prev_hash: prevHash,

@@ -605,7 +605,7 @@ export default function DashboardPage() {
     const token = crypto.randomUUID()
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
     await db.insert('qr_tokens', { professional_id: pro.id, token, expires_at: expiresAt })
-    const voteUrl = `${window.location.origin}/vote/${pro.id}?token=${token}`
+    const voteUrl = `${window.location.origin}/vote/${pro.id}?token=${token}&channel=dashboard`
     setQrUrl(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(voteUrl)}`)
   }
 

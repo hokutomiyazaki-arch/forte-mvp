@@ -62,7 +62,6 @@ interface ProData {
 
 interface ChannelData {
   ch: string
-  tokens: number
   votes: number
   pct: number
 }
@@ -354,10 +353,10 @@ async function fetchDashboardData() {
     supabase.from('votes').select('created_at, professional_id').gte('created_at', thirtyDaysAgo.toISOString()),
     // 日別プルーフ獲得者 (14日) — JOINなし（proResから名前引き）
     supabase.from('votes').select('created_at, professional_id').eq('status', 'confirmed').eq('vote_type', 'proof').gte('created_at', fourteenDaysAgo.toISOString()),
-    // チャネル別: qr_tokens
-    supabase.from('qr_tokens').select('token'),
-    // チャネル別: votes の qr_token
-    supabase.from('votes').select('id, qr_token'),
+    // チャネル別: votes.channel
+    supabase.from('votes').select('channel').eq('status', 'confirmed'),
+    // (旧qr_token分析 — 廃止、Promise.allの構造維持)
+    Promise.resolve({ data: null, error: null }),
     // シェア分析: シェア数
     supabase.from('page_views').select('page_type').in('page_type', ['share_profile_self', 'share_profile_other', 'share_voice']),
     // シェア分析: シェア経由PV
@@ -473,33 +472,27 @@ async function fetchDashboardData() {
       .sort((a, b) => b.dateRaw.localeCompare(a.dateRaw) || b.daily_votes - a.daily_votes)
   }
 
-  // チャネル別マッピング (QR vs NFC)
+  // チャネル別マッピング（votes.channelベース）
   let channels: ChannelData[] | null = null
   if (qrTokensRes.data && !qrTokensRes.error && Array.isArray(qrTokensRes.data)) {
-    // トークンをチャネル別に分類（ハイフン含む→QR、含まない→NFC）
-    const tokensByChannel: Record<string, Set<string>> = { QR: new Set(), NFC: new Set() }
+    const channelCounts: Record<string, number> = {}
     qrTokensRes.data.forEach((row: any) => {
-      const token = row.token || ''
-      const ch = token.includes('-') ? 'QR' : 'NFC'
-      tokensByChannel[ch].add(token)
+      const ch = row.channel || 'unknown'
+      channelCounts[ch] = (channelCounts[ch] || 0) + 1
     })
-
-    // 投票をチャネル別にカウント
-    const votesByChannel: Record<string, Set<string>> = { QR: new Set(), NFC: new Set() }
-    if (votesForChRes.data && !votesForChRes.error && Array.isArray(votesForChRes.data)) {
-      votesForChRes.data.forEach((row: any) => {
-        if (!row.qr_token) return
-        const ch = row.qr_token.includes('-') ? 'QR' : 'NFC'
-        votesByChannel[ch].add(row.id)
-      })
+    const totalVotesForChannel = Object.values(channelCounts).reduce((a, b) => a + b, 0)
+    const channelLabels: Record<string, string> = {
+      nfc: 'NFC/QRカード',
+      dashboard: 'ダッシュボードQR',
+      unknown: '不明（過去データ）',
     }
-
-    channels = ['QR', 'NFC'].map(ch => {
-      const tokens = tokensByChannel[ch].size
-      const votes = votesByChannel[ch].size
-      const pct = tokens > 0 ? Math.round((votes / tokens) * 1000) / 10 : 0
-      return { ch, tokens, votes, pct }
-    })
+    channels = Object.entries(channelCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([ch, votes]) => ({
+        ch: channelLabels[ch] || ch,
+        votes,
+        pct: totalVotesForChannel > 0 ? Math.round((votes / totalVotesForChannel) * 1000) / 10 : 0,
+      }))
   }
 
   // シェア分析マッピング
@@ -994,7 +987,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* [B] Channel */}
-      <Sec>チャネル別（QR vs NFC）</Sec>
+      <Sec>チャネル別</Sec>
       {channels.length === 0 ? (
         <Placeholder message="データなし" />
       ) : (
@@ -1002,7 +995,7 @@ export default function AdminDashboard() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${C.grayDark}` }}>
-                {['チャネル', 'トークン発行数', '投票完了', '転換率'].map(h => (
+                {['チャネル', '投票数', '割合'].map(h => (
                   <th key={h} style={{ textAlign: 'left', padding: '10px 14px', color: C.gray, fontWeight: 500, fontSize: 11 }}>
                     {h}
                   </th>
@@ -1013,7 +1006,6 @@ export default function AdminDashboard() {
               {channels.map(r => (
                 <tr key={r.ch} style={{ borderBottom: `1px solid ${C.grayDark}22` }}>
                   <td style={{ padding: '10px 14px', color: C.cream, fontWeight: 500 }}>{r.ch}</td>
-                  <td style={{ padding: '10px 14px', color: C.cream }}>{r.tokens}</td>
                   <td style={{ padding: '10px 14px', color: C.cream }}>{r.votes}</td>
                   <td style={{
                     padding: '10px 14px',

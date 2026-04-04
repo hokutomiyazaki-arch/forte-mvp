@@ -31,6 +31,7 @@ function VoteConfirmForm() {
         const client_email = searchParams.get('client_email') || null;
         const professional_id = searchParams.get('professional_id') || pendingVote.professional_id || params.id;
         const qr_token = searchParams.get('qr_token') || pendingVote.qr_token || null;
+        const channel_param = searchParams.get('channel') || pendingVote.channel || 'unknown';
 
         // voter_email の決定: LINE/Google からのメール or 仮メール
         const voter_email = client_email || `line_${auth_provider_id}@line.realproof.jp`;
@@ -53,6 +54,7 @@ function VoteConfirmForm() {
           auth_method: auth_method,
           auth_provider_id: auth_provider_id,
           auth_display_name: auth_display_name,
+          channel: channel_param,
         }).select().maybeSingle();
 
         if (voteError) {
