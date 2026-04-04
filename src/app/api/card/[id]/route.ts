@@ -66,12 +66,9 @@ export async function GET(
         .select('credential_level_id, credential_levels(id, name, description, image_url), organizations(id, name)')
         .eq('professional_id', proId).eq('status', 'active')
         .not('credential_level_id', 'is', null),
-      // 11. セッション回数（クライアント構成バー用）
-      supabase.from('votes')
-        .select('session_count')
-        .eq('professional_id', proId)
-        .eq('status', 'confirmed'),
-      // 12. Velocity・リピーター率用データ
+      // 11. (旧session_count — 実レコード数に統一したため未使用、Promise.allの構造維持)
+      Promise.resolve({ data: null, error: null }),
+      // 12. Velocity・リピーター率・CLIENT COMPOSITION用データ
       supabase.from('votes')
         .select('created_at, voter_email')
         .eq('professional_id', proId)
@@ -90,17 +87,7 @@ export async function GET(
       isBookmarked = !!bookmark
     }
 
-    // セッション回数集計（クライアント構成バー用）
-    const sessionCounts = { first: 0, repeat: 0, regular: 0 }
-    if (sessionCountResult.data) {
-      for (const v of sessionCountResult.data) {
-        if (v.session_count && v.session_count in sessionCounts) {
-          sessionCounts[v.session_count as keyof typeof sessionCounts]++
-        }
-      }
-    }
-
-    // Velocity・リピーター率集計
+    // Velocity・リピーター率・CLIENT COMPOSITION集計（全て実レコード数ベース）
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
     let recentProofs = 0
     const voterCounts: Record<string, number> = {}
@@ -109,21 +96,20 @@ export async function GET(
       const email = v.voter_email || ''
       if (email) voterCounts[email] = (voterCounts[email] || 0) + 1
     }
-    const totalProofsForRate = velocityResult.data?.length || 0
+    const counts = Object.values(voterCounts)
+    const firstTimerCount = counts.filter(c => c === 1).length
+    const repeaterCount = counts.filter(c => c === 2).length
+    const regularCount = counts.filter(c => c >= 3).length
+
+    // CLIENT COMPOSITIONバー（実レコード数ベースに統一）
+    const sessionCounts = { first: firstTimerCount, repeat: repeaterCount, regular: regularCount }
+
+    // リピーター率
+    const totalVoters = Object.keys(voterCounts).length
     let repeaterRate: number | null = null
-    let firstTimerCount = 0
-    let repeaterCount = 0
-    let regularCount = 0
-    if (totalProofsForRate >= 10) {
-      const totalVoters = Object.keys(voterCounts).length
-      const repeaters = Object.values(voterCounts).filter(c => c === 2).length
-      const regulars = Object.values(voterCounts).filter(c => c >= 3).length
-      const firstTimers = Object.values(voterCounts).filter(c => c === 1).length
-      const repeaterAndRegular = Object.values(voterCounts).filter(c => c >= 2).length
+    if (totalVoters >= 10) {
+      const repeaterAndRegular = counts.filter(c => c >= 2).length
       repeaterRate = totalVoters > 0 ? Math.round((repeaterAndRegular / totalVoters) * 100) : 0
-      firstTimerCount = firstTimers
-      repeaterCount = repeaters
-      regularCount = regulars
     }
 
     return NextResponse.json({

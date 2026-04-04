@@ -58,7 +58,9 @@ function VoteConfirmForm() {
         if (voteError) {
           console.error('Vote insert error:', voteError);
           if (voteError.code === '23505') {
-            setErrorMessage('既に回答済みです。');
+            // レースコンディション（ほぼ同時の二重送信）対策
+            console.error('Duplicate vote detected (race condition):', voteError)
+            setErrorMessage('送信が重複しました。すでに回答は送信されています。');
           } else {
             setErrorMessage('保存に失敗しました。');
           }

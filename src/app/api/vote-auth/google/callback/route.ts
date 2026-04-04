@@ -302,6 +302,8 @@ export async function GET(request: NextRequest) {
     if (voteError) {
       console.error('[vote-auth/google/callback] Vote INSERT error:', voteError)
       if (voteError.code === '23505') {
+        // レースコンディション（ほぼ同時の二重送信）対策
+        console.error('[vote-auth/google/callback] Duplicate vote (race condition)')
         return NextResponse.redirect(
           new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=already_voted`, origin)
         )

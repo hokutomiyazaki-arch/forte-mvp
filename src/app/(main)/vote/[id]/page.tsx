@@ -306,7 +306,7 @@ function VoteForm() {
   const voteMethodRef = useRef<'session' | 'email'>('email')
 
   // フォーム state
-  const [sessionCount, setSessionCount] = useState<'first' | 'repeat' | 'regular' | ''>('')
+  // session_count（自己申告）は廃止。実レコード数ベースに統一済み。
   const [voterEmail, setVoterEmail] = useState('')
   const [comment, setComment] = useState('')
   const [selectedRewardId, setSelectedRewardId] = useState('')
@@ -534,14 +534,14 @@ function VoteForm() {
             }
           }
 
-          const ninetyDaysAgoInit = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+          const sevenDaysAgoInit = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
           const { data: existing } = await (supabase as any)
             .from('votes')
             .select('id, created_at')
             .eq('professional_id', proId)
             .eq('normalized_email', normalizeEmail(sessionIdentifier))
             .eq('status', 'confirmed')
-            .gt('created_at', ninetyDaysAgoInit)
+            .gt('created_at', sevenDaysAgoInit)
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle()
@@ -550,14 +550,14 @@ function VoteForm() {
           const savedEmail = localStorage.getItem('proof_voter_email')
           if (savedEmail) {
             setVoterEmail(savedEmail)
-            const ninetyDaysAgoSaved = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+            const sevenDaysAgoSaved = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
             const { data: existing } = await (supabase as any)
               .from('votes')
               .select('id, created_at')
               .eq('professional_id', proId)
               .eq('normalized_email', normalizeEmail(savedEmail))
               .eq('status', 'confirmed')
-              .gt('created_at', ninetyDaysAgoSaved)
+              .gt('created_at', sevenDaysAgoSaved)
               .order('created_at', { ascending: false })
               .limit(1)
               .maybeSingle()
@@ -858,7 +858,9 @@ function VoteForm() {
 
       if (voteError) {
         if (voteError.code === '23505') {
-          setError('この電話番号では既に回答済みです')
+          // レースコンディション（ほぼ同時の二重送信）対策
+          console.error('Duplicate vote detected (race condition):', voteError)
+          setError('送信が重複しました。すでに回答は送信されています。')
         } else {
           setError(`送信に失敗しました: ${voteError.message}`)
         }
@@ -983,7 +985,9 @@ function VoteForm() {
 
     if (voteError) {
       if (voteError.code === '23505') {
-        setError('この電話番号では既に回答済みです')
+        // レースコンディション（ほぼ同時の二重送信）対策
+        console.error('Duplicate vote detected (race condition):', voteError)
+        setError('送信が重複しました。すでに回答は送信されています。')
       } else {
         setError(`送信に失敗しました: ${voteError.message}`)
       }
@@ -1166,7 +1170,9 @@ function VoteForm() {
         qr_token: qrToken,
       })
       if (voteError.code === '23505') {
-        setError('このメールアドレスでは既に回答済みです')
+        // レースコンディション（ほぼ同時の二重送信）対策
+        console.error('Duplicate vote detected (race condition):', voteError)
+        setError('送信が重複しました。すでに回答は送信されています。')
       } else {
         setError(`送信に失敗しました (${voteError.code || 'unknown'}): ${voteError.message || '不明なエラー'}`)
       }
@@ -1297,7 +1303,7 @@ function VoteForm() {
       } else if (data.error === 'expired_code') {
         setError('確認コードの有効期限が切れました。再送信してください。')
       } else if (data.error === 'already_voted') {
-        setError('このメールアドレスでは既に回答済みです')
+        setError('送信が重複しました。すでに回答は送信されています。')
       } else {
         setError(data.error || '認証に失敗しました。もう一度お試しください。')
       }
@@ -1365,7 +1371,7 @@ function VoteForm() {
           </svg>
         </div>
         <h1 className="text-xl font-bold text-[#1A1A2E] mb-2">回答済みです</h1>
-        <p className="text-gray-500 mb-6">{pro.name}さんへの回答は既に送信済みです。</p>
+        <p className="text-gray-500 mb-6">{pro.name}さんへの回答は最近送信済みです。7日後に再度回答できます。</p>
         <a href={`/card/${pro.id}`} className="text-[#C4A35A] underline">
           {pro.name}さんのカードを見る
         </a>

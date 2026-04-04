@@ -127,6 +127,8 @@ export async function POST(req: NextRequest) {
     if (voteError) {
       console.error('[verify-code] Vote insert error:', voteError)
       if (voteError.code === '23505') {
+        // レースコンディション（ほぼ同時の二重送信）対策
+        console.error('[verify-code] Duplicate vote (race condition)')
         return NextResponse.json({ error: 'already_voted' }, { status: 409 })
       }
       return NextResponse.json({ error: 'vote_failed' }, { status: 500 })
