@@ -885,9 +885,21 @@ export default function CardPage() {
                           })()
                         : c.comment}
                     </div>
-                    {/* 日付 */}
-                    <div style={{ fontSize: 11, color: T.textMuted, fontFamily: T.fontMono }}>
-                      {new Date(c.created_at).toLocaleDateString('ja-JP')}
+                    {/* リピーター・常連マーク + 日付 */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                      <div style={{ fontSize: 11, color: T.textMuted, fontFamily: T.fontMono }}>
+                        {new Date(c.created_at).toLocaleDateString('ja-JP')}
+                      </div>
+                      {(c as any).voter_vote_count >= 3 && (
+                        <div style={{ fontSize: 11, fontWeight: 600, color: '#C4A35A' }}>
+                          ⭐ 常連
+                        </div>
+                      )}
+                      {(c as any).voter_vote_count === 2 && (
+                        <div style={{ fontSize: 11, fontWeight: 600, color: '#999' }}>
+                          🔄 リピーター
+                        </div>
+                      )}
                     </div>
                   </div>
                 )

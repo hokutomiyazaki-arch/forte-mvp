@@ -47,7 +47,7 @@ export async function GET(
       // 5. 人柄項目マスタ
       supabase.from('personality_items').select('id, label'),
       // 6. コメント付き投票
-      supabase.from('votes').select('id, comment, created_at')
+      supabase.from('votes').select('id, comment, created_at, voter_email')
         .eq('professional_id', proId).eq('status', 'confirmed')
         .not('comment', 'is', null).neq('comment', '')
         .order('created_at', { ascending: false }),
@@ -118,7 +118,12 @@ export async function GET(
       proofItems: proofItemsResult.data || [],
       personalitySummary: personalitySummaryResult.data || [],
       personalityItems: personalityItemsResult.data || [],
-      comments: commentsResult.data || [],
+      comments: (commentsResult.data || []).map((c: { id: string; comment: string; created_at: string; voter_email: string }) => ({
+        id: c.id,
+        comment: c.comment,
+        created_at: c.created_at,
+        voter_vote_count: voterCounts[c.voter_email] || 1,
+      })),
       totalVotes: totalVotesResult.count || 0,
       bookmarkCount: bookmarkCountResult.count || 0,
       isBookmarked,
