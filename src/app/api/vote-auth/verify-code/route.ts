@@ -74,6 +74,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'already_voted' }, { status: 409 })
     }
 
+    // ── 1分以内の重複チェック（ダブルサブミット防止） ──
+    const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString()
+    const { data: recentDuplicate } = await supabase
+      .from('votes')
+      .select('id')
+      .eq('normalized_email', normalizeEmail(email))
+      .eq('professional_id', professional_id)
+      .eq('status', 'confirmed')
+      .gt('created_at', oneMinuteAgo)
+      .maybeSingle()
+
+    if (recentDuplicate) {
+      // ダブルサブミット検出 — エラーではなく成功扱い
+      console.log('[verify-code] Double submit detected:', normalizeEmail(email), professional_id)
+      return NextResponse.json({
+        success: true,
+        vote_id: recentDuplicate.id,
+        client_reward_id: '',
+      })
+    }
+
     // --- ハッシュチェーン処理 START ---
     const { data: latestVote } = await supabase
       .from('votes')

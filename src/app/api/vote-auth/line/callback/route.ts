@@ -182,6 +182,25 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // ── 1分以内の重複チェック（ダブルサブミット防止） ──
+    const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString()
+    const { data: recentDuplicate } = await supabaseAdmin
+      .from('votes')
+      .select('id')
+      .eq('normalized_email', normalizeEmail(email))
+      .eq('professional_id', professional_id)
+      .eq('status', 'confirmed')
+      .gt('created_at', oneMinuteAgo)
+      .maybeSingle()
+
+    if (recentDuplicate) {
+      // ダブルサブミット検出 — エラーではなく成功扱い（完了画面にリダイレクト）
+      console.log('[vote-auth/line/callback] Double submit detected:', normalizeEmail(email), professional_id)
+      return NextResponse.redirect(
+        new URL(`/vote-confirmed?pro=${professional_id}&vote_id=${recentDuplicate.id}&auth_method=line`, origin)
+      )
+    }
+
     // Step 5: 自己投票チェック（強化版）
     const { data: proData } = await supabaseAdmin
       .from('professionals')

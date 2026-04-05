@@ -294,6 +294,9 @@ function VoteForm() {
   const [isSelfVote, setIsSelfVote] = useState(false)
   const [showPreviewBanner, setShowPreviewBanner] = useState(true)
 
+  // ダブルサブミット防止
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
   // メール確認コード認証（新フロー）
   const [emailCodeStep, setEmailCodeStep] = useState<'input' | 'verify'>('input')
   const [emailCode, setEmailCode] = useState('')
@@ -781,11 +784,13 @@ function VoteForm() {
 
   // ── 電話番号認証: コード確認 + 投票送信 ──
   async function handlePhoneVerify() {
+    if (isSubmitting) return
     if (isPreview) return // プレビューモードでは投票しない
     if (!phoneCode.trim() || phoneCode.length < 6) {
       setError('6桁の認証コードを入力してください')
       return
     }
+    setIsSubmitting(true)
     setError('')
     setPhoneVerifying(true)
 
@@ -838,6 +843,25 @@ function VoteForm() {
         const waitMin = Math.ceil((nextAvailable.getTime() - Date.now()) / 60000)
         setError('ありがとうございます！次のアンケートは30分後から回答できます。')
         setPhoneVerifying(false)
+        setIsSubmitting(false)
+        return
+      }
+
+      // ── 1分以内の重複チェック（ダブルサブミット防止） ──
+      const oneMinuteAgoPhone = new Date(Date.now() - 60 * 1000).toISOString()
+      const { data: recentDuplicatePhone } = await (supabase as any)
+        .from('votes')
+        .select('id')
+        .eq('normalized_email', normalizeEmail(formattedPhone))
+        .eq('professional_id', proId)
+        .eq('status', 'confirmed')
+        .gt('created_at', oneMinuteAgoPhone)
+        .maybeSingle()
+
+      if (recentDuplicatePhone) {
+        // ダブルサブミット検出 — 成功扱い（完了画面にリダイレクト）
+        console.log('[handlePhoneVerify] Double submit detected:', normalizeEmail(formattedPhone), proId)
+        window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${recentDuplicatePhone.id}&has_account=true`
         return
       }
 
@@ -870,6 +894,7 @@ function VoteForm() {
           setError(`送信に失敗しました: ${voteError.message}`)
         }
         setPhoneVerifying(false)
+        setIsSubmitting(false)
         return
       }
 
@@ -909,23 +934,28 @@ function VoteForm() {
       } else {
         setError('認証に失敗しました。もう一度お試しください。')
       }
+      setIsSubmitting(false)
     }
     setPhoneVerifying(false)
   }
 
   // ── フォールバック認証: 名前+生年月日+電話番号で認証なし投票 ──
   async function handleFallbackSubmit() {
+    if (isSubmitting) return
     if (isPreview) return // プレビューモードでは投票しない
+    setIsSubmitting(true)
     setError('')
 
     // バリデーション
     if (fallbackName.trim().length < 2) {
       setError('お名前を入力してください')
+      setIsSubmitting(false)
       return
     }
     const rawPhone = fallbackPhone.replace(/[-\s()]/g, '')
     if (rawPhone.length < 10 || !rawPhone.startsWith('0')) {
       setError('携帯番号を正しく入力してください')
+      setIsSubmitting(false)
       return
     }
 
@@ -949,6 +979,7 @@ function VoteForm() {
     if (recentRepeatVoteFb) {
       const nextVoteDateFb = new Date(new Date(recentRepeatVoteFb.created_at).getTime() + 7 * 24 * 60 * 60 * 1000)
       setError(`このプロにはすでにアンケートを回答済みです。次回は${nextVoteDateFb.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}以降に再度回答できます。`)
+      setIsSubmitting(false)
       return
     }
 
@@ -967,6 +998,25 @@ function VoteForm() {
       const nextAvailable = new Date(new Date(recentCooldownVote.created_at).getTime() + 30 * 60 * 1000)
       const waitMin = Math.ceil((nextAvailable.getTime() - Date.now()) / 60000)
       setError('ありがとうございます！次のアンケートは30分後から回答できます。')
+      setIsSubmitting(false)
+      return
+    }
+
+    // ── 1分以内の重複チェック（ダブルサブミット防止） ──
+    const oneMinuteAgoFb = new Date(Date.now() - 60 * 1000).toISOString()
+    const { data: recentDuplicateFb } = await (supabase as any)
+      .from('votes')
+      .select('id')
+      .eq('normalized_email', normalizeEmail(formattedPhone))
+      .eq('professional_id', proId)
+      .eq('status', 'confirmed')
+      .gt('created_at', oneMinuteAgoFb)
+      .maybeSingle()
+
+    if (recentDuplicateFb) {
+      // ダブルサブミット検出 — 成功扱い（完了画面にリダイレクト）
+      console.log('[handleFallbackSubmit] Double submit detected:', normalizeEmail(formattedPhone), proId)
+      window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${recentDuplicateFb.id}&has_account=false`
       return
     }
 
@@ -997,6 +1047,7 @@ function VoteForm() {
       } else {
         setError(`送信に失敗しました: ${voteError.message}`)
       }
+      setIsSubmitting(false)
       return
     }
 
@@ -1018,7 +1069,9 @@ function VoteForm() {
   // ── 投票送信（メール認証用） ──
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (isSubmitting) return
     if (isPreview) return // プレビューモードでは投票しない
+    setIsSubmitting(true)
     setError('')
 
     // メール: セッション投票ならセッションから、それ以外はフォーム入力値
@@ -1031,10 +1084,12 @@ function VoteForm() {
     if (!isSessionVoteAttempt) {
       if (!email || !email.includes('@')) {
         setError('メールアドレスを入力してください')
+        setIsSubmitting(false)
         return
       }
       if (/https?:\/\/|www\./i.test(email)) {
         setError('正しいメールアドレスを入力してください')
+        setIsSubmitting(false)
         return
       }
     }
@@ -1044,6 +1099,7 @@ function VoteForm() {
       // user_id 照合
       if (clerkUser.id === pro.user_id) {
         setError('ご自身への回答はできません')
+        setIsSubmitting(false)
         return
       }
       // Clerkメールアドレス照合
@@ -1051,6 +1107,7 @@ function VoteForm() {
       if (clerkEmail && pro.contact_email &&
           clerkEmail.toLowerCase() === pro.contact_email.toLowerCase()) {
         setError('ご自身への回答はできません')
+        setIsSubmitting(false)
         return
       }
     }
@@ -1064,16 +1121,19 @@ function VoteForm() {
       })
       if (!checkRes.ok) {
         setError('確認中にエラーが発生しました。もう一度お試しください。')
+        setIsSubmitting(false)
         return
       }
       const checkData = await checkRes.json()
       if (checkData.isSelf) {
         setError('ご自身への回答はできません')
+        setIsSubmitting(false)
         return
       }
     } catch (err) {
       console.error('[vote] check-email error:', err)
       setError('確認中にエラーが発生しました。もう一度お試しください。')
+      setIsSubmitting(false)
       return
     }
 
@@ -1092,6 +1152,7 @@ function VoteForm() {
       const nextAvailable = new Date(new Date(recentVote.created_at).getTime() + 30 * 60 * 1000)
       const waitMin = Math.ceil((nextAvailable.getTime() - Date.now()) / 60000)
       setError('ありがとうございます！次のアンケートは30分後から回答できます。')
+      setIsSubmitting(false)
       return
     }
 
@@ -1111,6 +1172,25 @@ function VoteForm() {
     if (recentRepeatVoteSubmit) {
       const nextVoteDateSubmit = new Date(new Date(recentRepeatVoteSubmit.created_at).getTime() + 7 * 24 * 60 * 60 * 1000)
       setError(`このプロにはすでにアンケートを回答済みです。次回は${nextVoteDateSubmit.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}以降に再度回答できます。`)
+      setIsSubmitting(false)
+      return
+    }
+
+    // ── 1分以内の重複チェック（ダブルサブミット防止） ──
+    const oneMinuteAgoSubmit = new Date(Date.now() - 60 * 1000).toISOString()
+    const { data: recentDuplicateSubmit } = await (supabase as any)
+      .from('votes')
+      .select('id')
+      .eq('normalized_email', normalizeEmail(email))
+      .eq('professional_id', proId)
+      .eq('status', 'confirmed')
+      .gt('created_at', oneMinuteAgoSubmit)
+      .maybeSingle()
+
+    if (recentDuplicateSubmit) {
+      // ダブルサブミット検出 — 成功扱い（完了画面にリダイレクト）
+      console.log('[handleSubmit] Double submit detected:', normalizeEmail(email), proId)
+      window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${recentDuplicateSubmit.id}&has_account=true`
       return
     }
 
@@ -1183,6 +1263,7 @@ function VoteForm() {
       } else {
         setError(`送信に失敗しました (${voteError.code || 'unknown'}): ${voteError.message || '不明なエラー'}`)
       }
+      setIsSubmitting(false)
       return
     }
 
@@ -1222,6 +1303,7 @@ function VoteForm() {
     // handleSubmitはセッション投票専用。ここに到達することは想定外。
     console.error('[handleSubmit] Unexpected: non-session vote reached end of handleSubmit')
     setError('予期しないエラーが発生しました。もう一度お試しください。')
+    setIsSubmitting(false)
   }
 
   // ── メール確認コード送信ハンドラー（新フロー） ──
@@ -1261,8 +1343,10 @@ function VoteForm() {
 
   // ── メール確認コード検証ハンドラー（新フロー） ──
   async function handleEmailVerifyCode() {
+    if (isSubmitting) return
     const email = voterEmail.trim().toLowerCase()
     if (!email || emailCode.length < 6) return
+    setIsSubmitting(true)
     setError('')
     setEmailCodeVerifying(true)
 
@@ -1318,6 +1402,7 @@ function VoteForm() {
       setError('エラーが発生しました。もう一度お試しください。')
     }
     setEmailCodeVerifying(false)
+    setIsSubmitting(false)
   }
 
   // ── スプラッシュ（データはバックグラウンドで読み込み中） ──
@@ -1858,9 +1943,13 @@ function VoteForm() {
                   voteMethodRef.current = 'session'
                   handleSubmit({ preventDefault: () => {} } as React.FormEvent)
                 }}
-                style={S.primaryBtn}
+                disabled={isSubmitting}
+                style={{
+                  ...S.primaryBtn,
+                  opacity: isSubmitting ? 0.5 : 1,
+                }}
               >
-                このアカウントで回答する
+                {isSubmitting ? '送信中...' : 'このアカウントで回答する'}
               </button>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -1974,13 +2063,13 @@ function VoteForm() {
                     />
                     <button
                       onClick={handlePhoneVerify}
-                      disabled={phoneVerifying || phoneCode.length < 6}
+                      disabled={isSubmitting || phoneVerifying || phoneCode.length < 6}
                       style={{
                         ...S.primaryBtn,
-                        opacity: phoneVerifying || phoneCode.length < 6 ? 0.5 : 1,
+                        opacity: isSubmitting || phoneVerifying || phoneCode.length < 6 ? 0.5 : 1,
                       }}
                     >
-                      {phoneVerifying ? '確認中...' : '認証して送信する'}
+                      {isSubmitting || phoneVerifying ? '送信中...' : '認証して送信する'}
                     </button>
                     <button
                       onClick={() => { setPhoneStep('input'); setPhoneCode(''); setError(''); }}
@@ -2101,13 +2190,13 @@ function VoteForm() {
                     />
                     <button
                       onClick={handleEmailVerifyCode}
-                      disabled={emailCodeVerifying || emailCode.length < 6}
+                      disabled={isSubmitting || emailCodeVerifying || emailCode.length < 6}
                       style={{
                         ...S.primaryBtn,
-                        opacity: emailCodeVerifying || emailCode.length < 6 ? 0.5 : 1,
+                        opacity: isSubmitting || emailCodeVerifying || emailCode.length < 6 ? 0.5 : 1,
                       }}
                     >
-                      {emailCodeVerifying ? '確認中...' : '認証して送信する'}
+                      {isSubmitting || emailCodeVerifying ? '送信中...' : '認証して送信する'}
                     </button>
                     <div style={{ display: "flex", justifyContent: "center", gap: 16, marginTop: 8 }}>
                       <button
@@ -2217,18 +2306,20 @@ function VoteForm() {
                     <button
                       onClick={handleFallbackSubmit}
                       disabled={
+                        isSubmitting ||
                         fallbackName.trim().length < 2 ||
                         fallbackPhone.replace(/\D/g, '').length < 10
                       }
                       style={{
                         ...S.primaryBtn,
                         opacity: (
+                          isSubmitting ||
                           fallbackName.trim().length < 2 ||
                           fallbackPhone.replace(/\D/g, '').length < 10
                         ) ? 0.4 : 1,
                       }}
                     >
-                      回答を送信する →
+                      {isSubmitting ? '送信中...' : '回答を送信する →'}
                     </button>
                   </div>
                 )}
