@@ -3234,6 +3234,10 @@ export default function DashboardPage() {
                   <p style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6, whiteSpace: 'pre-line' }}>{`「自分の技術を上げるために\nお客さんの声を集めてるんです。\nかんたんなアンケートなんですけど、\nご協力いただけますか？」`}</p>
                 </div>
                 <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
+                  <p style={{ fontSize: 12, fontWeight: 600, color: '#C4A35A', marginBottom: 4 }}>貢献を伝える</p>
+                  <p style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6, whiteSpace: 'pre-line' }}>{`「〇〇さんが感じた変化が、\n次に困っている方の力になります。\nかんたんなアンケートで\n教えていただけますか？」`}</p>
+                </div>
+                <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
                   <p style={{ fontSize: 12, fontWeight: 600, color: '#C4A35A', marginBottom: 4 }}>断られたら</p>
                   <p style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6 }}>大丈夫。別のお客さんに、別のタイミングで。無理は禁物。</p>
                 </div>

@@ -68,11 +68,12 @@ export async function GET(
         .not('credential_level_id', 'is', null),
       // 11. (旧session_count — 実レコード数に統一したため未使用、Promise.allの構造維持)
       Promise.resolve({ data: null, error: null }),
-      // 12. Velocity・リピーター率・CLIENT COMPOSITION用データ
+      // 12. Velocity・リピーター率・CLIENT COMPOSITION用データ（session_countフォールバック対応）
       supabase.from('votes')
-        .select('created_at, normalized_email')
+        .select('id, created_at, normalized_email, session_count')
         .eq('professional_id', proId)
-        .eq('status', 'confirmed'),
+        .eq('status', 'confirmed')
+        .order('created_at', { ascending: true }),
     ])
 
     // ブックマーク状態（ログイン中のみ）
@@ -87,28 +88,62 @@ export async function GET(
       isBookmarked = !!bookmark
     }
 
-    // Velocity・リピーター率・CLIENT COMPOSITION集計（全て実レコード数ベース）
+    // Velocity・リピーター率・CLIENT COMPOSITION集計（session_countフォールバック対応）
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
     let recentProofs = 0
-    const voterCounts: Record<string, number> = {}
+
+    // voterInfoMap: normalized_email → { totalCount, firstSessionCount, firstVoteId }
+    interface VoterInfo {
+      totalCount: number
+      firstSessionCount: string | null
+      firstVoteId: string
+    }
+    const voterInfoMap: Record<string, VoterInfo> = {}
+
     for (const v of velocityResult.data || []) {
       if (new Date(v.created_at) >= thirtyDaysAgo) recentProofs++
       const email = v.normalized_email || ''
-      if (email) voterCounts[email] = (voterCounts[email] || 0) + 1
+      if (!email) continue
+      if (!voterInfoMap[email]) {
+        voterInfoMap[email] = {
+          totalCount: 1,
+          firstSessionCount: v.session_count || null,
+          firstVoteId: v.id,
+        }
+      } else {
+        voterInfoMap[email].totalCount += 1
+      }
     }
-    const counts = Object.values(voterCounts)
-    const firstTimerCount = counts.filter(c => c === 1).length
-    const repeaterCount = counts.filter(c => c === 2).length
-    const regularCount = counts.filter(c => c >= 3).length
 
-    // CLIENT COMPOSITIONバー（実レコード数ベースに統一）
+    // 最終判定関数: Math.max(旧ステータス, 新ステータス)
+    const getVoterLevel = (info: VoterInfo): number => {
+      let oldLevel = 1
+      if (info.firstSessionCount === 'repeat') oldLevel = 2
+      if (info.firstSessionCount === 'regular') oldLevel = 3
+      const newRecords = info.totalCount - 1
+      let newLevel = 1
+      if (newRecords >= 2) newLevel = 3
+      else if (newRecords >= 1) newLevel = 2
+      return Math.max(oldLevel, newLevel)
+    }
+
+    let firstTimerCount = 0
+    let repeaterCount = 0
+    let regularCount = 0
+    for (const info of Object.values(voterInfoMap)) {
+      const level = getVoterLevel(info)
+      if (level >= 3) regularCount++
+      else if (level === 2) repeaterCount++
+      else firstTimerCount++
+    }
+
     const sessionCounts = { first: firstTimerCount, repeat: repeaterCount, regular: regularCount }
 
     // リピーター率
-    const totalVoters = Object.keys(voterCounts).length
+    const totalVoters = Object.keys(voterInfoMap).length
     let repeaterRate: number | null = null
     if (totalVoters >= 10) {
-      const repeaterAndRegular = counts.filter(c => c >= 2).length
+      const repeaterAndRegular = Object.values(voterInfoMap).filter(info => getVoterLevel(info) >= 2).length
       repeaterRate = totalVoters > 0 ? Math.round((repeaterAndRegular / totalVoters) * 100) : 0
     }
 
@@ -118,12 +153,20 @@ export async function GET(
       proofItems: proofItemsResult.data || [],
       personalitySummary: personalitySummaryResult.data || [],
       personalityItems: personalityItemsResult.data || [],
-      comments: (commentsResult.data || []).map((c: { id: string; comment: string; created_at: string; normalized_email: string }) => ({
-        id: c.id,
-        comment: c.comment,
-        created_at: c.created_at,
-        voter_vote_count: voterCounts[c.normalized_email] || 1,
-      })),
+      comments: (commentsResult.data || []).map((c: { id: string; comment: string; created_at: string; normalized_email: string }) => {
+        const info = voterInfoMap[c.normalized_email]
+        const isFirstVote = info && info.firstVoteId === c.id
+        let voterVoteCount = 1
+        if (info && !isFirstVote) {
+          voterVoteCount = getVoterLevel(info)
+        }
+        return {
+          id: c.id,
+          comment: c.comment,
+          created_at: c.created_at,
+          voter_vote_count: voterVoteCount,
+        }
+      }),
       totalVotes: totalVotesResult.count || 0,
       bookmarkCount: bookmarkCountResult.count || 0,
       isBookmarked,

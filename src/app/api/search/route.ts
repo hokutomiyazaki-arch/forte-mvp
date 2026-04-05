@@ -76,12 +76,13 @@ export async function GET(request: Request) {
       .eq('vote_type', 'proof')
       .limit(10000)
 
-    // リピーター率用: 全投票のnormalized_emailを取得（card APIと同じ）
+    // リピーター率用: 全投票のnormalized_email+session_countを取得（session_countフォールバック対応）
     const { data: allVotesForRepeater } = await supabase
       .from('votes')
-      .select('professional_id, voter_email')
+      .select('id, professional_id, normalized_email, session_count, created_at')
       .in('professional_id', proIds)
       .eq('status', 'confirmed')
+      .order('created_at', { ascending: true })
       .limit(10000)
 
     // proof_items のtab情報を取得
@@ -173,6 +174,23 @@ export async function GET(request: Request) {
       }
     }
 
+    // VoterInfo型（session_countフォールバック対応）
+    interface VoterInfo {
+      totalCount: number
+      firstSessionCount: string | null
+      firstVoteId: string
+    }
+    const getVoterLevel = (info: VoterInfo): number => {
+      let oldLevel = 1
+      if (info.firstSessionCount === 'repeat') oldLevel = 2
+      if (info.firstSessionCount === 'regular') oldLevel = 3
+      const newRecords = info.totalCount - 1
+      let newLevel = 1
+      if (newRecords >= 2) newLevel = 3
+      else if (newRecords >= 1) newLevel = 2
+      return Math.max(oldLevel, newLevel)
+    }
+
     // プロごとの集計
     const proStats = new Map<string, {
       totalVotes: number
@@ -180,7 +198,7 @@ export async function GET(request: Request) {
       recentProofs: number
       categoryCount: Record<string, number>
       recentCategoryCount: Record<string, number>
-      voterCounts: Record<string, number>
+      voterInfoMap: Record<string, VoterInfo>
       latestVoteComment: string
       proofItemCounts: Record<string, number>
     }>()
@@ -193,7 +211,7 @@ export async function GET(request: Request) {
           recentProofs: 0,
           categoryCount: {},
           recentCategoryCount: {},
-          voterCounts: {},
+          voterInfoMap: {},
           latestVoteComment: '',
           proofItemCounts: {},
         })
@@ -201,14 +219,21 @@ export async function GET(request: Request) {
       return proStats.get(pid)!
     }
 
-    // 1) リピーター率・CLIENT COMPOSITION用: 全投票からvoterCounts集計（実レコード数ベース）
+    // 1) リピーター率・CLIENT COMPOSITION用: 全投票からvoterInfoMap集計（session_countフォールバック対応）
     for (const v of allVotesForRepeater || []) {
       const stat = ensureStat(v.professional_id)
       stat.totalVotes++
 
-      const email = v.voter_email || ''
-      if (email) {
-        stat.voterCounts[email] = (stat.voterCounts[email] || 0) + 1
+      const email = v.normalized_email || ''
+      if (!email) continue
+      if (!stat.voterInfoMap[email]) {
+        stat.voterInfoMap[email] = {
+          totalCount: 1,
+          firstSessionCount: v.session_count || null,
+          firstVoteId: v.id,
+        }
+      } else {
+        stat.voterInfoMap[email].totalCount += 1
       }
     }
 
@@ -246,7 +271,7 @@ export async function GET(request: Request) {
         recentProofs: 0,
         categoryCount: {},
         recentCategoryCount: {},
-        voterCounts: {},
+        voterInfoMap: {},
         latestVoteComment: '',
         proofItemCounts: {},
       }
@@ -254,13 +279,19 @@ export async function GET(request: Request) {
       // プルーフ0は除外
       if (stat.totalProofs === 0) return null
 
-      // リピーター率・CLIENT COMPOSITION: 全て実レコード数ベース
-      const uniqueVoters = Object.keys(stat.voterCounts).length
-      const counts = Object.values(stat.voterCounts)
+      // リピーター率・CLIENT COMPOSITION: session_countフォールバック対応
+      const uniqueVoters = Object.keys(stat.voterInfoMap).length
+      const voterInfos = Object.values(stat.voterInfoMap)
 
-      const firstCount = counts.filter(c => c === 1).length
-      const repeaterCount = counts.filter(c => c === 2).length
-      const regularCount = counts.filter(c => c >= 3).length
+      let firstCount = 0
+      let repeaterCount = 0
+      let regularCount = 0
+      for (const info of voterInfos) {
+        const level = getVoterLevel(info)
+        if (level >= 3) regularCount++
+        else if (level === 2) repeaterCount++
+        else firstCount++
+      }
       const repeaterRate = uniqueVoters >= 3
         ? Math.round(wilsonScore(regularCount, uniqueVoters) * 100)
         : null
