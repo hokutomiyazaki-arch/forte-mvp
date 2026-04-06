@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { PREFECTURES } from '@/lib/prefectures'
 import { COLORS, FONTS } from '@/lib/design-tokens'
+import { SPECIALIST_THRESHOLD } from '@/lib/constants'
 
 const T = { ...COLORS, font: FONTS.main }
 
@@ -317,7 +318,7 @@ export default function SearchPage() {
                         marginTop: 10, padding: '6px 10px', background: 'rgba(196,163,90,0.06)',
                         borderRadius: 8, display: 'flex', alignItems: 'center', gap: 6,
                       }}>
-                        <span style={{ fontSize: 12 }}>{'\u2B50'}</span>
+                        <span style={{ fontSize: 12 }}>{proof.votes >= SPECIALIST_THRESHOLD ? '🏆' : '\u2B50'}</span>
                         <span style={{ fontSize: 12, fontWeight: 700, color: T.dark }}>
                           {proof.strengthLabel}
                         </span>
