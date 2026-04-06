@@ -62,18 +62,23 @@ function getBarColor(rank: number): string {
   return '#C4A35A55'
 }
 
-// SVGリングチャート
-function RingChart({ label, count, max, size = 76 }: { label: string; count: number; max: number; size?: number }) {
-  const strokeWidth = 4
+// SVGリングチャート（人柄プルーフ用 — 30票以上💎、50票以上★ティア）
+function RingChart({ label, count, max, size: sizeProp }: { label: string; count: number; max: number; size?: number }) {
+  const isMaster = count >= 50  // MASTER_THRESHOLD
+  const isDiamond = count >= 30 // SPECIALIST_THRESHOLD
+  const hasTier = isMaster || isDiamond
+  const size = sizeProp || (hasTier ? 68 : 76)
+  const strokeWidth = hasTier ? 2.5 : 4
   const radius = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
   const pct = max > 0 ? count / max : 0
   const offset = circumference * (1 - pct)
+  const bgFill = isMaster ? 'rgba(196,163,90,0.08)' : isDiamond ? 'rgba(196,163,90,0.06)' : 'none'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#F0EDE6" strokeWidth={strokeWidth} />
+        <circle cx={size / 2} cy={size / 2} r={radius} fill={bgFill} stroke="#F0EDE6" strokeWidth={strokeWidth} />
         <circle
           cx={size / 2} cy={size / 2} r={radius} fill="none"
           stroke={T.gold} strokeWidth={strokeWidth}
@@ -82,10 +87,31 @@ function RingChart({ label, count, max, size = 76 }: { label: string; count: num
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
           style={{ transition: 'stroke-dashoffset 1.2s ease' }}
         />
-        <text x={size / 2} y={size / 2} textAnchor="middle" dominantBaseline="central"
-          fill={T.gold} fontSize="18" fontWeight="bold" fontFamily={T.fontMono}>
-          {count}
-        </text>
+        {hasTier ? (
+          <>
+            {/* ティアアイコン */}
+            {isMaster ? (
+              <g transform={`translate(${size / 2 - 8}, ${size / 2 - 16})`}>
+                <path d="M8 1L10.2 5.5L15 6.2L11.5 9.6L12.4 14.4L8 12.1L3.6 14.4L4.5 9.6L1 6.2L5.8 5.5L8 1Z" fill="#C4A35A"/>
+              </g>
+            ) : (
+              <text x={size / 2} y={size / 2 - 8} textAnchor="middle" dominantBaseline="central"
+                fontSize="13">
+                💎
+              </text>
+            )}
+            {/* 数字（下） */}
+            <text x={size / 2} y={size / 2 + 10} textAnchor="middle" dominantBaseline="central"
+              fill={T.gold} fontSize="16" fontWeight="bold" fontFamily={T.fontMono}>
+              {count}
+            </text>
+          </>
+        ) : (
+          <text x={size / 2} y={size / 2} textAnchor="middle" dominantBaseline="central"
+            fill={T.gold} fontSize="18" fontWeight="bold" fontFamily={T.fontMono}>
+            {count}
+          </text>
+        )}
       </svg>
       <div style={{ fontSize: 11, fontWeight: 'bold', color: T.text, textAlign: 'center', marginTop: 6, lineHeight: 1.3 }}>
         {label}
