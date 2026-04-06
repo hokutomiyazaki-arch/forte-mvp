@@ -3227,7 +3227,7 @@ export default function DashboardPage() {
                 </div>
                 <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
                   <p style={{ fontSize: 12, fontWeight: 600, color: '#C4A35A', marginBottom: 4 }}>一番シンプル <span style={{ fontSize: 11, background: 'rgba(196,163,90,0.1)', color: '#C4A35A', padding: '1px 6px', borderRadius: 4 }}>★ おすすめ</span></p>
-                  <p style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6, whiteSpace: 'pre-line' }}>{`「かんたんなアンケートに\nご協力いただけますか？\nスマホをかざすだけで、\n30秒で終わります」`}</p>
+                  <p style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6, whiteSpace: 'pre-line' }}>{`「かんたんなアンケートに\nご協力いただけますか？\nスマホをかざすだけで、\n3分で終わります」`}</p>
                 </div>
                 <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
                   <p style={{ fontSize: 12, fontWeight: 600, color: '#C4A35A', marginBottom: 4 }}>理由を添える</p>

@@ -1603,7 +1603,7 @@ function VoteForm() {
               かんたんアンケート
             </div>
 
-            {/* 約30秒バッジ */}
+            {/* 約3分バッジ */}
             <div style={{
               display: "inline-flex", alignItems: "center", gap: 6,
               background: "rgba(196,163,90,0.12)",
@@ -1612,7 +1612,7 @@ function VoteForm() {
             }}>
               <span style={{ fontSize: 14 }}>⏱️</span>
               <span style={{ color: "#C4A35A", fontWeight: 700, fontSize: 13 }}>
-                約30秒で終わります
+                約3分で終わります
               </span>
             </div>
 

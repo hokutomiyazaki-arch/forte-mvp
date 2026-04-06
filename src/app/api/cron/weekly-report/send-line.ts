@@ -249,7 +249,7 @@ function buildStartingFlex(data: WeeklyProData, content: WeeklyReportContent | n
     // カード準備完了
     { type: 'text', text: 'YOUR CARD IS READY', size: 'xxs', color: GOLD, weight: 'bold', margin: 'lg' },
     { type: 'text', text: 'セットアップは完了しています。', size: 'sm', color: CREAM, wrap: true, margin: 'sm' },
-    { type: 'text', text: 'やることは1つ——カードをクライアントにタップしてもらうだけ。30秒で強みが記録されます。', size: 'xs', color: GRAY, wrap: true, margin: 'sm' },
+    { type: 'text', text: 'やることは1つ——カードをクライアントにタップしてもらうだけ。3分で強みが記録されます。', size: 'xs', color: GRAY, wrap: true, margin: 'sm' },
     separator(),
     // メリット
     { type: 'text', text: 'WHY COLLECT PROOFS?', size: 'xxs', color: GOLD, weight: 'bold', margin: 'lg' },
@@ -260,7 +260,7 @@ function buildStartingFlex(data: WeeklyProData, content: WeeklyReportContent | n
     // はじめの一歩
     { type: 'text', text: 'FIRST STEP', size: 'xxs', color: GOLD, weight: 'bold', margin: 'lg' },
     { type: 'text', text: '次のセッション後、お客様にこう伝えてください：', size: 'xs', color: CREAM, wrap: true, margin: 'sm' },
-    { type: 'text', text: '「感想を記録してもらえませんか？30秒で終わります」', size: 'sm', color: GOLD, wrap: true, margin: 'sm', weight: 'bold' },
+    { type: 'text', text: '「感想を記録してもらえませんか？3分で終わります」', size: 'sm', color: GOLD, wrap: true, margin: 'sm', weight: 'bold' },
   ]
 
   // HIGHLIGHT
@@ -323,7 +323,7 @@ function buildStalledFlex(data: WeeklyProData, content: WeeklyReportContent | nu
     { type: 'text', text: 'RESTART TIP', size: 'xxs', color: GOLD, weight: 'bold', margin: 'lg' },
     { type: 'text', text: '常連のお客様から始めるのが一番自然です。', size: 'xs', color: CREAM, wrap: true, margin: 'sm' },
     { type: 'text', text: '「前回のセッションどうでしたか？感想を記録してもらえると嬉しいです」', size: 'xs', color: GOLD, wrap: true, margin: 'sm', weight: 'bold' },
-    { type: 'text', text: 'カードをタップしてもらうだけ。30秒です。', size: 'xs', color: GRAY, wrap: true, margin: 'sm' },
+    { type: 'text', text: 'カードをタップしてもらうだけ。3分です。', size: 'xs', color: GRAY, wrap: true, margin: 'sm' },
   ]
 
   // PROVEN進捗

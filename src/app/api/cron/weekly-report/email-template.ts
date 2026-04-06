@@ -257,7 +257,7 @@ function generateStartingEmailHTML(data: WeeklyProData, content: WeeklyReportCon
       ダッシュボードを見る必要はありません。<br>
       やることは1つだけ——<br>
       <span style="color:${GOLD};font-weight:600;">セッション後にカードをクライアントにタップしてもらうだけ。</span><br>
-      30秒で、あなたの強みが記録されます。
+      3分で、あなたの強みが記録されます。
     </div>
   </td></tr>`
 
@@ -290,7 +290,7 @@ function generateStartingEmailHTML(data: WeeklyProData, content: WeeklyReportCon
     ${sectionHeader('FIRST STEP')}
     <div style="color:${CREAM};font-size:13px;line-height:1.8;background:${BAR_BG};border-radius:8px;padding:16px;">
       次のセッション後、お客様にこう伝えてください：<br>
-      <span style="color:${GOLD};font-weight:600;">「感想を記録してもらえませんか？30秒で終わります」</span><br>
+      <span style="color:${GOLD};font-weight:600;">「感想を記録してもらえませんか？3分で終わります」</span><br>
       そしてカードをスマホにかざしてもらうだけ。それだけです。
     </div>
   </td></tr>`
@@ -346,7 +346,7 @@ function generateStalledEmailHTML(data: WeeklyProData, content: WeeklyReportCont
       常連のお客様から始めるのが一番自然です。<br>
       <span style="color:${GOLD};font-weight:600;">「前回のセッションどうでしたか？感想を記録してもらえると嬉しいです」</span><br>
       信頼関係があるからこそ、自然にお願いできます。<br>
-      もちろんカードをタップしてもらうだけ。30秒です。
+      もちろんカードをタップしてもらうだけ。3分です。
     </div>
   </td></tr>`
 
