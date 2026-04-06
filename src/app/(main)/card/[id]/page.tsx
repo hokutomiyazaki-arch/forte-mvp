@@ -426,13 +426,24 @@ export default function CardPage() {
             <span style={{ fontSize: 13, color: T.textSub, marginLeft: 6 }}>proofs</span>
           </div>
           {(() => {
+            const specialistCount = sortedVotes.filter(v => v.vote_count >= SPECIALIST_THRESHOLD).length
             const provenCount = sortedVotes.filter(v => v.vote_count >= PROVEN_THRESHOLD).length
-            return provenCount > 0 ? (
-              <div style={{ textAlign: 'center' }}>
-                <span style={{ fontSize: 20, fontWeight: 'bold', color: PROVEN_GOLD, fontFamily: T.fontMono }}>{provenCount}</span>
-                <span style={{ fontSize: 11, color: PROVEN_GOLD, marginLeft: 4, fontWeight: 700 }}>proven</span>
-              </div>
-            ) : null
+            return (
+              <>
+                {specialistCount > 0 && (
+                  <div style={{ textAlign: 'center' }}>
+                    <span style={{ fontSize: 20, fontWeight: 'bold', color: '#C4A35A', fontFamily: T.fontMono }}>{specialistCount}</span>
+                    <span style={{ fontSize: 11, color: '#C4A35A', marginLeft: 4, fontWeight: 700 }}>specialist</span>
+                  </div>
+                )}
+                {provenCount > 0 && (
+                  <div style={{ textAlign: 'center' }}>
+                    <span style={{ fontSize: 20, fontWeight: 'bold', color: PROVEN_GOLD, fontFamily: T.fontMono }}>{provenCount}</span>
+                    <span style={{ fontSize: 11, color: PROVEN_GOLD, marginLeft: 4, fontWeight: 700 }}>proven</span>
+                  </div>
+                )}
+              </>
+            )
           })()}
           {bookmarkCount > 0 && (
             <div style={{ textAlign: 'center' }}>
