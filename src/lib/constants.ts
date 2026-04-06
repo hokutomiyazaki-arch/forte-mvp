@@ -6,6 +6,9 @@ export const PROVEN_THRESHOLD = 15;
 /** Lv.2: 30プルーフ以上で SPECIALIST 認定（賞状・カード申請可能） */
 export const SPECIALIST_THRESHOLD = 30;
 
+/** Lv.3: 50プルーフ以上で MASTER 認定（将来用、人柄ティアで使用） */
+export const MASTER_THRESHOLD = 50;
+
 /** PROVEN / SPECIALIST 共通ゴールドカラー */
 export const PROVEN_GOLD = '#D4A843';
 

@@ -6,7 +6,7 @@ import { Professional, VoteSummary, Vote } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import { COLORS, FONTS } from '@/lib/design-tokens'
 import { trackPageView, trackEvent } from '@/lib/tracking'
-import { PROVEN_THRESHOLD, PROVEN_GOLD, TAB_DISPLAY_NAMES } from '@/lib/constants'
+import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, MASTER_THRESHOLD, PROVEN_GOLD, TAB_DISPLAY_NAMES } from '@/lib/constants'
 // VoiceShareModal removed — public card is view-only
 import RelatedPros from '@/components/RelatedPros'
 
@@ -510,30 +510,60 @@ export default function CardPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
                   {top3.map((v, i) => {
                     const pct = (v.vote_count / maxVotes) * 100
+                    const isSpecialist = v.vote_count >= SPECIALIST_THRESHOLD
                     const isProven = v.vote_count >= PROVEN_THRESHOLD
-                    const tier = v.vote_count > 30 ? 'elite' : v.vote_count > 10 ? 'strong' : 'normal'
+                    const tier = isSpecialist ? 'specialist' : v.vote_count > 10 ? 'strong' : 'normal'
                     const cardBg = tier === 'normal' ? T.cardBg : '#1A1A2E'
-                    const cardBorder = tier === 'normal' ? T.cardBorder : '#2A2A3E'
-                    const labelColor = tier === 'elite' ? '#C4A35A' : tier === 'strong' ? '#FFFFFF' : T.text
-                    const countColor = tier === 'elite' ? '#C4A35A' : tier === 'strong' ? '#FFFFFF' : T.gold
+                    const cardBorder = tier === 'specialist' ? '#C4A35A' : tier === 'normal' ? T.cardBorder : '#2A2A3E'
+                    const cardBorderWidth = tier === 'specialist' ? '1.5px' : '1px'
+                    const labelColor = isSpecialist ? '#C4A35A' : tier === 'strong' ? '#FFFFFF' : T.text
+                    const countColor = isSpecialist ? '#C4A35A' : tier === 'strong' ? '#FFFFFF' : T.gold
                     const barTrack = tier === 'normal' ? '#F0EDE6' : '#2A2A3E'
-                    const barFill = isProven ? PROVEN_GOLD : getBarColor(i)
+                    const barFill = isSpecialist
+                      ? 'linear-gradient(90deg, #C4A35A, #E8D9A8)'
+                      : isProven ? PROVEN_GOLD : getBarColor(i)
+                    const barHeight = isSpecialist ? 5 : 8
                     return (
-                      <div key={v.category} style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 14, padding: 18, cursor: 'pointer' }}
+                      <div key={v.category} style={{
+                        background: cardBg,
+                        border: `${cardBorderWidth} solid ${cardBorder}`,
+                        borderRadius: 14,
+                        padding: 18,
+                        cursor: 'pointer',
+                        overflow: 'hidden',
+                        position: 'relative' as const,
+                      }}
                         onClick={() => v.proof_id && toggleProofDates(v.proof_id)}>
-                        {isProven && (
+                        {/* SPECIALIST トップライン */}
+                        {isSpecialist && (
+                          <div style={{
+                            position: 'absolute' as const, top: 0, left: 0, right: 0, height: 3,
+                            background: 'linear-gradient(90deg, #C4A35A, #E8D9A8, #C4A35A)',
+                          }} />
+                        )}
+                        {/* ティアラベル */}
+                        {isSpecialist ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                            <span style={{
+                              fontSize: 10, fontWeight: 500, letterSpacing: 0.5, color: '#1A1A2E',
+                              background: '#C4A35A', padding: '2px 8px', borderRadius: 10,
+                            }}>
+                              🏆 SPECIALIST
+                            </span>
+                          </div>
+                        ) : isProven ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
                             <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, color: PROVEN_GOLD }}>
                               🛡 PROVEN
                             </span>
                           </div>
-                        )}
+                        ) : null}
                         <div style={{ marginBottom: 6 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
                             <span style={{ fontSize: 15, fontWeight: 700, color: labelColor, lineHeight: 1.5, overflowWrap: 'anywhere' as const }}>
                               {v.strength_label || v.category}
                             </span>
-                            <span style={{ fontSize: 16, fontWeight: 'bold', color: countColor, fontFamily: T.fontMono, flexShrink: 0 }}>{v.vote_count}</span>
+                            <span style={{ fontSize: isSpecialist ? 18 : 16, fontWeight: 'bold', color: countColor, fontFamily: T.fontMono, flexShrink: 0 }}>{v.vote_count}</span>
                           </div>
                           {v.strength_label && (
                             <div style={{ fontSize: 11, color: tier === 'normal' ? T.textMuted : 'rgba(255,255,255,0.55)', marginTop: 2 }}>
@@ -548,13 +578,25 @@ export default function CardPage() {
                             </div>
                           )}
                         </div>
-                        <div style={{ width: '100%', height: 8, background: barTrack, borderRadius: 99 }}>
+                        <div style={{ width: '100%', height: barHeight, background: barTrack, borderRadius: 99 }}>
                           <div style={{
-                            height: 8, borderRadius: 99, background: barFill,
+                            height: barHeight, borderRadius: 99,
+                            background: barFill,
                             width: animated ? `${pct}%` : '0%',
                             transition: `width 1.2s ease ${i * 0.08}s`,
                           }} />
                         </div>
+                        {/* 次の目標テキスト */}
+                        {isSpecialist && (
+                          <div style={{ fontSize: 10, color: '#C4A35A', textAlign: 'right' as const, marginTop: 6 }}>
+                            Next: MASTER (50)
+                          </div>
+                        )}
+                        {!isSpecialist && isProven && (
+                          <div style={{ fontSize: 10, color: 'rgba(250,250,247,0.4)', textAlign: 'right' as const, marginTop: 6 }}>
+                            あと{SPECIALIST_THRESHOLD - v.vote_count}票でSPECIALIST
+                          </div>
+                        )}
                         {/* 日付アコーディオン */}
                         {v.proof_id && expandedProofId === v.proof_id && (
                           <div style={{ marginTop: 10, borderTop: `1px solid ${tier === 'normal' ? T.divider : '#3A3A4E'}`, paddingTop: 10 }}>
@@ -586,26 +628,47 @@ export default function CardPage() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     {rest.map((v, i) => {
                       const pct = (v.vote_count / maxVotes) * 100
+                      const isSpecialist = v.vote_count >= SPECIALIST_THRESHOLD
                       const isProven = v.vote_count >= PROVEN_THRESHOLD
                       return (
-                        <div key={v.category} style={{ width: '100%', cursor: 'pointer' }}
+                        <div key={v.category} style={{
+                          width: '100%', cursor: 'pointer',
+                          ...(isSpecialist ? { border: '1.5px solid #C4A35A', borderRadius: 10, padding: '10px 12px', background: '#1A1A2E', position: 'relative' as const, overflow: 'hidden' } : {}),
+                        }}
                           onClick={() => v.proof_id && toggleProofDates(v.proof_id)}>
-                          {isProven && (
+                          {/* SPECIALIST トップライン */}
+                          {isSpecialist && (
+                            <div style={{
+                              position: 'absolute' as const, top: 0, left: 0, right: 0, height: 3,
+                              background: 'linear-gradient(90deg, #C4A35A, #E8D9A8, #C4A35A)',
+                            }} />
+                          )}
+                          {/* ティアラベル */}
+                          {isSpecialist ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+                              <span style={{
+                                fontSize: 10, fontWeight: 500, letterSpacing: 0.5, color: '#1A1A2E',
+                                background: '#C4A35A', padding: '2px 8px', borderRadius: 10,
+                              }}>
+                                🏆 SPECIALIST
+                              </span>
+                            </div>
+                          ) : isProven ? (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
                               <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: PROVEN_GOLD }}>
                                 🛡 PROVEN
                               </span>
                             </div>
-                          )}
+                          ) : null}
                           <div style={{ marginBottom: 4 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                              <span style={{ fontSize: 13, fontWeight: 600, color: isProven ? PROVEN_GOLD : T.text, lineHeight: 1.5, overflowWrap: 'anywhere' as const }}>
+                              <span style={{ fontSize: 13, fontWeight: 600, color: isSpecialist ? '#C4A35A' : isProven ? PROVEN_GOLD : T.text, lineHeight: 1.5, overflowWrap: 'anywhere' as const }}>
                                 {v.strength_label || v.category}
                               </span>
-                              <span style={{ fontSize: 13, color: isProven ? PROVEN_GOLD : T.textMuted, fontFamily: T.fontMono, flexShrink: 0 }}>{v.vote_count}</span>
+                              <span style={{ fontSize: isSpecialist ? 15 : 13, color: isSpecialist ? '#C4A35A' : isProven ? PROVEN_GOLD : T.textMuted, fontFamily: T.fontMono, flexShrink: 0, fontWeight: isSpecialist ? 'bold' : undefined }}>{v.vote_count}</span>
                             </div>
                             {v.strength_label && (
-                              <div style={{ fontSize: 10, color: T.textMuted, marginTop: 2 }}>
+                              <div style={{ fontSize: 10, color: isSpecialist ? 'rgba(255,255,255,0.55)' : T.textMuted, marginTop: 2 }}>
                                 {v.category}
                               </div>
                             )}
@@ -617,29 +680,41 @@ export default function CardPage() {
                               </div>
                             )}
                           </div>
-                          <div style={{ width: '100%', height: 5, background: '#F0EDE6', borderRadius: 99 }}>
+                          <div style={{ width: '100%', height: 5, background: isSpecialist ? '#2A2A3E' : '#F0EDE6', borderRadius: 99 }}>
                             <div style={{
-                              height: 5, borderRadius: 99, background: isProven ? PROVEN_GOLD : getBarColor(3),
+                              height: 5, borderRadius: 99,
+                              background: isSpecialist ? 'linear-gradient(90deg, #C4A35A, #E8D9A8)' : isProven ? PROVEN_GOLD : getBarColor(3),
                               width: animated ? `${pct}%` : '0%',
                               transition: `width 1.2s ease ${(i + 3) * 0.08}s`,
                             }} />
                           </div>
+                          {/* 次の目標テキスト */}
+                          {isSpecialist && (
+                            <div style={{ fontSize: 10, color: '#C4A35A', textAlign: 'right' as const, marginTop: 4 }}>
+                              Next: MASTER (50)
+                            </div>
+                          )}
+                          {!isSpecialist && isProven && (
+                            <div style={{ fontSize: 10, color: 'rgba(250,250,247,0.4)', textAlign: 'right' as const, marginTop: 4 }}>
+                              あと{SPECIALIST_THRESHOLD - v.vote_count}票でSPECIALIST
+                            </div>
+                          )}
                           {/* 日付アコーディオン */}
                           {v.proof_id && expandedProofId === v.proof_id && (
-                            <div style={{ marginTop: 8, borderTop: `1px solid ${T.divider}`, paddingTop: 8 }}>
+                            <div style={{ marginTop: 8, borderTop: `1px solid ${isSpecialist ? '#3A3A4E' : T.divider}`, paddingTop: 8 }}>
                               {proofDatesLoading === v.proof_id ? (
-                                <div style={{ fontSize: 11, color: T.textMuted }}>読み込み中...</div>
+                                <div style={{ fontSize: 11, color: isSpecialist ? 'rgba(255,255,255,0.5)' : T.textMuted }}>読み込み中...</div>
                               ) : (proofDatesCache[v.proof_id] || []).length > 0 ? (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                                  <div style={{ fontSize: 10, fontWeight: 700, color: T.textMuted, letterSpacing: 1, marginBottom: 2 }}>投票日</div>
+                                  <div style={{ fontSize: 10, fontWeight: 700, color: isSpecialist ? 'rgba(255,255,255,0.5)' : T.textMuted, letterSpacing: 1, marginBottom: 2 }}>投票日</div>
                                   {(proofDatesCache[v.proof_id] || []).map((date, di) => (
-                                    <div key={di} style={{ fontSize: 11, color: T.textSub, fontFamily: T.fontMono }}>
+                                    <div key={di} style={{ fontSize: 11, color: isSpecialist ? 'rgba(255,255,255,0.7)' : T.textSub, fontFamily: T.fontMono }}>
                                       {date}
                                     </div>
                                   ))}
                                 </div>
                               ) : (
-                                <div style={{ fontSize: 11, color: T.textMuted }}>日付データなし</div>
+                                <div style={{ fontSize: 11, color: isSpecialist ? 'rgba(255,255,255,0.5)' : T.textMuted }}>日付データなし</div>
                               )}
                             </div>
                           )}
