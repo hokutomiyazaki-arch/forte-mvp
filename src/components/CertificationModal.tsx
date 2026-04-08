@@ -143,8 +143,83 @@ export default function CertificationModal({
                   最も評価された人柄: 「{topPersonality}」
                 </p>
               )}
-              <p className="text-xs text-gray-500 mt-3">
-                以下に送付先を入力してください
+            </div>
+
+            {/* ====== 制度説明セクション ====== */}
+            <div style={{
+              background: 'rgba(196,163,90,0.06)',
+              border: '1px solid #C4A35A',
+              borderRadius: 12,
+              padding: 20,
+              marginBottom: 24,
+            }}>
+              <div style={{ fontSize: 16, fontWeight: 500, color: '#C4A35A', marginBottom: 12 }}>
+                REALPROOF認定について
+              </div>
+              <p style={{ fontSize: 14, lineHeight: 1.7, color: '#374151', margin: 0 }}>
+                1つの強みで30プルーフを達成したプロに贈られる認定です。
+              </p>
+
+              {/* 届くもの */}
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#C4A35A', letterSpacing: 0.5, marginTop: 16, marginBottom: 8 }}>
+                【届くもの（セットで郵送）】
+              </div>
+              <div style={{ fontSize: 14, lineHeight: 1.7, color: '#374151' }}>
+                <p style={{ margin: '0 0 8px 0' }}>
+                  <span style={{ marginRight: 6 }}>🏆</span><strong>認定証（賞状）</strong><br />
+                  <span style={{ marginLeft: 24, display: 'inline-block' }}>
+                    「{categoryName}スペシャリスト」の称号<br />
+                    カテゴリごとに1枚発行<br />
+                    壁に飾れる達成の記録
+                  </span>
+                </p>
+                <p style={{ margin: 0 }}>
+                  <span style={{ marginRight: 6 }}>💳</span><strong>認定カード（NFC付き）</strong><br />
+                  <span style={{ marginLeft: 24, display: 'inline-block' }}>
+                    あなたの全認定を1枚に集約<br />
+                    新しいカテゴリが30票に達するたびに最新版に更新できます
+                  </span>
+                </p>
+              </div>
+
+              {/* 申請タイミング */}
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#C4A35A', letterSpacing: 0.5, marginTop: 16, marginBottom: 8 }}>
+                【申請タイミング】
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{
+                  border: '0.5px solid rgba(196,163,90,0.3)',
+                  padding: 12,
+                  borderRadius: 8,
+                  fontSize: 14,
+                  lineHeight: 1.7,
+                  color: '#374151',
+                }}>
+                  <strong>A：今すぐ申請する</strong><br />
+                  → 現時点の認定カテゴリのみ記載<br />
+                  → 後で別カテゴリが30票に達したら追加申請可能
+                </div>
+                <div style={{
+                  border: '0.5px solid rgba(196,163,90,0.3)',
+                  padding: 12,
+                  borderRadius: 8,
+                  fontSize: 14,
+                  lineHeight: 1.7,
+                  color: '#374151',
+                }}>
+                  <strong>B：もう少し待ってから申請する</strong><br />
+                  → 他のカテゴリも30票に近いなら、まとめて申請する事で<br />
+                  　 複数の認定が入ったカードが届きます
+                </div>
+              </div>
+
+              {/* 料金 */}
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#C4A35A', letterSpacing: 0.5, marginTop: 16, marginBottom: 8 }}>
+                【料金】
+              </div>
+              <p style={{ fontSize: 14, lineHeight: 1.7, color: '#374151', margin: 0 }}>
+                初回：無料<br />
+                2回目以降：有料（カード更新 + 新しい賞状のセット）
               </p>
             </div>
 
