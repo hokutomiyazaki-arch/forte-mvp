@@ -686,20 +686,40 @@ function VoteForm() {
   // ── LINE認証で投票 ──
   function handleLineVote() {
     if (isPreview) return // プレビューモードでは投票しない
+    // 🔒 SNAPSHOT: 認証前にstateを固定（stale state対策）
+    const voteDataSnapshot = buildVoteData()
+
+    if (!voteDataSnapshot.vote_type) {
+      console.error('[handleLineVote] voteData snapshot is empty')
+      setError('投票データの取得に失敗しました。もう一度お試しください。')
+      return
+    }
+
     setError('')
-    // 投票データを構築してLINE認証に直接遷移（Clerkを使わない）
-    const voteData = buildVoteData()
-    const voteDataParam = encodeURIComponent(JSON.stringify(voteData))
+    // sessionStorageにもバックアップ保存（二重防御）
+    saveVoteDataToSession()
+
+    const voteDataParam = encodeURIComponent(JSON.stringify(voteDataSnapshot))
     window.location.href = `/api/vote-auth/line?professional_id=${proId}&qr_token=${qrToken || ''}&vote_data=${voteDataParam}`
   }
 
   // ── Google認証で投票 ──
   function handleGoogleVote() {
     if (isPreview) return // プレビューモードでは投票しない
+    // 🔒 SNAPSHOT: 認証前にstateを固定（stale state対策）
+    const voteDataSnapshot = buildVoteData()
+
+    if (!voteDataSnapshot.vote_type) {
+      console.error('[handleGoogleVote] voteData snapshot is empty')
+      setError('投票データの取得に失敗しました。もう一度お試しください。')
+      return
+    }
+
     setError('')
-    // 投票データを構築してGoogle認証に直接遷移
-    const voteData = buildVoteData()
-    const voteDataParam = encodeURIComponent(JSON.stringify(voteData))
+    // sessionStorageにもバックアップ保存（二重防御）
+    saveVoteDataToSession()
+
+    const voteDataParam = encodeURIComponent(JSON.stringify(voteDataSnapshot))
     window.location.href = `/api/vote-auth/google?professional_id=${proId}&qr_token=${qrToken || ''}&vote_data=${voteDataParam}`
   }
 
@@ -790,6 +810,19 @@ function VoteForm() {
       setError('6桁の認証コードを入力してください')
       return
     }
+
+    // 🔒 SNAPSHOT: Clerk認証前にstateを固定（stale state対策）
+    const voteDataSnapshot = buildVoteData()
+
+    if (!voteDataSnapshot.vote_type) {
+      console.error('[handlePhoneVerify] voteData snapshot is empty')
+      setError('投票データの取得に失敗しました。もう一度お試しください。')
+      return
+    }
+
+    // sessionStorageにもバックアップ保存（二重防御）
+    saveVoteDataToSession()
+
     setIsSubmitting(true)
     setError('')
     setPhoneVerifying(true)
@@ -866,7 +899,6 @@ function VoteForm() {
       }
 
       await new Promise(resolve => setTimeout(resolve, 500))
-      const voteData = buildVoteData()
 
       const { data: insertedVote, error: voteError } = await (supabase as any).from('votes').insert({
         professional_id: proId,
@@ -874,15 +906,15 @@ function VoteForm() {
         normalized_email: normalizeEmail(formattedPhone),
         client_user_id: null,
         vote_weight: 1.0,
-        vote_type: voteData.vote_type,
-        selected_proof_ids: voteData.selected_proof_ids,
-        selected_personality_ids: voteData.selected_personality_ids,
-        selected_reward_id: voteData.selected_reward_id,
-        comment: voteData.comment,
-        qr_token: voteData.qr_token,
+        vote_type: voteDataSnapshot.vote_type,
+        selected_proof_ids: voteDataSnapshot.selected_proof_ids,
+        selected_personality_ids: voteDataSnapshot.selected_personality_ids,
+        selected_reward_id: voteDataSnapshot.selected_reward_id,
+        comment: voteDataSnapshot.comment,
+        qr_token: voteDataSnapshot.qr_token,
         status: 'confirmed',
         auth_method: 'sms',
-        channel,
+        channel: voteDataSnapshot.channel || channel,
       }).select().maybeSingle()
 
       if (voteError) {
@@ -1346,20 +1378,22 @@ function VoteForm() {
     if (isSubmitting) return
     const email = voterEmail.trim().toLowerCase()
     if (!email || emailCode.length < 6) return
+
+    // 🔒 SNAPSHOT: 認証前にstateを固定（stale state対策）
+    const voteDataSnapshot = buildVoteData()
+
+    if (!voteDataSnapshot.vote_type) {
+      console.error('[handleEmailVerifyCode] voteData snapshot is empty')
+      setError('投票データの取得に失敗しました。もう一度お試しください。')
+      return
+    }
+
+    // sessionStorageにもバックアップ保存（二重防御）
+    saveVoteDataToSession()
+
     setIsSubmitting(true)
     setError('')
     setEmailCodeVerifying(true)
-
-    // 投票データを組み立て
-    const allSelectedProofIds = Array.from(selectedProofIds)
-    const hasProofs = allSelectedProofIds.length > 0
-    let voteType = 'personality_only'
-    if (isHopeful) {
-      voteType = 'hopeful'
-    } else if (hasProofs) {
-      voteType = 'proof'
-    }
-    const proofIdsToSend = isHopeful ? null : (hasProofs ? allSelectedProofIds : null)
 
     try {
       const res = await fetch('/api/vote-auth/verify-code', {
@@ -1369,14 +1403,7 @@ function VoteForm() {
           email,
           code: emailCode,
           professional_id: proId,
-          vote_data: {
-            vote_type: voteType,
-            selected_proof_ids: proofIdsToSend,
-            selected_personality_ids: selectedPersonalityIds.size > 0 ? Array.from(selectedPersonalityIds) : null,
-            selected_reward_id: selectedRewardId || null,
-            comment: comment.trim() || null,
-            qr_token: qrToken,
-          },
+          vote_data: voteDataSnapshot,
         }),
       })
 
