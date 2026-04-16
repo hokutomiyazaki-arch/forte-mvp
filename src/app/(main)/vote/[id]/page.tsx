@@ -1639,7 +1639,7 @@ function VoteForm() {
               borderRadius: 8,
               padding: "16px 20px",
               marginBottom: 24,
-              textAlign: "left",
+              textAlign: "center",
               color: "#FAFAF7",
               fontSize: 13,
               lineHeight: 1.7,
