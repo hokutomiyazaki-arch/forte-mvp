@@ -1623,29 +1623,56 @@ function VoteForm() {
               {pro.name}さんへ
             </div>
             {pro.store_name && (
-              <div style={{ color: "rgba(250,250,247,0.6)", fontSize: 12, marginBottom: 6 }}>{pro.store_name}</div>
+              <div style={{ color: "rgba(250,250,247,0.6)", fontSize: 12, marginBottom: 20 }}>{pro.store_name}</div>
             )}
-            <div style={{ color: "#FAFAF7", fontSize: 15, marginBottom: 20, lineHeight: 1.6 }}>
-              プロの技術向上のための<br />
-              かんたんアンケート
+
+            {/* メイン見出し */}
+            <div style={{ color: "#FAFAF7", fontSize: 18, fontWeight: 700, marginBottom: 24, lineHeight: 1.6 }}>
+              今日感じた“本物”を、<br />
+              声で残してください。
             </div>
 
-            {/* 約3分バッジ */}
+            {/* 注意書きブロック（新設） */}
+            <div style={{
+              background: "rgba(196,163,90,0.12)",
+              border: "1px solid rgba(196,163,90,0.25)",
+              borderRadius: 8,
+              padding: "16px 20px",
+              marginBottom: 24,
+              textAlign: "left",
+              color: "#FAFAF7",
+              fontSize: 13,
+              lineHeight: 1.7,
+            }}>
+              <div>
+                ⚠️ “変わった”と思ったものだけ選んでください。
+              </div>
+              <div style={{ marginTop: 4 }}>
+                当てはまるものが無ければスキップでOK。
+              </div>
+              <div style={{ marginTop: 4, fontSize: 11, color: "rgba(250,250,247,0.75)" }}>
+                （プロには分かりません）
+              </div>
+            </div>
+
+            {/* サブコピー */}
+            <div style={{ color: "#8B8B9A", fontSize: 12, lineHeight: 1.8, marginBottom: 24 }}>
+              あなたの声が、<br />
+              同じ悩みを持つ誰かの<br />
+              力になります。
+            </div>
+
+            {/* 約3分バッジ（CTA直前に移動） */}
             <div style={{
               display: "inline-flex", alignItems: "center", gap: 6,
               background: "rgba(196,163,90,0.12)",
               border: "1px solid rgba(196,163,90,0.35)",
-              borderRadius: 100, padding: "6px 16px", marginBottom: 28,
+              borderRadius: 100, padding: "6px 16px", marginBottom: 20,
             }}>
               <span style={{ fontSize: 14 }}>⏱️</span>
               <span style={{ color: "#C4A35A", fontWeight: 700, fontSize: 13 }}>
                 約3分で終わります
               </span>
-            </div>
-
-            <div style={{ color: "#8B8B9A", fontSize: 12, lineHeight: 1.8, marginBottom: 32 }}>
-              あなたが感じたことを<br />
-              そのまま伝えてください。
             </div>
 
             <button
@@ -1654,6 +1681,18 @@ function VoteForm() {
             >
               はじめる →
             </button>
+
+            {/* 用語定義フッター（新設） */}
+            <div style={{
+              marginTop: 32,
+              paddingTop: 16,
+              borderTop: "1px solid #333333",
+              color: "#888888",
+              fontSize: 11,
+              lineHeight: 1.6,
+            }}>
+              ※ この仕組みを“プルーフ（信頼の証明）”と呼んでいます。
+            </div>
           </div>
         </StepWrapper>
       )}
