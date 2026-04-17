@@ -4,6 +4,7 @@ import { clerkClient } from '@clerk/nextjs/server'
 
 import { normalizeEmail } from '@/lib/normalize-email'
 import { computeProofHash, generateNonce, GENESIS_HASH } from '@/lib/proof-chain'
+import { checkVoterIsPro } from '@/lib/voter-pro-check'
 
 export const dynamic = 'force-dynamic'
 
@@ -294,6 +295,22 @@ export async function GET(request: NextRequest) {
     })
     // --- ハッシュチェーン処理 END ---
 
+    // --- Phase 1 Step 2: Clerk imageUrl + プロ判定 ---
+    let clientPhotoUrl: string | null = null
+    if (voterClerkUserId) {
+      try {
+        const clerk = await clerkClient()
+        const voterClerkUser = await clerk.users.getUser(voterClerkUserId)
+        clientPhotoUrl = voterClerkUser.imageUrl || null
+      } catch (e) {
+        console.error('[vote-auth/google/callback] Clerk imageUrl fetch failed:', e)
+      }
+    }
+    const voterProfessionalId = await checkVoterIsPro(
+      normalizeEmail(email),
+      voterClerkUserId
+    )
+
     // Step 7: 投票INSERT（Google認証済みなので status='confirmed'）
     const { data: insertedVote, error: voteError } = await supabaseAdmin
       .from('votes')
@@ -315,6 +332,10 @@ export async function GET(request: NextRequest) {
         proof_hash: proofHash,
         prev_hash: prevHash,
         proof_nonce: nonce,
+        // --- Phase 1 Step 2 追加 ---
+        display_mode: 'hidden',
+        client_photo_url: clientPhotoUrl,
+        voter_professional_id: voterProfessionalId,
       })
       .select()
       .maybeSingle()
@@ -508,20 +529,8 @@ export async function GET(request: NextRequest) {
       // メール失敗で投票レスポンスをブロックしない
     }
 
-    // Step 9c: 投票者のロール判定（Clerk情報はStep 5で取得済み）
-    let voterIsPro = false
-    if (hasAccount && voterClerkUserId) {
-      try {
-        const { data: voterPro } = await supabaseAdmin
-          .from('professionals')
-          .select('id')
-          .eq('user_id', voterClerkUserId)
-          .maybeSingle()
-        voterIsPro = !!voterPro
-      } catch (e) {
-        console.error('[vote-auth/google/callback] Voter pro check failed:', e)
-      }
-    }
+    // Step 9c: 投票者のロール判定（Phase 1 Step 2 で checkVoterIsPro に一本化）
+    const voterIsPro = !!voterProfessionalId
 
     // Step 10: vote-confirmed にリダイレクト
     const redirectParams = new URLSearchParams({

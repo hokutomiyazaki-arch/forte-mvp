@@ -4,6 +4,7 @@ import { clerkClient } from '@clerk/nextjs/server'
 
 import { normalizeEmail } from '@/lib/normalize-email'
 import { computeProofHash, generateNonce, GENESIS_HASH } from '@/lib/proof-chain'
+import { checkVoterIsPro } from '@/lib/voter-pro-check'
 
 export const dynamic = 'force-dynamic'
 
@@ -133,17 +134,28 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // メールが取れない場合（email権限未承認）→ LINE userIdをフォールバック
-    if (!email) {
+    // --- Phase 1 Step 2: LINE profile を常に取得（pictureUrl / displayName / userIdフォールバック用） ---
+    let lineProfile: { userId?: string; displayName?: string; pictureUrl?: string } | null = null
+    try {
       const profileRes = await fetch('https://api.line.me/v2/profile', {
         headers: { 'Authorization': `Bearer ${tokenData.access_token}` },
       })
       if (profileRes.ok) {
-        const profile = await profileRes.json()
-        email = `line_${profile.userId}@line.realproof.jp`
+        lineProfile = await profileRes.json()
+      } else {
+        console.error('[vote-auth/line/callback] LINE profile fetch returned non-OK:', profileRes.status)
+      }
+    } catch (e) {
+      console.error('[vote-auth/line/callback] LINE profile fetch failed:', e)
+    }
+
+    // メールが取れない場合（email権限未承認）→ LINE userIdをフォールバック
+    if (!email) {
+      if (lineProfile?.userId) {
+        email = `line_${lineProfile.userId}@line.realproof.jp`
         console.log('[vote-auth/line/callback] Using LINE userId as email fallback:', email)
       } else {
-        console.error('[vote-auth/line/callback] Failed to get LINE profile')
+        console.error('[vote-auth/line/callback] Failed to get LINE profile userId')
         return NextResponse.redirect(
           new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=line_no_email`, origin)
         )
@@ -297,6 +309,13 @@ export async function GET(request: NextRequest) {
     })
     // --- ハッシュチェーン処理 END ---
 
+    // --- Phase 1 Step 2: プロ判定（LINE は Clerk session なし、email のみで判定） ---
+    const voterProfessionalId = await checkVoterIsPro(
+      normalizeEmail(email),
+      null
+    )
+    const clientPhotoUrl = lineProfile?.pictureUrl || null
+
     // Step 7: 投票INSERT（LINEで認証済みなので status='confirmed'）
     const { data: insertedVote, error: voteError } = await supabaseAdmin
       .from('votes')
@@ -319,6 +338,10 @@ export async function GET(request: NextRequest) {
         proof_hash: proofHash,
         prev_hash: prevHash,
         proof_nonce: nonce,
+        // --- Phase 1 Step 2 追加 ---
+        display_mode: 'hidden',
+        client_photo_url: clientPhotoUrl,
+        voter_professional_id: voterProfessionalId,
       })
       .select()
       .maybeSingle()
@@ -501,24 +524,16 @@ export async function GET(request: NextRequest) {
       console.error('[vote-auth/line/callback] PROVEN/SPECIALIST notification error:', err)
     }
 
-    // Step 9c: Clerkアカウント存在チェック + 投票者のロール判定
+    // Step 9c: Clerkアカウント存在チェック（ロール判定は Phase 1 Step 2 で checkVoterIsPro に一本化）
     let hasAccount = false
-    let voterIsPro = false
     try {
       const clerk = await clerkClient()
       const users = await clerk.users.getUserList({ emailAddress: [email] })
       hasAccount = users.data.length > 0
-      if (hasAccount) {
-        const { data: voterPro } = await supabaseAdmin
-          .from('professionals')
-          .select('id')
-          .eq('user_id', users.data[0].id)
-          .maybeSingle()
-        voterIsPro = !!voterPro
-      }
     } catch (e) {
       console.error('[vote-auth/line/callback] Clerk user check failed:', e)
     }
+    const voterIsPro = !!voterProfessionalId
 
     // Step 10: vote-confirmed にリダイレクト
     const redirectParams = new URLSearchParams({

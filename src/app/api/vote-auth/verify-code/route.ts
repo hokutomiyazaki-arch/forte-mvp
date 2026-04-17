@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { normalizeEmail } from '@/lib/normalize-email'
 import { computeProofHash, generateNonce, GENESIS_HASH } from '@/lib/proof-chain'
+import { checkVoterIsPro } from '@/lib/voter-pro-check'
 
 
 export const dynamic = 'force-dynamic'
@@ -120,6 +121,12 @@ export async function POST(req: NextRequest) {
     })
     // --- ハッシュチェーン処理 END ---
 
+    // --- Phase 1 Step 2: メール認証は画像なし、プロ判定のみ ---
+    const voterProfessionalId = await checkVoterIsPro(
+      normalizeEmail(email),
+      null
+    )
+
     // 投票をINSERT（status=confirmed で直接保存）
     const { data: insertedVote, error: voteError } = await supabase
       .from('votes')
@@ -142,6 +149,10 @@ export async function POST(req: NextRequest) {
         proof_hash: proofHash,
         prev_hash: prevHash,
         proof_nonce: nonce,
+        // --- Phase 1 Step 2 追加 ---
+        display_mode: 'hidden',
+        client_photo_url: null,
+        voter_professional_id: voterProfessionalId,
       })
       .select()
       .maybeSingle()

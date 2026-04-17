@@ -676,6 +676,10 @@ function VoteForm() {
         vote_weight: 0.5,
         auth_method: 'hopeful',
         channel,
+        // --- Phase 1 Step 2 追加 ---
+        display_mode: 'hidden',
+        client_photo_url: null,
+        voter_professional_id: null,
       })
     } catch (e) {
       console.error('hopeful vote error:', e)
@@ -915,6 +919,10 @@ function VoteForm() {
         status: 'confirmed',
         auth_method: 'sms',
         channel: voteDataSnapshot.channel || channel,
+        // --- Phase 1 Step 2 追加 ---
+        display_mode: 'hidden',
+        client_photo_url: null,
+        voter_professional_id: null,
       }).select().maybeSingle()
 
       if (voteError) {
@@ -1069,6 +1077,10 @@ function VoteForm() {
       status: 'confirmed', // フォールバックは即確定（後で認証を促す）
       auth_method: 'sms_fallback',
       channel,
+      // --- Phase 1 Step 2 追加 ---
+      display_mode: 'hidden',
+      client_photo_url: null,
+      voter_professional_id: null,
     }).select().maybeSingle()
 
     if (voteError) {
@@ -1268,6 +1280,10 @@ function VoteForm() {
       status: voteStatus,
       auth_method: 'email',
       channel,
+      // --- Phase 1 Step 2 追加 ---
+      display_mode: 'hidden',
+      client_photo_url: null,
+      voter_professional_id: null,
     }).select().maybeSingle()
 
     if (voteError) {
