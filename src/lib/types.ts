@@ -54,6 +54,8 @@ export interface Client {
   created_at: string
 }
 
+export type VoteDisplayMode = 'photo' | 'nickname_only' | 'pro_link' | 'hidden';
+
 export interface Vote {
   id: string
   professional_id: string
@@ -63,6 +65,11 @@ export interface Vote {
   comment: string | null
   qr_token: string | null
   created_at: string
+
+  // --- Phase 1 Step 1 追加 (2026-04-16) ---
+  display_mode: VoteDisplayMode
+  client_photo_url: string | null
+  voter_professional_id: string | null
 }
 
 export interface VoteSummary {
