@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase'
 import { useUser, useSignUp, useSignIn } from '@clerk/nextjs'
 import { Professional, getRewardLabel } from '@/lib/types'
 import { normalizeEmail } from '@/lib/normalize-email'
+import { extractDisplayName, determineAuthMethod } from '@/lib/vote-auth-helpers'
+import { checkVoteDuplicates } from '@/lib/vote-duplicate-check'
 import { Suspense } from 'react'
 // AuthMethodSelector は login ページで使用。投票ページはフォーム内のためインライン実装
 
@@ -675,6 +677,9 @@ function VoteForm() {
         status: 'confirmed',
         vote_weight: 0.5,
         auth_method: 'hopeful',
+        // Phase 1 Step 3: hopeful は匿名投票 — identity 系は常に null
+        auth_display_name: null,
+        auth_provider_id: null,
         channel,
         // --- Phase 1 Step 2 追加 ---
         display_mode: 'hidden',
@@ -745,22 +750,20 @@ function VoteForm() {
     }
 
     try {
-      // ── 7日リピートチェック（SMS送信前に確認） ──
-      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-      const { data: recentRepeatVote } = await (supabase as any)
-        .from('votes')
-        .select('id, created_at')
-        .eq('normalized_email', normalizeEmail(formattedPhone))
-        .eq('professional_id', proId)
-        .eq('status', 'confirmed')
-        .gt('created_at', sevenDaysAgo)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      if (recentRepeatVote) {
-        const nextVoteDate = new Date(new Date(recentRepeatVote.created_at).getTime() + 7 * 24 * 60 * 60 * 1000)
-        setError(`このプロにはすでにアンケートを回答済みです。次回は${nextVoteDate.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}以降に再度回答できます。`)
+      // ── 重複チェック（pre-flight、SMS 送信前） ──
+      const dupeResult = await checkVoteDuplicates(supabase, {
+        voterIdentifier: formattedPhone,
+        professionalId: proId,
+      })
+      if (!dupeResult.ok) {
+        if (dupeResult.reason === 'already_voted' && dupeResult.recentVoteCreatedAt) {
+          const nextVoteDate = new Date(new Date(dupeResult.recentVoteCreatedAt).getTime() + 7 * 24 * 60 * 60 * 1000)
+          setError(`このプロにはすでにアンケートを回答済みです。次回は${nextVoteDate.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}以降に再度回答できます。`)
+        } else if (dupeResult.reason === 'cooldown') {
+          setError('ありがとうございます！次のアンケートは30分後から回答できます。')
+        } else {
+          setError('送信が重複しました。すでに回答は送信されています。')
+        }
         setPhoneSending(false)
         return
       }
@@ -864,41 +867,24 @@ function VoteForm() {
 
       // 認証成功 → 投票送信
 
-      // ── 30分クールダウンチェック（全プロ横断） ──
-      const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString()
-      const { data: recentCooldownVote } = await (supabase as any)
-        .from('votes')
-        .select('created_at')
-        .eq('normalized_email', normalizeEmail(formattedPhone))
-        .eq('status', 'confirmed')
-        .gt('created_at', thirtyMinAgo)
-        .limit(1)
-        .maybeSingle()
-
-      if (recentCooldownVote) {
-        const nextAvailable = new Date(new Date(recentCooldownVote.created_at).getTime() + 30 * 60 * 1000)
-        const waitMin = Math.ceil((nextAvailable.getTime() - Date.now()) / 60000)
-        setError('ありがとうございます！次のアンケートは30分後から回答できます。')
+      // ── 重複チェック（30分クールダウン / 7日リピート / 1分ダブルサブミット） ──
+      const verifyDupeResult = await checkVoteDuplicates(supabase, {
+        voterIdentifier: formattedPhone,
+        professionalId: proId,
+      })
+      if (!verifyDupeResult.ok) {
+        if (verifyDupeResult.reason === 'duplicate_submit' && verifyDupeResult.existingVoteId) {
+          console.log('[handlePhoneVerify] Double submit detected:', normalizeEmail(formattedPhone), proId)
+          window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${verifyDupeResult.existingVoteId}&has_account=true`
+          return
+        }
+        if (verifyDupeResult.reason === 'cooldown') {
+          setError('ありがとうございます！次のアンケートは30分後から回答できます。')
+        } else {
+          setError('このプロにはすでにアンケートを回答済みです。')
+        }
         setPhoneVerifying(false)
         setIsSubmitting(false)
-        return
-      }
-
-      // ── 1分以内の重複チェック（ダブルサブミット防止） ──
-      const oneMinuteAgoPhone = new Date(Date.now() - 60 * 1000).toISOString()
-      const { data: recentDuplicatePhone } = await (supabase as any)
-        .from('votes')
-        .select('id')
-        .eq('normalized_email', normalizeEmail(formattedPhone))
-        .eq('professional_id', proId)
-        .eq('status', 'confirmed')
-        .gt('created_at', oneMinuteAgoPhone)
-        .maybeSingle()
-
-      if (recentDuplicatePhone) {
-        // ダブルサブミット検出 — 成功扱い（完了画面にリダイレクト）
-        console.log('[handlePhoneVerify] Double submit detected:', normalizeEmail(formattedPhone), proId)
-        window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${recentDuplicatePhone.id}&has_account=true`
         return
       }
 
@@ -918,6 +904,9 @@ function VoteForm() {
         qr_token: voteDataSnapshot.qr_token,
         status: 'confirmed',
         auth_method: 'sms',
+        // Phase 1 Step 3: SMS は表示名取得できないので null。phone を provider_id として記録
+        auth_display_name: null,
+        auth_provider_id: formattedPhone,
         channel: voteDataSnapshot.channel || channel,
         // --- Phase 1 Step 2 追加 ---
         display_mode: 'hidden',
@@ -1004,59 +993,26 @@ function VoteForm() {
       formattedPhone = '+81' + formattedPhone.slice(1)
     }
 
-    // 7日リピートチェック
-    const sevenDaysAgoFb = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-    const { data: recentRepeatVoteFb } = await (supabase as any).from('votes')
-      .select('id, created_at')
-      .eq('normalized_email', normalizeEmail(formattedPhone))
-      .eq('professional_id', proId)
-      .eq('status', 'confirmed')
-      .gt('created_at', sevenDaysAgoFb)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (recentRepeatVoteFb) {
-      const nextVoteDateFb = new Date(new Date(recentRepeatVoteFb.created_at).getTime() + 7 * 24 * 60 * 60 * 1000)
-      setError(`このプロにはすでにアンケートを回答済みです。次回は${nextVoteDateFb.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}以降に再度回答できます。`)
+    // ── 重複チェック（7日リピート / 30分クールダウン / 1分ダブルサブミット） ──
+    const fbDupeResult = await checkVoteDuplicates(supabase, {
+      voterIdentifier: formattedPhone,
+      professionalId: proId,
+    })
+    if (!fbDupeResult.ok) {
+      if (fbDupeResult.reason === 'duplicate_submit' && fbDupeResult.existingVoteId) {
+        console.log('[handleFallbackSubmit] Double submit detected:', normalizeEmail(formattedPhone), proId)
+        window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${fbDupeResult.existingVoteId}&has_account=false`
+        return
+      }
+      if (fbDupeResult.reason === 'already_voted' && fbDupeResult.recentVoteCreatedAt) {
+        const nextVoteDateFb = new Date(new Date(fbDupeResult.recentVoteCreatedAt).getTime() + 7 * 24 * 60 * 60 * 1000)
+        setError(`このプロにはすでにアンケートを回答済みです。次回は${nextVoteDateFb.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}以降に再度回答できます。`)
+      } else if (fbDupeResult.reason === 'cooldown') {
+        setError('ありがとうございます！次のアンケートは30分後から回答できます。')
+      } else {
+        setError('送信が重複しました。')
+      }
       setIsSubmitting(false)
-      return
-    }
-
-    // ── 30分クールダウンチェック（全プロ横断） ──
-    const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString()
-    const { data: recentCooldownVote } = await (supabase as any)
-      .from('votes')
-      .select('created_at')
-      .eq('normalized_email', normalizeEmail(formattedPhone))
-      .eq('status', 'confirmed')
-      .gt('created_at', thirtyMinAgo)
-      .limit(1)
-      .maybeSingle()
-
-    if (recentCooldownVote) {
-      const nextAvailable = new Date(new Date(recentCooldownVote.created_at).getTime() + 30 * 60 * 1000)
-      const waitMin = Math.ceil((nextAvailable.getTime() - Date.now()) / 60000)
-      setError('ありがとうございます！次のアンケートは30分後から回答できます。')
-      setIsSubmitting(false)
-      return
-    }
-
-    // ── 1分以内の重複チェック（ダブルサブミット防止） ──
-    const oneMinuteAgoFb = new Date(Date.now() - 60 * 1000).toISOString()
-    const { data: recentDuplicateFb } = await (supabase as any)
-      .from('votes')
-      .select('id')
-      .eq('normalized_email', normalizeEmail(formattedPhone))
-      .eq('professional_id', proId)
-      .eq('status', 'confirmed')
-      .gt('created_at', oneMinuteAgoFb)
-      .maybeSingle()
-
-    if (recentDuplicateFb) {
-      // ダブルサブミット検出 — 成功扱い（完了画面にリダイレクト）
-      console.log('[handleFallbackSubmit] Double submit detected:', normalizeEmail(formattedPhone), proId)
-      window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${recentDuplicateFb.id}&has_account=false`
       return
     }
 
@@ -1076,6 +1032,9 @@ function VoteForm() {
       qr_token: voteData.qr_token,
       status: 'confirmed', // フォールバックは即確定（後で認証を促す）
       auth_method: 'sms_fallback',
+      // Phase 1 Step 3: fallback は名前入力済み + phone。identity を活かせる
+      auth_display_name: fallbackName.trim() || null,
+      auth_provider_id: formattedPhone,
       channel,
       // --- Phase 1 Step 2 追加 ---
       display_mode: 'hidden',
@@ -1181,60 +1140,26 @@ function VoteForm() {
       return
     }
 
-    // 30分クールダウン（全プロ横断: 同一ユーザーは30分に1投票のみ）
-    const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString()
-    const { data: recentVote } = await (supabase as any)
-      .from('votes')
-      .select('created_at')
-      .eq('normalized_email', normalizeEmail(email))
-      .eq('status', 'confirmed')
-      .gt('created_at', thirtyMinAgo)
-      .limit(1)
-      .maybeSingle()
-
-    if (recentVote) {
-      const nextAvailable = new Date(new Date(recentVote.created_at).getTime() + 30 * 60 * 1000)
-      const waitMin = Math.ceil((nextAvailable.getTime() - Date.now()) / 60000)
-      setError('ありがとうございます！次のアンケートは30分後から回答できます。')
+    // ── 重複チェック（7日リピート / 30分クールダウン / 1分ダブルサブミット） ──
+    const submitDupeResult = await checkVoteDuplicates(supabase, {
+      voterIdentifier: email,
+      professionalId: proId,
+    })
+    if (!submitDupeResult.ok) {
+      if (submitDupeResult.reason === 'duplicate_submit' && submitDupeResult.existingVoteId) {
+        console.log('[handleSubmit] Double submit detected:', normalizeEmail(email), proId)
+        window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${submitDupeResult.existingVoteId}&has_account=true`
+        return
+      }
+      if (submitDupeResult.reason === 'already_voted' && submitDupeResult.recentVoteCreatedAt) {
+        const nextVoteDateSubmit = new Date(new Date(submitDupeResult.recentVoteCreatedAt).getTime() + 7 * 24 * 60 * 60 * 1000)
+        setError(`このプロにはすでにアンケートを回答済みです。次回は${nextVoteDateSubmit.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}以降に再度回答できます。`)
+      } else if (submitDupeResult.reason === 'cooldown') {
+        setError('ありがとうございます！次のアンケートは30分後から回答できます。')
+      } else {
+        setError('送信が重複しました。')
+      }
       setIsSubmitting(false)
-      return
-    }
-
-    // 7日リピートチェック（同じプロに対して）
-    const sevenDaysAgoSubmit = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-    const { data: recentRepeatVoteSubmit } = await (supabase as any)
-      .from('votes')
-      .select('id, created_at')
-      .eq('normalized_email', normalizeEmail(email))
-      .eq('professional_id', proId)
-      .eq('status', 'confirmed')
-      .gt('created_at', sevenDaysAgoSubmit)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (recentRepeatVoteSubmit) {
-      const nextVoteDateSubmit = new Date(new Date(recentRepeatVoteSubmit.created_at).getTime() + 7 * 24 * 60 * 60 * 1000)
-      setError(`このプロにはすでにアンケートを回答済みです。次回は${nextVoteDateSubmit.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}以降に再度回答できます。`)
-      setIsSubmitting(false)
-      return
-    }
-
-    // ── 1分以内の重複チェック（ダブルサブミット防止） ──
-    const oneMinuteAgoSubmit = new Date(Date.now() - 60 * 1000).toISOString()
-    const { data: recentDuplicateSubmit } = await (supabase as any)
-      .from('votes')
-      .select('id')
-      .eq('normalized_email', normalizeEmail(email))
-      .eq('professional_id', proId)
-      .eq('status', 'confirmed')
-      .gt('created_at', oneMinuteAgoSubmit)
-      .maybeSingle()
-
-    if (recentDuplicateSubmit) {
-      // ダブルサブミット検出 — 成功扱い（完了画面にリダイレクト）
-      console.log('[handleSubmit] Double submit detected:', normalizeEmail(email), proId)
-      window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${recentDuplicateSubmit.id}&has_account=true`
       return
     }
 
@@ -1279,6 +1204,10 @@ function VoteForm() {
       qr_token: qrToken,
       status: voteStatus,
       auth_method: 'email',
+      // Phase 1 Step 3: handleSubmit はボタン経由 → handleClerkVote へ移行済みのデッドコード。
+      //                 到達した場合のスキーマ保全のため null で埋める。
+      auth_display_name: null,
+      auth_provider_id: null,
       channel,
       // --- Phase 1 Step 2 追加 ---
       display_mode: 'hidden',
@@ -1446,6 +1375,172 @@ function VoteForm() {
     }
     setEmailCodeVerifying(false)
     setIsSubmitting(false)
+  }
+
+  // ── ログイン済み（Clerkセッション有り）投票ハンドラ ──
+  //   「このアカウントで回答する」ボタン経由。
+  //   旧 handleSubmit の session 分岐を分離し、Clerk strategy に応じた
+  //   auth_method / auth_display_name / auth_provider_id を正しく埋める。
+  async function handleClerkVote() {
+    if (isSubmitting) return
+    if (isPreview) return
+    if (!clerkUser) {
+      setError('ログイン状態が確認できません。ページを再読み込みしてください。')
+      return
+    }
+
+    // 🔒 SNAPSHOT: 認証前にstateを固定（stale state対策）
+    const voteDataSnapshot = buildVoteData()
+    if (!voteDataSnapshot.vote_type) {
+      console.error('[handleClerkVote] voteData snapshot is empty')
+      setError('投票データの取得に失敗しました。もう一度お試しください。')
+      return
+    }
+
+    setIsSubmitting(true)
+    setError('')
+
+    try {
+      // identity 情報抽出
+      const authMethod = determineAuthMethod(clerkUser)
+      const authDisplayName = extractDisplayName(clerkUser)
+      const authProviderId = clerkUser.id
+      const clerkEmail = clerkUser.primaryEmailAddress?.emailAddress || null
+      const clerkPhone = clerkUser.primaryPhoneNumber?.phoneNumber || null
+      const voterIdentifier = clerkEmail || clerkPhone
+      if (!voterIdentifier) {
+        setError('メールまたは電話番号が確認できません。再度ログインしてください。')
+        setIsSubmitting(false)
+        return
+      }
+
+      // 自己投票チェック（Clerk直接照合）
+      if (pro) {
+        if (clerkUser.id === pro.user_id) {
+          setError('ご自身への回答はできません')
+          setIsSubmitting(false)
+          return
+        }
+        if (clerkEmail && pro.contact_email &&
+            clerkEmail.toLowerCase() === pro.contact_email.toLowerCase()) {
+          setError('ご自身への回答はできません')
+          setIsSubmitting(false)
+          return
+        }
+      }
+
+      // 重複チェック（共通ヘルパー）
+      const clerkDupeResult = await checkVoteDuplicates(supabase, {
+        voterIdentifier,
+        professionalId: proId,
+      })
+      if (!clerkDupeResult.ok) {
+        if (clerkDupeResult.reason === 'duplicate_submit' && clerkDupeResult.existingVoteId) {
+          console.log('[handleClerkVote] Double submit detected')
+          window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${clerkDupeResult.existingVoteId}&has_account=true`
+          return
+        }
+        if (clerkDupeResult.reason === 'already_voted' && clerkDupeResult.recentVoteCreatedAt) {
+          const next = new Date(new Date(clerkDupeResult.recentVoteCreatedAt).getTime() + 7 * 24 * 60 * 60 * 1000)
+          setError(`このプロにはすでにアンケートを回答済みです。次回は${next.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}以降に再度回答できます。`)
+        } else if (clerkDupeResult.reason === 'cooldown') {
+          setError('ありがとうございます！次のアンケートは30分後から回答できます。')
+        } else {
+          setError('送信が重複しました。')
+        }
+        setIsSubmitting(false)
+        return
+      }
+
+      // voter-pro-check: このClerkユーザーがプロか判定（client-side 直接クエリ）
+      let voterProfessionalId: string | null = null
+      {
+        const { data: proByUserId } = await (supabase as any)
+          .from('professionals')
+          .select('id')
+          .eq('user_id', clerkUser.id)
+          .maybeSingle()
+        if (proByUserId?.id) {
+          voterProfessionalId = proByUserId.id
+        } else if (clerkEmail) {
+          const { data: proByEmail } = await (supabase as any)
+            .from('professionals')
+            .select('id')
+            .eq('contact_email', clerkEmail.toLowerCase())
+            .maybeSingle()
+          if (proByEmail?.id) voterProfessionalId = proByEmail.id
+        }
+      }
+      const clientPhotoUrl = clerkUser.imageUrl || null
+      const displayMode = voterProfessionalId ? 'pro_link' : 'hidden'
+
+      // 投票INSERT（Clerk認証済みなので status='confirmed'）
+      const { data: insertedVote, error: voteError } = await (supabase as any)
+        .from('votes')
+        .insert({
+          professional_id: proId,
+          voter_email: voterIdentifier,
+          normalized_email: normalizeEmail(voterIdentifier),
+          client_user_id: null,
+          vote_weight: 1.0,
+          vote_type: voteDataSnapshot.vote_type,
+          selected_proof_ids: voteDataSnapshot.selected_proof_ids,
+          selected_personality_ids: voteDataSnapshot.selected_personality_ids,
+          selected_reward_id: voteDataSnapshot.selected_reward_id,
+          comment: voteDataSnapshot.comment,
+          qr_token: voteDataSnapshot.qr_token,
+          status: 'confirmed',
+          auth_method: authMethod,
+          auth_display_name: authDisplayName,
+          auth_provider_id: authProviderId,
+          channel: voteDataSnapshot.channel || channel,
+          display_mode: displayMode,
+          client_photo_url: clientPhotoUrl,
+          voter_professional_id: voterProfessionalId,
+        })
+        .select()
+        .maybeSingle()
+
+      if (voteError) {
+        if (voteError.code === '23505') {
+          console.error('[handleClerkVote] Duplicate vote (race condition):', voteError)
+          setError('送信が重複しました。すでに回答は送信されています。')
+        } else {
+          console.error('[handleClerkVote] Vote INSERT error:', voteError)
+          setError(`送信に失敗しました (${voteError.code || 'unknown'}): ${voteError.message || '不明なエラー'}`)
+        }
+        setIsSubmitting(false)
+        return
+      }
+
+      // vote_emails 記録（失敗しても投票は成立）
+      try {
+        await (supabase as any).from('vote_emails').insert({
+          email: voterIdentifier,
+          professional_id: proId,
+          source: 'vote',
+        })
+      } catch { /* 無視 */ }
+
+      // リワード処理
+      let clerkRid = ''
+      if (voteDataSnapshot.selected_reward_id && insertedVote) {
+        const { data: crData } = await (supabase as any).from('client_rewards').insert({
+          vote_id: insertedVote.id,
+          reward_id: voteDataSnapshot.selected_reward_id,
+          professional_id: proId,
+          client_email: voterIdentifier,
+          status: 'active',
+        }).select('id').maybeSingle()
+        if (crData?.id) clerkRid = crData.id
+      }
+
+      window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${insertedVote.id}&has_account=true${clerkRid ? `&rid=${clerkRid}` : ''}`
+    } catch (err: any) {
+      console.error('[handleClerkVote] Unexpected error:', err)
+      setError('エラーが発生しました。もう一度お試しください。')
+      setIsSubmitting(false)
+    }
   }
 
   // ── スプラッシュ（データはバックグラウンドで読み込み中） ──
@@ -2022,8 +2117,9 @@ function VoteForm() {
             {isLoggedIn && sessionEmail ? (
               <button
                 onClick={() => {
-                  voteMethodRef.current = 'session'
-                  handleSubmit({ preventDefault: () => {} } as React.FormEvent)
+                  // Phase 1 Step 3: Clerk セッション経由の投票は handleClerkVote に分離
+                  //   （auth_method / display_name / provider_id を strategy 判別で正しく埋める）
+                  handleClerkVote()
                 }}
                 disabled={isSubmitting}
                 style={{
