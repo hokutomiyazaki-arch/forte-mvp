@@ -32,6 +32,11 @@ export type VoteDuplicateResult = {
   reason?: VoteDuplicateReason
   existingVoteId?: string
   recentVoteCreatedAt?: string
+  /**
+   * cooldown 判定時のみセット。30 分 - 経過分 の切り上げ値（1 以上）。
+   * ユーザー向けメッセージで「あと N 分後に再度お試しください」を表示するため。
+   */
+  cooldownRemainingMinutes?: number
 }
 
 export type CheckVoteDuplicatesParams = {
@@ -82,10 +87,14 @@ export async function checkVoteDuplicates(
     .maybeSingle()
 
   if (cooldownVote) {
+    // 残り分数を計算（1 分未満も最低 1 分として表示）
+    const elapsedMs = Date.now() - new Date(cooldownVote.created_at).getTime()
+    const remainingMinutes = Math.max(1, Math.ceil((30 * 60 * 1000 - elapsedMs) / 60000))
     return {
       ok: false,
       reason: 'cooldown',
       recentVoteCreatedAt: cooldownVote.created_at,
+      cooldownRemainingMinutes: remainingMinutes,
     }
   }
 

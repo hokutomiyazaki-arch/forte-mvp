@@ -59,10 +59,19 @@ export async function POST(req: NextRequest) {
           client_reward_id: '',
         })
       }
+      // Phase 1b: context 情報も返してクライアント側で getVoteErrorMessage() が
+      //           次回日付や残り分数を表示できるようにする
       if (dupeResult.reason === 'cooldown') {
-        return NextResponse.json({ error: 'cooldown' }, { status: 429 })
+        return NextResponse.json({
+          error: 'cooldown',
+          recentVoteCreatedAt: dupeResult.recentVoteCreatedAt,
+          cooldownRemainingMinutes: dupeResult.cooldownRemainingMinutes,
+        }, { status: 429 })
       }
-      return NextResponse.json({ error: 'already_voted' }, { status: 409 })
+      return NextResponse.json({
+        error: 'already_voted',
+        recentVoteCreatedAt: dupeResult.recentVoteCreatedAt,
+      }, { status: 409 })
     }
 
     // --- ハッシュチェーン処理 START ---
