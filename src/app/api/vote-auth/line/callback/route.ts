@@ -6,6 +6,7 @@ import { normalizeEmail } from '@/lib/normalize-email'
 import { computeProofHash, generateNonce, GENESIS_HASH } from '@/lib/proof-chain'
 import { checkVoterIsPro } from '@/lib/voter-pro-check'
 import { checkVoteDuplicates } from '@/lib/vote-duplicate-check'
+import { claimLineCallback } from '@/lib/line-idempotency'
 
 export const dynamic = 'force-dynamic'
 
@@ -175,6 +176,40 @@ export async function GET(request: NextRequest) {
     }
 
     const supabaseAdmin = getSupabaseAdmin()
+
+    // Step 3.5: LINE callback 冪等性 claim（二重発火対策）
+    //   LINE 内蔵ブラウザの既知挙動で callback が 2 回発火すると、
+    //   checkVoteDuplicates → INSERT 間の race で 0.04 秒差の二重投票が発生する。
+    //   DB UNIQUE 制約で 5 秒ウィンドウを serialize することで防止する。
+    if (lineProfile?.userId) {
+      const claim = await claimLineCallback(supabaseAdmin, lineProfile.userId, professional_id)
+      if (!claim.acquired) {
+        console.log('[vote-auth/line/callback] Claim rejected — duplicate callback detected:', lineProfile.userId, professional_id)
+        if (claim.existingVoteId) {
+          return NextResponse.redirect(
+            new URL(`/vote-confirmed?pro=${professional_id}&vote_id=${claim.existingVoteId}&auth_method=line`, origin)
+          )
+        }
+        // 先行 callback が INSERT 前の可能性あり — 短く待って再検索
+        await new Promise(resolve => setTimeout(resolve, 1500))
+        const { data: retryVote } = await supabaseAdmin
+          .from('votes')
+          .select('id')
+          .eq('auth_provider_id', lineProfile.userId)
+          .eq('professional_id', professional_id)
+          .eq('auth_method', 'line')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        if (retryVote) {
+          return NextResponse.redirect(
+            new URL(`/vote-confirmed?pro=${professional_id}&vote_id=${retryVote.id}&auth_method=line`, origin)
+          )
+        }
+        // ここまで来たら先行 callback は失敗した可能性 — 通常フローに進む（fail-open）
+        console.warn('[vote-auth/line/callback] Claim rejected but no existing vote found after retry — falling through')
+      }
+    }
 
     // Step 4: 重複チェック（7日リピート / 30分クールダウン / 1分ダブルサブミット）
     const dupeResult = await checkVoteDuplicates(supabaseAdmin, {
