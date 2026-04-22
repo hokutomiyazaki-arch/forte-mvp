@@ -19,14 +19,20 @@ import { normalizeEmail } from './normalize-email'
 
 export type VoteDuplicateReason = 'already_voted' | 'cooldown' | 'duplicate_submit'
 
-export type VoteDuplicateResult =
-  | { ok: true }
-  | {
-      ok: false
-      reason: VoteDuplicateReason
-      existingVoteId?: string
-      recentVoteCreatedAt?: string
-    }
+/**
+ * flat型: `ok: boolean` + optional fields。
+ *
+ * 理由: discriminated union にすると呼び出し側で narrowing が必要になり、
+ *       一部の TypeScript 設定下では `if (!result.ok)` 分岐内でも
+ *       `result.reason` が見えないビルドエラーになる。全 optional にすることで
+ *       narrowing 不要、将来フィールド追加も安全。
+ */
+export type VoteDuplicateResult = {
+  ok: boolean
+  reason?: VoteDuplicateReason
+  existingVoteId?: string
+  recentVoteCreatedAt?: string
+}
 
 export type CheckVoteDuplicatesParams = {
   /** メール or 電話番号。内部で normalizeEmail() を適用する。 */
