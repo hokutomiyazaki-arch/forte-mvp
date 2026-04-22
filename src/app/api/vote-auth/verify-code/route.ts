@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { normalizeEmail } from '@/lib/normalize-email'
 import { computeProofHash, generateNonce, GENESIS_HASH } from '@/lib/proof-chain'
 import { checkVoterIsPro } from '@/lib/voter-pro-check'
+import { checkVoteDuplicates } from '@/lib/vote-duplicate-check'
 
 
 export const dynamic = 'force-dynamic'
@@ -43,57 +44,25 @@ export async function POST(req: NextRequest) {
       .update({ confirmed_at: new Date().toISOString() })
       .eq('id', confirmation.id)
 
-    // ── 30分クールダウンチェック（全プロ横断） ──
-    const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString()
-    const { data: recentVote } = await supabase
-      .from('votes')
-      .select('created_at')
-      .eq('normalized_email', normalizeEmail(email))
-      .eq('status', 'confirmed')
-      .gt('created_at', thirtyMinAgo)
-      .limit(1)
-      .maybeSingle()
-
-    if (recentVote) {
-      return NextResponse.json({ error: 'cooldown' }, { status: 429 })
-    }
-
-    // ── 7日リピートチェック（同じプロに対して） ──
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-    const { data: recentRepeatVote } = await supabase
-      .from('votes')
-      .select('id, created_at')
-      .eq('normalized_email', normalizeEmail(email))
-      .eq('professional_id', professional_id)
-      .eq('status', 'confirmed')
-      .gt('created_at', sevenDaysAgo)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (recentRepeatVote) {
+    // ── 重複チェック（7日リピート / 30分クールダウン / 1分ダブルサブミット） ──
+    const dupeResult = await checkVoteDuplicates(supabase, {
+      voterIdentifier: email,
+      professionalId: professional_id,
+    })
+    if (!dupeResult.ok) {
+      if (dupeResult.reason === 'duplicate_submit' && dupeResult.existingVoteId) {
+        // ダブルサブミット検出 — エラーではなく成功扱い
+        console.log('[verify-code] Double submit detected:', normalizeEmail(email), professional_id)
+        return NextResponse.json({
+          success: true,
+          vote_id: dupeResult.existingVoteId,
+          client_reward_id: '',
+        })
+      }
+      if (dupeResult.reason === 'cooldown') {
+        return NextResponse.json({ error: 'cooldown' }, { status: 429 })
+      }
       return NextResponse.json({ error: 'already_voted' }, { status: 409 })
-    }
-
-    // ── 1分以内の重複チェック（ダブルサブミット防止） ──
-    const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString()
-    const { data: recentDuplicate } = await supabase
-      .from('votes')
-      .select('id')
-      .eq('normalized_email', normalizeEmail(email))
-      .eq('professional_id', professional_id)
-      .eq('status', 'confirmed')
-      .gt('created_at', oneMinuteAgo)
-      .maybeSingle()
-
-    if (recentDuplicate) {
-      // ダブルサブミット検出 — エラーではなく成功扱い
-      console.log('[verify-code] Double submit detected:', normalizeEmail(email), professional_id)
-      return NextResponse.json({
-        success: true,
-        vote_id: recentDuplicate.id,
-        client_reward_id: '',
-      })
     }
 
     // --- ハッシュチェーン処理 START ---
@@ -149,8 +118,11 @@ export async function POST(req: NextRequest) {
         proof_hash: proofHash,
         prev_hash: prevHash,
         proof_nonce: nonce,
-        // --- Phase 1 Step 2 追加 ---
-        display_mode: 'hidden',
+        // --- Phase 1 Step 3: Clerk セッション非経由なので両方 null ---
+        auth_display_name: null,
+        auth_provider_id: null,
+        // --- Phase 1 Step 2/3（display_mode は pro なら pro_link 自動） ---
+        display_mode: voterProfessionalId ? 'pro_link' : 'hidden',
         client_photo_url: null,
         voter_professional_id: voterProfessionalId,
       })

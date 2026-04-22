@@ -5,6 +5,7 @@ import { clerkClient } from '@clerk/nextjs/server'
 import { normalizeEmail } from '@/lib/normalize-email'
 import { computeProofHash, generateNonce, GENESIS_HASH } from '@/lib/proof-chain'
 import { checkVoterIsPro } from '@/lib/voter-pro-check'
+import { checkVoteDuplicates } from '@/lib/vote-duplicate-check'
 
 export const dynamic = 'force-dynamic'
 
@@ -175,41 +176,22 @@ export async function GET(request: NextRequest) {
 
     const supabaseAdmin = getSupabaseAdmin()
 
-    // Step 4: 7日リピートチェック
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-    const { data: recentRepeatVote } = await supabaseAdmin
-      .from('votes')
-      .select('id, created_at')
-      .eq('professional_id', professional_id)
-      .eq('normalized_email', normalizeEmail(email))
-      .eq('status', 'confirmed')
-      .gt('created_at', sevenDaysAgo)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (recentRepeatVote) {
+    // Step 4: 重複チェック（7日リピート / 30分クールダウン / 1分ダブルサブミット）
+    const dupeResult = await checkVoteDuplicates(supabaseAdmin, {
+      voterIdentifier: email,
+      professionalId: professional_id,
+    })
+    if (!dupeResult.ok) {
+      if (dupeResult.reason === 'duplicate_submit' && dupeResult.existingVoteId) {
+        // ダブルサブミット検出 — エラーではなく成功扱い
+        console.log('[vote-auth/line/callback] Double submit detected:', normalizeEmail(email), professional_id)
+        return NextResponse.redirect(
+          new URL(`/vote-confirmed?pro=${professional_id}&vote_id=${dupeResult.existingVoteId}&auth_method=line`, origin)
+        )
+      }
+      const errKey = dupeResult.reason === 'cooldown' ? 'cooldown' : 'already_voted'
       return NextResponse.redirect(
-        new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=already_voted`, origin)
-      )
-    }
-
-    // ── 1分以内の重複チェック（ダブルサブミット防止） ──
-    const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString()
-    const { data: recentDuplicate } = await supabaseAdmin
-      .from('votes')
-      .select('id')
-      .eq('normalized_email', normalizeEmail(email))
-      .eq('professional_id', professional_id)
-      .eq('status', 'confirmed')
-      .gt('created_at', oneMinuteAgo)
-      .maybeSingle()
-
-    if (recentDuplicate) {
-      // ダブルサブミット検出 — エラーではなく成功扱い（完了画面にリダイレクト）
-      console.log('[vote-auth/line/callback] Double submit detected:', normalizeEmail(email), professional_id)
-      return NextResponse.redirect(
-        new URL(`/vote-confirmed?pro=${professional_id}&vote_id=${recentDuplicate.id}&auth_method=line`, origin)
+        new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=${errKey}`, origin)
       )
     }
 
@@ -267,22 +249,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Step 6: 30分クールダウンチェック（全プロ横断）
-    const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString()
-    const { data: recentVote } = await supabaseAdmin
-      .from('votes')
-      .select('created_at')
-      .eq('normalized_email', normalizeEmail(email))
-      .eq('status', 'confirmed')
-      .gt('created_at', thirtyMinAgo)
-      .limit(1)
-      .maybeSingle()
-
-    if (recentVote) {
-      return NextResponse.redirect(
-        new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=cooldown`, origin)
-      )
-    }
+    // Step 6: （重複/クールダウンチェックは Step 4 の checkVoteDuplicates で統一済み）
 
     // --- ハッシュチェーン処理 START ---
     const { data: latestVote } = await supabaseAdmin
@@ -338,8 +305,11 @@ export async function GET(request: NextRequest) {
         proof_hash: proofHash,
         prev_hash: prevHash,
         proof_nonce: nonce,
-        // --- Phase 1 Step 2 追加 ---
-        display_mode: 'hidden',
+        // --- Phase 1 Step 3 追加: auth_display_name / auth_provider_id ---
+        auth_display_name: lineProfile?.displayName || null,
+        auth_provider_id: lineProfile?.userId || null,
+        // --- Phase 1 Step 2 追加（display_mode は pro なら pro_link 自動） ---
+        display_mode: voterProfessionalId ? 'pro_link' : 'hidden',
         client_photo_url: clientPhotoUrl,
         voter_professional_id: voterProfessionalId,
       })
