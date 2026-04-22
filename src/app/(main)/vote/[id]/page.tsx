@@ -7,6 +7,7 @@ import { Professional, getRewardLabel } from '@/lib/types'
 import { normalizeEmail } from '@/lib/normalize-email'
 import { extractDisplayName, determineAuthMethod } from '@/lib/vote-auth-helpers'
 import { checkVoteDuplicates } from '@/lib/vote-duplicate-check'
+import { getVoteErrorMessage, mapAuthErrorParamToReason } from '@/lib/vote-error-messages'
 import { Suspense } from 'react'
 // AuthMethodSelector は login ページで使用。投票ページはフォーム内のためインライン実装
 
@@ -431,30 +432,14 @@ function VoteForm() {
     loadedRef.current = true
 
     async function load() {
-      // LINE/Google認証からのエラーハンドリング
+      // LINE/Google認証からのエラーハンドリング — getVoteErrorMessage で統一化
       const authError = searchParams.get('error')
       if (authError === 'already_voted') {
+        // 7日リピート専用画面にルート（error 表示とは別扱い）
         setAlreadyVoted(true)
-      } else if (authError === 'self_vote') {
-        setError('ご自身への回答はできません')
-      } else if (authError === 'line_cancelled') {
-        setError('LINE認証がキャンセルされました')
-      } else if (authError === 'line_expired') {
-        setError('認証の有効期限が切れました。もう一度お試しください。')
-      } else if (authError === 'line_no_email') {
-        setError('LINEからメールアドレスを取得できませんでした。メールアドレスを入力して回答してください。')
-      } else if (authError === 'cooldown') {
-        setError('ありがとうございます！次のアンケートは30分後から回答できます。')
-      } else if (authError === 'vote_failed') {
-        setError('送信に失敗しました。もう一度お試しください。')
-      } else if (authError === 'invalid_vote_data') {
-        setError('データが無効です。もう一度お試しください。')
-      } else if (authError === 'google_cancelled') {
-        setError('Google認証がキャンセルされました')
-      } else if (authError === 'google_failed') {
-        setError('Google認証に失敗しました。もう一度お試しください。')
-      } else if (authError === 'google_no_email') {
-        setError('Googleアカウントからメールアドレスを取得できませんでした。メールアドレスで回答してください。')
+      } else if (authError) {
+        const reason = mapAuthErrorParamToReason(authError)
+        setError(getVoteErrorMessage(reason))
       }
 
       // ── ウェーブ1: QRチェック・プロ情報・人柄を並列取得 ──
@@ -756,14 +741,10 @@ function VoteForm() {
         professionalId: proId,
       })
       if (!dupeResult.ok) {
-        if (dupeResult.reason === 'already_voted' && dupeResult.recentVoteCreatedAt) {
-          const nextVoteDate = new Date(new Date(dupeResult.recentVoteCreatedAt).getTime() + 7 * 24 * 60 * 60 * 1000)
-          setError(`このプロにはすでにアンケートを回答済みです。次回は${nextVoteDate.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}以降に再度回答できます。`)
-        } else if (dupeResult.reason === 'cooldown') {
-          setError('ありがとうございます！次のアンケートは30分後から回答できます。')
-        } else {
-          setError('送信が重複しました。すでに回答は送信されています。')
-        }
+        setError(getVoteErrorMessage(dupeResult.reason, {
+          recentVoteCreatedAt: dupeResult.recentVoteCreatedAt,
+          cooldownRemainingMinutes: dupeResult.cooldownRemainingMinutes,
+        }))
         setPhoneSending(false)
         return
       }
@@ -878,11 +859,10 @@ function VoteForm() {
           window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${verifyDupeResult.existingVoteId}&has_account=true`
           return
         }
-        if (verifyDupeResult.reason === 'cooldown') {
-          setError('ありがとうございます！次のアンケートは30分後から回答できます。')
-        } else {
-          setError('このプロにはすでにアンケートを回答済みです。')
-        }
+        setError(getVoteErrorMessage(verifyDupeResult.reason, {
+          recentVoteCreatedAt: verifyDupeResult.recentVoteCreatedAt,
+          cooldownRemainingMinutes: verifyDupeResult.cooldownRemainingMinutes,
+        }))
         setPhoneVerifying(false)
         setIsSubmitting(false)
         return
@@ -1004,14 +984,10 @@ function VoteForm() {
         window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${fbDupeResult.existingVoteId}&has_account=false`
         return
       }
-      if (fbDupeResult.reason === 'already_voted' && fbDupeResult.recentVoteCreatedAt) {
-        const nextVoteDateFb = new Date(new Date(fbDupeResult.recentVoteCreatedAt).getTime() + 7 * 24 * 60 * 60 * 1000)
-        setError(`このプロにはすでにアンケートを回答済みです。次回は${nextVoteDateFb.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}以降に再度回答できます。`)
-      } else if (fbDupeResult.reason === 'cooldown') {
-        setError('ありがとうございます！次のアンケートは30分後から回答できます。')
-      } else {
-        setError('送信が重複しました。')
-      }
+      setError(getVoteErrorMessage(fbDupeResult.reason, {
+        recentVoteCreatedAt: fbDupeResult.recentVoteCreatedAt,
+        cooldownRemainingMinutes: fbDupeResult.cooldownRemainingMinutes,
+      }))
       setIsSubmitting(false)
       return
     }
@@ -1101,7 +1077,7 @@ function VoteForm() {
     if (clerkUser && pro) {
       // user_id 照合
       if (clerkUser.id === pro.user_id) {
-        setError('ご自身への回答はできません')
+        setError(getVoteErrorMessage('self_vote'))
         setIsSubmitting(false)
         return
       }
@@ -1109,7 +1085,7 @@ function VoteForm() {
       const clerkEmail = clerkUser.primaryEmailAddress?.emailAddress
       if (clerkEmail && pro.contact_email &&
           clerkEmail.toLowerCase() === pro.contact_email.toLowerCase()) {
-        setError('ご自身への回答はできません')
+        setError(getVoteErrorMessage('self_vote'))
         setIsSubmitting(false)
         return
       }
@@ -1129,7 +1105,7 @@ function VoteForm() {
       }
       const checkData = await checkRes.json()
       if (checkData.isSelf) {
-        setError('ご自身への回答はできません')
+        setError(getVoteErrorMessage('self_vote'))
         setIsSubmitting(false)
         return
       }
@@ -1151,14 +1127,10 @@ function VoteForm() {
         window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${submitDupeResult.existingVoteId}&has_account=true`
         return
       }
-      if (submitDupeResult.reason === 'already_voted' && submitDupeResult.recentVoteCreatedAt) {
-        const nextVoteDateSubmit = new Date(new Date(submitDupeResult.recentVoteCreatedAt).getTime() + 7 * 24 * 60 * 60 * 1000)
-        setError(`このプロにはすでにアンケートを回答済みです。次回は${nextVoteDateSubmit.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}以降に再度回答できます。`)
-      } else if (submitDupeResult.reason === 'cooldown') {
-        setError('ありがとうございます！次のアンケートは30分後から回答できます。')
-      } else {
-        setError('送信が重複しました。')
-      }
+      setError(getVoteErrorMessage(submitDupeResult.reason, {
+        recentVoteCreatedAt: submitDupeResult.recentVoteCreatedAt,
+        cooldownRemainingMinutes: submitDupeResult.cooldownRemainingMinutes,
+      }))
       setIsSubmitting(false)
       return
     }
@@ -1360,15 +1332,21 @@ function VoteForm() {
         return
       }
 
-      // エラーハンドリング
+      // エラーハンドリング — getVoteErrorMessage で統一
       if (data.error === 'invalid_code') {
         setError('確認コードが正しくありません')
       } else if (data.error === 'expired_code') {
-        setError('確認コードの有効期限が切れました。再送信してください。')
+        setError(getVoteErrorMessage('auth_expired'))
       } else if (data.error === 'already_voted') {
-        setError('送信が重複しました。すでに回答は送信されています。')
+        setError(getVoteErrorMessage('already_voted', {
+          recentVoteCreatedAt: data.recentVoteCreatedAt,
+        }))
+      } else if (data.error === 'cooldown') {
+        setError(getVoteErrorMessage('cooldown', {
+          cooldownRemainingMinutes: data.cooldownRemainingMinutes,
+        }))
       } else {
-        setError(data.error || '認証に失敗しました。もう一度お試しください。')
+        setError(getVoteErrorMessage('auth_invalid'))
       }
     } catch {
       setError('エラーが発生しました。もう一度お試しください。')
@@ -1417,13 +1395,13 @@ function VoteForm() {
       // 自己投票チェック（Clerk直接照合）
       if (pro) {
         if (clerkUser.id === pro.user_id) {
-          setError('ご自身への回答はできません')
+          setError(getVoteErrorMessage('self_vote'))
           setIsSubmitting(false)
           return
         }
         if (clerkEmail && pro.contact_email &&
             clerkEmail.toLowerCase() === pro.contact_email.toLowerCase()) {
-          setError('ご自身への回答はできません')
+          setError(getVoteErrorMessage('self_vote'))
           setIsSubmitting(false)
           return
         }
@@ -1440,14 +1418,10 @@ function VoteForm() {
           window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${clerkDupeResult.existingVoteId}&has_account=true`
           return
         }
-        if (clerkDupeResult.reason === 'already_voted' && clerkDupeResult.recentVoteCreatedAt) {
-          const next = new Date(new Date(clerkDupeResult.recentVoteCreatedAt).getTime() + 7 * 24 * 60 * 60 * 1000)
-          setError(`このプロにはすでにアンケートを回答済みです。次回は${next.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}以降に再度回答できます。`)
-        } else if (clerkDupeResult.reason === 'cooldown') {
-          setError('ありがとうございます！次のアンケートは30分後から回答できます。')
-        } else {
-          setError('送信が重複しました。')
-        }
+        setError(getVoteErrorMessage(clerkDupeResult.reason, {
+          recentVoteCreatedAt: clerkDupeResult.recentVoteCreatedAt,
+          cooldownRemainingMinutes: clerkDupeResult.cooldownRemainingMinutes,
+        }))
         setIsSubmitting(false)
         return
       }
