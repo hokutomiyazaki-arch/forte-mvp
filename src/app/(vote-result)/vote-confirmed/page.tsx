@@ -342,7 +342,7 @@ function ConfirmedContent() {
         </div>
 
         {/* ===== セクション1.5: Voice への顔写真・ニックネーム同意 UI（Phase 2） ===== */}
-        {consentVote && <VoteConsentSection vote={consentVote} />}
+        {consentVote && <VoteConsentSection vote={consentVote} proName={proName} />}
 
         {/* ===== セクション2: リワード開示（選択済みの場合） ===== */}
         {reward && (
