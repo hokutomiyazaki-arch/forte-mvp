@@ -113,13 +113,16 @@ export async function GET(request: NextRequest) {
           console.error('[vote-auth/line/callback] Recovery check failed:', e)
         }
 
-        // invalid_grant で最近の vote が見つからない = 1回目 callback が重複/自己投票/
-        // 7日リピート等で弾かれた可能性が高い。line_expired は認証期限切れ
-        // メッセージが出て混乱するため、already_voted にフォールバック。
-        // （真の OAuth 期限切れは稀、かつユーザーはもう一度 LINE ボタンを
-        //   押せば fresh なフローでより正確なエラーに誘導される）
-        console.log('[vote-auth/line/callback] invalid_grant without recent vote — assuming dup-blocked 1st callback')
-        return NextResponse.redirect(new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=already_voted`, origin))
+        // invalid_grant で最近の vote が見つからない場合、1回目 callback の
+        // 失敗理由（cooldown / already_voted / self_vote / etc.）をこの時点で
+        // 特定する手段がない（email/userId は token 交換失敗により取れない）。
+        // 以前は `already_voted` に固定で倒していたが、本来 cooldown だった
+        // ケースまで「既にご投票いただいております」と誤表示されるため、
+        // 汎用リトライエラー `line_retry` にフォールバックし、もう一度 LINE
+        // 認証を促す。fresh な code で再試行すれば Step 4 の checkVoteDuplicates
+        // が正確な reason を返す。
+        console.log('[vote-auth/line/callback] invalid_grant without recent vote — falling back to line_retry (reason unknown)')
+        return NextResponse.redirect(new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=line_retry`, origin))
       }
 
       return NextResponse.redirect(new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=line_expired`, origin))
@@ -233,9 +236,12 @@ export async function GET(request: NextRequest) {
         )
       }
       const errKey = dupeResult.reason === 'cooldown' ? 'cooldown' : 'already_voted'
-      return NextResponse.redirect(
-        new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=${errKey}`, origin)
-      )
+      const errUrl = new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=${errKey}`, origin)
+      // cooldown 時は残り分数を URL に付与してフロントで「あとN分後」を正確表示
+      if (dupeResult.reason === 'cooldown' && dupeResult.cooldownRemainingMinutes) {
+        errUrl.searchParams.set('remaining', String(dupeResult.cooldownRemainingMinutes))
+      }
+      return NextResponse.redirect(errUrl)
     }
 
     // Step 5: 自己投票チェック（強化版）

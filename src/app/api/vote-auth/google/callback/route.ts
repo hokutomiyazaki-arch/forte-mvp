@@ -184,9 +184,12 @@ export async function GET(request: NextRequest) {
         )
       }
       const errKey = dupeResult.reason === 'cooldown' ? 'cooldown' : 'already_voted'
-      return NextResponse.redirect(
-        new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=${errKey}`, origin)
-      )
+      const errUrl = new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=${errKey}`, origin)
+      // cooldown 時は残り分数を URL に付与してフロントで「あとN分後」を正確表示
+      if (dupeResult.reason === 'cooldown' && dupeResult.cooldownRemainingMinutes) {
+        errUrl.searchParams.set('remaining', String(dupeResult.cooldownRemainingMinutes))
+      }
+      return NextResponse.redirect(errUrl)
     }
 
     // Step 5: 自己投票チェック（実在カラムのみ + デバッグログ付き）

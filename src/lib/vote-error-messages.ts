@@ -18,6 +18,7 @@ import type { VoteDuplicateReason } from './vote-duplicate-check'
 export type VoteAuthErrorReason =
   | 'auth_expired'     // 認証コード自体の有効期限切れ
   | 'auth_invalid'     // 認証コード不正
+  | 'auth_retry'       // 認証コードが使用済みで 2 回目 callback が届いた等、原因不明。もう一度認証させる
   | 'self_vote'        // 自己投票ブロック
   | 'line_cancelled'   // LINE 認証キャンセル
   | 'google_cancelled' // Google 認証キャンセル
@@ -59,7 +60,7 @@ export function getVoteErrorMessage(
 
     case 'cooldown': {
       const remaining = context?.cooldownRemainingMinutes ?? 30
-      return `連続回答を防ぐため、あと${remaining}分後に再度お試しください。`
+      return `連続投票を防ぐため、30分以内は1件のみ投票可能です。あと${remaining}分後にもう一度お試しください。他のプロへの投票は時間をおいてからお願いします。`
     }
 
     case 'duplicate_submit':
@@ -73,6 +74,9 @@ export function getVoteErrorMessage(
 
     case 'auth_invalid':
       return '認証に失敗しました。もう一度お試しください。'
+
+    case 'auth_retry':
+      return '認証処理が完了できませんでした。もう一度「LINEで認証」ボタンを押してお試しください。（既にご投票が完了している場合は、通知メールまたは履歴をご確認ください）'
 
     case 'line_cancelled':
       return 'LINE認証がキャンセルされました。'
@@ -110,6 +114,7 @@ export function mapAuthErrorParamToReason(param: string | null | undefined): Vot
     case 'line_cancelled': return 'line_cancelled'
     case 'google_cancelled': return 'google_cancelled'
     case 'line_expired': return 'auth_expired'
+    case 'line_retry': return 'auth_retry'
     case 'line_no_email': return 'line_no_email'
     case 'google_failed': return 'auth_invalid'
     case 'google_no_email': return 'google_no_email'
