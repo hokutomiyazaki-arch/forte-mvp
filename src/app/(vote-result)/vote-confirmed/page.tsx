@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import RewardReveal from '@/components/RewardReveal'
+import VoteConsentSection, { VoteConsentVote } from '@/components/vote-consent/VoteConsentSection'
 import { Suspense } from 'react'
 import Link from 'next/link'
 import { useProStatus } from '@/lib/useProStatus'
@@ -32,6 +33,8 @@ function ConfirmedContent() {
   const [nearbyPros, setNearbyPros] = useState<any[]>([])
   const [currentRid, setCurrentRid] = useState(rid)
   const [copyToast, setCopyToast] = useState('')
+  // Phase 2: 同意 UI 用の vote レコード（consent 対象フィールドのみ）
+  const [consentVote, setConsentVote] = useState<VoteConsentVote | null>(null)
 
   // PWA インストール
   const [installPrompt, setInstallPrompt] = useState<any>(null)
@@ -128,6 +131,18 @@ function ConfirmedContent() {
 
   useEffect(() => {
     async function load() {
+      // Phase 2: 同意 UI 用の vote レコード取得（consent 分岐判定に使う）
+      if (voteId) {
+        const { data: voteData } = await (supabase as any)
+          .from('votes')
+          .select('id, professional_id, auth_method, auth_display_name, client_photo_url, voter_professional_id, display_mode')
+          .eq('id', voteId)
+          .maybeSingle()
+        if (voteData) {
+          setConsentVote(voteData as VoteConsentVote)
+        }
+      }
+
       // プロ名取得（RLS問題なし）
       if (proId) {
         const { data: proData } = await (supabase as any)
@@ -326,6 +341,9 @@ function ConfirmedContent() {
           </p>
         </div>
 
+        {/* ===== セクション1.5: Voice への顔写真・ニックネーム同意 UI（Phase 2） ===== */}
+        {consentVote && <VoteConsentSection vote={consentVote} />}
+
         {/* ===== セクション2: リワード開示（選択済みの場合） ===== */}
         {reward && (
           <>
@@ -353,29 +371,44 @@ function ConfirmedContent() {
         {hasAccount && (
           <div className="bg-[#1A1A2E] rounded-2xl p-6 text-center">
             <p className="text-white text-lg font-bold mb-2">
-              {isProUser ? 'ダッシュボードに戻る' : 'ありがとうございました'}
+              ありがとうございました
             </p>
-            {isProUser && (
-              <p className="text-gray-400 text-sm mb-5 leading-relaxed">
-                プロダッシュボードで状況を確認できます
-              </p>
-            )}
             {isProUser ? (
-              <button
-                onClick={async () => {
-                  try {
-                    const res = await fetch('/api/user/role')
-                    const data = await res.json()
-                    const isProResult = data.isPro || roleParam === 'pro'
-                    window.location.href = isProResult ? '/dashboard' : '/mycard'
-                  } catch {
-                    window.location.href = isProUser ? '/dashboard' : '/mycard'
-                  }
-                }}
-                className="block w-full py-4 rounded-xl font-bold text-lg text-[#1A1A2E] bg-[#C4A35A] hover:bg-[#b3923f] transition cursor-pointer"
-              >
-                ダッシュボードを見る →
-              </button>
+              // Phase 2 暫定: プロ投票者（ケース🅰）は投票先プロのプロフィールを主ボタンに。
+              //               ダッシュボード導線は副ボタンとして残す。Phase 3 で正式調整。
+              <>
+                {proId && (
+                  <a
+                    href={`/card/${proId}`}
+                    className="block w-full py-4 rounded-xl font-bold text-lg text-[#1A1A2E] bg-[#C4A35A] hover:bg-[#b3923f] transition mb-3"
+                  >
+                    {proName ? `${proName}さんのプロフィールを見る →` : 'プロフィールを見る →'}
+                  </a>
+                )}
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await fetch('/api/user/role')
+                      const data = await res.json()
+                      const isProResult = data.isPro || roleParam === 'pro'
+                      window.location.href = isProResult ? '/dashboard' : '/mycard'
+                    } catch {
+                      window.location.href = '/dashboard'
+                    }
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#C4A35A',
+                    textDecoration: 'underline',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    padding: '8px 0',
+                  }}
+                >
+                  ダッシュボードに戻る
+                </button>
+              </>
             ) : (
               <>
                 {proId && (
