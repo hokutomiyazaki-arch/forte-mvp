@@ -38,11 +38,8 @@ export default function RewardContent({
     parts.push({ type: 'text', value: remaining })
   }
 
-  // テキスト部分だけを取得（ボタンラベル用）
-  const textParts = parts.filter(p => p.type === 'text').map(p => p.value.trim()).filter(Boolean)
-
   return (
-    <div className={`${className || ''} flex flex-col items-center`}>
+    <div className={`${className || ''} flex flex-col items-center gap-3 w-full`}>
       {parts.map((part, i) => {
         if (part.type === 'text') {
           const trimmed = part.value.trim()
@@ -53,21 +50,23 @@ export default function RewardContent({
             </p>
           )
         }
-        // URL → ボタンに変換
-        const label = textParts.length > 0 ? textParts[0] : 'リンクを開く'
+        // URL → ゴールドボタンに変換（ボタンラベルは常に「リンクを開く」固定で
+        // 上の説明文と重複しないようにする。ラベルにドメインも併記したい場合は
+        // 下のコメントアウト行参照）
+        // const domain = (() => { try { return new URL(part.value).hostname.replace(/^www\./,'') } catch { return '' } })()
         return (
           <a
             key={i}
             href={part.value}
             target="_blank"
             rel="noopener noreferrer"
-            className={`inline-flex items-center justify-center gap-2 w-full px-6 py-3 rounded-lg text-base font-bold transition-colors ${
+            className={`inline-flex items-center justify-center gap-2 w-full min-h-[48px] px-6 py-3 rounded-lg text-base font-bold transition-colors ${
               strikethrough
                 ? 'bg-gray-200 text-gray-400 pointer-events-none line-through'
                 : 'bg-[#C4A35A] text-white hover:bg-[#b3923f]'
             }`}
           >
-            {label}
+            リンクを開く →
           </a>
         )
       })}

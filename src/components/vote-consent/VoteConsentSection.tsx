@@ -30,6 +30,8 @@ export interface VoteConsentVote {
 
 interface Props {
   vote: VoteConsentVote
+  /** プロ名。footer の「{pro.name}さんに連絡して変更・削除できます」で使用。 */
+  proName?: string
 }
 
 type Variant = 'photo' | 'name_only' | 'nickname_input' | 'skip'
@@ -205,7 +207,7 @@ function ensureKeyframes() {
   keyframesInjected = true
 }
 
-export default function VoteConsentSection({ vote }: Props) {
+export default function VoteConsentSection({ vote, proName }: Props) {
   ensureKeyframes()
 
   const variant = determineVariant(vote)
@@ -214,18 +216,27 @@ export default function VoteConsentSection({ vote }: Props) {
   const [errorText, setErrorText] = useState('')
   const [nickname, setNickname] = useState('')
 
+  // マイカード機能は未実装のため、変更・削除導線はプロへの直接連絡に誘導する。
+  // proName が無い場合は汎用フォールバック。
+  const changeNote = proName
+    ? `※あとから${proName}さんに連絡して変更・削除できます`
+    : '※あとからプロの方に連絡して変更・削除できます'
+
   // ケース🅰 プロ投票 — 何もレンダーしない
   if (variant === 'skip') return null
 
   // 送信成功後の共通表示
   if (submitted) {
+    const successNote = proName
+      ? `あとから${proName}さんに連絡して変更・削除できます。`
+      : 'あとからプロの方に連絡して変更・削除できます。'
     return (
       <div style={styles.successCard}>
         <p style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
           ありがとうございました
         </p>
         <p style={{ fontSize: 13, color: '#B5B5C3', lineHeight: 1.6 }}>
-          あとからマイカードで変更できます。
+          {successNote}
         </p>
       </div>
     )
@@ -327,7 +338,7 @@ export default function VoteConsentSection({ vote }: Props) {
           今回は載せない
         </button>
         <div style={styles.footNote}>
-          ※あとからマイカードで変更できます
+          {changeNote}
         </div>
       </div>
     )
@@ -368,7 +379,7 @@ export default function VoteConsentSection({ vote }: Props) {
           今回は載せない
         </button>
         <div style={styles.footNote}>
-          ※あとからマイカードで変更できます
+          {changeNote}
         </div>
       </div>
     )
@@ -411,7 +422,7 @@ export default function VoteConsentSection({ vote }: Props) {
         名前なしで送る
       </button>
       <div style={styles.footNote}>
-        ※あとからマイカードで変更できます
+        {changeNote}
       </div>
     </div>
   )
