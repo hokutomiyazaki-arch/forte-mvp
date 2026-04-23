@@ -86,6 +86,9 @@ export const metadata: Metadata = {
     description: '信頼を資産に変える、ただ一つの証明。。',
     images: ['https://forte-mvp.vercel.app/images/hero_ogp.png'],
   },
+  verification: {
+    google: '3Gxx8iv5VvkVxkFWpMPJ6vMLSESvXQHr0giciwle5oM',
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
