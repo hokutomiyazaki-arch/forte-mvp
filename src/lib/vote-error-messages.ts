@@ -42,8 +42,9 @@ export function getVoteErrorMessage(
 ): string {
   switch (reason) {
     case 'already_voted': {
+      // ポジティブなトーン: エラーではなく「すでに応援いただいた」という仕様説明
       if (!context?.recentVoteCreatedAt) {
-        return 'このプロへはすでに回答済みです。7日後に再度回答できます。'
+        return 'このプロには既にご投票いただいております。より多くの方の声を届けるため、同じプロへのプルーフは1週間に1回までとさせていただいております。他のプロフェッショナルへのご投票もぜひお試しください。'
       }
       const nextDate = new Date(
         new Date(context.recentVoteCreatedAt).getTime() + 7 * 24 * 60 * 60 * 1000
@@ -53,7 +54,7 @@ export function getVoteErrorMessage(
         month: 'long',
         day: 'numeric',
       })
-      return `このプロへはすでに回答済みです。次回は${formatted}以降に回答できます。`
+      return `このプロには既にご投票いただいております。次回は${formatted}以降にご投票いただけます。他のプロフェッショナルへのご投票もぜひお試しください。`
     }
 
     case 'cooldown': {

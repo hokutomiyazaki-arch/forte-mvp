@@ -18,11 +18,13 @@ export async function checkVoterIsPro(
   const supabase = getSupabaseAdmin()
 
   // 1. Clerk user_id で検索（最も確実）
+  //    deactivated_at IS NULL を必須に — 削除済みプロが voter として紐付くバグ修正（2026-04-23）
   if (clerkUserId) {
     const { data: proByUserId } = await supabase
       .from('professionals')
       .select('id')
       .eq('user_id', clerkUserId)
+      .is('deactivated_at', null)
       .maybeSingle()
 
     if (proByUserId) return proByUserId.id
@@ -34,6 +36,7 @@ export async function checkVoterIsPro(
       .from('professionals')
       .select('id')
       .eq('contact_email', normalizedEmail)
+      .is('deactivated_at', null)
       .maybeSingle()
 
     if (proByEmail) return proByEmail.id
