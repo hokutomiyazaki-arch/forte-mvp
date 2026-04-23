@@ -411,14 +411,18 @@ function VoteForm() {
   }, [largeMode])
 
   // URLバーからトークンを消す（カジュアルな拡散への心理的摩擦）
-  // ただし ?error= がある場合はsearchParamsが読まれるまで保持する
+  // ただし ?error= / ?remaining= がある場合はsearchParamsが読まれるまで保持する
   // プレビューモードではURLを保持する
   useEffect(() => {
     if (isPreview) return // プレビューモードではURL変更しない
     const params = new URLSearchParams(window.location.search)
     if (params.has('error')) {
-      // エラーパラメータだけ残してパスをクリーン化
-      window.history.replaceState(null, '', `/vote/${proId}?error=${params.get('error')}`)
+      // エラーパラメータと残り分数だけ残してパスをクリーン化
+      const kept = new URLSearchParams()
+      kept.set('error', params.get('error') || '')
+      const remaining = params.get('remaining')
+      if (remaining) kept.set('remaining', remaining)
+      window.history.replaceState(null, '', `/vote/${proId}?${kept.toString()}`)
     } else {
       window.history.replaceState(null, '', `/vote/${proId}`)
     }
@@ -439,7 +443,13 @@ function VoteForm() {
         setAlreadyVoted(true)
       } else if (authError) {
         const reason = mapAuthErrorParamToReason(authError)
-        setError(getVoteErrorMessage(reason))
+        // cooldown 時は URL の ?remaining=N を context に渡して正確な残り分数を表示
+        const remainingStr = searchParams.get('remaining')
+        const remainingMin = remainingStr ? parseInt(remainingStr, 10) : NaN
+        const ctx = Number.isFinite(remainingMin) && remainingMin > 0
+          ? { cooldownRemainingMinutes: remainingMin }
+          : undefined
+        setError(getVoteErrorMessage(reason, ctx))
       }
 
       // ── ウェーブ1: QRチェック・プロ情報・人柄を並列取得 ──
