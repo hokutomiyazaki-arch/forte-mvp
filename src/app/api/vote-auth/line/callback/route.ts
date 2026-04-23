@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
       const errBody = await tokenRes.text()
       console.error('[vote-auth/line/callback] Token exchange failed:', tokenRes.status, errBody)
 
-      // invalid_grant = codeが既に使用済み → 1回目のcallbackで投票成功済みの可能性
+      // invalid_grant = codeが既に使用済み → 1回目のcallbackで処理済みの可能性
       if (errBody.includes('invalid_grant')) {
         // 1回目のcallbackがINSERTを完了するのを待つ
         await new Promise(resolve => setTimeout(resolve, 1500))
@@ -112,6 +112,14 @@ export async function GET(request: NextRequest) {
         } catch (e) {
           console.error('[vote-auth/line/callback] Recovery check failed:', e)
         }
+
+        // invalid_grant で最近の vote が見つからない = 1回目 callback が重複/自己投票/
+        // 7日リピート等で弾かれた可能性が高い。line_expired は認証期限切れ
+        // メッセージが出て混乱するため、already_voted にフォールバック。
+        // （真の OAuth 期限切れは稀、かつユーザーはもう一度 LINE ボタンを
+        //   押せば fresh なフローでより正確なエラーに誘導される）
+        console.log('[vote-auth/line/callback] invalid_grant without recent vote — assuming dup-blocked 1st callback')
+        return NextResponse.redirect(new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=already_voted`, origin))
       }
 
       return NextResponse.redirect(new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=line_expired`, origin))

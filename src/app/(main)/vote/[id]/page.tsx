@@ -1427,12 +1427,14 @@ function VoteForm() {
       }
 
       // voter-pro-check: このClerkユーザーがプロか判定（client-side 直接クエリ）
+      // deactivated_at IS NULL 必須 — 削除済みプロが voter として紐付くバグ修正（2026-04-23）
       let voterProfessionalId: string | null = null
       {
         const { data: proByUserId } = await (supabase as any)
           .from('professionals')
           .select('id')
           .eq('user_id', clerkUser.id)
+          .is('deactivated_at', null)
           .maybeSingle()
         if (proByUserId?.id) {
           voterProfessionalId = proByUserId.id
@@ -1441,6 +1443,7 @@ function VoteForm() {
             .from('professionals')
             .select('id')
             .eq('contact_email', clerkEmail.toLowerCase())
+            .is('deactivated_at', null)
             .maybeSingle()
           if (proByEmail?.id) voterProfessionalId = proByEmail.id
         }
@@ -1574,8 +1577,16 @@ function VoteForm() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        <h1 className="text-xl font-bold text-[#1A1A2E] mb-2">回答済みです</h1>
-        <p className="text-gray-500 mb-6">{pro.name}さんへの回答は最近送信済みです。7日後に再度回答できます。</p>
+        <h1 className="text-xl font-bold text-[#1A1A2E] mb-2">
+          既にご投票いただいております
+        </h1>
+        <p className="text-gray-500 mb-3 leading-relaxed">
+          {pro.name}さんへのプルーフはありがとうございました。
+        </p>
+        <p className="text-sm text-gray-500 mb-6 leading-relaxed">
+          より多くの方の声を届けるため、同じプロへのプルーフは1週間に1回までとさせていただいております。<br />
+          他のプロフェッショナルへのご投票もぜひお試しください。
+        </p>
         <a href={`/card/${pro.id}`} className="text-[#C4A35A] underline">
           {pro.name}さんのカードを見る
         </a>
