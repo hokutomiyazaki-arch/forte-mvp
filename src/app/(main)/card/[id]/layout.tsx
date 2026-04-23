@@ -152,7 +152,7 @@ export default async function CardLayout({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const personSchema: any = {
     '@context': 'https://schema.org',
-    '@type': 'Person',
+    '@type': 'LocalBusiness',
     name: pro.name,
     description: pro.title || pro.bio || 'プロフェッショナル',
     url: `${baseUrl}/card/${id}`,
