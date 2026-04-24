@@ -1,0 +1,34 @@
+-- 025_display_mode_default_null.sql
+--
+-- display_mode のカラム DEFAULT を 'hidden' → NULL に変更する。
+--
+-- 目的:
+--   votes.display_mode は Phase 2 同意 UI（VoteConsentSection）の操作ログとして
+--   以下 5 状態を区別する必要がある:
+--     NULL            = UI 未操作（ユーザーがボタンを押さずに離脱）
+--     'hidden'        = NO ボタン押下（明示的に非表示を選択）
+--     'photo'         = YES ボタン押下（写真＋名前を公開）
+--     'nickname_only' = YES ボタン押下 or ニックネーム入力（名前のみ公開）
+--     'pro_link'      = 投票者がプロ（自動設定、同意 UI スキップ）
+--
+--   しかし DEFAULT が 'hidden' のままだと INSERT 時点で 'hidden' が入るため、
+--   NO と UI 未操作が区別できず、同意 UI の効果計測ができない。
+--
+-- 変更内容:
+--   ALTER TABLE votes ALTER COLUMN display_mode DROP DEFAULT;
+--   → INSERT 時に display_mode を明示しなければ NULL になる。
+--
+-- 合わせてアプリケーションコード側 (google / line / verify-code callback 等) で
+-- INSERT 時の明示的な 'hidden' を null に変更する（別コミット）。
+--
+-- 既存データの扱い:
+--   過去の 'hidden' データは NO と未操作が混在しているが、マイグレーションしない。
+--   本 migration と対応コードが本番反映された以降の新規投票データから正しく
+--   区別されるようになる。過去分は「混在している」前提で集計する。
+--
+-- ロールバック:
+--   必要なら ALTER TABLE votes ALTER COLUMN display_mode SET DEFAULT 'hidden';
+--   で戻せる（ただしコード側も 'hidden' INSERT に戻す必要あり）。
+
+ALTER TABLE votes
+  ALTER COLUMN display_mode DROP DEFAULT;
