@@ -189,7 +189,15 @@ export default function RewardReveal({ reward, proName }: { reward: any; proName
   }, [])
 
   const isOrgApp = reward?.reward_type === 'org_app' || reward?.reward_type === 'fnt_neuro_app'
-  const rewardTypeLabel = isOrgApp ? '' : (getRewardLabel(reward?.reward_type) || reward?.title || reward?.reward_type || 'リワード')
+  // freeform はプロが自由にタイトルを設定する仕様。getRewardLabel('freeform')='自由記入'
+  // がプロの title を上書きしないよう title 優先に変更。
+  // freeform 以外も title をプロが設定していれば尊重する（旧コードは category label が
+  // 先で title を無視していた）。
+  const rewardTypeLabel = isOrgApp
+    ? ''
+    : reward?.reward_type === 'freeform'
+      ? (reward?.title || 'おすすめ')
+      : (reward?.title || getRewardLabel(reward?.reward_type) || 'リワード')
 
   return (
     <>

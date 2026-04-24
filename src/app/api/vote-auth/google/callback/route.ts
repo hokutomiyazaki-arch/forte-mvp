@@ -311,7 +311,8 @@ export async function GET(request: NextRequest) {
         prev_hash: prevHash,
         proof_nonce: nonce,
         // --- Phase 1 Step 2/3（display_mode は pro なら pro_link 自動） ---
-        display_mode: voterProfessionalId ? 'pro_link' : 'hidden',
+        // NULL = 同意 UI 未操作。NO 押下時は VoteConsentSection 側で 'hidden' に UPDATE される。
+        display_mode: voterProfessionalId ? 'pro_link' : null,
         client_photo_url: clientPhotoUrl,
         voter_professional_id: voterProfessionalId,
       })
