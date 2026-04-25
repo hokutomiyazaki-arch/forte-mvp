@@ -1017,9 +1017,6 @@ function VoteForm() {
       auth_provider_id: formattedPhone,
       channel,
       // --- Phase 1 Step 2 追加 ---
-      display_mode: 'hidden',
-      client_photo_url: null,
-      voter_professional_id: null,
     }).select().maybeSingle()
 
     if (voteError) {
