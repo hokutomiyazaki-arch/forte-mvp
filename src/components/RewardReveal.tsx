@@ -366,30 +366,30 @@ export default function RewardReveal({ reward, proName }: { reward: any; proName
                       {reward.title}
                     </div>
                   )}
+
+                  {/* content 表示(あれば、説明文として。content 内 URL は自動でゴールドボタン化) */}
                   {reward?.content && (
                     <div style={{
-                      background: '#F0F4FF', borderLeft: '3px solid #3B82F6',
-                      borderRadius: 8, padding: '12px 14px', marginBottom: 12,
-                      textAlign: 'left', fontSize: 13, color: '#4B5563',
-                      wordBreak: 'break-word', overflowWrap: 'break-word',
+                      background: '#F5F0E5', border: '1px dashed #C4A35A', borderRadius: 8,
+                      padding: 16, wordBreak: 'break-word', overflowWrap: 'break-word',
+                      marginBottom: reward?.url ? 12 : 0,
                     }}>
-                      {reward.content}
+                      <RewardContent
+                        content={reward.content}
+                        linkLabel="アプリを開く →"
+                      />
                     </div>
                   )}
+
+                  {/* url 列がある場合は別途ゴールドボタン (org_app レガシーレコード24件対応) */}
                   {reward?.url && (
                     <a
                       href={reward.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      style={{
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        gap: 6, width: '100%', padding: '12px 16px', borderRadius: 10,
-                        background: '#EFF6FF', border: '1px solid #BFDBFE',
-                        color: '#1D4ED8', fontSize: 15, fontWeight: 700,
-                        textDecoration: 'none', transition: 'background 0.2s',
-                      }}
+                      className="inline-flex items-center justify-center gap-2 w-full min-h-[48px] px-6 py-3 rounded-lg text-base font-bold transition-colors bg-[#C4A35A] text-white hover:bg-[#b3923f]"
                     >
-                      {reward?.reward_type === 'fnt_neuro_app' ? 'アプリを開く →' : 'リワードを開く →'}
+                      アプリを開く →
                     </a>
                   )}
                 </>

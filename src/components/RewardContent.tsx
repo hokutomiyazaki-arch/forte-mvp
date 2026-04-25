@@ -12,10 +12,12 @@ export default function RewardContent({
   content,
   className,
   strikethrough = false,
+  linkLabel,
 }: {
   content: string
   className?: string
   strikethrough?: boolean
+  linkLabel?: string
 }) {
   const urls = content.match(URL_REGEX)
 
@@ -66,7 +68,7 @@ export default function RewardContent({
                 : 'bg-[#C4A35A] text-white hover:bg-[#b3923f]'
             }`}
           >
-            リンクを開く →
+            {linkLabel ?? 'リンクを開く →'}
           </a>
         )
       })}
