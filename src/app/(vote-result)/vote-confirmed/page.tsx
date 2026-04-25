@@ -36,11 +36,13 @@ function ConfirmedContent() {
   // Phase 2: 同意 UI 用の vote レコード（consent 対象フィールドのみ）
   const [consentVote, setConsentVote] = useState<VoteConsentVote | null>(null)
   // Phase 2: リワード表示ゲート
-  // - consentDone: YES/NO 押下後 true (VoteConsentSection から onComplete で通知)
-  // - voter_professional_id !== null の場合は同意UIをスキップ → 即リワード表示
+  // - consentDone: 今回 YES/NO 押下後 true (VoteConsentSection から onComplete で通知、揮発)
+  // - consentSkipped: voter_professional_id !== null は同意UI不要(pro_link)
+  // - consentAlreadyDone: display_mode が既にセット済み(過去のセッションで同意済み)→ リロードでもUI再表示しない
   const [consentDone, setConsentDone] = useState(false)
   const consentSkipped = !!consentVote?.voter_professional_id
-  const rewardUnlocked = consentDone || consentSkipped || !consentVote
+  const consentAlreadyDone = !!consentVote?.display_mode
+  const rewardUnlocked = consentDone || consentSkipped || consentAlreadyDone || !consentVote
 
   // PWA インストール
   const [installPrompt, setInstallPrompt] = useState<any>(null)
@@ -352,7 +354,7 @@ function ConfirmedContent() {
             VoteConsentSection 自身は variant='skip' (voter_professional_id 有り) の時に
             null を返すので、その場合は consentSkipped=true でリワード即表示に流す。
         */}
-        {consentVote && !consentDone && !consentSkipped && (
+        {consentVote && !consentDone && !consentSkipped && !consentAlreadyDone && (
           <VoteConsentSection
             vote={consentVote}
             proName={proName}
