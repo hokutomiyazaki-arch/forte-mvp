@@ -366,32 +366,12 @@ export default function RewardReveal({ reward, proName }: { reward: any; proName
                       {reward.title}
                     </div>
                   )}
-                  {reward?.content && (
-                    <div style={{
-                      background: '#F0F4FF', borderLeft: '3px solid #3B82F6',
-                      borderRadius: 8, padding: '12px 14px', marginBottom: 12,
-                      textAlign: 'left', fontSize: 13, color: '#4B5563',
-                      wordBreak: 'break-word', overflowWrap: 'break-word',
-                    }}>
-                      {reward.content}
-                    </div>
-                  )}
-                  {reward?.url && (
-                    <a
-                      href={reward.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        gap: 6, width: '100%', padding: '12px 16px', borderRadius: 10,
-                        background: '#EFF6FF', border: '1px solid #BFDBFE',
-                        color: '#1D4ED8', fontSize: 15, fontWeight: 700,
-                        textDecoration: 'none', transition: 'background 0.2s',
-                      }}
-                    >
-                      {reward?.reward_type === 'fnt_neuro_app' ? 'アプリを開く →' : 'リワードを開く →'}
-                    </a>
-                  )}
+                  <div style={{ background: '#F5F0E5', border: '1px dashed #C4A35A', borderRadius: 8, padding: 16, wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+                    <RewardContent
+                      content={reward?.content || ''}
+                      linkLabel="アプリを開く →"
+                    />
+                  </div>
                 </>
               ) : (
                 <div style={{ background: '#F5F0E5', border: '1px dashed #C4A35A', borderRadius: 8, padding: 16, wordBreak: 'break-word', overflowWrap: 'break-word' }}>
