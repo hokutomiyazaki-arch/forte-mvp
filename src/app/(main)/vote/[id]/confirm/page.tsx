@@ -58,9 +58,6 @@ function VoteConfirmForm() {
           // --- Phase 1 Step 2 追加 ---
           // このページは Clerk session 経由の確定フロー。画像・プロ判定はクライアント側では取得不可のため null / hidden。
           // サーバー側（Google/LINE callback）でも INSERT する経路があり、そちらで値がセットされる。
-          display_mode: 'hidden',
-          client_photo_url: null,
-          voter_professional_id: null,
         }).select().maybeSingle();
 
         if (voteError) {
