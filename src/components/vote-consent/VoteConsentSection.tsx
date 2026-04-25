@@ -32,6 +32,8 @@ interface Props {
   vote: VoteConsentVote
   /** プロ名。footer の「{pro.name}さんに連絡して変更・削除できます」で使用。 */
   proName?: string
+  /** YES/NO どちらかが押されて UPDATE 成功した時に呼ばれる（リワード解放のゲート） */
+  onComplete?: () => void
 }
 
 type Variant = 'photo' | 'name_only' | 'nickname_input' | 'skip'
@@ -207,7 +209,7 @@ function ensureKeyframes() {
   keyframesInjected = true
 }
 
-export default function VoteConsentSection({ vote, proName }: Props) {
+export default function VoteConsentSection({ vote, proName, onComplete }: Props) {
   ensureKeyframes()
 
   const variant = determineVariant(vote)
@@ -251,6 +253,7 @@ export default function VoteConsentSection({ vote, proName }: Props) {
       const mode = variant === 'photo' ? 'photo' : 'nickname_only'
       await updateDisplayMode(vote.id, mode)
       setSubmitted(true)
+      onComplete?.()
     } catch {
       setErrorText('更新に失敗しました。もう一度お試しください。')
     } finally {
@@ -266,6 +269,7 @@ export default function VoteConsentSection({ vote, proName }: Props) {
     try {
       await updateDisplayMode(vote.id, 'hidden')
       setSubmitted(true)
+      onComplete?.()
     } catch {
       setErrorText('更新に失敗しました。もう一度お試しください。')
     } finally {
@@ -290,6 +294,7 @@ export default function VoteConsentSection({ vote, proName }: Props) {
     try {
       await updateDisplayMode(vote.id, 'nickname_only', trimmed)
       setSubmitted(true)
+      onComplete?.()
     } catch {
       setErrorText('更新に失敗しました。もう一度お試しください。')
     } finally {
