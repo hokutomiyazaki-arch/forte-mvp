@@ -35,6 +35,12 @@ function ConfirmedContent() {
   const [copyToast, setCopyToast] = useState('')
   // Phase 2: 同意 UI 用の vote レコード（consent 対象フィールドのみ）
   const [consentVote, setConsentVote] = useState<VoteConsentVote | null>(null)
+  // Phase 2: リワード表示ゲート
+  // - consentDone: YES/NO 押下後 true (VoteConsentSection から onComplete で通知)
+  // - voter_professional_id !== null の場合は同意UIをスキップ → 即リワード表示
+  const [consentDone, setConsentDone] = useState(false)
+  const consentSkipped = !!consentVote?.voter_professional_id
+  const rewardUnlocked = consentDone || consentSkipped || !consentVote
 
   // PWA インストール
   const [installPrompt, setInstallPrompt] = useState<any>(null)
@@ -341,11 +347,21 @@ function ConfirmedContent() {
           </p>
         </div>
 
-        {/* ===== セクション1.5: Voice への顔写真・ニックネーム同意 UI（Phase 2） ===== */}
-        {consentVote && <VoteConsentSection vote={consentVote} proName={proName} />}
+        {/* ===== セクション1.5: Voice への顔写真・ニックネーム同意 UI（Phase 2） =====
+            consentDone=true になるまでリワード(セクション2以降)はゲートする。
+            VoteConsentSection 自身は variant='skip' (voter_professional_id 有り) の時に
+            null を返すので、その場合は consentSkipped=true でリワード即表示に流す。
+        */}
+        {consentVote && !consentDone && !consentSkipped && (
+          <VoteConsentSection
+            vote={consentVote}
+            proName={proName}
+            onComplete={() => setConsentDone(true)}
+          />
+        )}
 
         {/* ===== セクション2: リワード開示（選択済みの場合） ===== */}
-        {reward && (
+        {rewardUnlocked && reward && (
           <>
             <RewardReveal reward={reward} proName={proName || ''} />
 
@@ -368,7 +384,7 @@ function ConfirmedContent() {
         )}
 
         {/* ===== セクション2.5: リワード受け取り確認 ===== */}
-        {hasAccount && (
+        {rewardUnlocked && hasAccount && (
           <div className="bg-[#1A1A2E] rounded-2xl p-6 text-center">
             <p className="text-white text-lg font-bold mb-2">
               ありがとうございました
@@ -441,7 +457,7 @@ function ConfirmedContent() {
         )}
 
         {/* ===== プロフィール導線 + シェア（未ログインユーザー向け） ===== */}
-        {!hasAccount && proId && (
+        {rewardUnlocked && !hasAccount && proId && (
           <div className="text-center space-y-3">
             <a
               href={`/card/${proId}`}
