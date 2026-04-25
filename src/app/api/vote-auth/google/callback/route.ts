@@ -121,6 +121,10 @@ export async function GET(request: NextRequest) {
 
     // Step 2: メールアドレス取得（id_tokenからデコード）
     let email = ''
+    let googlePictureUrl: string | null = null
+    let googleName: string | null = null
+    let googleGivenName: string | null = null
+    let googleFamilyName: string | null = null
 
     if (tokenData.id_token) {
       try {
@@ -128,15 +132,21 @@ export async function GET(request: NextRequest) {
           Buffer.from(tokenData.id_token.split('.')[1], 'base64').toString()
         )
         email = payload.email || ''
+        googlePictureUrl = payload.picture || null
+        googleName = payload.name || null
+        googleGivenName = payload.given_name || null
+        googleFamilyName = payload.family_name || null
         console.log('[vote-auth/google/callback] Email from id_token:', email ? 'found' : 'not found')
       } catch (e) {
         console.error('[vote-auth/google/callback] Failed to decode id_token:', e)
       }
     }
 
-    // Googleでメールが取れないことは基本ないが、念のため
-    if (!email) {
-      console.log('[vote-auth/google/callback] No email - trying userinfo endpoint')
+    // Googleでメールが取れない、または picture/name がない場合は userinfo endpoint で補完
+    if (!email || !googlePictureUrl || !googleName) {
+      if (!email) {
+        console.log('[vote-auth/google/callback] No email - trying userinfo endpoint')
+      }
       // フォールバック: userinfo endpoint で取得
       try {
         const userinfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
@@ -144,7 +154,11 @@ export async function GET(request: NextRequest) {
         })
         if (userinfoRes.ok) {
           const userinfo = await userinfoRes.json()
-          email = userinfo.email || ''
+          if (!email) email = userinfo.email || ''
+          if (!googlePictureUrl) googlePictureUrl = userinfo.picture || null
+          if (!googleName) googleName = userinfo.name || null
+          if (!googleGivenName) googleGivenName = userinfo.given_name || null
+          if (!googleFamilyName) googleFamilyName = userinfo.family_name || null
         }
       } catch (e) {
         console.error('[vote-auth/google/callback] Userinfo fetch failed:', e)
@@ -266,6 +280,7 @@ export async function GET(request: NextRequest) {
     // --- ハッシュチェーン処理 END ---
 
     // --- Phase 1 Step 2/3: Clerk imageUrl + 表示名 + プロ判定 ---
+    // 優先度1: Clerk(従来通り) → 優先度2: Google id_token / userinfo
     let clientPhotoUrl: string | null = null
     let authDisplayName: string | null = null
     if (voterClerkUserId) {
@@ -278,6 +293,18 @@ export async function GET(request: NextRequest) {
       } catch (e) {
         console.error('[vote-auth/google/callback] Clerk imageUrl fetch failed:', e)
       }
+    }
+
+    // 優先度2: Clerk未登録 or Clerk取得失敗時、Google id_token / userinfo クレームから補完
+    if (!clientPhotoUrl && googlePictureUrl) {
+      clientPhotoUrl = googlePictureUrl
+    }
+    if (!authDisplayName && googleName) {
+      authDisplayName = googleName
+    }
+    // 優先度3: name が無い場合、family_name + given_name を結合
+    if (!authDisplayName && (googleFamilyName || googleGivenName)) {
+      authDisplayName = [googleFamilyName, googleGivenName].filter(Boolean).join(' ') || null
     }
     const voterProfessionalId = await checkVoterIsPro(
       normalizeEmail(email),
