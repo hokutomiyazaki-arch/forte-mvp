@@ -366,12 +366,32 @@ export default function RewardReveal({ reward, proName }: { reward: any; proName
                       {reward.title}
                     </div>
                   )}
-                  <div style={{ background: '#F5F0E5', border: '1px dashed #C4A35A', borderRadius: 8, padding: 16, wordBreak: 'break-word', overflowWrap: 'break-word' }}>
-                    <RewardContent
-                      content={reward?.content || ''}
-                      linkLabel="アプリを開く →"
-                    />
-                  </div>
+
+                  {/* content 表示(あれば、説明文として。content 内 URL は自動でゴールドボタン化) */}
+                  {reward?.content && (
+                    <div style={{
+                      background: '#F5F0E5', border: '1px dashed #C4A35A', borderRadius: 8,
+                      padding: 16, wordBreak: 'break-word', overflowWrap: 'break-word',
+                      marginBottom: reward?.url ? 12 : 0,
+                    }}>
+                      <RewardContent
+                        content={reward.content}
+                        linkLabel="アプリを開く →"
+                      />
+                    </div>
+                  )}
+
+                  {/* url 列がある場合は別途ゴールドボタン (org_app レガシーレコード24件対応) */}
+                  {reward?.url && (
+                    <a
+                      href={reward.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-2 w-full min-h-[48px] px-6 py-3 rounded-lg text-base font-bold transition-colors bg-[#C4A35A] text-white hover:bg-[#b3923f]"
+                    >
+                      アプリを開く →
+                    </a>
+                  )}
                 </>
               ) : (
                 <div style={{ background: '#F5F0E5', border: '1px dashed #C4A35A', borderRadius: 8, padding: 16, wordBreak: 'break-word', overflowWrap: 'break-word' }}>
