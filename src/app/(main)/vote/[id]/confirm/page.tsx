@@ -55,9 +55,6 @@ function VoteConfirmForm() {
           auth_provider_id: auth_provider_id,
           auth_display_name: auth_display_name,
           channel: channel_param,
-          // --- Phase 1 Step 2 追加 ---
-          // このページは Clerk session 経由の確定フロー。画像・プロ判定はクライアント側では取得不可のため null / hidden。
-          // サーバー側（Google/LINE callback）でも INSERT する経路があり、そちらで値がセットされる。
         }).select().maybeSingle();
 
         if (voteError) {
