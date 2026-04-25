@@ -676,7 +676,6 @@ function VoteForm() {
         auth_display_name: null,
         auth_provider_id: null,
         channel,
-        // --- Phase 1 Step 2 追加 ---
       })
     } catch (e) {
       console.error('hopeful vote error:', e)
@@ -895,7 +894,6 @@ function VoteForm() {
         auth_display_name: null,
         auth_provider_id: formattedPhone,
         channel: voteDataSnapshot.channel || channel,
-        // --- Phase 1 Step 2 追加 ---
       }).select().maybeSingle()
 
       if (voteError) {
@@ -1016,7 +1014,6 @@ function VoteForm() {
       auth_display_name: fallbackName.trim() || null,
       auth_provider_id: formattedPhone,
       channel,
-      // --- Phase 1 Step 2 追加 ---
     }).select().maybeSingle()
 
     if (voteError) {
@@ -1182,7 +1179,6 @@ function VoteForm() {
       auth_display_name: null,
       auth_provider_id: null,
       channel,
-      // --- Phase 1 Step 2 追加 ---
     }).select().maybeSingle()
 
     if (voteError) {
