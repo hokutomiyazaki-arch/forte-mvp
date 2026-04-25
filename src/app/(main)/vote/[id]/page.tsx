@@ -677,9 +677,6 @@ function VoteForm() {
         auth_provider_id: null,
         channel,
         // --- Phase 1 Step 2 追加 ---
-        display_mode: 'hidden',
-        client_photo_url: null,
-        voter_professional_id: null,
       })
     } catch (e) {
       console.error('hopeful vote error:', e)
