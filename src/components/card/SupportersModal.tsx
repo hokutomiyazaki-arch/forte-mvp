@@ -2,16 +2,9 @@
 import { useEffect } from 'react'
 import { COLORS, FONTS } from '@/lib/design-tokens'
 import { getSurname } from '@/lib/display-name-utils'
+import type { Supporter } from './types'
 
 const T = { ...COLORS, font: FONTS.main }
-
-export interface Supporter {
-  vote_id: string
-  photo_url: string
-  display_name: string
-  is_pro: boolean
-  created_at: string
-}
 
 interface Props {
   supporters: Supporter[]

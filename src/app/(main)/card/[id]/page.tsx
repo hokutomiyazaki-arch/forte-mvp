@@ -10,8 +10,8 @@ import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, MASTER_THRESHOLD, PROVEN_GOLD, 
 // VoiceShareModal removed — public card is view-only
 import RelatedPros from '@/components/RelatedPros'
 import { SupportersStrip } from '@/components/card/SupportersStrip'
-import { VoiceCommentCard, type VoiceComment } from '@/components/card/VoiceCommentCard'
-import type { Supporter } from '@/components/card/SupportersModal'
+import { VoiceCommentCard } from '@/components/card/VoiceCommentCard'
+import type { VoiceComment, Supporter } from '@/components/card/types'
 
 // デザイントークンのローカルショートカット
 const T = {

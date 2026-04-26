@@ -1,24 +1,9 @@
 'use client'
 import { COLORS, FONTS } from '@/lib/design-tokens'
 import { getSurname } from '@/lib/display-name-utils'
+import type { VoiceComment } from './types'
 
 const T = { ...COLORS, font: FONTS.main, fontMono: FONTS.mono }
-
-export interface VoiceComment {
-  id: string
-  comment: string
-  created_at: string
-  display_mode: string | null
-  client_photo_url: string | null
-  auth_display_name: string | null
-  voter_pro: {
-    id: string
-    name: string
-    title: string | null
-    photo_url: string | null
-  } | null
-  voter_vote_count: number
-}
 
 interface Props {
   vote: VoiceComment

@@ -2,7 +2,8 @@
 import { useState } from 'react'
 import { COLORS, FONTS } from '@/lib/design-tokens'
 import { getSurname } from '@/lib/display-name-utils'
-import { SupportersModal, type Supporter } from './SupportersModal'
+import { SupportersModal } from './SupportersModal'
+import type { Supporter } from './types'
 
 const T = { ...COLORS, font: FONTS.main, fontMono: FONTS.mono }
 
@@ -24,7 +25,8 @@ interface Props {
 function getSizingConfig(count: number) {
   if (count <= 3) return { iconSize: 64, gap: 12, fontSize: 12, showName: true }
   if (count <= 8) return { iconSize: 48, gap: 10, fontSize: 11, showName: true }
-  if (count <= 16) return { iconSize: 40, gap: 8, fontSize: 10, showName: true }
+  // 9-16件は名前非表示（FV高さ130px以内に収めるため）
+  if (count <= 16) return { iconSize: 40, gap: 8, fontSize: 0, showName: false }
   return { iconSize: 32, gap: 6, fontSize: 0, showName: false }
 }
 
@@ -67,7 +69,7 @@ export function SupportersStrip({ supporters, onSupporterClick }: Props) {
             marginBottom: 8,
           }}
         >
-          支持しているクライアント（{supporters.length}人）
+          支持しているクライアント
         </div>
         <div
           style={{
