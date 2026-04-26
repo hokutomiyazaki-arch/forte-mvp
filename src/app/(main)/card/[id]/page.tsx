@@ -2,13 +2,16 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 // useUser removed — auth is now handled server-side in /api/card/[id]
-import { Professional, VoteSummary, Vote } from '@/lib/types'
+import { Professional, VoteSummary } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import { COLORS, FONTS } from '@/lib/design-tokens'
 import { trackPageView, trackEvent } from '@/lib/tracking'
 import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, MASTER_THRESHOLD, PROVEN_GOLD, TAB_DISPLAY_NAMES } from '@/lib/constants'
 // VoiceShareModal removed — public card is view-only
 import RelatedPros from '@/components/RelatedPros'
+import { SupportersStrip } from '@/components/card/SupportersStrip'
+import { VoiceCommentCard } from '@/components/card/VoiceCommentCard'
+import type { VoiceComment, Supporter } from '@/components/card/types'
 
 // デザイントークンのローカルショートカット
 const T = {
@@ -131,7 +134,10 @@ export default function CardPage() {
   const [pro, setPro] = useState<Professional | null>(null)
   const [votes, setVotes] = useState<VoteSummary[]>([])
   const [personalityVotes, setPersonalityVotes] = useState<{ category: string; vote_count: number }[]>([])
-  const [comments, setComments] = useState<Vote[]>([])
+  const [comments, setComments] = useState<VoiceComment[]>([])
+  const [supporters, setSupporters] = useState<Supporter[]>([])
+  // 検索ハイライト (?highlight=...) と Strip タップハイライトは別 state で管理
+  const [tapHighlightVoteId, setTapHighlightVoteId] = useState<string | null>(null)
   const [totalVotes, setTotalVotes] = useState(0)
   const [loading, setLoading] = useState(true)
   const initialTab = (tabParam === 'voices' || tabParam === 'certs') ? tabParam : 'strengths'
@@ -209,6 +215,7 @@ export default function CardPage() {
         }
 
         setComments(data.comments)
+        setSupporters(data.supporters || [])
         setTotalVotes(data.totalVotes)
         setBookmarkCount(data.bookmarkCount)
         setIsBookmarked(data.isBookmarked)
@@ -291,6 +298,20 @@ export default function CardPage() {
       })
       .catch(() => {})
   }, [id])
+
+  // Supporter アイコンタップ時: Voices タブ切替 → 該当コメントへスクロール → 2秒間ハイライト
+  const handleSupporterClick = (voteId: string) => {
+    setActiveTab('voices')
+    // タブ切替後にDOMが描画されるのを待つ
+    setTimeout(() => {
+      const el = document.getElementById(`vote-${voteId}`)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        setTapHighlightVoteId(voteId)
+        setTimeout(() => setTapHighlightVoteId(null), 2000)
+      }
+    }, 100)
+  }
 
   const handleBookmarkToggle = async () => {
     if (!currentUserId) {
@@ -486,6 +507,12 @@ export default function CardPage() {
           <p style={{ fontSize: 12, color: T.textSub, lineHeight: 1.9, whiteSpace: 'pre-wrap', margin: 0, fontWeight: 500 }}>{pro.bio}</p>
         </div>
       )}
+
+      {/* ═══ Supporters Strip（紹介文の下、タブの上） ═══ */}
+      <SupportersStrip
+        supporters={supporters}
+        onSupporterClick={handleSupporterClick}
+      />
 
       {/* ═══ タブ切替 ═══ */}
       <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 12, padding: 3, display: 'flex', marginBottom: 12 }}>
@@ -964,56 +991,17 @@ export default function CardPage() {
           </div>
           {voiceCount > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {comments.map((c: Vote) => {
-                const isMatch = highlightParam && c.comment?.includes(highlightParam)
+              {comments.map((c) => {
+                const isSearchHighlighted = !!(highlightParam && c.comment?.includes(highlightParam))
+                const isTapHighlighted = tapHighlightVoteId === c.id
                 return (
-                  <div key={c.id}
-                    data-highlight-match={isMatch ? 'true' : undefined}
-                    style={{
-                      background: isMatch
-                        ? 'linear-gradient(170deg, #FFF8E1 0%, #FFF3CD 100%)'
-                        : 'linear-gradient(170deg, #FAF8F4 0%, #F3EFE7 100%)',
-                      border: isMatch ? '1.5px solid #C4A35A' : '1px solid #E8E4DC',
-                      borderRadius: 14, padding: '20px',
-                    }}
-                  >
-                    {/* 引用符 */}
-                    <div style={{ fontSize: 32, color: 'rgba(196, 163, 90, 0.3)', fontFamily: 'Georgia, serif', lineHeight: 1 }}>&ldquo;</div>
-                    {/* コメント */}
-                    <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', lineHeight: 1.8, margin: '4px 0 10px' }}>
-                      {highlightParam && c.comment?.includes(highlightParam)
-                        ? (() => {
-                            const parts = c.comment.split(highlightParam)
-                            return parts.map((part, i) => (
-                              <span key={i}>
-                                {part}
-                                {i < parts.length - 1 && (
-                                  <mark style={{ background: 'rgba(196,163,90,0.25)', color: '#1A1A2E', padding: '0 2px', borderRadius: 2 }}>
-                                    {highlightParam}
-                                  </mark>
-                                )}
-                              </span>
-                            ))
-                          })()
-                        : c.comment}
-                    </div>
-                    {/* リピーター・常連マーク + 日付 */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                      <div style={{ fontSize: 11, color: T.textMuted, fontFamily: T.fontMono }}>
-                        {new Date(c.created_at).toLocaleDateString('ja-JP')}
-                      </div>
-                      {(c as any).voter_vote_count >= 3 && (
-                        <div style={{ fontSize: 11, fontWeight: 600, color: '#C4A35A' }}>
-                          ⭐ 常連
-                        </div>
-                      )}
-                      {(c as any).voter_vote_count === 2 && (
-                        <div style={{ fontSize: 11, fontWeight: 600, color: '#999' }}>
-                          🔄 リピーター
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  <VoiceCommentCard
+                    key={c.id}
+                    vote={c}
+                    isSearchHighlighted={isSearchHighlighted}
+                    isTapHighlighted={isTapHighlighted}
+                    highlightWord={highlightParam || undefined}
+                  />
                 )
               })}
             </div>
