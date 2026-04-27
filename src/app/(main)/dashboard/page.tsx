@@ -3810,6 +3810,21 @@ export default function DashboardPage() {
           proName={pro.name}
           proTitle={pro.title}
           proPhotoUrl={pro.photo_url}
+          // Fix-3: VoiceShareCard と同じデザインを再現するため、
+          // トッププルーフ + 表示制御を popup にも渡す。
+          // topStrengths は VoiceShareModal の既存パターン同様 votes から
+          // sort+slice で導出。VoiceShareModal は配列を渡すが popup は
+          // 単一オブジェクト（最上位 1 件）を渡す仕様。
+          topStrengths={
+            votes.length > 0
+              ? (() => {
+                  const top = [...votes].sort((a, b) => b.vote_count - a.vote_count)[0]
+                  return { label: top.category, count: top.vote_count }
+                })()
+              : null
+          }
+          showProof={true}
+          showProInfo={true}
           onShare={handlePopupShare}
           onEdit={handlePopupEdit}
           onDismiss={handlePopupDismiss}

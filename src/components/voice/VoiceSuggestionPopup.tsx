@@ -74,6 +74,14 @@ export interface VoiceSuggestionPopupProps {
   onEdit: () => void
   /** 「後で」/ ESC / 背景タップ: popup-action dismissed と次状態遷移は親担当 */
   onDismiss: () => void
+
+  // ── Fix-3 で追加（VoiceShareCard と同じデザインを再現するため） ──
+  /** トッププルーフ（「N人が証明」バッジ表示用）。省略時はバッジ非表示 */
+  topStrengths?: { label: string; count: number } | null
+  /** プルーフバッジ表示制御。デフォルト true */
+  showProof?: boolean
+  /** プロ情報セクション表示制御。デフォルト true */
+  showProInfo?: boolean
 }
 
 const Z_INDEX = 5000
@@ -120,6 +128,10 @@ export default function VoiceSuggestionPopup({
   onShare,
   onEdit,
   onDismiss,
+  // Fix-3: 親から受け取る（デフォルト値で従来挙動を維持）
+  topStrengths = null,
+  showProof = true,
+  showProInfo = true,
 }: VoiceSuggestionPopupProps) {
   const popupRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
@@ -193,16 +205,8 @@ export default function VoiceSuggestionPopup({
 
   // テーマ復元
   const theme = resolveSuggestedTheme(suggestedTheme)
-  // showProInfo: custom 保存があれば respect、preset なら true
-  // ※ Fix-3 で props として受け取るようにする予定。Fix-1 では既存ロジック維持
-  const showProInfo =
-    suggestedTheme.type === 'custom'
-      ? suggestedTheme.custom?.showProInfo !== false
-      : true
-  // showProof: ※ Fix-3 で props 化予定。Fix-1 では true 固定
-  const showProof = true
-  // topStrengths: ※ Fix-3 で props 化予定。Fix-1 では一旦 null（バッジ非表示）
-  const topProof: { label: string; count: number } | null = null
+  // showProof / showProInfo / topStrengths は Fix-3 で props 化済み（destructure
+  // のデフォルト値で従来挙動を維持: showProof=true, showProInfo=true, topStrengths=null）
   const isLightBg = isLightBackground(theme.bg)
   const headerText = buildHeaderText(popupType, badgeEvent)
 
@@ -527,8 +531,8 @@ export default function VoiceSuggestionPopup({
                   </>
                 ))}
 
-              {/* ── トッププルーフバッジ (showProof === true && topProof) ── */}
-              {showProof && topProof && (
+              {/* ── トッププルーフバッジ (showProof === true && topStrengths) ── */}
+              {showProof && topStrengths && (
                 <div
                   style={{
                     background: hexToRgba(theme.accent, 0.08),
@@ -548,7 +552,7 @@ export default function VoiceSuggestionPopup({
                       color: theme.accent,
                     }}
                   >
-                    ◆ {topProof.count}人が「{topProof.label}」と証明
+                    ◆ {topStrengths.count}人が「{topStrengths.label}」と証明
                   </span>
                 </div>
               )}
