@@ -9,6 +9,7 @@ import ForteChart from '@/components/ForteChart'
 import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, PROVEN_GOLD, PROVEN_GRADIENT, TAB_ORDER, TAB_DISPLAY_NAMES } from '@/lib/constants'
 import VoiceShareModal from '@/components/VoiceShareCard'
 import { VoiceCommentCard } from '@/components/card/VoiceCommentCard'
+import VoiceSuggestionPopup, { type SuggestedTheme } from '@/components/voice/VoiceSuggestionPopup'
 import type { VoiceComment } from '@/components/card/types'
 import CertificationModal from '@/components/CertificationModal'
 import ImageCropper from '@/components/ImageCropper'
@@ -144,6 +145,20 @@ export default function DashboardPage() {
 
   // Voice カードテーマ: DB生データをそのまま保持（モーダル内で解決）
   const [savedVoiceThemeData, setSavedVoiceThemeData] = useState<any>(null)
+
+  // ── シェア促進ポップアップ (v1.2.1 §12) ──
+  // popup-suggestion API のレスポンス（should_show:true 時のみセット）
+  type PopupSuggestionData = {
+    popup_type: 'first' | 'random' | 'milestone'
+    badge_event: 'PROVEN' | 'SPECIALIST' | 'MASTER' | null
+    vote: VoiceComment
+    suggested_theme: SuggestedTheme
+    suggested_phrase_id: number | null
+  }
+  const [popupSuggestion, setPopupSuggestion] = useState<PopupSuggestionData | null>(null)
+  // 「デザインを編集する」で popup から VoiceShareModal に theme を引き継ぐための一時 override
+  // （案A: SuggestedTheme を savedThemeData 形式に合成して渡す。VoiceShareModal は無改修）
+  const [savedVoiceThemeDataOverride, setSavedVoiceThemeDataOverride] = useState<any>(null)
 
   // NFC カード管理 state
   const [nfcCard, setNfcCard] = useState<{ id: string; card_uid: string; status: string; linked_at: string | null } | null>(null)
@@ -392,6 +407,139 @@ export default function DashboardPage() {
     }
     load()
   }, [authLoaded, clerkUser])
+
+  // ────────────────────────────────────────
+  // シェア促進ポップアップ: ダッシュボード読み込み時に1回 fetch
+  // 依存は pro?.id（プリミティブ）のみ。pro オブジェクトを依存に入れない
+  // ────────────────────────────────────────
+  useEffect(() => {
+    const proId = pro?.id
+    if (!proId) return
+
+    let cancelled = false
+
+    ;(async () => {
+      try {
+        const res = await fetch('/api/dashboard/popup-suggestion')
+        if (!res.ok) return
+        const data = await res.json()
+        if (cancelled) return
+        if (data && data.should_show === true) {
+          setPopupSuggestion({
+            popup_type: data.popup_type,
+            badge_event: data.badge_event ?? null,
+            vote: data.vote,
+            suggested_theme: data.suggested_theme,
+            suggested_phrase_id: data.suggested_phrase_id ?? null,
+          })
+        }
+      } catch {
+        // popup は optional UX。失敗しても何もしない
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [pro?.id])
+
+  // VoiceShareModal が閉じられたら override をクリア
+  // （依存はプリミティブ shareModalVoice?.id のみ）
+  const shareModalVoiceId = shareModalVoice?.id ?? null
+  useEffect(() => {
+    if (shareModalVoiceId === null && savedVoiceThemeDataOverride !== null) {
+      setSavedVoiceThemeDataOverride(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shareModalVoiceId])
+
+  // ────────────────────────────────────────
+  // ポップアップ 3 アクションのハンドラ
+  // ────────────────────────────────────────
+
+  // [シェアする] 成功時: popup-action(shared) は VoiceSuggestionPopup 内部で
+  // POST 済み。ここでは popup state を閉じるのみ（連続表示は当面単発運用）。
+  const handlePopupShare = () => {
+    setPopupSuggestion(null)
+  }
+
+  // [デザインを編集する]: popup-action(edited) を POST してから popup を閉じ、
+  // 既存 VoiceShareModal を popup の Voice + テーマ + フレーズで開く（案A）。
+  const handlePopupEdit = async () => {
+    const current = popupSuggestion
+    if (!current) return
+
+    // popup-action(edited) ─ 失敗してもユーザー体験を阻害しない
+    try {
+      await fetch('/api/dashboard/popup-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vote_id: current.vote.id,
+          popup_type: current.popup_type,
+          badge_event: current.badge_event,
+          user_action: 'edited',
+        }),
+      })
+    } catch {}
+
+    // 案A: SuggestedTheme を savedThemeData 形式に合成
+    let synthetic: any = null
+    if (current.suggested_theme.type === 'preset' && current.suggested_theme.preset) {
+      synthetic = {
+        type: 'preset',
+        preset: current.suggested_theme.preset,
+        showProof: true,
+        showProInfo: true,
+      }
+    } else if (current.suggested_theme.type === 'custom' && current.suggested_theme.custom) {
+      synthetic = {
+        type: 'custom',
+        bg: current.suggested_theme.custom.bg,
+        text: current.suggested_theme.custom.text,
+        accent: current.suggested_theme.custom.accent,
+        showProof: current.suggested_theme.custom.showProof,
+        showProInfo: current.suggested_theme.custom.showProInfo,
+      }
+    }
+
+    // popup の suggested_phrase_id を VoiceShareModal にも引き継ぐ
+    // （selectedPhrases[vote.id] 経由で phraseId prop に流れる）
+    if (current.suggested_phrase_id != null) {
+      const phraseId = current.suggested_phrase_id
+      setSelectedPhrases(prev => ({ ...prev, [current.vote.id]: phraseId }))
+    }
+
+    // popup を閉じて VoiceShareModal を開く
+    setSavedVoiceThemeDataOverride(synthetic)
+    setShareModalVoice({
+      id: current.vote.id,
+      comment: current.vote.comment,
+      created_at: current.vote.created_at,
+    })
+    setPopupSuggestion(null)
+  }
+
+  // [後で] / ESC / 背景タップ: popup-action(dismissed) を POST して popup を閉じる
+  const handlePopupDismiss = async () => {
+    const current = popupSuggestion
+    if (!current) return
+
+    try {
+      await fetch('/api/dashboard/popup-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vote_id: current.vote.id,
+          popup_type: current.popup_type,
+          badge_event: current.badge_event,
+          user_action: 'dismissed',
+        }),
+      })
+    } catch {}
+
+    setPopupSuggestion(null)
+  }
 
   // メンバー用: 所属団体のリソース取得
   async function loadMemberResources(orgId: string) {
@@ -2967,7 +3115,7 @@ export default function DashboardPage() {
           proPhotoUrl={pro.photo_url}
           totalProofs={totalVotes}
           topStrengths={votes.sort((a, b) => b.vote_count - a.vote_count).slice(0, 3).map(v => ({ label: v.category, count: v.vote_count }))}
-          savedThemeData={savedVoiceThemeData}
+          savedThemeData={savedVoiceThemeDataOverride ?? savedVoiceThemeData}
           onSaveTheme={(data: any) => {
             setSavedVoiceThemeData(data);
             db.update('professionals', { voice_card_theme: data }, { id: pro.id })
@@ -3635,6 +3783,30 @@ export default function DashboardPage() {
         )}
       </div>
       </>
+      )}
+
+      {/* シェア促進ポップアップ (v1.2.1 §12) — タブに依存せずグローバル表示 */}
+      {popupSuggestion && pro && (
+        <VoiceSuggestionPopup
+          isOpen={true}
+          popupType={popupSuggestion.popup_type}
+          badgeEvent={popupSuggestion.badge_event}
+          vote={popupSuggestion.vote}
+          suggestedTheme={popupSuggestion.suggested_theme}
+          suggestedPhraseId={popupSuggestion.suggested_phrase_id}
+          phraseText={
+            voicePhrases.find(p => p.id === popupSuggestion.suggested_phrase_id)?.text
+            ?? voicePhrases.find(p => p.is_default)?.text
+            ?? ''
+          }
+          professionalId={pro.id}
+          proName={pro.name}
+          proTitle={pro.title}
+          proPhotoUrl={pro.photo_url}
+          onShare={handlePopupShare}
+          onEdit={handlePopupEdit}
+          onDismiss={handlePopupDismiss}
+        />
       )}
 
       {/* 認定申請モーダル */}
