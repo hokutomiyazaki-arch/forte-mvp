@@ -297,12 +297,17 @@ export default function VoiceSuggestionPopup({
       exportMode === 'stories' ? '100%' : forExport ? 1080 : 340
 
     return (
-      <div style={frameStyle}>
+      // VoiceShareCard line 629 と同じく、id="voice-popup-card-for-export" は
+      // frame の最外側に付ける。html2canvas に frame (stories: 1080×1920 white
+      // BG + padded gradient card) ごと捕捉させるため。
+      <div
+        id={forExport ? EXPORT_ELEMENT_ID : undefined}
+        style={frameStyle}
+      >
         <div style={{ width: wrapperWidth }}>
           <div style={{ position: 'relative' }}>
-            {/* ── カード本体 ── */}
+            {/* ── カード本体（id は frame に付与済みなのでここには付けない） ── */}
             <div
-              id={forExport ? EXPORT_ELEMENT_ID : undefined}
               style={{
                 width: '100%',
                 background: `linear-gradient(170deg, ${theme.bg} 0%, ${theme.bg2} 100%)`,
