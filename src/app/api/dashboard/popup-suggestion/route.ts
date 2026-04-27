@@ -24,8 +24,10 @@ export const dynamic = 'force-dynamic'
  *   - 過去90日以内
  *   - popup_history に未記録
  *
- * 提案データ:
- *   - suggested_theme_name: voiceCardThemes の preset.name（"Cream" / "Sunset" 等、15色からランダム）
+ * 提案データ (v1.2.1 §12.4.2):
+ *   - suggested_theme: { type: 'preset' | 'custom', preset, custom } オブジェクト
+ *       プロが voice_card_theme を保存していればそれを優先（preset/custom そのまま）
+ *       未保存ならランダム15色プリセット
  *   - suggested_phrase_id: gratitude_phrases.id（ランダム）
  *
  * レスポンスは Cache-Control: no-store。
@@ -40,11 +42,11 @@ export async function GET() {
     const supabase = getSupabaseAdmin()
 
     // ────────────────────────────────────────
-    // 1. プロ情報取得
+    // 1. プロ情報取得（voice_card_theme もまとめて取得して N+1 を回避）
     // ────────────────────────────────────────
     const { data: pro } = await supabase
       .from('professionals')
-      .select('id, popup_first_shown_at, popup_last_shown_at')
+      .select('id, popup_first_shown_at, popup_last_shown_at, voice_card_theme')
       .eq('user_id', userId)
       .is('deactivated_at', null)
       .maybeSingle()
@@ -52,6 +54,10 @@ export async function GET() {
     if (!pro) {
       return notShow('not_a_pro')
     }
+
+    // pro が確定したら、テーマ抽選結果は popup_type に依らず同じ
+    // （プロ保存テーマ優先 → 未保存ならランダム15色、v1.2.1 §確定 #13/#15）
+    const suggestedTheme = pickThemeForPopup(pro.voice_card_theme)
 
     // ────────────────────────────────────────
     // 2. 達成記念チェック（最優先）
@@ -63,7 +69,7 @@ export async function GET() {
         popup_type: 'milestone',
         badge_event: milestone.badge,
         vote: milestone.vote,
-        suggested_theme_name: pickRandomTheme(),
+        suggested_theme: suggestedTheme,
         suggested_phrase_id: phraseId,
       })
     }
@@ -79,7 +85,7 @@ export async function GET() {
         popup_type: 'first',
         badge_event: null,
         vote,
-        suggested_theme_name: pickRandomTheme(),
+        suggested_theme: suggestedTheme,
         suggested_phrase_id: phraseId,
       })
     }
@@ -110,7 +116,7 @@ export async function GET() {
       popup_type: 'random',
       badge_event: null,
       vote,
-      suggested_theme_name: pickRandomTheme(),
+      suggested_theme: suggestedTheme,
       suggested_phrase_id: phraseId,
     })
   } catch (err: any) {
@@ -130,11 +136,32 @@ const NO_STORE_HEADERS = {
   'Cache-Control': 'no-store, no-cache, must-revalidate',
 } as const
 
+/**
+ * 提案テーマ（v1.2.1 §12.4.2）
+ *
+ *   type='preset': preset に preset 名（"Cream" / "Sunset" 等）、custom は null
+ *   type='custom': preset は null、custom に bg/text/accent + showProof/showProInfo
+ *
+ * フロントは type で分岐し、preset 名なら VOICE_CARD_PRESETS から復元、
+ * custom なら buildCustomTheme(...) で復元する想定。
+ */
+interface SuggestedTheme {
+  type: 'preset' | 'custom'
+  preset: string | null
+  custom: {
+    bg: string
+    text: string
+    accent: string
+    showProof: boolean
+    showProInfo: boolean
+  } | null
+}
+
 function showResponse(body: {
   popup_type: 'random' | 'milestone' | 'first'
   badge_event: 'PROVEN' | 'SPECIALIST' | 'MASTER' | null
   vote: any
-  suggested_theme_name: string
+  suggested_theme: SuggestedTheme
   suggested_phrase_id: number | null
 }) {
   return NextResponse.json(
@@ -157,12 +184,61 @@ function notShow(
 // ────────────────────────────────────────────────────────────────
 
 /**
- * テーマ抽選: 15 プリセットから 1 つ選び、preset.name を返す。
- * カスタムカラーは対象外（v1.2 §確定 #13）。
+ * テーマ抽選 (v1.2.1 §12.4.2 §確定 #13/#15):
+ *
+ *   1. プロが voice_card_theme に preset を保存していれば、それを優先
+ *   2. プロが voice_card_theme に custom を保存していれば、それをそのまま提示
+ *   3. 未保存（NULL）or 不正なデータならランダム15色
+ *
+ * 非破壊で動作することを最優先（NULL や欠落を全て random に fallback）。
  */
-function pickRandomTheme(): string {
+function pickThemeForPopup(savedTheme: any): SuggestedTheme {
+  // (1) preset 保存
+  if (
+    savedTheme &&
+    savedTheme.type === 'preset' &&
+    typeof savedTheme.preset === 'string' &&
+    savedTheme.preset.length > 0
+  ) {
+    return {
+      type: 'preset',
+      preset: savedTheme.preset,
+      custom: null,
+    }
+  }
+
+  // (2) custom 保存（bg/text/accent が全て埋まっている時のみ）
+  if (
+    savedTheme &&
+    savedTheme.type === 'custom' &&
+    typeof savedTheme.bg === 'string' &&
+    savedTheme.bg.length > 0 &&
+    typeof savedTheme.text === 'string' &&
+    savedTheme.text.length > 0 &&
+    typeof savedTheme.accent === 'string' &&
+    savedTheme.accent.length > 0
+  ) {
+    return {
+      type: 'custom',
+      preset: null,
+      custom: {
+        bg: savedTheme.bg,
+        text: savedTheme.text,
+        accent: savedTheme.accent,
+        // showProof / showProInfo は未指定なら true（VoiceShareCard の初期値と一致）
+        showProof: savedTheme.showProof !== false,
+        showProInfo: savedTheme.showProInfo !== false,
+      },
+    }
+  }
+
+  // (3) 未保存 or 不正データ: ランダム15色
   const idx = Math.floor(Math.random() * VOICE_CARD_PRESETS.length)
-  return VOICE_CARD_PRESETS[idx].name
+  return {
+    type: 'preset',
+    preset: VOICE_CARD_PRESETS[idx].name,
+    custom: null,
+  }
 }
 
 /**
