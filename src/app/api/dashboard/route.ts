@@ -143,8 +143,10 @@ export async function GET() {
       // パーソナリティサマリー
       supabase.from('personality_summary').select('*').eq('professional_id', proId),
       // 投票（総数 + コメント付きを1クエリで取得）
+      // v1.2 §11.4-2: display_mode/client_photo_url/auth_display_name/voter_professional_id を追加
+      // normalized_email はサーバー内集計（voter_vote_count）のみで使用、レスポンスからは除外
       supabase.from('votes')
-        .select('id, comment, created_at', { count: 'exact' })
+        .select('id, comment, created_at, display_mode, client_photo_url, auth_display_name, voter_professional_id, normalized_email', { count: 'exact' })
         .eq('professional_id', proId)
         .eq('status', 'confirmed')
         .order('created_at', { ascending: false }),
@@ -201,12 +203,72 @@ export async function GET() {
     if (isDev) console.log('[Dashboard API] Phase 2 done:', Date.now() - startTime, 'ms')
 
     // ────────────────────────────────────────
-    // votes データ整形: 総数 + コメント付きをJSで分離
+    // votes データ整形: 総数 + コメント付きを抽出 + voter_pro / voter_vote_count 付与
+    // v1.2 §11.4-2: ダッシュボード Voicesタブで顔写真・名前・プロリンクを表示するため
+    //   - display_mode 系フィールドはそのまま透過
+    //   - voter_vote_count: このプロ宛て累計（normalized_email ベース集計）
+    //   - voter_pro: voter_professional_id をまとめ取り（N+1 回避）
+    //   - normalized_email / voter_professional_id はレスポンスから除外（PII）
     // ────────────────────────────────────────
     const totalVotes = votesResult.count || 0
-    const voiceComments = (votesResult.data || []).filter(
-      (v: any) => v.comment && v.comment.trim() !== ''
-    )
+    const allVotes = (votesResult.data || []) as Array<{
+      id: string
+      comment: string | null
+      created_at: string
+      display_mode: string | null
+      client_photo_url: string | null
+      auth_display_name: string | null
+      voter_professional_id: string | null
+      normalized_email: string | null
+    }>
+
+    // voter_vote_count: normalized_email ごとに「このプロ宛て」累計をカウント
+    // votesResult は eq('professional_id', proId) で絞り込み済みなので、
+    // ここでの集計は自動的に「このプロ宛てのみ」となる
+    const countByEmail = new Map<string, number>()
+    for (const v of allVotes) {
+      if (!v.normalized_email) continue
+      countByEmail.set(v.normalized_email, (countByEmail.get(v.normalized_email) ?? 0) + 1)
+    }
+
+    // voter_pro: voter_professional_id を一括取得（N+1 回避）
+    // card/[id]/route.ts の enrichment パターンを踏襲。
+    // 公開情報のみ（id, name, title, photo_url）— title は VoiceComment 型と整合させるため含める
+    const voterProIds = Array.from(new Set(
+      allVotes
+        .map(v => v.voter_professional_id)
+        .filter((id): id is string => !!id)
+    ))
+    const voterProMap = new Map<string, { id: string; name: string; title: string | null; photo_url: string | null }>()
+    if (voterProIds.length > 0) {
+      const { data: voterPros } = await supabase
+        .from('professionals')
+        .select('id, name, title, photo_url')
+        .in('id', voterProIds)
+        .is('deactivated_at', null)
+      for (const p of (voterPros || [])) {
+        voterProMap.set(p.id, p)
+      }
+    }
+
+    // コメント付きを抽出 + enrichment + PII 除外
+    const voiceComments = allVotes
+      .filter(v => v.comment && v.comment.trim() !== '')
+      .map(v => {
+        const voter_vote_count = v.normalized_email
+          ? (countByEmail.get(v.normalized_email) ?? 1)
+          : 1
+        const voter_pro = v.voter_professional_id
+          ? voterProMap.get(v.voter_professional_id) ?? null
+          : null
+        // ★ PII 除外: normalized_email / voter_professional_id をレスポンスから外す
+        const { normalized_email, voter_professional_id, ...safe } = v
+        return {
+          ...safe,
+          voter_pro,
+          voter_vote_count,
+        }
+      })
 
     // ────────────────────────────────────────
     // pending招待 (org_membersから)
