@@ -465,9 +465,16 @@ export default function DashboardPage() {
 
   // [デザインを編集する]: popup-action(edited) を POST してから popup を閉じ、
   // 既存 VoiceShareModal を popup の Voice + テーマ + フレーズで開く（案A）。
+  //
+  // 注意: VoiceShareModal は Voicesタブ条件下にのみレンダリングされる既存制約があるため、
+  // 本ハンドラの最初で必ず dashboardTab を 'voices' に切り替える必要がある。
+  // popup の z-index が高くタブ UI を直接タップできないため、ここで自動切替する。
   const handlePopupEdit = async () => {
+    if (!popupSuggestion || !pro) return
+    // ★ Voicesタブに切替（VoiceShareModal レンダリングのため必須）
+    setDashboardTab('voices')
+
     const current = popupSuggestion
-    if (!current) return
 
     // popup-action(edited) ─ 失敗してもユーザー体験を阻害しない
     try {
