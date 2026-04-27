@@ -55,6 +55,18 @@ export async function GET() {
       return notShow('not_a_pro')
     }
 
+    // ── デバッグログ（一時、本番で実値の型/内容を確認するため） ──
+    // 'below_threshold' 誤発火の原因切り分け用。
+    // 本番ログで pro state の実値・型を確認できたら削除する。
+    console.log('[popup-suggestion] pro state:', {
+      id: pro.id,
+      popup_first_shown_at: pro.popup_first_shown_at,
+      popup_first_shown_at_type: typeof pro.popup_first_shown_at,
+      popup_last_shown_at: pro.popup_last_shown_at,
+      popup_last_shown_at_type: typeof pro.popup_last_shown_at,
+      voice_card_theme_type: typeof pro.voice_card_theme,
+    })
+
     // pro が確定したら、テーマ抽選結果は popup_type に依らず同じ
     // （プロ保存テーマ優先 → 未保存ならランダム15色、v1.2.1 §確定 #13/#15）
     const suggestedTheme = pickThemeForPopup(pro.voice_card_theme)
@@ -76,8 +88,14 @@ export async function GET() {
 
     // ────────────────────────────────────────
     // 3. ランダム提案 — 初回判定
+    //
+    // 'below_threshold' 誤発火対策（defense in depth）:
+    //   - `== null` (loose equality) で null と undefined を両方 catch
+    //   - popup_last_shown_at も条件に含める。両者は popup-action で
+    //     ペアでセットされる前提なので、片方だけ null は異常状態 →
+    //     初回扱いに集約して threshold check に進ませない
     // ────────────────────────────────────────
-    if (pro.popup_first_shown_at === null) {
+    if (pro.popup_first_shown_at == null || pro.popup_last_shown_at == null) {
       const vote = await pickRandomEligibleVote(supabase, pro.id)
       if (!vote) return notShow('no_eligible_voice')
       const phraseId = await pickRandomPhrase(supabase)
