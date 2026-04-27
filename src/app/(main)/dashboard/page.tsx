@@ -8,6 +8,8 @@ import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels
 import ForteChart from '@/components/ForteChart'
 import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, PROVEN_GOLD, PROVEN_GRADIENT, TAB_ORDER, TAB_DISPLAY_NAMES } from '@/lib/constants'
 import VoiceShareModal from '@/components/VoiceShareCard'
+import { VoiceCommentCard } from '@/components/card/VoiceCommentCard'
+import type { VoiceComment } from '@/components/card/types'
 import CertificationModal from '@/components/CertificationModal'
 import ImageCropper from '@/components/ImageCropper'
 import CardModeSwitch from '@/components/CardModeSwitch'
@@ -130,7 +132,10 @@ export default function DashboardPage() {
   const [featuredVoiceSaving, setFeaturedVoiceSaving] = useState(false)
 
   // Voices用 state
-  const [voiceComments, setVoiceComments] = useState<{ id: string; comment: string; created_at: string }[]>([])
+  // v1.2 §11.4-2: API は display_mode / client_photo_url / auth_display_name /
+  // voter_pro / voter_vote_count を返す（Phase B 完了済み）。VoiceCommentCard が
+  // これらを消費するため VoiceComment 型に拡張。
+  const [voiceComments, setVoiceComments] = useState<VoiceComment[]>([])
   const [voicePhrases, setVoicePhrases] = useState<{ id: number; text: string; is_default: boolean; sort_order: number }[]>([])
   const [expandedVoice, setExpandedVoice] = useState<string | null>(null)
   const [phraseSelecting, setPhraseSelecting] = useState<string | null>(null)
@@ -2813,22 +2818,16 @@ export default function DashboardPage() {
                 || voicePhrases.find(p => p.is_default)?.text || ''
 
               return (
+                // 外側ラッパー: 背景・ボーダーは VoiceCommentCard 側に委譲。
+                // ここでは onClick（カード展開）と cursor のみを担当する。
                 <div key={c.id}
                   onClick={() => { if (!isExpanded) setExpandedVoice(c.id) }}
-                  style={{
-                    background: 'linear-gradient(170deg, #FAF8F4 0%, #F3EFE7 100%)',
-                    border: '1px solid #E8E4DC',
-                    borderRadius: 14, padding: '20px',
-                    cursor: !isExpanded ? 'pointer' : 'default',
-                  }}
+                  style={{ cursor: !isExpanded ? 'pointer' : 'default' }}
                 >
-                  <div style={{ fontSize: 32, color: 'rgba(196, 163, 90, 0.3)', fontFamily: 'Georgia, serif', lineHeight: 1 }}>&ldquo;</div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', lineHeight: 1.8, margin: '4px 0 10px' }}>{c.comment}</div>
-                  <div style={{ fontSize: 11, color: '#888888', fontFamily: "'Inter', sans-serif" }}>
-                    {new Date(c.created_at).toLocaleDateString('ja-JP')}
-                  </div>
+                  {/* 顔写真 / 苗字 / 引用符 / コメント / 日時 / 常連バッジ */}
+                  <VoiceCommentCard vote={c} />
 
-                  {/* 検索カード設定ボタン */}
+                  {/* 検索カード設定ボタン（カード直下に独立配置） */}
                   <div style={{ marginTop: 10 }} onClick={e => e.stopPropagation()}>
                     {featuredVoiceId === c.id ? (
                       <button
@@ -2883,9 +2882,18 @@ export default function DashboardPage() {
                     )}
                   </div>
 
+                  {/* 展開時: フレーズ選択 + 「この声をシェアする」 */}
                   {isExpanded && (
-                    <div style={{ borderTop: '1px solid #E8E4DC', marginTop: 14, paddingTop: 14 }}
-                      onClick={e => e.stopPropagation()}>
+                    <div
+                      style={{
+                        marginTop: 12,
+                        padding: 14,
+                        background: '#FAF8F4',
+                        border: '1px solid #E8E4DC',
+                        borderRadius: 12,
+                      }}
+                      onClick={e => e.stopPropagation()}
+                    >
                       <div style={{ fontSize: 11, color: '#888888', marginBottom: 8 }}>感謝のひとこと</div>
 
                       {isSelectingPhrase ? (
@@ -2897,7 +2905,7 @@ export default function DashboardPage() {
                                 setPhraseSelecting(null)
                               }}
                               style={{
-                                background: selectedPhraseId === p.id ? '#C4A35A' : '#FAF8F4',
+                                background: selectedPhraseId === p.id ? '#C4A35A' : '#FFFFFF',
                                 color: selectedPhraseId === p.id ? '#fff' : '#555555',
                                 border: '1px solid #E8E4DC', borderRadius: 8, padding: '8px 12px',
                                 fontSize: 12, cursor: 'pointer', textAlign: 'left' as const,
@@ -2911,7 +2919,7 @@ export default function DashboardPage() {
                         <div
                           onClick={() => setPhraseSelecting(c.id)}
                           style={{
-                            background: '#FAF8F4', border: '1px solid #E8E4DC',
+                            background: '#FFFFFF', border: '1px solid #E8E4DC',
                             borderRadius: 8, padding: '8px 12px',
                             fontSize: 12, color: '#C4A35A', cursor: 'pointer', marginBottom: 12,
                             fontStyle: 'italic',
