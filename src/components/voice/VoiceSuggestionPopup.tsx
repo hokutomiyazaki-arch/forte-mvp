@@ -9,7 +9,12 @@ import {
   type VoiceCardTheme,
 } from '@/lib/voiceCardThemes'
 import { executeVoiceShare } from '@/lib/voice-share'
-import { getSurname } from '@/lib/display-name-utils'
+import { REALPROOF_LOGO_BASE64 } from '@/lib/logoBase64'
+import {
+  isLightBackground,
+  getCommentFontSize,
+  CARD_SHAPES,
+} from '@/lib/voice-card-shared'
 
 /**
  * VoiceSuggestionPopup（v1.2 §12.3 / v1.2.1 §13）
@@ -91,18 +96,6 @@ function resolveSuggestedTheme(s: SuggestedTheme): VoiceCardTheme {
   return VOICE_CARD_PRESETS[0]
 }
 
-/** 背景色の明るさ判定（VoiceShareCard と同じロジック） */
-function isLightBackground(bg: string): boolean {
-  const m = bg.match(/#[0-9A-Fa-f]{6}/)?.[0] || bg
-  const hex = m.replace('#', '')
-  if (hex.length !== 6) return true
-  const r = parseInt(hex.substring(0, 2), 16)
-  const g = parseInt(hex.substring(2, 4), 16)
-  const b = parseInt(hex.substring(4, 6), 16)
-  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-  return lum > 0.5
-}
-
 function buildHeaderText(popupType: PopupType, badge: BadgeEvent | null | undefined): string {
   if (popupType === 'first') return HEADER_TEXT_FIRST
   if (popupType === 'random') return HEADER_TEXT_RANDOM
@@ -131,6 +124,16 @@ export default function VoiceSuggestionPopup({
   const popupRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
   const [sharing, setSharing] = useState(false)
+  // ── stories/feed トグル（VoiceShareCard と同じデフォルト 'stories'） ──
+  // Fix-2 でトグル UI を追加するまでは固定。Fix-1 では state だけ用意。
+  const [exportMode, setExportMode] = useState<'stories' | 'feed'>('stories')
+  // ストーリーズ用背景色: Fix-1/Fix-2 とも '#FFFFFF' 固定（CEO 確定）
+  const storyBg: '#FFFFFF' | '#111111' = '#FFFFFF'
+  // 形状は 'round' 固定（CEO 確定: shape 切替 UI は popup には追加しない）
+  const currentShape = CARD_SHAPES.find(s => s.id === 'round')!
+  // VoiceShareCard line 130-132 の borderRadius 計算を踏襲
+  const previewRadius = exportMode === 'stories' ? currentShape.borderRadius : 18
+  const exportRadius = exportMode === 'stories' ? currentShape.borderRadius * 2 : 36
 
   // ── a11y: ESC / focus trap / focus restore ──
   // 依存配列はプリミティブ (isOpen) のみ。onDismiss は最新参照を ref で保持
@@ -191,13 +194,17 @@ export default function VoiceSuggestionPopup({
   // テーマ復元
   const theme = resolveSuggestedTheme(suggestedTheme)
   // showProInfo: custom 保存があれば respect、preset なら true
+  // ※ Fix-3 で props として受け取るようにする予定。Fix-1 では既存ロジック維持
   const showProInfo =
     suggestedTheme.type === 'custom'
       ? suggestedTheme.custom?.showProInfo !== false
       : true
+  // showProof: ※ Fix-3 で props 化予定。Fix-1 では true 固定
+  const showProof = true
+  // topStrengths: ※ Fix-3 で props 化予定。Fix-1 では一旦 null（バッジ非表示）
+  const topProof: { label: string; count: number } | null = null
   const isLightBg = isLightBackground(theme.bg)
   const headerText = buildHeaderText(popupType, badgeEvent)
-  const surname = getSurname(vote.auth_display_name)
 
   // ── シェア処理 ──
   const handleShareClick = async () => {
@@ -212,7 +219,7 @@ export default function VoiceSuggestionPopup({
 
     const result = await executeVoiceShare({
       cardElement: el,
-      exportMode: 'feed', // popup は 4:5 で固定
+      exportMode, // ← state から（Fix-1: stories/feed どちらにも対応）
       voteId: vote.id,
       professionalId,
       phraseId: suggestedPhraseId ?? 1,
@@ -242,202 +249,371 @@ export default function VoiceSuggestionPopup({
     setSharing(false)
   }
 
-  // ── 表示用 / エクスポート用の共用カードレンダラー ──
+  // ────────────────────────────────────────────────────────────────
+  // 表示用 / エクスポート用の共用カードレンダラー
+  //
+  // VoiceShareCard.tsx (line 202-340 visible / line 626-803 export) の
+  // JSX 構造を完全コピー。数値・スタイル・要素順序すべて同一。
+  // 唯一の差分:
+  //   - shape は 'round' 固定（CARD_SHAPES.find(s => s.id === 'round')）
+  //     stamp/notch/tail/特殊形状は使わないため、それらの分岐は省略
+  //   - エクスポート用フッター右側は VoiceShareCard では 'realproof.jp'
+  //     テキストだが、popup ではロゴ画像のまま（CEO 確定）
+  // 削除した独自要素（VoiceShareCard には存在しない）:
+  //   - display_mode 別ヘッダー（クライアント顔写真+苗字 / イニシャル+苗字）
+  //   - 日付表示
+  // ────────────────────────────────────────────────────────────────
   const renderCard = (forExport: boolean) => {
-    const baseFontScale = forExport ? 2 : 1
-    const cardWidth = forExport ? 680 : 280
+    // ── フレーム (stories: 9:16 / feed: 白パディング) ──
+    const frameStyle: React.CSSProperties =
+      exportMode === 'stories'
+        ? forExport
+          ? {
+              width: 1080,
+              height: 1920,
+              background: storyBg,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '0 60px',
+              boxSizing: 'border-box',
+            }
+          : {
+              width: 340,
+              aspectRatio: '9 / 16',
+              background: storyBg,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '0 20px',
+              boxSizing: 'border-box',
+            }
+        : forExport
+          ? { display: 'inline-block' }
+          : { padding: 24, backgroundColor: '#FFFFFF' }
+
+    // ── 中間ラッパー幅 (round shape: stamp/notch/tail なしのため直接指定) ──
+    const wrapperWidth: number | string =
+      exportMode === 'stories' ? '100%' : forExport ? 1080 : 340
+
     return (
-      <div
-        id={forExport ? EXPORT_ELEMENT_ID : undefined}
-        style={{
-          background: `linear-gradient(170deg, ${theme.bg} 0%, ${theme.bg2} 100%)`,
-          border: isLightBg
-            ? '1px solid rgba(0,0,0,0.06)'
-            : '1px solid rgba(255,255,255,0.1)',
-          borderRadius: forExport ? 24 : 14,
-          padding: forExport ? '40px 36px' : '20px',
-          width: cardWidth,
-          boxSizing: 'border-box' as const,
-          fontFamily: "'Inter', 'Noto Sans JP', sans-serif",
-          color: theme.text,
-        }}
-      >
-        {/* display_mode 別のクライアントヘッダー */}
-        {vote.display_mode === 'photo' && vote.client_photo_url && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              marginBottom: forExport ? 20 : 12,
-            }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={vote.client_photo_url}
-              alt=""
-              style={{
-                width: 32 * baseFontScale,
-                height: 32 * baseFontScale,
-                borderRadius: '50%',
-                objectFit: 'cover',
-                display: 'block',
-              }}
-            />
-            {surname && (
-              <span style={{ fontSize: 13 * baseFontScale, color: theme.sub }}>
-                {surname}さん
-              </span>
-            )}
-          </div>
-        )}
-        {vote.display_mode === 'nickname_only' && surname && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              marginBottom: forExport ? 20 : 12,
-            }}
-          >
+      <div style={frameStyle}>
+        <div style={{ width: wrapperWidth }}>
+          <div style={{ position: 'relative' }}>
+            {/* ── カード本体 ── */}
             <div
+              id={forExport ? EXPORT_ELEMENT_ID : undefined}
               style={{
-                width: 32 * baseFontScale,
-                height: 32 * baseFontScale,
-                borderRadius: '50%',
-                background: hexToRgba(theme.accent, 0.15),
+                width: '100%',
+                background: `linear-gradient(170deg, ${theme.bg} 0%, ${theme.bg2} 100%)`,
+                borderRadius: forExport ? exportRadius : previewRadius,
+                padding: forExport ? '64px 52px' : '32px 26px',
+                border: isLightBg
+                  ? forExport
+                    ? '4px solid rgba(0,0,0,0.08)'
+                    : '2px solid rgba(0,0,0,0.08)'
+                  : forExport
+                    ? '4px solid rgba(255,255,255,0.12)'
+                    : '2px solid rgba(255,255,255,0.12)',
+                fontFamily: "'Inter', 'Noto Sans JP', sans-serif",
                 display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: theme.accent,
-                fontSize: 13 * baseFontScale,
-                fontWeight: 700,
+                flexDirection: 'column',
+                position: 'relative',
+                overflow: 'hidden',
+                boxSizing: 'border-box',
               }}
             >
-              {surname.charAt(0)}
-            </div>
-            <span style={{ fontSize: 13 * baseFontScale, color: theme.sub }}>
-              {surname}さん
-            </span>
-          </div>
-        )}
-
-        {/* 引用符 */}
-        <div
-          style={{
-            fontSize: 32 * baseFontScale,
-            color: hexToRgba(theme.accent, 0.22),
-            fontFamily: "Georgia, 'Times New Roman', serif",
-            lineHeight: 1,
-            marginBottom: 4,
-          }}
-        >
-          &ldquo;
-        </div>
-
-        {/* コメント本文 */}
-        <div
-          style={{
-            fontSize: 14 * baseFontScale,
-            fontWeight: 600,
-            lineHeight: 1.7,
-            margin: '4px 0 14px',
-            whiteSpace: 'pre-wrap' as const,
-          }}
-        >
-          {vote.comment}
-        </div>
-
-        {/* 区切り */}
-        <div
-          style={{
-            height: 1,
-            background: hexToRgba(theme.accent, 0.15),
-            margin: '12px 0',
-          }}
-        />
-
-        {/* 感謝フレーズ */}
-        <div
-          style={{
-            fontSize: 11 * baseFontScale,
-            color: theme.accent,
-            fontStyle: 'italic',
-            marginBottom: 8,
-          }}
-        >
-          ── {phraseText || '感謝のひとこと'}
-        </div>
-
-        {/* プロ情報（showProInfo の時のみ） */}
-        {showProInfo && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              marginTop: 12,
-              paddingTop: 10,
-              borderTop: `1px solid ${hexToRgba(theme.accent, 0.12)}`,
-            }}
-          >
-            {proPhotoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={proPhotoUrl}
-                alt=""
-                style={{
-                  width: 24 * baseFontScale,
-                  height: 24 * baseFontScale,
-                  borderRadius: '50%',
-                  objectFit: 'cover',
-                  display: 'block',
-                }}
-              />
-            ) : (
+              {/* ── ヘッダー: REALPROOF ロゴ + サブタイトル ── */}
               <div
                 style={{
-                  width: 24 * baseFontScale,
-                  height: 24 * baseFontScale,
-                  borderRadius: '50%',
-                  background: hexToRgba(theme.accent, 0.18),
-                }}
-              />
-            )}
-            <div style={{ minWidth: 0 }}>
-              <div
-                style={{
-                  fontSize: 11 * baseFontScale,
-                  fontWeight: 700,
-                  color: theme.text,
+                  textAlign: 'center',
+                  marginBottom: forExport ? 48 : 20,
                 }}
               >
-                {proName}
-              </div>
-              {proTitle && (
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={REALPROOF_LOGO_BASE64}
+                  alt="REALPROOF"
+                  style={{
+                    width: '80%',
+                    maxWidth: forExport ? 600 : 280,
+                    height: 'auto',
+                    objectFit: 'contain',
+                    filter: isLightBg ? 'none' : 'brightness(2)',
+                  }}
+                />
                 <div
                   style={{
-                    fontSize: 9 * baseFontScale,
+                    fontSize: forExport ? 28 : 11,
                     color: theme.sub,
+                    marginTop: forExport ? 16 : 6,
                   }}
                 >
-                  {proTitle}
+                  クライアントのリアルな声を紹介
                 </div>
+              </div>
+
+              {/* ── 引用符 ── */}
+              <div
+                style={{
+                  fontSize: forExport ? 120 : 56,
+                  lineHeight: 1,
+                  color: hexToRgba(theme.accent, 0.22),
+                  fontFamily: forExport
+                    ? "Georgia, 'Times New Roman', serif"
+                    : 'Georgia, serif',
+                  marginBottom: forExport ? -20 : 0,
+                }}
+              >
+                {'\u201C'}
+              </div>
+
+              {/* ── コメント ── */}
+              <div
+                style={{
+                  color: theme.text,
+                  fontSize: forExport
+                    ? getCommentFontSize(vote.comment, exportMode) * 3
+                    : getCommentFontSize(vote.comment, exportMode),
+                  fontWeight: 600,
+                  lineHeight: forExport ? 1.85 : 1.8,
+                  marginTop: forExport ? 0 : 8,
+                  marginBottom: forExport ? 40 : 16,
+                  letterSpacing: forExport ? 0.5 : 0,
+                }}
+              >
+                {vote.comment}
+              </div>
+
+              {/* ── コメント下区切り線 (visible のみ) ── */}
+              {!forExport && (
+                <div
+                  style={{
+                    height: 1,
+                    background: hexToRgba(theme.accent, 0.12),
+                    margin: '4px 0 12px',
+                  }}
+                />
+              )}
+
+              {/* ── 感謝フレーズ ── */}
+              <div
+                style={{
+                  color: theme.accent,
+                  fontSize: forExport ? 32 : 12,
+                  fontWeight: 500,
+                  marginBottom: forExport ? 40 : 20,
+                  letterSpacing: forExport ? 1 : 0,
+                }}
+              >
+                ── {phraseText}
+              </div>
+
+              {/* ── プロ情報 (showProInfo === true) ── */}
+              {showProInfo &&
+                (forExport ? (
+                  // エクスポート: 自身の borderTop で区切り
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 28,
+                      paddingTop: 32,
+                      borderTop: `2px solid ${hexToRgba(theme.accent, 0.15)}`,
+                      marginBottom: 32,
+                    }}
+                  >
+                    {proPhotoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={proPhotoUrl}
+                        alt={proName}
+                        crossOrigin="anonymous"
+                        style={{
+                          width: 100,
+                          height: 100,
+                          borderRadius: '50%',
+                          objectFit: 'cover',
+                          border: `3px solid ${hexToRgba(theme.accent, 0.25)}`,
+                          flexShrink: 0,
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: 100,
+                          height: 100,
+                          borderRadius: '50%',
+                          background: hexToRgba(theme.accent, 0.18),
+                          border: `3px solid ${hexToRgba(theme.accent, 0.3)}`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 42,
+                          color: theme.accent,
+                          fontWeight: 700,
+                          flexShrink: 0,
+                        }}
+                      >
+                        {proName.charAt(0)}
+                      </div>
+                    )}
+                    <div>
+                      <div style={{ fontSize: 32, fontWeight: 600, color: theme.text }}>{proName}</div>
+                      <div style={{ fontSize: 24, fontWeight: 500, color: theme.sub, marginTop: 6 }}>{proTitle}</div>
+                    </div>
+                  </div>
+                ) : (
+                  // visible: 独立した区切り線 + コンテナ
+                  <>
+                    <div
+                      style={{
+                        height: 1,
+                        background: hexToRgba(theme.accent, 0.12),
+                        margin: '0 0 14px',
+                      }}
+                    />
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 14,
+                        marginBottom: 16,
+                      }}
+                    >
+                      {proPhotoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={proPhotoUrl}
+                          alt={proName}
+                          style={{
+                            width: 48,
+                            height: 48,
+                            borderRadius: '50%',
+                            objectFit: 'cover',
+                            border: `2px solid ${hexToRgba(theme.accent, 0.2)}`,
+                            flexShrink: 0,
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: 48,
+                            height: 48,
+                            borderRadius: '50%',
+                            background: hexToRgba(theme.accent, 0.15),
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: theme.accent,
+                            fontSize: 20,
+                            fontWeight: 'bold',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {proName.charAt(0)}
+                        </div>
+                      )}
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: theme.text }}>{proName}</div>
+                        <div style={{ fontSize: 10, fontWeight: 500, color: theme.sub, marginTop: 2 }}>{proTitle}</div>
+                      </div>
+                    </div>
+                  </>
+                ))}
+
+              {/* ── トッププルーフバッジ (showProof === true && topProof) ── */}
+              {showProof && topProof && (
+                <div
+                  style={{
+                    background: hexToRgba(theme.accent, 0.08),
+                    border: forExport
+                      ? `2px solid ${hexToRgba(theme.accent, 0.2)}`
+                      : `1px solid ${hexToRgba(theme.accent, 0.2)}`,
+                    borderRadius: forExport ? 16 : 8,
+                    padding: forExport ? '20px 28px' : '8px 12px',
+                    marginBottom: forExport ? 32 : 16,
+                    textAlign: 'center',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: forExport ? 28 : 11,
+                      fontWeight: 600,
+                      color: theme.accent,
+                    }}
+                  >
+                    ◆ {topProof.count}人が「{topProof.label}」と証明
+                  </span>
+                </div>
+              )}
+
+              {/* ── フッター ── */}
+              {forExport ? (
+                <div
+                  style={{
+                    borderTop: `2px solid ${hexToRgba(theme.accent, 0.12)}`,
+                    paddingTop: 24,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 22,
+                      color: theme.sub,
+                      letterSpacing: 1,
+                    }}
+                  >
+                    強みが、あなたを定義する。
+                  </span>
+                  {/* CEO 確定: エクスポート用も realproof.jp テキストではなくロゴ画像のまま */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={REALPROOF_LOGO_BASE64}
+                    alt="REALPROOF"
+                    style={{
+                      height: 44,
+                      objectFit: 'contain',
+                      filter: isLightBg ? 'none' : 'brightness(2)',
+                    }}
+                  />
+                </div>
+              ) : (
+                <>
+                  <div
+                    style={{
+                      height: 1,
+                      background: hexToRgba(theme.accent, 0.12),
+                      margin: '0 0 12px',
+                    }}
+                  />
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <span style={{ fontSize: 9, color: theme.sub }}>
+                      強みが、あなたを定義する。
+                    </span>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={REALPROOF_LOGO_BASE64}
+                      alt="REALPROOF"
+                      style={{
+                        height: 22,
+                        objectFit: 'contain',
+                        filter: isLightBg ? 'none' : 'brightness(2)',
+                      }}
+                    />
+                  </div>
+                </>
               )}
             </div>
           </div>
-        )}
-
-        {/* 日時 */}
-        <div
-          style={{
-            fontSize: 9 * baseFontScale,
-            color: theme.sub,
-            marginTop: 8,
-            fontFamily: "'Courier New', monospace",
-          }}
-        >
-          {new Date(vote.created_at).toLocaleDateString('ja-JP')}
         </div>
       </div>
     )
