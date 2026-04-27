@@ -1,10 +1,8 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
-import html2canvas from 'html2canvas'
-import { createClient } from '@/lib/supabase'
 import { REALPROOF_LOGO_BASE64 } from '@/lib/logoBase64'
-import { trackPageView } from '@/lib/tracking'
+import { executeVoiceShare } from '@/lib/voice-share'
 import {
   VoiceCardTheme, hexToRgba,
   VOICE_CARD_PRESETS, resolveTheme, buildCustomTheme,
@@ -77,8 +75,6 @@ export default function VoiceShareModal({
   totalProofs, topStrengths,
   savedThemeData, onSaveTheme,
 }: VoiceShareModalProps) {
-  const supabase = createClient()
-
   // ── テーマ state ──
   const resolved = resolveTheme(savedThemeData)
   const [theme, setTheme] = useState<VoiceCardTheme>(resolved.theme)
@@ -168,97 +164,23 @@ export default function VoiceShareModal({
   }
 
   // ── シェア / ダウンロード（フルブリードエクスポート）──
+  // 実際のロジックは src/lib/voice-share.ts (executeVoiceShare) に共通化済み。
+  // ここでは UI 状態 (saving フラグ) と DOM 要素の取得のみを担当する。
   const handleShare = async () => {
     setSaving(true)
     const el = document.getElementById('voice-card-for-export')
     if (!el) { setSaving(false); return }
 
-    // モードに応じたスケール計算
-    const targetWidth = exportMode === 'stories' ? 1080 : 680
-    const scale = targetWidth / el.offsetWidth
-
-    const canvas = await html2canvas(el, {
-      scale,
-      backgroundColor: null,
-      useCORS: true,
-      width: el.offsetWidth,
-      height: el.offsetHeight,
+    await executeVoiceShare({
+      cardElement: el,
+      exportMode,
+      voteId: voice.id,
+      professionalId: proId,
+      phraseId: currentPhraseId,
+      includeProfile: showProInfo,
+      source: 'dashboard',
     })
 
-    // ストーリーズモード: 角丸なし → canvasそのまま
-    // フィードモード: 角丸マスク適用
-    let finalCanvas = canvas
-
-    if (exportMode === 'feed') {
-      finalCanvas = document.createElement('canvas')
-      finalCanvas.width = canvas.width
-      finalCanvas.height = canvas.height
-      const ctx = finalCanvas.getContext('2d')
-      if (ctx) {
-        const radius = 36 * (scale / 2)
-        ctx.beginPath()
-        ctx.moveTo(radius, 0)
-        ctx.lineTo(canvas.width - radius, 0)
-        ctx.quadraticCurveTo(canvas.width, 0, canvas.width, radius)
-        ctx.lineTo(canvas.width, canvas.height - radius)
-        ctx.quadraticCurveTo(canvas.width, canvas.height, canvas.width - radius, canvas.height)
-        ctx.lineTo(radius, canvas.height)
-        ctx.quadraticCurveTo(0, canvas.height, 0, canvas.height - radius)
-        ctx.lineTo(0, radius)
-        ctx.quadraticCurveTo(0, 0, radius, 0)
-        ctx.closePath()
-        ctx.clip()
-        ctx.drawImage(canvas, 0, 0)
-      }
-    }
-
-    const blob = await new Promise<Blob>((resolve) => {
-      finalCanvas.toBlob((b) => resolve(b!), 'image/png')
-    })
-
-    const file = new File([blob], `realproof-voice-${exportMode}.png`, { type: 'image/png' })
-
-    // Web Share API
-    if (navigator.share && navigator.canShare?.({ files: [file] })) {
-      try {
-        await navigator.share({
-          files: [file],
-          title: 'REALPROOF',
-          text: '強みが、あなたを定義する。',
-        })
-        trackPageView('share_voice', proId, voice.id)
-        const hash = crypto.randomUUID().replace(/-/g, '').slice(0, 12)
-        await (supabase as any).from('voice_shares').insert({
-          vote_id: voice.id,
-          professional_id: proId,
-          phrase_id: currentPhraseId,
-          include_profile: showProInfo,
-          hash,
-        })
-        setSaving(false)
-        return
-      } catch (e) {
-        if ((e as Error).name === 'AbortError') { setSaving(false); return }
-      }
-    }
-
-    // フォールバック: ダウンロード
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `realproof-voice-${exportMode}.png`
-    a.click()
-    URL.revokeObjectURL(url)
-
-    trackPageView('share_voice', proId, voice.id)
-    const hash = crypto.randomUUID().replace(/-/g, '').slice(0, 12)
-    await (supabase as any).from('voice_shares').insert({
-      vote_id: voice.id,
-      professional_id: proId,
-      phrase_id: currentPhraseId,
-      include_profile: showProInfo,
-      hash,
-    })
     setSaving(false)
   }
 
