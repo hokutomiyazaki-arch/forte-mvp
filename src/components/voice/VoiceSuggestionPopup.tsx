@@ -682,6 +682,47 @@ export default function VoiceSuggestionPopup({
           {renderCard(false)}
         </div>
 
+        {/* ═══ SIZE トグル ═══ */}
+        {/* VoiceShareCard line 519-553 を literal copy。
+            配色は VoiceShareCard が暗い背景前提 (#F0ECE4 / #BBBBBB /
+            border rgba(255,255,255,0.15)) のため、白背景 popup では
+            視認性が低い可能性あり。CEO 判断後に Fix-2 STOP で調整想定。 */}
+        <div style={{ maxWidth: 340, margin: '14px auto 0' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#F0ECE4', marginBottom: 8, fontFamily: "'Inter', sans-serif", letterSpacing: 1 }}>
+            SIZE
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {([
+              { key: 'stories' as const, label: 'ストーリーズ（9:16）' },
+              { key: 'feed' as const, label: 'フィード（4:5）' },
+            ]).map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setExportMode(key)}
+                style={{
+                  flex: 1,
+                  padding: '10px 12px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  fontFamily: "'Inter', 'Noto Sans JP', sans-serif",
+                  borderRadius: 8,
+                  border: exportMode === key
+                    ? '1px solid #C4A35A'
+                    : '1px solid rgba(255,255,255,0.15)',
+                  background: exportMode === key
+                    ? 'rgba(196,163,90,0.15)'
+                    : 'transparent',
+                  color: exportMode === key ? '#C4A35A' : '#BBBBBB',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* ボタン群 */}
         <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
           <button
