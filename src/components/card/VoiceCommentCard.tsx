@@ -1,6 +1,5 @@
 'use client'
 import { COLORS, FONTS } from '@/lib/design-tokens'
-import { getSurname } from '@/lib/display-name-utils'
 import type { VoiceComment } from './types'
 
 const T = { ...COLORS, font: FONTS.main, fontMono: FONTS.mono }
@@ -98,32 +97,15 @@ export function VoiceCommentCard({
     switch (vote.display_mode) {
       case 'photo': {
         if (!vote.client_photo_url) return null
-        const surname = getSurname(vote.auth_display_name)
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <ClientIcon type="image" imageUrl={vote.client_photo_url} />
-            {surname && (
-              <span style={{ fontSize: 13, fontWeight: 600, color: T.textSub }}>
-                {surname}さん
-              </span>
-            )}
           </div>
         )
       }
-      case 'nickname_only': {
-        const surname = getSurname(vote.auth_display_name)
-        const initial = surname ? surname.charAt(0) : '〇'
-        return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <ClientIcon type="initial" initial={initial} />
-            {surname && (
-              <span style={{ fontSize: 13, fontWeight: 600, color: T.textSub }}>
-                {surname}さん
-              </span>
-            )}
-          </div>
-        )
-      }
+      case 'nickname_only':
+        // CEO 指示で nickname_only はアバター+名前ヘッダーごと非表示（コメント本文のみ）
+        return null
       case 'pro_link': {
         if (!vote.voter_pro) return null
         return (

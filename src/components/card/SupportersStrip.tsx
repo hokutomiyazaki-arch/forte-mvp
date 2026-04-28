@@ -1,7 +1,6 @@
 'use client'
 import { useState } from 'react'
 import { COLORS, FONTS } from '@/lib/design-tokens'
-import { getSurname } from '@/lib/display-name-utils'
 import { SupportersModal } from './SupportersModal'
 import type { Supporter } from './types'
 
@@ -13,21 +12,22 @@ interface Props {
 }
 
 /**
- * 件数に応じた動的サイジング設定（仕様 §2.1 v2）
+ * 件数に応じた動的サイジング設定
  *
- * | 件数      | アイコン | gap  | 表示数        | 行数 | 名前 |
- * |-----------|---------|------|--------------|-----|------|
- * | 1〜3      | 64px    | 12px | 全件         | 1   | あり |
- * | 4〜8      | 48px    | 10px | 全件         | 1   | あり |
- * | 9〜16     | 40px    |  8px | 全件         | 2   | あり(小)|
- * | 17件以上  | 32px    |  6px | 16件 + +N    | 2   | なし |
+ * 名前は CEO 指示で全件非表示（写真のみ）。
+ *
+ * | 件数      | アイコン | gap  | 表示数        | 行数 |
+ * |-----------|---------|------|--------------|-----|
+ * | 1〜3      | 64px    | 12px | 全件         | 1   |
+ * | 4〜8      | 48px    | 10px | 全件         | 1   |
+ * | 9〜16     | 40px    |  8px | 全件         | 2   |
+ * | 17件以上  | 32px    |  6px | 16件 + +N    | 2   |
  */
 function getSizingConfig(count: number) {
-  if (count <= 3) return { iconSize: 64, gap: 12, fontSize: 12, showName: true }
-  if (count <= 8) return { iconSize: 48, gap: 10, fontSize: 11, showName: true }
-  // 9-16件は名前非表示（FV高さ130px以内に収めるため）
-  if (count <= 16) return { iconSize: 40, gap: 8, fontSize: 0, showName: false }
-  return { iconSize: 32, gap: 6, fontSize: 0, showName: false }
+  if (count <= 3) return { iconSize: 64, gap: 12 }
+  if (count <= 8) return { iconSize: 48, gap: 10 }
+  if (count <= 16) return { iconSize: 40, gap: 8 }
+  return { iconSize: 32, gap: 6 }
 }
 
 const VISIBLE_LIMIT = 16
@@ -142,21 +142,6 @@ export function SupportersStrip({ supporters, onSupporterClick }: Props) {
                   </div>
                 )}
               </div>
-              {config.showName && (
-                <span
-                  style={{
-                    fontSize: config.fontSize,
-                    color: T.textSub,
-                    lineHeight: 1.2,
-                    maxWidth: '100%',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {getSurname(s.display_name)}
-                </span>
-              )}
             </button>
           ))}
 
