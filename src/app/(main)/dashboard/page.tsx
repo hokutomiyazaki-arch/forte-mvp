@@ -17,6 +17,7 @@ import CardModeSwitch from '@/components/CardModeSwitch'
 import InstallPrompt from '@/components/InstallPrompt'
 import { PREFECTURES } from '@/lib/prefectures'
 import XDayCountdown from '@/components/XDayCountdown'
+import { isPersonalityV2 } from '@/lib/personality'
 
 // バッジ階層: FNTはBDCの上位資格。同レベルのFNTを持っていたらBDCは非表示
 const BADGE_ORDER: Record<string, number> = {
@@ -62,6 +63,7 @@ export default function DashboardPage() {
   const [pro, setPro] = useState<Professional | null>(null)
   const [votes, setVotes] = useState<VoteSummary[]>([])
   const [personalityVotes, setPersonalityVotes] = useState<{category: string, vote_count: number}[]>([])
+  const [archivedPersonality, setArchivedPersonality] = useState<{ label: string; personality_label: string; votes: number }[]>([])
   const [totalVotes, setTotalVotes] = useState(0)
   const [bookmarkCount, setBookmarkCount] = useState(0)
   const [firstTimerCount, setFirstTimerCount] = useState(0)
@@ -344,6 +346,27 @@ export default function DashboardPage() {
         if (data.personalitySummary && data.personalityItems) {
           const labeledPers = resolvePersonalityLabels(data.personalitySummary, data.personalityItems)
           setPersonalityVotes(labeledPers)
+
+          // アーカイブ集計（is_active=false かつ過去票がある項目）
+          const voteCountMap = new Map<string, number>()
+          for (const v of data.personalitySummary as Array<{ personality_id: string; vote_count: number }>) {
+            voteCountMap.set(v.personality_id, v.vote_count)
+          }
+          const archived = (data.personalityItems as Array<{
+            id: string
+            label: string
+            personality_label: string | null
+            is_active: boolean | null
+          }>)
+            .filter(item => item.is_active === false)
+            .map(item => ({
+              label: item.label,
+              personality_label: item.personality_label || item.label,
+              votes: voteCountMap.get(item.id) || 0,
+            }))
+            .filter(item => item.votes > 0)
+            .sort((a, b) => b.votes - a.votes)
+          setArchivedPersonality(archived)
         }
 
         setTotalVotes(data.totalVotes || 0)
@@ -2357,6 +2380,43 @@ export default function DashboardPage() {
           certApplications={certApplications}
         />
       </div>
+
+      {/* アーカイブ（旧パーソナリティで過去票がある項目） */}
+      {isPersonalityV2() && archivedPersonality.length > 0 && (() => {
+        const archMax = Math.max(...archivedPersonality.map(a => a.votes), 1)
+        return (
+          <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
+            <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">📂 アーカイブ</h2>
+            <p className="text-xs text-[#9CA3AF] mb-4">
+              フォーマット刷新前の評価記録です。集計には含まれませんが大切な投票として残しています。
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {archivedPersonality.map(item => {
+                const pct = Math.round((item.votes / archMax) * 100)
+                return (
+                  <div key={item.label}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 13, marginBottom: 4 }}>
+                      <span style={{ color: '#1A1A2E', fontWeight: 600 }}>
+                        {item.personality_label}
+                        <span style={{ color: '#9CA3AF', fontWeight: 400, marginLeft: 6, fontSize: 11 }}>
+                          {item.label}
+                        </span>
+                      </span>
+                      <span style={{ color: '#9CA3AF' }}>{item.votes}票</span>
+                    </div>
+                    <div style={{ width: '100%', height: 4, background: '#F0EDE6', borderRadius: 99 }}>
+                      <div style={{ width: `${pct}%`, height: 4, background: '#9CA3AF', borderRadius: 99 }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <p className="text-xs text-[#9CA3AF] mt-4 leading-relaxed">
+              2026年4月以降、パーソナリティのフォーマットを刷新しました。過去の評価は大切な記録として残しています。
+            </p>
+          </div>
+        )
+      })()}
 
       </>)}
 

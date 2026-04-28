@@ -17,7 +17,7 @@ async function getMasterData(supabase: ReturnType<typeof getSupabaseAdmin>) {
   }
   const [proofItemsResult, personalityItemsResult, phrasesResult] = await Promise.all([
     supabase.from('proof_items').select('*').order('sort_order'),
-    supabase.from('personality_items').select('id, label'),
+    supabase.from('personality_items').select('id, label, personality_label, category, is_active, sort_order'),
     supabase.from('gratitude_phrases').select('*').order('sort_order'),
   ])
   masterCache = {

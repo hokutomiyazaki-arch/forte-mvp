@@ -45,8 +45,8 @@ export async function GET(
       supabase.from('proof_items').select('id, label, tab, strength_label'),
       // 4. 人柄サマリー
       supabase.from('personality_summary').select('*').eq('professional_id', proId),
-      // 5. 人柄項目マスタ
-      supabase.from('personality_items').select('id, label'),
+      // 5. 人柄項目マスタ（category / is_active 含む）
+      supabase.from('personality_items').select('id, label, personality_label, category, is_active, sort_order'),
       // 6. コメント付き投票（display_mode/photo/auth_display_name/voter_professional_id 追加）
       supabase.from('votes')
         .select('id, comment, created_at, normalized_email, display_mode, client_photo_url, auth_display_name, voter_professional_id')

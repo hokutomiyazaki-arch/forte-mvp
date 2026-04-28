@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { PREFECTURES } from '@/lib/prefectures'
 import { COLORS, FONTS } from '@/lib/design-tokens'
 import { SPECIALIST_THRESHOLD } from '@/lib/constants'
+import { isPersonalityV2 } from '@/lib/personality'
 
 const T = { ...COLORS, font: FONTS.main }
 
@@ -66,6 +67,11 @@ interface SearchPro {
   } | null
   topPersonality: {
     label: string
+  } | null
+  topPersonalitiesByCategory?: {
+    inner: { label: string; personality_label: string; votes: number } | null
+    interpersonal: { label: string; personality_label: string; votes: number } | null
+    atmosphere: { label: string; personality_label: string; votes: number } | null
   } | null
 }
 
@@ -330,13 +336,34 @@ export default function SearchPage() {
                   })()}
 
                   {/* パーソナリティTOP */}
-                  {p.topPersonality && (
-                    <div style={{
-                      marginTop: 6, fontSize: 12, color: T.textSub, fontWeight: 600,
-                    }}>
-                      {'\uD83D\uDCAC'} {p.topPersonality.label}
-                    </div>
-                  )}
+                  {(() => {
+                    if (isPersonalityV2()) {
+                      const cats = p.topPersonalitiesByCategory
+                      if (!cats) return null
+                      const labels: string[] = []
+                      if (cats.inner) labels.push(cats.inner.personality_label || cats.inner.label)
+                      if (cats.interpersonal) labels.push(cats.interpersonal.personality_label || cats.interpersonal.label)
+                      if (cats.atmosphere) labels.push(cats.atmosphere.personality_label || cats.atmosphere.label)
+                      if (labels.length === 0) return null
+                      return (
+                        <div style={{
+                          marginTop: 6, fontSize: 12, color: T.textSub, fontWeight: 600,
+                        }}>
+                          {'\uD83D\uDCAC'} {labels.join(' × ')}
+                        </div>
+                      )
+                    }
+                    if (p.topPersonality) {
+                      return (
+                        <div style={{
+                          marginTop: 6, fontSize: 12, color: T.textSub, fontWeight: 600,
+                        }}>
+                          {'\uD83D\uDCAC'} {p.topPersonality.label}
+                        </div>
+                      )
+                    }
+                    return null
+                  })()}
 
                   {/* Voiceスニペット */}
                   {p.voiceSnippet && (

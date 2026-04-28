@@ -113,14 +113,20 @@ export async function GET(request: Request) {
       }
     }
 
-    // personality_items テーブル
+    // personality_items テーブル（is_active=true のみ集計対象、category 含む）
     const { data: personalityItems } = await supabase
       .from('personality_items')
-      .select('id, label')
+      .select('id, label, personality_label, category, is_active')
 
     const personalityLabelMap: Record<string, string> = {}
+    const personalityPersonalityLabelMap: Record<string, string> = {}
+    const personalityCategoryMap: Record<string, string> = {}
+    const activePersonalityIds = new Set<string>()
     for (const item of personalityItems || []) {
       personalityLabelMap[item.id] = item.label
+      personalityPersonalityLabelMap[item.id] = item.personality_label || item.label
+      if (item.category) personalityCategoryMap[item.id] = item.category
+      if (item.is_active !== false) activePersonalityIds.add(item.id)
     }
 
     // プロごとのパーソナリティ集計
@@ -398,8 +404,14 @@ export async function GET(request: Request) {
         }
       }
 
-      // topPersonality
+      // topPersonality（旧UI: is_active 関係なくTOP1）
       let topPersonality: { label: string } | null = null
+      // topPersonalitiesByCategory（新UI: カテゴリ別TOP1, is_active=trueのみ）
+      const topPersonalitiesByCategory: {
+        inner: { label: string; personality_label: string; votes: number } | null
+        interpersonal: { label: string; personality_label: string; votes: number } | null
+        atmosphere: { label: string; personality_label: string; votes: number } | null
+      } = { inner: null, interpersonal: null, atmosphere: null }
       const perCounts = proPersonalityCounts.get(pro.id)
       if (perCounts) {
         let topId = ''
@@ -409,6 +421,29 @@ export async function GET(request: Request) {
         }
         if (topId && personalityLabelMap[topId]) {
           topPersonality = { label: personalityLabelMap[topId] }
+        }
+
+        // カテゴリ別の集計（is_active=true のみ）
+        const byCategory: Record<string, { id: string; count: number }[]> = {
+          inner: [], interpersonal: [], atmosphere: [],
+        }
+        for (const [perId, count] of Object.entries(perCounts)) {
+          if (!activePersonalityIds.has(perId)) continue
+          const cat = personalityCategoryMap[perId]
+          if (cat && byCategory[cat]) {
+            byCategory[cat].push({ id: perId, count })
+          }
+        }
+        for (const catKey of ['inner', 'interpersonal', 'atmosphere'] as const) {
+          const list = byCategory[catKey]
+          if (list.length === 0) continue
+          list.sort((a, b) => b.count - a.count)
+          const top = list[0]
+          topPersonalitiesByCategory[catKey] = {
+            label: personalityLabelMap[top.id] || '',
+            personality_label: personalityPersonalityLabelMap[top.id] || '',
+            votes: top.count,
+          }
         }
       }
 
@@ -455,6 +490,7 @@ export async function GET(request: Request) {
         featuredProof,
         categoryTopProof,
         topPersonality,
+        topPersonalitiesByCategory,
       }
     }).filter((p): p is NonNullable<typeof p> => p !== null)
 

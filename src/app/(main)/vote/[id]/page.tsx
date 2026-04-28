@@ -9,6 +9,7 @@ import { extractDisplayName, determineAuthMethod } from '@/lib/vote-auth-helpers
 import { checkVoteDuplicates } from '@/lib/vote-duplicate-check'
 import { getVoteErrorMessage, mapAuthErrorParamToReason } from '@/lib/vote-error-messages'
 import { Suspense } from 'react'
+import { PERSONALITY_CATEGORIES, PersonalityCategory, isPersonalityV2 } from '@/lib/personality'
 // AuthMethodSelector は login ページで使用。投票ページはフォーム内のためインライン実装
 
 interface ProofItem {
@@ -29,6 +30,8 @@ interface PersonalityItem {
   label: string
   personality_label: string
   sort_order: number
+  category?: 'inner' | 'interpersonal' | 'atmosphere' | null
+  is_active?: boolean | null
 }
 
 interface RewardItem {
@@ -83,6 +86,137 @@ function Accordion({
           {children}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── パーソナリティ V2: カテゴリアコーディオン ──
+function PersonalityCategoryAccordions({
+  items,
+  selectedIds,
+  onSelect,
+}: {
+  items: PersonalityItem[]
+  selectedIds: Set<string>
+  onSelect: (category: PersonalityCategory, itemId: string | null) => void
+}) {
+  const [openCategory, setOpenCategory] = useState<PersonalityCategory | null>(null)
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
+      {PERSONALITY_CATEGORIES.map(meta => {
+        const catItems = items.filter(i => i.category === meta.key)
+        if (catItems.length === 0) return null
+        const isOpen = openCategory === meta.key
+        const selectedInCat = catItems.find(i => selectedIds.has(i.id))
+
+        return (
+          <div
+            key={meta.key}
+            style={{
+              borderRadius: 14,
+              border: '1.5px solid rgba(196,163,90,0.24)',
+              background: 'rgba(255,255,255,0.03)',
+              overflow: 'hidden',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setOpenCategory(prev => prev === meta.key ? null : meta.key)}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '14px 16px',
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                color: '#FAFAF7',
+                textAlign: 'left',
+              }}
+            >
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#FAFAF7' }}>
+                  {meta.emoji} {meta.name}
+                </div>
+                <div style={{ fontSize: 11, color: '#8B8B9A', marginTop: 2 }}>
+                  {meta.subtitle}
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {selectedInCat && (
+                  <span style={{ fontSize: 11, color: '#C4A35A', fontWeight: 600 }}>
+                    {selectedInCat.label}
+                  </span>
+                )}
+                <span style={{ fontSize: 12, color: '#8B8B9A' }}>{isOpen ? '▼' : '▶'}</span>
+              </div>
+            </button>
+            {isOpen && (
+              <div style={{ padding: '4px 16px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {catItems.map(item => {
+                  const isSelected = selectedIds.has(item.id)
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => onSelect(meta.key, isSelected ? null : item.id)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        padding: '10px 14px',
+                        borderRadius: 10,
+                        border: isSelected
+                          ? '1.5px solid #C4A35A'
+                          : '1.5px solid rgba(196,163,90,0.16)',
+                        background: isSelected ? 'rgba(196,163,90,0.12)' : 'rgba(255,255,255,0.02)',
+                        color: isSelected ? '#C4A35A' : '#FAFAF7',
+                        fontSize: 13,
+                        fontWeight: isSelected ? 600 : 400,
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: 16,
+                          height: 16,
+                          borderRadius: '50%',
+                          border: `1.5px solid ${isSelected ? '#C4A35A' : 'rgba(196,163,90,0.4)'}`,
+                          background: isSelected ? '#C4A35A' : 'transparent',
+                          display: 'inline-block',
+                          flexShrink: 0,
+                        }}
+                      />
+                      <span style={{ flex: 1 }}>{item.label}</span>
+                    </button>
+                  )
+                })}
+                {selectedInCat && (
+                  <button
+                    type="button"
+                    onClick={() => onSelect(meta.key, null)}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#8B8B9A',
+                      fontSize: 12,
+                      cursor: 'pointer',
+                      textDecoration: 'underline',
+                      padding: '4px',
+                      alignSelf: 'flex-end',
+                    }}
+                  >
+                    選択をクリア
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -462,8 +596,8 @@ function VoteForm() {
             : Promise.resolve({ data: { expires_at: new Date(Date.now() + 86400000).toISOString() } }),
         // プロ情報
         (supabase as any).from('professionals').select('*').eq('id', proId).maybeSingle(),
-        // 人柄プルーフ（プロ情報に依存しない）
-        (supabase as any).from('personality_items').select('id, label, personality_label, sort_order').order('sort_order'),
+        // 人柄プルーフ（プロ情報に依存しない、is_active=true のみ）
+        (supabase as any).from('personality_items').select('id, label, personality_label, category, is_active, sort_order').eq('is_active', true).order('sort_order'),
       ])
 
       // QRチェック結果（プレビューモードではスキップ）
@@ -1876,42 +2010,57 @@ function VoteForm() {
             <div style={S.title}>
               <span style={{ color: "#C4A35A" }}>{pro.name?.split(/[\s　]/)[0]}</span>さんはどんな人でしたか？
             </div>
-            <div style={S.subtitle}>あてはまるものを選んでください（任意・最大3つ）</div>
+            <div style={S.subtitle}>あてはまるものを選んでください（任意）</div>
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 28 }}>
-              {personalityItems.map(item => {
-                const isSelected = selectedPersonalityIds.has(item.id)
-                const disabled = selectedPersonalityIds.size >= 3 && !isSelected
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => togglePersonalityId(item.id)}
-                    disabled={disabled}
-                    style={{
-                      padding: "9px 15px", borderRadius: 100,
-                      border: isSelected
-                        ? "2px solid #C4A35A"
-                        : "1.5px solid rgba(196,163,90,0.24)",
-                      background: isSelected ? "rgba(196,163,90,0.13)" : "rgba(255,255,255,0.03)",
-                      color: isSelected ? "#C4A35A" : "#FAFAF7",
-                      fontSize: 13, fontWeight: isSelected ? 600 : 400,
-                      cursor: disabled ? "default" : "pointer",
-                      opacity: disabled && !isSelected ? 0.32 : 1,
-                    }}
-                  >
-                    {item.label}
-                  </button>
-                )
-              })}
-            </div>
+            {isPersonalityV2() ? (
+              <PersonalityCategoryAccordions
+                items={personalityItems}
+                selectedIds={selectedPersonalityIds}
+                onSelect={(category, itemId) => {
+                  setSelectedPersonalityIds(prev => {
+                    const next = new Set(prev)
+                    // そのカテゴリ内の既選択を解除
+                    for (const id of Array.from(next)) {
+                      const item = personalityItems.find(p => p.id === id)
+                      if (item?.category === category) next.delete(id)
+                    }
+                    if (itemId) next.add(itemId)
+                    return next
+                  })
+                }}
+              />
+            ) : (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 28 }}>
+                {personalityItems.map(item => {
+                  const isSelected = selectedPersonalityIds.has(item.id)
+                  const disabled = selectedPersonalityIds.size >= 3 && !isSelected
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => togglePersonalityId(item.id)}
+                      disabled={disabled}
+                      style={{
+                        padding: "9px 15px", borderRadius: 100,
+                        border: isSelected
+                          ? "2px solid #C4A35A"
+                          : "1.5px solid rgba(196,163,90,0.24)",
+                        background: isSelected ? "rgba(196,163,90,0.13)" : "rgba(255,255,255,0.03)",
+                        color: isSelected ? "#C4A35A" : "#FAFAF7",
+                        fontSize: 13, fontWeight: isSelected ? 600 : 400,
+                        cursor: disabled ? "default" : "pointer",
+                        opacity: disabled && !isSelected ? 0.32 : 1,
+                      }}
+                    >
+                      {item.label}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
 
             <button
               onClick={() => goToWithHistory("comment")}
-              disabled={selectedPersonalityIds.size === 0}
-              style={{
-                ...S.primaryBtn,
-                opacity: selectedPersonalityIds.size === 0 ? 0.4 : 1,
-              }}
+              style={S.primaryBtn}
             >
               次へ →
             </button>
