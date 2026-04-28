@@ -605,7 +605,13 @@ function VoteForm() {
         isPreview
           ? Promise.resolve({ data: { expires_at: new Date(Date.now() + 86400000).toISOString() } })
           : qrToken
-            ? (supabase as any).from('qr_tokens').select('expires_at').eq('token', qrToken).maybeSingle()
+            ? (supabase as any)
+              .from('qr_tokens')
+              .select('id, professional_id, expires_at, used_at')
+              .eq('token', qrToken)
+              .gt('expires_at', new Date().toISOString())
+              .is('used_at', null)
+              .maybeSingle()
             : Promise.resolve({ data: { expires_at: new Date(Date.now() + 86400000).toISOString() } }),
         // プロ情報
         (supabase as any).from('professionals').select('*').eq('id', proId).maybeSingle(),
@@ -614,9 +620,10 @@ function VoteForm() {
       ])
 
       // QRチェック結果（プレビューモードではスキップ）
+      // DB側 WHERE で expires_at > now() AND used_at IS NULL を満たすトークンのみ
+      // 取得しているため、data が null なら「無効（期限切れ or 使用済み or 不存在）」。
       if (!isPreview && qrToken) {
         if (!tokenResult.data) { setTokenExpired(true); setLoading(false); return }
-        if (new Date(tokenResult.data.expires_at) < new Date()) { setTokenExpired(true); setLoading(false); return }
       }
 
       // プロ情報チェック
@@ -1679,8 +1686,8 @@ function VoteForm() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         </div>
-        <h1 className="text-xl font-bold text-[#1A1A2E] mb-2">QRコードの有効期限が切れています</h1>
-        <p className="text-gray-500 mb-6">このQRコードは24時間の有効期限が過ぎています。プロに新しいQRコードを発行してもらってください。</p>
+        <h1 className="text-xl font-bold text-[#1A1A2E] mb-2">このQRコードは無効です</h1>
+        <p className="text-gray-500 mb-6">すでに使用されたか、期限が切れています。プロに新しいQRコードを表示してもらってください。</p>
       </div>
     )
   }

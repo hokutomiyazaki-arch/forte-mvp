@@ -74,6 +74,22 @@ export async function POST(req: NextRequest) {
       }, { status: 409 })
     }
 
+    // ── QRトークン検証（未使用 + 未失効） — Set 1 Phase 3 ──
+    if (vote_data.qr_token) {
+      const { data: tokenData } = await supabase
+        .from('qr_tokens')
+        .select('id, professional_id, expires_at, used_at')
+        .eq('token', vote_data.qr_token)
+        .gt('expires_at', new Date().toISOString())
+        .is('used_at', null)
+        .maybeSingle()
+
+      if (!tokenData) {
+        console.error('[verify-code] Invalid QR token:', vote_data.qr_token)
+        return NextResponse.json({ error: 'invalid_token' }, { status: 400 })
+      }
+    }
+
     // --- ハッシュチェーン処理 START ---
     const { data: latestVote } = await supabase
       .from('votes')

@@ -26,6 +26,7 @@ export type VoteAuthErrorReason =
   | 'google_no_email'  // Google メール取得失敗
   | 'invalid_vote_data'
   | 'vote_failed'
+  | 'invalid_token'    // QRトークン無効（使用済み or 期限切れ）
   | 'unknown'
 
 export type VoteErrorReason = VoteDuplicateReason | VoteAuthErrorReason
@@ -96,6 +97,9 @@ export function getVoteErrorMessage(
     case 'vote_failed':
       return '送信に失敗しました。もう一度お試しください。'
 
+    case 'invalid_token':
+      return 'このQRコードは無効です。すでに使用されたか、期限が切れています。プロに新しいQRコードを表示してもらってください。'
+
     default:
       return '回答処理中にエラーが発生しました。時間を置いて再度お試しください。'
   }
@@ -120,6 +124,7 @@ export function mapAuthErrorParamToReason(param: string | null | undefined): Vot
     case 'google_no_email': return 'google_no_email'
     case 'invalid_vote_data': return 'invalid_vote_data'
     case 'vote_failed': return 'vote_failed'
+    case 'invalid_token': return 'invalid_token'
     default: return 'unknown'
   }
 }

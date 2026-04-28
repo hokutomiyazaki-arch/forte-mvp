@@ -300,6 +300,24 @@ export async function GET(request: NextRequest) {
 
     // Step 6: （重複/クールダウンチェックは Step 4 の checkVoteDuplicates で統一済み）
 
+    // Step 6.5: QRトークン検証（未使用 + 未失効） — Set 1 Phase 3
+    if (qr_token) {
+      const { data: tokenData } = await supabaseAdmin
+        .from('qr_tokens')
+        .select('id, professional_id, expires_at, used_at')
+        .eq('token', qr_token)
+        .gt('expires_at', new Date().toISOString())
+        .is('used_at', null)
+        .maybeSingle()
+
+      if (!tokenData) {
+        console.error('[vote-auth/line/callback] Invalid QR token:', qr_token)
+        return NextResponse.redirect(
+          new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=invalid_token`, origin)
+        )
+      }
+    }
+
     // --- ハッシュチェーン処理 START ---
     const { data: latestVote } = await supabaseAdmin
       .from('votes')
