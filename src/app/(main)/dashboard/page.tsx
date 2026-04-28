@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useUser, useClerk } from '@clerk/nextjs'
 import { useSearchParams } from 'next/navigation'
 import { db, uploadFile } from '@/lib/db'
+import { calcQrTokenExpiry } from '@/lib/qr-token'
 import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYPES, getRewardType, FNT_NEURO_APPS } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import ForteChart from '@/components/ForteChart'
@@ -786,7 +787,7 @@ export default function DashboardPage() {
     // 既存トークンを削除
     await db.delete('qr_tokens', { professional_id: pro.id })
     const token = crypto.randomUUID()
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+    const expiresAt = calcQrTokenExpiry()
     await db.insert('qr_tokens', { professional_id: pro.id, token, expires_at: expiresAt })
     const voteUrl = `${window.location.origin}/vote/${pro.id}?token=${token}&channel=dashboard`
     setQrUrl(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(voteUrl)}`)

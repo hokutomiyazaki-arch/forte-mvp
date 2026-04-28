@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
+import { calcQrTokenExpiry } from '@/lib/qr-token'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -196,9 +197,9 @@ export async function GET(
       .delete()
       .eq('professional_id', card.professional_id)
 
-    // 5. 24時間有効のワンタイムトークンを生成
+    // 5. ワンタイムトークンを生成（TTLは src/lib/qr-token.ts で管理 / 現状1h）
     const token = randomBytes(16).toString('hex')
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+    const expiresAt = calcQrTokenExpiry()
 
     const { error: tokenError } = await supabase
       .from('qr_tokens')
