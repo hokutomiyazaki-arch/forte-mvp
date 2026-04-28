@@ -8,6 +8,7 @@ import { normalizeEmail } from '@/lib/normalize-email'
 import { extractDisplayName, determineAuthMethod } from '@/lib/vote-auth-helpers'
 import { checkVoteDuplicates } from '@/lib/vote-duplicate-check'
 import { getVoteErrorMessage, mapAuthErrorParamToReason } from '@/lib/vote-error-messages'
+import { markTokenUsedFromClient } from '@/lib/qr-token'
 import { Suspense } from 'react'
 import { PERSONALITY_CATEGORIES, PersonalityCategory, isPersonalityV2 } from '@/lib/personality'
 // AuthMethodSelector は login ページで使用。投票ページはフォーム内のためインライン実装
@@ -831,6 +832,7 @@ function VoteForm() {
         auth_provider_id: null,
         channel,
       })
+      await markTokenUsedFromClient(qrToken || '')
     } catch (e) {
       console.error('hopeful vote error:', e)
       // エラーでも完了画面は表示する（UXを壊さない）
@@ -1063,6 +1065,8 @@ function VoteForm() {
         return
       }
 
+      await markTokenUsedFromClient(voteDataSnapshot.qr_token || '')
+
       let clientRewardId = ''
       if (selectedRewardId && insertedVote) {
         const { data: crData } = await (supabase as any).from('client_rewards').insert({
@@ -1181,6 +1185,8 @@ function VoteForm() {
       setIsSubmitting(false)
       return
     }
+
+    await markTokenUsedFromClient(voteData.qr_token || '')
 
     let clientRewardId2 = ''
     if (selectedRewardId && insertedVote) {
@@ -1363,6 +1369,8 @@ function VoteForm() {
       setIsSubmitting(false)
       return
     }
+
+    await markTokenUsedFromClient(qrToken || '')
 
     // メアドをPROOFリストに保存
     const { error: emailInsertError } = await (supabase as any).from('vote_emails').insert({
@@ -1637,6 +1645,8 @@ function VoteForm() {
         setIsSubmitting(false)
         return
       }
+
+      await markTokenUsedFromClient(voteDataSnapshot.qr_token || '')
 
       // vote_emails 記録（失敗しても投票は成立）
       try {
