@@ -8,6 +8,7 @@ import { checkVoterIsPro } from '@/lib/voter-pro-check'
 import { checkVoteDuplicates } from '@/lib/vote-duplicate-check'
 import { extractDisplayName } from '@/lib/vote-auth-helpers'
 import { markTokenUsed } from '@/lib/qr-token'
+import { checkProCooldown } from '@/lib/vote-cooldown'
 
 export const dynamic = 'force-dynamic'
 
@@ -271,6 +272,16 @@ export async function GET(request: NextRequest) {
           new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=invalid_token`, origin)
         )
       }
+    }
+
+    // Step 6.6: プロ単位30分クールダウン（Set 2）
+    const proCooldown = await checkProCooldown(professional_id)
+    if (proCooldown.blocked) {
+      const errUrl = new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=pro_cooldown`, origin)
+      if (proCooldown.remainingMin) {
+        errUrl.searchParams.set('remaining', String(proCooldown.remainingMin))
+      }
+      return NextResponse.redirect(errUrl)
     }
 
     // --- ハッシュチェーン処理 START ---

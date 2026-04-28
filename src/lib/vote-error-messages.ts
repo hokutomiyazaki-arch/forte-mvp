@@ -27,6 +27,7 @@ export type VoteAuthErrorReason =
   | 'invalid_vote_data'
   | 'vote_failed'
   | 'invalid_token'    // QRトークン無効（使用済み or 期限切れ）
+  | 'pro_cooldown'     // プロ単位30分クールダウン（Set 2、投票者横断）
   | 'unknown'
 
 export type VoteErrorReason = VoteDuplicateReason | VoteAuthErrorReason
@@ -100,6 +101,9 @@ export function getVoteErrorMessage(
     case 'invalid_token':
       return 'このQRコードは無効です。すでに使用されたか、期限が切れています。プロに新しいQRコードを表示してもらってください。'
 
+    case 'pro_cooldown':
+      return 'このプロは今投票が集中しています。しばらく待ってからもう一度お試しください。'
+
     default:
       return '回答処理中にエラーが発生しました。時間を置いて再度お試しください。'
   }
@@ -125,6 +129,7 @@ export function mapAuthErrorParamToReason(param: string | null | undefined): Vot
     case 'invalid_vote_data': return 'invalid_vote_data'
     case 'vote_failed': return 'vote_failed'
     case 'invalid_token': return 'invalid_token'
+    case 'pro_cooldown': return 'pro_cooldown'
     default: return 'unknown'
   }
 }
