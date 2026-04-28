@@ -165,9 +165,8 @@ export async function POST(req: NextRequest) {
         // --- Phase 1 Step 3: Clerk セッション非経由なので両方 null ---
         auth_display_name: null,
         auth_provider_id: null,
-        // --- Phase 1 Step 2/3（display_mode は pro なら pro_link 自動） ---
-        // NULL = 同意 UI 未操作。NO 押下時は VoteConsentSection 側で 'hidden' に UPDATE される。
-        display_mode: voterProfessionalId ? 'pro_link' : null,
+        // Email は公開要素ゼロ → 同意 UI スキップのため初期値 'hidden'
+        display_mode: voterProfessionalId ? 'pro_link' : 'hidden',
         client_photo_url: null,
         voter_professional_id: voterProfessionalId,
       })
