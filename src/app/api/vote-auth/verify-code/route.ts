@@ -5,6 +5,7 @@ import { computeProofHash, generateNonce, GENESIS_HASH } from '@/lib/proof-chain
 import { checkVoterIsPro } from '@/lib/voter-pro-check'
 import { checkVoteDuplicates } from '@/lib/vote-duplicate-check'
 import { markTokenUsed } from '@/lib/qr-token'
+import { checkProCooldown, PRO_COOLDOWN_MESSAGE } from '@/lib/vote-cooldown'
 
 
 export const dynamic = 'force-dynamic'
@@ -89,6 +90,23 @@ export async function POST(req: NextRequest) {
         console.error('[verify-code] Invalid QR token:', vote_data.qr_token)
         return NextResponse.json({ error: 'invalid_token' }, { status: 400 })
       }
+    }
+
+    // ── プロ単位30分クールダウン（Set 2） ──
+    const proCooldown = await checkProCooldown(professional_id)
+    if (proCooldown.blocked) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'PRO_COOLDOWN',
+          message: PRO_COOLDOWN_MESSAGE,
+          remainingMin: proCooldown.remainingMin,
+        },
+        {
+          status: 429,
+          headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
+        }
+      )
     }
 
     // --- ハッシュチェーン処理 START ---

@@ -9,6 +9,7 @@ import { extractDisplayName, determineAuthMethod } from '@/lib/vote-auth-helpers
 import { checkVoteDuplicates } from '@/lib/vote-duplicate-check'
 import { getVoteErrorMessage, mapAuthErrorParamToReason } from '@/lib/vote-error-messages'
 import { markTokenUsedFromClient } from '@/lib/qr-token'
+import { checkProCooldownFromClient, PRO_COOLDOWN_MESSAGE } from '@/lib/vote-cooldown'
 import { Suspense } from 'react'
 import { PERSONALITY_CATEGORIES, PersonalityCategory, isPersonalityV2 } from '@/lib/personality'
 // AuthMethodSelector は login ページで使用。投票ページはフォーム内のためインライン実装
@@ -836,6 +837,12 @@ function VoteForm() {
     if (!pro) return
     if (isPreview) return // プレビューモードでは投票しない
     try {
+      // プロ単位30分クールダウン（Set 2）— 多人数集中時は hopeful も silently abort
+      const proCooldown = await checkProCooldownFromClient(proId)
+      if (proCooldown.blocked) {
+        console.log('[submitHopefulVote] Pro cooldown blocked')
+        return
+      }
       await (supabase as any).from('votes').insert({
         professional_id: proId,
         voter_email: null,
@@ -1053,6 +1060,15 @@ function VoteForm() {
         return
       }
 
+      // プロ単位30分クールダウン（Set 2）
+      const verifyProCooldown = await checkProCooldownFromClient(proId)
+      if (verifyProCooldown.blocked) {
+        setError(PRO_COOLDOWN_MESSAGE)
+        setPhoneVerifying(false)
+        setIsSubmitting(false)
+        return
+      }
+
       await new Promise(resolve => setTimeout(resolve, 500))
 
       const { data: insertedVote, error: voteError } = await (supabase as any).from('votes').insert({
@@ -1171,6 +1187,14 @@ function VoteForm() {
         recentVoteCreatedAt: fbDupeResult.recentVoteCreatedAt,
         cooldownRemainingMinutes: fbDupeResult.cooldownRemainingMinutes,
       }))
+      setIsSubmitting(false)
+      return
+    }
+
+    // プロ単位30分クールダウン（Set 2）
+    const fbProCooldown = await checkProCooldownFromClient(proId)
+    if (fbProCooldown.blocked) {
+      setError(PRO_COOLDOWN_MESSAGE)
       setIsSubmitting(false)
       return
     }
@@ -1312,6 +1336,14 @@ function VoteForm() {
         recentVoteCreatedAt: submitDupeResult.recentVoteCreatedAt,
         cooldownRemainingMinutes: submitDupeResult.cooldownRemainingMinutes,
       }))
+      setIsSubmitting(false)
+      return
+    }
+
+    // プロ単位30分クールダウン（Set 2）
+    const submitProCooldown = await checkProCooldownFromClient(proId)
+    if (submitProCooldown.blocked) {
+      setError(PRO_COOLDOWN_MESSAGE)
       setIsSubmitting(false)
       return
     }
@@ -1524,6 +1556,10 @@ function VoteForm() {
         setError(getVoteErrorMessage('cooldown', {
           cooldownRemainingMinutes: data.cooldownRemainingMinutes,
         }))
+      } else if (data.error === 'PRO_COOLDOWN') {
+        setError(data.message || getVoteErrorMessage('pro_cooldown', {
+          cooldownRemainingMinutes: data.remainingMin,
+        }))
       } else {
         setError(getVoteErrorMessage('auth_invalid'))
       }
@@ -1601,6 +1637,14 @@ function VoteForm() {
           recentVoteCreatedAt: clerkDupeResult.recentVoteCreatedAt,
           cooldownRemainingMinutes: clerkDupeResult.cooldownRemainingMinutes,
         }))
+        setIsSubmitting(false)
+        return
+      }
+
+      // プロ単位30分クールダウン（Set 2）
+      const clerkProCooldown = await checkProCooldownFromClient(proId)
+      if (clerkProCooldown.blocked) {
+        setError(PRO_COOLDOWN_MESSAGE)
         setIsSubmitting(false)
         return
       }
