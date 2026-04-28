@@ -620,16 +620,19 @@ function VoteForm() {
         setError(getVoteErrorMessage(reason, ctx))
       }
 
+      // 入口検証用トークン: URL > sessionStorage（line 584 の URL クリーン化後でも sessionStorage から復元できる）
+      const tokenForValidation = getQrToken()
+
       // ── ウェーブ1: QRチェック・プロ情報・人柄を並列取得 ──
       const [tokenResult, proResult, persResult] = await Promise.all([
         // QRトークン期限チェック（プレビューモードではスキップ）
         isPreview
           ? Promise.resolve({ data: { expires_at: new Date(Date.now() + 86400000).toISOString() } })
-          : qrToken
+          : tokenForValidation
             ? (supabase as any)
               .from('qr_tokens')
               .select('id, professional_id, expires_at, used_at')
-              .eq('token', qrToken)
+              .eq('token', tokenForValidation)
               .gt('expires_at', new Date().toISOString())
               .is('used_at', null)
               .maybeSingle()
@@ -643,7 +646,7 @@ function VoteForm() {
       // QRチェック結果（プレビューモードではスキップ）
       // DB側 WHERE で expires_at > now() AND used_at IS NULL を満たすトークンのみ
       // 取得しているため、data が null なら「無効（期限切れ or 使用済み or 不存在）」。
-      if (!isPreview && qrToken) {
+      if (!isPreview && tokenForValidation) {
         if (!tokenResult.data) { setTokenExpired(true); setLoading(false); return }
       }
 
