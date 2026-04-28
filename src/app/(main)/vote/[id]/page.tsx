@@ -150,7 +150,20 @@ function PersonalityCategoryAccordions({
                     {selectedInCat.label}
                   </span>
                 )}
-                <span style={{ fontSize: 12, color: '#8B8B9A' }}>{isOpen ? '▼' : '▶'}</span>
+                <span
+                  style={{
+                    fontSize: 10,
+                    color: 'rgba(139,139,154,0.85)',
+                    padding: '2px 8px',
+                    border: '0.5px solid rgba(196,163,90,0.22)',
+                    borderRadius: 999,
+                    background: 'rgba(255,255,255,0.04)',
+                    fontWeight: 400,
+                  }}
+                >
+                  任意
+                </span>
+                <span style={{ fontSize: 12, color: '#8B8B9A' }}>{isOpen ? '▲' : '▼'}</span>
               </div>
             </button>
             {isOpen && (
@@ -194,24 +207,24 @@ function PersonalityCategoryAccordions({
                     </button>
                   )
                 })}
-                {selectedInCat && (
-                  <button
-                    type="button"
-                    onClick={() => onSelect(meta.key, null)}
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: '#8B8B9A',
-                      fontSize: 12,
-                      cursor: 'pointer',
-                      textDecoration: 'underline',
-                      padding: '4px',
-                      alignSelf: 'flex-end',
-                    }}
-                  >
-                    選択をクリア
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => onSelect(meta.key, null)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    borderTop: '0.5px solid rgba(196,163,90,0.16)',
+                    color: selectedInCat ? '#C4A35A' : 'rgba(139,139,154,0.85)',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    padding: '10px 4px 4px',
+                    marginTop: 4,
+                    textAlign: 'center',
+                    width: '100%',
+                  }}
+                >
+                  選択しない
+                </button>
               </div>
             )}
           </div>
@@ -2010,7 +2023,23 @@ function VoteForm() {
             <div style={S.title}>
               <span style={{ color: "#C4A35A" }}>{pro.name?.split(/[\s　]/)[0]}</span>さんはどんな人でしたか？
             </div>
-            <div style={S.subtitle}>あてはまるものを選んでください（任意）</div>
+            {isPersonalityV2() ? (
+              <div style={{
+                fontSize: 13,
+                color: "#8B8B9A",
+                marginBottom: 16,
+                lineHeight: 1.6,
+                textAlign: "center",
+              }}>
+                あなたが感じた印象を教えてください
+                <br />
+                <span style={{ fontSize: 11, color: "rgba(139,139,154,0.7)" }}>
+                  強く感じたものだけでOK・スキップも自由です
+                </span>
+              </div>
+            ) : (
+              <div style={S.subtitle}>あてはまるものを選んでください（任意）</div>
+            )}
 
             {isPersonalityV2() ? (
               <PersonalityCategoryAccordions
@@ -2058,6 +2087,16 @@ function VoteForm() {
               </div>
             )}
 
+            {isPersonalityV2() && (
+              <div style={{
+                fontSize: 11,
+                color: "rgba(139,139,154,0.7)",
+                textAlign: "center",
+                marginBottom: 12,
+              }}>
+                選択していないカテゴリがあっても送信できます
+              </div>
+            )}
             <button
               onClick={() => goToWithHistory("comment")}
               style={S.primaryBtn}

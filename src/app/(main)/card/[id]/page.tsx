@@ -13,6 +13,7 @@ import {
   calculateRank,
   isPersonalityV2,
   getCategoryMeta,
+  getCategoryPalette,
 } from '@/lib/personality'
 import PersonalityDonut from '@/components/PersonalityDonut'
 // VoiceShareModal removed — public card is view-only
@@ -875,6 +876,7 @@ export default function CardPage() {
                       <PersonalityDonut
                         key={meta.key}
                         category={meta.key}
+                        items={data.items}
                         topItem={data.top}
                         totalVotes={data.totalVotes}
                         rank={data.rank}
@@ -904,20 +906,30 @@ export default function CardPage() {
                           <span style={{ marginLeft: 'auto', color: T.textMuted, fontWeight: 500, fontSize: 12 }}>{data.totalVotes}票</span>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                          {data.items.map(item => {
-                            const pct = data.totalVotes > 0 ? Math.round((item.votes / data.totalVotes) * 100) : 0
-                            return (
-                              <div key={item.id}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 12, marginBottom: 3 }}>
-                                  <span style={{ color: T.text, fontWeight: 600 }}>{item.personality_label}</span>
-                                  <span style={{ color: T.textMuted }}>{item.votes}票{data.totalVotes > 0 ? ` (${pct}%)` : ''}</span>
+                          {(() => {
+                            const palette = getCategoryPalette(meta.key)
+                            // 票数 > 0 の項目だけ palette[0..3] を割り当てる
+                            const ranked = data.items.filter(i => i.votes > 0)
+                            const colorByItemId = new Map<string, string>()
+                            ranked.forEach((item, idx) => {
+                              colorByItemId.set(item.id, palette[Math.min(idx, 4)])
+                            })
+                            return data.items.map(item => {
+                              const pct = data.totalVotes > 0 ? Math.round((item.votes / data.totalVotes) * 100) : 0
+                              const barColor = colorByItemId.get(item.id) || palette[4]
+                              return (
+                                <div key={item.id}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 12, marginBottom: 3 }}>
+                                    <span style={{ color: T.text, fontWeight: 600 }}>{item.personality_label}</span>
+                                    <span style={{ color: T.textMuted }}>{item.votes}票{data.totalVotes > 0 ? ` (${pct}%)` : ''}</span>
+                                  </div>
+                                  <div style={{ width: '100%', height: 4, background: palette[4], borderRadius: 99 }}>
+                                    <div style={{ width: `${pct}%`, height: 4, background: barColor, borderRadius: 99 }} />
+                                  </div>
                                 </div>
-                                <div style={{ width: '100%', height: 4, background: meta.colorLight, borderRadius: 99 }}>
-                                  <div style={{ width: `${pct}%`, height: 4, background: meta.color, borderRadius: 99 }} />
-                                </div>
-                              </div>
-                            )
-                          })}
+                              )
+                            })
+                          })()}
                         </div>
                         {data.rank.votesToNext !== null && data.rank.nextThreshold !== null && (() => {
                           const next = calculateRank(data.rank.nextThreshold)

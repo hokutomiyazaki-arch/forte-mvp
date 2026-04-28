@@ -1,11 +1,24 @@
 'use client'
-import { PersonalityCategory, PersonalityRank, getCategoryMeta } from '@/lib/personality'
+import {
+  PersonalityCategory,
+  PersonalityRank,
+  getCategoryMeta,
+  getCategoryPalette,
+} from '@/lib/personality'
+
+interface DonutItem {
+  id: string
+  label: string
+  personality_label: string
+  votes: number
+}
 
 interface PersonalityDonutProps {
   category: PersonalityCategory
-  topItem: { label: string; personality_label: string; votes: number } | null
+  items: DonutItem[]
   totalVotes: number
   rank: PersonalityRank
+  topItem: DonutItem | null
   isSelected: boolean
   onTap: () => void
 }
@@ -14,44 +27,43 @@ const SIZE = 80
 const STROKE = 9
 const RADIUS = (SIZE - STROKE) / 2
 const CENTER = SIZE / 2
-const CIRC = 2 * Math.PI * RADIUS
 
-function arcPath(percent: number): string {
-  // SVG arc from top, clockwise. percent in [0,1]
-  if (percent >= 1) {
-    // full circle as two arcs
-    return `M ${CENTER} ${CENTER - RADIUS}
-      A ${RADIUS} ${RADIUS} 0 1 1 ${CENTER - 0.001} ${CENTER - RADIUS}
-      A ${RADIUS} ${RADIUS} 0 1 1 ${CENTER} ${CENTER - RADIUS}`
+function polarToCartesian(angleDeg: number) {
+  const a = ((angleDeg - 90) * Math.PI) / 180
+  return {
+    x: CENTER + RADIUS * Math.cos(a),
+    y: CENTER + RADIUS * Math.sin(a),
   }
-  if (percent <= 0) return ''
-  const angle = percent * 2 * Math.PI
-  const x = CENTER + RADIUS * Math.sin(angle)
-  const y = CENTER - RADIUS * Math.cos(angle)
-  const largeArc = percent > 0.5 ? 1 : 0
-  return `M ${CENTER} ${CENTER - RADIUS} A ${RADIUS} ${RADIUS} 0 ${largeArc} 1 ${x} ${y}`
 }
 
-function rankPercent(level: number): number {
-  if (level >= 4) return 1
-  if (level === 3) return 0.75
-  if (level === 2) return 0.5
-  if (level === 1) return 0.25
-  return 0
+function arcPath(startDeg: number, endDeg: number): string {
+  // 12時方向起点・時計回り。endDeg > startDeg
+  const sweep = endDeg - startDeg
+  if (sweep <= 0) return ''
+  // 完全な円は2つの半円で描画
+  if (sweep >= 359.999) {
+    const half1 = arcPath(0, 180)
+    const half2 = arcPath(180, 359.99)
+    return `${half1} ${half2}`
+  }
+  const start = polarToCartesian(startDeg)
+  const end = polarToCartesian(endDeg)
+  const largeArc = sweep > 180 ? 1 : 0
+  return `M ${start.x} ${start.y} A ${RADIUS} ${RADIUS} 0 ${largeArc} 1 ${end.x} ${end.y}`
 }
 
 export default function PersonalityDonut({
   category,
-  topItem,
+  items,
   totalVotes,
   rank,
+  topItem,
   isSelected,
   onTap,
 }: PersonalityDonutProps) {
   const meta = getCategoryMeta(category)
-  const percent = rankPercent(rank.level)
+  const palette = getCategoryPalette(category)
 
-  // Lv.0: 8 dots around circle
   const dots = Array.from({ length: 8 }, (_, i) => {
     const angle = (i * Math.PI) / 4 - Math.PI / 2
     return {
@@ -59,6 +71,26 @@ export default function PersonalityDonut({
       y: CENTER + RADIUS * Math.sin(angle),
     }
   })
+
+  // 票数 1 以上の項目のみソート（既に降順想定だが念のため）
+  const visible = items.filter(i => i.votes > 0).sort((a, b) => b.votes - a.votes)
+
+  // セグメント計算
+  const segments: { startDeg: number; endDeg: number; color: string; id: string }[] = []
+  if (totalVotes > 0) {
+    let cursor = 0
+    visible.forEach((item, idx) => {
+      const sweep = (item.votes / totalVotes) * 360
+      const colorIdx = Math.min(idx, 4)
+      segments.push({
+        startDeg: cursor,
+        endDeg: cursor + sweep,
+        color: palette[colorIdx],
+        id: item.id,
+      })
+      cursor += sweep
+    })
+  }
 
   return (
     <button
@@ -74,6 +106,9 @@ export default function PersonalityDonut({
         alignItems: 'center',
         gap: 8,
         width: '100%',
+        transition: 'transform 0.2s ease, filter 0.2s ease',
+        transform: isSelected ? 'scale(1.04)' : 'scale(1)',
+        filter: isSelected ? 'drop-shadow(0 4px 12px rgba(0, 0, 0, 0.08))' : 'none',
       }}
     >
       <div
@@ -81,36 +116,47 @@ export default function PersonalityDonut({
           position: 'relative',
           width: SIZE,
           height: SIZE,
-          borderRadius: '50%',
-          padding: 4,
-          transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-          transform: isSelected ? 'scale(1.05)' : 'scale(1)',
-          boxShadow: isSelected ? `0 0 0 2px ${meta.color}` : 'none',
         }}
       >
         <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
-          {/* 背景の円（淡色） */}
-          <circle
-            cx={CENTER}
-            cy={CENTER}
-            r={RADIUS}
-            fill="none"
-            stroke={meta.colorLight}
-            strokeWidth={STROKE}
-          />
           {rank.level === 0 ? (
-            // Lv.0: 8 dots
-            dots.map((d, i) => (
-              <circle key={i} cx={d.x} cy={d.y} r={2.4} fill={meta.color} opacity={0.55} />
-            ))
+            <>
+              {/* 背景の薄いリング（任意。視認性を保つ） */}
+              <circle
+                cx={CENTER}
+                cy={CENTER}
+                r={RADIUS}
+                fill="none"
+                stroke={palette[4]}
+                strokeWidth={STROKE * 0.4}
+              />
+              {dots.map((d, i) => (
+                <circle key={i} cx={d.x} cy={d.y} r={2.6} fill={palette[1]} />
+              ))}
+            </>
           ) : (
-            <path
-              d={arcPath(percent)}
-              fill="none"
-              stroke={meta.color}
-              strokeWidth={STROKE}
-              strokeLinecap="round"
-            />
+            <>
+              {/* 未投票分の背景円（最淡色） */}
+              <circle
+                cx={CENTER}
+                cy={CENTER}
+                r={RADIUS}
+                fill="none"
+                stroke={palette[4]}
+                strokeWidth={STROKE}
+              />
+              {/* 各セグメント */}
+              {segments.map(seg => (
+                <path
+                  key={seg.id}
+                  d={arcPath(seg.startDeg, seg.endDeg)}
+                  fill="none"
+                  stroke={seg.color}
+                  strokeWidth={STROKE}
+                  strokeLinecap="butt"
+                />
+              ))}
+            </>
           )}
         </svg>
         <div
