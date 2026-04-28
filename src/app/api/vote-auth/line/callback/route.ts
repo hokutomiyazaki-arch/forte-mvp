@@ -7,6 +7,7 @@ import { computeProofHash, generateNonce, GENESIS_HASH } from '@/lib/proof-chain
 import { checkVoterIsPro } from '@/lib/voter-pro-check'
 import { checkVoteDuplicates } from '@/lib/vote-duplicate-check'
 import { claimLineCallback } from '@/lib/line-idempotency'
+import { markTokenUsed } from '@/lib/qr-token'
 
 export const dynamic = 'force-dynamic'
 
@@ -399,6 +400,8 @@ export async function GET(request: NextRequest) {
     }
 
     console.log('[vote-auth/line/callback] Vote inserted:', insertedVote.id)
+
+    await markTokenUsed(qr_token || '')
 
     // Step 8: vote_emails に記録
     try {

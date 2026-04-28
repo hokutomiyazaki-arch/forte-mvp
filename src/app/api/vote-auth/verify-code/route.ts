@@ -4,6 +4,7 @@ import { normalizeEmail } from '@/lib/normalize-email'
 import { computeProofHash, generateNonce, GENESIS_HASH } from '@/lib/proof-chain'
 import { checkVoterIsPro } from '@/lib/voter-pro-check'
 import { checkVoteDuplicates } from '@/lib/vote-duplicate-check'
+import { markTokenUsed } from '@/lib/qr-token'
 
 
 export const dynamic = 'force-dynamic'
@@ -168,6 +169,8 @@ export async function POST(req: NextRequest) {
     if (!insertedVote) {
       return NextResponse.json({ error: 'vote_failed' }, { status: 500 })
     }
+
+    await markTokenUsed(vote_data.qr_token || '')
 
     // vote_confirmationsにvote_idを紐付け
     await supabase
