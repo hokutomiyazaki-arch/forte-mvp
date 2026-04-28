@@ -115,6 +115,23 @@ export async function GET(request: NextRequest) {
           console.error('[vote-auth/line/callback] Recovery check failed:', e)
         }
 
+        // 1回目 callback が pro_cooldown でブロックされていた可能性を救済
+        // （Set 2 Phase 4）: existingVote 無し + LINE 二重発火で 1回目の
+        // ?error=pro_cooldown が 2回目の line_retry に上書きされる問題への対策。
+        try {
+          const proCooldown = await checkProCooldown(professional_id)
+          if (proCooldown.blocked) {
+            const errUrl = new URL(`${votePageUrl}${votePageUrl.includes('?') ? '&' : '?'}error=pro_cooldown`, origin)
+            if (proCooldown.remainingMin) {
+              errUrl.searchParams.set('remaining', String(proCooldown.remainingMin))
+            }
+            console.log('[vote-auth/line/callback] invalid_grant + pro_cooldown re-detected, redirecting with proper error')
+            return NextResponse.redirect(errUrl)
+          }
+        } catch (e) {
+          console.error('[vote-auth/line/callback] pro_cooldown re-check failed:', e)
+        }
+
         // invalid_grant で最近の vote が見つからない場合、1回目 callback の
         // 失敗理由（cooldown / already_voted / self_vote / etc.）をこの時点で
         // 特定する手段がない（email/userId は token 交換失敗により取れない）。
