@@ -55,18 +55,6 @@ export async function GET() {
       return notShow('not_a_pro')
     }
 
-    // ── デバッグログ（一時、本番で実値の型/内容を確認するため） ──
-    // 'below_threshold' 誤発火の原因切り分け用。
-    // 本番ログで pro state の実値・型を確認できたら削除する。
-    console.log('[popup-suggestion] pro state:', {
-      id: pro.id,
-      popup_first_shown_at: pro.popup_first_shown_at,
-      popup_first_shown_at_type: typeof pro.popup_first_shown_at,
-      popup_last_shown_at: pro.popup_last_shown_at,
-      popup_last_shown_at_type: typeof pro.popup_last_shown_at,
-      voice_card_theme_type: typeof pro.voice_card_theme,
-    })
-
     // pro が確定したら、テーマ抽選結果は popup_type に依らず同じ
     // （プロ保存テーマ優先 → 未保存ならランダム15色、v1.2.1 §確定 #13/#15）
     const suggestedTheme = pickThemeForPopup(pro.voice_card_theme)
