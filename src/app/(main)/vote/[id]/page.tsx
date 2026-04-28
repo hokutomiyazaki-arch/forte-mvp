@@ -1556,6 +1556,10 @@ function VoteForm() {
         setError(getVoteErrorMessage('cooldown', {
           cooldownRemainingMinutes: data.cooldownRemainingMinutes,
         }))
+      } else if (data.error === 'PRO_COOLDOWN') {
+        setError(data.message || getVoteErrorMessage('pro_cooldown', {
+          cooldownRemainingMinutes: data.remainingMin,
+        }))
       } else {
         setError(getVoteErrorMessage('auth_invalid'))
       }

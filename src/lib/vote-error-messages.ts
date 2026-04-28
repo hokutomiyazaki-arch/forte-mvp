@@ -101,8 +101,13 @@ export function getVoteErrorMessage(
     case 'invalid_token':
       return 'このQRコードは無効です。すでに使用されたか、期限が切れています。プロに新しいQRコードを表示してもらってください。'
 
-    case 'pro_cooldown':
+    case 'pro_cooldown': {
+      const remaining = context?.cooldownRemainingMinutes
+      if (remaining && remaining > 0) {
+        return `このプロは今投票が集中しています。あと${remaining}分後にもう一度お試しください。`
+      }
       return 'このプロは今投票が集中しています。しばらく待ってからもう一度お試しください。'
+    }
 
     default:
       return '回答処理中にエラーが発生しました。時間を置いて再度お試しください。'
