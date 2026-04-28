@@ -432,6 +432,26 @@ function VoteForm() {
   const channel = searchParams.get('channel') || 'unknown'
   const isPreview = searchParams.get('preview') === 'true'
   const supabase = createClient()
+
+  // ── qrToken の sessionStorage 永続化（Clerk 認証フロー後に URL から ?token= が消える対策） ──
+  // 過去の全 votes で qr_token=NULL になっていた根本原因。
+  // 初回マウント時に URL から取れる qrToken を保存し、ハンドラ内では getQrToken() 経由で取り出す。
+  useEffect(() => {
+    if (qrToken && typeof window !== 'undefined') {
+      sessionStorage.setItem('vote_qr_token', qrToken)
+      sessionStorage.setItem('vote_qr_token_pro_id', proId)
+    }
+  }, [qrToken, proId])
+
+  // ── 投票時の qrToken 取得: URL > sessionStorage（proId 一致のみ） ──
+  function getQrToken(): string {
+    if (qrToken) return qrToken
+    if (typeof window === 'undefined') return ''
+    const stored = sessionStorage.getItem('vote_qr_token')
+    const storedProId = sessionStorage.getItem('vote_qr_token_pro_id')
+    if (stored && storedProId === proId) return stored
+    return ''
+  }
   const { user: clerkUser, isLoaded: authLoaded } = useUser()
   const { signUp, setActive: setSignUpActive } = useSignUp()
   const { signIn, setActive: setSignInActive } = useSignIn()
@@ -784,7 +804,7 @@ function VoteForm() {
       selected_reward_id: selectedRewardId || null,
       comment: comment.trim() || null,
       vote_type: determineVoteType(),
-      qr_token: qrToken,
+      qr_token: getQrToken() || null,
       channel,
     }
     sessionStorage.setItem('pending_vote', JSON.stringify(voteData))
@@ -803,7 +823,7 @@ function VoteForm() {
       selected_reward_id: selectedRewardId || null,
       comment: comment.trim() || null,
       vote_type: determineVoteType(),
-      qr_token: qrToken,
+      qr_token: getQrToken() || null,
       channel,
     }
   }
@@ -823,7 +843,7 @@ function VoteForm() {
         selected_personality_ids: null,
         selected_reward_id: null,
         comment: null,
-        qr_token: qrToken || null,
+        qr_token: getQrToken() || null,
         status: 'confirmed',
         vote_weight: 0.5,
         auth_method: 'hopeful',
@@ -832,7 +852,7 @@ function VoteForm() {
         auth_provider_id: null,
         channel,
       })
-      await markTokenUsedFromClient(qrToken || '')
+      await markTokenUsedFromClient(getQrToken())
     } catch (e) {
       console.error('hopeful vote error:', e)
       // エラーでも完了画面は表示する（UXを壊さない）
@@ -856,7 +876,7 @@ function VoteForm() {
     saveVoteDataToSession()
 
     const voteDataParam = encodeURIComponent(JSON.stringify(voteDataSnapshot))
-    window.location.href = `/api/vote-auth/line?professional_id=${proId}&qr_token=${qrToken || ''}&vote_data=${voteDataParam}`
+    window.location.href = `/api/vote-auth/line?professional_id=${proId}&qr_token=${getQrToken()}&vote_data=${voteDataParam}`
   }
 
   // ── Google認証で投票 ──
@@ -876,7 +896,7 @@ function VoteForm() {
     saveVoteDataToSession()
 
     const voteDataParam = encodeURIComponent(JSON.stringify(voteDataSnapshot))
-    window.location.href = `/api/vote-auth/google?professional_id=${proId}&qr_token=${qrToken || ''}&vote_data=${voteDataParam}`
+    window.location.href = `/api/vote-auth/google?professional_id=${proId}&qr_token=${getQrToken()}&vote_data=${voteDataParam}`
   }
 
   // ── 電話番号認証: SMS送信 ──
@@ -1331,7 +1351,7 @@ function VoteForm() {
       selected_personality_ids: selectedPersonalityIds.size > 0 ? Array.from(selectedPersonalityIds) : null,
       selected_reward_id: selectedRewardId || null,
       comment: comment.trim() || null,
-      qr_token: qrToken,
+      qr_token: getQrToken() || null,
       status: voteStatus,
       auth_method: 'email',
       // Phase 1 Step 3: handleSubmit はボタン経由 → handleClerkVote へ移行済みのデッドコード。
@@ -1357,7 +1377,7 @@ function VoteForm() {
         selected_proof_ids: proofIdsToSend,
         selected_personality_ids: selectedPersonalityIds.size > 0 ? Array.from(selectedPersonalityIds) : null,
         selected_reward_id: selectedRewardId || null,
-        qr_token: qrToken,
+        qr_token: getQrToken() || null,
       })
       if (voteError.code === '23505') {
         // レースコンディション（ほぼ同時の二重送信）対策
@@ -1370,7 +1390,7 @@ function VoteForm() {
       return
     }
 
-    await markTokenUsedFromClient(qrToken || '')
+    await markTokenUsedFromClient(getQrToken())
 
     // メアドをPROOFリストに保存
     const { error: emailInsertError } = await (supabase as any).from('vote_emails').insert({
