@@ -7,7 +7,7 @@ import { Professional, getRewardLabel } from '@/lib/types'
 import { normalizeEmail } from '@/lib/normalize-email'
 import { extractDisplayName, determineAuthMethod } from '@/lib/vote-auth-helpers'
 import { checkVoteDuplicates } from '@/lib/vote-duplicate-check'
-import { getVoteErrorMessage, mapAuthErrorParamToReason } from '@/lib/vote-error-messages'
+import { getVoteErrorMessage, mapAuthErrorParamToReason, isRecoverableAuthError, type VoteErrorReason } from '@/lib/vote-error-messages'
 import { markTokenUsedFromClient } from '@/lib/qr-token'
 import { checkProCooldownFromClient, PRO_COOLDOWN_MESSAGE } from '@/lib/vote-cooldown'
 import { Suspense } from 'react'
@@ -527,6 +527,8 @@ function VoteForm() {
   const [isTransitioning, setIsTransitioning] = useState(false)
   const stepHistory = useRef<VoteStep[]>([])
   const [showEmailInput, setShowEmailInput] = useState(false)
+  // 認証エラーの reason を保持（救済対象なら CTA を出す）
+  const [errorReason, setErrorReason] = useState<VoteErrorReason | undefined>(undefined)
 
   // 電話番号認証（SMS）
   const [showPhoneInput, setShowPhoneInput] = useState(false)
@@ -619,6 +621,7 @@ function VoteForm() {
           ? { cooldownRemainingMinutes: remainingMin }
           : undefined
         setError(getVoteErrorMessage(reason, ctx))
+        setErrorReason(reason)
       }
 
       // 入口検証用トークン: URL > sessionStorage（line 584 の URL クリーン化後でも sessionStorage から復元できる）
@@ -2361,9 +2364,41 @@ function VoteForm() {
               <div style={{
                 background: "rgba(220,38,38,0.1)",
                 border: "1px solid rgba(220,38,38,0.3)",
-                borderRadius: 12, padding: "10px 14px", marginBottom: 16,
+                borderRadius: 12, padding: "12px 14px", marginBottom: 16,
               }}>
-                <div style={{ color: "#FCA5A5", fontSize: 13 }}>{error}</div>
+                <div style={{
+                  color: "#FCA5A5",
+                  fontSize: 13,
+                  whiteSpace: 'pre-line',
+                  lineHeight: 1.6,
+                }}>{error}</div>
+
+                {isRecoverableAuthError(errorReason) && (
+                  <button
+                    onClick={() => {
+                      setError('')
+                      setErrorReason(undefined)
+                      setShowEmailInput(true)
+                      setVoteStep('auth')
+                    }}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      marginTop: 12,
+                      padding: '12px 16px',
+                      background: '#C4A35A',
+                      color: '#1A1A2E',
+                      border: 'none',
+                      borderRadius: 10,
+                      fontSize: 14,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      letterSpacing: '0.02em',
+                    }}
+                  >
+                    メールアドレスで投票する →
+                  </button>
+                )}
               </div>
             )}
 
