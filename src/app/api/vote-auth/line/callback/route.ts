@@ -278,12 +278,8 @@ export async function GET(request: NextRequest) {
         isSelfVote = true
       }
 
-      // Check 2: professionals.contact_email と一致（重複チェック）
-      if (!isSelfVote && proData.contact_email && proData.contact_email.toLowerCase() === email) {
-        isSelfVote = true
-      }
-
-      // Check 3: Clerk経由でプロの全メールアドレスと照合
+      // Check 2: Clerk経由でプロの全メールアドレスと照合
+      //   contact_email が古い場合や、プロが Clerk で複数メアドを持っている場合の保険。
       if (!isSelfVote && proData.user_id) {
         try {
           const clerk = await clerkClient()
@@ -297,7 +293,7 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Check 4: clientsテーブルのuser_id照合（フォールバック）
+      // Check 3: clientsテーブルのuser_id照合（フォールバック）
       if (!isSelfVote && proData.user_id) {
         const { data: clientData } = await supabaseAdmin
           .from('clients')
