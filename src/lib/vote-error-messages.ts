@@ -72,25 +72,25 @@ export function getVoteErrorMessage(
       return 'ご自身への回答はできません。'
 
     case 'auth_expired':
-      return '認証コードの有効期限が切れました。もう一度認証してください。'
+      return '認証の有効期限が切れました。\nもう一度お試しいただくか、メールアドレスでも投票できます。'
 
     case 'auth_invalid':
-      return '認証に失敗しました。もう一度お試しください。'
+      return '認証に失敗しました。\nもう一度お試しいただくか、メールアドレスでも投票できます。'
 
     case 'auth_retry':
-      return '認証処理が完了できませんでした。もう一度「LINEで認証」ボタンを押してお試しください。（既にご投票が完了している場合は、通知メールまたは履歴をご確認ください）'
+      return '認証処理が完了できませんでした。\nもう一度お試しいただくか、メールアドレスでも投票できます。\n（既にご投票が完了している場合は、通知メールまたは履歴をご確認ください）'
 
     case 'line_cancelled':
-      return 'LINE認証がキャンセルされました。'
+      return 'LINE認証ができませんでした。\nもう一度お試しいただくか、メールアドレスでも投票できます。'
 
     case 'google_cancelled':
-      return 'Google認証がキャンセルされました。'
+      return 'Google認証ができませんでした。\nもう一度お試しいただくか、メールアドレスでも投票できます。'
 
     case 'line_no_email':
-      return 'LINEからメールアドレスを取得できませんでした。メールアドレスを入力して回答してください。'
+      return 'LINEからメールアドレスを取得できませんでした。\n下のフォームからメールアドレスでご投票ください。'
 
     case 'google_no_email':
-      return 'Googleアカウントからメールアドレスを取得できませんでした。メールアドレスで回答してください。'
+      return 'Googleアカウントからメールアドレスを取得できませんでした。\n下のフォームからメールアドレスでご投票ください。'
 
     case 'invalid_vote_data':
       return 'データが無効です。もう一度お試しください。'
@@ -137,4 +137,22 @@ export function mapAuthErrorParamToReason(param: string | null | undefined): Vot
     case 'pro_cooldown': return 'pro_cooldown'
     default: return 'unknown'
   }
+}
+
+/**
+ * 認証エラーのうち「メールアドレス代替」を提案すべきもの。
+ * 投票そのものが不可能な理由（cooldown / already_voted 等）はここに含めない。
+ */
+export const RECOVERABLE_AUTH_ERRORS: ReadonlySet<VoteErrorReason> = new Set<VoteErrorReason>([
+  'line_cancelled',
+  'google_cancelled',
+  'line_no_email',
+  'google_no_email',
+  'auth_expired',
+  'auth_retry',
+  'auth_invalid',
+])
+
+export function isRecoverableAuthError(reason: VoteErrorReason | undefined): boolean {
+  return reason !== undefined && RECOVERABLE_AUTH_ERRORS.has(reason)
 }
