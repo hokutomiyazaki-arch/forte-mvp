@@ -1089,6 +1089,8 @@ function VoteForm() {
         auth_display_name: null,
         auth_provider_id: formattedPhone,
         channel: voteDataSnapshot.channel || channel,
+        // SMS は公開要素ゼロ → 同意 UI スキップのため初期値 'hidden'
+        display_mode: 'hidden',
       }).select().maybeSingle()
 
       if (voteError) {

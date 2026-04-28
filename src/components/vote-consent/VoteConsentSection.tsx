@@ -1,16 +1,19 @@
 'use client'
 
 /**
- * VoteConsentSection — 投票完了画面の同意 UI（Phase 2）
+ * VoteConsentSection — 投票完了画面の同意 UI
  *
- * 4 ケースを内部で分岐:
- *   🅰 プロ投票 (voter_professional_id 有り)  → UI スキップ（何もレンダーしない）
- *   🅱 Clerk + 写真有り                         → YES/NO 2 択、YES=photo
- *   🅲 Clerk + 写真無し（名前のみ）              → YES/NO 2 択、YES=nickname_only
- *   🅳 SMS/Fallback/email_code（名前無し）      → ニックネーム入力 or スキップ
+ * cd9a55e で /card/[id] のクライアント名表示を全削除した結果、
+ * 公開される唯一の要素は「写真」のみ。同意は写真表示の可否のみで十分。
+ *
+ * Email/SMS は公開要素ゼロのため、Vote 作成時に display_mode='hidden' を
+ * 設定し、このコンポーネントには到達しない（vote-confirmed 側でスキップ）。
+ *
+ *   🅰 プロ投票 (voter_professional_id 有り)  → UI スキップ
+ *   🅱 写真あり (Google/LINE)                  → YES/NO 2 択、YES=photo
+ *   🅲 写真なし (sms_fallback OLD votes 等)    → 名前のみで同意（フォールバック）
  *
  * データ保存は仮実装（supabase client 直呼び）。
- * Phase 3 で PATCH /api/votes/[id]/display-mode に差し替える。
  */
 
 import { useState } from 'react'
@@ -36,13 +39,13 @@ interface Props {
   onComplete?: () => void
 }
 
-type Variant = 'photo' | 'name_only' | 'nickname_input' | 'skip'
+type Variant = 'photo' | 'name_only' | 'skip'
 
 function determineVariant(vote: VoteConsentVote): Variant {
   if (vote.voter_professional_id) return 'skip'
   if (vote.client_photo_url) return 'photo'
   if (vote.auth_display_name) return 'name_only'
-  return 'nickname_input'
+  return 'skip'
 }
 
 // TODO Phase 3: move to PATCH /api/votes/[id]/display-mode
@@ -216,7 +219,6 @@ export default function VoteConsentSection({ vote, proName, onComplete }: Props)
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [errorText, setErrorText] = useState('')
-  const [nickname, setNickname] = useState('')
 
   // マイカード機能は未実装のため、変更・削除導線はプロへの直接連絡に誘導する。
   // proName が無い場合は汎用フォールバック。
@@ -277,42 +279,12 @@ export default function VoteConsentSection({ vote, proName, onComplete }: Props)
     }
   }
 
-  // ─── ケース🅳 ニックネーム入力送信 ───
-  const handleNicknameSubmit = async () => {
-    if (submitting) return
-    const trimmed = nickname.trim()
-    if (!trimmed) {
-      setErrorText('ニックネームを入力してください')
-      return
-    }
-    if (trimmed.length > 20) {
-      setErrorText('20文字以内で入力してください')
-      return
-    }
-    setSubmitting(true)
-    setErrorText('')
-    try {
-      await updateDisplayMode(vote.id, 'nickname_only', trimmed)
-      setSubmitted(true)
-      onComplete?.()
-    } catch {
-      setErrorText('更新に失敗しました。もう一度お試しください。')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  // ─── ケース🅱 Clerk + 写真あり ───
+  // ─── ケース🅱 写真あり (Google/LINE) — 写真表示の可否のみ確認 ───
   if (variant === 'photo') {
     return (
       <div style={styles.card}>
-        <div style={styles.title}>
-          あなたの証言がこのプロの
-          <br />
-          信頼資産になります
-        </div>
         <div style={styles.subtitle}>
-          プロフィールカードに、あなたの写真と名前を載せてもいいですか？
+          この写真を、コメントと一緒に表示してもOKですか？
         </div>
         <div style={styles.previewRow}>
           {vote.client_photo_url && (
@@ -323,9 +295,6 @@ export default function VoteConsentSection({ vote, proName, onComplete }: Props)
               style={styles.avatarPhoto}
             />
           )}
-          <div style={styles.nameText}>
-            {vote.auth_display_name || '匿名'}
-          </div>
         </div>
         {errorText && <div style={styles.errorText}>{errorText}</div>}
         <button
@@ -333,14 +302,14 @@ export default function VoteConsentSection({ vote, proName, onComplete }: Props)
           onClick={handleYes}
           disabled={submitting}
         >
-          {submitting ? '送信中...' : 'はい、載せてもOK'}
+          {submitting ? '送信中...' : '表示OK'}
         </button>
         <button
           style={{ ...styles.btnGhost, opacity: submitting ? 0.6 : 1 }}
           onClick={handleNo}
           disabled={submitting}
         >
-          今回は載せない
+          表示しない
         </button>
         <div style={styles.footNote}>
           {changeNote}
@@ -390,45 +359,6 @@ export default function VoteConsentSection({ vote, proName, onComplete }: Props)
     )
   }
 
-  // ─── ケース🅳 SMS / email_code — ニックネーム入力 or スキップ ───
-  return (
-    <div style={styles.card}>
-      <div style={styles.title}>
-        あなたの証言がこのプロの
-        <br />
-        信頼資産になります
-      </div>
-      <div style={styles.subtitle}>
-        Voice にニックネームを添えますか？
-      </div>
-      <input
-        type="text"
-        value={nickname}
-        onChange={(e) => setNickname(e.target.value)}
-        placeholder="ニックネーム"
-        maxLength={40}
-        style={styles.input}
-        disabled={submitting}
-      />
-      <div style={styles.inputHint}>（20文字まで、後で変更可）</div>
-      {errorText && <div style={styles.errorText}>{errorText}</div>}
-      <button
-        style={{ ...styles.btnGold, opacity: submitting ? 0.6 : 1 }}
-        onClick={handleNicknameSubmit}
-        disabled={submitting}
-      >
-        {submitting ? '送信中...' : 'この名前で添える'}
-      </button>
-      <button
-        style={{ ...styles.btnGhost, opacity: submitting ? 0.6 : 1 }}
-        onClick={handleNo}
-        disabled={submitting}
-      >
-        名前なしで送る
-      </button>
-      <div style={styles.footNote}>
-        {changeNote}
-      </div>
-    </div>
-  )
+  // 想定外バリアント（写真なし・名前なし）— 何もレンダーしない
+  return null
 }

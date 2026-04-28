@@ -40,7 +40,10 @@ function ConfirmedContent() {
   // - consentSkipped: voter_professional_id !== null は同意UI不要(pro_link)
   // - consentAlreadyDone: display_mode が既にセット済み(過去のセッションで同意済み)→ リロードでもUI再表示しない
   const [consentDone, setConsentDone] = useState(false)
-  const consentSkipped = !!consentVote?.voter_professional_id
+  const consentSkipped =
+    !!consentVote?.voter_professional_id ||
+    consentVote?.auth_method === 'email_code' ||
+    consentVote?.auth_method === 'sms'
   const consentAlreadyDone = !!consentVote?.display_mode
   const rewardUnlocked = consentDone || consentSkipped || consentAlreadyDone || !consentVote
 
