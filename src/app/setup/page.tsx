@@ -6,6 +6,7 @@ import { REWARD_TYPES, getRewardType, FNT_NEURO_APPS } from '@/lib/types'
 import { PREFECTURES } from '@/lib/prefectures'
 import ImageCropper from '@/components/ImageCropper'
 import { TAB_ORDER, TAB_DISPLAY_NAMES } from '@/lib/constants'
+import { validateBookingUrl } from '@/lib/validation'
 
 // プルーフ項目の型
 interface ProofItem {
@@ -61,6 +62,11 @@ export default function SetupPage() {
   const [availableAppsLoaded, setAvailableAppsLoaded] = useState(false)
   const [showOrgAppPicker, setShowOrgAppPicker] = useState(false)
 
+  // === Step 4: 予約・連絡先URL (Phase 2 追加) ===
+  const [bookingUrl, setBookingUrl] = useState('')
+  const [bookingUrlError, setBookingUrlError] = useState('')
+  const [bookingSaving, setBookingSaving] = useState(false)
+
   // 初期ロード
   useEffect(() => {
     if (!authLoaded || !clerkUserId) return
@@ -91,6 +97,9 @@ export default function SetupPage() {
             is_online_available: pro.is_online_available || false,
             photo_url: pro.photo_url || '',
           })
+
+          // Step 4 (Phase 2): 既存プロの booking_url を復元 (再編集ケース)
+          setBookingUrl(pro.booking_url || '')
 
           // プルーフ選択状態を復元
           if (data.proofItems) {
@@ -290,8 +299,9 @@ export default function SetupPage() {
     setCurrentStep(3)
   }
 
-  // === Step 3: リワード保存 + 完了 ===
-  async function handleComplete() {
+  // === Step 3: リワード保存 → Step 4 へ進む ===
+  // Phase 2 でステップ追加。完了処理 (/api/setup/complete + redirect) は Step 4 へ移動。
+  async function handleSaveRewardsAndAdvance() {
     if (!proId) return
     setRewardSaving(true)
     setRewardError('')
@@ -345,25 +355,70 @@ export default function SetupPage() {
       }
     }
 
-    // セットアップ完了フラグ
+    // Step 4 (booking_url) へ進む。完了処理は Step 4 で実行。
+    setRewardSaving(false)
+    setCurrentStep(4)
+  }
+
+  // === Step 4: setup_completed → /dashboard 遷移の共通処理 ===
+  async function finalizeSetupAndGo() {
     try {
-      const res = await fetch('/api/setup/complete', { method: 'POST' })
+      const res = await fetch('/api/setup/complete', {
+        method: 'POST',
+        cache: 'no-store',
+      })
       if (!res.ok) {
         const body = await res.text()
         console.error('[setup] complete API failed:', res.status, body)
-        setRewardError('完了処理に失敗しました。もう一度お試しください。')
-        setRewardSaving(false)
-        return
+        setBookingUrlError('完了処理に失敗しました。もう一度お試しください。')
+        setBookingSaving(false)
+        return false
       }
     } catch (err) {
       console.error('[setup] complete API network error:', err)
-      setRewardError('ネットワークエラーが発生しました。もう一度お試しください。')
-      setRewardSaving(false)
+      setBookingUrlError('ネットワークエラーが発生しました。もう一度お試しください。')
+      setBookingSaving(false)
+      return false
+    }
+    window.location.href = '/dashboard'
+    return true
+  }
+
+  // === Step 4: 予約・連絡先URL 保存 + 完了 ===
+  async function handleSaveBookingUrl() {
+    if (!proId || bookingSaving) return
+
+    const validation = validateBookingUrl(bookingUrl)
+    if (!validation.valid) {
+      setBookingUrlError(validation.error)
       return
     }
 
-    // ダッシュボードへ
-    window.location.href = '/dashboard'
+    setBookingSaving(true)
+    setBookingUrlError('')
+
+    const trimmed = bookingUrl.trim()
+    const { error } = await db.update(
+      'professionals',
+      { booking_url: trimmed || null },
+      { id: proId }
+    )
+
+    if (error) {
+      setBookingUrlError('保存に失敗しました。もう一度お試しください。')
+      setBookingSaving(false)
+      return
+    }
+
+    await finalizeSetupAndGo()
+  }
+
+  // === Step 4: スキップ → 完了 ===
+  async function handleSkipBookingUrl() {
+    if (!proId || bookingSaving) return
+    setBookingSaving(true)
+    setBookingUrlError('')
+    await finalizeSetupAndGo()
   }
 
   // === バリデーション ===
@@ -390,10 +445,10 @@ export default function SetupPage() {
         <span style={{ color: '#C4A35A', fontWeight: 700, fontSize: 14, letterSpacing: 2 }}>REALPROOF</span>
       </div>
 
-      {/* プログレスバー */}
+      {/* プログレスバー (Phase 2 で 4 段階に拡張) */}
       <div style={{ padding: '20px 20px 0' }}>
         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-          {[1, 2, 3].map(step => (
+          {[1, 2, 3, 4].map(step => (
             <div
               key={step}
               style={{
@@ -405,7 +460,7 @@ export default function SetupPage() {
           ))}
         </div>
         <p style={{ fontSize: 13, color: '#999', textAlign: 'center' }}>
-          ステップ {currentStep} / 3
+          ステップ {currentStep} / 4
         </p>
       </div>
 
@@ -881,7 +936,7 @@ export default function SetupPage() {
             {rewardError && <p className="text-red-500 text-sm mb-2">{rewardError}</p>}
 
             <button
-              onClick={handleComplete}
+              onClick={handleSaveRewardsAndAdvance}
               disabled={!rewardsReady || rewardSaving}
               style={{
                 width: '100%', padding: '16px 0', borderRadius: 12,
@@ -892,7 +947,7 @@ export default function SetupPage() {
                 transition: 'opacity 0.2s',
               }}
             >
-              {rewardSaving ? '設定を保存しています...' : '完了！'}
+              {rewardSaving ? '保存中...' : '次へ'}
             </button>
 
             <button
@@ -901,6 +956,94 @@ export default function SetupPage() {
                 width: '100%', padding: '12px 0', marginTop: 8,
                 background: 'none', border: 'none',
                 fontSize: 14, color: '#9CA3AF', cursor: 'pointer',
+              }}
+            >
+              ← 戻る
+            </button>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════ */}
+        {/* Step 4: 予約・連絡先URL (Phase 2)        */}
+        {/* ═══════════════════════════════════════ */}
+        {currentStep === 4 && (
+          <div>
+            <h2 className="text-xl font-bold text-[#1A1A2E] mb-2 text-center">
+              予約・連絡先URLを設定しましょう
+              <span className="text-sm font-normal text-[#9CA3AF] ml-2">(任意)</span>
+            </h2>
+            <p className="text-sm text-[#9CA3AF] mb-6 text-center" style={{ lineHeight: 1.7 }}>
+              お客さんが「予約したい」「もっと話したい」と思った時の
+              <br />
+              連絡先を1つ設定してください。
+            </p>
+
+            {/* 説明ボックス */}
+            <div className="p-4 mb-4 rounded-lg" style={{ background: '#F5EFDF', border: '1px solid rgba(196,163,90,0.3)' }}>
+              <p className="text-sm font-bold text-[#1A1A2E] mb-2">こんなURLが使えます</p>
+              <ul className="text-sm text-[#1A1A2E] pl-5 space-y-1" style={{ listStyle: 'disc', lineHeight: 1.7 }}>
+                <li>公式LINEアカウントの追加URL (https://lin.ee/...)</li>
+                <li>予約サイト (Coubic、Reserva、HotPepper 等)</li>
+                <li>お問い合わせフォーム</li>
+                <li>自社ホームページ</li>
+                <li>Instagram プロフィールURL</li>
+              </ul>
+            </div>
+
+            {/* URL 入力欄 */}
+            <input
+              type="url"
+              value={bookingUrl}
+              onChange={(e) => {
+                setBookingUrl(e.target.value)
+                if (bookingUrlError) setBookingUrlError('')
+              }}
+              placeholder="https://lin.ee/example または https://example.com"
+              disabled={bookingSaving}
+              className="w-full px-4 py-3 border border-[#E5E7EB] rounded-lg outline-none focus:ring-2 focus:ring-[#C4A35A] mb-2"
+            />
+
+            {bookingUrlError && (
+              <p className="text-red-500 text-sm mb-2">{bookingUrlError}</p>
+            )}
+
+            {/* ボタン群 */}
+            <button
+              onClick={handleSaveBookingUrl}
+              disabled={bookingSaving}
+              style={{
+                width: '100%', padding: '16px 0', borderRadius: 12,
+                fontWeight: 700, fontSize: 18, color: '#fff', border: 'none',
+                background: '#1A1A2E',
+                opacity: bookingSaving ? 0.5 : 1,
+                cursor: bookingSaving ? 'wait' : 'pointer',
+                transition: 'opacity 0.2s',
+                marginTop: 16,
+              }}
+            >
+              {bookingSaving ? '保存中...' : '保存して次へ'}
+            </button>
+
+            <button
+              onClick={handleSkipBookingUrl}
+              disabled={bookingSaving}
+              style={{
+                width: '100%', padding: '12px 0', marginTop: 8,
+                background: 'none', border: '1px solid #E5E7EB', borderRadius: 12,
+                fontSize: 14, color: '#666',
+                cursor: bookingSaving ? 'wait' : 'pointer',
+              }}
+            >
+              スキップ(後で設定する)
+            </button>
+
+            <button
+              onClick={() => setCurrentStep(3)}
+              disabled={bookingSaving}
+              style={{
+                width: '100%', padding: '12px 0', marginTop: 8,
+                background: 'none', border: 'none',
+                fontSize: 14, color: '#9CA3AF', cursor: bookingSaving ? 'wait' : 'pointer',
               }}
             >
               ← 戻る
