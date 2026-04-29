@@ -118,6 +118,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ skipped: 'phone_format' }, { status: 200 })
     }
 
+    // 3-b. LINE ダミーメール除外 (DNS 未登録ドメイン → bounce 確実)
+    //      LINE 認証時に voter_email へ line_${userId}@line.realproof.jp が
+    //      入る経路があるため、Resend に渡すと送信エラーになる。
+    if (email.toLowerCase().endsWith('@line.realproof.jp')) {
+      return NextResponse.json({ skipped: 'line_dummy_email' }, { status: 200 })
+    }
+
     // 4. 冪等性: 既送信ならスキップ
     if ((cr as any).sent_email_at) {
       return NextResponse.json(
