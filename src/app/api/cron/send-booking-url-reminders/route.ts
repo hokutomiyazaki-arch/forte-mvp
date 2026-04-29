@@ -45,8 +45,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  // dry_run モード: ?dry_run=true で対象プロを列挙するだけ (Resend 送信なし、履歴 INSERT なし)
+  // 本番 DB を参照したまま事前確認できるよう、本番送信前のセーフティネット用途。
+  const url = new URL(req.url)
+  const dryRun = url.searchParams.get('dry_run') === 'true'
+
   const resendKey = process.env.RESEND_API_KEY
-  if (!resendKey) {
+  if (!resendKey && !dryRun) {
     return NextResponse.json({ error: 'RESEND_API_KEY not set' }, { status: 500 })
   }
 
@@ -79,6 +84,7 @@ export async function GET(req: NextRequest) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const results: any[] = []
   let sentCount = 0
+  let wouldSendCount = 0 // dry_run 時の「送信対象」カウント
   let skippedCount = 0
   let errorCount = 0
 
@@ -119,6 +125,20 @@ export async function GET(req: NextRequest) {
     }
 
     const proName = buildProName(pro)
+
+    // dry_run: 対象を列挙するだけで実送信・履歴記録は行わない
+    if (dryRun) {
+      results.push({
+        pro_id: pro.id,
+        pro_name: proName,
+        contact_email: recipientEmail,
+        vote_count: voteCount,
+        would_send: true,
+      })
+      wouldSendCount++
+      continue
+    }
+
     const { subject, html, text } = buildBookingUrlReminderEmail({
       proName,
       voteCount,
@@ -188,13 +208,22 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     success: true,
-    summary: {
-      sent: sentCount,
-      skipped: skippedCount,
-      error: errorCount,
-      target_filtered: targetPros.length,
-      total_active: allPros?.length || 0,
-    },
+    ...(dryRun ? { dry_run: true } : {}),
+    summary: dryRun
+      ? {
+          would_send: wouldSendCount,
+          skipped: skippedCount,
+          error: errorCount,
+          target_filtered: targetPros.length,
+          total_active: allPros?.length || 0,
+        }
+      : {
+          sent: sentCount,
+          skipped: skippedCount,
+          error: errorCount,
+          target_filtered: targetPros.length,
+          total_active: allPros?.length || 0,
+        },
     details: results,
   })
 }
