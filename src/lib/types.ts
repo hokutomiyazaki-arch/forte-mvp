@@ -70,6 +70,20 @@ export interface Vote {
   display_mode: VoteDisplayMode
   client_photo_url: string | null
   voter_professional_id: string | null
+
+  // --- リワード配信オプトイン (2026-04-29) ---
+  reward_optin?: boolean
+}
+
+// client_rewards: vote × reward の中間テーブル。
+// sent_email_at / sent_line_at は voter 単位での重複送信防止用。
+export interface ClientReward {
+  id: string
+  vote_id: string
+  reward_id: string
+  created_at: string
+  sent_email_at: string | null
+  sent_line_at: string | null
 }
 
 export interface VoteSummary {
