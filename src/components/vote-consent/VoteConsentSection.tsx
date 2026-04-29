@@ -37,6 +37,11 @@ interface Props {
   proName?: string
   /** YES/NO どちらかが押されて UPDATE 成功した時に呼ばれる（リワード解放のゲート） */
   onComplete?: () => void
+  /**
+   * Phase 1.5: リワード受け取り同意チェックがON+YES/NOで配信トリガーする時に呼ぶ。
+   * 親側 (vote-confirmed) で deliveryTriggeredRef による二重起動防止を実装済み。
+   */
+  onRewardOptinChange?: (optin: boolean) => void
 }
 
 type Variant = 'photo' | 'name_only' | 'skip'
@@ -195,6 +200,46 @@ const styles = {
     border: '1px solid rgba(196,163,90,0.3)',
     animation: 'consentFadeIn .4s ease-out',
   } as React.CSSProperties,
+  // ─── Phase 1.5: リワード同意チェックボックス (dark card 内側) ───
+  rewardOptinSection: {
+    marginTop: 18,
+    marginBottom: 18,
+  } as React.CSSProperties,
+  rewardOptinDivider: {
+    height: 1,
+    background: 'linear-gradient(to right, transparent, rgba(196,163,90,0.35), transparent)',
+    marginBottom: 18,
+  } as React.CSSProperties,
+  rewardOptinLabel: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: 12,
+    padding: '14px 16px',
+    backgroundColor: 'rgba(196,163,90,0.08)',
+    border: '1px solid rgba(196,163,90,0.3)',
+    borderRadius: 10,
+    cursor: 'pointer',
+    margin: 0,
+  } as React.CSSProperties,
+  rewardOptinCheckbox: {
+    marginTop: 3,
+    width: 20,
+    height: 20,
+    accentColor: '#C4A35A',
+    cursor: 'inherit',
+    flexShrink: 0,
+  } as React.CSSProperties,
+  rewardOptinText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 1.65,
+    color: '#FAFAF7',
+  } as React.CSSProperties,
+  rewardOptinNote: {
+    color: '#8B8B9A',
+    fontSize: 12,
+    marginLeft: 4,
+  } as React.CSSProperties,
 }
 
 // keyframes は 1 度だけ inject する
@@ -212,12 +257,22 @@ function ensureKeyframes() {
   keyframesInjected = true
 }
 
-export default function VoteConsentSection({ vote, proName, onComplete }: Props) {
+export default function VoteConsentSection({ vote, proName, onComplete, onRewardOptinChange }: Props) {
   ensureKeyframes()
 
   const variant = determineVariant(vote)
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  // Phase 1.5: リワード受け取り同意のチェック状態
+  const [rewardOptinChecked, setRewardOptinChecked] = useState(false)
+
+  // 認証方法による文言切替。
+  // sms 認証は本来 vote-confirmed 側で consentSkipped により本コンポーネントへ
+  // 到達しないが、防御的に隠す。
+  const isLineAuth = vote.auth_method === 'line'
+  const isSmsAuth = vote.auth_method === 'sms'
+  const channelText = isLineAuth ? 'LINE' : 'メール'
+  const showRewardOptin = !isSmsAuth
   const [errorText, setErrorText] = useState('')
 
   // マイカード機能は未実装のため、変更・削除導線はプロへの直接連絡に誘導する。
@@ -246,12 +301,40 @@ export default function VoteConsentSection({ vote, proName, onComplete }: Props)
     )
   }
 
+  /**
+   * Phase 1.5: リワード受け取り同意の保存と配信トリガー。
+   * チェックON 時のみ PATCH + 親への通知。失敗しても写真同意処理はブロックしない
+   * (UI 体験優先 — 同意失敗で全体止めると最悪の UX)。
+   */
+  const persistRewardOptin = async () => {
+    if (!rewardOptinChecked) return
+    if (!onRewardOptinChange) return
+    try {
+      const res = await fetch(`/api/votes/${vote.id}/reward-optin`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ reward_optin: true }),
+      })
+      if (!res.ok) {
+        console.warn('[VoteConsentSection] reward-optin save returned non-ok:', res.status)
+        return
+      }
+      onRewardOptinChange(true)
+    } catch (e) {
+      console.error('[VoteConsentSection] reward-optin save failed (non-blocking):', e)
+    }
+  }
+
   // ─── 共通アクション: YES ボタン（photo / name_only） ───
   const handleYes = async () => {
     if (submitting) return
     setSubmitting(true)
     setErrorText('')
     try {
+      // Phase 1.5: 写真同意の前にリワード保存 (失敗しても下を続行)
+      await persistRewardOptin()
+
       const mode = variant === 'photo' ? 'photo' : 'nickname_only'
       await updateDisplayMode(vote.id, mode)
       setSubmitted(true)
@@ -269,6 +352,9 @@ export default function VoteConsentSection({ vote, proName, onComplete }: Props)
     setSubmitting(true)
     setErrorText('')
     try {
+      // Phase 1.5: 写真NO時もリワード同意は保存する (チェックされていれば)
+      await persistRewardOptin()
+
       await updateDisplayMode(vote.id, 'hidden')
       setSubmitted(true)
       onComplete?.()
@@ -278,6 +364,30 @@ export default function VoteConsentSection({ vote, proName, onComplete }: Props)
       setSubmitting(false)
     }
   }
+
+  // ─── Phase 1.5: リワード同意チェックボックス (photo / name_only 共通) ───
+  const rewardOptinBlock = showRewardOptin ? (
+    <div style={styles.rewardOptinSection}>
+      <div style={styles.rewardOptinDivider} />
+      <label style={styles.rewardOptinLabel}>
+        <input
+          type="checkbox"
+          checked={rewardOptinChecked}
+          onChange={(e) => setRewardOptinChecked(e.target.checked)}
+          disabled={submitting}
+          style={styles.rewardOptinCheckbox}
+        />
+        <span style={styles.rewardOptinText}>
+          {proName ? `${proName}さん` : 'プロの方'}や REALPROOF からの
+          <br />
+          リワード・お知らせ・新機能情報を
+          <br />
+          {channelText}で受け取る
+          <span style={styles.rewardOptinNote}>(任意)</span>
+        </span>
+      </label>
+    </div>
+  ) : null
 
   // ─── ケース🅱 写真あり (Google/LINE) — 写真表示の可否のみ確認 ───
   if (variant === 'photo') {
@@ -297,6 +407,7 @@ export default function VoteConsentSection({ vote, proName, onComplete }: Props)
           )}
         </div>
         {errorText && <div style={styles.errorText}>{errorText}</div>}
+        {rewardOptinBlock}
         <button
           style={{ ...styles.btnGold, opacity: submitting ? 0.6 : 1 }}
           onClick={handleYes}
@@ -338,6 +449,7 @@ export default function VoteConsentSection({ vote, proName, onComplete }: Props)
           </div>
         </div>
         {errorText && <div style={styles.errorText}>{errorText}</div>}
+        {rewardOptinBlock}
         <button
           style={{ ...styles.btnGold, opacity: submitting ? 0.6 : 1 }}
           onClick={handleYes}
