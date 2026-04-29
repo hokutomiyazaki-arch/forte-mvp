@@ -1,19 +1,32 @@
 'use client'
 
 /**
- * VoteConsentSection — 投票完了画面の同意 UI
+ * VoteConsentSection — 投票完了画面の同意 UI (Phase 1.5: 2 段階フロー)
  *
- * cd9a55e で /card/[id] のクライアント名表示を全削除した結果、
- * 公開される唯一の要素は「写真」のみ。同意は写真表示の可否のみで十分。
+ * Step A: 写真 / ニックネーム表示同意 (display_mode の決定)
+ *           [表示OK] / [表示しない]
  *
- * Email/SMS は公開要素ゼロのため、Vote 作成時に display_mode='hidden' を
- * 設定し、このコンポーネントには到達しない（vote-confirmed 側でスキップ）。
+ *           ↓ どちらでも進む
  *
- *   🅰 プロ投票 (voter_professional_id 有り)  → UI スキップ
- *   🅱 写真あり (Google/LINE)                  → YES/NO 2 択、YES=photo
- *   🅲 写真なし (sms_fallback OLD votes 等)    → 名前のみで同意（フォールバック）
+ * Step B: お知らせ受け取り同意 (reward_optin)
+ *           [{メール|LINE}で受け取る] / [受け取らない]
  *
- * データ保存は仮実装（supabase client 直呼び）。
+ *           ↓ どちらでも進む
+ *
+ *         onComplete() → 親側 consentDone=true → リワード開示
+ *
+ * バリアント:
+ *   🅰 プロ投票 (voter_professional_id 有り)  → UI スキップ (return null)
+ *   🅱 写真あり (Google/LINE)                  → photo Step A → Step B
+ *   🅲 写真なし (sms_fallback OLD votes 等)    → name_only Step A → Step B
+ *
+ * 動的文言:
+ *   - vote.auth_method === 'line' → 「LINE で受け取る」
+ *   - vote.auth_method === 'sms'   → Step B をスキップ (即 onComplete)
+ *   - その他 (google / null など)   → 「メールで受け取る」
+ *
+ * Step B 失敗時は console.warn のみで握り潰し、onComplete() で次へ進む。
+ * (UI 体験優先 — 同意失敗で全体止めると最悪の UX)
  */
 
 import { useState } from 'react'
@@ -33,18 +46,19 @@ export interface VoteConsentVote {
 
 interface Props {
   vote: VoteConsentVote
-  /** プロ名。footer の「{pro.name}さんに連絡して変更・削除できます」で使用。 */
+  /** プロ名。Step B 文言と footer の「{pro.name}さんに連絡して変更・削除できます」で使用。 */
   proName?: string
-  /** YES/NO どちらかが押されて UPDATE 成功した時に呼ばれる（リワード解放のゲート） */
+  /** Step A・B 両方完了した時に呼ばれる (リワード解放のゲート) */
   onComplete?: () => void
   /**
-   * Phase 1.5: リワード受け取り同意チェックがON+YES/NOで配信トリガーする時に呼ぶ。
-   * 親側 (vote-confirmed) で deliveryTriggeredRef による二重起動防止を実装済み。
+   * Step B で「受け取る」が押されて保存成功した時に true で呼ばれる。
+   * 親側 (vote-confirmed) で /api/deliver-reward を fire-and-forget でトリガー。
    */
   onRewardOptinChange?: (optin: boolean) => void
 }
 
 type Variant = 'photo' | 'name_only' | 'skip'
+type Step = 'photo' | 'notification' | 'done'
 
 function determineVariant(vote: VoteConsentVote): Variant {
   if (vote.voter_professional_id) return 'skip'
@@ -75,7 +89,7 @@ async function updateDisplayMode(
   }
 }
 
-// ─── 共通スタイル ───
+// ─── 共通スタイル (dark card) ───
 const styles = {
   card: {
     background: '#1A1A2E',
@@ -160,25 +174,6 @@ const styles = {
     cursor: 'pointer',
     transition: 'opacity .15s',
   } as React.CSSProperties,
-  input: {
-    width: '100%',
-    minHeight: 52,
-    padding: '14px 16px',
-    borderRadius: 12,
-    background: 'rgba(255,255,255,0.06)',
-    color: '#FAFAF7',
-    border: '1px solid rgba(196,163,90,0.35)',
-    fontSize: 16,
-    marginBottom: 8,
-    outline: 'none',
-    fontFamily: 'inherit',
-  } as React.CSSProperties,
-  inputHint: {
-    fontSize: 12,
-    color: '#8B8B9A',
-    textAlign: 'center' as const,
-    marginBottom: 18,
-  },
   footNote: {
     fontSize: 12,
     color: '#8B8B9A',
@@ -191,55 +186,6 @@ const styles = {
     textAlign: 'center' as const,
     marginBottom: 10,
   },
-  successCard: {
-    background: 'rgba(196,163,90,0.1)',
-    borderRadius: 16,
-    padding: '20px 24px',
-    color: '#FAFAF7',
-    textAlign: 'center' as const,
-    border: '1px solid rgba(196,163,90,0.3)',
-    animation: 'consentFadeIn .4s ease-out',
-  } as React.CSSProperties,
-  // ─── Phase 1.5: リワード同意チェックボックス (dark card 内側) ───
-  rewardOptinSection: {
-    marginTop: 18,
-    marginBottom: 18,
-  } as React.CSSProperties,
-  rewardOptinDivider: {
-    height: 1,
-    background: 'linear-gradient(to right, transparent, rgba(196,163,90,0.35), transparent)',
-    marginBottom: 18,
-  } as React.CSSProperties,
-  rewardOptinLabel: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: 12,
-    padding: '14px 16px',
-    backgroundColor: 'rgba(196,163,90,0.08)',
-    border: '1px solid rgba(196,163,90,0.3)',
-    borderRadius: 10,
-    cursor: 'pointer',
-    margin: 0,
-  } as React.CSSProperties,
-  rewardOptinCheckbox: {
-    marginTop: 3,
-    width: 20,
-    height: 20,
-    accentColor: '#C4A35A',
-    cursor: 'inherit',
-    flexShrink: 0,
-  } as React.CSSProperties,
-  rewardOptinText: {
-    flex: 1,
-    fontSize: 14,
-    lineHeight: 1.65,
-    color: '#FAFAF7',
-  } as React.CSSProperties,
-  rewardOptinNote: {
-    color: '#8B8B9A',
-    fontSize: 12,
-    marginLeft: 4,
-  } as React.CSSProperties,
 }
 
 // keyframes は 1 度だけ inject する
@@ -257,58 +203,87 @@ function ensureKeyframes() {
   keyframesInjected = true
 }
 
-export default function VoteConsentSection({ vote, proName, onComplete, onRewardOptinChange }: Props) {
+export default function VoteConsentSection({
+  vote,
+  proName,
+  onComplete,
+  onRewardOptinChange,
+}: Props) {
   ensureKeyframes()
 
   const variant = determineVariant(vote)
-  const [submitted, setSubmitted] = useState(false)
+  const [step, setStep] = useState<Step>('photo')
   const [submitting, setSubmitting] = useState(false)
-  // Phase 1.5: リワード受け取り同意のチェック状態
-  const [rewardOptinChecked, setRewardOptinChecked] = useState(false)
+  const [errorText, setErrorText] = useState('')
 
-  // 認証方法による文言切替。
-  // sms 認証は本来 vote-confirmed 側で consentSkipped により本コンポーネントへ
-  // 到達しないが、防御的に隠す。
+  // 認証方法による文言切替
   const isLineAuth = vote.auth_method === 'line'
   const isSmsAuth = vote.auth_method === 'sms'
   const channelText = isLineAuth ? 'LINE' : 'メール'
-  const showRewardOptin = !isSmsAuth
-  const [errorText, setErrorText] = useState('')
+
+  const labelName = proName ? `${proName}さん` : 'プロの方'
 
   // マイカード機能は未実装のため、変更・削除導線はプロへの直接連絡に誘導する。
-  // proName が無い場合は汎用フォールバック。
   const changeNote = proName
     ? `※あとから${proName}さんに連絡して変更・削除できます`
     : '※あとからプロの方に連絡して変更・削除できます'
 
-  // ケース🅰 プロ投票 — 何もレンダーしない
+  // ケース🅰 プロ投票 — 何もレンダーしない (本来は親側 consentSkipped で除外されるが防御)
   if (variant === 'skip') return null
 
-  // 送信成功後の共通表示
-  if (submitted) {
-    const successNote = proName
-      ? `あとから${proName}さんに連絡して変更・削除できます。`
-      : 'あとからプロの方に連絡して変更・削除できます。'
-    return (
-      <div style={styles.successCard}>
-        <p style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
-          ありがとうございました
-        </p>
-        <p style={{ fontSize: 13, color: '#B5B5C3', lineHeight: 1.6 }}>
-          {successNote}
-        </p>
-      </div>
-    )
+  // 完了 — 親側で consentDone=true となり unmount される想定
+  if (step === 'done') return null
+
+  // ─── Step A: 写真同意ハンドラ ───
+  const advanceAfterPhoto = () => {
+    // SMS 認証は Step B スキップ (本来 vote-confirmed で除外されるが防御)
+    if (isSmsAuth) {
+      setStep('done')
+      onComplete?.()
+    } else {
+      setStep('notification')
+    }
   }
 
-  /**
-   * Phase 1.5: リワード受け取り同意の保存と配信トリガー。
-   * チェックON 時のみ PATCH + 親への通知。失敗しても写真同意処理はブロックしない
-   * (UI 体験優先 — 同意失敗で全体止めると最悪の UX)。
-   */
-  const persistRewardOptin = async () => {
-    if (!rewardOptinChecked) return
-    if (!onRewardOptinChange) return
+  const handlePhotoYes = async () => {
+    if (submitting) return
+    setSubmitting(true)
+    setErrorText('')
+    try {
+      const mode = variant === 'photo' ? 'photo' : 'nickname_only'
+      await updateDisplayMode(vote.id, mode)
+      advanceAfterPhoto()
+    } catch {
+      setErrorText('更新に失敗しました。もう一度お試しください。')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handlePhotoNo = async () => {
+    if (submitting) return
+    setSubmitting(true)
+    setErrorText('')
+    try {
+      await updateDisplayMode(vote.id, 'hidden')
+      advanceAfterPhoto()
+    } catch {
+      setErrorText('更新に失敗しました。もう一度お試しください。')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // ─── Step B: お知らせ受け取りハンドラ ───
+  const closeAndComplete = () => {
+    setStep('done')
+    onComplete?.()
+  }
+
+  const handleNotifYes = async () => {
+    if (submitting) return
+    setSubmitting(true)
+    setErrorText('')
     try {
       const res = await fetch(`/api/votes/${vote.id}/reward-optin`, {
         method: 'PATCH',
@@ -316,81 +291,30 @@ export default function VoteConsentSection({ vote, proName, onComplete, onReward
         cache: 'no-store',
         body: JSON.stringify({ reward_optin: true }),
       })
-      if (!res.ok) {
+      if (res.ok) {
+        onRewardOptinChange?.(true)
+      } else {
         console.warn('[VoteConsentSection] reward-optin save returned non-ok:', res.status)
-        return
       }
-      onRewardOptinChange(true)
     } catch (e) {
+      // UX 優先で握り潰し — 配信されないが画面は次へ進む
       console.error('[VoteConsentSection] reward-optin save failed (non-blocking):', e)
-    }
-  }
-
-  // ─── 共通アクション: YES ボタン（photo / name_only） ───
-  const handleYes = async () => {
-    if (submitting) return
-    setSubmitting(true)
-    setErrorText('')
-    try {
-      // Phase 1.5: 写真同意の前にリワード保存 (失敗しても下を続行)
-      await persistRewardOptin()
-
-      const mode = variant === 'photo' ? 'photo' : 'nickname_only'
-      await updateDisplayMode(vote.id, mode)
-      setSubmitted(true)
-      onComplete?.()
-    } catch {
-      setErrorText('更新に失敗しました。もう一度お試しください。')
     } finally {
       setSubmitting(false)
+      closeAndComplete()
     }
   }
 
-  // ─── 共通アクション: NO / スキップ ───
-  const handleNo = async () => {
+  const handleNotifNo = () => {
     if (submitting) return
-    setSubmitting(true)
-    setErrorText('')
-    try {
-      // Phase 1.5: 写真NO時もリワード同意は保存する (チェックされていれば)
-      await persistRewardOptin()
-
-      await updateDisplayMode(vote.id, 'hidden')
-      setSubmitted(true)
-      onComplete?.()
-    } catch {
-      setErrorText('更新に失敗しました。もう一度お試しください。')
-    } finally {
-      setSubmitting(false)
-    }
+    // PATCH なし — DB DEFAULT FALSE のまま
+    closeAndComplete()
   }
 
-  // ─── Phase 1.5: リワード同意チェックボックス (photo / name_only 共通) ───
-  const rewardOptinBlock = showRewardOptin ? (
-    <div style={styles.rewardOptinSection}>
-      <div style={styles.rewardOptinDivider} />
-      <label style={styles.rewardOptinLabel}>
-        <input
-          type="checkbox"
-          checked={rewardOptinChecked}
-          onChange={(e) => setRewardOptinChecked(e.target.checked)}
-          disabled={submitting}
-          style={styles.rewardOptinCheckbox}
-        />
-        <span style={styles.rewardOptinText}>
-          {proName ? `${proName}さん` : 'プロの方'}や REALPROOF からの
-          <br />
-          リワード・お知らせ・新機能情報を
-          <br />
-          {channelText}で受け取る
-          <span style={styles.rewardOptinNote}>(任意)</span>
-        </span>
-      </label>
-    </div>
-  ) : null
-
-  // ─── ケース🅱 写真あり (Google/LINE) — 写真表示の可否のみ確認 ───
-  if (variant === 'photo') {
+  // ═════════════════════════════════════════
+  //  Step A render: 写真 (photo variant)
+  // ═════════════════════════════════════════
+  if (step === 'photo' && variant === 'photo') {
     return (
       <div style={styles.card}>
         <div style={styles.subtitle}>
@@ -407,30 +331,29 @@ export default function VoteConsentSection({ vote, proName, onComplete, onReward
           )}
         </div>
         {errorText && <div style={styles.errorText}>{errorText}</div>}
-        {rewardOptinBlock}
         <button
           style={{ ...styles.btnGold, opacity: submitting ? 0.6 : 1 }}
-          onClick={handleYes}
+          onClick={handlePhotoYes}
           disabled={submitting}
         >
           {submitting ? '送信中...' : '表示OK'}
         </button>
         <button
           style={{ ...styles.btnGhost, opacity: submitting ? 0.6 : 1 }}
-          onClick={handleNo}
+          onClick={handlePhotoNo}
           disabled={submitting}
         >
           表示しない
         </button>
-        <div style={styles.footNote}>
-          {changeNote}
-        </div>
+        <div style={styles.footNote}>{changeNote}</div>
       </div>
     )
   }
 
-  // ─── ケース🅲 Clerk + 写真なし（名前のみ） ───
-  if (variant === 'name_only') {
+  // ═════════════════════════════════════════
+  //  Step A render: 名前のみ (name_only variant)
+  // ═════════════════════════════════════════
+  if (step === 'photo' && variant === 'name_only') {
     const initial = (vote.auth_display_name?.[0] || '?').toUpperCase()
     return (
       <div style={styles.card}>
@@ -444,33 +367,62 @@ export default function VoteConsentSection({ vote, proName, onComplete, onReward
         </div>
         <div style={styles.previewRow}>
           <div style={styles.avatarInitial}>{initial}</div>
-          <div style={styles.nameText}>
-            {vote.auth_display_name}
-          </div>
+          <div style={styles.nameText}>{vote.auth_display_name}</div>
         </div>
         {errorText && <div style={styles.errorText}>{errorText}</div>}
-        {rewardOptinBlock}
         <button
           style={{ ...styles.btnGold, opacity: submitting ? 0.6 : 1 }}
-          onClick={handleYes}
+          onClick={handlePhotoYes}
           disabled={submitting}
         >
           {submitting ? '送信中...' : 'はい、載せてもOK'}
         </button>
         <button
           style={{ ...styles.btnGhost, opacity: submitting ? 0.6 : 1 }}
-          onClick={handleNo}
+          onClick={handlePhotoNo}
           disabled={submitting}
         >
           今回は載せない
         </button>
-        <div style={styles.footNote}>
-          {changeNote}
-        </div>
+        <div style={styles.footNote}>{changeNote}</div>
       </div>
     )
   }
 
-  // 想定外バリアント（写真なし・名前なし）— 何もレンダーしない
+  // ═════════════════════════════════════════
+  //  Step B render: お知らせ受け取り
+  // ═════════════════════════════════════════
+  if (step === 'notification') {
+    return (
+      <div style={styles.card}>
+        <div style={styles.title}>お知らせを受け取りますか？</div>
+        <div style={styles.subtitle}>
+          {labelName}や REALPROOF からの
+          <br />
+          リワード・お知らせ・新機能情報を
+          <br />
+          {channelText}でお届けします
+        </div>
+        {errorText && <div style={styles.errorText}>{errorText}</div>}
+        <button
+          style={{ ...styles.btnGold, opacity: submitting ? 0.6 : 1 }}
+          onClick={handleNotifYes}
+          disabled={submitting}
+        >
+          {submitting ? '送信中...' : `${channelText}で受け取る`}
+        </button>
+        <button
+          style={{ ...styles.btnGhost, opacity: submitting ? 0.6 : 1 }}
+          onClick={handleNotifNo}
+          disabled={submitting}
+        >
+          受け取らない
+        </button>
+        <div style={styles.footNote}>※あとから配信停止できます</div>
+      </div>
+    )
+  }
+
+  // 想定外バリアント — 何もレンダーしない
   return null
 }
