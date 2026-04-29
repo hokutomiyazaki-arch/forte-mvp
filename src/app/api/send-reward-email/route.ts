@@ -1,20 +1,28 @@
 /**
  * /api/send-reward-email
  *
- * vote_id を受け取り、その voter にリワードメールを Resend で送信。
+ * vote_id を受け取り、その voter にリワード/お礼メールを Resend で送信。
+ *
+ * 設計変更 (2026-04-29):
+ *   配信先メアドは votes.voter_email から取得 (client_rewards は任意)。
+ *   全 1099 件中 924 件 (84%) が client_rewards 未作成 (リワード未設定プロ) で、
+ *   従来は 'no_client_reward' として一律スキップしていたが、
+ *   これらにも「応援ありがとうございます」のお礼メールを送るように変更。
  *
  * 既存パターン踏襲:
  *   - Resend SDK ではなく fetch 直叩き (welcome-email/route.ts と統一)
  *   - 送信元: REAL PROOF <info@proof-app.jp>
  *
  * スキップ条件 (200 で skipped を返す):
- *   - reward_optin が false / 未設定
- *   - client_rewards が無い / status='active' でない
- *   - client_email が @ を含まない (電話番号フォーマットなど)
- *   - sent_email_at が NOT NULL (冪等性: 既送信)
+ *   - reward_optin が false / 未設定                   → 'reward_optin_false'
+ *   - voter_email が無い / @ を含まない               → 'no_valid_email'
+ *   - voter_email が @line.realproof.jp ダミー        → 'line_dummy_email'
+ *   - client_rewards.sent_email_at NOT NULL          → 'already_sent' (冪等性)
+ *   - client_rewards.status !== 'active'             → `status_${value}`
  *
- * 重複送信防止フラグ (sent_email_at) は client_rewards 側に持つ。
- * voter × reward の組合せ単位 (= 1 投票につき 1 送信) で記録。
+ * 重複送信防止フラグ (sent_email_at) は client_rewards 側のみ更新。
+ * client_rewards が無い「応援メール」は idempotency なし
+ * (Phase 2 で必要なら vote_email_logs テーブル新設を検討)。
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -52,10 +60,10 @@ export async function POST(req: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
-    // 1. votes 取得 + reward_optin 確認
+    // 1. votes 取得 (voter_email を必須で取得)
     const { data: vote, error: voteError } = await supabase
       .from('votes')
-      .select('id, professional_id, reward_optin')
+      .select('id, professional_id, reward_optin, voter_email')
       .eq('id', vote_id)
       .maybeSingle()
 
@@ -70,14 +78,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ skipped: 'reward_optin_false' }, { status: 200 })
     }
 
-    // 2. client_rewards (vote_id 単位) + reward 結合
-    //    status カラムは client_rewards 側にあり (rewards 側には無い)、
-    //    'active' のみ配信対象。
+    // 2. 配信先メアドの検証 (votes.voter_email を採用)
+    const recipientEmail = String((vote as any).voter_email || '').trim()
+    if (!recipientEmail || !recipientEmail.includes('@')) {
+      return NextResponse.json({ skipped: 'no_valid_email' }, { status: 200 })
+    }
+    if (recipientEmail.toLowerCase().endsWith('@line.realproof.jp')) {
+      // LINE 認証のダミー voter_email — DNS 未登録 → bounce 確実
+      return NextResponse.json({ skipped: 'line_dummy_email' }, { status: 200 })
+    }
+
+    // 3. client_rewards (任意) を取得。
+    //    無ければ「応援ありがとう」テンプレートで送信。
+    //    あれば status='active' / sent_email_at NULL を確認。
     const { data: cr, error: crError } = await supabase
       .from('client_rewards')
       .select(`
         id,
-        client_email,
         status,
         sent_email_at,
         reward_id,
@@ -100,42 +117,23 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    if (!cr) {
-      return NextResponse.json({ skipped: 'no_client_reward' }, { status: 200 })
-    }
-
-    if ((cr as any).status !== 'active') {
-      return NextResponse.json({ skipped: 'not_active' }, { status: 200 })
-    }
-
-    // Supabase の embedded relation は単一 or 配列 — 単一参照に正規化
-    const reward = Array.isArray((cr as any).rewards) ? (cr as any).rewards[0] : (cr as any).rewards
-    if (!reward) {
-      return NextResponse.json({ skipped: 'no_reward' }, { status: 200 })
-    }
-
-    // 3. メールアドレス検証 (@ 含まない = 電話番号など)
-    const email = ((cr as any).client_email || '').trim()
-    if (!email.includes('@')) {
-      return NextResponse.json({ skipped: 'phone_format' }, { status: 200 })
-    }
-
-    // 3-b. LINE ダミーメール除外 (DNS 未登録ドメイン → bounce 確実)
-    //      LINE 認証時に voter_email へ line_${userId}@line.realproof.jp が
-    //      入る経路があるため、Resend に渡すと送信エラーになる。
-    if (email.toLowerCase().endsWith('@line.realproof.jp')) {
-      return NextResponse.json({ skipped: 'line_dummy_email' }, { status: 200 })
-    }
-
-    // 4. 冪等性: 既送信ならスキップ
-    if ((cr as any).sent_email_at) {
+    // 冪等性: client_rewards 既送信ならスキップ
+    if ((cr as any)?.sent_email_at) {
       return NextResponse.json(
         { skipped: 'already_sent', sent_at: (cr as any).sent_email_at },
         { status: 200 }
       )
     }
 
-    // 5. プロ情報取得 (name 優先、フォールバックで last_name+first_name)
+    // status='active' でないリワードは未確定状態とみなしてスキップ
+    if (cr && (cr as any).status !== 'active') {
+      return NextResponse.json(
+        { skipped: `status_${(cr as any).status}` },
+        { status: 200 }
+      )
+    }
+
+    // 4. プロ情報取得 (両パターン共通)
     const { data: pro, error: proError } = await supabase
       .from('professionals')
       .select('id, name, last_name, first_name, title, photo_url, booking_url')
@@ -151,22 +149,37 @@ export async function POST(req: NextRequest) {
 
     const proName = buildProName(pro as any)
 
-    // 6. メールテンプレート生成
+    // 5. reward の正規化 (client_rewards あれば rewards を embed、無ければ null)
+    const embeddedReward = cr
+      ? Array.isArray((cr as any).rewards)
+        ? (cr as any).rewards[0]
+        : (cr as any).rewards
+      : null
+
+    const reward = embeddedReward
+      ? {
+          title: embeddedReward.title || null,
+          content: embeddedReward.content || '',
+          url: embeddedReward.url || null,
+        }
+      : null
+
+    // 6. テンプレート生成 (reward の有無で件名・本文分岐)
     const { subject, html, text } = buildRewardEmail({
       proName,
       proPhotoUrl: (pro as any).photo_url || null,
       proTitle: (pro as any).title || '',
-      reward: {
-        title: reward.title || null,
-        content: reward.content || '',
-        url: reward.url || null,
-      },
+      proId: (pro as any).id,
+      reward,
       bookingUrl: (pro as any).booking_url || null,
       voteId: (vote as any).id,
-      voterEmail: email,
+      voterEmail: recipientEmail,
     })
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://realproof.jp'
+    const siteUrl =
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      process.env.NEXT_PUBLIC_APP_URL ||
+      'https://realproof.jp'
 
     // 7. Resend (fetch 直叩き — welcome-email/route.ts パターン)
     const resendRes = await fetch('https://api.resend.com/emails', {
@@ -178,7 +191,7 @@ export async function POST(req: NextRequest) {
       cache: 'no-store',
       body: JSON.stringify({
         from: 'REAL PROOF <info@proof-app.jp>',
-        to: email,
+        to: recipientEmail,
         subject,
         html,
         text,
@@ -200,20 +213,24 @@ export async function POST(req: NextRequest) {
 
     const sendData = await resendRes.json().catch(() => ({}))
 
-    // 8. 送信完了フラグ更新 (失敗時は警告のみ — メール自体は送信済み)
-    const { error: updateError } = await (supabase as any)
-      .from('client_rewards')
-      .update({ sent_email_at: new Date().toISOString() })
-      .eq('id', (cr as any).id)
+    // 8. 送信完了フラグ更新 (client_rewards がある場合のみ)
+    //    無いケース (応援メール) では idempotency 記録なし — Phase 2 課題
+    if (cr) {
+      const { error: updateError } = await (supabase as any)
+        .from('client_rewards')
+        .update({ sent_email_at: new Date().toISOString() })
+        .eq('id', (cr as any).id)
 
-    if (updateError) {
-      console.warn('[send-reward-email] sent_email_at update failed (mail already sent):', updateError)
+      if (updateError) {
+        console.warn('[send-reward-email] sent_email_at update failed (mail already sent):', updateError)
+      }
     }
 
     return NextResponse.json({
       success: true,
       message_id: sendData?.id,
-      email,
+      email: recipientEmail,
+      pattern: reward ? 'reward' : 'thanks',
     })
   } catch (err: any) {
     console.error('[send-reward-email] Unexpected error:', err)

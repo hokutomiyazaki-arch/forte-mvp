@@ -1,20 +1,19 @@
 /**
  * /api/send-reward-line
  *
- * vote_id を受け取り、LINE 認証で投票した voter にリワードを Flex Message で Push 送信。
+ * vote_id を受け取り、LINE 認証で投票した voter にお礼/リワードを Flex Message で Push 送信。
  *
- * 既存パターン踏襲:
- *   - LINE Push API へは fetch 直叩き (line-push.ts と同じパターン)
- *   - Flex Message 構築は cron/weekly-report/send-line.ts のブランドカラーに合わせる
+ * 設計変更 (2026-04-29):
+ *   client_rewards が無くても (リワード未設定プロへの投票でも) 「応援ありがとう」を Push する。
+ *   従来は 'no_client_reward' で一律スキップしていた挙動を撤廃。
  *
- * LINE userId の保存先:
- *   votes.auth_provider_id (auth_method='line' の時のみ意味を持つ)
+ * LINE userId の保存先: votes.auth_provider_id (auth_method='line' の場合)
  *
  * スキップ条件 (200 で skipped を返す):
- *   - reward_optin が false / 未設定
- *   - auth_method !== 'line' or auth_provider_id 無し → Email へフォールバック
- *   - client_rewards / reward が無い、または rewards.status !== 'active'
- *   - sent_line_at が NOT NULL (冪等性)
+ *   - reward_optin が false / 未設定                 → 'reward_optin_false'
+ *   - auth_method !== 'line' or auth_provider_id 無 → 'not_line_auth'
+ *   - client_rewards.sent_line_at NOT NULL          → 'already_sent'
+ *   - client_rewards.status !== 'active'            → `status_${value}`
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -28,7 +27,6 @@ export const runtime = 'nodejs'
 const DARK = '#1A1A2E'
 const GOLD = '#C4A35A'
 const CREAM = '#FAFAF7'
-const GRAY = '#888888'
 const BAR_BG = '#2A2A3E'
 
 function buildProName(pro: {
@@ -44,50 +42,73 @@ function buildProName(pro: {
 interface FlexParams {
   proName: string
   proPhotoUrl: string | null
-  reward: { title: string | null; content: string; url?: string | null }
+  reward: { title: string | null; content: string; url?: string | null } | null
   bookingUrl: string | null
+  cardUrl: string
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildRewardFlex(p: FlexParams): any {
-  const { proName, proPhotoUrl, reward, bookingUrl } = p
+  const { proName, proPhotoUrl, reward, bookingUrl, cardUrl } = p
+  const hasReward = !!reward
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const bodyContents: any[] = [
-    { type: 'text', text: 'REWARD', size: 'xxs', color: GOLD, weight: 'bold', letterSpacing: '2px' },
+    { type: 'text', text: 'REALPROOF', size: 'xxs', color: GOLD, weight: 'bold', letterSpacing: '2px' },
     { type: 'text', text: `${proName}さん`, size: 'lg', color: CREAM, weight: 'bold', margin: 'sm', wrap: true },
     { type: 'separator', margin: 'md', color: '#333355' },
-    { type: 'text', text: 'メッセージとリワードが届いています', size: 'sm', color: CREAM, margin: 'lg', wrap: true },
+    { type: 'text', text: `先日は ${proName}さんを応援していただき、ありがとうございました。`, size: 'sm', color: CREAM, margin: 'lg', wrap: true },
+    { type: 'text', text: `あなたの一票が ${proName}さんの次のステージへの後押しになっています。`, size: 'sm', color: CREAM, margin: 'sm', wrap: true },
   ]
 
-  if (reward.title) {
+  if (hasReward && reward) {
+    // ── パターン A: リワードあり ──
+    bodyContents.push({ type: 'separator', margin: 'lg', color: '#333355' })
+    bodyContents.push({ type: 'text', text: 'REWARD', size: 'xxs', color: GOLD, weight: 'bold', margin: 'lg', letterSpacing: '2px' })
+    if (reward.title) {
+      bodyContents.push({
+        type: 'text',
+        text: reward.title,
+        weight: 'bold',
+        color: CREAM,
+        margin: 'sm',
+        wrap: true,
+        size: 'md',
+      })
+    }
+    bodyContents.push({
+      type: 'box',
+      layout: 'vertical',
+      margin: 'sm',
+      paddingAll: 'md',
+      backgroundColor: BAR_BG,
+      cornerRadius: 'md',
+      contents: [{ type: 'text', text: reward.content, size: 'sm', color: CREAM, wrap: true }],
+    })
+  } else {
+    // ── パターン B: リワードなし ──
     bodyContents.push({
       type: 'text',
-      text: reward.title,
-      weight: 'bold',
+      text: `${proName}さんはまだリワードを設定していません。`,
+      size: 'sm',
       color: CREAM,
       margin: 'lg',
       wrap: true,
-      size: 'md',
+    })
+    bodyContents.push({
+      type: 'text',
+      text: '設定されたらお知らせします。',
+      size: 'sm',
+      color: GOLD,
+      margin: 'sm',
+      wrap: true,
     })
   }
-
-  bodyContents.push({
-    type: 'box',
-    layout: 'vertical',
-    margin: 'sm',
-    paddingAll: 'md',
-    backgroundColor: BAR_BG,
-    cornerRadius: 'md',
-    contents: [
-      { type: 'text', text: reward.content, size: 'sm', color: CREAM, wrap: true },
-    ],
-  })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const footerContents: any[] = []
 
-  if (reward.url) {
+  if (hasReward && reward?.url) {
     footerContents.push({
       type: 'button',
       action: { type: 'uri', label: 'リワードを開く', uri: reward.url },
@@ -107,6 +128,14 @@ function buildRewardFlex(p: FlexParams): any {
     })
   }
 
+  footerContents.push({
+    type: 'button',
+    action: { type: 'uri', label: 'プロフィールを見る', uri: cardUrl },
+    style: 'link',
+    height: 'sm',
+    margin: 'sm',
+  })
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const bubble: any = {
     type: 'bubble',
@@ -115,6 +144,13 @@ function buildRewardFlex(p: FlexParams): any {
       type: 'box',
       layout: 'vertical',
       contents: bodyContents,
+      paddingAll: 'lg',
+      backgroundColor: DARK,
+    },
+    footer: {
+      type: 'box',
+      layout: 'vertical',
+      contents: footerContents,
       paddingAll: 'lg',
       backgroundColor: DARK,
     },
@@ -134,19 +170,13 @@ function buildRewardFlex(p: FlexParams): any {
     }
   }
 
-  if (footerContents.length > 0) {
-    bubble.footer = {
-      type: 'box',
-      layout: 'vertical',
-      contents: footerContents,
-      paddingAll: 'lg',
-      backgroundColor: DARK,
-    }
-  }
+  const altText = hasReward
+    ? `${proName}さんからリワードが届きました`
+    : `${proName}さんを応援いただきありがとうございます`
 
   return {
     type: 'flex',
-    altText: `${proName}さんからメッセージとリワードが届きました`,
+    altText,
     contents: bubble,
   }
 }
@@ -193,8 +223,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ skipped: 'not_line_auth' }, { status: 200 })
     }
 
-    // 3. client_rewards + rewards 取得
-    //    status カラムは client_rewards 側にあり (rewards 側には無い)。
+    // 3. client_rewards (任意)
     const { data: cr, error: crError } = await supabase
       .from('client_rewards')
       .select(`
@@ -220,28 +249,22 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    if (!cr) {
-      return NextResponse.json({ skipped: 'no_client_reward' }, { status: 200 })
-    }
-
-    if ((cr as any).status !== 'active') {
-      return NextResponse.json({ skipped: 'not_active' }, { status: 200 })
-    }
-
-    const reward = Array.isArray((cr as any).rewards) ? (cr as any).rewards[0] : (cr as any).rewards
-    if (!reward) {
-      return NextResponse.json({ skipped: 'no_reward' }, { status: 200 })
-    }
-
-    // 4. 冪等性
-    if ((cr as any).sent_line_at) {
+    // 冪等性
+    if ((cr as any)?.sent_line_at) {
       return NextResponse.json(
         { skipped: 'already_sent', sent_at: (cr as any).sent_line_at },
         { status: 200 }
       )
     }
 
-    // 5. プロ情報
+    if (cr && (cr as any).status !== 'active') {
+      return NextResponse.json(
+        { skipped: `status_${(cr as any).status}` },
+        { status: 200 }
+      )
+    }
+
+    // 4. プロ情報
     const { data: pro, error: proError } = await supabase
       .from('professionals')
       .select('id, name, last_name, first_name, photo_url, booking_url')
@@ -257,7 +280,22 @@ export async function POST(req: NextRequest) {
 
     const proName = buildProName(pro as any)
 
-    // 6. 予約 URL に UTM 付与
+    // 5. reward 正規化
+    const embeddedReward = cr
+      ? Array.isArray((cr as any).rewards)
+        ? (cr as any).rewards[0]
+        : (cr as any).rewards
+      : null
+
+    const reward = embeddedReward
+      ? {
+          title: embeddedReward.title || null,
+          content: embeddedReward.content || '',
+          url: embeddedReward.url || null,
+        }
+      : null
+
+    // 6. URL 生成 (UTM 付与)
     const trackedBookingUrl = (pro as any).booking_url
       ? appendUtmParams((pro as any).booking_url, {
           utm_source: 'realproof',
@@ -267,16 +305,25 @@ export async function POST(req: NextRequest) {
         })
       : null
 
+    const siteUrl =
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      process.env.NEXT_PUBLIC_APP_URL ||
+      'https://realproof.jp'
+
+    const trackedCardUrl = appendUtmParams(`${siteUrl}/card/${(pro as any).id}`, {
+      utm_source: 'realproof',
+      utm_medium: 'reward_line',
+      utm_campaign: 'pro_card',
+      utm_content: (vote as any).id,
+    })
+
     // 7. Flex Message 構築
     const flex = buildRewardFlex({
       proName,
       proPhotoUrl: (pro as any).photo_url || null,
-      reward: {
-        title: reward.title || null,
-        content: reward.content || '',
-        url: reward.url || null,
-      },
+      reward,
       bookingUrl: trackedBookingUrl,
+      cardUrl: trackedCardUrl,
     })
 
     // 8. LINE Push (line-push.ts と同じ fetch パターン)
@@ -302,19 +349,22 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // 9. 送信フラグ更新
-    const { error: updateError } = await (supabase as any)
-      .from('client_rewards')
-      .update({ sent_line_at: new Date().toISOString() })
-      .eq('id', (cr as any).id)
+    // 9. 送信フラグ更新 (client_rewards がある場合のみ)
+    if (cr) {
+      const { error: updateError } = await (supabase as any)
+        .from('client_rewards')
+        .update({ sent_line_at: new Date().toISOString() })
+        .eq('id', (cr as any).id)
 
-    if (updateError) {
-      console.warn('[send-reward-line] sent_line_at update failed (push already sent):', updateError)
+      if (updateError) {
+        console.warn('[send-reward-line] sent_line_at update failed (push already sent):', updateError)
+      }
     }
 
     return NextResponse.json({
       success: true,
       line_user_id: lineUserId,
+      pattern: reward ? 'reward' : 'thanks',
     })
   } catch (err: any) {
     console.error('[send-reward-line] Unexpected error:', err)

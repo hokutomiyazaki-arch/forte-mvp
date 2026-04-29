@@ -55,10 +55,13 @@ async function callChannel(
 }
 
 /**
- * vote_id に紐づく client_rewards.client_email を取得。
- * ダミーメール判定だけに使うため、無くても fallback 経路は維持する。
+ * vote_id から votes.voter_email を取得。
+ * ダミーメール判定だけに使うため、取得失敗時は null = 通常フォールバック経路。
+ *
+ * 設計変更 (2026-04-29) で配信先メアドは votes.voter_email に統一。
+ * client_rewards.client_email は 84% の投票で存在しないため、こちらを真の参照先とする。
  */
-async function getClientEmail(voteId: string): Promise<string | null> {
+async function getVoterEmail(voteId: string): Promise<string | null> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!url || !key) return null
@@ -66,11 +69,11 @@ async function getClientEmail(voteId: string): Promise<string | null> {
   try {
     const supabase = createClient(url, key)
     const { data } = await supabase
-      .from('client_rewards')
-      .select('client_email')
-      .eq('vote_id', voteId)
+      .from('votes')
+      .select('voter_email')
+      .eq('id', voteId)
       .maybeSingle()
-    return ((data as any)?.client_email || null) as string | null
+    return ((data as any)?.voter_email || null) as string | null
   } catch {
     return null
   }
@@ -93,8 +96,8 @@ export async function deliverReward(
   const result: DeliverRewardResult = {}
 
   // 0. ダミーメール判定 (失敗時は null = 通常フォールバック経路)
-  const clientEmail = await getClientEmail(voteId)
-  const isLineDummyEmail = !!clientEmail?.toLowerCase().endsWith('@line.realproof.jp')
+  const voterEmail = await getVoterEmail(voteId)
+  const isLineDummyEmail = !!voterEmail?.toLowerCase().endsWith('@line.realproof.jp')
 
   // 1. LINE 試行
   result.line = await callChannel(baseUrl, '/api/send-reward-line', voteId)
