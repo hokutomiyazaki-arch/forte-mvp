@@ -8,8 +8,9 @@
  *     (DNS 未登録の架空ドメイン → bounce 確実、無駄な送信になる)
  *   - 両方失敗してもスローしない (vote-confirmed 画面はブロックしない fire-and-forget 用途)
  *
- * 内部 API call は server-side でも自身の origin を解決する必要があるため、
- * NEXT_PUBLIC_SITE_URL → NEXT_PUBLIC_APP_URL → 既定 (https://realproof.jp) の順で解決。
+ * baseUrl は呼び出し元 (= /api/deliver-reward) が request.headers の host から
+ * 動的に構築して渡す。env 変数 (NEXT_PUBLIC_SITE_URL 等) は本番固定値が入っており、
+ * ローカル/preview 環境で本番に向けて fetch してしまう事故を起こすため使わない。
  */
 
 import { createClient } from '@supabase/supabase-js'
@@ -28,19 +29,12 @@ export interface DeliverRewardResult {
   email_skipped_reason?: string
 }
 
-function getSiteUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    'https://realproof.jp'
-  )
-}
-
 async function callChannel(
+  baseUrl: string,
   path: '/api/send-reward-line' | '/api/send-reward-email',
   voteId: string
 ): Promise<ChannelResult> {
-  const url = `${getSiteUrl()}${path}`
+  const url = `${baseUrl}${path}`
   try {
     const res = await fetch(url, {
       method: 'POST',
@@ -87,8 +81,15 @@ async function getClientEmail(voteId: string): Promise<string | null> {
  * - LINE が delivered (ok && !skipped) → Email スキップ
  * - LINE が not delivered + client_email が @line.realproof.jp ダミー → Email スキップ
  * - 上記以外 → Email フォールバック
+ *
+ * @param voteId 配信対象の votes.id
+ * @param baseUrl 内部 API の origin (例: "http://localhost:3000")。
+ *                呼び出し元が request.headers.host から動的構築する。
  */
-export async function deliverReward(voteId: string): Promise<DeliverRewardResult> {
+export async function deliverReward(
+  voteId: string,
+  baseUrl: string
+): Promise<DeliverRewardResult> {
   const result: DeliverRewardResult = {}
 
   // 0. ダミーメール判定 (失敗時は null = 通常フォールバック経路)
@@ -96,7 +97,7 @@ export async function deliverReward(voteId: string): Promise<DeliverRewardResult
   const isLineDummyEmail = !!clientEmail?.toLowerCase().endsWith('@line.realproof.jp')
 
   // 1. LINE 試行
-  result.line = await callChannel('/api/send-reward-line', voteId)
+  result.line = await callChannel(baseUrl, '/api/send-reward-line', voteId)
   const lineDelivered = result.line.ok && !result.line.skipped
   if (lineDelivered) return result
 
@@ -107,6 +108,6 @@ export async function deliverReward(voteId: string): Promise<DeliverRewardResult
   }
 
   // 3. Email フォールバック
-  result.email = await callChannel('/api/send-reward-email', voteId)
+  result.email = await callChannel(baseUrl, '/api/send-reward-email', voteId)
   return result
 }

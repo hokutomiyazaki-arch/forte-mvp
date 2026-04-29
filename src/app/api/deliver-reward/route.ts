@@ -27,7 +27,20 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const result = await deliverReward(vote_id)
+    // baseUrl は request の host から動的構築する。
+    // env (NEXT_PUBLIC_SITE_URL 等) は本番固定で、ローカル/preview から本番へ
+    // fetch しに行く事故を起こすため、ここでは使わない。
+    const host = req.headers.get('host')
+    if (!host) {
+      return NextResponse.json(
+        { error: 'host header missing' },
+        { status: 400 }
+      )
+    }
+    const proto = req.headers.get('x-forwarded-proto') || 'http'
+    const baseUrl = `${proto}://${host}`
+
+    const result = await deliverReward(vote_id, baseUrl)
     return NextResponse.json({ success: true, result })
   } catch (err: any) {
     console.error('[deliver-reward] Unexpected error:', err)
