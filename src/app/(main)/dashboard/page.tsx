@@ -19,6 +19,7 @@ import InstallPrompt from '@/components/InstallPrompt'
 import { PREFECTURES } from '@/lib/prefectures'
 import XDayCountdown from '@/components/XDayCountdown'
 import { isPersonalityV2 } from '@/lib/personality'
+import { validateBookingUrl } from '@/lib/validation'
 
 // バッジ階層: FNTはBDCの上位資格。同レベルのFNTを持っていたらBDCは非表示
 const BADGE_ORDER: Record<string, number> = {
@@ -111,6 +112,8 @@ export default function DashboardPage() {
   const [showDeactivateModal, setShowDeactivateModal] = useState(false)
   const [deactivating, setDeactivating] = useState(false)
   const [formError, setFormError] = useState('')
+  // Phase 2: booking_url バリデーション専用のフィールドエラー (入力欄直下に表示)
+  const [bookingUrlError, setBookingUrlError] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
   const [hasEmailIdentity, setHasEmailIdentity] = useState(false)
@@ -684,7 +687,16 @@ export default function DashboardPage() {
     e.preventDefault()
     setSaving(true)
     setFormError('')
+    setBookingUrlError('')
     if (!user) { setSaving(false); return }
+
+    // Phase 2: 予約・連絡先 URL バリデーション (空 OK / http(s):// 必須 / URL parse)
+    const bookingValidation = validateBookingUrl(form.booking_url || '')
+    if (!bookingValidation.valid) {
+      setBookingUrlError(bookingValidation.error)
+      setSaving(false)
+      return
+    }
 
     const urlPattern = /https?:\/\/|www\./i
     if (!form.last_name.trim() || !form.first_name.trim()) {
@@ -1348,9 +1360,28 @@ export default function DashboardPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">予約URL</label>
-            <input value={form.booking_url} onChange={e => setForm({...form, booking_url: e.target.value})}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none" placeholder="https://..." />
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              予約・連絡先URL
+              <span className="text-xs font-normal text-gray-400 ml-2">(任意)</span>
+            </label>
+            <p className="text-xs text-gray-500 mb-2 leading-relaxed">
+              応援してくれたお客さんが、次にあなたへ連絡する手段です。
+              <br />
+              公式LINE・予約サイト・お問い合わせフォームなど、なんでもOK。
+            </p>
+            <input
+              type="url"
+              value={form.booking_url}
+              onChange={e => {
+                setForm({ ...form, booking_url: e.target.value })
+                if (bookingUrlError) setBookingUrlError('')
+              }}
+              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none ${bookingUrlError ? 'border-red-400' : 'border-gray-300'}`}
+              placeholder="https://lin.ee/example または https://example.com"
+            />
+            {bookingUrlError && (
+              <p className="text-red-500 text-xs mt-1">{bookingUrlError}</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">連絡先メールアドレス</label>
