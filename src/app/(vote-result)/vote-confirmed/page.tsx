@@ -46,7 +46,13 @@ function ConfirmedContent() {
     consentVote?.auth_method === 'email_code' ||
     consentVote?.auth_method === 'sms'
   const consentAlreadyDone = !!consentVote?.display_mode
-  const rewardUnlocked = consentDone || consentSkipped || consentAlreadyDone || !consentVote
+  // Phase 1.5 拡張: 過去同意済みでも reward_optin 未済なら Step B を尋ねるため、
+  // rewardUnlocked は (consentAlreadyDone && reward_optin) を条件に含める。
+  const rewardUnlocked =
+    consentDone ||
+    consentSkipped ||
+    (consentAlreadyDone && !!consentVote?.reward_optin) ||
+    !consentVote
 
   // リワード配信トリガーの二重起動防止 (StrictMode dev / 連続クリック対策)
   const deliveryTriggeredRef = useRef(false)
@@ -167,7 +173,7 @@ function ConfirmedContent() {
       if (voteId) {
         const { data: voteData } = await (supabase as any)
           .from('votes')
-          .select('id, professional_id, auth_method, auth_display_name, client_photo_url, voter_professional_id, display_mode')
+          .select('id, professional_id, auth_method, auth_display_name, client_photo_url, voter_professional_id, display_mode, reward_optin')
           .eq('id', voteId)
           .maybeSingle()
         if (voteData) {
@@ -373,36 +379,56 @@ function ConfirmedContent() {
           </p>
         </div>
 
-        {/* ===== セクション1.5: Voice への顔写真・ニックネーム同意 UI（Phase 2） =====
-            consentDone=true になるまでリワード(セクション2以降)はゲートする。
-            VoteConsentSection 自身は variant='skip' (voter_professional_id 有り) の時に
-            null を返すので、その場合は consentSkipped=true でリワード即表示に流す。
-        */}
-        {consentVote && !consentDone && !consentSkipped && !consentAlreadyDone && (
-          <VoteConsentSection
-            vote={consentVote}
-            proName={proName}
-            onComplete={() => setConsentDone(true)}
-            onRewardOptinChange={handleRewardOptinChange}
-          />
-        )}
+        {/* ===== セクション1.5: 同意 UI (Phase 1.5: 2 段階同意フロー) =====
+            consentVote の状態に応じて 3 ケースに分岐:
 
-        {/* ===== セクション1.6: リワード配信オプトイン (Phase 1 リワードメール) =====
-            Phase 1.5 で VoteConsentSection に統合した結果、本セクションは
-            「VoteConsentSection が表示されないケース (consentSkipped=true)」のみで
-            単独表示される。具体的には:
-              - voter_professional_id !== null (プロ→プロ投票)
-              - auth_method === 'email_code'
-              - auth_method === 'sms' (内部で null 返却するため非表示)
-            consentDone / consentAlreadyDone 経由は表示しない (VoteConsentSection 経由)。
+            ケース1: 完全な新規投票 (display_mode 未セット)
+              → VoteConsentSection を Step A から開始 (initialStep デフォルト)
+
+            ケース2: 過去同意済み (display_mode セット済み) + reward_optin=false
+              → VoteConsentSection を Step B (notification) から開始
+              → Step A はスキップしお知らせ受け取り同意のみ尋ねる
+
+            ケース3: スキップケース (consentSkipped=true)
+              → 写真同意 UI 不要なので RewardOptinSection 単独表示
+              → voter_professional_id !== null / email_code / sms 認証
+              → SMS 認証は RewardOptinSection 内で null 返却
+
+            consentDone || rewardUnlocked になればこのセクション全体を出さない。
         */}
-        {voteId && consentSkipped && proName && (
-          <RewardOptinSection
-            voteId={voteId}
-            proName={proName}
-            authMethod={consentVote?.auth_method ?? undefined}
-            onChange={handleRewardOptinChange}
-          />
+        {consentVote && !consentDone && (
+          <>
+            {/* ケース1: 写真同意未済 */}
+            {!consentAlreadyDone && !consentSkipped && (
+              <VoteConsentSection
+                vote={consentVote}
+                proName={proName}
+                onComplete={() => setConsentDone(true)}
+                onRewardOptinChange={handleRewardOptinChange}
+              />
+            )}
+
+            {/* ケース2: 写真同意済み + reward_optin 未同意 → Step B のみ */}
+            {consentAlreadyDone && !consentVote.reward_optin && !consentSkipped && (
+              <VoteConsentSection
+                vote={consentVote}
+                proName={proName}
+                onComplete={() => setConsentDone(true)}
+                onRewardOptinChange={handleRewardOptinChange}
+                initialStep="notification"
+              />
+            )}
+
+            {/* ケース3: スキップケース (RewardOptinSection 単独) */}
+            {consentSkipped && proName && (
+              <RewardOptinSection
+                voteId={voteId}
+                proName={proName}
+                authMethod={consentVote?.auth_method ?? undefined}
+                onChange={handleRewardOptinChange}
+              />
+            )}
+          </>
         )}
 
         {/* ===== セクション2: リワード開示（選択済みの場合） ===== */}

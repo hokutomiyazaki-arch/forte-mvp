@@ -42,6 +42,8 @@ export interface VoteConsentVote {
   client_photo_url: string | null
   voter_professional_id: string | null
   display_mode: DisplayMode
+  /** Phase 1.5: お知らせ受け取り同意 (DB DEFAULT FALSE) */
+  reward_optin: boolean
 }
 
 interface Props {
@@ -55,6 +57,12 @@ interface Props {
    * 親側 (vote-confirmed) で /api/deliver-reward を fire-and-forget でトリガー。
    */
   onRewardOptinChange?: (optin: boolean) => void
+  /**
+   * 開始ステップ。デフォルト 'photo' (Step A から)。
+   * 過去同意済みユーザ (display_mode 既セット) で Step B のみ表示する場合は
+   * 'notification' を渡す。
+   */
+  initialStep?: 'photo' | 'notification'
 }
 
 type Variant = 'photo' | 'name_only' | 'skip'
@@ -208,11 +216,13 @@ export default function VoteConsentSection({
   proName,
   onComplete,
   onRewardOptinChange,
+  initialStep,
 }: Props) {
   ensureKeyframes()
 
   const variant = determineVariant(vote)
-  const [step, setStep] = useState<Step>('photo')
+  // initialStep がプリミティブで安定しているため useState 初期値で確定 (再レンダー時に変更されない)
+  const [step, setStep] = useState<Step>(initialStep || 'photo')
   const [submitting, setSubmitting] = useState(false)
   const [errorText, setErrorText] = useState('')
 
