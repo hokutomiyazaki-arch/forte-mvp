@@ -194,15 +194,16 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. client_rewards + rewards 取得
+    //    status カラムは client_rewards 側にあり (rewards 側には無い)。
     const { data: cr, error: crError } = await supabase
       .from('client_rewards')
       .select(`
         id,
+        status,
         sent_line_at,
         reward_id,
         rewards:rewards (
           id,
-          status,
           title,
           content,
           url
@@ -223,12 +224,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ skipped: 'no_client_reward' }, { status: 200 })
     }
 
+    if ((cr as any).status !== 'active') {
+      return NextResponse.json({ skipped: 'not_active' }, { status: 200 })
+    }
+
     const reward = Array.isArray((cr as any).rewards) ? (cr as any).rewards[0] : (cr as any).rewards
     if (!reward) {
       return NextResponse.json({ skipped: 'no_reward' }, { status: 200 })
-    }
-    if (reward.status !== 'active') {
-      return NextResponse.json({ skipped: 'not_active' }, { status: 200 })
     }
 
     // 4. 冪等性

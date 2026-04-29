@@ -71,17 +71,18 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. client_rewards (vote_id 単位) + reward 結合
-    //    rewards.status='active' のものだけ配信対象。
+    //    status カラムは client_rewards 側にあり (rewards 側には無い)、
+    //    'active' のみ配信対象。
     const { data: cr, error: crError } = await supabase
       .from('client_rewards')
       .select(`
         id,
         client_email,
+        status,
         sent_email_at,
         reward_id,
         rewards:rewards (
           id,
-          status,
           title,
           content,
           url,
@@ -103,13 +104,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ skipped: 'no_client_reward' }, { status: 200 })
     }
 
+    if ((cr as any).status !== 'active') {
+      return NextResponse.json({ skipped: 'not_active' }, { status: 200 })
+    }
+
     // Supabase の embedded relation は単一 or 配列 — 単一参照に正規化
     const reward = Array.isArray((cr as any).rewards) ? (cr as any).rewards[0] : (cr as any).rewards
     if (!reward) {
       return NextResponse.json({ skipped: 'no_reward' }, { status: 200 })
-    }
-    if (reward.status !== 'active') {
-      return NextResponse.json({ skipped: 'not_active' }, { status: 200 })
     }
 
     // 3. メールアドレス検証 (@ 含まない = 電話番号など)
