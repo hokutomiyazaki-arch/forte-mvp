@@ -20,6 +20,9 @@ import { PREFECTURES } from '@/lib/prefectures'
 import XDayCountdown from '@/components/XDayCountdown'
 import { isPersonalityV2 } from '@/lib/personality'
 import { validateBookingUrl } from '@/lib/validation'
+import { getProVoteCount } from '@/lib/vote-count'
+import BookingUrlBanner from '@/components/BookingUrlBanner'
+import { createClient as createSupabaseClient } from '@/lib/supabase'
 
 // バッジ階層: FNTはBDCの上位資格。同レベルのFNTを持っていたらBDCは非表示
 const BADGE_ORDER: Record<string, number> = {
@@ -114,6 +117,8 @@ export default function DashboardPage() {
   const [formError, setFormError] = useState('')
   // Phase 2: booking_url バリデーション専用のフィールドエラー (入力欄直下に表示)
   const [bookingUrlError, setBookingUrlError] = useState('')
+  // Phase 2: 累積投票数 (BookingUrlBanner で「○○人を応援した」の表示に使用)
+  const [voteCount, setVoteCount] = useState(0)
   const [newPassword, setNewPassword] = useState('')
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
   const [hasEmailIdentity, setHasEmailIdentity] = useState(false)
@@ -236,6 +241,19 @@ export default function DashboardPage() {
       setEditing(true)
     }
   }, [editParam, loading, pro])
+
+  // Phase 2: 累積投票数取得 (BookingUrlBanner の表示用)
+  // proId はプリミティブ (string|undefined) のため deps として安全。
+  const proIdForVoteCount = pro?.id
+  useEffect(() => {
+    if (!proIdForVoteCount) return
+    const supabase = createSupabaseClient()
+    getProVoteCount(supabase, proIdForVoteCount)
+      .then(setVoteCount)
+      .catch((err) => {
+        console.error('[dashboard] getProVoteCount failed:', err)
+      })
+  }, [proIdForVoteCount])
 
   useEffect(() => {
     if (!authLoaded) return
@@ -1947,6 +1965,18 @@ export default function DashboardPage() {
           </button>
         </div>
       )}
+
+      {/* Phase 2: 予約・連絡先URL 未設定バナー
+          表示条件: setup 完了済み + booking_url 空 + 投票 1 票以上 */}
+      {pro &&
+        (pro as any).setup_completed === true &&
+        (!pro.booking_url || pro.booking_url.trim() === '') &&
+        voteCount > 0 && (
+          <BookingUrlBanner
+            proName={`${pro.last_name || ''}${pro.first_name || ''}`.trim()}
+            voteCount={voteCount}
+          />
+        )}
 
       {/* QRコード（タブの上に配置） */}
       {!isSettingsTab && (
