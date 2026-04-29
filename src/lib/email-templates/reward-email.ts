@@ -102,16 +102,12 @@ export function buildRewardEmail(params: RewardEmailParams): RewardEmailResult {
       あなたの一票が ${escapeHtml(proName)}さんの<br>次のステージへの後押しになっています。
     </p>`
 
+  // パターン B (reward なし) は「未設定」案内を出さず、お礼 2 行だけで CTA に繋ぐ。
   const headerDiff = hasReward
     ? `<p style="margin:0;color:#FFFFFF;font-size:16px;line-height:1.7;">
          ${escapeHtml(proName)}さんから、リワードが届いています。
        </p>`
-    : `<p style="margin:0 0 8px;color:#FFFFFF;font-size:16px;line-height:1.7;">
-         ${escapeHtml(proName)}さんはまだリワードを設定していません。
-       </p>
-       <p style="margin:0;color:#C4A35A;font-size:14px;line-height:1.7;">
-         設定されたらお知らせします。
-       </p>`
+    : ''
 
   // ── リワードボックス (パターン A のみ) ──
   const rewardBox = hasReward && reward
@@ -232,10 +228,8 @@ export function buildRewardEmail(params: RewardEmailParams): RewardEmailResult {
     if (reward.title) textLines.push(reward.title)
     textLines.push(reward.content)
     if (reward.url) textLines.push(`→ ${reward.url}`)
-  } else {
-    textLines.push(`${proName}さんはまだリワードを設定していません。`)
-    textLines.push('設定されたらお知らせします。')
   }
+  // パターン B (reward なし) は「未設定」案内を出さず、CTA へ直接繋ぐ。
 
   textLines.push('')
   if (trackedBookingUrl) {

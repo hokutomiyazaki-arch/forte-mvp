@@ -85,25 +85,8 @@ function buildRewardFlex(p: FlexParams): any {
       cornerRadius: 'md',
       contents: [{ type: 'text', text: reward.content, size: 'sm', color: CREAM, wrap: true }],
     })
-  } else {
-    // ── パターン B: リワードなし ──
-    bodyContents.push({
-      type: 'text',
-      text: `${proName}さんはまだリワードを設定していません。`,
-      size: 'sm',
-      color: CREAM,
-      margin: 'lg',
-      wrap: true,
-    })
-    bodyContents.push({
-      type: 'text',
-      text: '設定されたらお知らせします。',
-      size: 'sm',
-      color: GOLD,
-      margin: 'sm',
-      wrap: true,
-    })
   }
+  // パターン B (reward なし) は「未設定」案内を出さず、お礼 2 行だけで CTA に繋ぐ。
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const footerContents: any[] = []
