@@ -18,7 +18,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { appendUtmParams } from '@/lib/email-templates/reward-email'
+import { appendUtmParams, extractContentAndUrls } from '@/lib/email-templates/reward-email'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -45,12 +45,29 @@ interface FlexParams {
   reward: { title: string | null; content: string; url?: string | null } | null
   bookingUrl: string | null
   cardUrl: string
+  /** content 内 URL ボタンに付与する UTM utm_content の値 (= vote.id) */
+  voteId: string
+}
+
+/** Flex Message footer の同一系統ボタンに段差マージンを付ける小ヘルパー。 */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function pushFooterButton(footer: any[], btn: any) {
+  if (footer.length > 0) btn.margin = btn.margin || 'sm'
+  footer.push(btn)
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildRewardFlex(p: FlexParams): any {
-  const { proName, proPhotoUrl, reward, bookingUrl, cardUrl } = p
+  const { proName, proPhotoUrl, reward, bookingUrl, cardUrl, voteId } = p
   const hasReward = !!reward
+
+  // content から URL を抽出 (fnt_neuro_app / freeform 等で本文に URL が
+  // プレーンテキストで埋まっているケースに対応)。表示は cleanContent、
+  // URL は footer ボタンとして最大 3 つまで提示。
+  const { cleanContent, urls: contentUrls } = hasReward && reward
+    ? extractContentAndUrls(reward.content || '')
+    : { cleanContent: '', urls: [] as string[] }
+  const inlineUrls = contentUrls.slice(0, 3)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const bodyContents: any[] = [
@@ -76,23 +93,44 @@ function buildRewardFlex(p: FlexParams): any {
         size: 'md',
       })
     }
-    bodyContents.push({
-      type: 'box',
-      layout: 'vertical',
-      margin: 'sm',
-      paddingAll: 'md',
-      backgroundColor: BAR_BG,
-      cornerRadius: 'md',
-      contents: [{ type: 'text', text: reward.content, size: 'sm', color: CREAM, wrap: true }],
-    })
+    // URL を抜いた cleanContent。空になるケース (URL のみの content) は
+    // 入れる意味がないので skip。
+    if (cleanContent.trim().length > 0) {
+      bodyContents.push({
+        type: 'box',
+        layout: 'vertical',
+        margin: 'sm',
+        paddingAll: 'md',
+        backgroundColor: BAR_BG,
+        cornerRadius: 'md',
+        contents: [{ type: 'text', text: cleanContent, size: 'sm', color: CREAM, wrap: true }],
+      })
+    }
   }
   // パターン B (reward なし) は「未設定」案内を出さず、お礼 2 行だけで CTA に繋ぐ。
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const footerContents: any[] = []
 
+  // content 抽出した URL を「このリンクを開く」ボタンとして先頭に並べる
+  for (const u of inlineUrls) {
+    const trackedUrl = appendUtmParams(u, {
+      utm_source: 'realproof',
+      utm_medium: 'reward_line',
+      utm_campaign: 'reward_link',
+      utm_content: voteId,
+    })
+    pushFooterButton(footerContents, {
+      type: 'button',
+      action: { type: 'uri', label: 'このリンクを開く', uri: trackedUrl },
+      style: 'primary',
+      color: GOLD,
+      height: 'sm',
+    })
+  }
+
   if (hasReward && reward?.url) {
-    footerContents.push({
+    pushFooterButton(footerContents, {
       type: 'button',
       action: { type: 'uri', label: 'リワードを開く', uri: reward.url },
       style: 'primary',
@@ -102,21 +140,19 @@ function buildRewardFlex(p: FlexParams): any {
   }
 
   if (bookingUrl) {
-    footerContents.push({
+    pushFooterButton(footerContents, {
       type: 'button',
       action: { type: 'uri', label: `${proName}さんに予約する`, uri: bookingUrl },
       style: 'secondary',
       height: 'sm',
-      margin: 'sm',
     })
   }
 
-  footerContents.push({
+  pushFooterButton(footerContents, {
     type: 'button',
     action: { type: 'uri', label: 'プロフィールを見る', uri: cardUrl },
     style: 'link',
     height: 'sm',
-    margin: 'sm',
   })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -307,6 +343,7 @@ export async function POST(req: NextRequest) {
       reward,
       bookingUrl: trackedBookingUrl,
       cardUrl: trackedCardUrl,
+      voteId: (vote as any).id,
     })
 
     // 8. LINE Push (line-push.ts と同じ fetch パターン)

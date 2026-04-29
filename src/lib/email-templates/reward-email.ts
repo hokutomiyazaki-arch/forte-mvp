@@ -51,6 +51,24 @@ export function appendUtmParams(url: string, params: Record<string, string>): st
   }
 }
 
+/**
+ * リワード content から URL を抽出し、本文と URL 配列に分離する。
+ *
+ * fnt_neuro_app / freeform などで content にプレーン URL が埋まっているケース
+ * (ユーザがメール上でクリックできない) を解消するため、URL をテキストから取り除き
+ * ボタンとして別途レンダリングする用途。
+ */
+export function extractContentAndUrls(content: string): {
+  cleanContent: string
+  urls: string[]
+} {
+  const urlPattern = /https?:\/\/[^\s<>]+/g
+  const urls = content.match(urlPattern) || []
+  // URL を抜いた残りテキスト。連続する空行を 1 つに圧縮して見栄えを保つ。
+  const cleaned = content.replace(urlPattern, '').trim().replace(/\n\s*\n/g, '\n\n')
+  return { cleanContent: cleaned, urls }
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -110,6 +128,24 @@ export function buildRewardEmail(params: RewardEmailParams): RewardEmailResult {
     : ''
 
   // ── リワードボックス (パターン A のみ) ──
+  // content から URL を抽出してインラインリンクボタン化 (fnt_neuro_app / freeform 等で
+  // URL がプレーンテキストとして埋まっているケースに対応)。
+  const { cleanContent, urls: contentUrls } = hasReward && reward
+    ? extractContentAndUrls(reward.content)
+    : { cleanContent: '', urls: [] as string[] }
+
+  const inlineUrlButtonsHtml = contentUrls
+    .map((u) => {
+      const trackedUrl = appendUtmParams(u, {
+        utm_source: 'realproof',
+        utm_medium: 'reward_email',
+        utm_campaign: 'reward_link',
+        utm_content: voteId,
+      })
+      return `<p style="margin:16px 0 0;text-align:center;"><a href="${escapeHtml(trackedUrl)}" style="display:inline-block;padding:12px 24px;background-color:#C4A35A;color:#1A1A2E;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px;">このリンクを開く →</a></p>`
+    })
+    .join('')
+
   const rewardBox = hasReward && reward
     ? `
       <tr>
@@ -119,7 +155,8 @@ export function buildRewardEmail(params: RewardEmailParams): RewardEmailResult {
               <td style="padding:24px;">
                 <p style="margin:0 0 12px;color:#C4A35A;font-size:12px;letter-spacing:1px;font-weight:600;">REWARD</p>
                 ${reward.title ? `<p style="margin:0 0 12px;color:#FFFFFF;font-size:18px;font-weight:600;">${escapeHtml(reward.title)}</p>` : ''}
-                <p style="margin:0;color:#E8E8E8;font-size:14px;line-height:1.7;white-space:pre-wrap;">${escapeHtml(reward.content)}</p>
+                <p style="margin:0;color:#E8E8E8;font-size:14px;line-height:1.7;white-space:pre-wrap;">${escapeHtml(cleanContent).replace(/\n/g, '<br>')}</p>
+                ${inlineUrlButtonsHtml}
                 ${reward.url ? `<p style="margin:20px 0 0;text-align:center;"><a href="${escapeHtml(reward.url)}" style="display:inline-block;padding:12px 32px;background-color:#C4A35A;color:#1A1A2E;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px;">リワードを開く</a></p>` : ''}
               </td>
             </tr>
@@ -226,7 +263,12 @@ export function buildRewardEmail(params: RewardEmailParams): RewardEmailResult {
     textLines.push('')
     textLines.push('【REWARD】')
     if (reward.title) textLines.push(reward.title)
-    textLines.push(reward.content)
+    // text 版は cleanContent + 抽出した URL を箇条書きで残す
+    // (text/plain クライアントでは URL がそのままクリック可能なため)
+    textLines.push(cleanContent)
+    for (const u of contentUrls) {
+      textLines.push(`→ ${u}`)
+    }
     if (reward.url) textLines.push(`→ ${reward.url}`)
   }
   // パターン B (reward なし) は「未設定」案内を出さず、CTA へ直接繋ぐ。
