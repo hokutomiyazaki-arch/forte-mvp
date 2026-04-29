@@ -383,19 +383,24 @@ function ConfirmedContent() {
             vote={consentVote}
             proName={proName}
             onComplete={() => setConsentDone(true)}
+            onRewardOptinChange={handleRewardOptinChange}
           />
         )}
 
         {/* ===== セクション1.6: リワード配信オプトイン (Phase 1 リワードメール) =====
-            写真同意 UI 完了後 (rewardUnlocked=true) に表示。
-            チェック → PATCH /api/votes/[id]/reward-optin で保存
-                    → /api/deliver-reward を fire-and-forget でトリガー。
-            voteId が無いケース (URL 不正) では出さない。
+            Phase 1.5 で VoteConsentSection に統合した結果、本セクションは
+            「VoteConsentSection が表示されないケース (consentSkipped=true)」のみで
+            単独表示される。具体的には:
+              - voter_professional_id !== null (プロ→プロ投票)
+              - auth_method === 'email_code'
+              - auth_method === 'sms' (内部で null 返却するため非表示)
+            consentDone / consentAlreadyDone 経由は表示しない (VoteConsentSection 経由)。
         */}
-        {voteId && rewardUnlocked && (
+        {voteId && consentSkipped && proName && (
           <RewardOptinSection
             voteId={voteId}
-            proName={proName || ''}
+            proName={proName}
+            authMethod={consentVote?.auth_method ?? undefined}
             onChange={handleRewardOptinChange}
           />
         )}

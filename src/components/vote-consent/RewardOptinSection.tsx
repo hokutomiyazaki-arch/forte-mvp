@@ -1,15 +1,19 @@
 'use client'
 
 /**
- * RewardOptinSection — 投票完了画面で「リワード/お知らせをメールで受け取る」同意を取る UI
+ * RewardOptinSection — 投票完了画面で「リワード/お知らせを受け取る」同意を取る UI
  *
- * 配置: vote-confirmed/page.tsx の VoteConsentSection (写真同意 UI) の直下、
- *       RewardReveal の上。同意 UI が不要なケース (pro_link 等) でも常に表示する。
+ * Phase 1.5 で役割整理: VoteConsentSection に同意UIを統合したため、
+ * このコンポーネントは consentSkipped ケース (pro_link / email_code 認証) のみで
+ * 単独表示される。SMS 認証は親側でも除外されるが、防御的に null 返却する。
  *
  * 動作:
  *   - チェック → PATCH /api/votes/[id]/reward-optin で votes.reward_optin を更新
  *   - 保存成功 → 親へ onChange(true) 通知 (親が /api/deliver-reward を fire-and-forget)
  *   - 保存失敗 → checkbox を rollback
+ *
+ * 配色: VoteConsentSection と違い、light ページ背景 (#FAFAF7) 上に置かれるため
+ *       dark text (#1A1A2E) を使う。dark カード内側ではないので注意。
  */
 
 import { useState } from 'react'
@@ -17,14 +21,29 @@ import { useState } from 'react'
 interface Props {
   voteId: string
   proName: string
+  /**
+   * vote.auth_method。動的文言切替に使う:
+   *   'line' → 「LINEで受け取る」
+   *   'sms'  → null 返却 (チェックボックス自体非表示)
+   *   それ以外 (email_code / google / pro→pro 等) → 「メールで受け取る」
+   */
+  authMethod?: string | null
   /** チェック状態が変わって保存成功した時に呼ばれる */
   onChange?: (optin: boolean) => void
 }
 
-export default function RewardOptinSection({ voteId, proName, onChange }: Props) {
+export default function RewardOptinSection({ voteId, proName, authMethod, onChange }: Props) {
   const [checked, setChecked] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // 動的文言判定 (VoteConsentSection と同じロジック)
+  const isLineAuth = authMethod === 'line'
+  const isSmsAuth = authMethod === 'sms'
+  const channelText = isLineAuth ? 'LINE' : 'メール'
+
+  // SMS 認証は何も表示しない (親側 consentSkipped でも除外されるが防御的に)
+  if (isSmsAuth) return null
 
   const handleChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const newChecked = e.target.checked
@@ -102,7 +121,7 @@ export default function RewardOptinSection({ voteId, proName, onChange }: Props)
             <br />
             リワード・お知らせ・新機能情報を
             <br />
-            メールで受け取る
+            {channelText}で受け取る
           </div>
           <div
             style={{
