@@ -1,9 +1,10 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import RewardReveal from '@/components/RewardReveal'
 import VoteConsentSection, { VoteConsentVote } from '@/components/vote-consent/VoteConsentSection'
+import RewardOptinSection from '@/components/vote-consent/RewardOptinSection'
 import { Suspense } from 'react'
 import Link from 'next/link'
 import { useProStatus } from '@/lib/useProStatus'
@@ -46,6 +47,26 @@ function ConfirmedContent() {
     consentVote?.auth_method === 'sms'
   const consentAlreadyDone = !!consentVote?.display_mode
   const rewardUnlocked = consentDone || consentSkipped || consentAlreadyDone || !consentVote
+
+  // リワード配信トリガーの二重起動防止 (StrictMode dev / 連続クリック対策)
+  const deliveryTriggeredRef = useRef(false)
+
+  const handleRewardOptinChange = (optin: boolean) => {
+    if (!optin) return
+    if (deliveryTriggeredRef.current) return
+    if (!voteId) return
+    deliveryTriggeredRef.current = true
+
+    // fire-and-forget: UI ブロックしない
+    fetch('/api/deliver-reward', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+      body: JSON.stringify({ vote_id: voteId }),
+    }).catch((e) => {
+      console.error('[vote-confirmed] deliver-reward trigger failed:', e)
+    })
+  }
 
   // PWA インストール
   const [installPrompt, setInstallPrompt] = useState<any>(null)
@@ -362,6 +383,20 @@ function ConfirmedContent() {
             vote={consentVote}
             proName={proName}
             onComplete={() => setConsentDone(true)}
+          />
+        )}
+
+        {/* ===== セクション1.6: リワード配信オプトイン (Phase 1 リワードメール) =====
+            写真同意 UI 完了後 (rewardUnlocked=true) に表示。
+            チェック → PATCH /api/votes/[id]/reward-optin で保存
+                    → /api/deliver-reward を fire-and-forget でトリガー。
+            voteId が無いケース (URL 不正) では出さない。
+        */}
+        {voteId && rewardUnlocked && (
+          <RewardOptinSection
+            voteId={voteId}
+            proName={proName || ''}
+            onChange={handleRewardOptinChange}
           />
         )}
 
