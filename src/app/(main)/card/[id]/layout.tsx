@@ -149,6 +149,20 @@ export default async function CardLayout({
     .eq('professional_id', id)
     .eq('status', 'confirmed')
 
+  // 公開コメント（status=confirmed & comment 非空）を全件取得して Schema.org Review に反映
+  const { data: commentRows } = await supabase
+    .from('votes')
+    .select('comment, display_mode, created_at')
+    .eq('professional_id', id)
+    .eq('status', 'confirmed')
+    .not('comment', 'is', null)
+    .neq('comment', '')
+    .order('created_at', { ascending: false })
+
+  const comments = (commentRows || []).filter(
+    (c) => typeof c.comment === 'string' && c.comment.trim().length > 0
+  )
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const personSchema: any = {
     '@context': 'https://schema.org',
@@ -172,14 +186,38 @@ export default async function CardLayout({
 
   // AggregateRating は投票数があるときのみ。
   // REALPROOF は賛成票のみなので ratingValue=5 固定（bestRating=worstRating=5）。
+  // ratingCount = 全 confirmed 投票数 / reviewCount = 実コメント数（異なる）。
   if (totalVotes && totalVotes > 0) {
     personSchema.aggregateRating = {
       '@type': 'AggregateRating',
       ratingValue: '5',
-      reviewCount: totalVotes,
+      ratingCount: totalVotes,
+      reviewCount: comments.length,
       bestRating: '5',
       worstRating: '5',
     }
+  }
+
+  // Review: votes.comment を全件出力（投票時にコメント公開同意済み）。
+  // display_mode が 'hidden' / null は「匿名のクライアント」、それ以外は「クライアント」。
+  if (comments.length > 0) {
+    personSchema.review = comments.map((c) => ({
+      '@type': 'Review',
+      reviewRating: {
+        '@type': 'Rating',
+        ratingValue: '5',
+        bestRating: '5',
+      },
+      author: {
+        '@type': 'Person',
+        name:
+          !c.display_mode || c.display_mode === 'hidden'
+            ? '匿名のクライアント'
+            : 'クライアント',
+      },
+      reviewBody: c.comment,
+      datePublished: c.created_at,
+    }))
   }
 
   return (
