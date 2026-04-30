@@ -11,9 +11,9 @@ import { createClientComponentClient } from './supabase-client'
 
 /**
  * QRトークンの有効期限（ミリ秒）
- * 1時間。
+ * 24時間。
  */
-export const QR_TOKEN_TTL_MS = 60 * 60 * 1000
+export const QR_TOKEN_TTL_MS = 24 * 60 * 60 * 1000
 
 /**
  * 新規トークンの expires_at を計算する

@@ -197,7 +197,7 @@ export async function GET(
       .delete()
       .eq('professional_id', card.professional_id)
 
-    // 5. ワンタイムトークンを生成（TTLは src/lib/qr-token.ts で管理 / 現状1h）
+    // 5. ワンタイムトークンを生成（TTLは src/lib/qr-token.ts で管理 / 現状24h）
     const token = randomBytes(16).toString('hex')
     const expiresAt = calcQrTokenExpiry()
 
