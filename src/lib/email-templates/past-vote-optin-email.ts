@@ -103,9 +103,9 @@ export function generateHtmlBody(
           <tr>
             <td style="padding:32px 28px;">
 
-              <!-- ロゴ -->
-              <div style="text-align:center;margin-bottom:24px;">
-                <img src="https://realproof.jp/images/logo.png" alt="REALPROOF" style="height:40px;border:0;display:inline-block;">
+              <!-- テキストロゴ -->
+              <div style="text-align:center;margin-bottom:24px;padding:8px 0;">
+                <span style="font-size:26px;font-weight:bold;letter-spacing:3px;color:#1A1A2E;font-family:'Hiragino Sans','Noto Sans JP',sans-serif;">REALPROOF</span>
               </div>
 
               <!-- 宛名 -->
