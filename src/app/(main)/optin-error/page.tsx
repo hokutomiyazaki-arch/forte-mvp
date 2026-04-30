@@ -78,10 +78,10 @@ export default function OptinErrorPage({
         </p>
 
         <a
-          href="https://realproof.jp"
+          href="/search"
           className="inline-block bg-[#C4A35A] text-white px-8 py-3.5 rounded-lg font-bold hover:opacity-90 transition-opacity"
         >
-          REALPROOF を見る
+          プロを検索する
         </a>
 
         <p className="mt-16 text-sm italic text-gray-400">
