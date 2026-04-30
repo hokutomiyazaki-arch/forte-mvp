@@ -162,7 +162,7 @@ export async function GET(req: NextRequest) {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              from: 'REAL PROOF <info@proof-app.jp>',
+              from: 'REAL PROOF <noreply@realproof.jp>',
               to: vote.voter_email,
               subject: `${pro.name}さんからリワードが届いています`,
               html: `

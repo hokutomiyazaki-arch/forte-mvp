@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            from: 'REAL PROOF <info@proof-app.jp>',
+            from: 'REAL PROOF <noreply@realproof.jp>',
             to: 'info@proof-app.jp',
             subject: `[不具合報告] ${screen || '画面不明'}`,
             html: `

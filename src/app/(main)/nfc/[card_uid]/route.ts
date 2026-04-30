@@ -141,7 +141,7 @@ export async function GET(
                   'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                  from: 'REAL PROOF <info@proof-app.jp>',
+                  from: 'REAL PROOF <noreply@realproof.jp>',
                   to: proEmail,
                   subject: 'あなたのREALPROOFカードが読み取られました',
                   html: `

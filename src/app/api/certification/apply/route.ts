@@ -228,7 +228,7 @@ async function sendOpsNotificationEmail(params: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: 'REAL PROOF <info@proof-app.jp>',
+          from: 'REAL PROOF <noreply@realproof.jp>',
           to: OPS_EMAIL,
           subject: `REALPROOF認定申請 ${proName} / ${categoryName} / ${proofCount}proofs`,
           html: `
@@ -305,7 +305,7 @@ async function sendProConfirmationEmail(params: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: 'REAL PROOF <info@proof-app.jp>',
+          from: 'REAL PROOF <noreply@realproof.jp>',
           to: proEmail,
           subject: `🏆 REALPROOF認定申請を受け付けました`,
           html: `

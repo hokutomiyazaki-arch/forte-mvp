@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: 'REAL PROOF <info@proof-app.jp>',
+          from: 'REAL PROOF <noreply@realproof.jp>',
           to: normalizedEmail,
           subject: `${orgName}からREALPROOFへの招待が届いています`,
           html: `

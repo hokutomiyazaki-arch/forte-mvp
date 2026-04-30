@@ -156,7 +156,7 @@ export async function GET(req: NextRequest) {
         },
         cache: 'no-store',
         body: JSON.stringify({
-          from: 'REAL PROOF <info@proof-app.jp>',
+          from: 'REAL PROOF <noreply@realproof.jp>',
           to: recipientEmail,
           subject,
           html,

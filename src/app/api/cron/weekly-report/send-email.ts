@@ -20,7 +20,7 @@ export async function sendWeeklyEmail(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'REALPROOF <info@proof-app.jp>',
+        from: 'REALPROOF <noreply@realproof.jp>',
         to,
         subject: `今週のあなたのプルーフ｜REALPROOF Weekly`,
         html,

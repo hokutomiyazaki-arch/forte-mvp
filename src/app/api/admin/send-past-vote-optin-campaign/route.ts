@@ -29,7 +29,7 @@ export const runtime = 'nodejs'
  *   - DB UPDATE は本ルートで一切行わない (オプトイン UPDATE は受付API側 = /api/past-vote-optin)
  */
 
-const FROM_EMAIL = 'REAL PROOF <info@proof-app.jp>'
+const FROM_EMAIL = 'REAL PROOF <noreply@realproof.jp>'
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://realproof.jp'
 
 type SendResult = {

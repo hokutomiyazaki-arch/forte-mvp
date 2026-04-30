@@ -11,7 +11,7 @@
  *
  * 既存パターン踏襲:
  *   - Resend SDK ではなく fetch 直叩き (welcome-email/route.ts と統一)
- *   - 送信元: REAL PROOF <info@proof-app.jp>
+ *   - 送信元: REAL PROOF <noreply@realproof.jp>
  *
  * スキップ条件 (200 で skipped を返す):
  *   - reward_optin が false / 未設定                   → 'reward_optin_false'
@@ -190,7 +190,7 @@ export async function POST(req: NextRequest) {
       },
       cache: 'no-store',
       body: JSON.stringify({
-        from: 'REAL PROOF <info@proof-app.jp>',
+        from: 'REAL PROOF <noreply@realproof.jp>',
         to: recipientEmail,
         subject,
         html,
