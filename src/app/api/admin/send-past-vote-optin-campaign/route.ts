@@ -32,7 +32,11 @@ export const runtime = 'nodejs'
 const FROM_EMAIL = 'REAL PROOF <info@proof-app.jp>'
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://realproof.jp'
 
-type SendResult = { ok: true; messageId: string } | { ok: false; error: string }
+type SendResult = {
+  ok: boolean
+  messageId: string | null
+  error: string | null
+}
 
 async function sendOptinEmail(params: {
   to: string
@@ -68,18 +72,20 @@ async function sendOptinEmail(params: {
       const body = await res.text().catch(() => '')
       return {
         ok: false,
+        messageId: null,
         error: `Resend ${res.status}: ${body.slice(0, 200) || 'no body'}`,
       }
     }
 
     const data: any = await res.json().catch(() => ({}))
     if (!data?.id) {
-      return { ok: false, error: 'no message id returned' }
+      return { ok: false, messageId: null, error: 'no message id returned' }
     }
-    return { ok: true, messageId: String(data.id) }
+    return { ok: true, messageId: String(data.id), error: null }
   } catch (e) {
     return {
       ok: false,
+      messageId: null,
       error: e instanceof Error ? e.message : 'unknown error',
     }
   }
@@ -153,24 +159,24 @@ export async function GET(req: NextRequest) {
 
       if (result.ok) {
         console.log(
-          `[past-vote-optin-campaign] test_only ${masked} → ✓ (${result.messageId})`
+          `[past-vote-optin-campaign] test_only ${masked} → ✓ (${result.messageId ?? 'unknown'})`
         )
         return NextResponse.json({
           mode: 'test_only',
           to: normalized,
           sent: true,
-          message_id: result.messageId,
+          message_id: result.messageId ?? 'unknown',
         })
       } else {
         console.error(
-          `[past-vote-optin-campaign] test_only ${masked} → ✗ ${result.error}`
+          `[past-vote-optin-campaign] test_only ${masked} → ✗ ${result.error ?? 'unknown'}`
         )
         return NextResponse.json(
           {
             mode: 'test_only',
             to: normalized,
             sent: false,
-            error: result.error,
+            error: result.error ?? 'unknown',
           },
           { status: 502 }
         )
@@ -251,13 +257,13 @@ export async function GET(req: NextRequest) {
       if (result.ok) {
         sent++
         console.log(
-          `[past-vote-optin-campaign] [${i + 1}/${targets.length}] ${masked} → ✓ (${result.messageId})`
+          `[past-vote-optin-campaign] [${i + 1}/${targets.length}] ${masked} → ✓ (${result.messageId ?? 'unknown'})`
         )
       } else {
         failed++
-        errors.push({ email: masked, reason: result.error })
+        errors.push({ email: masked, reason: result.error ?? 'unknown' })
         console.error(
-          `[past-vote-optin-campaign] [${i + 1}/${targets.length}] ${masked} → ✗ ${result.error}`
+          `[past-vote-optin-campaign] [${i + 1}/${targets.length}] ${masked} → ✗ ${result.error ?? 'unknown'}`
         )
       }
 
