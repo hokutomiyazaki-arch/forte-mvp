@@ -12,6 +12,7 @@ import VoiceShareModal from '@/components/VoiceShareCard'
 import { VoiceCommentCard } from '@/components/card/VoiceCommentCard'
 import VoiceSuggestionPopup, { type SuggestedTheme } from '@/components/voice/VoiceSuggestionPopup'
 import type { VoiceComment } from '@/components/card/types'
+import VoiceReplyModal from '@/components/VoiceReplyModal'
 import CertificationModal from '@/components/CertificationModal'
 import ImageCropper from '@/components/ImageCropper'
 import CardModeSwitch from '@/components/CardModeSwitch'
@@ -153,6 +154,9 @@ export default function DashboardPage() {
   const [phraseSelecting, setPhraseSelecting] = useState<string | null>(null)
   const [selectedPhrases, setSelectedPhrases] = useState<Record<string, number>>({})
   const [shareModalVoice, setShareModalVoice] = useState<{ id: string; comment: string; created_at: string } | null>(null)
+
+  // Phase 3 Voice 返信: 返信モーダルを開く対象の vote。null なら閉。
+  const [replyModalVote, setReplyModalVote] = useState<VoiceComment | null>(null)
 
   // Voice カードテーマ: DB生データをそのまま保持（モーダル内で解決）
   const [savedVoiceThemeData, setSavedVoiceThemeData] = useState<any>(null)
@@ -3104,6 +3108,48 @@ export default function DashboardPage() {
                   {/* 顔写真 / 苗字 / 引用符 / コメント / 日時 / 常連バッジ */}
                   <VoiceCommentCard vote={c} />
 
+                  {/* Phase 3: 返信ボタン（コメント付き Voice のみ表示） */}
+                  <div style={{ marginTop: 10 }} onClick={e => e.stopPropagation()}>
+                    {c.reply ? (
+                      <div>
+                        <div style={{
+                          fontSize: 11, color: '#888888', marginBottom: 6,
+                          padding: '8px 10px', background: '#FAF8F4',
+                          border: '1px solid #E8E4DC', borderRadius: 8,
+                          lineHeight: 1.5,
+                        }}>
+                          <span style={{ fontWeight: 600, color: '#1A1A2E' }}>あなたの返信: </span>
+                          {c.reply.reply_text.length > 50
+                            ? c.reply.reply_text.slice(0, 50) + '…'
+                            : c.reply.reply_text}
+                        </div>
+                        <button
+                          onClick={() => setReplyModalVote(c)}
+                          style={{
+                            padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 600,
+                            background: 'transparent', color: '#888888',
+                            border: '1px solid #D0CCC4', cursor: 'pointer',
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = '#1A1A2E'; e.currentTarget.style.color = '#1A1A2E' }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = '#D0CCC4'; e.currentTarget.style.color = '#888888' }}
+                        >
+                          返信を編集
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setReplyModalVote(c)}
+                        style={{
+                          padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 700,
+                          background: '#1A1A2E', color: '#FFFFFF',
+                          border: '1px solid #1A1A2E', cursor: 'pointer',
+                        }}
+                      >
+                        返信を書く
+                      </button>
+                    )}
+                  </div>
+
                   {/* 検索カード設定ボタン（カード直下に独立配置） */}
                   <div style={{ marginTop: 10 }} onClick={e => e.stopPropagation()}>
                     {featuredVoiceId === c.id ? (
@@ -3229,6 +3275,37 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Phase 3: Voice 返信モーダル */}
+      {replyModalVote && (
+        <VoiceReplyModal
+          isOpen={true}
+          onClose={() => setReplyModalVote(null)}
+          vote={{
+            id: replyModalVote.id,
+            comment: replyModalVote.comment,
+            auth_display_name: replyModalVote.auth_display_name,
+            client_photo_url: replyModalVote.client_photo_url,
+            display_mode: replyModalVote.display_mode,
+            created_at: replyModalVote.created_at,
+          }}
+          existingReply={
+            replyModalVote.reply
+              ? {
+                  id: replyModalVote.reply.id,
+                  reply_text: replyModalVote.reply.reply_text,
+                  delivered_at: replyModalVote.reply.delivered_at,
+                }
+              : null
+          }
+          onSaved={(reply) => {
+            const targetId = replyModalVote.id
+            setVoiceComments((prev) =>
+              prev.map((v) => (v.id === targetId ? { ...v, reply } : v))
+            )
+          }}
+        />
+      )}
 
       {/* Voice Share Modal */}
       {shareModalVoice && pro && (

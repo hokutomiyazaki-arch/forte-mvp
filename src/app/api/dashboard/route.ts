@@ -252,23 +252,53 @@ export async function GET() {
     }
 
     // コメント付きを抽出 + enrichment + PII 除外
-    const voiceComments = allVotes
-      .filter(v => v.comment && v.comment.trim() !== '')
-      .map(v => {
-        const voter_vote_count = v.normalized_email
-          ? (countByEmail.get(v.normalized_email) ?? 1)
-          : 1
-        const voter_pro = v.voter_professional_id
-          ? voterProMap.get(v.voter_professional_id) ?? null
-          : null
-        // ★ PII 除外: normalized_email / voter_professional_id をレスポンスから外す
-        const { normalized_email, voter_professional_id, ...safe } = v
-        return {
-          ...safe,
-          voter_pro,
-          voter_vote_count,
-        }
-      })
+    const commentedVotes = allVotes.filter(v => v.comment && v.comment.trim() !== '')
+
+    // Phase 3 Voice 返信: vote_replies を一括取得（is_deleted=false）
+    // 仕様書 §4-3: voiceComments の各 vote に reply を付与（N+1 回避のため一括 IN クエリ）
+    const commentedVoteIds = commentedVotes.map(v => v.id)
+    const replyMap = new Map<string, {
+      id: string
+      reply_text: string
+      created_at: string
+      updated_at: string
+      delivered_at: string | null
+      delivered_via: 'line' | 'email' | null
+    }>()
+    if (commentedVoteIds.length > 0) {
+      const { data: replies } = await supabase
+        .from('vote_replies')
+        .select('id, vote_id, reply_text, created_at, updated_at, delivered_at, delivered_via')
+        .in('vote_id', commentedVoteIds)
+        .eq('is_deleted', false)
+      for (const r of (replies || [])) {
+        replyMap.set(r.vote_id, {
+          id: r.id,
+          reply_text: r.reply_text,
+          created_at: r.created_at,
+          updated_at: r.updated_at,
+          delivered_at: r.delivered_at,
+          delivered_via: r.delivered_via,
+        })
+      }
+    }
+
+    const voiceComments = commentedVotes.map(v => {
+      const voter_vote_count = v.normalized_email
+        ? (countByEmail.get(v.normalized_email) ?? 1)
+        : 1
+      const voter_pro = v.voter_professional_id
+        ? voterProMap.get(v.voter_professional_id) ?? null
+        : null
+      // ★ PII 除外: normalized_email / voter_professional_id をレスポンスから外す
+      const { normalized_email, voter_professional_id, ...safe } = v
+      return {
+        ...safe,
+        voter_pro,
+        voter_vote_count,
+        reply: replyMap.get(v.id) ?? null,
+      }
+    })
 
     // ────────────────────────────────────────
     // pending招待 (org_membersから)
