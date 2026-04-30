@@ -203,6 +203,7 @@ export async function GET(req: NextRequest) {
       .in('auth_method', ['email', 'line', 'email_code', 'google', 'nfc_legacy'])
       .not('normalized_email', 'is', null)
       .not('normalized_email', 'like', '+%')
+      .not('normalized_email', 'like', '%@line.realproof.jp')
       .eq('reward_optin', false)
       .eq('status', 'confirmed')
 
@@ -233,8 +234,45 @@ export async function GET(req: NextRequest) {
     }
     const targets = Array.from(uniqueMap.values())
 
+    // プロ自身を配信対象から除外 (professionals.contact_email との一致)
+    const { data: proRows, error: proErr } = await supabaseProd
+      .from('professionals')
+      .select('contact_email')
+      .is('deactivated_at', null)
+      .not('contact_email', 'is', null)
+
+    if (proErr) {
+      console.error(
+        '[past-vote-optin-campaign] failed to load professionals for exclusion',
+        proErr.message
+      )
+      return NextResponse.json(
+        {
+          error: 'failed to load professionals for exclusion',
+          details: proErr.message,
+        },
+        { status: 500 }
+      )
+    }
+
+    const proEmails = new Set(
+      (proRows ?? [])
+        .map((r: any) => r.contact_email?.toLowerCase())
+        .filter((e: string | undefined): e is string => !!e)
+    )
+
+    const excludedProCount = targets.filter((t) =>
+      proEmails.has(t.email.toLowerCase())
+    ).length
+    const filteredTargets = targets.filter(
+      (t) => !proEmails.has(t.email.toLowerCase())
+    )
+
     console.log(
-      `[past-vote-optin-campaign] production START: ${targets.length} targets`
+      `[past-vote-optin-campaign] excluded ${excludedProCount} pro voters from targets`
+    )
+    console.log(
+      `[past-vote-optin-campaign] production START: ${filteredTargets.length} targets`
     )
 
     const startTime = Date.now()
@@ -243,8 +281,8 @@ export async function GET(req: NextRequest) {
     let failed = 0
 
     // 順次送信 (Promise.all 並列禁止: Resend 100req/sec 超過対策)
-    for (let i = 0; i < targets.length; i++) {
-      const target = targets[i]
+    for (let i = 0; i < filteredTargets.length; i++) {
+      const target = filteredTargets[i]
       const masked = maskEmail(target.email)
 
       const result = await sendOptinEmail({
@@ -257,13 +295,13 @@ export async function GET(req: NextRequest) {
       if (result.ok) {
         sent++
         console.log(
-          `[past-vote-optin-campaign] [${i + 1}/${targets.length}] ${masked} → ✓ (${result.messageId ?? 'unknown'})`
+          `[past-vote-optin-campaign] [${i + 1}/${filteredTargets.length}] ${masked} → ✓ (${result.messageId ?? 'unknown'})`
         )
       } else {
         failed++
         errors.push({ email: masked, reason: result.error ?? 'unknown' })
         console.error(
-          `[past-vote-optin-campaign] [${i + 1}/${targets.length}] ${masked} → ✗ ${result.error ?? 'unknown'}`
+          `[past-vote-optin-campaign] [${i + 1}/${filteredTargets.length}] ${masked} → ✗ ${result.error ?? 'unknown'}`
         )
       }
 
@@ -278,7 +316,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       mode: 'production',
-      total: targets.length,
+      total: filteredTargets.length,
+      excluded_pro_count: excludedProCount,
       sent,
       failed,
       duration_seconds: duration,
@@ -300,6 +339,7 @@ export async function GET(req: NextRequest) {
     .in('auth_method', ['email', 'line', 'email_code', 'google', 'nfc_legacy'])
     .not('normalized_email', 'is', null)
     .not('normalized_email', 'like', '+%')
+    .not('normalized_email', 'like', '%@line.realproof.jp')
     .eq('reward_optin', false)
     .eq('status', 'confirmed')
 
@@ -322,18 +362,57 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const targetCount = dedupMap.size
-  const sampleRecipients = Array.from(dedupMap.entries())
-    .slice(0, 5)
-    .map(([email, name]) => ({ email, name }))
+  // dedupMap → 配列化してプロ自身を除外
+  const dedupedTargets = Array.from(dedupMap.entries()).map(
+    ([email, name]) => ({ email, name })
+  )
+
+  // プロ自身を配信対象から除外 (professionals.contact_email との一致)
+  const { data: proRows, error: proErr } = await supabase
+    .from('professionals')
+    .select('contact_email')
+    .is('deactivated_at', null)
+    .not('contact_email', 'is', null)
+
+  if (proErr) {
+    console.error(
+      '[past-vote-optin-campaign] failed to load professionals for exclusion',
+      proErr.message
+    )
+    return NextResponse.json(
+      {
+        error: 'failed to load professionals for exclusion',
+        details: proErr.message,
+      },
+      { status: 500 }
+    )
+  }
+
+  const proEmails = new Set(
+    (proRows ?? [])
+      .map((r: any) => r.contact_email?.toLowerCase())
+      .filter((e: string | undefined): e is string => !!e)
+  )
+
+  const excludedProCount = dedupedTargets.filter((t) =>
+    proEmails.has(t.email.toLowerCase())
+  ).length
+  const filteredTargets = dedupedTargets.filter(
+    (t) => !proEmails.has(t.email.toLowerCase())
+  )
+
+  const targetCount = filteredTargets.length
+  const sampleRecipients = filteredTargets.slice(0, 5)
 
   console.log(
-    `[past-vote-optin-campaign] dry_run: rows=${count ?? '?'} dedup=${targetCount}`
+    `[past-vote-optin-campaign] dry_run: rows=${count ?? '?'} dedup=${dedupedTargets.length} excluded_pro=${excludedProCount} final=${targetCount}`
   )
 
   return NextResponse.json({
     mode: 'dry_run',
     target_count: targetCount,
+    excluded_line_dummies: '43 (estimated)',
+    excluded_pro_count: excludedProCount,
     sample_recipients: sampleRecipients,
     estimated_send_time_seconds: Math.max(1, Math.ceil(targetCount / 100)),
     note: 'Email template and send logic not implemented yet (Step 1 scope: dry_run only)',
