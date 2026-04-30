@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
           },
           body: JSON.stringify({
             from: 'REAL PROOF <noreply@realproof.jp>',
-            to: 'info@proof-app.jp',
+            to: 'hokutomiyazaki312@gmail.com',
             subject: `[不具合報告] ${screen || '画面不明'}`,
             html: `
               <div style="max-width:480px;margin:0 auto;font-family:sans-serif;">
