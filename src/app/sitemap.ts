@@ -16,24 +16,22 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
   ]
 
-  // 公開カードページ（name 設定済み & deactivated でないプロのみ）
+  // 公開カードページ（setup_completed=true & deactivated でないプロのみ）
   try {
     const supabase = getSupabaseAdmin()
     const { data: professionals } = await supabase
       .from('professionals')
-      .select('id, updated_at, name')
-      .not('name', 'is', null)
+      .select('id, updated_at')
+      .eq('setup_completed', true)
       .is('deactivated_at', null)
       .order('updated_at', { ascending: false })
 
-    const proPages: MetadataRoute.Sitemap = (professionals || [])
-      .filter((pro) => pro.name && pro.name.trim().length > 0)
-      .map((pro) => ({
-        url: `${baseUrl}/card/${pro.id}`,
-        lastModified: pro.updated_at ? new Date(pro.updated_at) : new Date(),
-        changeFrequency: 'weekly',
-        priority: 0.8,
-      }))
+    const proPages: MetadataRoute.Sitemap = (professionals || []).map((pro) => ({
+      url: `${baseUrl}/card/${pro.id}`,
+      lastModified: pro.updated_at ? new Date(pro.updated_at) : new Date(),
+      changeFrequency: 'weekly',
+      priority: 0.8,
+    }))
 
     return [...staticPages, ...proPages]
   } catch (err) {
