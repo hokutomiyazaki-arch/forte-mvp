@@ -1,23 +1,97 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import {
+  generateSubject,
+  generateTextBody,
+  generateHtmlBody,
+} from '@/lib/email-templates/past-vote-optin-email'
+import { generateOptinToken } from '@/lib/optin-token'
 
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
 /**
  * GET /api/admin/send-past-vote-optin-campaign
  *
- * Phase 4: 過去票オプトインメール一斉配信 — Step 1 スケルトン (dry_run のみ)
+ * Phase 4: 過去票オプトインメール一斉配信
  * 詳細仕様: phase4-past-vote-optin-instructions.md
  *
- * モード:
- *   - ?dry_run=true            … 対象抽出 + 件数 + 先頭5件サンプルを返す
- *   - ?test_only=true (Step 6) … 1通だけテスト送信 (未実装)
- *   - 無指定 = production (Step 6) … 一斉配信 (未実装)
+ * モード (優先順位: dry_run > test_only > production):
+ *   - ?dry_run=true                                                     … 対象抽出 + 件数 + 先頭5件サンプルを返す (Step 1 実装、変更禁止)
+ *   - ?test_only=true&test_email=xxx@example.com                        … 1通だけテスト送信、DBは触らない、displayName='テスト' 固定
+ *   - ?confirm=YES_I_REALLY_WANT_TO_SEND_TO_735                          … 一斉配信。confirm 完全一致必須
  *
  * 認証: ?key=<ADMIN_API_KEY>
  *
- * 注意: 環境変数の値は console.log にも response にも絶対に含めない。
+ * 注意:
+ *   - 環境変数の値は console.log にも response にも絶対に含めない
+ *   - メアドの生値は console.log / errors[] に出さない (maskEmail 経由)
+ *   - DB UPDATE は本ルートで一切行わない (オプトイン UPDATE は受付API側 = /api/past-vote-optin)
  */
+
+const FROM_EMAIL = 'REAL PROOF <info@proof-app.jp>'
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://realproof.jp'
+
+type SendResult = { ok: true; messageId: string } | { ok: false; error: string }
+
+async function sendOptinEmail(params: {
+  to: string
+  normalizedEmail: string
+  displayName: string | null
+  resendKey: string
+}): Promise<SendResult> {
+  try {
+    const token = generateOptinToken(params.normalizedEmail)
+    const optinUrl = `${SITE_URL}/api/past-vote-optin?token=${token}&email=${encodeURIComponent(params.normalizedEmail)}`
+
+    const subject = generateSubject()
+    const text = generateTextBody(params.displayName, optinUrl)
+    const html = generateHtmlBody(params.displayName, optinUrl)
+
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${params.resendKey}`,
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store',
+      body: JSON.stringify({
+        from: FROM_EMAIL,
+        to: params.to,
+        subject,
+        text,
+        html,
+      }),
+    })
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      return {
+        ok: false,
+        error: `Resend ${res.status}: ${body.slice(0, 200) || 'no body'}`,
+      }
+    }
+
+    const data: any = await res.json().catch(() => ({}))
+    if (!data?.id) {
+      return { ok: false, error: 'no message id returned' }
+    }
+    return { ok: true, messageId: String(data.id) }
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : 'unknown error',
+    }
+  }
+}
+
+function maskEmail(email: string): string {
+  const [local, domain] = email.split('@')
+  if (!local || !domain) return '***'
+  const visible = local.slice(0, 4)
+  return `${visible}***@${domain}`
+}
+
 export async function GET(req: NextRequest) {
   // ADMIN_API_KEY 未設定チェック (env 値そのものは出力しない)
   if (!process.env.ADMIN_API_KEY) {
@@ -34,18 +108,176 @@ export async function GET(req: NextRequest) {
   }
 
   const dryRun = req.nextUrl.searchParams.get('dry_run') === 'true'
+  const testOnly = req.nextUrl.searchParams.get('test_only') === 'true'
+  const testEmail = req.nextUrl.searchParams.get('test_email')
+  const confirm = req.nextUrl.searchParams.get('confirm')
 
-  // Step 1 では dry_run 以外は未実装。誤って production を叩く事故を防ぐため
-  // test_only / 無指定 (= production) は明示的に 400 で拒否する。
+  // モード優先順位: dry_run > test_only > production
+  // dry_run が true なら他のフラグは全て無視 (production 誤爆事故対策)
   if (!dryRun) {
-    return NextResponse.json(
-      {
-        error: 'Not implemented yet, see Step 6',
-        code: 'NOT_IMPLEMENTED',
-        hint: 'Use ?dry_run=true to preview targets while Step 1 only',
-      },
-      { status: 400 }
+    // RESEND_API_KEY は test_only / production 共通で必須
+    const resendKey = process.env.RESEND_API_KEY
+    if (!resendKey) {
+      return NextResponse.json(
+        { error: 'RESEND_API_KEY env var not set' },
+        { status: 500 }
+      )
+    }
+
+    // OPTIN_SECRET は HMAC token 生成に必須 (generateOptinToken が throw する前にここで弾く)
+    if (!process.env.OPTIN_SECRET) {
+      return NextResponse.json(
+        { error: 'OPTIN_SECRET env var not set' },
+        { status: 500 }
+      )
+    }
+
+    // === test_only モード ===
+    if (testOnly) {
+      if (!testEmail || typeof testEmail !== 'string' || testEmail.trim() === '') {
+        return NextResponse.json(
+          { error: 'test_only mode requires test_email parameter' },
+          { status: 400 }
+        )
+      }
+
+      const normalized = testEmail.toLowerCase().trim()
+      const masked = maskEmail(normalized)
+
+      const result = await sendOptinEmail({
+        to: normalized,
+        normalizedEmail: normalized,
+        displayName: 'テスト',
+        resendKey,
+      })
+
+      if (result.ok) {
+        console.log(
+          `[past-vote-optin-campaign] test_only ${masked} → ✓ (${result.messageId})`
+        )
+        return NextResponse.json({
+          mode: 'test_only',
+          to: normalized,
+          sent: true,
+          message_id: result.messageId,
+        })
+      } else {
+        console.error(
+          `[past-vote-optin-campaign] test_only ${masked} → ✗ ${result.error}`
+        )
+        return NextResponse.json(
+          {
+            mode: 'test_only',
+            to: normalized,
+            sent: false,
+            error: result.error,
+          },
+          { status: 502 }
+        )
+      }
+    }
+
+    // === production モード ===
+    // confirm の完全一致チェック (大文字小文字 / 空白も含めて厳密に)
+    if (confirm !== 'YES_I_REALLY_WANT_TO_SEND_TO_735') {
+      return NextResponse.json(
+        {
+          error:
+            'production mode requires confirm=YES_I_REALLY_WANT_TO_SEND_TO_735',
+        },
+        { status: 400 }
+      )
+    }
+
+    // 対象抽出 (dry_run と同じ抽出条件)
+    const supabaseProd = getSupabaseAdmin()
+    const { data: rows, error: queryError } = await supabaseProd
+      .from('votes')
+      .select('normalized_email, auth_display_name')
+      .in('auth_method', ['email', 'line', 'email_code', 'google', 'nfc_legacy'])
+      .not('normalized_email', 'is', null)
+      .not('normalized_email', 'like', '+%')
+      .eq('reward_optin', false)
+      .eq('status', 'confirmed')
+
+    if (queryError) {
+      console.error(
+        '[past-vote-optin-campaign] production query error:',
+        queryError.message
+      )
+      return NextResponse.json(
+        { error: 'votes query failed', details: queryError.message },
+        { status: 500 }
+      )
+    }
+
+    // 重複除去 (normalized_email 単位、初出の auth_display_name を保持)
+    const uniqueMap = new Map<
+      string,
+      { email: string; name: string | null }
+    >()
+    for (const row of rows ?? []) {
+      if (!row.normalized_email) continue
+      if (!uniqueMap.has(row.normalized_email)) {
+        uniqueMap.set(row.normalized_email, {
+          email: row.normalized_email,
+          name: row.auth_display_name ?? null,
+        })
+      }
+    }
+    const targets = Array.from(uniqueMap.values())
+
+    console.log(
+      `[past-vote-optin-campaign] production START: ${targets.length} targets`
     )
+
+    const startTime = Date.now()
+    const errors: Array<{ email: string; reason: string }> = []
+    let sent = 0
+    let failed = 0
+
+    // 順次送信 (Promise.all 並列禁止: Resend 100req/sec 超過対策)
+    for (let i = 0; i < targets.length; i++) {
+      const target = targets[i]
+      const masked = maskEmail(target.email)
+
+      const result = await sendOptinEmail({
+        to: target.email,
+        normalizedEmail: target.email,
+        displayName: target.name,
+        resendKey,
+      })
+
+      if (result.ok) {
+        sent++
+        console.log(
+          `[past-vote-optin-campaign] [${i + 1}/${targets.length}] ${masked} → ✓ (${result.messageId})`
+        )
+      } else {
+        failed++
+        errors.push({ email: masked, reason: result.error })
+        console.error(
+          `[past-vote-optin-campaign] [${i + 1}/${targets.length}] ${masked} → ✗ ${result.error}`
+        )
+      }
+
+      // Resend レート制限 (100req/sec) 対策で 15ms sleep (実効 ~66req/sec)
+      await new Promise((r) => setTimeout(r, 15))
+    }
+
+    const duration = Math.round((Date.now() - startTime) / 1000)
+    console.log(
+      `[past-vote-optin-campaign] DONE. sent=${sent} failed=${failed} duration=${duration}s`
+    )
+
+    return NextResponse.json({
+      mode: 'production',
+      total: targets.length,
+      sent,
+      failed,
+      duration_seconds: duration,
+      errors,
+    })
   }
 
   const supabase = getSupabaseAdmin()
