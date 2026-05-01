@@ -90,8 +90,11 @@ export function verifyChain(
       }
     }
 
-    // ソフトデリート済み: ハッシュ再計算はスキップ、チェーンリンクのみ検証
-    if (vote.voter_email === DELETED_MARKER) {
+    // ソフトデリート済み (voter_email または comment が DELETED_MARKER):
+    // ハッシュ再計算はスキップ、チェーンリンク (prev_hash) のみ検証する。
+    // - voter_email === '[deleted]' : ADMIN フル ソフトデリート (admin/soft-delete-vote)
+    // - comment === '[deleted]'     : プロによるコメント削除 (dashboard/voices/.../remove-comment)
+    if (vote.voter_email === DELETED_MARKER || vote.comment === DELETED_MARKER) {
       continue
     }
 

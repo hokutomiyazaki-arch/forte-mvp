@@ -92,6 +92,7 @@ export async function GET() {
       .eq('status', 'confirmed')
       .not('comment', 'is', null)
       .neq('comment', '')
+      .neq('comment', '[deleted]')
       .neq('vote_type', 'hopeful')
       .order('created_at', { ascending: false })
     if (votesErr) throw votesErr
