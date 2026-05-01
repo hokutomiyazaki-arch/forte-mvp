@@ -128,7 +128,7 @@ export async function getCardData(
     supabase.from('votes')
       .select('id, comment, created_at, normalized_email, display_mode, client_photo_url, auth_display_name, voter_professional_id')
       .eq('professional_id', proId).eq('status', 'confirmed')
-      .not('comment', 'is', null).neq('comment', '')
+      .not('comment', 'is', null).neq('comment', '').neq('comment', '[deleted]')
       .order('created_at', { ascending: false }),
     // 7. 総投票数
     supabase.from('votes').select('*', { count: 'exact', head: true })

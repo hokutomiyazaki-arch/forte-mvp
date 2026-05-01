@@ -157,6 +157,7 @@ export default async function CardLayout({
     .eq('status', 'confirmed')
     .not('comment', 'is', null)
     .neq('comment', '')
+    .neq('comment', '[deleted]')
     .order('created_at', { ascending: false })
 
   const comments = (commentRows || []).filter(
