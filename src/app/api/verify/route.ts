@@ -37,6 +37,7 @@ export async function GET() {
       totalProofs: votes.length,
       verified: result.valid,
       brokenAt: result.brokenAt ?? null,
+      formats: result.formats,
       firstProofDate: votes[0].created_at,
       lastProofDate: votes[votes.length - 1].created_at,
       message: result.valid

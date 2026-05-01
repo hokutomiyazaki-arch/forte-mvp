@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { clerkClient } from '@clerk/nextjs/server'
 
 import { normalizeEmail } from '@/lib/normalize-email'
-import { computeProofHash, generateNonce, GENESIS_HASH } from '@/lib/proof-chain'
+import { computeProofHash, generateNonce, GENESIS_HASH, normalizeTimestampForHash } from '@/lib/proof-chain'
 import { checkVoterIsPro } from '@/lib/voter-pro-check'
 import { checkVoteDuplicates } from '@/lib/vote-duplicate-check'
 import { claimLineCallback } from '@/lib/line-idempotency'
@@ -354,7 +354,8 @@ export async function GET(request: NextRequest) {
 
     const prevHash = latestVote?.proof_hash || GENESIS_HASH
     const nonce = generateNonce()
-    const createdAt = new Date().toISOString()
+    // hash chain 用に "+00:00" 形式で統一 (DB 返却値と一致させる)
+    const createdAt = normalizeTimestampForHash(new Date().toISOString())
 
     const proofHash = computeProofHash({
       voter_email: normalizeEmail(email),

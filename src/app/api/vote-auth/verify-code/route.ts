@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { normalizeEmail } from '@/lib/normalize-email'
-import { computeProofHash, generateNonce, GENESIS_HASH } from '@/lib/proof-chain'
+import { computeProofHash, generateNonce, GENESIS_HASH, normalizeTimestampForHash } from '@/lib/proof-chain'
 import { checkVoterIsPro } from '@/lib/voter-pro-check'
 import { checkVoteDuplicates } from '@/lib/vote-duplicate-check'
 import { markTokenUsed } from '@/lib/qr-token'
@@ -120,7 +120,10 @@ export async function POST(req: NextRequest) {
 
     const prevHash = latestVote?.proof_hash || GENESIS_HASH
     const nonce = generateNonce()
-    const createdAt = new Date().toISOString()
+    // Date.toISOString() は "Z" 末尾。Postgres timestamptz は "+00:00" を返すため、
+    // 「INSERT 時 hash 計算」と「verify 時 SELECT 取得値」を一致させるため
+    // hash chain 用の format は "+00:00" に統一する。
+    const createdAt = normalizeTimestampForHash(new Date().toISOString())
 
     const proofHash = computeProofHash({
       voter_email: normalizeEmail(email),
