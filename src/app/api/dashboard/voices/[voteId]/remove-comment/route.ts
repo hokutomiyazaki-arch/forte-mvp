@@ -82,7 +82,6 @@ export async function POST(
       .from('votes')
       .update({
         comment: DELETED_MARKER,
-        updated_at: new Date().toISOString(),
       })
       .eq('id', voteId)
     if (updErr) throw updErr
