@@ -147,6 +147,7 @@ export default function CardPage() {
   const tabParam = searchParams.get('tab')
   const highlightParam = searchParams.get('highlight') || ''
   const highlightScrollRef = useRef(false)
+  const hashScrollRef = useRef(false)
   // Clerk auth removed from client — handled server-side in /api/card/[id]
   const [pro, setPro] = useState<Professional | null>(null)
   const [votes, setVotes] = useState<VoteSummary[]>([])
@@ -336,6 +337,39 @@ export default function CardPage() {
       }, 200)
     }
   }, [highlightParam, activeTab, loading])
+
+  // メール/LINE通知からのディープリンク `#vote-{vote_id}` 対応
+  // - データ読み込み完了後に1度だけ発火（hashScrollRef でガード）
+  // - Voicesタブを開いてから setTimeout で DOM 描画を待ってスクロール+ハイライト
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (loading || hashScrollRef.current) return
+
+    const hash = window.location.hash
+    if (!hash || !hash.startsWith('#vote-')) return
+
+    const voteId = hash.replace('#vote-', '')
+    if (!voteId) return
+
+    hashScrollRef.current = true
+    setActiveTab('voices')
+
+    const scrollTimer = setTimeout(() => {
+      const target = document.getElementById(`vote-${voteId}`)
+      if (!target) return
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      setTapHighlightVoteId(voteId)
+    }, 200)
+
+    const clearHighlightTimer = setTimeout(() => {
+      setTapHighlightVoteId(null)
+    }, 3200)
+
+    return () => {
+      clearTimeout(scrollTimer)
+      clearTimeout(clearHighlightTimer)
+    }
+  }, [loading])
 
   // 順位メダル取得（1つだけ）
   useEffect(() => {
