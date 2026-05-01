@@ -38,7 +38,6 @@ export function buildVoiceReplyFlexMessage(params: {
             size: 'xxs',
             color: GOLD,
             weight: 'bold',
-            letterSpacing: '2px',
           },
           {
             type: 'text',
