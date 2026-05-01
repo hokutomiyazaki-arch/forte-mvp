@@ -44,6 +44,11 @@ type ClientDisplay =
     }
 
 function buildClientDisplay(vote: VoteRow): ClientDisplay {
+  // 最優先: display_mode='hidden' なら auth_method を問わず非公開表示
+  // (投票時に「写真出さない」を選んだケース、プロが事後削除したケース両方を含む)
+  if (vote.display_mode === 'hidden') {
+    return { type: 'auth_only', label: '公開設定: 非公開', icon: 'default' }
+  }
   if (vote.auth_method === 'google' || vote.auth_method === 'line') {
     return {
       type: 'rich',
