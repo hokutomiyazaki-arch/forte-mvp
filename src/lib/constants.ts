@@ -6,8 +6,66 @@ export const PROVEN_THRESHOLD = 15;
 /** Lv.2: 30プルーフ以上で SPECIALIST 認定（賞状・カード申請可能） */
 export const SPECIALIST_THRESHOLD = 30;
 
-/** Lv.3: 50プルーフ以上で MASTER 認定（将来用、人柄ティアで使用） */
+/** Lv.3: 50プルーフ以上で MASTER 認定 */
 export const MASTER_THRESHOLD = 50;
+
+/** Lv.4: 100プルーフ以上で LEGEND 認定 */
+export const LEGEND_THRESHOLD = 100;
+
+// ===== 認定ティア判定ヘルパー =====
+
+export type CertificationTier = 'PROVEN' | 'SPECIALIST' | 'MASTER' | 'LEGEND'
+/** 申請対象ティア (PROVEN は申請対象外、SPECIALIST 以上のみ) */
+export type CertifiableTier = 'SPECIALIST' | 'MASTER' | 'LEGEND'
+
+/**
+ * 票数からティアを判定。閾値未満は null。
+ * 優先順: LEGEND > MASTER > SPECIALIST > PROVEN
+ */
+export function getCertificationTier(voteCount: number): CertificationTier | null {
+  if (voteCount >= LEGEND_THRESHOLD) return 'LEGEND'
+  if (voteCount >= MASTER_THRESHOLD) return 'MASTER'
+  if (voteCount >= SPECIALIST_THRESHOLD) return 'SPECIALIST'
+  if (voteCount >= PROVEN_THRESHOLD) return 'PROVEN'
+  return null
+}
+
+/** 申請対象ティア (SPECIALIST 以上) のみ返す。PROVEN / 未達は null。 */
+export function getCertifiableTier(voteCount: number): CertifiableTier | null {
+  const tier = getCertificationTier(voteCount)
+  if (tier === 'SPECIALIST' || tier === 'MASTER' || tier === 'LEGEND') return tier
+  return null
+}
+
+/**
+ * 次のティアと残り票数。
+ * - PROVEN 未達 / PROVEN: Next = SPECIALIST (30)
+ * - SPECIALIST: Next = MASTER (50)
+ * - MASTER: Next = LEGEND (100)
+ * - LEGEND: null (最高ティア達成)
+ */
+export function getNextTier(
+  voteCount: number
+): { tier: CertifiableTier; threshold: number; remaining: number } | null {
+  if (voteCount < SPECIALIST_THRESHOLD) {
+    return { tier: 'SPECIALIST', threshold: SPECIALIST_THRESHOLD, remaining: SPECIALIST_THRESHOLD - voteCount }
+  }
+  if (voteCount < MASTER_THRESHOLD) {
+    return { tier: 'MASTER', threshold: MASTER_THRESHOLD, remaining: MASTER_THRESHOLD - voteCount }
+  }
+  if (voteCount < LEGEND_THRESHOLD) {
+    return { tier: 'LEGEND', threshold: LEGEND_THRESHOLD, remaining: LEGEND_THRESHOLD - voteCount }
+  }
+  return null
+}
+
+/** ティア表示メタ (アイコン、ラベル) */
+export const TIER_DISPLAY: Record<CertificationTier, { icon: string; label: string }> = {
+  PROVEN: { icon: '🛡', label: 'PROVEN' },
+  SPECIALIST: { icon: '🏆', label: 'SPECIALIST' },
+  MASTER: { icon: '👑', label: 'MASTER' },
+  LEGEND: { icon: '💎', label: 'LEGEND' },
+}
 
 /** PROVEN / SPECIALIST 共通ゴールドカラー */
 export const PROVEN_GOLD = '#D4A843';

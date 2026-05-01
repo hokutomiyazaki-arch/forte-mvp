@@ -51,7 +51,7 @@ export default function Navbar() {
     discover: false,
     support: false,
   })
-  const { unreadCount, ownedOrg, hasOrgMembership } = useSharedData()
+  const { unreadCount, ownedOrg, hasOrgMembership, eligibleCertificationTier } = useSharedData()
 
   const toggleMenuGroup = (group: string) => {
     setOpenMenuGroups(prev => ({ ...prev, [group]: !prev[group] }))
@@ -86,6 +86,17 @@ export default function Navbar() {
                 <a href="/dashboard?tab=proofs" onClick={closeMenu} style={menuLinkStyle}>強み設定</a>
                 <a href="/dashboard?tab=rewards" onClick={closeMenu} style={menuLinkStyle}>リワード設定</a>
                 <a href="/dashboard?tab=card" onClick={closeMenu} style={menuLinkStyle}>NFCカード</a>
+                {eligibleCertificationTier && (
+                  <a
+                    href="/dashboard?action=certification"
+                    onClick={closeMenu}
+                    style={{ ...menuLinkStyle, color: '#C4A35A', fontWeight: 700 }}
+                  >
+                    {eligibleCertificationTier === 'LEGEND' ? '💎 LEGEND認定申請'
+                      : eligibleCertificationTier === 'MASTER' ? '👑 MASTER認定申請'
+                      : '🏆 SPECIALIST認定申請'}
+                  </a>
+                )}
               </div>
             </>
           )}

@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { useUser } from '@clerk/nextjs'
+import type { CertifiableTier } from '@/lib/constants'
 
 interface Announcement {
   id: string
@@ -22,6 +23,8 @@ interface SharedData {
   // nav-context
   ownedOrg: { id: string; name?: string; type?: string } | null
   hasOrgMembership: boolean
+  /** SPECIALIST(30+)/MASTER(50+)/LEGEND(100+) の最高未申請ティア。Navbar 認定申請メニュー表示用 */
+  eligibleCertificationTier: CertifiableTier | null
   navContextLoaded: boolean
 }
 
@@ -32,6 +35,7 @@ const SharedDataContext = createContext<SharedData>({
   announcementsLoaded: false,
   ownedOrg: null,
   hasOrgMembership: false,
+  eligibleCertificationTier: null,
   navContextLoaded: false,
 })
 
@@ -45,6 +49,7 @@ export function SharedDataProvider({ children }: { children: ReactNode }) {
 
   const [ownedOrg, setOwnedOrg] = useState<{ id: string; name?: string; type?: string } | null>(null)
   const [hasOrgMembership, setHasOrgMembership] = useState(false)
+  const [eligibleCertificationTier, setEligibleCertificationTier] = useState<CertifiableTier | null>(null)
   const [navContextLoaded, setNavContextLoaded] = useState(false)
 
   // announcements: 1回だけfetch
@@ -72,6 +77,9 @@ export function SharedDataProvider({ children }: { children: ReactNode }) {
       .then(data => {
         if (data.ownedOrg) setOwnedOrg(data.ownedOrg)
         if (data.hasOrgMembership) setHasOrgMembership(true)
+        if (data.eligibleCertificationTier) {
+          setEligibleCertificationTier(data.eligibleCertificationTier)
+        }
         setNavContextLoaded(true)
       })
       .catch(() => setNavContextLoaded(true))
@@ -85,6 +93,7 @@ export function SharedDataProvider({ children }: { children: ReactNode }) {
       announcementsLoaded,
       ownedOrg,
       hasOrgMembership,
+      eligibleCertificationTier,
       navContextLoaded,
     }}>
       {children}

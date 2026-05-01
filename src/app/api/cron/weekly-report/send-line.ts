@@ -254,7 +254,7 @@ function buildStartingFlex(data: WeeklyProData, content: WeeklyReportContent | n
     // メリット
     { type: 'text', text: 'WHY COLLECT PROOFS?', size: 'xxs', color: GOLD, weight: 'bold', margin: 'lg' },
     benefitItem('自分の「本当の強み」がデータで見える'),
-    benefitItem('15票でPROVEN認定。30票でSPECIALIST。'),
+    benefitItem('15票でPROVEN・30票でSPECIALIST・50票でMASTER・100票でLEGEND認定。'),
     benefitItem('一生消えない、ポータブルな実力の証明'),
     separator(),
     // はじめの一歩

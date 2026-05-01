@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { OPS_EMAIL, STRENGTH_ENGLISH_NAMES, PERSONALITY_ENGLISH_NAMES, SPECIALIST_THRESHOLD } from '@/lib/constants'
+import { OPS_EMAIL, STRENGTH_ENGLISH_NAMES, PERSONALITY_ENGLISH_NAMES, SPECIALIST_THRESHOLD, getCertifiableTier, TIER_DISPLAY } from '@/lib/constants'
 
 export const dynamic = 'force-dynamic'
 
@@ -205,6 +205,9 @@ export async function POST(req: NextRequest) {
     const nfcUrl = nfcCardUid ? `https://realproof.jp/nfc/${nfcCardUid}` : null
     const cardUrl = `https://realproof.jp/card/${professionalId}`
 
+    // 8. 申請ティア (今回申請カテゴリの票数からSPECIALIST/MASTER/LEGEND判定)
+    const certTier = getCertifiableTier(proofCount || 30) || 'SPECIALIST'
+
     // 運営向けメール送信
     try {
       await sendOpsNotificationEmail({
@@ -216,6 +219,7 @@ export async function POST(req: NextRequest) {
         categoryName,
         categoryEnglish,
         proofCount: proofCount || 30,
+        certTier,
         achievementDate,
         topPersonality: topPersonality || '—',
         personalityEnglish,
@@ -314,6 +318,7 @@ async function sendOpsNotificationEmail(params: {
   categoryName: string
   categoryEnglish: string
   proofCount: number
+  certTier: 'SPECIALIST' | 'MASTER' | 'LEGEND'
   achievementDate: string
   topPersonality: string
   personalityEnglish: string
@@ -334,7 +339,8 @@ async function sendOpsNotificationEmail(params: {
     return
   }
 
-  const { proName, categoryName, proofCount, certNumber } = params
+  const { proName, categoryName, proofCount, certNumber, certTier } = params
+  const tierMeta = TIER_DISPLAY[certTier]
   const orgDisplay = params.organization?.trim() || '未入力'
   const nfcUidDisplay = params.nfcCardUid || 'なし'
   const qrUrl = params.nfcUrl || params.cardUrl
@@ -361,7 +367,7 @@ async function sendOpsNotificationEmail(params: {
         body: JSON.stringify({
           from: 'REAL PROOF <noreply@realproof.jp>',
           to: OPS_EMAIL,
-          subject: `REALPROOF認定申請 ${proName} / ${categoryName} / ${proofCount}proofs`,
+          subject: `REALPROOF認定申請（${tierMeta.label}）${proName} / ${categoryName} / ${proofCount}proofs`,
           html: `
             <div style="font-family: 'Noto Sans JP', sans-serif; max-width: 640px; margin: 0 auto; color: #1A1A2E; line-height: 1.7;">
               <h2 style="margin-bottom: 16px;">REALPROOF認定申請が届きました。</h2>
@@ -376,6 +382,7 @@ async function sendOpsNotificationEmail(params: {
 
               <h3 style="border-bottom:2px solid #C4A35A;padding-bottom:4px;">■ 今回の認定内容</h3>
               <p>
+                認定ティア: ${esc(tierMeta.icon)} <strong>${esc(tierMeta.label)}</strong><br/>
                 認定カテゴリ: ${esc(categoryName)}<br/>
                 英語: ${esc(params.categoryEnglish)}<br/>
                 プルーフ数: ${proofCount}<br/>

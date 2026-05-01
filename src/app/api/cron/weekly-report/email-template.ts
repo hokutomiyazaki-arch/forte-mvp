@@ -6,10 +6,8 @@
  */
 
 import { WeeklyProData, WeeklyReportContent } from '@/lib/weekly-report'
-import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD } from '@/lib/constants'
+import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, MASTER_THRESHOLD, LEGEND_THRESHOLD } from '@/lib/constants'
 import { generateUnsubscribeToken } from '@/lib/unsubscribe-token'
-
-const MASTER_THRESHOLD = 50
 
 // ── ブランドカラー ──
 const DARK = '#1A1A2E'
@@ -173,7 +171,11 @@ function generateNormalEmailHTML(data: WeeklyProData, content: WeeklyReportConte
   let progressRows = ''
   data.proof_progress.forEach(item => {
     const milestoneLabel = item.is_proven
-      ? (item.current_votes >= SPECIALIST_THRESHOLD
+      ? (item.current_votes >= LEGEND_THRESHOLD
+        ? `LEGEND達成 ✦ 最高ティア`
+        : item.current_votes >= MASTER_THRESHOLD
+        ? `MASTER達成 ✦ 次の目標: LEGEND（${LEGEND_THRESHOLD}票）`
+        : item.current_votes >= SPECIALIST_THRESHOLD
         ? `SPECIALIST達成 ✦ 次の目標: MASTER（${MASTER_THRESHOLD}票）`
         : `PROVEN達成 ✦ 次の目標: SPECIALIST（${SPECIALIST_THRESHOLD}票）`)
       : `あと${item.remaining}票でPROVEN達成`
@@ -274,7 +276,7 @@ function generateStartingEmailHTML(data: WeeklyProData, content: WeeklyReportCon
       <tr><td style="background:${BAR_BG};border-radius:8px;padding:14px 16px;">
         <div style="font-size:16px;margin-bottom:4px;">&#127942;</div>
         <div style="color:${CREAM};font-size:13px;font-weight:600;margin-bottom:4px;">15票でPROVEN認定</div>
-        <div style="color:${GRAY};font-size:12px;line-height:1.6;">プロフィールのバーがゴールドに輝きます。30票でSPECIALIST、50票でMASTER。</div>
+        <div style="color:${GRAY};font-size:12px;line-height:1.6;">プロフィールのバーがゴールドに輝きます。30票でSPECIALIST、50票でMASTER、100票でLEGEND。</div>
       </td></tr>
       <tr><td height="8"></td></tr>
       <tr><td style="background:${BAR_BG};border-radius:8px;padding:14px 16px;">

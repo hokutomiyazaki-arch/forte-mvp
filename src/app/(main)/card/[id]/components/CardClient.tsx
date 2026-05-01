@@ -12,7 +12,7 @@ import { Professional, VoteSummary } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import { COLORS, FONTS } from '@/lib/design-tokens'
 import { trackPageView, trackEvent } from '@/lib/tracking'
-import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, MASTER_THRESHOLD, PROVEN_GOLD, TAB_DISPLAY_NAMES } from '@/lib/constants'
+import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, MASTER_THRESHOLD, LEGEND_THRESHOLD, PROVEN_GOLD, TAB_DISPLAY_NAMES, getCertifiableTier, getNextTier, TIER_DISPLAY } from '@/lib/constants'
 import {
   PERSONALITY_CATEGORIES,
   PersonalityCategory,
@@ -707,8 +707,10 @@ export default function CardClient({ cardData }: Props) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
                   {top3.map((v, i) => {
                     const pct = (v.vote_count / maxVotes) * 100
-                    const isSpecialist = v.vote_count >= SPECIALIST_THRESHOLD
+                    const certTier = getCertifiableTier(v.vote_count)  // SPECIALIST/MASTER/LEGEND/null
+                    const isSpecialist = !!certTier  // ≥ 30
                     const isProven = v.vote_count >= PROVEN_THRESHOLD
+                    const nextTier = getNextTier(v.vote_count)
                     const tier = isSpecialist ? 'specialist' : v.vote_count > 10 ? 'strong' : 'normal'
                     const cardBg = tier === 'normal' ? T.cardBg : '#1A1A2E'
                     const cardBorder = tier === 'specialist' ? '#C4A35A' : tier === 'normal' ? T.cardBorder : '#2A2A3E'
@@ -738,14 +740,14 @@ export default function CardClient({ cardData }: Props) {
                             background: 'linear-gradient(90deg, #C4A35A, #E8D9A8, #C4A35A)',
                           }} />
                         )}
-                        {/* ティアラベル */}
-                        {isSpecialist ? (
+                        {/* ティアラベル: SPECIALIST(🏆) / MASTER(👑) / LEGEND(💎) / PROVEN(🛡) */}
+                        {certTier ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
                             <span style={{
                               fontSize: 10, fontWeight: 500, letterSpacing: 0.5, color: '#1A1A2E',
                               background: '#C4A35A', padding: '2px 8px', borderRadius: 10,
                             }}>
-                              🏆 SPECIALIST
+                              {TIER_DISPLAY[certTier].icon} {TIER_DISPLAY[certTier].label}
                             </span>
                           </div>
                         ) : isProven ? (
@@ -783,15 +785,15 @@ export default function CardClient({ cardData }: Props) {
                             transition: `width 1.2s ease ${i * 0.08}s`,
                           }} />
                         </div>
-                        {/* 次の目標テキスト */}
-                        {isSpecialist && (
+                        {/* 次の目標テキスト: tier に応じて Next: SPECIALIST/MASTER/LEGEND を出し分け */}
+                        {certTier && nextTier && (
                           <div style={{ fontSize: 10, color: '#C4A35A', textAlign: 'right' as const, marginTop: 6 }}>
-                            Next: MASTER (50)
+                            Next: {TIER_DISPLAY[nextTier.tier].label} ({nextTier.threshold})
                           </div>
                         )}
-                        {!isSpecialist && isProven && (
+                        {!certTier && isProven && nextTier && (
                           <div style={{ fontSize: 10, color: 'rgba(250,250,247,0.4)', textAlign: 'right' as const, marginTop: 6 }}>
-                            あと{SPECIALIST_THRESHOLD - v.vote_count}票でSPECIALIST
+                            あと{nextTier.remaining}票で{TIER_DISPLAY[nextTier.tier].label}
                           </div>
                         )}
                         {/* 日付アコーディオン */}
@@ -825,8 +827,10 @@ export default function CardClient({ cardData }: Props) {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     {rest.map((v, i) => {
                       const pct = (v.vote_count / maxVotes) * 100
-                      const isSpecialist = v.vote_count >= SPECIALIST_THRESHOLD
+                      const certTier = getCertifiableTier(v.vote_count)  // SPECIALIST/MASTER/LEGEND/null
+                      const isSpecialist = !!certTier
                       const isProven = v.vote_count >= PROVEN_THRESHOLD
+                      const nextTier = getNextTier(v.vote_count)
                       return (
                         <div key={v.category} style={{
                           width: '100%', cursor: 'pointer',
@@ -840,14 +844,14 @@ export default function CardClient({ cardData }: Props) {
                               background: 'linear-gradient(90deg, #C4A35A, #E8D9A8, #C4A35A)',
                             }} />
                           )}
-                          {/* ティアラベル */}
-                          {isSpecialist ? (
+                          {/* ティアラベル: SPECIALIST(🏆) / MASTER(👑) / LEGEND(💎) / PROVEN(🛡) */}
+                          {certTier ? (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
                               <span style={{
                                 fontSize: 10, fontWeight: 500, letterSpacing: 0.5, color: '#1A1A2E',
                                 background: '#C4A35A', padding: '2px 8px', borderRadius: 10,
                               }}>
-                                🏆 SPECIALIST
+                                {TIER_DISPLAY[certTier].icon} {TIER_DISPLAY[certTier].label}
                               </span>
                             </div>
                           ) : isProven ? (
@@ -885,15 +889,15 @@ export default function CardClient({ cardData }: Props) {
                               transition: `width 1.2s ease ${(i + 3) * 0.08}s`,
                             }} />
                           </div>
-                          {/* 次の目標テキスト */}
-                          {isSpecialist && (
+                          {/* 次の目標テキスト: tier に応じて Next: SPECIALIST/MASTER/LEGEND を出し分け */}
+                          {certTier && nextTier && (
                             <div style={{ fontSize: 10, color: '#C4A35A', textAlign: 'right' as const, marginTop: 4 }}>
-                              Next: MASTER (50)
+                              Next: {TIER_DISPLAY[nextTier.tier].label} ({nextTier.threshold})
                             </div>
                           )}
-                          {!isSpecialist && isProven && (
+                          {!certTier && isProven && nextTier && (
                             <div style={{ fontSize: 10, color: 'rgba(250,250,247,0.4)', textAlign: 'right' as const, marginTop: 4 }}>
-                              あと{SPECIALIST_THRESHOLD - v.vote_count}票でSPECIALIST
+                              あと{nextTier.remaining}票で{TIER_DISPLAY[nextTier.tier].label}
                             </div>
                           )}
                           {/* 日付アコーディオン */}

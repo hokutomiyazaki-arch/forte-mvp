@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { VoteSummary, Professional } from '@/lib/types'
-import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, PROVEN_GOLD, TAB_DISPLAY_NAMES } from '@/lib/constants'
+import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, PROVEN_GOLD, TAB_DISPLAY_NAMES, getCertificationTier, getCertifiableTier, TIER_DISPLAY } from '@/lib/constants'
 
 interface PersonalitySummary {
   category: string
@@ -72,8 +72,10 @@ export default function ForteChart({ votes, personalityVotes = [], professional,
             {sortedResults.map(v => {
               const isProven = v.vote_count >= PROVEN_THRESHOLD
               const isSpecialist = v.vote_count >= SPECIALIST_THRESHOLD
+              const tier = getCertificationTier(v.vote_count)
               const barColor = isProven ? PROVEN_GOLD : '#1A1A2E'
-              const mark = isSpecialist ? ' 🏆' : isProven ? ' ✦' : ''
+              // ティア別アイコン: PROVEN(🛡)/SPECIALIST(🏆)/MASTER(👑)/LEGEND(💎)
+              const mark = tier ? ` ${TIER_DISPLAY[tier].icon}` : ''
               const slug = v.proof_id || v.category
               const appStatus = certMap.get(slug)
               const hasApplied = !!appStatus

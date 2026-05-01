@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { SPECIALIST_THRESHOLD, getCertifiableTier, type CertifiableTier } from '@/lib/constants'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,12 +10,18 @@ export const dynamic = 'force-dynamic'
  * Navbar用の軽量コンテキスト取得
  * - ownedOrg: オーナーの団体情報
  * - hasOrgMembership: 所属団体があるか
+ * - eligibleCertificationTier: SPECIALIST(30+)/MASTER(50+)/LEGEND(100+) の最高ティアで
+ *   未申請のものがあれば返す。なければ null。Navbar の認定申請メニュー表示用。
  */
 export async function GET() {
   try {
     const { userId } = await auth()
     if (!userId) {
-      return NextResponse.json({ ownedOrg: null, hasOrgMembership: false })
+      return NextResponse.json({
+        ownedOrg: null,
+        hasOrgMembership: false,
+        eligibleCertificationTier: null,
+      })
     }
 
     const supabase = getSupabaseAdmin()
@@ -62,11 +69,43 @@ export async function GET() {
       }
     }
 
+    // 認定申請メニューの表示判定: SPECIALIST(30) 以上で未申請のカテゴリがあるか。
+    // 最高票数のカテゴリの tier をラベル切り替えに使う。
+    let eligibleCertificationTier: CertifiableTier | null = null
+    if (proResult.data) {
+      const proId = proResult.data.id
+      const [voteSummaryResult, certApplicationsResult] = await Promise.all([
+        supabase
+          .from('vote_summary')
+          .select('proof_id, vote_count')
+          .eq('professional_id', proId)
+          .gte('vote_count', SPECIALIST_THRESHOLD),
+        supabase
+          .from('certification_applications')
+          .select('category_slug')
+          .eq('professional_id', proId),
+      ])
+      const appliedSlugs = new Set(
+        (certApplicationsResult.data || []).map((a: { category_slug: string }) => a.category_slug)
+      )
+      const eligible = (voteSummaryResult.data || [])
+        .filter((v: { proof_id: string; vote_count: number }) => !appliedSlugs.has(v.proof_id))
+      if (eligible.length > 0) {
+        const topCount = Math.max(...eligible.map((v: { vote_count: number }) => v.vote_count))
+        eligibleCertificationTier = getCertifiableTier(topCount)
+      }
+    }
+
     return NextResponse.json({
       ownedOrg: ownedOrgResult.data || null,
       hasOrgMembership,
+      eligibleCertificationTier,
     })
   } catch {
-    return NextResponse.json({ ownedOrg: null, hasOrgMembership: false })
+    return NextResponse.json({
+      ownedOrg: null,
+      hasOrgMembership: false,
+      eligibleCertificationTier: null,
+    })
   }
 }

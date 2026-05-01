@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useUser, useClerk } from '@clerk/nextjs'
 import { useSearchParams } from 'next/navigation'
 import { db, uploadFile } from '@/lib/db'
@@ -7,7 +7,7 @@ import { calcQrTokenExpiry } from '@/lib/qr-token'
 import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYPES, getRewardType, FNT_NEURO_APPS } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import ForteChart from '@/components/ForteChart'
-import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, PROVEN_GOLD, PROVEN_GRADIENT, TAB_ORDER, TAB_DISPLAY_NAMES } from '@/lib/constants'
+import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, PROVEN_GOLD, PROVEN_GRADIENT, TAB_ORDER, TAB_DISPLAY_NAMES, getCertifiableTier, TIER_DISPLAY } from '@/lib/constants'
 import VoiceShareModal from '@/components/VoiceShareCard'
 import DashboardVoiceCard, { type DashboardVoice } from '@/components/dashboard/DashboardVoiceCard'
 import VoiceSuggestionPopup, { type SuggestedTheme } from '@/components/voice/VoiceSuggestionPopup'
@@ -245,6 +245,24 @@ export default function DashboardPage() {
       setEditing(true)
     }
   }, [editParam, loading, pro])
+
+  // Navbar「認定申請」メニューからの導線: /dashboard?action=certification で
+  // 最も票数の多い未申請カテゴリの認定モーダルを自動オープン
+  const actionParam = searchParams.get('action')
+  const certActionRef = useRef(false)
+  useEffect(() => {
+    if (actionParam !== 'certification') return
+    if (certActionRef.current || loading || !pro || votes.length === 0) return
+    const appliedSlugs = certApplications.map(app => app.category_slug)
+    const eligible = votes
+      .filter(v => v.vote_count >= SPECIALIST_THRESHOLD && !appliedSlugs.includes(v.proof_id || v.category))
+      .slice()
+      .sort((a, b) => b.vote_count - a.vote_count)
+    if (eligible.length === 0) return
+    certActionRef.current = true
+    const top = eligible[0]
+    setCertModal({ slug: top.proof_id || top.category, name: top.category, count: top.vote_count })
+  }, [actionParam, loading, pro, votes.length, certApplications.length])
 
   // Phase 2: 累積投票数取得 (BookingUrlBanner の表示用)
   // proId はプリミティブ (string|undefined) のため deps として安全。
@@ -2411,19 +2429,27 @@ export default function DashboardPage() {
               >
                 ✕
               </button>
-              <div style={{ fontSize: '14px', marginBottom: '12px' }}>
-                <span style={{ fontSize: '24px', marginRight: '8px' }}>🏆</span>
-                <span style={{ color: PROVEN_GOLD, fontSize: '16px', fontWeight: 'bold' }}>
-                  REALPROOF認定に到達しました！
-                </span>
-              </div>
-              <p style={{ color: '#FAFAF7', fontSize: '14px', lineHeight: '1.7', margin: '0 0 20px 0' }}>
-                「<strong style={{ color: PROVEN_GOLD }}>{cat.label}</strong>」が{cat.vote_count}プルーフを突破。
-                <br />
-                あなたの実力が証明されました。
-                <br />
-                認定証と名前入りプルーフカードを無料でお届けします。
-              </p>
+              {(() => {
+                const catTier = getCertifiableTier(cat.vote_count) || 'SPECIALIST'
+                const tierMeta = TIER_DISPLAY[catTier]
+                return (
+                  <>
+                    <div style={{ fontSize: '14px', marginBottom: '12px' }}>
+                      <span style={{ fontSize: '24px', marginRight: '8px' }}>{tierMeta.icon}</span>
+                      <span style={{ color: PROVEN_GOLD, fontSize: '16px', fontWeight: 'bold' }}>
+                        {tierMeta.label}認定に到達しました!
+                      </span>
+                    </div>
+                    <p style={{ color: '#FAFAF7', fontSize: '14px', lineHeight: '1.7', margin: '0 0 20px 0' }}>
+                      「<strong style={{ color: PROVEN_GOLD }}>{cat.label}</strong>」が{cat.vote_count}プルーフを突破。
+                      <br />
+                      あなたの実力が証明されました。
+                      <br />
+                      認定証と名前入りプルーフカードを無料でお届けします。
+                    </p>
+                  </>
+                )
+              })()}
               <button
                 onClick={() => setCertModal({ slug: cat.proof_id, name: cat.label, count: cat.vote_count })}
                 style={{

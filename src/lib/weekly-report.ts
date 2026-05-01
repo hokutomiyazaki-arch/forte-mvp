@@ -7,9 +7,7 @@
 
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { clerkClient } from '@clerk/nextjs/server'
-import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD } from '@/lib/constants'
-
-const MASTER_THRESHOLD = 50
+import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, MASTER_THRESHOLD, LEGEND_THRESHOLD } from '@/lib/constants'
 
 // ============================================================
 // 型定義
@@ -91,11 +89,12 @@ function getWeekStartJST(date: Date = new Date()): Date {
   return new Date(jstDate.getTime() - jstOffset)
 }
 
-/** 次のマイルストーン（15→30→50）を返す */
+/** 次のマイルストーン（15→30→50→100）を返す。LEGEND 達成後は LEGEND_THRESHOLD のまま */
 function getNextMilestone(votes: number): number {
   if (votes < PROVEN_THRESHOLD) return PROVEN_THRESHOLD
   if (votes < SPECIALIST_THRESHOLD) return SPECIALIST_THRESHOLD
-  return MASTER_THRESHOLD
+  if (votes < MASTER_THRESHOLD) return MASTER_THRESHOLD
+  return LEGEND_THRESHOLD
 }
 
 // ============================================================
