@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { deliverVoiceReplyNotification } from '@/lib/voice-reply-notification'
 
 export const dynamic = 'force-dynamic'
 
@@ -99,7 +100,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Insert failed' }, { status: 500 })
     }
 
-    return NextResponse.json(inserted)
+    // Phase 3 Step 2: クライアントへ Email/LINE で通知配信
+    // 配信失敗してもレスポンスは成功扱い (返信自体は保存できているため)。
+    // 5秒タイムアウトで最大遅延を制限。
+    try {
+      await deliverVoiceReplyNotification({
+        voteId,
+        professionalId: pro.id,
+        replyId: inserted.id,
+        supabase,
+      })
+    } catch (notifyErr) {
+      // 配信例外も握りつぶしてログだけ残す。
+      console.error('[api/dashboard/reply POST] notify error:', notifyErr)
+    }
+
+    // 配信後の delivered_at / delivered_via を最新化して返却
+    const { data: refreshed } = await supabase
+      .from('vote_replies')
+      .select('id, vote_id, reply_text, created_at, updated_at, delivered_at, delivered_via')
+      .eq('id', inserted.id)
+      .maybeSingle()
+
+    return NextResponse.json(refreshed ?? inserted)
   } catch (err) {
     console.error('[api/dashboard/reply POST] error:', err)
     const message = err instanceof Error ? err.message : 'Internal error'
