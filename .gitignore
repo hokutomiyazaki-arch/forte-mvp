@@ -14,3 +14,11 @@ next-env.d.ts
 # clerk configuration (can include secrets)
 /.clerk/
 .archive/
+
+# Backup files (絶対にcommitしない)
+.env.local.backup*
+.env.local.bak
+.env.backup*
+*.env.bak
+*.backup
+*.bak
