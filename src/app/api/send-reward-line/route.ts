@@ -71,7 +71,7 @@ function buildRewardFlex(p: FlexParams): any {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const bodyContents: any[] = [
-    { type: 'text', text: 'REALPROOF', size: 'xxs', color: GOLD, weight: 'bold', letterSpacing: '2px' },
+    { type: 'text', text: 'REALPROOF', size: 'xxs', color: GOLD, weight: 'bold' },
     { type: 'text', text: `${proName}さん`, size: 'lg', color: CREAM, weight: 'bold', margin: 'sm', wrap: true },
     { type: 'separator', margin: 'md', color: '#333355' },
     { type: 'text', text: `先日は ${proName}さんを応援していただき、ありがとうございました。`, size: 'sm', color: CREAM, margin: 'lg', wrap: true },
@@ -81,7 +81,7 @@ function buildRewardFlex(p: FlexParams): any {
   if (hasReward && reward) {
     // ── パターン A: リワードあり ──
     bodyContents.push({ type: 'separator', margin: 'lg', color: '#333355' })
-    bodyContents.push({ type: 'text', text: 'REWARD', size: 'xxs', color: GOLD, weight: 'bold', margin: 'lg', letterSpacing: '2px' })
+    bodyContents.push({ type: 'text', text: 'REWARD', size: 'xxs', color: GOLD, weight: 'bold', margin: 'lg' })
     if (reward.title) {
       bodyContents.push({
         type: 'text',
