@@ -22,3 +22,48 @@ next-env.d.ts
 *.env.bak
 *.backup
 *.bak
+
+# Working files (作業用ファイル、ローカルのみ保管)
+# Claude Code 指示書・プロンプト
+/*-instructions.md
+/*-instructions_v*.md
+/claude-code-prompt-*.md
+/claude-code-patch-*.md
+
+# 設計ドキュメント・PDF
+/REALPROOF_*.docx
+/REALPROOF_*.pdf
+/REALPROOF_*.md
+/RP_*.docx
+/北斗の*.pdf
+/トンマナ*.pdf
+
+# UI 試作品(本物のコードは src/ 配下)
+/REALPROOF_*.tsx
+/REALPROOF_*.jsx
+/*-mockup.jsx
+/*-mockup.tsx
+
+# 調査メモ・SQL・一時ファイル
+/*-investigation*.md
+/REALPROOF_*.sql
+/sql/
+/supabase/.temp/
+
+# その他の作業ファイル
+/30sec-to-3min-instructions.md
+/2026-04-23-urgent-fix-pack-instructions.md
+/display_mode_investigation_20260425.md
+/announcement-banner-fix-instructions*.md
+/auth-error-recovery-instructions.md
+/step4-*-instructions*.md
+/step4-*-report.md
+/step4a-*-instructions.md
+/phase*-instructions*.md
+/phase*-report*.md
+/phase*-instructions-v*.md
+
+# 漏れ対応(v2系・stalled系)
+/*-instructions-v*.md
+/*-phase*-v*.md
+/weekly-report-supplement-*.md
