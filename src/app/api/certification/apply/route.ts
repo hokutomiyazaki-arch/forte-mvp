@@ -171,7 +171,7 @@ export async function POST(req: NextRequest) {
         const sl = proofToStrength.get(pid)
         if (sl) strengths.add(sl)
       }
-      for (const sl of strengths) {
+      for (const sl of Array.from(strengths)) {
         if (!strengthVotes.has(sl)) strengthVotes.set(sl, [])
         strengthVotes.get(sl)!.push(v.created_at)
       }
