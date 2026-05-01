@@ -31,6 +31,7 @@ export default function CertificationModal({
   // フォームフィールド
   const [fullNameKanji, setFullNameKanji] = useState('')
   const [fullNameRomaji, setFullNameRomaji] = useState('')
+  const [organization, setOrganization] = useState('')
   const [postalCode, setPostalCode] = useState('')
   const [prefecture, setPrefecture] = useState('')
   const [cityAddress, setCityAddress] = useState('')
@@ -93,6 +94,7 @@ export default function CertificationModal({
           topPersonality,
           fullNameKanji: fullNameKanji.trim(),
           fullNameRomaji: fullNameRomaji.trim(),
+          organization: organization.trim() || null,
           postalCode: postalCode.replace(/[^0-9]/g, ''),
           prefecture,
           cityAddress: cityAddress.trim(),
@@ -248,6 +250,15 @@ export default function CertificationModal({
                 <p className="text-[10px] text-gray-400 mt-0.5">カード印字用</p>
               </div>
 
+              {/* 所属／肩書（任意） */}
+              <div>
+                <label className={labelClass}>所属 / 肩書（カードに印字されます）</label>
+                <input type="text" className={inputClass} value={organization}
+                  onChange={(e) => setOrganization(e.target.value)}
+                  placeholder="例：一般社団法人 〇〇 代表" />
+                <p className="text-[10px] text-gray-400 mt-0.5">任意。カード表面に併記されます</p>
+              </div>
+
               {/* 郵便番号 */}
               <div>
                 <label className={labelClass}>郵便番号<span className="text-red-500 ml-1">*</span></label>
@@ -338,6 +349,12 @@ export default function CertificationModal({
                 <span className="text-gray-500">氏名（ローマ字）</span>
                 <span>{fullNameRomaji}</span>
               </div>
+              {organization.trim() && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">所属 / 肩書</span>
+                  <span>{organization}</span>
+                </div>
+              )}
               <hr className="my-2" />
               <div>
                 <span className="text-gray-500">送付先</span>

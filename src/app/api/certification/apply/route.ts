@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { OPS_EMAIL } from '@/lib/constants'
+import { OPS_EMAIL, STRENGTH_ENGLISH_NAMES, PERSONALITY_ENGLISH_NAMES, SPECIALIST_THRESHOLD } from '@/lib/constants'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,6 +26,7 @@ export async function POST(req: NextRequest) {
       topPersonality,
       fullNameKanji,
       fullNameRomaji,
+      organization,
       postalCode,
       prefecture,
       cityAddress,
@@ -112,6 +113,7 @@ export async function POST(req: NextRequest) {
         top_personality: topPersonality || null,
         full_name_kanji: fullNameKanji,
         full_name_romaji: fullNameRomaji,
+        organization: organization || null,
         postal_code: postalCode,
         prefecture,
         city_address: cityAddress,
@@ -131,6 +133,78 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Insert failed' }, { status: 500 })
     }
 
+    // ===========================================================
+    // 認定メール用の拡張データを取得 (strength_label 単位で集計)
+    // ===========================================================
+    // 1. 直列処理 OK の指示なので順次取得
+    const { data: allProofItems } = await supabase
+      .from('proof_items')
+      .select('id, label, strength_label')
+
+    const { data: allVotes } = await supabase
+      .from('votes')
+      .select('id, created_at, selected_proof_ids')
+      .eq('professional_id', professionalId)
+      .eq('status', 'confirmed')
+      .order('created_at', { ascending: true })
+
+    const { data: nfcCard } = await supabase
+      .from('nfc_cards')
+      .select('card_uid, status')
+      .eq('professional_id', professionalId)
+      .eq('status', 'active')
+      .maybeSingle()
+
+    // 2. proof_id → strength_label マップ
+    const proofToStrength = new Map<string, string>()
+    for (const p of (allProofItems || []) as Array<{ id: string; strength_label: string | null }>) {
+      if (p.strength_label) proofToStrength.set(p.id, p.strength_label)
+    }
+
+    // 3. strength_label 単位で投票時系列 (created_at[]) を構築
+    //    同一投票内で複数 proof_id が同じ strength_label を指す場合は重複カウント回避
+    const strengthVotes = new Map<string, string[]>()
+    for (const v of (allVotes || []) as Array<{ created_at: string; selected_proof_ids: string[] | null }>) {
+      const proofIds = (v.selected_proof_ids || []) as string[]
+      const strengths = new Set<string>()
+      for (const pid of proofIds) {
+        const sl = proofToStrength.get(pid)
+        if (sl) strengths.add(sl)
+      }
+      for (const sl of strengths) {
+        if (!strengthVotes.has(sl)) strengthVotes.set(sl, [])
+        strengthVotes.get(sl)!.push(v.created_at)
+      }
+    }
+
+    // 4. 今回申請カテゴリの strength_label と 30 票目達成日
+    const targetStrengthLabel = proofToStrength.get(categorySlug) || categoryName
+    const targetDates = strengthVotes.get(targetStrengthLabel) || []
+    const achievementDateRaw = targetDates[SPECIALIST_THRESHOLD - 1] || targetDates[targetDates.length - 1] || null
+    const achievementDate = formatJpDate(achievementDateRaw)
+
+    // 5. 全スペシャリスト項目 (>= SPECIALIST_THRESHOLD)
+    const allSpecialistItems = Array.from(strengthVotes.entries())
+      .filter(([, dates]) => dates.length >= SPECIALIST_THRESHOLD)
+      .map(([sl, dates]) => ({
+        label: sl,
+        labelEnglish: STRENGTH_ENGLISH_NAMES[sl] || sl,
+        voteCount: dates.length,
+        achievementDate: formatJpDate(dates[SPECIALIST_THRESHOLD - 1] || ''),
+      }))
+      .sort((a, b) => a.achievementDate.localeCompare(b.achievementDate))
+
+    // 6. 英語名解決
+    const categoryEnglish = STRENGTH_ENGLISH_NAMES[targetStrengthLabel] || targetStrengthLabel
+    const personalityEnglish = topPersonality
+      ? (PERSONALITY_ENGLISH_NAMES[topPersonality] || topPersonality)
+      : '—'
+
+    // 7. NFC URL (紐付けなしなら null)
+    const nfcCardUid = nfcCard?.card_uid || null
+    const nfcUrl = nfcCardUid ? `https://realproof.jp/nfc/${nfcCardUid}` : null
+    const cardUrl = `https://realproof.jp/card/${professionalId}`
+
     // 運営向けメール送信
     try {
       await sendOpsNotificationEmail({
@@ -138,10 +212,17 @@ export async function POST(req: NextRequest) {
         proEmail,
         fullNameKanji,
         fullNameRomaji,
+        organization: organization || null,
         categoryName,
+        categoryEnglish,
         proofCount: proofCount || 30,
+        achievementDate,
         topPersonality: topPersonality || '—',
-        cardUrl: `https://realproof.jp/card/${professionalId}`,
+        personalityEnglish,
+        allSpecialistItems,
+        nfcCardUid,
+        nfcUrl,
+        cardUrl,
         postalCode,
         prefecture,
         cityAddress,
@@ -192,17 +273,53 @@ export async function POST(req: NextRequest) {
   }
 }
 
+/** 'YYYY-MM-DDTHH:mm:ss...' / null → 'YYYY/MM/DD' or '—' */
+function formatJpDate(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return '—'
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}/${m}/${day}`
+}
+
+/** HTML escape（メール本文の差し込み値用） */
+function esc(s: string | null | undefined): string {
+  if (s == null) return ''
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 /**
  * 運営向けメール送信（リトライ付き最大3回）
+ *
+ * カード/賞状制作に必要な以下を含む:
+ *   - 申請者情報（所属/肩書を含む）
+ *   - 今回認定内容（英語名・30票目達成日）
+ *   - 全スペシャリスト項目（strength_label 単位 >= 30、各達成日）
+ *   - NFC カード情報（card_uid, URL）
+ *   - 賞状枚数とカード記載内容
  */
 async function sendOpsNotificationEmail(params: {
   proName: string
   proEmail: string
   fullNameKanji: string
   fullNameRomaji: string
+  organization: string | null
   categoryName: string
+  categoryEnglish: string
   proofCount: number
+  achievementDate: string
   topPersonality: string
+  personalityEnglish: string
+  allSpecialistItems: Array<{ label: string; labelEnglish: string; voteCount: number; achievementDate: string }>
+  nfcCardUid: string | null
+  nfcUrl: string | null
   cardUrl: string
   postalCode: string
   prefecture: string
@@ -218,6 +335,20 @@ async function sendOpsNotificationEmail(params: {
   }
 
   const { proName, categoryName, proofCount, certNumber } = params
+  const orgDisplay = params.organization?.trim() || '未入力'
+  const nfcUidDisplay = params.nfcCardUid || 'なし'
+  const qrUrl = params.nfcUrl || params.cardUrl
+  const certificateCount = params.allSpecialistItems.length
+
+  // 賞状リスト（HTML）
+  const specialistRows = params.allSpecialistItems
+    .map((item, i) =>
+      `<li>${i + 1}. ${esc(item.label)} / ${esc(item.labelEnglish)} / ${esc(item.achievementDate)}（${item.voteCount}票）</li>`
+    )
+    .join('')
+  const specialistListHtml = specialistRows
+    ? `<ul style="padding-left:20px;margin:8px 0;">${specialistRows}</ul>`
+    : '<p style="color:#888;">（該当なし）</p>'
 
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
@@ -232,32 +363,53 @@ async function sendOpsNotificationEmail(params: {
           to: OPS_EMAIL,
           subject: `REALPROOF認定申請 ${proName} / ${categoryName} / ${proofCount}proofs`,
           html: `
-            <div style="font-family: 'Noto Sans JP', sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2>REALPROOF認定申請が届きました。</h2>
-              <hr/>
-              <h3>■ 申請者情報</h3>
-              <p>氏名（漢字）: ${params.fullNameKanji}<br/>
-              氏名（ローマ字）: ${params.fullNameRomaji}<br/>
-              メール: ${params.proEmail}</p>
-              <hr/>
-              <h3>■ 認定内容</h3>
-              <p>認定カテゴリ: ${categoryName}<br/>
-              プルーフ数: ${proofCount}<br/>
-              最多人柄項目: ${params.topPersonality}<br/>
-              カードページ: <a href="${params.cardUrl}">${params.cardUrl}</a></p>
-              <hr/>
-              <h3>■ 送付先</h3>
-              <p>〒 ${params.postalCode}<br/>
-              ${params.prefecture} ${params.cityAddress}<br/>
-              ${params.building}<br/>
-              TEL: ${params.phone}</p>
-              <hr/>
-              <h3>■ 賞状印字内容</h3>
-              <p>認定名: REALPROOF認定 ${categoryName}スペシャリスト<br/>
-              賞状氏名: ${params.fullNameKanji}<br/>
-              カード氏名: ${params.fullNameRomaji}<br/>
-              人柄追記: ${params.topPersonality}<br/>
-              認定番号: ${certNumber}</p>
+            <div style="font-family: 'Noto Sans JP', sans-serif; max-width: 640px; margin: 0 auto; color: #1A1A2E; line-height: 1.7;">
+              <h2 style="margin-bottom: 16px;">REALPROOF認定申請が届きました。</h2>
+
+              <h3 style="border-bottom:2px solid #C4A35A;padding-bottom:4px;">■ 申請者情報</h3>
+              <p>
+                氏名（漢字）: ${esc(params.fullNameKanji)}<br/>
+                氏名（ローマ字）: ${esc(params.fullNameRomaji)}<br/>
+                メール: ${esc(params.proEmail)}<br/>
+                所属/肩書: ${esc(orgDisplay)}
+              </p>
+
+              <h3 style="border-bottom:2px solid #C4A35A;padding-bottom:4px;">■ 今回の認定内容</h3>
+              <p>
+                認定カテゴリ: ${esc(categoryName)}<br/>
+                英語: ${esc(params.categoryEnglish)}<br/>
+                プルーフ数: ${proofCount}<br/>
+                30票目達成日: ${esc(params.achievementDate)}<br/>
+                最多人柄項目: ${esc(params.topPersonality)}<br/>
+                英語: ${esc(params.personalityEnglish)}
+              </p>
+
+              <h3 style="border-bottom:2px solid #C4A35A;padding-bottom:4px;">■ 全スペシャリスト項目（カード記載用）</h3>
+              ${specialistListHtml}
+
+              <h3 style="border-bottom:2px solid #C4A35A;padding-bottom:4px;">■ カード・賞状 制作情報</h3>
+              <p>
+                認定番号: ${esc(certNumber)}<br/>
+                NFCカード番号: ${esc(nfcUidDisplay)}<br/>
+                NFC URL: ${params.nfcUrl ? `<a href="${esc(params.nfcUrl)}">${esc(params.nfcUrl)}</a>` : 'なし'}<br/>
+                QR生成用URL: <a href="${esc(qrUrl)}">${esc(qrUrl)}</a><br/>
+                カードページ: <a href="${esc(params.cardUrl)}">${esc(params.cardUrl)}</a>
+              </p>
+              <p>賞状枚数: ${certificateCount}枚（スペシャリスト項目ごとに1枚）</p>
+              ${specialistListHtml}
+              <p>
+                <strong>カード記載内容:</strong><br/>
+                表面: ${esc(params.fullNameKanji)} / ${esc(params.fullNameRomaji)} / ${esc(orgDisplay)}<br/>
+                裏面: 全スペシャリスト項目 + 人柄 + QRコード
+              </p>
+
+              <h3 style="border-bottom:2px solid #C4A35A;padding-bottom:4px;">■ 送付先</h3>
+              <p>
+                〒 ${esc(params.postalCode)}<br/>
+                ${esc(params.prefecture)} ${esc(params.cityAddress)}<br/>
+                ${esc(params.building)}<br/>
+                TEL: ${esc(params.phone)}
+              </p>
             </div>
           `
         }),
