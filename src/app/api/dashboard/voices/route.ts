@@ -7,7 +7,9 @@
  *   - google / line     → 写真 + 名前 + プロバイダラベル (rich)
  *   - email / email_code → アイコン + 「メール認証」 (auth_only)
  *   - sms                → アイコン + 「SMS認証」    (auth_only)
- *   - hopeful (legacy)   → 配列から除外
+ *
+ * vote_type='hopeful' (レガシー) は配列から除外。hopeful は vote_type カラムの値で
+ * auth_method には存在しない (SQL で実態確認済み)。
  *
  * 個人情報 (normalized_email / voter_email / auth_provider_id 等) はレスポンスに含めない。
  */
@@ -80,7 +82,7 @@ export async function GET() {
       return NextResponse.json({ error: 'pro not found' }, { status: 404 })
     }
 
-    // ② コメント付き投票 (hopeful 除外、status=confirmed のみ)
+    // ② コメント付き投票 (vote_type='hopeful' 除外、status=confirmed のみ)
     const { data: votesRaw, error: votesErr } = await supabase
       .from('votes')
       .select('id, comment, created_at, auth_method, auth_display_name, client_photo_url')
@@ -88,7 +90,7 @@ export async function GET() {
       .eq('status', 'confirmed')
       .not('comment', 'is', null)
       .neq('comment', '')
-      .neq('auth_method', 'hopeful')
+      .neq('vote_type', 'hopeful')
       .order('created_at', { ascending: false })
     if (votesErr) throw votesErr
 
