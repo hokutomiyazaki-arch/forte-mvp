@@ -366,11 +366,16 @@ export default function CardClient({ cardData }: Props) {
   }, [highlightParam, activeTab, loading])
 
   // メール/LINE通知からのディープリンク `#vote-{vote_id}` 対応
-  // - データ読み込み完了後に1度だけ発火（hashScrollRef でガード）
+  // - 1度だけ発火（hashScrollRef でガード、React Strict Mode の二重実行も吸収）
   // - Voicesタブを開いてから setTimeout で DOM 描画を待ってスクロール+ハイライト
+  // - cleanup で clearTimeout しない:
+  //   Strict Mode dev では setup → cleanup → setup が同期的に走り、cleanup で
+  //   clearTimeout を呼ぶとハイライト解除 setTimeout(3200ms) もキャンセルされて
+  //   「ハイライトが一瞬で消える」挙動になる。ハッシュ来訪は1度限りの導線かつ
+  //   ページ離脱時はコンポーネント自体が破棄されるため、cleanup 省略で実害なし。
   useEffect(() => {
     if (typeof window === 'undefined') return
-    if (loading || hashScrollRef.current) return
+    if (hashScrollRef.current) return
 
     const hash = window.location.hash
     if (!hash || !hash.startsWith('#vote-')) return
@@ -381,22 +386,17 @@ export default function CardClient({ cardData }: Props) {
     hashScrollRef.current = true
     setActiveTab('voices')
 
-    const scrollTimer = setTimeout(() => {
+    setTimeout(() => {
       const target = document.getElementById(`vote-${voteId}`)
       if (!target) return
       target.scrollIntoView({ behavior: 'smooth', block: 'center' })
       setTapHighlightVoteId(voteId)
     }, 200)
 
-    const clearHighlightTimer = setTimeout(() => {
+    setTimeout(() => {
       setTapHighlightVoteId(null)
     }, 3200)
-
-    return () => {
-      clearTimeout(scrollTimer)
-      clearTimeout(clearHighlightTimer)
-    }
-  }, [loading])
+  }, [])
 
   // 順位メダル取得（1つだけ）
   useEffect(() => {
