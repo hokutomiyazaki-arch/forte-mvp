@@ -68,16 +68,20 @@ export const TIER_DISPLAY: Record<CertificationTier, { icon: string; label: stri
 }
 
 /**
- * 認定申請の Stripe 決済リンク (CertifiableTier 別)
- *   - SPECIALIST: 「2 回目以降の SPECIALIST 更新」用 (初回 SPECIALIST は無料)
- *   - MASTER: 常に有料
- *   - LEGEND: 常に有料
+ * 認定申請の料金 + Stripe 決済リンク (CertifiableTier 別)
+ *   - SPECIALIST: 初回は無料、2 回目以降の更新は ¥11,000
+ *   - MASTER: 常に ¥22,000
+ *   - LEGEND: 常に ¥55,000
  */
-export const STRIPE_PAYMENT_URLS: Record<CertifiableTier, string> = {
-  SPECIALIST: 'https://buy.stripe.com/5kQ5kE4N376mefq8dIffy0h',
-  MASTER: 'https://buy.stripe.com/7sY5kEenD62ib3e9hMffy0i',
-  LEGEND: 'https://buy.stripe.com/5kQ9AUbbraiy0oA2Toffy0k',
-}
+export const CERTIFICATION_PRICING: Record<CertifiableTier, {
+  amount: number
+  label: string
+  stripeUrl: string
+}> = {
+  SPECIALIST: { amount: 11000, label: '¥11,000', stripeUrl: 'https://buy.stripe.com/5kQ5kE4N376mefq8dIffy0h' },
+  MASTER:     { amount: 22000, label: '¥22,000', stripeUrl: 'https://buy.stripe.com/7sY5kEenD62ib3e9hMffy0i' },
+  LEGEND:     { amount: 55000, label: '¥55,000', stripeUrl: 'https://buy.stripe.com/5kQ9AUbbraiy0oA2Toffy0k' },
+} as const
 
 /** PROVEN / SPECIALIST 共通ゴールドカラー */
 export const PROVEN_GOLD = '#D4A843';

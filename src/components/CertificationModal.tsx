@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { PROVEN_GOLD, getCertifiableTier, TIER_DISPLAY } from '@/lib/constants'
+import { PROVEN_GOLD, getCertifiableTier, TIER_DISPLAY, CERTIFICATION_PRICING } from '@/lib/constants'
 import { PREFECTURES } from '@/lib/prefectures'
 
 interface CertificationModalProps {
@@ -105,6 +105,7 @@ export default function CertificationModal({
           fullNameKanji: fullNameKanji.trim(),
           fullNameRomaji: fullNameRomaji.trim(),
           organization: organization.trim() || null,
+          payment_tier: applyTier,
           postalCode: postalCode.replace(/[^0-9]/g, ''),
           prefecture,
           cityAddress: cityAddress.trim(),
@@ -380,22 +381,22 @@ export default function CertificationModal({
               </div>
             </div>
 
-            {/* 決済区分の案内 (確認画面) */}
-            <div className="mt-4 p-3 rounded-lg" style={{ background: 'rgba(196,163,90,0.06)', border: '1px solid rgba(196,163,90,0.3)' }}>
-              <div className="text-xs text-gray-700">
-                {isFreeApplication
-                  ? '初回 SPECIALIST 認定は無料です。申請後すぐに制作を開始します。'
-                  : (
-                    <>
-                      <strong>{TIER_DISPLAY[applyTier].icon} {TIER_DISPLAY[applyTier].label}</strong> 認定は有料です。
-                      <br />
-                      申請後に表示される決済リンクからお支払いください。
-                      <br />
-                      お支払い完了後に制作を開始します。
-                    </>
-                  )
-                }
-              </div>
+            {/* 料金表示 (確認画面) */}
+            <div className="mt-4 p-3 rounded-lg" style={{ background: 'rgba(196,163,90,0.08)', border: '1px solid #C4A35A' }}>
+              {isFreeApplication ? (
+                <div className="text-sm" style={{ color: '#1A1A2E' }}>
+                  💰 料金: <strong>無料</strong>(初回SPECIALIST申請)
+                </div>
+              ) : (
+                <>
+                  <div className="text-sm" style={{ color: '#1A1A2E' }}>
+                    💰 料金: <strong>{CERTIFICATION_PRICING[applyTier].label}</strong>
+                  </div>
+                  <div className="text-xs text-gray-600 mt-1">
+                    ※ 申請後、お支払いリンクが表示されます。
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="flex gap-3 mt-6">
@@ -437,22 +438,32 @@ export default function CertificationModal({
             {/* 有料申請: 決済リンクを優先表示 */}
             {paymentStatus === 'pending' && stripePaymentUrl && (
               <div className="rounded-lg p-4 mb-4 text-left" style={{ background: 'rgba(196,163,90,0.08)', border: '1px solid #C4A35A' }}>
-                <p className="text-sm font-bold mb-2" style={{ color: '#C4A35A' }}>
-                  お支払いをお願いします
+                <p className="text-sm font-bold mb-2" style={{ color: '#1A1A2E' }}>
+                  お支払い完了後に制作を開始します。
                 </p>
                 <p className="text-xs text-gray-700 mb-3 leading-relaxed">
-                  お支払い完了後に制作を開始します。
-                  下記のボタンから Stripe の決済ページにお進みください。
+                  以下のリンクからお支払いをお願いします。
                 </p>
                 <a
                   href={stripePaymentUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block w-full px-4 py-3 text-sm font-bold rounded-lg text-center"
-                  style={{ backgroundColor: PROVEN_GOLD, color: '#1A1A2E', textDecoration: 'none' }}
+                  style={{
+                    background: '#C4A35A',
+                    color: 'white',
+                    padding: '16px 32px',
+                    borderRadius: '8px',
+                    fontWeight: 'bold',
+                    textAlign: 'center' as const,
+                    display: 'block',
+                    textDecoration: 'none',
+                  }}
                 >
-                  お支払いページへ →
+                  {TIER_DISPLAY[applyTier].icon} {TIER_DISPLAY[applyTier].label}認定セット {CERTIFICATION_PRICING[applyTier].label}
                 </a>
+                <p className="text-xs text-gray-500 mt-3 text-center">
+                  ※ お支払い後、通常2週間以内にお届けします。
+                </p>
               </div>
             )}
 

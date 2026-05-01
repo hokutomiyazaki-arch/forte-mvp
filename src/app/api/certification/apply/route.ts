@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { OPS_EMAIL, STRENGTH_ENGLISH_NAMES, PERSONALITY_ENGLISH_NAMES, SPECIALIST_THRESHOLD, getCertifiableTier, TIER_DISPLAY, STRIPE_PAYMENT_URLS } from '@/lib/constants'
+import { OPS_EMAIL, STRENGTH_ENGLISH_NAMES, PERSONALITY_ENGLISH_NAMES, SPECIALIST_THRESHOLD, getCertifiableTier, TIER_DISPLAY, CERTIFICATION_PRICING, type CertifiableTier } from '@/lib/constants'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
       cityAddress,
       building,
       phone,
+      payment_tier: bodyPaymentTier,
     } = body
 
     console.log('[CERT APPLY] professionalId from body:', professionalId)
@@ -105,16 +106,25 @@ export async function POST(req: NextRequest) {
 
     // 決済判定: 「初回 SPECIALIST」のみ無料、それ以外は有料 (pending)
     //   - 初回判定はこのプロ自身の certification_applications 件数 === 0
-    //   - 申請ティアは proofCount から判定 (30+/50+/100+ で SPECIALIST/MASTER/LEGEND)
+    //   - 申請ティアはリクエスト body の payment_tier を優先 (フロントの票数判定結果)
+    //     不正値 / 未指定なら proofCount からサーバ側で再計算
     const { count: proPriorAppCount } = await supabase
       .from('certification_applications')
       .select('*', { count: 'exact', head: true })
       .eq('professional_id', professionalId)
-    const isFirstApplication = (proPriorAppCount || 0) === 0
-    const applyTier = getCertifiableTier(proofCount || 30) || 'SPECIALIST'
+    const pastApplications = proPriorAppCount || 0
+    const isFirstApplication = pastApplications === 0
+
+    const VALID_TIERS: ReadonlyArray<CertifiableTier> = ['SPECIALIST', 'MASTER', 'LEGEND']
+    const applyTier: CertifiableTier =
+      typeof bodyPaymentTier === 'string' && (VALID_TIERS as ReadonlyArray<string>).includes(bodyPaymentTier)
+        ? (bodyPaymentTier as CertifiableTier)
+        : (getCertifiableTier(proofCount || 30) || 'SPECIALIST')
+
     const isFreeApplication = isFirstApplication && applyTier === 'SPECIALIST'
     const paymentStatus: 'free' | 'pending' = isFreeApplication ? 'free' : 'pending'
-    const stripePaymentUrl = isFreeApplication ? null : STRIPE_PAYMENT_URLS[applyTier]
+    const paymentAmount = isFreeApplication ? 0 : CERTIFICATION_PRICING[applyTier].amount
+    const stripePaymentUrl = isFreeApplication ? null : CERTIFICATION_PRICING[applyTier].stripeUrl
 
     // INSERT
     const { data: application, error } = await supabase
@@ -136,7 +146,7 @@ export async function POST(req: NextRequest) {
         status: 'pending',
         payment_status: paymentStatus,
         payment_tier: applyTier,
-        payment_amount: 0,
+        payment_amount: paymentAmount,
       })
       .select()
       .maybeSingle()
@@ -236,7 +246,10 @@ export async function POST(req: NextRequest) {
         categoryEnglish,
         proofCount: proofCount || 30,
         certTier,
+        isFirstApplication,
+        applicationCount: pastApplications + 1,
         paymentStatus,
+        paymentAmount,
         stripePaymentUrl,
         achievementDate,
         topPersonality: topPersonality || '—',
@@ -288,7 +301,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       certificationNumber: certNumber,
+      isFirstApplication,
       paymentStatus,
+      paymentAmount,
+      paymentTier: applyTier,
       stripePaymentUrl,
       certTier: applyTier,
     })
@@ -340,7 +356,10 @@ async function sendOpsNotificationEmail(params: {
   categoryEnglish: string
   proofCount: number
   certTier: 'SPECIALIST' | 'MASTER' | 'LEGEND'
+  isFirstApplication: boolean
+  applicationCount: number
   paymentStatus: 'free' | 'pending'
+  paymentAmount: number
   stripePaymentUrl: string | null
   achievementDate: string
   topPersonality: string
@@ -416,10 +435,13 @@ async function sendOpsNotificationEmail(params: {
 
               <h3 style="border-bottom:2px solid #C4A35A;padding-bottom:4px;">■ 決済情報</h3>
               <p>
+                申請回数: <strong>${params.isFirstApplication ? '初回（無料）' : `${params.applicationCount}回目（有料）`}</strong><br/>
+                認定ティア: <strong>${esc(tierMeta.label)}</strong><br/>
                 決済状況: <strong>${params.paymentStatus === 'free' ? '無料' : '決済待ち'}</strong><br/>
+                金額: <strong>${params.paymentAmount === 0 ? '無料' : `¥${params.paymentAmount.toLocaleString()}`}</strong>
                 ${params.stripePaymentUrl
-                  ? `決済リンク (プロへのリマインド用): <a href="${esc(params.stripePaymentUrl)}">${esc(params.stripePaymentUrl)}</a><br/>制作開始は決済完了後。`
-                  : '初回 SPECIALIST 申請のため無料。即時制作可能。'
+                  ? `<br/>決済リンク（プロに送付用）: <a href="${esc(params.stripePaymentUrl)}">${esc(params.stripePaymentUrl)}</a><br/>制作開始は決済完了後。`
+                  : '<br/>初回 SPECIALIST 申請のため無料。即時制作可能。'
                 }
               </p>
 
