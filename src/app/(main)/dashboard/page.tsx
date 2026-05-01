@@ -9,7 +9,7 @@ import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels
 import ForteChart from '@/components/ForteChart'
 import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, PROVEN_GOLD, PROVEN_GRADIENT, TAB_ORDER, TAB_DISPLAY_NAMES } from '@/lib/constants'
 import VoiceShareModal from '@/components/VoiceShareCard'
-import { VoiceCommentCard } from '@/components/card/VoiceCommentCard'
+import DashboardVoiceCard, { type DashboardVoice } from '@/components/dashboard/DashboardVoiceCard'
 import VoiceSuggestionPopup, { type SuggestedTheme } from '@/components/voice/VoiceSuggestionPopup'
 import type { VoiceComment } from '@/components/card/types'
 import VoiceReplyModal from '@/components/VoiceReplyModal'
@@ -146,9 +146,9 @@ export default function DashboardPage() {
 
   // Voices用 state
   // v1.2 §11.4-2: API は display_mode / client_photo_url / auth_display_name /
-  // voter_pro / voter_vote_count を返す（Phase B 完了済み）。VoiceCommentCard が
-  // これらを消費するため VoiceComment 型に拡張。
-  const [voiceComments, setVoiceComments] = useState<VoiceComment[]>([])
+  // /api/dashboard/voices からダッシュボード専用整形済みデータを受け取る。
+  // 公開ページとは異なり display_mode は無視、auth_method ベースで client 表示を判定。
+  const [voiceComments, setVoiceComments] = useState<DashboardVoice[]>([])
   const [voicePhrases, setVoicePhrases] = useState<{ id: number; text: string; is_default: boolean; sort_order: number }[]>([])
   const [expandedVoice, setExpandedVoice] = useState<string | null>(null)
   const [phraseSelecting, setPhraseSelecting] = useState<string | null>(null)
@@ -156,7 +156,7 @@ export default function DashboardPage() {
   const [shareModalVoice, setShareModalVoice] = useState<{ id: string; comment: string; created_at: string } | null>(null)
 
   // Phase 3 Voice 返信: 返信モーダルを開く対象の vote。null なら閉。
-  const [replyModalVote, setReplyModalVote] = useState<VoiceComment | null>(null)
+  const [replyModalVote, setReplyModalVote] = useState<DashboardVoice | null>(null)
 
   // Voice カードテーマ: DB生データをそのまま保持（モーダル内で解決）
   const [savedVoiceThemeData, setSavedVoiceThemeData] = useState<any>(null)
@@ -270,13 +270,20 @@ export default function DashboardPage() {
 
       try {
         // 専用APIで1リクエスト（サーバー側Promise.all並列 + role判定込み）
-        const res = await fetch('/api/dashboard')
+        // ダッシュボード Voices タブ専用の voices エンドポイントも並行 fetch
+        const [res, voicesRes] = await Promise.all([
+          fetch('/api/dashboard'),
+          fetch('/api/dashboard/voices'),
+        ])
         if (!res.ok) {
           console.error('[dashboard] API error:', res.status)
           setLoading(false)
           return
         }
         const data = await res.json()
+        const voicesData = voicesRes.ok
+          ? await voicesRes.json().catch(() => null)
+          : null
 
         // ロールチェック: /api/dashboard のレスポンスから判定
         if (data.role === null) {
@@ -414,8 +421,9 @@ export default function DashboardPage() {
         // Voice カードテーマ
         setSavedVoiceThemeData(proData.voice_card_theme || null)
 
-        // Voices
-        if (data.voiceComments) setVoiceComments(data.voiceComments)
+        // Voices: /api/dashboard/voices からダッシュボード専用整形済みデータを使う
+        // (/api/dashboard 側の data.voiceComments は使わない)
+        if (voicesData?.voices) setVoiceComments(voicesData.voices)
         if (data.gratitudePhrases) setVoicePhrases(data.gratitudePhrases)
 
         // NFCカード
@@ -3099,43 +3107,30 @@ export default function DashboardPage() {
                 || voicePhrases.find(p => p.is_default)?.text || ''
 
               return (
-                // 外側ラッパー: 背景・ボーダーは VoiceCommentCard 側に委譲。
+                // 外側ラッパー: 背景・ボーダーは DashboardVoiceCard 側に委譲。
                 // ここでは onClick（カード展開）と cursor のみを担当する。
                 <div key={c.id}
                   onClick={() => { if (!isExpanded) setExpandedVoice(c.id) }}
                   style={{ cursor: !isExpanded ? 'pointer' : 'default' }}
                 >
-                  {/* 顔写真 / 苗字 / 引用符 / コメント / 日時 / 常連バッジ */}
-                  <VoiceCommentCard vote={c} />
+                  {/* クライアント情報 (auth_method ベース) + コメント本文 + 返信表示 */}
+                  <DashboardVoiceCard voice={c} professionalName={pro?.name || ''} />
 
-                  {/* Phase 3: 返信ボタン（コメント付き Voice のみ表示） */}
+                  {/* Phase 3: 返信ボタン (返信本文の表示は DashboardVoiceCard 内で完結) */}
                   <div style={{ marginTop: 10 }} onClick={e => e.stopPropagation()}>
                     {c.reply ? (
-                      <div>
-                        <div style={{
-                          fontSize: 11, color: '#888888', marginBottom: 6,
-                          padding: '8px 10px', background: '#FAF8F4',
-                          border: '1px solid #E8E4DC', borderRadius: 8,
-                          lineHeight: 1.5,
-                        }}>
-                          <span style={{ fontWeight: 600, color: '#1A1A2E' }}>あなたの返信: </span>
-                          {c.reply.reply_text.length > 50
-                            ? c.reply.reply_text.slice(0, 50) + '…'
-                            : c.reply.reply_text}
-                        </div>
-                        <button
-                          onClick={() => setReplyModalVote(c)}
-                          style={{
-                            padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 600,
-                            background: 'transparent', color: '#888888',
-                            border: '1px solid #D0CCC4', cursor: 'pointer',
-                          }}
-                          onMouseEnter={e => { e.currentTarget.style.borderColor = '#1A1A2E'; e.currentTarget.style.color = '#1A1A2E' }}
-                          onMouseLeave={e => { e.currentTarget.style.borderColor = '#D0CCC4'; e.currentTarget.style.color = '#888888' }}
-                        >
-                          返信を編集
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => setReplyModalVote(c)}
+                        style={{
+                          padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 600,
+                          background: 'transparent', color: '#888888',
+                          border: '1px solid #D0CCC4', cursor: 'pointer',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#1A1A2E'; e.currentTarget.style.color = '#1A1A2E' }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#D0CCC4'; e.currentTarget.style.color = '#888888' }}
+                      >
+                        返信を編集
+                      </button>
                     ) : (
                       <button
                         onClick={() => setReplyModalVote(c)}
