@@ -78,7 +78,6 @@ export async function POST(
       .update({
         client_photo_url: null,
         display_mode: 'hidden',
-        updated_at: new Date().toISOString(),
       })
       .eq('id', voteId)
     if (updErr) throw updErr
