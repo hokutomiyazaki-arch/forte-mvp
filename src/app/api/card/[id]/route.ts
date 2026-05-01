@@ -212,7 +212,37 @@ export async function GET(
       }
     }
 
-    // === enrichedComments: 機密フィールドを除外し voter_pro を付与 ===
+    // === Phase 3 Step 3: vote_replies を一括取得（is_deleted=false のみ） ===
+    // 親コメントごとに reply を 1 つだけ付与（vote_id は UNIQUE）
+    const commentedVoteIds = commentsRaw.map(c => c.id)
+    interface VoiceReply {
+      id: string
+      reply_text: string
+      created_at: string
+      updated_at: string
+      delivered_at: string | null
+      delivered_via: 'line' | 'email' | null
+    }
+    const replyMap = new Map<string, VoiceReply>()
+    if (commentedVoteIds.length > 0) {
+      const { data: replies } = await supabase
+        .from('vote_replies')
+        .select('id, vote_id, reply_text, created_at, updated_at, delivered_at, delivered_via')
+        .in('vote_id', commentedVoteIds)
+        .eq('is_deleted', false)
+      for (const r of (replies || []) as Array<VoiceReply & { vote_id: string }>) {
+        replyMap.set(r.vote_id, {
+          id: r.id,
+          reply_text: r.reply_text,
+          created_at: r.created_at,
+          updated_at: r.updated_at,
+          delivered_at: r.delivered_at,
+          delivered_via: r.delivered_via,
+        })
+      }
+    }
+
+    // === enrichedComments: 機密フィールドを除外し voter_pro / reply を付与 ===
     const enrichedComments = commentsRaw.map(c => {
       const info = c.normalized_email ? voterInfoMap[c.normalized_email] : undefined
       const isFirstVote = info && info.firstVoteId === c.id
@@ -233,6 +263,7 @@ export async function GET(
         auth_display_name: c.auth_display_name,
         voter_pro,
         voter_vote_count: voterVoteCount,
+        reply: replyMap.get(c.id) ?? null,
       }
     })
 

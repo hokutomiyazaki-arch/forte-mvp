@@ -12,6 +12,8 @@ interface Props {
   isTapHighlighted?: boolean
   /** 検索ワード本文（マッチ時に <mark> でハイライト） */
   highlightWord?: string
+  /** プロ名（返信表示の見出しに使う） */
+  professionalName?: string
 }
 
 /** 円形アイコン（32x32）— display_mode に応じて切り替え */
@@ -92,6 +94,7 @@ export function VoiceCommentCard({
   isSearchHighlighted,
   isTapHighlighted,
   highlightWord,
+  professionalName,
 }: Props) {
   const renderClientHeader = () => {
     switch (vote.display_mode) {
@@ -232,6 +235,41 @@ export function VoiceCommentCard({
           <div style={{ fontSize: 11, fontWeight: 600, color: '#999' }}>🔄 リピーター</div>
         )}
       </div>
+
+      {/* Phase 3 Step 3: プロからの返信（is_deleted=false のみAPIから渡される） */}
+      {vote.reply && (
+        <div
+          style={{
+            marginTop: 14,
+            paddingLeft: 12,
+            borderLeft: '2px solid rgba(196, 163, 90, 0.4)',
+          }}
+        >
+          <div
+            style={{
+              fontSize: 11,
+              color: '#C4A35A',
+              fontWeight: 700,
+              letterSpacing: 0.4,
+              marginBottom: 6,
+              fontFamily: T.font,
+            }}
+          >
+            {professionalName ? `${professionalName} からの返信` : 'プロからの返信'}
+          </div>
+          <div
+            style={{
+              fontSize: 13,
+              color: 'rgba(26, 26, 46, 0.9)',
+              lineHeight: 1.7,
+              whiteSpace: 'pre-wrap',
+              fontFamily: T.font,
+            }}
+          >
+            {vote.reply.reply_text}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

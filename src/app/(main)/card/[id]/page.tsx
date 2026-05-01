@@ -1156,6 +1156,7 @@ export default function CardPage() {
                     isSearchHighlighted={isSearchHighlighted}
                     isTapHighlighted={isTapHighlighted}
                     highlightWord={highlightParam || undefined}
+                    professionalName={pro.name}
                   />
                 )
               })}
