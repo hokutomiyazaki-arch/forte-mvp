@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { OPS_EMAIL, STRENGTH_ENGLISH_NAMES, PERSONALITY_ENGLISH_NAMES, SPECIALIST_THRESHOLD, getCertifiableTier, TIER_DISPLAY } from '@/lib/constants'
+import { OPS_EMAIL, STRENGTH_ENGLISH_NAMES, PERSONALITY_ENGLISH_NAMES, SPECIALIST_THRESHOLD, getCertifiableTier, TIER_DISPLAY, STRIPE_PAYMENT_URLS } from '@/lib/constants'
 
 export const dynamic = 'force-dynamic'
 
@@ -103,6 +103,19 @@ export async function POST(req: NextRequest) {
     const seqNum = String((count || 0) + 1).padStart(4, '0')
     const certNumber = `RP-${year}-${seqNum}`
 
+    // 決済判定: 「初回 SPECIALIST」のみ無料、それ以外は有料 (pending)
+    //   - 初回判定はこのプロ自身の certification_applications 件数 === 0
+    //   - 申請ティアは proofCount から判定 (30+/50+/100+ で SPECIALIST/MASTER/LEGEND)
+    const { count: proPriorAppCount } = await supabase
+      .from('certification_applications')
+      .select('*', { count: 'exact', head: true })
+      .eq('professional_id', professionalId)
+    const isFirstApplication = (proPriorAppCount || 0) === 0
+    const applyTier = getCertifiableTier(proofCount || 30) || 'SPECIALIST'
+    const isFreeApplication = isFirstApplication && applyTier === 'SPECIALIST'
+    const paymentStatus: 'free' | 'pending' = isFreeApplication ? 'free' : 'pending'
+    const stripePaymentUrl = isFreeApplication ? null : STRIPE_PAYMENT_URLS[applyTier]
+
     // INSERT
     const { data: application, error } = await supabase
       .from('certification_applications')
@@ -121,6 +134,9 @@ export async function POST(req: NextRequest) {
         phone,
         certification_number: certNumber,
         status: 'pending',
+        payment_status: paymentStatus,
+        payment_tier: applyTier,
+        payment_amount: 0,
       })
       .select()
       .maybeSingle()
@@ -205,8 +221,8 @@ export async function POST(req: NextRequest) {
     const nfcUrl = nfcCardUid ? `https://realproof.jp/nfc/${nfcCardUid}` : null
     const cardUrl = `https://realproof.jp/card/${professionalId}`
 
-    // 8. 申請ティア (今回申請カテゴリの票数からSPECIALIST/MASTER/LEGEND判定)
-    const certTier = getCertifiableTier(proofCount || 30) || 'SPECIALIST'
+    // 8. 申請ティアは INSERT 時に算出済 (applyTier)。メール用に再利用。
+    const certTier = applyTier
 
     // 運営向けメール送信
     try {
@@ -220,6 +236,8 @@ export async function POST(req: NextRequest) {
         categoryEnglish,
         proofCount: proofCount || 30,
         certTier,
+        paymentStatus,
+        stripePaymentUrl,
         achievementDate,
         topPersonality: topPersonality || '—',
         personalityEnglish,
@@ -270,6 +288,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       certificationNumber: certNumber,
+      paymentStatus,
+      stripePaymentUrl,
+      certTier: applyTier,
     })
   } catch (err: any) {
     console.error('[certification/apply] error:', err)
@@ -319,6 +340,8 @@ async function sendOpsNotificationEmail(params: {
   categoryEnglish: string
   proofCount: number
   certTier: 'SPECIALIST' | 'MASTER' | 'LEGEND'
+  paymentStatus: 'free' | 'pending'
+  stripePaymentUrl: string | null
   achievementDate: string
   topPersonality: string
   personalityEnglish: string
@@ -389,6 +412,15 @@ async function sendOpsNotificationEmail(params: {
                 30票目達成日: ${esc(params.achievementDate)}<br/>
                 最多人柄項目: ${esc(params.topPersonality)}<br/>
                 英語: ${esc(params.personalityEnglish)}
+              </p>
+
+              <h3 style="border-bottom:2px solid #C4A35A;padding-bottom:4px;">■ 決済情報</h3>
+              <p>
+                決済状況: <strong>${params.paymentStatus === 'free' ? '無料' : '決済待ち'}</strong><br/>
+                ${params.stripePaymentUrl
+                  ? `決済リンク (プロへのリマインド用): <a href="${esc(params.stripePaymentUrl)}">${esc(params.stripePaymentUrl)}</a><br/>制作開始は決済完了後。`
+                  : '初回 SPECIALIST 申請のため無料。即時制作可能。'
+                }
               </p>
 
               <h3 style="border-bottom:2px solid #C4A35A;padding-bottom:4px;">■ 全スペシャリスト項目（カード記載用）</h3>

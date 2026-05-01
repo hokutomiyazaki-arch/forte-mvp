@@ -4059,8 +4059,9 @@ export default function DashboardPage() {
           categoryName={certModal.name}
           proofCount={certModal.count}
           topPersonality={personalityVotes.length > 0 ? [...personalityVotes].sort((a, b) => b.vote_count - a.vote_count)[0].category : null}
+          isFirstApplication={certApplications.length === 0}
           onClose={() => setCertModal(null)}
-          onComplete={(certNum) => {
+          onComplete={() => {
             setCertApplications(prev => [...prev, { category_slug: certModal.slug, status: 'pending' }])
             // モーダルは閉じない → 完了画面を表示し、ユーザーが「ダッシュボードに戻る」を押して閉じる
           }}

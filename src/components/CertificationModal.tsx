@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { PROVEN_GOLD } from '@/lib/constants'
+import { PROVEN_GOLD, getCertifiableTier, TIER_DISPLAY } from '@/lib/constants'
 import { PREFECTURES } from '@/lib/prefectures'
 
 interface CertificationModalProps {
@@ -9,6 +9,8 @@ interface CertificationModalProps {
   categoryName: string
   proofCount: number
   topPersonality: string | null
+  /** このプロのこれまでの申請件数 === 0 か。SPECIALIST 初回判定に使う */
+  isFirstApplication: boolean
   onClose: () => void
   onComplete: (certNumber: string) => void
 }
@@ -21,12 +23,20 @@ export default function CertificationModal({
   categoryName,
   proofCount,
   topPersonality,
+  isFirstApplication,
   onClose,
   onComplete,
 }: CertificationModalProps) {
   const [step, setStep] = useState<ModalStep>('form')
   const [certNumber, setCertNumber] = useState('')
   const [error, setError] = useState('')
+  // 申請後にレスポンスから受け取る決済情報
+  const [paymentStatus, setPaymentStatus] = useState<'free' | 'pending'>('free')
+  const [stripePaymentUrl, setStripePaymentUrl] = useState<string | null>(null)
+
+  // フロント側のティア / 無料判定 (確認画面のボタン文言などで使用)
+  const applyTier = getCertifiableTier(proofCount) || 'SPECIALIST'
+  const isFreeApplication = isFirstApplication && applyTier === 'SPECIALIST'
 
   // フォームフィールド
   const [fullNameKanji, setFullNameKanji] = useState('')
@@ -113,6 +123,11 @@ export default function CertificationModal({
         return
       }
       setCertNumber(data.certificationNumber || '')
+      // サーバ側の決済判定をクライアントへ反映 (フロントのフォールバック判定より優先)
+      if (data.paymentStatus === 'free' || data.paymentStatus === 'pending') {
+        setPaymentStatus(data.paymentStatus)
+      }
+      setStripePaymentUrl(typeof data.stripePaymentUrl === 'string' ? data.stripePaymentUrl : null)
       setStep('complete')
       onComplete(data.certificationNumber || '')
     } catch (err) {
@@ -365,6 +380,24 @@ export default function CertificationModal({
               </div>
             </div>
 
+            {/* 決済区分の案内 (確認画面) */}
+            <div className="mt-4 p-3 rounded-lg" style={{ background: 'rgba(196,163,90,0.06)', border: '1px solid rgba(196,163,90,0.3)' }}>
+              <div className="text-xs text-gray-700">
+                {isFreeApplication
+                  ? '初回 SPECIALIST 認定は無料です。申請後すぐに制作を開始します。'
+                  : (
+                    <>
+                      <strong>{TIER_DISPLAY[applyTier].icon} {TIER_DISPLAY[applyTier].label}</strong> 認定は有料です。
+                      <br />
+                      申請後に表示される決済リンクからお支払いください。
+                      <br />
+                      お支払い完了後に制作を開始します。
+                    </>
+                  )
+                }
+              </div>
+            </div>
+
             <div className="flex gap-3 mt-6">
               <button onClick={() => setStep('form')}
                 className="flex-1 px-4 py-3 text-sm border rounded-lg text-gray-600 hover:bg-gray-50">
@@ -373,7 +406,7 @@ export default function CertificationModal({
               <button onClick={handleSubmit}
                 className="flex-1 px-4 py-3 text-sm font-bold rounded-lg"
                 style={{ backgroundColor: PROVEN_GOLD, color: '#1A1A2E' }}>
-                はい、申請する
+                {isFreeApplication ? '申請する(無料)' : '申請する'}
               </button>
             </div>
           </div>
@@ -390,14 +423,38 @@ export default function CertificationModal({
         {/* ====== 完了画面 ====== */}
         {step === 'complete' && (
           <div className="p-6 text-center">
-            <div className="text-4xl mb-4">🎉</div>
-            <h2 className="text-xl font-bold mb-2">申請完了！</h2>
+            <div className="text-4xl mb-4">{paymentStatus === 'pending' ? '✅' : '🎉'}</div>
+            <h2 className="text-xl font-bold mb-2">
+              {paymentStatus === 'pending' ? '申請を受け付けました!' : '申請完了!'}
+            </h2>
             <p className="text-sm text-gray-600 mb-1">
-              REALPROOF認定「<strong>{categoryName}スペシャリスト</strong>」の
+              REALPROOF認定「<strong>{categoryName}{TIER_DISPLAY[applyTier].label}</strong>」の
             </p>
             <p className="text-sm text-gray-600 mb-4">
               賞状と名前入りプルーフカードをお届けします。
             </p>
+
+            {/* 有料申請: 決済リンクを優先表示 */}
+            {paymentStatus === 'pending' && stripePaymentUrl && (
+              <div className="rounded-lg p-4 mb-4 text-left" style={{ background: 'rgba(196,163,90,0.08)', border: '1px solid #C4A35A' }}>
+                <p className="text-sm font-bold mb-2" style={{ color: '#C4A35A' }}>
+                  お支払いをお願いします
+                </p>
+                <p className="text-xs text-gray-700 mb-3 leading-relaxed">
+                  お支払い完了後に制作を開始します。
+                  下記のボタンから Stripe の決済ページにお進みください。
+                </p>
+                <a
+                  href={stripePaymentUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full px-4 py-3 text-sm font-bold rounded-lg text-center"
+                  style={{ backgroundColor: PROVEN_GOLD, color: '#1A1A2E', textDecoration: 'none' }}
+                >
+                  お支払いページへ →
+                </a>
+              </div>
+            )}
 
             <div className="bg-gray-50 rounded-lg p-4 mb-4 text-left">
               <p className="text-xs font-bold text-gray-500 mb-2">■ 送付先</p>
@@ -409,7 +466,9 @@ export default function CertificationModal({
             </div>
 
             <p className="text-xs text-gray-500 mb-4">
-              準備が整い次第、上記の住所に発送いたします。
+              {paymentStatus === 'pending'
+                ? 'お支払いが確認でき次第、上記の住所に発送いたします。'
+                : '準備が整い次第、上記の住所に発送いたします。'}
             </p>
             {certNumber && (
               <p className="text-xs text-gray-400 mb-4">
@@ -418,7 +477,11 @@ export default function CertificationModal({
             )}
             <button onClick={onClose}
               className="w-full px-4 py-3 text-sm font-bold rounded-lg"
-              style={{ backgroundColor: PROVEN_GOLD, color: '#1A1A2E' }}>
+              style={{
+                backgroundColor: paymentStatus === 'pending' ? 'transparent' : PROVEN_GOLD,
+                color: paymentStatus === 'pending' ? '#888' : '#1A1A2E',
+                border: paymentStatus === 'pending' ? '1px solid #D0CCC4' : 'none',
+              }}>
               ダッシュボードに戻る
             </button>
           </div>

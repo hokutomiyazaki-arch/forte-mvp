@@ -67,6 +67,18 @@ export const TIER_DISPLAY: Record<CertificationTier, { icon: string; label: stri
   LEGEND: { icon: '💎', label: 'LEGEND' },
 }
 
+/**
+ * 認定申請の Stripe 決済リンク (CertifiableTier 別)
+ *   - SPECIALIST: 「2 回目以降の SPECIALIST 更新」用 (初回 SPECIALIST は無料)
+ *   - MASTER: 常に有料
+ *   - LEGEND: 常に有料
+ */
+export const STRIPE_PAYMENT_URLS: Record<CertifiableTier, string> = {
+  SPECIALIST: 'https://buy.stripe.com/5kQ5kE4N376mefq8dIffy0h',
+  MASTER: 'https://buy.stripe.com/7sY5kEenD62ib3e9hMffy0i',
+  LEGEND: 'https://buy.stripe.com/5kQ9AUbbraiy0oA2Toffy0k',
+}
+
 /** PROVEN / SPECIALIST 共通ゴールドカラー */
 export const PROVEN_GOLD = '#D4A843';
 
