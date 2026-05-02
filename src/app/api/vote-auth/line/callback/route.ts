@@ -35,7 +35,15 @@ export async function GET(request: NextRequest) {
 
   // LINE認証がキャンセルされた場合
   if (error || !code || !stateParam) {
-    console.error('[vote-auth/line/callback] Auth error or cancelled:', error)
+    console.error('[vote-auth/line/callback] Auth error or cancelled:', {
+      error,
+      has_code: !!code,
+      has_state: !!stateParam,
+      url: request.nextUrl.toString(),
+      user_agent: request.headers.get('user-agent'),
+      referer: request.headers.get('referer'),
+      x_forwarded_for: request.headers.get('x-forwarded-for'),
+    })
     // state からprofessional_idを復元してエラーパラメータ付きで投票ページに戻す
     let redirectPath = '/'
     if (stateParam) {
