@@ -23,6 +23,12 @@ next-env.d.ts
 *.backup
 *.bak
 
+# DB dump backups (PII 含むため絶対 commit しない)
+/backups/
+
+# 実行ログ(commit しない)
+/logs/
+
 # Working files (作業用ファイル、ローカルのみ保管)
 # Claude Code 指示書・プロンプト
 /*-instructions.md
