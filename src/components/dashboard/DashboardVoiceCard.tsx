@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 /**
  * ダッシュボード Voices タブ専用カード
@@ -167,6 +167,18 @@ export default function DashboardVoiceCard({
     voice.comment.trim() !== ''
   const showMenu = showPhotoDelete || showCommentDelete
 
+  // メニュー外クリック検知 (補強書 B-5、依存配列はプリミティブのみ)
+  useEffect(() => {
+    if (!menuOpen) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [menuOpen])
+
   return (
     <div
       style={{
@@ -176,8 +188,173 @@ export default function DashboardVoiceCard({
         borderRadius: 14,
       }}
     >
-      <div style={{ marginBottom: 12 }}>
-        <ClientHeader client={voice.client} />
+      {/* ヘッダー: クライアント情報 (左) + [⋯] トグルメニュー (右) */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          gap: 8,
+          marginBottom: 12,
+        }}
+      >
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <ClientHeader client={voice.client} />
+        </div>
+
+        {showMenu && (
+          <div
+            ref={menuRef}
+            style={{ position: 'relative', flexShrink: 0 }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/*
+              タップ領域は 44x44 (WCAG AAA 準拠、モバイル誤タップ防止)。
+              視覚は内側 span の 32x32 円形で維持し、ホバー時の背景色も内側 span に
+              のみ適用することで「視覚 32x32 のまま反応」を実現する。
+            */}
+            <button
+              type="button"
+              onClick={() => setMenuOpen(o => !o)}
+              aria-label="編集メニュー"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              style={{
+                width: 44,
+                height: 44,
+                padding: 0,
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onMouseEnter={e => {
+                const span = e.currentTarget.firstElementChild as HTMLElement | null
+                if (span) {
+                  span.style.background = 'rgba(26, 26, 46, 0.06)'
+                  span.style.color = '#1A1A2E'
+                }
+              }}
+              onMouseLeave={e => {
+                const span = e.currentTarget.firstElementChild as HTMLElement | null
+                if (span) {
+                  span.style.background = 'transparent'
+                  span.style.color = '#888888'
+                }
+              }}
+            >
+              <span
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  background: 'transparent',
+                  color: '#888888',
+                  fontSize: 18,
+                  lineHeight: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'background 0.15s, color 0.15s',
+                }}
+              >
+                ⋯
+              </span>
+            </button>
+
+            {menuOpen && (
+              <div
+                role="menu"
+                aria-label="編集メニュー"
+                style={{
+                  position: 'absolute',
+                  // button 44x44 の場合、視覚 span 32x32 の下端は y=38
+                  // → 4px 下げて 42 で span 直下に自然配置 (タップ領域拡張に伴う調整)
+                  top: 42,
+                  right: 0,
+                  zIndex: 100,
+                  minWidth: 200,
+                  background: '#FFFFFF',
+                  border: '1px solid #E8E4DC',
+                  borderRadius: 10,
+                  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
+                  padding: 4,
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+              >
+                {showPhotoDelete && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setConfirmAction('photo')
+                      setMenuOpen(false)
+                    }}
+                    style={{
+                      textAlign: 'left',
+                      padding: '10px 12px',
+                      minHeight: 44,
+                      borderRadius: 6,
+                      border: 'none',
+                      background: 'transparent',
+                      color: '#1A1A2E',
+                      fontSize: 13,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = 'rgba(26, 26, 46, 0.05)'
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = 'transparent'
+                    }}
+                  >
+                    <span aria-hidden="true">📸</span>
+                    <span>顔写真を削除する</span>
+                  </button>
+                )}
+                {showCommentDelete && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setConfirmAction('comment')
+                      setMenuOpen(false)
+                    }}
+                    style={{
+                      textAlign: 'left',
+                      padding: '10px 12px',
+                      minHeight: 44,
+                      borderRadius: 6,
+                      border: 'none',
+                      background: 'transparent',
+                      color: '#1A1A2E',
+                      fontSize: 13,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = 'rgba(26, 26, 46, 0.05)'
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = 'transparent'
+                    }}
+                  >
+                    <span aria-hidden="true">🗑️</span>
+                    <span>コメントを削除する</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 引用符 + コメント本文 */}
@@ -241,6 +418,122 @@ export default function DashboardVoiceCard({
           </div>
         </div>
       )}
+
+      {/*
+        カード内アクション領域 (返信 / 検索カード設定)
+        Step 4 で page.tsx 側の外側ボタン群が削除されるまで一時的に二重表示になる
+        (補強書 C-2 で許容)。
+      */}
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          marginTop: 14,
+          paddingTop: 12,
+          borderTop: '1px solid rgba(232, 228, 220, 0.6)',
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 8,
+        }}
+      >
+        {/* 返信ボタン (reply 有無で文言切替) */}
+        {voice.reply ? (
+          <button
+            type="button"
+            onClick={() => onReplyClick(voice)}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 8,
+              fontSize: 11,
+              fontWeight: 600,
+              background: 'transparent',
+              color: '#888888',
+              border: '1px solid #D0CCC4',
+              cursor: 'pointer',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = '#1A1A2E'
+              e.currentTarget.style.color = '#1A1A2E'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = '#D0CCC4'
+              e.currentTarget.style.color = '#888888'
+            }}
+          >
+            返信を編集
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onReplyClick(voice)}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 8,
+              fontSize: 11,
+              fontWeight: 700,
+              background: '#1A1A2E',
+              color: '#FFFFFF',
+              border: '1px solid #1A1A2E',
+              cursor: 'pointer',
+            }}
+          >
+            返信を書く
+          </button>
+        )}
+
+        {/* 検索カード設定ボタン (isFeatured で文言切替) */}
+        {isFeatured ? (
+          <button
+            type="button"
+            disabled={isFeaturedSaving}
+            onClick={() => {
+              void onFeaturedToggle(voice.id)
+            }}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 8,
+              fontSize: 11,
+              fontWeight: 600,
+              background: 'rgba(196,163,90,0.1)',
+              color: '#C4A35A',
+              border: '1px solid #C4A35A',
+              cursor: isFeaturedSaving ? 'default' : 'pointer',
+              opacity: isFeaturedSaving ? 0.5 : 1,
+            }}
+          >
+            ✓ 検索カードに表示中
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={isFeaturedSaving}
+            onClick={() => {
+              void onFeaturedToggle(voice.id)
+            }}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 8,
+              fontSize: 11,
+              fontWeight: 600,
+              background: 'transparent',
+              color: '#888888',
+              border: '1px solid #D0CCC4',
+              cursor: isFeaturedSaving ? 'default' : 'pointer',
+              opacity: isFeaturedSaving ? 0.5 : 1,
+            }}
+            onMouseEnter={e => {
+              if (isFeaturedSaving) return
+              e.currentTarget.style.borderColor = '#C4A35A'
+              e.currentTarget.style.color = '#C4A35A'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = '#D0CCC4'
+              e.currentTarget.style.color = '#888888'
+            }}
+          >
+            検索カードに設定
+          </button>
+        )}
+      </div>
     </div>
   )
 }
