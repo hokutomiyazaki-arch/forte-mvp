@@ -155,6 +155,7 @@ export default function DashboardVoiceCard({
 
   const menuRef = useRef<HTMLDivElement>(null)
   const cancelButtonRef = useRef<HTMLButtonElement>(null)
+  const confirmButtonRef = useRef<HTMLButtonElement>(null)
 
   // メニュー項目の表示条件 (補強書 A-1)
   //   - 写真なし票では「写真削除」非表示
@@ -178,6 +179,67 @@ export default function DashboardVoiceCard({
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [menuOpen])
+
+  // 確認モーダル: 初期フォーカスはキャンセルボタン (補強書 A-2、誤タップ防止)
+  useEffect(() => {
+    if (!confirmAction) return
+    cancelButtonRef.current?.focus()
+  }, [confirmAction])
+
+  // 確認モーダル: ESC キーで閉じる (補強書 B-6、actionLoading 中は無効)
+  // 依存配列はプリミティブのみ (CLAUDE.md ルール準拠)
+  useEffect(() => {
+    if (!confirmAction) return
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !actionLoading) {
+        setConfirmAction(null)
+      }
+    }
+    document.addEventListener('keydown', handleEsc)
+    return () => document.removeEventListener('keydown', handleEsc)
+  }, [confirmAction, actionLoading])
+
+  // 削除実行 (補強書 B-3 の責任分担: 子は callback を await するだけ)
+  const handleConfirmAction = async () => {
+    if (!confirmAction) return
+    setActionLoading(true)
+    try {
+      if (confirmAction === 'photo') {
+        await onPhotoDelete(voice.id)
+      } else if (confirmAction === 'comment') {
+        await onCommentDelete(voice.id)
+      }
+      setConfirmAction(null)
+      setMenuOpen(false)
+    } catch (err) {
+      // Step 3 では alert で簡易対応 (補強書 B-3、Step 4 でトースト化検討)
+      alert((err as Error).message || '削除に失敗しました')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  // 確認モーダル focus trap: Tab/Shift+Tab で 2 ボタン間を循環 (補強書 B-2)
+  const handleDialogKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'Tab') return
+    const cancelEl = cancelButtonRef.current
+    const confirmEl = confirmButtonRef.current
+    if (!cancelEl || !confirmEl) return
+
+    if (e.shiftKey) {
+      // Shift+Tab: cancel にいるなら confirm へ循環
+      if (document.activeElement === cancelEl) {
+        e.preventDefault()
+        confirmEl.focus()
+      }
+    } else {
+      // Tab: confirm にいるなら cancel へ循環
+      if (document.activeElement === confirmEl) {
+        e.preventDefault()
+        cancelEl.focus()
+      }
+    }
+  }
 
   return (
     <div
@@ -534,6 +596,132 @@ export default function DashboardVoiceCard({
           </button>
         )}
       </div>
+
+      {/*
+        削除確認モーダル (補強書 B-1: z-index 9000、B-2: a11y、B-4: インライン実装)
+        - role="dialog" + aria-modal + aria-labelledby
+        - 初期フォーカス: キャンセルボタン (補強書 A-2)
+        - ESC キーで閉じる (actionLoading 中は無効)
+        - Tab/Shift+Tab で focus trap (2 ボタン間で循環)
+        - 背景クリックで閉じる (actionLoading 中は無効)
+        - 各ボタン min-height: 44 (WCAG AAA タップ領域)
+      */}
+      {confirmAction && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="dashboard-voice-confirm-title"
+          onKeyDown={handleDialogKeyDown}
+          onClick={e => {
+            // 背景クリックで閉じる (actionLoading 中は無効)
+            // stopPropagation で親カードの setExpandedVoice バブリングを防ぐ
+            e.stopPropagation()
+            if (e.target === e.currentTarget && !actionLoading) {
+              setConfirmAction(null)
+            }
+          }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9000,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#FFFFFF',
+              borderRadius: 12,
+              padding: 24,
+              maxWidth: 400,
+              width: '100%',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.16)',
+            }}
+          >
+            <h2
+              id="dashboard-voice-confirm-title"
+              style={{
+                fontSize: 16,
+                fontWeight: 700,
+                color: '#1A1A2E',
+                margin: '0 0 12px',
+              }}
+            >
+              {confirmAction === 'photo'
+                ? '顔写真を削除しますか?'
+                : 'コメントを削除しますか?'}
+            </h2>
+            <p
+              style={{
+                fontSize: 13,
+                color: '#666666',
+                lineHeight: 1.7,
+                margin: '0 0 20px',
+                whiteSpace: 'pre-wrap',
+              }}
+            >
+              {confirmAction === 'photo'
+                ? 'このクライアントの顔写真がダッシュボード・公開ページ・シェアカードから完全に消えます。\nコメントは残ります。\n\nこの操作は元に戻せません。'
+                : 'このクライアントが書いたコメント本文が完全に消えます。\n投票自体は記録として残りますが、ダッシュボードからはこのカードは表示されなくなります。\n\nこの操作は元に戻せません。'}
+            </p>
+            <div
+              style={{
+                display: 'flex',
+                gap: 12,
+                justifyContent: 'flex-end',
+                flexWrap: 'wrap',
+              }}
+            >
+              <button
+                ref={cancelButtonRef}
+                type="button"
+                onClick={() => {
+                  if (!actionLoading) setConfirmAction(null)
+                }}
+                disabled={actionLoading}
+                style={{
+                  minHeight: 44,
+                  padding: '10px 20px',
+                  borderRadius: 8,
+                  border: '1px solid #D0CCC4',
+                  background: 'transparent',
+                  color: '#1A1A2E',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: actionLoading ? 'default' : 'pointer',
+                  opacity: actionLoading ? 0.5 : 1,
+                }}
+              >
+                キャンセル
+              </button>
+              <button
+                ref={confirmButtonRef}
+                type="button"
+                onClick={handleConfirmAction}
+                disabled={actionLoading}
+                style={{
+                  minHeight: 44,
+                  padding: '10px 20px',
+                  borderRadius: 8,
+                  border: '1px solid #1A1A2E',
+                  background: '#1A1A2E',
+                  color: '#FFFFFF',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: actionLoading ? 'default' : 'pointer',
+                  opacity: actionLoading ? 0.7 : 1,
+                }}
+              >
+                {actionLoading ? '削除中...' : '削除する'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
