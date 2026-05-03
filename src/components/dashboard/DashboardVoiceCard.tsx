@@ -1,5 +1,7 @@
 'use client'
 
+import { useRef, useState } from 'react'
+
 /**
  * ダッシュボード Voices タブ専用カード
  *
@@ -8,9 +10,10 @@
  *   - auth_method ベースで「対面の相手」としてリッチに表示
  *   - data source: /api/dashboard/voices の voices[i]
  *
- * このコンポーネントはコメント本文 + クライアント情報ヘッダー + プロからの返信表示
- * までを担当。「返信を書く」「シェア」「検索カードに設定」等のボタンは呼び出し元
- * (dashboard/page.tsx) 側で本コンポーネントの後ろに配置する。
+ * Phase 5 Step 3: トグルメニュー [⋯] と削除確認モーダルをカード内に統合。
+ *   - 「返信を編集 / 返信を書く」「✓ 検索カードに表示中 / 検索カードに設定」を
+ *     カード内のアクション領域に集約 (親 page.tsx から callback 経由で操作)
+ *   - 編集系の破壊的操作 (写真削除 / コメント削除) は右上 [⋯] メニュー内に隠す
  */
 
 export interface DashboardVoiceClient {
@@ -46,7 +49,20 @@ export interface DashboardVoice {
 interface Props {
   voice: DashboardVoice
   professionalName: string
+
+  // 親 page.tsx から渡される操作 callback
+  onReplyClick: (voice: DashboardVoice) => void
+  onFeaturedToggle: (voiceId: string) => Promise<void>
+  onPhotoDelete: (voiceId: string) => Promise<void>
+  onCommentDelete: (voiceId: string) => Promise<void>
+
+  // 親が管理する状態
+  isFeatured: boolean
+  isFeaturedSaving: boolean
 }
+
+// 削除確認モーダルの種別
+type ConfirmAction = null | 'photo' | 'comment'
 
 function ClientHeader({ client }: { client: DashboardVoiceClient }) {
   if (client.type === 'rich') {
@@ -122,7 +138,35 @@ function ClientHeader({ client }: { client: DashboardVoiceClient }) {
   )
 }
 
-export default function DashboardVoiceCard({ voice, professionalName }: Props) {
+export default function DashboardVoiceCard({
+  voice,
+  professionalName,
+  onReplyClick,
+  onFeaturedToggle,
+  onPhotoDelete,
+  onCommentDelete,
+  isFeatured,
+  isFeaturedSaving,
+}: Props) {
+  // STOP-1: 内部 state / ref 先行宣言 (UI 配置は STOP-2 以降)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null)
+  const [actionLoading, setActionLoading] = useState(false)
+
+  const menuRef = useRef<HTMLDivElement>(null)
+  const cancelButtonRef = useRef<HTMLButtonElement>(null)
+
+  // メニュー項目の表示条件 (補強書 A-1)
+  //   - 写真なし票では「写真削除」非表示
+  //   - コメントなし/空文字票では「コメント削除」非表示 (型上 string だが防御的に null チェック併用)
+  //   - 両方非表示なら [⋯] ボタン自体を非表示 (空メニューを開く意味なし)
+  const showPhotoDelete = voice.client_photo_url !== null && voice.client_photo_url !== ''
+  const showCommentDelete =
+    voice.comment !== null &&
+    voice.comment !== undefined &&
+    voice.comment.trim() !== ''
+  const showMenu = showPhotoDelete || showCommentDelete
+
   return (
     <div
       style={{
