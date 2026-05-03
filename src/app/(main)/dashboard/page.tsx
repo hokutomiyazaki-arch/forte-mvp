@@ -3140,7 +3140,29 @@ export default function DashboardPage() {
                   style={{ cursor: !isExpanded ? 'pointer' : 'default' }}
                 >
                   {/* クライアント情報 (auth_method ベース) + コメント本文 + 返信表示 */}
-                  <DashboardVoiceCard voice={c} professionalName={pro?.name || ''} />
+                  {/*
+                    Phase 5 STOP-4 暫定 props (補強書 C-1):
+                    - onReplyClick / isFeatured: 既存ロジックをそのまま流用
+                    - onFeaturedToggle / onPhotoDelete / onCommentDelete / isFeaturedSaving:
+                      Phase 5 Step 4 で本実装。現状は空 (削除メニューを押しても何も起きない)。
+                    - 外側ボタン群 (line 3146-3227) は Step 4 で削除予定 (現状は二重表示)。
+                  */}
+                  <DashboardVoiceCard
+                    voice={c}
+                    professionalName={pro?.name || ''}
+                    onReplyClick={(v) => setReplyModalVote(v)}
+                    onFeaturedToggle={async (_voiceId) => {
+                      // TODO Phase 5 Step 4: 既存の検索カード切替ロジック (line 3176-3226) をここに移植
+                    }}
+                    onPhotoDelete={async (_voiceId) => {
+                      // TODO Phase 5 Step 4: /api/dashboard/voices/[id]/remove-photo を叩いて voiceComments を更新
+                    }}
+                    onCommentDelete={async (_voiceId) => {
+                      // TODO Phase 5 Step 4: /api/dashboard/voices/[id]/remove-comment を叩いて voiceComments から除外
+                    }}
+                    isFeatured={featuredVoiceId === c.id}
+                    isFeaturedSaving={false}
+                  />
 
                   {/* Phase 3: 返信ボタン (返信本文の表示は DashboardVoiceCard 内で完結) */}
                   <div style={{ marginTop: 10 }} onClick={e => e.stopPropagation()}>
