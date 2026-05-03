@@ -143,6 +143,9 @@ export default function DashboardPage() {
   const [featuredProofSaving, setFeaturedProofSaving] = useState(false)
   const [featuredVoiceId, setFeaturedVoiceId] = useState<string | null>(null)
   const [featuredVoiceSaving, setFeaturedVoiceSaving] = useState(false)
+  // Phase 5 Step 4: 検索カード設定保存中の voiceId (複数カード対応、保存中の1枚のみ disabled)
+  // ⚠️ 既存の featuredVoiceSaving (boolean) は STOP-3 で外側ボタン削除と同時に廃止予定。
+  const [featuredVoiceSavingId, setFeaturedVoiceSavingId] = useState<string | null>(null)
 
   // Voices用 state
   // v1.2 §11.4-2: API は display_mode / client_photo_url / auth_display_name /
@@ -157,6 +160,103 @@ export default function DashboardPage() {
 
   // Phase 3 Voice 返信: 返信モーダルを開く対象の vote。null なら閉。
   const [replyModalVote, setReplyModalVote] = useState<DashboardVoice | null>(null)
+
+  // ── Phase 5 Step 4: Voices タブ専用 callbacks (DashboardVoiceCard に渡す) ──
+  // 既存の暫定空関数 (Step 3 STOP-4) を本実装に置換。
+  // 補強書 §C-1〜C-4 準拠。§7.3 のサンプルコードは認証ラベル誤上書きバグがあるため使用しない。
+
+  // 返信モーダルを開く (補強書 §C-4: 既存 setReplyModalVote ラップ)
+  const handleReplyClick = (voice: DashboardVoice) => {
+    setReplyModalVote(voice)
+  }
+
+  // 検索カード設定切替 (補強書 §C-3 + 既存外側ボタン onClick 移植 [page.tsx 旧 line 3198-3248])
+  // featuredVoiceId === voiceId なら OFF、それ以外なら ON。
+  const handleFeaturedToggle = async (voiceId: string) => {
+    setFeaturedVoiceSavingId(voiceId)
+    try {
+      const turningOff = featuredVoiceId === voiceId
+      const newVoteId = turningOff ? null : voiceId
+      await fetch('/api/dashboard/set-featured-voice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vote_id: newVoteId }),
+      })
+      setFeaturedVoiceId(newVoteId)
+    } catch (err) {
+      console.error('[handleFeaturedToggle] failed:', err)
+      alert('検索カード設定に失敗しました')
+    } finally {
+      setFeaturedVoiceSavingId(null)
+    }
+  }
+
+  // 写真削除 (補強書 §C-1: 楽観的更新 → API → 失敗時ロールバック)
+  // ⚠️ §7.3 の `client: { type: 'auth_only', label: 'メール認証', icon: 'email' }` は使わない。
+  //    LINE 認証ユーザーが「メール認証」に化けるバグ。
+  //    正しくは display_mode='hidden' を設定し、buildClientDisplay の '公開設定: 非公開' に揃える。
+  const handlePhotoDelete = async (voiceId: string) => {
+    const backup = voiceComments.find(v => v.id === voiceId)
+    if (!backup) return
+
+    setVoiceComments(prev => prev.map(v =>
+      v.id === voiceId  // ⚠️ 比較演算子 (===)、絶対に "=" 1個にしない (補強書 §A-1)
+        ? {
+            ...v,
+            client_photo_url: null,
+            display_mode: 'hidden',
+            client: {
+              type: 'auth_only' as const,
+              label: '公開設定: 非公開',
+              icon: 'default' as const,
+            },
+          }
+        : v
+    ))
+
+    try {
+      const res = await fetch(`/api/dashboard/voices/${voiceId}/remove-photo`, {
+        method: 'POST',
+        cache: 'no-store',
+      })
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}))
+        throw new Error(errBody.error || '削除に失敗しました')
+      }
+    } catch (err) {
+      // ロールバック: バックアップで該当 voice を復元
+      setVoiceComments(prev => prev.map(v => v.id === voiceId ? backup : v))
+      throw err  // DashboardVoiceCard 側 handleConfirmAction の catch で alert 表示
+    }
+  }
+
+  // コメント削除 (補強書 §C-2: 楽観的更新でリストから除外 → API → 失敗時 splice で元位置に再挿入)
+  const handleCommentDelete = async (voiceId: string) => {
+    const backupIndex = voiceComments.findIndex(v => v.id === voiceId)
+    if (backupIndex === -1) return
+    const backup = voiceComments[backupIndex]
+
+    setVoiceComments(prev => prev.filter(v => v.id !== voiceId))  // ⚠️ !== 比較
+
+    try {
+      const res = await fetch(`/api/dashboard/voices/${voiceId}/remove-comment`, {
+        method: 'POST',
+        cache: 'no-store',
+      })
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}))
+        throw new Error(errBody.error || '削除に失敗しました')
+      }
+    } catch (err) {
+      // ロールバック: 元の位置に再挿入
+      setVoiceComments(prev => {
+        const restored = [...prev]
+        restored.splice(backupIndex, 0, backup)
+        return restored
+      })
+      throw err  // DashboardVoiceCard 側 handleConfirmAction の catch で alert 表示
+    }
+  }
 
   // Voice カードテーマ: DB生データをそのまま保持（モーダル内で解決）
   const [savedVoiceThemeData, setSavedVoiceThemeData] = useState<any>(null)
@@ -3141,27 +3241,19 @@ export default function DashboardPage() {
                 >
                   {/* クライアント情報 (auth_method ベース) + コメント本文 + 返信表示 */}
                   {/*
-                    Phase 5 STOP-4 暫定 props (補強書 C-1):
-                    - onReplyClick / isFeatured: 既存ロジックをそのまま流用
-                    - onFeaturedToggle / onPhotoDelete / onCommentDelete / isFeaturedSaving:
-                      Phase 5 Step 4 で本実装。現状は空 (削除メニューを押しても何も起きない)。
-                    - 外側ボタン群 (line 3146-3227) は Step 4 で削除予定 (現状は二重表示)。
+                    Phase 5 Step 4 STOP-1: callback 本実装に置換 (handler 関数は state 宣言群直後)。
+                    外側ボタン群 (返信ボタン + 検索カード設定ボタン) は STOP-3 で削除予定。
+                    現状は内側カード内ボタンと外側ボタンが二重表示 (補強書 C-2 で許容)。
                   */}
                   <DashboardVoiceCard
                     voice={c}
                     professionalName={pro?.name || ''}
-                    onReplyClick={(v) => setReplyModalVote(v)}
-                    onFeaturedToggle={async (_voiceId) => {
-                      // TODO Phase 5 Step 4: 既存の検索カード切替ロジック (line 3176-3226) をここに移植
-                    }}
-                    onPhotoDelete={async (_voiceId) => {
-                      // TODO Phase 5 Step 4: /api/dashboard/voices/[id]/remove-photo を叩いて voiceComments を更新
-                    }}
-                    onCommentDelete={async (_voiceId) => {
-                      // TODO Phase 5 Step 4: /api/dashboard/voices/[id]/remove-comment を叩いて voiceComments から除外
-                    }}
+                    onReplyClick={handleReplyClick}
+                    onFeaturedToggle={handleFeaturedToggle}
+                    onPhotoDelete={handlePhotoDelete}
+                    onCommentDelete={handleCommentDelete}
                     isFeatured={featuredVoiceId === c.id}
-                    isFeaturedSaving={false}
+                    isFeaturedSaving={featuredVoiceSavingId === c.id}
                   />
 
                   {/* Phase 3: 返信ボタン (返信本文の表示は DashboardVoiceCard 内で完結) */}
