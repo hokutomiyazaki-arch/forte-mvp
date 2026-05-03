@@ -431,6 +431,13 @@ function ConfirmedContent() {
           </>
         )}
 
+        {/* ===== Step 5: 削除案内 (ケース1+2 のみ) ===== */}
+        {consentVote && !consentDone && !consentSkipped && proName && (
+          <p className="text-xs text-[#999999] mt-4 mb-4 leading-relaxed whitespace-pre-line">
+            {`※ 表示内容を後から変更したい場合は、${proName}さんに直接ご連絡ください。\nプロのダッシュボードから写真やコメントを削除できます。`}
+          </p>
+        )}
+
         {/* ===== セクション2: リワード開示（選択済みの場合） ===== */}
         {rewardUnlocked && reward && (
           <>
