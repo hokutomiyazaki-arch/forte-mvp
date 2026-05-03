@@ -142,9 +142,7 @@ export default function DashboardPage() {
   const [featuredProofId, setFeaturedProofId] = useState<string | null>(null)
   const [featuredProofSaving, setFeaturedProofSaving] = useState(false)
   const [featuredVoiceId, setFeaturedVoiceId] = useState<string | null>(null)
-  const [featuredVoiceSaving, setFeaturedVoiceSaving] = useState(false)
   // Phase 5 Step 4: 検索カード設定保存中の voiceId (複数カード対応、保存中の1枚のみ disabled)
-  // ⚠️ 既存の featuredVoiceSaving (boolean) は STOP-3 で外側ボタン削除と同時に廃止予定。
   const [featuredVoiceSavingId, setFeaturedVoiceSavingId] = useState<string | null>(null)
 
   // Voices用 state
@@ -3255,90 +3253,6 @@ export default function DashboardPage() {
                     isFeatured={featuredVoiceId === c.id}
                     isFeaturedSaving={featuredVoiceSavingId === c.id}
                   />
-
-                  {/* Phase 3: 返信ボタン (返信本文の表示は DashboardVoiceCard 内で完結) */}
-                  <div style={{ marginTop: 10 }} onClick={e => e.stopPropagation()}>
-                    {c.reply ? (
-                      <button
-                        onClick={() => setReplyModalVote(c)}
-                        style={{
-                          padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 600,
-                          background: 'transparent', color: '#888888',
-                          border: '1px solid #D0CCC4', cursor: 'pointer',
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#1A1A2E'; e.currentTarget.style.color = '#1A1A2E' }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#D0CCC4'; e.currentTarget.style.color = '#888888' }}
-                      >
-                        返信を編集
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => setReplyModalVote(c)}
-                        style={{
-                          padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 700,
-                          background: '#1A1A2E', color: '#FFFFFF',
-                          border: '1px solid #1A1A2E', cursor: 'pointer',
-                        }}
-                      >
-                        返信を書く
-                      </button>
-                    )}
-                  </div>
-
-                  {/* 検索カード設定ボタン（カード直下に独立配置） */}
-                  <div style={{ marginTop: 10 }} onClick={e => e.stopPropagation()}>
-                    {featuredVoiceId === c.id ? (
-                      <button
-                        disabled={featuredVoiceSaving}
-                        onClick={async () => {
-                          setFeaturedVoiceSaving(true)
-                          try {
-                            await fetch('/api/dashboard/set-featured-voice', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ vote_id: null }),
-                            })
-                            setFeaturedVoiceId(null)
-                          } catch {}
-                          setFeaturedVoiceSaving(false)
-                        }}
-                        style={{
-                          padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 600,
-                          background: 'rgba(196,163,90,0.1)', color: '#C4A35A',
-                          border: '1px solid #C4A35A', cursor: 'pointer',
-                          opacity: featuredVoiceSaving ? 0.5 : 1,
-                        }}
-                      >
-                        ✓ 検索カードに表示中
-                      </button>
-                    ) : (
-                      <button
-                        disabled={featuredVoiceSaving}
-                        onClick={async () => {
-                          setFeaturedVoiceSaving(true)
-                          try {
-                            await fetch('/api/dashboard/set-featured-voice', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ vote_id: c.id }),
-                            })
-                            setFeaturedVoiceId(c.id)
-                          } catch {}
-                          setFeaturedVoiceSaving(false)
-                        }}
-                        style={{
-                          padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 600,
-                          background: 'transparent', color: '#888888',
-                          border: '1px solid #D0CCC4', cursor: 'pointer',
-                          opacity: featuredVoiceSaving ? 0.5 : 1,
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#C4A35A'; e.currentTarget.style.color = '#C4A35A' }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#D0CCC4'; e.currentTarget.style.color = '#888888' }}
-                      >
-                        検索カードに設定
-                      </button>
-                    )}
-                  </div>
 
                   {/* 展開時: フレーズ選択 + 「この声をシェアする」 */}
                   {isExpanded && (
