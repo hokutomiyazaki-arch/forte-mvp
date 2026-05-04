@@ -95,7 +95,6 @@ export async function GET(req: NextRequest) {
         voter_email,
         professional_id,
         created_at,
-        professionals(id, name),
         client_rewards(id, reward_id)
       `)
       .eq('status', 'confirmed')
@@ -117,6 +116,24 @@ export async function GET(req: NextRequest) {
     if (votesWithRewards.length === 0) {
       return NextResponse.json({ sent: 0, message: 'No votes with rewards' })
     }
+
+    // professionals を別クエリで取得（votes には professionals への FK が2本あり embed が曖昧になるため）
+    const proIds = Array.from(
+      new Set(votesWithRewards.map((v: any) => v.professional_id).filter(Boolean))
+    )
+    const { data: pros, error: prosError } = await supabaseAdmin
+      .from('professionals')
+      .select('id, name')
+      .in('id', proIds)
+
+    if (prosError) {
+      console.error('[reward-reminder] Professionals query error:', prosError.message)
+      return NextResponse.json({ error: prosError.message }, { status: 500 })
+    }
+
+    const proMap = new Map<string, { id: string; name: string | null }>(
+      (pros || []).map((p: any) => [p.id, p])
+    )
 
     // 対象投票IDの既存リマインダーをまとめて取得
     const voteIds = votesWithRewards.map((v: any) => v.id)
@@ -152,7 +169,7 @@ export async function GET(req: NextRequest) {
 
     for (const vote of votesWithRewards) {
       const email = (vote.voter_email as string).toLowerCase()
-      const pro = (vote as any).professionals
+      const pro = proMap.get((vote as any).professional_id)
       const proName = pro?.name || 'プロ'
       const voteCreatedAt = new Date(vote.created_at)
       const hoursSinceVote = (now.getTime() - voteCreatedAt.getTime()) / (1000 * 60 * 60)
