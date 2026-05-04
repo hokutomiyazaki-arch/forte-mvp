@@ -9,7 +9,7 @@
  *           ↓ どちらでも進む
  *
  * Step B: お知らせ受け取り同意 (reward_optin)
- *           [{メール|LINE}で受け取る] / [受け取らない]
+ *           [メールで受け取る] / [受け取らない]
  *
  *           ↓ どちらでも進む
  *
@@ -21,9 +21,9 @@
  *   🅲 写真なし (sms_fallback OLD votes 等)    → name_only Step A → Step B
  *
  * 動的文言:
- *   - vote.auth_method === 'line' → 「LINE で受け取る」
  *   - vote.auth_method === 'sms'   → Step B をスキップ (即 onComplete)
- *   - その他 (google / null など)   → 「メールで受け取る」
+ *   - それ以外すべて                → 「メールで受け取る」(LINE認証も含む)
+ *     ※LINE認証ユーザーには別途 LINE 友達追加 CTA を Step B 直下に表示
  *
  * Step B 失敗時は console.warn のみで握り潰し、onComplete() で次へ進む。
  * (UI 体験優先 — 同意失敗で全体止めると最悪の UX)
@@ -227,9 +227,10 @@ export default function VoteConsentSection({
   const [errorText, setErrorText] = useState('')
 
   // 認証方法による文言切替
-  const isLineAuth = vote.auth_method === 'line'
   const isSmsAuth = vote.auth_method === 'sms'
-  const channelText = isLineAuth ? 'LINE' : 'メール'
+  // LINE認証ユーザーも実態としてメール配信になるため、文言を統一
+  // (LINE友達追加機能は別途CTA表示で誘導)
+  const channelText = 'メール'
 
   const labelName = proName ? `${proName}さん` : 'プロの方'
 
@@ -404,32 +405,86 @@ export default function VoteConsentSection({
   // ═════════════════════════════════════════
   if (step === 'notification') {
     return (
-      <div style={styles.card}>
-        <div style={styles.title}>お知らせを受け取りますか？</div>
-        <div style={styles.subtitle}>
-          {labelName}や REALPROOF からの
-          <br />
-          リワード・お知らせ・新機能情報を
-          <br />
-          {channelText}でお届けします
+      <>
+        <div style={styles.card}>
+          <div style={styles.title}>お知らせを受け取りますか？</div>
+          <div style={styles.subtitle}>
+            {labelName}や REALPROOF からの
+            <br />
+            リワード・お知らせ・新機能情報を
+            <br />
+            {channelText}でお届けします
+          </div>
+          {errorText && <div style={styles.errorText}>{errorText}</div>}
+          <button
+            style={{ ...styles.btnGold, opacity: submitting ? 0.6 : 1 }}
+            onClick={handleNotifYes}
+            disabled={submitting}
+          >
+            {submitting ? '送信中...' : `${channelText}で受け取る`}
+          </button>
+          <button
+            style={{ ...styles.btnGhost, opacity: submitting ? 0.6 : 1 }}
+            onClick={handleNotifNo}
+            disabled={submitting}
+          >
+            受け取らない
+          </button>
+          <div style={styles.footNote}>※あとから配信停止できます</div>
         </div>
-        {errorText && <div style={styles.errorText}>{errorText}</div>}
-        <button
-          style={{ ...styles.btnGold, opacity: submitting ? 0.6 : 1 }}
-          onClick={handleNotifYes}
-          disabled={submitting}
-        >
-          {submitting ? '送信中...' : `${channelText}で受け取る`}
-        </button>
-        <button
-          style={{ ...styles.btnGhost, opacity: submitting ? 0.6 : 1 }}
-          onClick={handleNotifNo}
-          disabled={submitting}
-        >
-          受け取らない
-        </button>
-        <div style={styles.footNote}>※あとから配信停止できます</div>
-      </div>
+
+        {/* LINE 友達追加 CTA - 認証方法に関わらず常時表示 */}
+        <div style={{
+          marginTop: 16,
+          padding: '20px 24px',
+          borderRadius: 16,
+          background: '#FAFAF7',
+          border: '1px solid rgba(6, 199, 85, 0.2)',
+          fontFamily: 'Noto Sans JP, sans-serif',
+        }}>
+          <div style={{
+            fontSize: 15,
+            fontWeight: 700,
+            color: '#1A1A2E',
+            textAlign: 'center',
+            marginBottom: 6,
+            lineHeight: 1.5,
+          }}>
+            LINE でも最新情報を受け取る
+          </div>
+          <div style={{
+            fontSize: 13,
+            color: '#6B6B7A',
+            textAlign: 'center',
+            lineHeight: 1.6,
+            marginBottom: 14,
+          }}>
+            REALPROOF 公式アカウントを友達追加
+          </div>
+          <a
+            href="https://lin.ee/NqGmRKE"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'block',
+              width: '100%',
+              minHeight: 48,
+              padding: '13px 20px',
+              borderRadius: 10,
+              background: '#06C755',
+              color: '#FFFFFF',
+              textAlign: 'center',
+              fontSize: 15,
+              fontWeight: 700,
+              textDecoration: 'none',
+              boxSizing: 'border-box',
+              lineHeight: '22px',
+            }}
+          >
+            LINE 友達追加 →
+          </a>
+        </div>
+      </>
     )
   }
 

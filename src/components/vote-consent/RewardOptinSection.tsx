@@ -26,9 +26,9 @@ interface Props {
   proName: string
   /**
    * vote.auth_method。動的文言切替に使う:
-   *   'line' → 「LINEで受け取る」
    *   'sms'  → null 返却 (チェックボックス自体非表示)
-   *   それ以外 (email_code / google / pro→pro 等) → 「メールで受け取る」
+   *   それ以外すべて → 「メールで受け取る」(LINE認証も含む)
+   *   ※LINE認証ユーザーには別途 LINE 友達追加 CTA を直下に表示
    */
   authMethod?: string | null
   /** YES/NO どちらかが押されて処理完了した時に呼ばれる (引数は optin の真偽値) */
@@ -109,9 +109,9 @@ export default function RewardOptinSection({
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
 
-  const isLineAuth = authMethod === 'line'
   const isSmsAuth = authMethod === 'sms'
-  const channelText = isLineAuth ? 'LINE' : 'メール'
+  // LINE認証ユーザーも実態としてメール配信になるため、文言を統一
+  const channelText = 'メール'
 
   // SMS 認証は何も表示しない (親側 consentSkipped でも除外されるが防御的に)
   if (isSmsAuth) return null
@@ -152,30 +152,84 @@ export default function RewardOptinSection({
   }
 
   return (
-    <div style={styles.card}>
-      <div style={styles.title}>お知らせを受け取りますか？</div>
-      <div style={styles.subtitle}>
-        {labelName}や REALPROOF からの
-        <br />
-        リワード・お知らせ・新機能情報を
-        <br />
-        {channelText}でお届けします
+    <>
+      <div style={styles.card}>
+        <div style={styles.title}>お知らせを受け取りますか？</div>
+        <div style={styles.subtitle}>
+          {labelName}や REALPROOF からの
+          <br />
+          リワード・お知らせ・新機能情報を
+          <br />
+          {channelText}でお届けします
+        </div>
+        <button
+          style={{ ...styles.btnGold, opacity: submitting ? 0.6 : 1 }}
+          onClick={handleYes}
+          disabled={submitting}
+        >
+          {submitting ? '送信中...' : `${channelText}で受け取る`}
+        </button>
+        <button
+          style={{ ...styles.btnGhost, opacity: submitting ? 0.6 : 1 }}
+          onClick={handleNo}
+          disabled={submitting}
+        >
+          受け取らない
+        </button>
+        <div style={styles.footNote}>※あとから配信停止できます</div>
       </div>
-      <button
-        style={{ ...styles.btnGold, opacity: submitting ? 0.6 : 1 }}
-        onClick={handleYes}
-        disabled={submitting}
-      >
-        {submitting ? '送信中...' : `${channelText}で受け取る`}
-      </button>
-      <button
-        style={{ ...styles.btnGhost, opacity: submitting ? 0.6 : 1 }}
-        onClick={handleNo}
-        disabled={submitting}
-      >
-        受け取らない
-      </button>
-      <div style={styles.footNote}>※あとから配信停止できます</div>
-    </div>
+
+      {/* LINE 友達追加 CTA - 認証方法に関わらず常時表示 */}
+      <div style={{
+        marginTop: 16,
+        padding: '20px 24px',
+        borderRadius: 16,
+        background: '#FAFAF7',
+        border: '1px solid rgba(6, 199, 85, 0.2)',
+        fontFamily: 'Noto Sans JP, sans-serif',
+      }}>
+        <div style={{
+          fontSize: 15,
+          fontWeight: 700,
+          color: '#1A1A2E',
+          textAlign: 'center',
+          marginBottom: 6,
+          lineHeight: 1.5,
+        }}>
+          LINE でも最新情報を受け取る
+        </div>
+        <div style={{
+          fontSize: 13,
+          color: '#6B6B7A',
+          textAlign: 'center',
+          lineHeight: 1.6,
+          marginBottom: 14,
+        }}>
+          REALPROOF 公式アカウントを友達追加
+        </div>
+        <a
+          href="https://lin.ee/NqGmRKE"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'block',
+            width: '100%',
+            minHeight: 48,
+            padding: '13px 20px',
+            borderRadius: 10,
+            background: '#06C755',
+            color: '#FFFFFF',
+            textAlign: 'center',
+            fontSize: 15,
+            fontWeight: 700,
+            textDecoration: 'none',
+            boxSizing: 'border-box',
+            lineHeight: '22px',
+          }}
+        >
+          LINE 友達追加 →
+        </a>
+      </div>
+    </>
   )
 }
