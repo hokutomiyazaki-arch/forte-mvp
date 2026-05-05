@@ -9,7 +9,7 @@ import { isPersonalityV2 } from '@/lib/personality'
 const T = { ...COLORS, font: FONTS.main }
 
 const CATEGORIES = [
-  { id: 'multi',       label: '🌐 マルチスペシャリスト' },
+  { id: 'multi',       label: '✨ おすすめ' },
   { id: 'healing',     label: '痛みや不調を改善したい' },
   { id: 'body',        label: '機能的な体を手に入れたい' },
   { id: 'bodymake',    label: 'ボディメイクしたい' },
