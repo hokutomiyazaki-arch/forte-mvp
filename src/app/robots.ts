@@ -21,7 +21,8 @@ export default function robots(): MetadataRoute.Robots {
           '/vote/', // 投票ページ（QR経由で直接アクセスされるべき）
           '/vote-confirmed', // 投票完了ページ
           '/badge/claim', // バッジ付与ページ
-          '/org/', // 団体管理ページ
+          '/org/dashboard', // オーナーダッシュボード
+          '/org/register', // 団体登録ページ
         ],
       },
     ],
