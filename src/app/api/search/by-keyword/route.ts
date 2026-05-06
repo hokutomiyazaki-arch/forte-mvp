@@ -78,28 +78,42 @@ export async function GET(request: Request) {
       )
     }
 
-    const params = new URLSearchParams({ category, sub })
-    if (prefecture) params.set('prefecture', prefecture)
-    // q は渡さない:/api/search の literal filter (L498-509) で synonym-only マッチプロが
-    // 除外されるのを回避。voice_keywords 由来の絞り込みは post-filter で行う。
-    const searchUrl = `${url.origin}/api/search?${params.toString()}`
+    // 2-fetch UNION:
+    //   fetch1 (q=name): literal hit プロ。matchedVoice/voiceMatchCount/profileMatchField が populate される
+    //   fetch2 (q なし): 全プロ。synonym-only ヒットを救う(voice_keywords post-filter で絞る)
+    // 結果 = fetch1 ∪ (fetch2 ∩ voice_keywords)・dedupe by id・fetch1 優先
+    const baseParams = new URLSearchParams({ category, sub })
+    if (prefecture) baseParams.set('prefecture', prefecture)
 
-    const resp = await fetch(searchUrl, { cache: 'no-store' })
-    if (!resp.ok) {
-      const errMsg = `loopback /api/search failed: ${resp.status}`
+    const params1 = new URLSearchParams(baseParams)
+    if (keywordName) params1.set('q', keywordName)
+    const url1 = `${url.origin}/api/search?${params1.toString()}`
+    const url2 = `${url.origin}/api/search?${baseParams.toString()}`
+
+    const [resp1, resp2] = await Promise.all([
+      fetch(url1, { cache: 'no-store' }),
+      fetch(url2, { cache: 'no-store' }),
+    ])
+    if (!resp1.ok || !resp2.ok) {
+      const errMsg = `loopback /api/search failed: ${resp1.status}/${resp2.status}`
       console.error('[by-keyword]', errMsg)
       return NextResponse.json(
         { error: errMsg },
         { status: 500, headers: NO_STORE_HEADERS }
       )
     }
-    const searchData = await resp.json()
-    const allPros = (searchData?.professionals || []) as Array<{ id: string }>
+    const [data1, data2] = await Promise.all([resp1.json(), resp2.json()])
+    const pros1 = (data1?.professionals || []) as Array<{ id: string }>
+    const pros2 = (data2?.professionals || []) as Array<{ id: string }>
 
-    const filtered = allPros.filter((p) => proIdSet.has(p.id))
+    const fetch1IdSet = new Set(pros1.map((p) => p.id))
+    const synonymOnly = pros2.filter(
+      (p) => proIdSet.has(p.id) && !fetch1IdSet.has(p.id)
+    )
+    const merged = [...pros1, ...synonymOnly]
 
     return NextResponse.json(
-      { professionals: filtered, total: filtered.length, matchedKeywords },
+      { professionals: merged, total: merged.length, matchedKeywords },
       { headers: NO_STORE_HEADERS }
     )
   } catch (err) {
