@@ -80,7 +80,8 @@ export async function GET(request: Request) {
 
     const params = new URLSearchParams({ category, sub })
     if (prefecture) params.set('prefecture', prefecture)
-    if (keywordName) params.set('q', keywordName)
+    // q は渡さない:/api/search の literal filter (L498-509) で synonym-only マッチプロが
+    // 除外されるのを回避。voice_keywords 由来の絞り込みは post-filter で行う。
     const searchUrl = `${url.origin}/api/search?${params.toString()}`
 
     const resp = await fetch(searchUrl, { cache: 'no-store' })
