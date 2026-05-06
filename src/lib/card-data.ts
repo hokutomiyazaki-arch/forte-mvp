@@ -63,6 +63,15 @@ export interface Supporter {
   created_at: string
 }
 
+export interface ProMenu {
+  id: string
+  name: string
+  price_text: string
+  category_tags: string[]
+  description: string | null
+  display_order: number
+}
+
 export interface CardData {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   pro: any | null
@@ -76,6 +85,7 @@ export interface CardData {
   personalityItems: any[]
   comments: EnrichedComment[]
   supporters: Supporter[]
+  menus: ProMenu[]
   totalVotes: number
   bookmarkCount: number
   isBookmarked: boolean
@@ -113,6 +123,7 @@ export async function getCardData(
     /* sessionCountResult */ ,
     velocityResult,
     supportersResult,
+    menusResult,
   ] = await Promise.all([
     // 1. プロ情報
     supabase.from('professionals').select('*').eq('id', proId).maybeSingle(),
@@ -160,6 +171,13 @@ export async function getCardData(
       .in('display_mode', ['photo', 'pro_link'])
       .order('created_at', { ascending: false })
       .limit(50),
+    // 14. サービスメニュー (is_active = true のみ)
+    supabase.from('pro_menus')
+      .select('id, name, price_text, category_tags, description, display_order')
+      .eq('professional_id', proId)
+      .eq('is_active', true)
+      .order('display_order', { ascending: true })
+      .order('created_at', { ascending: true }),
   ])
 
   // ブックマーク状態（ログイン中のみ）
@@ -345,6 +363,7 @@ export async function getCardData(
     personalityItems: personalityItemsResult.data || [],
     comments: enrichedComments,
     supporters,
+    menus: (menusResult.data || []) as ProMenu[],
     totalVotes: totalVotesResult.count || 0,
     bookmarkCount: bookmarkCountResult.count || 0,
     isBookmarked,

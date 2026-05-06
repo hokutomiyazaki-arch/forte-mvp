@@ -279,9 +279,15 @@ export default function CardClient({ cardData }: Props) {
   const [totalVotes] = useState(cardData.totalVotes)
   // SSR で取得済みなので最初から false (旧 fetch 中の loading 表示は出さない)
   const [loading] = useState(false)
-  const initialTab =
-    tabParam === 'voices' || tabParam === 'certs' ? tabParam : 'strengths'
-  const [activeTab, setActiveTab] = useState<'strengths' | 'certs' | 'voices'>(
+  const menus = cardData.menus || []
+  const hasMenus = menus.length > 0
+  const initialTab: 'strengths' | 'certs' | 'voices' | 'menus' =
+    tabParam === 'voices' || tabParam === 'certs'
+      ? tabParam
+      : tabParam === 'menus' && hasMenus
+        ? 'menus'
+        : 'strengths'
+  const [activeTab, setActiveTab] = useState<'strengths' | 'certs' | 'voices' | 'menus'>(
     initialTab
   )
   const [animated, setAnimated] = useState(false)
@@ -653,6 +659,7 @@ export default function CardClient({ cardData }: Props) {
           { key: 'strengths' as const, label: '強み' },
           { key: 'certs' as const, label: '認定・資格' },
           { key: 'voices' as const, label: 'Voices', badge: voiceCount },
+          ...(hasMenus ? [{ key: 'menus' as const, label: 'サービスメニュー' }] : []),
         ]).map(tab => (
           <button
             key={tab.key}
@@ -1231,6 +1238,47 @@ export default function CardClient({ cardData }: Props) {
               コメントがまだありません
             </div>
           )}
+        </div>
+      )}
+
+      {/* ═══ タブコンテンツ: サービスメニュー ═══ */}
+      {activeTab === 'menus' && hasMenus && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: T.textMuted, letterSpacing: 2, textTransform: 'uppercase', fontFamily: T.fontMono, marginBottom: 10 }}>
+            MENU
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {menus.map((m) => (
+              <div
+                key={m.id}
+                style={{
+                  background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14,
+                  padding: '14px 16px',
+                }}
+              >
+                <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 4 }}>{m.name}</div>
+                <div style={{ fontSize: 13, color: T.gold, fontWeight: 700, marginBottom: 6 }}>{m.price_text}</div>
+                {m.category_tags && m.category_tags.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: m.description ? 6 : 0 }}>
+                    {m.category_tags.map((tag) => (
+                      <span
+                        key={tag}
+                        style={{
+                          fontSize: 10, padding: '2px 8px', background: '#2A2A3E',
+                          color: T.textMuted, borderRadius: 4,
+                        }}
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {m.description && (
+                  <p style={{ fontSize: 12, color: T.textSub, lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap' }}>{m.description}</p>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

@@ -34,7 +34,7 @@ export default async function CardPage({
   }
 
   const cardData = await getCardData(id, currentUserId)
-  const { pro, comments, voteSummary, proofItems, badgeMembers, orgMembers } = cardData
+  const { pro, comments, voteSummary, proofItems, badgeMembers, orgMembers, menus } = cardData
 
   // SEO 用 HTML を出力する条件:
   //   - プロが存在し
@@ -136,6 +136,21 @@ export default async function CardPage({
                   )}
                 </div>
               ))}
+            </section>
+          )}
+
+          {menus.length > 0 && (
+            <section>
+              <h2>サービスメニュー</h2>
+              <ul>
+                {menus.map((m) => (
+                  <li key={m.id}>
+                    <h3>{m.name}</h3>
+                    <p>料金: {m.price_text}</p>
+                    {m.description && <p>{m.description}</p>}
+                  </li>
+                ))}
+              </ul>
             </section>
           )}
         </article>
