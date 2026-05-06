@@ -106,18 +106,25 @@ export default function SearchPage() {
   const [chipsLoading, setChipsLoading] = useState(true)
   const [chipsExpanded, setChipsExpanded] = useState(false)
   const [activeKeywordId, setActiveKeywordId] = useState<string | null>(null)
+  const [matchedKeywords, setMatchedKeywords] = useState<string[]>([])
 
-  // チップデータ取得（マウント時1回のみ・取得時にシャッフル固定）
+  // チップデータ取得（フィルタ変更ごとに再取得・取得時にシャッフル+「もっと見る」リセット）
   useEffect(() => {
     let cancelled = false
     const loadChips = async () => {
+      setChipsLoading(true)
       try {
-        const res = await fetch('/api/search/keyword-chips', { cache: 'no-store' })
+        const params = new URLSearchParams({ category, sub: subCategory })
+        if (selectedPrefecture) params.set('prefecture', selectedPrefecture)
+        const res = await fetch(`/api/search/keyword-chips?${params.toString()}`, {
+          cache: 'no-store',
+        })
         if (!res.ok) return
         const data = await res.json()
         if (cancelled) return
         const items = (data.chips || []) as ChipItem[]
         setChips(shuffle(items))
+        setChipsExpanded(false)
       } catch (e) {
         console.error('keyword-chips fetch error:', e)
       } finally {
@@ -126,7 +133,16 @@ export default function SearchPage() {
     }
     loadChips()
     return () => { cancelled = true }
-  }, [])
+  }, [category, subCategory, selectedPrefecture])
+
+  // フィルタ変更で chips が更新された時、active keyword が新リストに含まれなければクリア
+  useEffect(() => {
+    if (chipsLoading) return
+    if (!activeKeywordId) return
+    if (chips.find((c) => c.id === activeKeywordId)) return
+    setActiveKeywordId(null)
+    setQuery('')
+  }, [chips, chipsLoading, activeKeywordId])
 
   // デバウンス（400ms）
   useEffect(() => {
@@ -158,6 +174,7 @@ export default function SearchPage() {
         const data = await res.json()
         setProfessionals(data.professionals || [])
         setTotal(data.total || 0)
+        setMatchedKeywords(activeKeywordId ? ((data.matchedKeywords || []) as string[]) : [])
       } catch (e) {
         console.error(e)
       } finally {
@@ -167,18 +184,34 @@ export default function SearchPage() {
     fetchPros()
   }, [category, subCategory, debouncedQuery, selectedPrefecture, activeKeywordId])
 
-  // 検索ワードハイライト
+  // ハイライト対象キーワード:チップ active 時は主キーワード+同義語、通常時は debouncedQuery
+  const highlightTerms: string[] =
+    activeKeywordId && matchedKeywords.length > 0
+      ? matchedKeywords
+      : debouncedQuery
+        ? [debouncedQuery]
+        : []
+
+  // 検索ワードハイライト(multi-term・全箇所マーク・大小区別なし)
   const highlightQuery = (text: string) => {
-    if (!debouncedQuery || !text) return text
-    const idx = text.toLowerCase().indexOf(debouncedQuery.toLowerCase())
-    if (idx === -1) return text
+    if (!text || highlightTerms.length === 0) return text
+    const escaped = highlightTerms
+      .filter((t) => t && t.length > 0)
+      .map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    if (escaped.length === 0) return text
+    const re = new RegExp(`(${escaped.join('|')})`, 'gi')
+    const parts = text.split(re)
     return (
       <>
-        {text.slice(0, idx)}
-        <mark style={{ background: 'none', color: T.gold, fontWeight: 700 }}>
-          {text.slice(idx, idx + debouncedQuery.length)}
-        </mark>
-        {text.slice(idx + debouncedQuery.length)}
+        {parts.map((p, i) =>
+          i % 2 === 1 ? (
+            <mark key={i} style={{ background: 'none', color: T.gold, fontWeight: 700 }}>
+              {p}
+            </mark>
+          ) : (
+            <span key={i}>{p}</span>
+          )
+        )}
       </>
     )
   }
@@ -227,7 +260,10 @@ export default function SearchPage() {
           />
           {query && (
             <button
-              onClick={() => setQuery('')}
+              onClick={() => {
+                setQuery('')
+                setActiveKeywordId(null)
+              }}
               style={{
                 position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
                 background: 'none', border: 'none', fontSize: 16, color: T.textMuted,
@@ -255,7 +291,7 @@ export default function SearchPage() {
                     key={chip.id}
                     onClick={() => {
                       setActiveKeywordId(chip.id)
-                      setQuery('')
+                      setQuery(chip.name)
                     }}
                     style={{
                       padding: '5px 12px', borderRadius: 16, fontSize: 11, fontWeight: 500,

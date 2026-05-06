@@ -11,8 +11,13 @@ export type ChipItem = {
   name: string
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const url = new URL(request.url)
+    const category = url.searchParams.get('category') || 'multi'
+    const sub = url.searchParams.get('sub') || 'rising'
+    const prefecture = url.searchParams.get('prefecture') || ''
+
     const supabase = getSupabaseAdmin()
 
     const { data: kwRows, error: kwErr } = await supabase
@@ -29,6 +34,28 @@ export async function GET() {
       )
     }
 
+    const params = new URLSearchParams({ category, sub })
+    if (prefecture) params.set('prefecture', prefecture)
+    const searchUrl = `${url.origin}/api/search?${params.toString()}`
+
+    const resp = await fetch(searchUrl, { cache: 'no-store' })
+    if (!resp.ok) {
+      const errMsg = `loopback /api/search failed: ${resp.status}`
+      console.error('[keyword-chips]', errMsg)
+      return NextResponse.json(
+        { error: errMsg },
+        { status: 500, headers: NO_STORE_HEADERS }
+      )
+    }
+    const searchData = await resp.json()
+    const filteredProIds = (
+      (searchData?.professionals || []) as Array<{ id: string }>
+    ).map((p) => p.id)
+
+    if (filteredProIds.length === 0) {
+      return NextResponse.json({ chips: [] }, { headers: NO_STORE_HEADERS })
+    }
+
     const counts = new Map<string, number>()
     const PAGE = 1000
     let offset = 0
@@ -36,6 +63,7 @@ export async function GET() {
       const { data, error } = await supabase
         .from('voice_keywords')
         .select('keyword_id')
+        .in('professional_id', filteredProIds)
         .order('id', { ascending: true })
         .range(offset, offset + PAGE - 1)
       if (error) {

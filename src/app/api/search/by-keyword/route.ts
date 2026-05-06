@@ -23,6 +23,29 @@ export async function GET(request: Request) {
 
     const supabase = getSupabaseAdmin()
 
+    const { data: kwRow, error: kwErr } = await supabase
+      .from('keywords')
+      .select('name, synonyms')
+      .eq('id', keywordId)
+      .maybeSingle()
+    if (kwErr) {
+      console.error('[by-keyword] keyword fetch error:', kwErr)
+      return NextResponse.json(
+        { error: kwErr.message },
+        { status: 500, headers: NO_STORE_HEADERS }
+      )
+    }
+    if (!kwRow) {
+      return NextResponse.json(
+        { error: 'keyword not found' },
+        { status: 404, headers: NO_STORE_HEADERS }
+      )
+    }
+    const keywordName: string = (kwRow as { name: string }).name || ''
+    const synonyms: string[] = ((kwRow as { synonyms: string[] | null }).synonyms || [])
+      .filter((s): s is string => typeof s === 'string' && s.length > 0)
+    const matchedKeywords = [keywordName, ...synonyms].filter((s) => s.length > 0)
+
     const proIdSet = new Set<string>()
     const PAGE = 1000
     let offset = 0
@@ -50,13 +73,14 @@ export async function GET(request: Request) {
 
     if (proIdSet.size === 0) {
       return NextResponse.json(
-        { professionals: [], total: 0 },
+        { professionals: [], total: 0, matchedKeywords },
         { headers: NO_STORE_HEADERS }
       )
     }
 
     const params = new URLSearchParams({ category, sub })
     if (prefecture) params.set('prefecture', prefecture)
+    if (keywordName) params.set('q', keywordName)
     const searchUrl = `${url.origin}/api/search?${params.toString()}`
 
     const resp = await fetch(searchUrl, { cache: 'no-store' })
@@ -74,7 +98,7 @@ export async function GET(request: Request) {
     const filtered = allPros.filter((p) => proIdSet.has(p.id))
 
     return NextResponse.json(
-      { professionals: filtered, total: filtered.length },
+      { professionals: filtered, total: filtered.length, matchedKeywords },
       { headers: NO_STORE_HEADERS }
     )
   } catch (err) {
