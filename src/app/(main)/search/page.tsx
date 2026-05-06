@@ -29,6 +29,21 @@ const SUB_CATEGORIES = [
   { id: 'top',        label: '\uD83C\uDFC6 総合力' },
 ]
 
+interface ChipItem {
+  id: string
+  name: string
+  count: number
+}
+
+interface ChipSection {
+  category: 'concern' | 'goal' | 'posture' | 'target' | 'method'
+  section_type: 'voice' | 'method'
+  label: string
+  chips: ChipItem[]
+}
+
+const DEFAULT_VISIBLE_CHIPS = 6
+
 interface SearchPro {
   id: string
   name: string
@@ -84,6 +99,29 @@ export default function SearchPage() {
   const [professionals, setProfessionals] = useState<SearchPro[]>([])
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
+  const [chipSections, setChipSections] = useState<ChipSection[]>([])
+  const [chipsLoading, setChipsLoading] = useState(true)
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({})
+
+  // チップデータ取得（マウント時1回のみ）
+  useEffect(() => {
+    let cancelled = false
+    const loadChips = async () => {
+      try {
+        const res = await fetch('/api/search/keyword-chips', { cache: 'no-store' })
+        if (!res.ok) return
+        const data = await res.json()
+        if (cancelled) return
+        setChipSections((data.sections || []) as ChipSection[])
+      } catch (e) {
+        console.error('keyword-chips fetch error:', e)
+      } finally {
+        if (!cancelled) setChipsLoading(false)
+      }
+    }
+    loadChips()
+    return () => { cancelled = true }
+  }, [])
 
   // デバウンス（400ms）
   useEffect(() => {
@@ -180,6 +218,75 @@ export default function SearchPage() {
             </button>
           )}
         </div>
+
+        {/* キーワードチップセクション */}
+        {!chipsLoading && chipSections.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            {chipSections.map((sec, idx) => {
+              const isMethod = sec.section_type === 'method'
+              const isExpanded = !!expandedCategories[sec.category]
+              const visible = isExpanded ? sec.chips : sec.chips.slice(0, DEFAULT_VISIBLE_CHIPS)
+              const hasMore = sec.chips.length > DEFAULT_VISIBLE_CHIPS
+              const showDivider =
+                isMethod && idx > 0 && chipSections[idx - 1].section_type === 'voice'
+
+              return (
+                <div key={sec.category} style={{ marginTop: idx === 0 ? 4 : 12 }}>
+                  {showDivider && (
+                    <hr style={{
+                      border: 'none', borderTop: `1px solid ${T.cardBorder}`, margin: '16px 0',
+                    }} />
+                  )}
+                  <div style={{
+                    fontSize: 12, fontWeight: 700, color: T.dark, marginBottom: 8,
+                  }}>
+                    {isMethod ? '⚙️' : '🎯'} {sec.label}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {visible.map((chip) => {
+                      const active = query === chip.name
+                      return (
+                        <button
+                          key={chip.id}
+                          onClick={() => setQuery(chip.name)}
+                          style={{
+                            padding: '6px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600,
+                            border: active ? 'none' : `1px solid ${T.cardBorder}`,
+                            background: active ? T.dark : T.cardBg,
+                            color: active ? '#fff' : T.dark,
+                            cursor: 'pointer', fontFamily: T.font,
+                          }}
+                        >
+                          {chip.name}
+                          <span style={{
+                            marginLeft: 4, fontSize: 10, fontWeight: 600, opacity: 0.7,
+                          }}>
+                            {chip.count}
+                          </span>
+                        </button>
+                      )
+                    })}
+                    {hasMore && !isExpanded && (
+                      <button
+                        onClick={() =>
+                          setExpandedCategories((prev) => ({ ...prev, [sec.category]: true }))
+                        }
+                        style={{
+                          padding: '6px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600,
+                          border: `1px dashed ${T.cardBorder}`,
+                          background: 'transparent', color: T.textSub,
+                          cursor: 'pointer', fontFamily: T.font,
+                        }}
+                      >
+                        もっと見る (+{sec.chips.length - DEFAULT_VISIBLE_CHIPS})
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         {/* カテゴリタブ（横スクロール） */}
         <div style={{
