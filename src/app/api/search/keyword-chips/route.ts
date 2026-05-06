@@ -6,32 +6,10 @@ export const runtime = 'nodejs'
 
 const NO_STORE_HEADERS = { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
 
-export type ChipCategory = 'concern' | 'goal' | 'posture' | 'target' | 'method'
-export type ChipSectionType = 'voice' | 'method'
-
 export type ChipItem = {
   id: string
   name: string
-  count: number
 }
-
-export type ChipSection = {
-  category: ChipCategory
-  section_type: ChipSectionType
-  label: string
-  chips: ChipItem[]
-}
-
-const CATEGORY_LABELS: Record<ChipCategory, string> = {
-  concern: '悩みから探す',
-  goal: '目的から探す',
-  posture: '体型悩み',
-  target: 'こんな人向け',
-  method: '手法から探す',
-}
-
-const CATEGORY_ORDER: ChipCategory[] = ['concern', 'goal', 'posture', 'target', 'method']
-const MIN_CHIPS_PER_SECTION = 2
 
 export async function GET() {
   try {
@@ -39,7 +17,7 @@ export async function GET() {
 
     const { data: kwRows, error: kwErr } = await supabase
       .from('keywords')
-      .select('id, name, category, display_order')
+      .select('id, name')
       .eq('is_active', true)
       .order('display_order', { ascending: true })
 
@@ -75,35 +53,14 @@ export async function GET() {
       offset += PAGE
     }
 
-    type Bucket = { id: string; name: string; count: number; display_order: number }
-    const grouped = new Map<ChipCategory, Bucket[]>()
-    for (const k of (kwRows || []) as Array<{
-      id: string
-      name: string
-      category: ChipCategory
-      display_order: number
-    }>) {
-      const c = counts.get(k.id) || 0
-      if (c === 0) continue
-      const arr = grouped.get(k.category) || []
-      arr.push({ id: k.id, name: k.name, count: c, display_order: k.display_order })
-      grouped.set(k.category, arr)
+    const chips: ChipItem[] = []
+    for (const k of (kwRows || []) as Array<{ id: string; name: string }>) {
+      if ((counts.get(k.id) || 0) > 0) {
+        chips.push({ id: k.id, name: k.name })
+      }
     }
 
-    const sections: ChipSection[] = []
-    for (const cat of CATEGORY_ORDER) {
-      const arr = grouped.get(cat)
-      if (!arr || arr.length < MIN_CHIPS_PER_SECTION) continue
-      arr.sort((a, b) => b.count - a.count || a.display_order - b.display_order)
-      sections.push({
-        category: cat,
-        section_type: cat === 'method' ? 'method' : 'voice',
-        label: CATEGORY_LABELS[cat],
-        chips: arr.map((x) => ({ id: x.id, name: x.name, count: x.count })),
-      })
-    }
-
-    return NextResponse.json({ sections }, { headers: NO_STORE_HEADERS })
+    return NextResponse.json({ chips }, { headers: NO_STORE_HEADERS })
   } catch (err) {
     console.error('[api/search/keyword-chips GET] error:', err)
     return NextResponse.json(
