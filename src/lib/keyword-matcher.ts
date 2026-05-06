@@ -2,7 +2,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 
 export type KeywordSourceType = 'vote_comment' | 'profile_method'
 
-type KeywordRow = {
+export type ActiveKeyword = {
   id: string
   name: string
   category: 'concern' | 'goal' | 'posture' | 'target' | 'method'
@@ -16,30 +16,51 @@ type VoiceKeywordInsert = {
   source_id: string
 }
 
+export async function fetchActiveKeywords(): Promise<ActiveKeyword[]> {
+  const supabase = getSupabaseAdmin()
+  const { data, error } = await supabase
+    .from('keywords')
+    .select('id, name, category, synonyms')
+    .eq('is_active', true)
+
+  if (error) {
+    console.error('[keyword-matcher] fetchActiveKeywords error:', error)
+    return []
+  }
+  return (data || []) as ActiveKeyword[]
+}
+
 export async function matchKeywordsAndStore(
   proId: string,
   text: string | null | undefined,
   sourceType: KeywordSourceType,
-  sourceId: string
+  sourceId: string,
+  cachedKeywords?: ActiveKeyword[]
 ): Promise<number> {
   if (!text || text.trim().length === 0) return 0
 
   const supabase = getSupabaseAdmin()
 
-  const { data: keywords, error: kwErr } = await supabase
-    .from('keywords')
-    .select('id, name, category, synonyms')
-    .eq('is_active', true)
+  let keywords: ActiveKeyword[]
+  if (cachedKeywords) {
+    keywords = cachedKeywords
+  } else {
+    const { data, error: kwErr } = await supabase
+      .from('keywords')
+      .select('id, name, category, synonyms')
+      .eq('is_active', true)
 
-  if (kwErr) {
-    console.error('[keyword-matcher] failed to load keywords:', kwErr)
-    return 0
+    if (kwErr) {
+      console.error('[keyword-matcher] failed to load keywords:', kwErr)
+      return 0
+    }
+    keywords = (data || []) as ActiveKeyword[]
   }
-  if (!keywords || keywords.length === 0) return 0
+  if (keywords.length === 0) return 0
 
   const matches: VoiceKeywordInsert[] = []
 
-  for (const kw of keywords as KeywordRow[]) {
+  for (const kw of keywords) {
     if (sourceType === 'profile_method' && kw.category !== 'method') {
       continue
     }
@@ -92,7 +113,10 @@ export async function deleteKeywordMatches(
 
 const FB_PREFIX_RE = /^\[FB:[^\]]+\]\s*/
 
-export async function matchVoteComment(voteId: string): Promise<number> {
+export async function matchVoteComment(
+  voteId: string,
+  cachedKeywords?: ActiveKeyword[]
+): Promise<number> {
   if (!voteId) return 0
 
   const supabase = getSupabaseAdmin()
@@ -119,6 +143,7 @@ export async function matchVoteComment(voteId: string): Promise<number> {
     vote.professional_id,
     cleaned,
     'vote_comment',
-    voteId
+    voteId,
+    cachedKeywords
   )
 }
