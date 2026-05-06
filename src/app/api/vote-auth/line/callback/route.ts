@@ -9,6 +9,7 @@ import { checkVoteDuplicates } from '@/lib/vote-duplicate-check'
 import { claimLineCallback } from '@/lib/line-idempotency'
 import { markTokenUsed } from '@/lib/qr-token'
 import { checkProCooldown } from '@/lib/vote-cooldown'
+import { matchVoteComment } from '@/lib/keyword-matcher'
 
 export const dynamic = 'force-dynamic'
 
@@ -433,6 +434,10 @@ export async function GET(request: NextRequest) {
     }
 
     console.log('[vote-auth/line/callback] Vote inserted:', insertedVote.id)
+
+    matchVoteComment(insertedVote.id).catch((err) =>
+      console.error('[vote-auth/line/callback] keyword match error:', err)
+    )
 
     await markTokenUsed(qr_token || '')
 

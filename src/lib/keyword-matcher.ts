@@ -1,6 +1,6 @@
 import { getSupabaseAdmin } from '@/lib/supabase'
 
-export type KeywordSourceType = 'voice' | 'vote_comment' | 'profile_method'
+export type KeywordSourceType = 'vote_comment' | 'profile_method'
 
 type KeywordRow = {
   id: string
@@ -21,8 +21,8 @@ export async function matchKeywordsAndStore(
   text: string | null | undefined,
   sourceType: KeywordSourceType,
   sourceId: string
-): Promise<void> {
-  if (!text || text.trim().length === 0) return
+): Promise<number> {
+  if (!text || text.trim().length === 0) return 0
 
   const supabase = getSupabaseAdmin()
 
@@ -33,9 +33,9 @@ export async function matchKeywordsAndStore(
 
   if (kwErr) {
     console.error('[keyword-matcher] failed to load keywords:', kwErr)
-    return
+    return 0
   }
-  if (!keywords || keywords.length === 0) return
+  if (!keywords || keywords.length === 0) return 0
 
   const matches: VoiceKeywordInsert[] = []
 
@@ -57,7 +57,7 @@ export async function matchKeywordsAndStore(
     }
   }
 
-  if (matches.length === 0) return
+  if (matches.length === 0) return 0
 
   const { error: upsertErr } = await supabase
     .from('voice_keywords')
@@ -68,7 +68,10 @@ export async function matchKeywordsAndStore(
 
   if (upsertErr) {
     console.error('[keyword-matcher] upsert error:', upsertErr)
+    return 0
   }
+
+  return matches.length
 }
 
 export async function deleteKeywordMatches(
@@ -85,4 +88,37 @@ export async function deleteKeywordMatches(
   if (error) {
     console.error('[keyword-matcher] delete error:', error)
   }
+}
+
+const FB_PREFIX_RE = /^\[FB:[^\]]+\]\s*/
+
+export async function matchVoteComment(voteId: string): Promise<number> {
+  if (!voteId) return 0
+
+  const supabase = getSupabaseAdmin()
+
+  const { data: vote, error } = await supabase
+    .from('votes')
+    .select('id, professional_id, comment, status')
+    .eq('id', voteId)
+    .maybeSingle()
+
+  if (error) {
+    console.error('[keyword-matcher] matchVoteComment fetch error:', error)
+    return 0
+  }
+  if (!vote) return 0
+  if (vote.status !== 'confirmed') return 0
+  if (!vote.comment || vote.comment === '' || vote.comment === '[deleted]') return 0
+
+  const cleaned = vote.comment.replace(FB_PREFIX_RE, '')
+  if (cleaned.trim().length === 0) return 0
+
+  await deleteKeywordMatches('vote_comment', voteId)
+  return await matchKeywordsAndStore(
+    vote.professional_id,
+    cleaned,
+    'vote_comment',
+    voteId
+  )
 }

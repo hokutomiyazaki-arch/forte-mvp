@@ -919,6 +919,9 @@ export default function DashboardPage() {
       if (isNew) console.log('[handleSave] new pro created, id:', savedData.id)
     }
 
+    fetch('/api/pro/keyword-rebuild', { method: 'POST', cache: 'no-store' })
+      .catch(err => console.error('keyword rebuild error:', err))
+
     // パスワードはClerkで管理するため、ここでは何もしない
 
     // === clients テーブルへの同期（プロ側をマスターとする） ===

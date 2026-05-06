@@ -1111,6 +1111,15 @@ function VoteForm() {
 
       await markTokenUsedFromClient(voteDataSnapshot.qr_token || '')
 
+      if (insertedVote?.id) {
+        fetch('/api/keyword/match-vote', {
+          method: 'POST',
+          cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ voteId: insertedVote.id }),
+        }).catch((err) => console.error('keyword match error:', err))
+      }
+
       let clientRewardId = ''
       if (selectedRewardId && insertedVote) {
         const { data: crData } = await (supabase as any).from('client_rewards').insert({
@@ -1239,6 +1248,15 @@ function VoteForm() {
     }
 
     await markTokenUsedFromClient(voteData.qr_token || '')
+
+    if (insertedVote?.id) {
+      fetch('/api/keyword/match-vote', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ voteId: insertedVote.id }),
+      }).catch((err) => console.error('keyword match error:', err))
+    }
 
     let clientRewardId2 = ''
     if (selectedRewardId && insertedVote) {

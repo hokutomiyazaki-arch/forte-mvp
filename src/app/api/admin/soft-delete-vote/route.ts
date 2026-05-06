@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { DELETED_MARKER } from '@/lib/proof-chain'
+import { deleteKeywordMatches } from '@/lib/keyword-matcher'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,6 +40,10 @@ export async function POST(request: Request) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+
+  deleteKeywordMatches('vote_comment', vote_id).catch((err) =>
+    console.error('[admin/soft-delete-vote] keyword delete error:', err)
+  )
 
   return NextResponse.json({
     success: true,

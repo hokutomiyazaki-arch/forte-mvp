@@ -70,6 +70,15 @@ function VoteConfirmForm() {
           return;
         }
 
+        if (voteData?.id) {
+          fetch('/api/keyword/match-vote', {
+            method: 'POST',
+            cache: 'no-store',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ voteId: voteData.id }),
+          }).catch((err) => console.error('keyword match error:', err))
+        }
+
         // vote_emails にメアドを保存（分析用）
         if (client_email) {
           await (supabase as any).from('vote_emails').insert({

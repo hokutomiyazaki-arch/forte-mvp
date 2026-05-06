@@ -6,6 +6,7 @@ import { checkVoterIsPro } from '@/lib/voter-pro-check'
 import { checkVoteDuplicates } from '@/lib/vote-duplicate-check'
 import { markTokenUsed } from '@/lib/qr-token'
 import { checkProCooldown, PRO_COOLDOWN_MESSAGE } from '@/lib/vote-cooldown'
+import { matchVoteComment } from '@/lib/keyword-matcher'
 
 
 export const dynamic = 'force-dynamic'
@@ -189,6 +190,10 @@ export async function POST(req: NextRequest) {
     if (!insertedVote) {
       return NextResponse.json({ error: 'vote_failed' }, { status: 500 })
     }
+
+    matchVoteComment(insertedVote.id).catch((err) =>
+      console.error('[verify-code] keyword match error:', err)
+    )
 
     await markTokenUsed(vote_data.qr_token || '')
 

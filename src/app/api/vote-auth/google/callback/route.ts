@@ -9,6 +9,7 @@ import { checkVoteDuplicates } from '@/lib/vote-duplicate-check'
 import { extractDisplayName } from '@/lib/vote-auth-helpers'
 import { markTokenUsed } from '@/lib/qr-token'
 import { checkProCooldown } from '@/lib/vote-cooldown'
+import { matchVoteComment } from '@/lib/keyword-matcher'
 
 export const dynamic = 'force-dynamic'
 
@@ -399,6 +400,10 @@ export async function GET(request: NextRequest) {
     }
 
     console.log('[vote-auth/google/callback] Vote inserted:', insertedVote.id)
+
+    matchVoteComment(insertedVote.id).catch((err) =>
+      console.error('[vote-auth/google/callback] keyword match error:', err)
+    )
 
     await markTokenUsed(qr_token || '')
 

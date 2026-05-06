@@ -17,6 +17,7 @@ import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { DELETED_MARKER } from '@/lib/proof-chain'
+import { deleteKeywordMatches } from '@/lib/keyword-matcher'
 
 export const dynamic = 'force-dynamic'
 
@@ -85,6 +86,10 @@ export async function POST(
       })
       .eq('id', voteId)
     if (updErr) throw updErr
+
+    deleteKeywordMatches('vote_comment', voteId).catch((err) =>
+      console.error('[remove-comment] keyword delete error:', err)
+    )
 
     return NextResponse.json(
       { success: true, voteId, message: 'コメントを削除しました' },

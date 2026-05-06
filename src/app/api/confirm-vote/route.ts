@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getRewardLabel } from '@/lib/types'
 import { clerkClient } from '@clerk/nextjs/server'
+import { matchVoteComment } from '@/lib/keyword-matcher'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,6 +60,9 @@ export async function GET(req: NextRequest) {
         console.error('[confirm-vote] Step 3 FAIL - update vote status:', updateVoteError.message)
       } else {
         console.log('[confirm-vote] Step 3 OK - vote status set to confirmed')
+        matchVoteComment(confirmation.vote_id).catch((err) =>
+          console.error('[confirm-vote] keyword match error:', err)
+        )
       }
     }
 
