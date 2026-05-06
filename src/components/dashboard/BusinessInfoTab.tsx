@@ -259,10 +259,10 @@ export default function BusinessInfoTab({ initialProfessionType, onProfessionTyp
 
   return (
     <div style={{ paddingBottom: 40 }}>
-      <h2 style={{ fontSize: 18, fontWeight: 500, color: '#1A1A2E', marginBottom: 8 }}>店舗情報</h2>
+      <h2 style={{ fontSize: 18, fontWeight: 500, color: '#1A1A2E', marginBottom: 8 }}>サービスメニュー</h2>
       <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, marginBottom: 24 }}>
         提供メニューの料金・サービス内容を登録できます。
-        登録するとあなたのカードページに「店舗情報」タブが追加され、お客さんが見られるようになります。
+        登録するとあなたのカードページに「サービスメニュー」タブが追加され、お客さんが見られるようになります。
       </p>
 
       {/* 業種表示 */}
@@ -596,7 +596,7 @@ export default function BusinessInfoTab({ initialProfessionType, onProfessionTyp
               メニューを削除しますか?
             </h3>
             <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, marginBottom: 20 }}>
-              削除するとカードページの店舗情報からも非表示になります。
+              削除するとカードページからも非表示になります。
             </p>
             <div style={{ display: 'flex', gap: 8 }}>
               <button

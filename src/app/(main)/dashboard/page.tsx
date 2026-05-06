@@ -3895,7 +3895,7 @@ export default function DashboardPage() {
       </div>
       )}
 
-      {/* ═══ Tab: 店舗情報 ═══ */}
+      {/* ═══ Tab: サービスメニュー ═══ */}
       {dashboardTab === 'business-info' && pro && (
         <BusinessInfoTab
           initialProfessionType={pro.profession_type ?? null}
