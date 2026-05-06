@@ -659,7 +659,7 @@ export default function CardClient({ cardData }: Props) {
           { key: 'strengths' as const, label: '強み' },
           { key: 'certs' as const, label: '認定・資格' },
           { key: 'voices' as const, label: 'Voices', badge: voiceCount },
-          ...(hasMenus ? [{ key: 'menus' as const, label: 'サービスメニュー' }] : []),
+          ...(hasMenus ? [{ key: 'menus' as const, label: 'メニュー' }] : []),
         ]).map(tab => (
           <button
             key={tab.key}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 export type ProfessionType = 'trainer' | 'therapist' | 'yoga' | 'nutrition' | 'other'
 
@@ -12,15 +12,30 @@ const OPTIONS: { value: ProfessionType; label: string }[] = [
   { value: 'other', label: 'その他' },
 ]
 
+const VALID_TYPES: readonly string[] = OPTIONS.map(o => o.value)
+
 interface Props {
   open: boolean
+  mode?: 'initial' | 'edit'
+  currentValue?: string | null
   onSaved: (type: ProfessionType) => void
+  onClose?: () => void
 }
 
-export default function ProfessionTypeModal({ open, onSaved }: Props) {
+export default function ProfessionTypeModal({ open, mode = 'initial', currentValue = null, onSaved, onClose }: Props) {
   const [selected, setSelected] = useState<ProfessionType | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!open) return
+    if (mode === 'edit' && currentValue && VALID_TYPES.includes(currentValue)) {
+      setSelected(currentValue as ProfessionType)
+    } else {
+      setSelected(null)
+    }
+    setError('')
+  }, [open, mode, currentValue])
 
   if (!open) return null
 
@@ -51,8 +66,19 @@ export default function ProfessionTypeModal({ open, onSaved }: Props) {
     }
   }
 
+  const handleBackdropClick = () => {
+    if (mode === 'edit' && !saving && onClose) {
+      onClose()
+    }
+  }
+
+  const handleCancel = () => {
+    if (!saving && onClose) onClose()
+  }
+
   return (
     <div
+      onClick={handleBackdropClick}
       style={{
         position: 'fixed',
         inset: 0,
@@ -65,6 +91,7 @@ export default function ProfessionTypeModal({ open, onSaved }: Props) {
       }}
     >
       <div
+        onClick={e => e.stopPropagation()}
         style={{
           background: 'white',
           borderRadius: 12,
@@ -75,7 +102,7 @@ export default function ProfessionTypeModal({ open, onSaved }: Props) {
         }}
       >
         <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1A1A2E', marginBottom: 8 }}>
-          あなたの業種を教えてください
+          {mode === 'edit' ? '業種を変更' : 'あなたの業種を教えてください'}
         </h2>
         <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, marginBottom: 20 }}>
           これによってメニュー登録時の例文が業種に合った内容に変わります。
@@ -114,23 +141,43 @@ export default function ProfessionTypeModal({ open, onSaved }: Props) {
           <p style={{ fontSize: 13, color: '#E24B4A', marginBottom: 12 }}>{error}</p>
         )}
 
-        <button
-          onClick={handleSave}
-          disabled={saving || !selected}
-          style={{
-            width: '100%',
-            padding: '12px 16px',
-            background: !selected || saving ? '#E5E7EB' : '#C4A35A',
-            color: !selected || saving ? '#9CA3AF' : '#1A1A2E',
-            border: 'none',
-            borderRadius: 8,
-            fontSize: 14,
-            fontWeight: 700,
-            cursor: !selected || saving ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {saving ? '保存中...' : '保存する'}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={handleSave}
+            disabled={saving || !selected}
+            style={{
+              flex: 1,
+              padding: '12px 16px',
+              background: !selected || saving ? '#E5E7EB' : '#C4A35A',
+              color: !selected || saving ? '#9CA3AF' : '#1A1A2E',
+              border: 'none',
+              borderRadius: 8,
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: !selected || saving ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {saving ? '保存中...' : '保存する'}
+          </button>
+          {mode === 'edit' && (
+            <button
+              onClick={handleCancel}
+              disabled={saving}
+              style={{
+                padding: '12px 16px',
+                background: 'white',
+                color: '#6B7280',
+                border: '1px solid #E5E7EB',
+                borderRadius: 8,
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: saving ? 'not-allowed' : 'pointer',
+              }}
+            >
+              キャンセル
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

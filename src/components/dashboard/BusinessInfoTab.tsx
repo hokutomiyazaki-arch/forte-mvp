@@ -90,6 +90,7 @@ const EMPTY_FORM: FormState = {
 
 export default function BusinessInfoTab({ initialProfessionType, onProfessionTypeUpdated }: Props) {
   const [professionType, setProfessionType] = useState<ProfessionType | null>(initialProfessionType)
+  const [editModalOpen, setEditModalOpen] = useState(false)
   const [menus, setMenus] = useState<Menu[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -254,6 +255,7 @@ export default function BusinessInfoTab({ initialProfessionType, onProfessionTyp
 
   const handleProfessionSaved = (t: ProfessionType) => {
     setProfessionType(t)
+    setEditModalOpen(false)
     if (onProfessionTypeUpdated) onProfessionTypeUpdated(t)
   }
 
@@ -262,7 +264,7 @@ export default function BusinessInfoTab({ initialProfessionType, onProfessionTyp
       <h2 style={{ fontSize: 18, fontWeight: 500, color: '#1A1A2E', marginBottom: 8 }}>サービスメニュー</h2>
       <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, marginBottom: 24 }}>
         提供メニューの料金・サービス内容を登録できます。
-        登録するとあなたのカードページに「サービスメニュー」タブが追加され、お客さんが見られるようになります。
+        登録するとあなたのカードページに「メニュー」タブが追加され、お客さんが見られるようになります。
       </p>
 
       {/* 業種表示 */}
@@ -285,7 +287,23 @@ export default function BusinessInfoTab({ initialProfessionType, onProfessionTyp
             {professionType ? PROFESSION_LABEL[professionType] : '未設定'}
           </div>
         </div>
-        <span style={{ fontSize: 11, color: '#9CA3AF' }}>変更は今後対応</span>
+        {professionType && (
+          <button
+            onClick={() => setEditModalOpen(true)}
+            style={{
+              fontSize: 12,
+              padding: '6px 12px',
+              background: 'white',
+              color: '#C4A35A',
+              border: '1px solid #C4A35A',
+              borderRadius: 6,
+              cursor: 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            変更
+          </button>
+        )}
       </div>
 
       {/* 一覧ヘッダー */}
@@ -638,8 +656,11 @@ export default function BusinessInfoTab({ initialProfessionType, onProfessionTyp
       )}
 
       <ProfessionTypeModal
-        open={professionType === null}
+        open={professionType === null || editModalOpen}
+        mode={professionType === null ? 'initial' : 'edit'}
+        currentValue={professionType}
         onSaved={handleProfessionSaved}
+        onClose={() => setEditModalOpen(false)}
       />
     </div>
   )
