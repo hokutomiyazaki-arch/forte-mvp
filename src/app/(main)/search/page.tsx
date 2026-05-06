@@ -435,7 +435,7 @@ export default function SearchPage() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
                         <div style={{ fontSize: 14, fontWeight: 800, color: T.dark }}>
-                          {debouncedQuery && p.profileMatchField === 'name' ? highlightQuery(p.name) : p.name}
+                          {highlightQuery(p.name)}
                         </div>
                         {(p.recentProofs || 0) > 0 && (
                           <span style={{ fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0, color: T.textSub }}>
@@ -444,14 +444,12 @@ export default function SearchPage() {
                         )}
                       </div>
                       <div style={{ fontSize: 11, color: T.gold, fontWeight: 600, marginTop: 1 }}>
-                        {debouncedQuery && p.profileMatchField === 'title' ? highlightQuery(p.title) : p.title}
+                        {highlightQuery(p.title)}
                       </div>
                       <div style={{ fontSize: 10, color: T.textMuted, marginTop: 2 }}>
-                        {debouncedQuery && p.profileMatchField === 'prefecture' ? highlightQuery(p.prefecture || '') : p.prefecture}
+                        {highlightQuery(p.prefecture || '')}
                         {p.area_description ? ` · ` : ''}
-                        {p.area_description && debouncedQuery && p.profileMatchField === 'area'
-                          ? highlightQuery(p.area_description)
-                          : p.area_description || ''}
+                        {highlightQuery(p.area_description || '')}
                       </div>
                     </div>
                   </div>
