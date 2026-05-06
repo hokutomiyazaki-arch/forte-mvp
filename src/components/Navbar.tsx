@@ -86,6 +86,7 @@ export default function Navbar() {
                 <a href="/dashboard?tab=proofs" onClick={closeMenu} style={menuLinkStyle}>強み設定</a>
                 <a href="/dashboard?tab=rewards" onClick={closeMenu} style={menuLinkStyle}>リワード設定</a>
                 <a href="/dashboard?tab=card" onClick={closeMenu} style={menuLinkStyle}>NFCカード</a>
+                <a href="/dashboard?tab=business-info" onClick={closeMenu} style={menuLinkStyle}>店舗情報</a>
                 {eligibleCertificationTier && (
                   <a
                     href="/dashboard?action=certification"

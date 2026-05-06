@@ -23,6 +23,7 @@ import { isPersonalityV2 } from '@/lib/personality'
 import { validateBookingUrl } from '@/lib/validation'
 import { getProVoteCount } from '@/lib/vote-count'
 import BookingUrlBanner from '@/components/BookingUrlBanner'
+import BusinessInfoTab from '@/components/dashboard/BusinessInfoTab'
 import { createClient as createSupabaseClient } from '@/lib/supabase'
 
 // バッジ階層: FNTはBDCの上位資格。同レベルのFNTを持っていたらBDCは非表示
@@ -131,7 +132,7 @@ export default function DashboardPage() {
   const [selectedProofIds, setSelectedProofIds] = useState<Set<string>>(new Set())
   const [customProofs, setCustomProofs] = useState<CustomProof[]>([])
   const [activeTab, setActiveTab] = useState('healing')
-  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'card' | 'org' | 'myorgs' | 'guide'>('profile')
+  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'card' | 'org' | 'myorgs' | 'guide' | 'business-info'>('profile')
   const [openSections, setOpenSections] = useState<Set<string>>(new Set())
   // userRole removed: /api/dashboard の role レスポンスで判定
   const [proofSaving, setProofSaving] = useState(false)
@@ -314,7 +315,7 @@ export default function DashboardPage() {
   const tabParam = searchParams.get('tab')
   useEffect(() => {
     if (!tabParam || loading) return
-    const validTabs = ['profile', 'proofs', 'rewards', 'voices', 'card', 'myorgs', 'org', 'guide']
+    const validTabs = ['profile', 'proofs', 'rewards', 'voices', 'card', 'myorgs', 'org', 'guide', 'business-info']
     if (validTabs.includes(tabParam)) {
       setDashboardTab(tabParam as any)
       if (tabParam === 'myorgs' && selectedMemberOrgId) {
@@ -1796,7 +1797,7 @@ export default function DashboardPage() {
 
   const daysSinceRegistration = getDaysSinceRegistration()
 
-  const isSettingsTab = ['proofs', 'rewards', 'card', 'myorgs', 'org', 'guide'].includes(dashboardTab)
+  const isSettingsTab = ['proofs', 'rewards', 'card', 'myorgs', 'org', 'guide', 'business-info'].includes(dashboardTab)
 
   function toggleSection(id: string) {
     setOpenSections(prev => {
@@ -3892,6 +3893,14 @@ export default function DashboardPage() {
           ))}
         </div>
       </div>
+      )}
+
+      {/* ═══ Tab: 店舗情報 ═══ */}
+      {dashboardTab === 'business-info' && pro && (
+        <BusinessInfoTab
+          initialProfessionType={pro.profession_type ?? null}
+          onProfessionTypeUpdated={(t) => setPro({ ...pro, profession_type: t })}
+        />
       )}
 
       {/* ═══ Tab: 団体（メンバー用リソース閲覧） ═══ */}

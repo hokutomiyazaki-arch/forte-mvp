@@ -25,6 +25,7 @@ export interface Professional {
   area_description: string | null
   selected_proofs: string[] | null
   custom_proofs: { id: string; label: string }[] | null
+  profession_type: 'trainer' | 'therapist' | 'yoga' | 'nutrition' | 'other' | null
   is_founding_member: boolean
   badges: Badge[]
   card_mode: 'pro' | 'general' | null
