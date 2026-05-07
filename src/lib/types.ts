@@ -29,6 +29,20 @@ export interface Professional {
   is_founding_member: boolean
   badges: Badge[]
   card_mode: 'pro' | 'general' | null
+  // Phase A2: アクセス情報
+  address: string | null
+  nearest_station: string | null
+  walk_minutes: number | null
+  access_note: string | null
+  service_formats: string[] | null
+  google_maps_url: string | null
+  // Phase A2: 外部リンク
+  website_url: string | null
+  instagram_handle: string | null
+  twitter_handle: string | null
+  facebook_url: string | null
+  youtube_url: string | null
+  phone_number: string | null
   deactivated_at: string | null
   created_at: string
   updated_at: string

@@ -101,6 +101,20 @@ export default function DashboardPage() {
     title: '', prefecture: '', area_description: '',
     is_online_available: false,
     bio: '', booking_url: '', photo_url: '', contact_email: '',
+    // Phase A2: アクセス情報
+    address: '',
+    nearest_station: '',
+    walk_minutes: '' as '' | number,
+    access_note: '',
+    service_formats: [] as string[],
+    google_maps_url: '',
+    // Phase A2: 外部リンク
+    website_url: '',
+    instagram_handle: '',
+    twitter_handle: '',
+    facebook_url: '',
+    youtube_url: '',
+    phone_number: '',
   })
   const [customResultFortes, setCustomResultFortes] = useState<CustomForte[]>([])
   const [customPersonalityFortes, setCustomPersonalityFortes] = useState<CustomForte[]>([])
@@ -460,6 +474,20 @@ export default function DashboardPage() {
           bio: proData.bio || '', booking_url: proData.booking_url || '',
           photo_url: proData.photo_url || '',
           contact_email: proData.contact_email || '',
+          // Phase A2: アクセス情報
+          address: proData.address || '',
+          nearest_station: proData.nearest_station || '',
+          walk_minutes: typeof proData.walk_minutes === 'number' ? proData.walk_minutes : '',
+          access_note: proData.access_note || '',
+          service_formats: Array.isArray(proData.service_formats) ? proData.service_formats : [],
+          google_maps_url: proData.google_maps_url || '',
+          // Phase A2: 外部リンク
+          website_url: proData.website_url || '',
+          instagram_handle: proData.instagram_handle || '',
+          twitter_handle: proData.twitter_handle || '',
+          facebook_url: proData.facebook_url || '',
+          youtube_url: proData.youtube_url || '',
+          phone_number: proData.phone_number || '',
         })
         setCustomResultFortes(proData.custom_result_fortes || [])
         setCustomPersonalityFortes(proData.custom_personality_fortes || [])
@@ -892,6 +920,20 @@ export default function DashboardPage() {
       photo_url: form.photo_url || null,
       custom_result_fortes: validResultFortes,
       custom_personality_fortes: validPersonalityFortes,
+      // Phase A2: アクセス情報
+      address: form.address.trim() || null,
+      nearest_station: form.nearest_station.trim() || null,
+      walk_minutes: form.walk_minutes === '' ? null : Number(form.walk_minutes),
+      access_note: form.access_note.trim() || null,
+      service_formats: form.service_formats,
+      google_maps_url: form.google_maps_url.trim() || null,
+      // Phase A2: 外部リンク
+      website_url: form.website_url.trim() || null,
+      instagram_handle: form.instagram_handle.trim() || null,
+      twitter_handle: form.twitter_handle.trim() || null,
+      facebook_url: form.facebook_url.trim() || null,
+      youtube_url: form.youtube_url.trim() || null,
+      phone_number: form.phone_number.trim() || null,
     }
 
     const isNew = !pro
