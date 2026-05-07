@@ -99,7 +99,6 @@ export default function DashboardPage() {
   const [form, setForm] = useState({
     name: '', last_name: '', first_name: '', store_name: '',
     title: '', prefecture: '', area_description: '',
-    is_online_available: false,
     bio: '', booking_url: '', photo_url: '', contact_email: '',
     // Phase A2: アクセス情報
     address: '',
@@ -470,7 +469,6 @@ export default function DashboardPage() {
           title: proData.title || '',
           prefecture: proData.prefecture || '',
           area_description: proData.area_description || '',
-          is_online_available: proData.is_online_available || false,
           bio: proData.bio || '', booking_url: proData.booking_url || '',
           photo_url: proData.photo_url || '',
           contact_email: proData.contact_email || '',
@@ -914,7 +912,6 @@ export default function DashboardPage() {
       title: form.title,
       prefecture: form.prefecture || null,
       area_description: form.area_description || null,
-      is_online_available: form.is_online_available,
       bio: form.bio || null, booking_url: form.booking_url || null,
       contact_email: form.contact_email || null,
       photo_url: form.photo_url || null,
@@ -1538,12 +1535,6 @@ export default function DashboardPage() {
             <input value={form.area_description} onChange={e => setForm({...form, area_description: e.target.value})}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
               placeholder="渋谷・恵比寿エリア / 出張対応：関東全域 など" />
-          </div>
-          <div className="flex items-center gap-2">
-            <input type="checkbox" checked={form.is_online_available}
-              onChange={e => setForm({...form, is_online_available: e.target.checked})}
-              className="w-4 h-4 rounded border-gray-300 text-[#C4A35A] focus:ring-[#C4A35A]" />
-            <label className="text-sm font-medium text-gray-700">オンライン対応可</label>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">自己紹介</label>
@@ -3940,7 +3931,7 @@ export default function DashboardPage() {
       </div>
       )}
 
-      {/* ═══ Tab: サービスメニュー ═══ */}
+      {/* ═══ Tab: サービス・案内 ═══ */}
       {dashboardTab === 'business-info' && pro && (
         <BusinessInfoTab
           initialProfessionType={pro.profession_type ?? null}

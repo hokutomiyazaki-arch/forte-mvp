@@ -1241,7 +1241,7 @@ export default function CardClient({ cardData }: Props) {
         </div>
       )}
 
-      {/* ═══ タブコンテンツ: サービスメニュー ═══ */}
+      {/* ═══ タブコンテンツ: サービス・案内 ═══ */}
       {activeTab === 'menus' && hasMenus && (
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: T.textMuted, letterSpacing: 2, textTransform: 'uppercase', fontFamily: T.fontMono, marginBottom: 10 }}>

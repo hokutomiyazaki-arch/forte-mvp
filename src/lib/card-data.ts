@@ -171,7 +171,7 @@ export async function getCardData(
       .in('display_mode', ['photo', 'pro_link'])
       .order('created_at', { ascending: false })
       .limit(50),
-    // 14. サービスメニュー (is_active = true のみ)
+    // 14. サービス・案内 (is_active = true のみ)
     supabase.from('pro_menus')
       .select('id, name, price_text, category_tags, description, display_order')
       .eq('professional_id', proId)

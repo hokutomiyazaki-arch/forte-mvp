@@ -141,7 +141,7 @@ export default async function CardPage({
 
           {menus.length > 0 && (
             <section>
-              <h2>サービスメニュー</h2>
+              <h2>サービス・案内</h2>
               <ul>
                 {menus.map((m) => (
                   <li key={m.id}>

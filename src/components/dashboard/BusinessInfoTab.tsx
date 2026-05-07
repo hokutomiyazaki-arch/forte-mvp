@@ -261,7 +261,7 @@ export default function BusinessInfoTab({ initialProfessionType, onProfessionTyp
 
   return (
     <div style={{ paddingBottom: 40 }}>
-      <h2 style={{ fontSize: 18, fontWeight: 500, color: '#1A1A2E', marginBottom: 8 }}>サービスメニュー</h2>
+      <h2 style={{ fontSize: 18, fontWeight: 500, color: '#1A1A2E', marginBottom: 8 }}>サービス・案内</h2>
       <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, marginBottom: 24 }}>
         提供メニューの料金・サービス内容を登録できます。
         登録するとあなたのカードページに「メニュー」タブが追加され、お客さんが見られるようになります。

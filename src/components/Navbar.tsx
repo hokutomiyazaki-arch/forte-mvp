@@ -83,7 +83,7 @@ export default function Navbar() {
               </button>
               <div style={{ maxHeight: openMenuGroups.settings ? '500px' : '0px', overflow: 'hidden', transition: 'max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1)' }}>
                 <a href="/dashboard?tab=profile&edit=true" onClick={closeMenu} style={menuLinkStyle}>プロフィール編集</a>
-                <a href="/dashboard?tab=business-info" onClick={closeMenu} style={menuLinkStyle}>サービスメニュー</a>
+                <a href="/dashboard?tab=business-info" onClick={closeMenu} style={menuLinkStyle}>サービス・案内</a>
                 <a href="/dashboard?tab=proofs" onClick={closeMenu} style={menuLinkStyle}>強み設定</a>
                 <a href="/dashboard?tab=rewards" onClick={closeMenu} style={menuLinkStyle}>リワード設定</a>
                 <a href="/dashboard?tab=card" onClick={closeMenu} style={menuLinkStyle}>NFCカード</a>
