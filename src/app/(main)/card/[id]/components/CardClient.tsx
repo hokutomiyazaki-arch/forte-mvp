@@ -282,12 +282,15 @@ export default function CardClient({ cardData }: Props) {
   const menus = cardData.menus || []
   const hasMenus = menus.length > 0
   // Phase A2: アクセス情報・外部リンクの表示条件
+  // service_formats=['online'] のみのプロは「●オンライン対応」バッジで足り、ACCESS セクションは冗長になるため
+  // 物理アクセス(店舗/訪問/住所等)が無い限り非表示にする
   const hasAccessInfo = !!(
     pro.address ||
     pro.nearest_station ||
     pro.access_note ||
-    (pro.service_formats && pro.service_formats.length > 0) ||
-    pro.google_maps_url
+    pro.google_maps_url ||
+    pro.service_formats?.includes('store') ||
+    pro.service_formats?.includes('visit')
   )
   const hasLinks = !!(
     pro.website_url ||
@@ -1336,13 +1339,13 @@ export default function CardClient({ cardData }: Props) {
                 {pro.service_formats && pro.service_formats.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: pro.google_maps_url ? 12 : 0 }}>
                     {pro.service_formats.includes('store') && (
-                      <span style={{ fontSize: 10, padding: '2px 8px', background: '#2A2A3E', color: T.textMuted, borderRadius: 4 }}>店舗(対面)</span>
+                      <span style={{ fontSize: 10, padding: '2px 8px', background: T.bg, color: T.text, border: `1px solid ${T.cardBorder}`, borderRadius: 4 }}>店舗(対面)</span>
                     )}
                     {pro.service_formats.includes('visit') && (
-                      <span style={{ fontSize: 10, padding: '2px 8px', background: '#2A2A3E', color: T.textMuted, borderRadius: 4 }}>訪問(出張)</span>
+                      <span style={{ fontSize: 10, padding: '2px 8px', background: T.bg, color: T.text, border: `1px solid ${T.cardBorder}`, borderRadius: 4 }}>訪問(出張)</span>
                     )}
                     {pro.service_formats.includes('online') && (
-                      <span style={{ fontSize: 10, padding: '2px 8px', background: '#2A2A3E', color: T.textMuted, borderRadius: 4 }}>オンライン</span>
+                      <span style={{ fontSize: 10, padding: '2px 8px', background: T.bg, color: T.text, border: `1px solid ${T.cardBorder}`, borderRadius: 4 }}>オンライン</span>
                     )}
                   </div>
                 )}
