@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import ProfessionTypeModal, { type ProfessionType } from './ProfessionTypeModal'
+import AccessLinksSection, { type AccessLinksFormPart } from './AccessLinksSection'
 
 const MENU_LIMIT = 20
 const NAME_MAX = 100
@@ -70,6 +71,11 @@ const PLACEHOLDERS: Record<ProfessionType, { name: string; price: string; descri
 interface Props {
   initialProfessionType: ProfessionType | null
   onProfessionTypeUpdated?: (t: ProfessionType) => void
+  // Phase A2: アクセス情報・外部リンクのフォーム連携
+  accessLinks: AccessLinksFormPart
+  onAccessLinksChange: (next: Partial<AccessLinksFormPart>) => void
+  onSaveAccessLinks: () => void | Promise<void>
+  savingAccessLinks: boolean
 }
 
 interface FormState {
@@ -88,7 +94,14 @@ const EMPTY_FORM: FormState = {
   category_tags: [],
 }
 
-export default function BusinessInfoTab({ initialProfessionType, onProfessionTypeUpdated }: Props) {
+export default function BusinessInfoTab({
+  initialProfessionType,
+  onProfessionTypeUpdated,
+  accessLinks,
+  onAccessLinksChange,
+  onSaveAccessLinks,
+  savingAccessLinks,
+}: Props) {
   const [professionType, setProfessionType] = useState<ProfessionType | null>(initialProfessionType)
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [menus, setMenus] = useState<Menu[]>([])
@@ -654,6 +667,14 @@ export default function BusinessInfoTab({ initialProfessionType, onProfessionTyp
           </div>
         </div>
       )}
+
+      {/* ── Phase A2: アクセス情報・外部リンク ── */}
+      <AccessLinksSection
+        accessLinks={accessLinks}
+        onAccessLinksChange={onAccessLinksChange}
+        onSave={onSaveAccessLinks}
+        saving={savingAccessLinks}
+      />
 
       <ProfessionTypeModal
         open={professionType === null || editModalOpen}

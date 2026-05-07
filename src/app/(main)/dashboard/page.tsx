@@ -20,7 +20,7 @@ import InstallPrompt from '@/components/InstallPrompt'
 import { PREFECTURES } from '@/lib/prefectures'
 import XDayCountdown from '@/components/XDayCountdown'
 import { isPersonalityV2 } from '@/lib/personality'
-import { validateBookingUrl } from '@/lib/validation'
+import { validateBookingUrl, validateSocialHandle } from '@/lib/validation'
 import { getProVoteCount } from '@/lib/vote-count'
 import BookingUrlBanner from '@/components/BookingUrlBanner'
 import BusinessInfoTab from '@/components/dashboard/BusinessInfoTab'
@@ -856,8 +856,7 @@ export default function DashboardPage() {
     setLineBannerState('hidden')
   }
 
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault()
+  async function doSaveLogic() {
     setSaving(true)
     setFormError('')
     setBookingUrlError('')
@@ -926,8 +925,8 @@ export default function DashboardPage() {
       google_maps_url: form.google_maps_url.trim() || null,
       // Phase A2: 外部リンク
       website_url: form.website_url.trim() || null,
-      instagram_handle: form.instagram_handle.trim() || null,
-      twitter_handle: form.twitter_handle.trim() || null,
+      instagram_handle: validateSocialHandle(form.instagram_handle, 'Instagram').normalized || null,
+      twitter_handle: validateSocialHandle(form.twitter_handle, 'X(Twitter)').normalized || null,
       facebook_url: form.facebook_url.trim() || null,
       youtube_url: form.youtube_url.trim() || null,
       phone_number: form.phone_number.trim() || null,
@@ -981,6 +980,13 @@ export default function DashboardPage() {
 
     setSaving(false)
     setEditing(false)
+  }
+
+  // 既存 <form onSubmit={handleSave}> から呼ばれる thin wrapper。
+  // シグネチャと preventDefault 動作を従来通り保持しつつ、本体ロジックは doSaveLogic に集約。
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault()
+    await doSaveLogic()
   }
 
   async function generateQR() {
@@ -3936,6 +3942,23 @@ export default function DashboardPage() {
         <BusinessInfoTab
           initialProfessionType={pro.profession_type ?? null}
           onProfessionTypeUpdated={(t) => setPro({ ...pro, profession_type: t })}
+          accessLinks={{
+            address: form.address,
+            nearest_station: form.nearest_station,
+            walk_minutes: form.walk_minutes,
+            access_note: form.access_note,
+            service_formats: form.service_formats,
+            google_maps_url: form.google_maps_url,
+            website_url: form.website_url,
+            instagram_handle: form.instagram_handle,
+            twitter_handle: form.twitter_handle,
+            facebook_url: form.facebook_url,
+            youtube_url: form.youtube_url,
+            phone_number: form.phone_number,
+          }}
+          onAccessLinksChange={(next) => setForm(prev => ({ ...prev, ...next }))}
+          onSaveAccessLinks={() => doSaveLogic()}
+          savingAccessLinks={saving}
         />
       )}
 
