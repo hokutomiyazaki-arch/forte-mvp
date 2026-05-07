@@ -281,10 +281,27 @@ export default function CardClient({ cardData }: Props) {
   const [loading] = useState(false)
   const menus = cardData.menus || []
   const hasMenus = menus.length > 0
+  // Phase A2: アクセス情報・外部リンクの表示条件
+  const hasAccessInfo = !!(
+    pro.address ||
+    pro.nearest_station ||
+    pro.access_note ||
+    (pro.service_formats && pro.service_formats.length > 0) ||
+    pro.google_maps_url
+  )
+  const hasLinks = !!(
+    pro.website_url ||
+    pro.instagram_handle ||
+    pro.twitter_handle ||
+    pro.facebook_url ||
+    pro.youtube_url ||
+    pro.phone_number
+  )
+  const showServiceTab = hasMenus || hasAccessInfo || hasLinks
   const initialTab: 'strengths' | 'certs' | 'voices' | 'menus' =
     tabParam === 'voices' || tabParam === 'certs'
       ? tabParam
-      : tabParam === 'menus' && hasMenus
+      : tabParam === 'menus' && showServiceTab
         ? 'menus'
         : 'strengths'
   const [activeTab, setActiveTab] = useState<'strengths' | 'certs' | 'voices' | 'menus'>(
@@ -580,7 +597,8 @@ export default function CardClient({ cardData }: Props) {
             <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>
               {pro.prefecture && <span>{pro.prefecture}</span>}
               {pro.area_description && <span> · {pro.area_description}</span>}
-              {pro.is_online_available && <span style={{ marginLeft: 6, color: T.gold }}>● オンライン対応</span>}
+              {/* Phase A2: service_formats を優先しつつ、setup ウィザード経由の新規プロ(is_online_available のみ)も後方互換でカバー */}
+              {(pro.service_formats?.includes('online') || pro.is_online_available) && <span style={{ marginLeft: 6, color: T.gold }}>● オンライン対応</span>}
             </div>
             {orgs.length > 0 && (
               <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -659,7 +677,8 @@ export default function CardClient({ cardData }: Props) {
           { key: 'strengths' as const, label: '強み' },
           { key: 'certs' as const, label: '認定・資格' },
           { key: 'voices' as const, label: 'Voices', badge: voiceCount },
-          ...(hasMenus ? [{ key: 'menus' as const, label: 'メニュー' }] : []),
+          // Tab key 'menus' kept for ?tab=menus URL backward compat (Phase A2 expanded scope)
+          ...(showServiceTab ? [{ key: 'menus' as const, label: 'サービス・案内' }] : []),
         ]).map(tab => (
           <button
             key={tab.key}
@@ -1242,43 +1261,167 @@ export default function CardClient({ cardData }: Props) {
       )}
 
       {/* ═══ タブコンテンツ: サービス・案内 ═══ */}
-      {activeTab === 'menus' && hasMenus && (
+      {activeTab === 'menus' && showServiceTab && (
         <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: T.textMuted, letterSpacing: 2, textTransform: 'uppercase', fontFamily: T.fontMono, marginBottom: 10 }}>
-            MENU
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {menus.map((m) => (
+          {/* ── メニュー(Phase A1・既存) ── */}
+          {hasMenus && (
+            <>
+              <div style={{ fontSize: 10, fontWeight: 700, color: T.textMuted, letterSpacing: 2, textTransform: 'uppercase', fontFamily: T.fontMono, marginBottom: 10 }}>
+                MENU
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {menus.map((m) => (
+                  <div
+                    key={m.id}
+                    style={{
+                      background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14,
+                      padding: '14px 16px',
+                    }}
+                  >
+                    <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 4 }}>{m.name}</div>
+                    <div style={{ fontSize: 13, color: T.gold, fontWeight: 700, marginBottom: 6 }}>{m.price_text}</div>
+                    {m.category_tags && m.category_tags.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: m.description ? 6 : 0 }}>
+                        {m.category_tags.map((tag) => (
+                          <span
+                            key={tag}
+                            style={{
+                              fontSize: 10, padding: '2px 8px', background: '#2A2A3E',
+                              color: T.textMuted, borderRadius: 4,
+                            }}
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {m.description && (
+                      <p style={{ fontSize: 12, color: T.textSub, lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap' }}>{m.description}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* ── アクセス情報(Phase A2 新規) ── */}
+          {hasAccessInfo && (
+            <>
+              <div style={{ fontSize: 10, fontWeight: 700, color: T.textMuted, letterSpacing: 2, textTransform: 'uppercase', fontFamily: T.fontMono, marginTop: hasMenus ? 24 : 0, marginBottom: 10 }}>
+                ACCESS
+              </div>
               <div
-                key={m.id}
                 style={{
                   background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14,
                   padding: '14px 16px',
                 }}
               >
-                <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 4 }}>{m.name}</div>
-                <div style={{ fontSize: 13, color: T.gold, fontWeight: 700, marginBottom: 6 }}>{m.price_text}</div>
-                {m.category_tags && m.category_tags.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: m.description ? 6 : 0 }}>
-                    {m.category_tags.map((tag) => (
-                      <span
-                        key={tag}
-                        style={{
-                          fontSize: 10, padding: '2px 8px', background: '#2A2A3E',
-                          color: T.textMuted, borderRadius: 4,
-                        }}
-                      >
-                        {tag}
-                      </span>
-                    ))}
+                {pro.address && (
+                  <div style={{ fontSize: 13, color: T.text, lineHeight: 1.7, marginBottom: 6 }}>
+                    {pro.address}
                   </div>
                 )}
-                {m.description && (
-                  <p style={{ fontSize: 12, color: T.textSub, lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap' }}>{m.description}</p>
+                {(pro.nearest_station || typeof pro.walk_minutes === 'number') && (
+                  <div style={{ fontSize: 12, color: T.textSub, marginBottom: 6 }}>
+                    {pro.nearest_station}
+                    {pro.nearest_station && typeof pro.walk_minutes === 'number' && ' '}
+                    {typeof pro.walk_minutes === 'number' && `徒歩${pro.walk_minutes}分`}
+                  </div>
+                )}
+                {pro.access_note && (
+                  <div style={{ fontSize: 12, color: T.textSub, marginBottom: 8 }}>
+                    {pro.access_note}
+                  </div>
+                )}
+                {pro.service_formats && pro.service_formats.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: pro.google_maps_url ? 12 : 0 }}>
+                    {pro.service_formats.includes('store') && (
+                      <span style={{ fontSize: 10, padding: '2px 8px', background: '#2A2A3E', color: T.textMuted, borderRadius: 4 }}>店舗(対面)</span>
+                    )}
+                    {pro.service_formats.includes('visit') && (
+                      <span style={{ fontSize: 10, padding: '2px 8px', background: '#2A2A3E', color: T.textMuted, borderRadius: 4 }}>訪問(出張)</span>
+                    )}
+                    {pro.service_formats.includes('online') && (
+                      <span style={{ fontSize: 10, padding: '2px 8px', background: '#2A2A3E', color: T.textMuted, borderRadius: 4 }}>オンライン</span>
+                    )}
+                  </div>
+                )}
+                {pro.google_maps_url && (
+                  <a
+                    href={pro.google_maps_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      fontSize: 12, fontWeight: 700, color: T.gold,
+                      textDecoration: 'none',
+                    }}
+                  >
+                    📍 GoogleMaps で開く →
+                  </a>
                 )}
               </div>
-            ))}
-          </div>
+            </>
+          )}
+
+          {/* ── 外部リンク(Phase A2 新規) ── */}
+          {hasLinks && (
+            <>
+              <div style={{ fontSize: 10, fontWeight: 700, color: T.textMuted, letterSpacing: 2, textTransform: 'uppercase', fontFamily: T.fontMono, marginTop: (hasMenus || hasAccessInfo) ? 24 : 0, marginBottom: 10 }}>
+                LINKS
+              </div>
+              <div
+                style={{
+                  background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14,
+                  padding: '6px 16px',
+                  display: 'flex', flexDirection: 'column',
+                }}
+              >
+                {pro.website_url && (
+                  <a href={pro.website_url} target="_blank" rel="noopener noreferrer"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: `1px solid ${T.cardBorder}`, fontSize: 13, color: T.text, textDecoration: 'none' }}>
+                    <span><span style={{ marginRight: 8 }}>🌐</span>公式HP</span>
+                    <span style={{ color: T.textMuted, fontSize: 12 }}>→</span>
+                  </a>
+                )}
+                {pro.instagram_handle && (
+                  <a href={`https://instagram.com/${pro.instagram_handle}`} target="_blank" rel="noopener noreferrer"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: `1px solid ${T.cardBorder}`, fontSize: 13, color: T.text, textDecoration: 'none' }}>
+                    <span><span style={{ marginRight: 8 }}>📷</span>@{pro.instagram_handle}</span>
+                    <span style={{ color: T.textMuted, fontSize: 12 }}>→</span>
+                  </a>
+                )}
+                {pro.twitter_handle && (
+                  <a href={`https://x.com/${pro.twitter_handle}`} target="_blank" rel="noopener noreferrer"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: `1px solid ${T.cardBorder}`, fontSize: 13, color: T.text, textDecoration: 'none' }}>
+                    <span><span style={{ marginRight: 8 }}>𝕏</span>@{pro.twitter_handle}</span>
+                    <span style={{ color: T.textMuted, fontSize: 12 }}>→</span>
+                  </a>
+                )}
+                {pro.facebook_url && (
+                  <a href={pro.facebook_url} target="_blank" rel="noopener noreferrer"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: `1px solid ${T.cardBorder}`, fontSize: 13, color: T.text, textDecoration: 'none' }}>
+                    <span><span style={{ marginRight: 8 }}>📘</span>Facebook</span>
+                    <span style={{ color: T.textMuted, fontSize: 12 }}>→</span>
+                  </a>
+                )}
+                {pro.youtube_url && (
+                  <a href={pro.youtube_url} target="_blank" rel="noopener noreferrer"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: `1px solid ${T.cardBorder}`, fontSize: 13, color: T.text, textDecoration: 'none' }}>
+                    <span><span style={{ marginRight: 8 }}>▶️</span>YouTube</span>
+                    <span style={{ color: T.textMuted, fontSize: 12 }}>→</span>
+                  </a>
+                )}
+                {pro.phone_number && (
+                  <a href={`tel:${pro.phone_number}`}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', fontSize: 13, color: T.text, textDecoration: 'none' }}>
+                    <span><span style={{ marginRight: 8 }}>📞</span>{pro.phone_number}</span>
+                    <span style={{ color: T.textMuted, fontSize: 12 }}>→</span>
+                  </a>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
 
