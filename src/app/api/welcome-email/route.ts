@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
       `
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://forte-mvp.vercel.app'
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://realproof.jp'
 
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',

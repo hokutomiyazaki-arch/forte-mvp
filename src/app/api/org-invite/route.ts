@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
     // 7. Resendでメール送信
     const resendKey = process.env.RESEND_API_KEY
     if (resendKey) {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://forte-mvp.vercel.app'
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://realproof.jp'
 
       await fetch('https://api.resend.com/emails', {
         method: 'POST',

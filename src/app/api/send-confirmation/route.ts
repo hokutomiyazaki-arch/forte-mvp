@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://forte-mvp.vercel.app'
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://realproof.jp'
     const confirmUrl = `${appUrl}/api/confirm-vote?token=${token}`
 
     // Resend でメール送信

@@ -71,7 +71,7 @@ export const metadata: Metadata = {
     description: '信頼を資産に変える、ただ一つの証明。。対面のプロフェッショナルのための強み証明プラットフォーム。',
     images: [
       {
-        url: 'https://forte-mvp.vercel.app/images/hero_ogp.png',
+        url: 'https://realproof.jp/images/hero_ogp.png',
         width: 1200,
         height: 630,
         alt: 'REALPROOF',
@@ -84,7 +84,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'REALPROOF — 強みが、あなたを定義する。',
     description: '信頼を資産に変える、ただ一つの証明。。',
-    images: ['https://forte-mvp.vercel.app/images/hero_ogp.png'],
+    images: ['https://realproof.jp/images/hero_ogp.png'],
   },
   verification: {
     google: '3Gxx8iv5VvkVxkFWpMPJ6vMLSESvXQHr0giciwle5oM',

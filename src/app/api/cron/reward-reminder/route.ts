@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'RESEND_API_KEY not set' }, { status: 500 })
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://forte-mvp.vercel.app'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://realproof.jp'
   const now = new Date()
   let totalSent = 0
 
