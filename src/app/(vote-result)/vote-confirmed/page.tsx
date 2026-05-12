@@ -46,12 +46,13 @@ function ConfirmedContent() {
     consentVote?.auth_method === 'email_code' ||
     consentVote?.auth_method === 'sms'
   const consentAlreadyDone = !!consentVote?.display_mode
-  // Phase 1.5 拡張: 過去同意済みでも reward_optin 未済なら Step B を尋ねるため、
-  // rewardUnlocked は (consentAlreadyDone && reward_optin) を条件に含める。
+  // 設計原則: リワードは投票への感謝として無条件に開示する。
+  // reward_optin はメール/LINE 再配信の任意同意であり、封筒解錠の条件にはしない。
+  // (Phase 1.5 で導入したゲートを 2026-05-12 撤回。LINE 認証で 78% ロック率になっていたため。)
   const rewardUnlocked =
     consentDone ||
     consentSkipped ||
-    (consentAlreadyDone && !!consentVote?.reward_optin) ||
+    consentAlreadyDone ||
     !consentVote
 
   // リワード配信トリガーの二重起動防止 (StrictMode dev / 連続クリック対策)
