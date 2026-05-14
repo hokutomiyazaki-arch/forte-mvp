@@ -109,6 +109,9 @@ export default function Navbar() {
         </button>
         <div style={{ maxHeight: openMenuGroups.discover ? '500px' : '0px', overflow: 'hidden', transition: 'max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1)' }}>
           <a href="/search" onClick={closeMenu} style={menuLinkStyle}>プロを探す</a>
+          <SignedIn>
+            <a href="/mycard?tab=bookmarked" onClick={closeMenu} style={menuLinkStyle}>ブックマーク</a>
+          </SignedIn>
         </div>
 
         {/* サポート（全員） */}
