@@ -73,7 +73,6 @@ export default function Navbar() {
           {isPro && (
             <a href="/dashboard" onClick={closeMenu} style={{ ...menuLinkStyle, color: '#C4A35A', fontWeight: 700 }}>ダッシュボード</a>
           )}
-          <a href="/mycard" onClick={closeMenu} style={menuLinkStyle}>マイプルーフ</a>
           {/* 設定（プロのみ） */}
           {isPro && (
             <>
@@ -101,18 +100,6 @@ export default function Navbar() {
               </div>
             </>
           )}
-          {/* 設定（一般ユーザー） */}
-          {!isPro && (
-            <>
-              <button onClick={() => toggleMenuGroup('settings')} style={{ ...menuGroupLabel, display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', background: 'none', border: 'none', cursor: 'pointer' }}>
-                <span>設定</span>
-                <ChevronIcon isOpen={!!openMenuGroups.settings} />
-              </button>
-              <div style={{ maxHeight: openMenuGroups.settings ? '500px' : '0px', overflow: 'hidden', transition: 'max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1)' }}>
-                <a href="/mycard?tab=card" onClick={closeMenu} style={menuLinkStyle}>NFCカード</a>
-              </div>
-            </>
-          )}
         </SignedIn>
 
         {/* 見つける（全員） */}
@@ -122,9 +109,6 @@ export default function Navbar() {
         </button>
         <div style={{ maxHeight: openMenuGroups.discover ? '500px' : '0px', overflow: 'hidden', transition: 'max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1)' }}>
           <a href="/search" onClick={closeMenu} style={menuLinkStyle}>プロを探す</a>
-          <SignedIn>
-            <a href="/mycard?tab=bookmarked" onClick={closeMenu} style={menuLinkStyle}>ブックマーク</a>
-          </SignedIn>
         </div>
 
         {/* サポート（全員） */}
