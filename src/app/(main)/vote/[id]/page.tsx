@@ -836,6 +836,32 @@ function VoteForm() {
   }
 
   // ── hopeful投票（「気になっている」用） ──
+  const handleSaveReward = async () => {
+    const url = window.location.href
+    const shareData = {
+      title: 'リワード | REALPROOF',
+      text: 'リワード',
+      url,
+    }
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData)
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          console.error('Share failed:', err)
+        }
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(url)
+        alert('URLをコピーしました')
+      } catch {
+        alert('URLのコピーに失敗しました')
+      }
+    }
+  }
+
   const submitHopefulVote = async () => {
     if (!pro) return
     if (isPreview) return // プレビューモードでは投票しない
@@ -2919,10 +2945,10 @@ function VoteForm() {
               </div>
             ) : (
               <button
-                onClick={() => { window.location.href = "/mycard" }}
+                onClick={handleSaveReward}
                 style={S.primaryBtn}
               >
-                マイページでリワードを保存する
+                リワードを保存する
               </button>
             )}
           </div>
