@@ -15,7 +15,7 @@ export default function AuthRedirectPage() {
         if (data.role === 'professional') {
           window.location.href = '/dashboard'
         } else if (data.role === 'client') {
-          window.location.href = '/mycard'
+          window.location.href = '/'
         } else {
           // DBにレコードなし = 新規ユーザー
           window.location.href = '/onboarding'

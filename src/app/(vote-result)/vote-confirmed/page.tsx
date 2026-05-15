@@ -486,7 +486,7 @@ function ConfirmedContent() {
                       const res = await fetch('/api/user/role')
                       const data = await res.json()
                       const isProResult = data.isPro || roleParam === 'pro'
-                      window.location.href = isProResult ? '/dashboard' : '/mycard'
+                      window.location.href = isProResult ? '/dashboard' : '/'
                     } catch {
                       window.location.href = '/dashboard'
                     }

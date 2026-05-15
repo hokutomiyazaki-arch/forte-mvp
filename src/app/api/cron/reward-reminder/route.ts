@@ -191,7 +191,7 @@ export async function GET(req: NextRequest) {
         if (schedule.number > 1 && !sentNumbers.has(schedule.number - 1)) continue
 
         // メール送信
-        const claimUrl = `${appUrl}/login?role=client&redirect=/mycard&email=${encodeURIComponent(email)}`
+        const claimUrl = `${appUrl}/login?role=client&redirect=/&email=${encodeURIComponent(email)}`
         const { subject, html } = getEmailHtml(proName, schedule.number, claimUrl)
 
         try {

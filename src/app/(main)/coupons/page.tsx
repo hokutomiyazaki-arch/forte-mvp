@@ -3,7 +3,7 @@ import { useEffect } from 'react'
 
 export default function CouponsRedirect() {
   useEffect(() => {
-    window.location.href = '/mycard'
+    window.location.href = '/'
   }, [])
 
   return <div className="text-center py-16 text-gray-400">リダイレクト中...</div>

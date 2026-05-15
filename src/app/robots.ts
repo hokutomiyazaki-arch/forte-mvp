@@ -15,7 +15,6 @@ export default function robots(): MetadataRoute.Robots {
           '/api/', // API routes
           '/dashboard', // プロダッシュボード
           '/admin', // 管理画面
-          '/mycard', // クライアントマイカード（個人情報）
           '/sign-in',
           '/sign-up',
           '/vote/', // 投票ページ（QR経由で直接アクセスされるべき）

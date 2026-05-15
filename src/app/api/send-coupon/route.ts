@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
                 <p style="color:#666;font-size:13px;">クーポンを使用するには、以下からログインしてください。</p>
                 
                 <div style="text-align:center;margin:24px 0;">
-                  <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://realproof.jp'}/mycard"
+                  <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://realproof.jp'}/"
                      style="background:#C4A35A;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:14px;">
                     ログインしてクーポンを受け取る
                   </a>

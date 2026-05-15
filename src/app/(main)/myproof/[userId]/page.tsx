@@ -196,7 +196,7 @@ export default function MyProofPage() {
     return (
       <div style={{ minHeight: '60vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
         <p style={{ color: '#888' }}>ユーザーが見つかりません</p>
-        <a href="/mycard" style={{ fontSize: 14, color: '#C4A35A', textDecoration: 'none' }}>
+        <a href="/" style={{ fontSize: 14, color: '#C4A35A', textDecoration: 'none' }}>
           ← マイページに戻る
         </a>
       </div>
@@ -208,7 +208,7 @@ export default function MyProofPage() {
       <div style={{ maxWidth: 480, margin: '0 auto' }}>
         {/* マイページに戻るボタン */}
         <div style={{ marginBottom: 16 }}>
-          <a href={isOwner ? (isPro ? '/dashboard' : '/mycard') : '/mycard'}
+          <a href={isOwner ? (isPro ? '/dashboard' : '/') : '/'}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
               fontSize: 14, color: '#666', textDecoration: 'none',

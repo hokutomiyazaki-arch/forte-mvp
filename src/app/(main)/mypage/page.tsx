@@ -20,11 +20,11 @@ export default function MyPage() {
         if (data.isPro) {
           window.location.href = '/dashboard'
         } else {
-          window.location.href = '/mycard'
+          window.location.href = '/'
         }
       })
       .catch(() => {
-        window.location.href = '/mycard'
+        window.location.href = '/'
       })
   }, [isLoaded, isSignedIn])
 

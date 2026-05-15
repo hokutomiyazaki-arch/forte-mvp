@@ -75,7 +75,7 @@ export default function SetupPage() {
       .then(res => res.json())
       .then(data => {
         if (!data.role || data.role !== 'professional') {
-          window.location.href = '/mycard'
+          window.location.href = '/'
           return
         }
         if (data.setupCompleted) {

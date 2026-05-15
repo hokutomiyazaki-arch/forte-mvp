@@ -19,7 +19,7 @@ export default function OnboardingPage() {
         if (data.role === 'professional') {
           window.location.href = '/dashboard'
         } else if (data.role === 'client') {
-          window.location.href = '/mycard'
+          window.location.href = '/'
         } else {
           setChecking(false) // DBにレコードなし → 選択画面を表示
         }
@@ -43,7 +43,7 @@ export default function OnboardingPage() {
         return
       }
       if (data.success) {
-        window.location.href = role === 'professional' ? '/setup' : '/mycard'
+        window.location.href = role === 'professional' ? '/setup' : '/'
       }
     } catch (err) {
       console.error(err)

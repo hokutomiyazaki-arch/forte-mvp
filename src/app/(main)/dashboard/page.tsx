@@ -421,7 +421,7 @@ export default function DashboardPage() {
           return
         }
         if (data.role === 'client' && tabParam !== 'myorgs') {
-          window.location.href = '/mycard'
+          window.location.href = '/'
           return
         }
 
@@ -1093,7 +1093,7 @@ export default function DashboardPage() {
       }
       const { error } = await db.delete('professionals', { id: pro.id })
       if (error) throw new Error(`professionals: ${error.message}`)
-      window.location.href = '/mycard'
+      window.location.href = '/'
     } catch (e: any) {
       console.error('[handleDeregister] error:', e.message)
       alert('解除に失敗しました')
@@ -1395,7 +1395,7 @@ export default function DashboardPage() {
     setUploading(false)
   }
 
-  // プロ登録解除 → /mycard にリダイレクト
+  // プロ登録解除 → / にリダイレクト
   async function handleDeactivate() {
     setDeactivating(true)
     try {
@@ -1407,7 +1407,7 @@ export default function DashboardPage() {
         return
       }
       setShowDeactivateModal(false)
-      window.location.href = '/mycard'
+      window.location.href = '/'
     } catch (e) {
       console.error('[handleDeactivate] error:', e)
       alert('解除に失敗しました')
@@ -2206,7 +2206,7 @@ export default function DashboardPage() {
         <button
           onClick={() => {
             if (!pro) {
-              window.location.href = '/mycard'
+              window.location.href = '/'
             } else {
               setDashboardTab('profile')
               window.history.replaceState(null, '', '/dashboard')
