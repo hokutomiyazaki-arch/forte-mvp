@@ -65,21 +65,9 @@ export async function GET(
         card.professional_id = proByUser.id
         // proを後続で使えるよう変数を設定せず、パターンBに合流
       } else {
-        // プロ未登録 or card_mode='general' → マイプルーフへ
-        const { data: myProofCard } = await supabase
-          .from('my_proof_cards')
-          .select('qr_token')
-          .eq('user_id', card.user_id)
-          .maybeSingle()
-
-        if (myProofCard?.qr_token) {
-          return NextResponse.redirect(
-            new URL(`/myproof/p/${myProofCard.qr_token}`, request.url)
-          )
-        }
-        return NextResponse.redirect(
-          new URL('/?error=myproof_not_configured', request.url)
-        )
+        // プロ未登録 or card_mode='general' → トップへ
+        // (STOP 3-D: /myproof 削除に向けた依存切り)
+        return NextResponse.redirect(new URL('/', request.url))
       }
     }
 
@@ -91,22 +79,10 @@ export async function GET(
       .eq('id', card.professional_id)
       .maybeSingle()
 
-    // 2.5 card_mode が 'general' ならマイプルーフへリダイレクト
-    if (pro && pro.card_mode === 'general' && pro.user_id) {
-      const { data: myProofCard } = await supabase
-        .from('my_proof_cards')
-        .select('qr_token')
-        .eq('user_id', pro.user_id)
-        .maybeSingle()
-
-      if (myProofCard?.qr_token) {
-        return NextResponse.redirect(
-          new URL(`/myproof/p/${myProofCard.qr_token}`, request.url)
-        )
-      }
-      return NextResponse.redirect(
-        new URL('/?error=myproof_not_configured', request.url)
-      )
+    // 2.5 card_mode が 'general' ならトップへ
+    // (STOP 3-D: /myproof 削除に向けた依存切り。card_mode カラム自体は STOP 6/8 で削除予定)
+    if (pro && pro.card_mode === 'general') {
+      return NextResponse.redirect(new URL('/', request.url))
     }
 
     // 3. プロモード: 強み登録チェック
