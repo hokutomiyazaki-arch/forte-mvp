@@ -5,7 +5,6 @@ import { createClient } from '@/lib/supabase'
 import { useUser, useClerk } from '@clerk/nextjs'
 import CardModeSwitch from '@/components/CardModeSwitch'
 import PhotoCropper from '@/components/PhotoCropper'
-import MyProofTab from '@/components/MyProofTab'
 import InstallPrompt from '@/components/InstallPrompt'
 import { Suspense } from 'react'
 
@@ -47,7 +46,7 @@ function MyCardContent() {
   const tabParam = searchParams.get('tab')
   const [tab, setTab] = useState<'history' | 'bookmarked' | 'myproof' | 'card' | 'myorgs'>(
     tabParam === 'card' || tabParam === 'history' || tabParam === 'bookmarked' || tabParam === 'myorgs'
-      ? tabParam : 'myproof'
+      ? tabParam : 'card'
   )
   const [message, setMessage] = useState('')
   const [showSettings, setShowSettings] = useState(false)
@@ -59,9 +58,6 @@ function MyCardContent() {
   const [timedOut, setTimedOut] = useState(false)
   const [resetLinkError, setResetLinkError] = useState(false)
   const [isLineUser, setIsLineUser] = useState(false)
-  const [myProofQrUrl, setMyProofQrUrl] = useState('')
-  const [myProofQrToken, setMyProofQrToken] = useState('')
-  const [showMyProofQR, setShowMyProofQR] = useState(false)
   const [nickname, setNickname] = useState('')
   const [clientLastName, setClientLastName] = useState('')
   const [clientFirstName, setClientFirstName] = useState('')
@@ -93,13 +89,6 @@ function MyCardContent() {
   const [nfcLoading, setNfcLoading] = useState(false)
   const [nfcError, setNfcError] = useState('')
   const [nfcSuccess, setNfcSuccess] = useState('')
-
-  function generateMyProofQR() {
-    if (!authUser?.id) return
-    const url = `${window.location.origin}/myproof/${authUser.id}`
-    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`
-    setMyProofQrUrl(qrApiUrl)
-  }
 
   // データ取得（専用APIで1リクエスト、サーバー側Promise.all並列）
   async function loadData() {
@@ -145,19 +134,6 @@ function MyCardContent() {
         }
       } catch (e) {
         console.error('[mycard] member orgs load error:', e)
-      }
-
-      // マイプルーフのqr_token取得
-      try {
-        const myproofRes = await fetch('/api/myproof')
-        if (myproofRes.ok) {
-          const myproofData = await myproofRes.json()
-          if (myproofData.card?.qr_token) {
-            setMyProofQrToken(myproofData.card.qr_token)
-          }
-        }
-      } catch (e) {
-        console.error('[mycard] myproof token load error:', e)
       }
 
       // NFCカード情報の取得
@@ -594,70 +570,12 @@ function MyCardContent() {
 
   return (
     <div className="max-w-lg mx-auto px-4 py-8">
-      {/* プルーフカードタブ以外: ← ホームに戻る */}
-      {tab !== 'myproof' && (
-        <a
-          href={isPro ? '/dashboard' : '/mycard'}
-          className="inline-flex items-center gap-1 text-sm text-[#C4A35A] hover:text-[#b3923f] mb-4 transition-colors"
-        >
-          ← ホームに戻る
-        </a>
-      )}
-
-      {/* プロ管理画面ボタン（プルーフカードタブの時のみ） */}
-      {tab === 'myproof' && isPro && (
-        <button
-          onClick={() => { window.location.href = '/dashboard' }}
-          className="w-full mb-4 py-3 rounded-lg text-sm font-semibold text-white"
-          style={{ backgroundColor: '#1A1A2E' }}
-        >
-          プロダッシュボードへ
-        </button>
-      )}
-
-      {/* マイプルーフ QRコード（プルーフカードタブの時のみ） */}
-      {tab === 'myproof' && (
-      <div className="bg-white rounded-xl p-6 shadow-sm mb-6 text-center">
-        <h2 className="text-base font-bold text-[#1A1A2E] mb-1">プルーフカード QRコード</h2>
-        <p className="text-xs text-gray-500 mb-4">
-          スキャンするとあなたのプルーフカードページが開きます（期限なし）
-        </p>
-        {myProofQrToken ? (
-          <>
-            {showMyProofQR ? (
-              <>
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`${window.location.origin}/myproof/p/${myProofQrToken}`)}`}
-                  alt="プルーフカード QR"
-                  className="mx-auto mb-4"
-                  style={{ width: 200, height: 200 }}
-                />
-                <button
-                  onClick={() => setShowMyProofQR(false)}
-                  className="text-sm text-gray-400 hover:text-gray-600"
-                >
-                  &#10005; 閉じる
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={() => setShowMyProofQR(true)}
-                className="bg-[#C4A35A] text-white rounded-lg px-6 py-3 text-sm font-semibold"
-              >
-                QRコードを表示する
-              </button>
-            )}
-          </>
-        ) : (
-          <button
-            onClick={generateMyProofQR}
-            className="bg-[#C4A35A] text-white rounded-lg px-6 py-3 text-sm font-semibold"
-          >
-            QRコードを発行する
-          </button>
-        )}
-      </div>
-      )}
+      <a
+        href={isPro ? '/dashboard' : '/mycard'}
+        className="inline-flex items-center gap-1 text-sm text-[#C4A35A] hover:text-[#b3923f] mb-4 transition-colors"
+      >
+        ← ホームに戻る
+      </a>
 
       {tab === 'myproof' && (
       <>
@@ -894,46 +812,6 @@ function MyCardContent() {
         </div>
       )}
 
-      {/* タブ（URLパラメータでタブ指定されている場合は非表示） */}
-      {!tabParam && (
-      <div style={{
-        display: 'flex',
-        overflowX: 'auto',
-        WebkitOverflowScrolling: 'touch',
-        borderBottom: '1px solid #E5E7EB',
-        marginBottom: 24,
-        scrollbarWidth: 'none',
-        gap: 0,
-      }}>
-        {([
-          { key: 'myproof' as const, label: 'プルーフカード', count: 0 },
-        ]).map(t => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            style={{
-              flex: '0 0 auto',
-              padding: '12px 14px',
-              fontSize: 13,
-              fontWeight: tab === t.key ? 700 : 500,
-              color: tab === t.key ? '#C4A35A' : '#9CA3AF',
-              background: 'transparent',
-              border: 'none',
-              borderBottom: tab === t.key ? '2px solid #C4A35A' : '2px solid transparent',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              transition: 'color 0.2s, border-color 0.2s',
-            }}
-          >
-            {t.label}
-            {t.count !== undefined && t.count > 0 && (
-              <span style={{ marginLeft: 4, fontSize: 11, fontWeight: 700 }}>{t.count}</span>
-            )}
-          </button>
-        ))}
-      </div>
-      )}
-
       {/* 投票履歴タブ */}
       {tab === 'history' && (
         <div>
@@ -1117,50 +995,6 @@ function MyCardContent() {
             </div>
           )}
         </div>
-      )}
-
-      {/* プルーフカードタブ */}
-      {tab === 'myproof' && (
-        <>
-          {/* 保有バッジ */}
-          {credentialBadges.length > 0 && (
-            <div className="mb-4">
-              <h3 style={{ color: '#1A1A2E', fontSize: '15px', fontWeight: 700, marginBottom: '12px' }}>
-                保有バッジ
-              </h3>
-              <div className="space-y-2">
-                {credentialBadges.map((badge) => (
-                  <div key={badge.id} className="flex items-center gap-3 p-3 rounded-xl" style={{ backgroundColor: '#fff', border: '1px solid #E8E4DC' }}>
-                    {badge.image_url ? (
-                      <img src={badge.image_url} alt={badge.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
-                    ) : (
-                      <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'linear-gradient(135deg, #C4A35A, #E8D5A0)' }}>
-                        <span className="text-white font-bold">{badge.name.charAt(0)}</span>
-                      </div>
-                    )}
-                    <div className="min-w-0">
-                      <p style={{ fontSize: '14px', fontWeight: 600, color: '#1A1A2E' }}>{badge.name}</p>
-                      <p style={{ fontSize: '11px', color: '#888' }}>{badge.org_name}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {myProofQrToken && (
-            <a
-              href={`/myproof/p/${myProofQrToken}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block w-full text-center py-3 mb-4 bg-white rounded-xl shadow-sm text-sm font-medium hover:bg-gray-50 transition"
-              style={{ color: '#C4A35A' }}
-            >
-              プルーフカードを確認する &#8594;
-            </a>
-          )}
-          <MyProofTab />
-        </>
       )}
 
       {/* カード管理タブ */}
