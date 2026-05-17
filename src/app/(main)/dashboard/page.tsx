@@ -550,7 +550,7 @@ export default function DashboardPage() {
         setFirstTimerCount(data.firstTimerCount || 0)
         setRepeaterCount(data.repeaterCount || 0)
         setRegularCount(data.regularCount || 0)
-        // bookmarks removed (now in /mycard only)
+        // bookmarks moved to /bookmarks
 
         // プルーフ選択状態を復元
         if (data.proofItems) {
@@ -596,9 +596,7 @@ export default function DashboardPage() {
           console.error('[dashboard] member orgs load error:', err)
         }
 
-        // myProofQrToken removed (now in /mycard only)
         if (data.certApplications) setCertApplications(data.certApplications)
-        // receivedRewards removed (now in /mycard only)
       } catch (err) {
         console.error('[dashboard] load error:', err)
       }

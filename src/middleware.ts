@@ -8,7 +8,6 @@ const isPublicMyProof = createRouteMatcher(['/myproof/p/(.*)'])
 // ※ /admin/* は Clerk ではなくパスワード保護なので除外
 const isProtectedRoute = createRouteMatcher([
   '/dashboard(.*)',
-  '/mycard(.*)',
   '/myproof(.*)',
   '/org/dashboard(.*)',
   '/org/register(.*)',
