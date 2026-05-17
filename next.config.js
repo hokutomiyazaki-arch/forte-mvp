@@ -29,6 +29,8 @@ const nextConfig = {
         destination: '/sign-in',
         permanent: true,
       },
+      { source: '/mycard', destination: '/', permanent: true },
+      { source: '/mycard/:path*', destination: '/', permanent: true },
     ]
   },
 };
