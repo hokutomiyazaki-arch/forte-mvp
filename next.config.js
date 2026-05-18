@@ -31,6 +31,8 @@ const nextConfig = {
       },
       { source: '/mycard', destination: '/', permanent: true },
       { source: '/mycard/:path*', destination: '/', permanent: true },
+      { source: '/myproof', destination: '/', permanent: true },
+      { source: '/myproof/:path*', destination: '/', permanent: true },
     ]
   },
 };
