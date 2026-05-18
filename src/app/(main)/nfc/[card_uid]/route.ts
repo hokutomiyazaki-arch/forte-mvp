@@ -66,7 +66,6 @@ export async function GET(
         // proを後続で使えるよう変数を設定せず、パターンBに合流
       } else {
         // プロ未登録 or card_mode='general' → トップへ
-        // (STOP 3-D: /myproof 削除に向けた依存切り)
         return NextResponse.redirect(new URL('/', request.url))
       }
     }
@@ -80,7 +79,7 @@ export async function GET(
       .maybeSingle()
 
     // 2.5 card_mode が 'general' ならトップへ
-    // (STOP 3-D: /myproof 削除に向けた依存切り。card_mode カラム自体は STOP 6/8 で削除予定)
+    // (card_mode カラム自体は STOP 6/8 で削除予定)
     if (pro && pro.card_mode === 'general') {
       return NextResponse.redirect(new URL('/', request.url))
     }
