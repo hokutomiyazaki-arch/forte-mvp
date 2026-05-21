@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   const body = await request.json()
   const { role } = body
 
-  if (!role || !['client', 'professional'].includes(role)) {
+  if (role !== 'professional') {
     return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
   }
 
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   }
   const displayName = (finalLastName + ' ' + finalFirstName).trim() || user?.username || '未設定'
 
-  // 全員 clients レコードを作成
+  // clients レコードを作成(プロも含む / 名前同期用 / TODO: clients テーブル廃止STOPで見直し予定)
   const { data: existingClient } = await supabase
     .from('clients')
     .select('id')
