@@ -19,6 +19,8 @@ export default function OnboardingPage() {
         if (data.role === 'professional') {
           window.location.href = '/dashboard'
         } else if (data.role === 'client') {
+          // safety net: 既存client(52名)の /onboarding 直アクセス時の事故防止
+          // STOP 4 では削除せず保持。clients テーブル廃止STOPで同時削除予定
           window.location.href = '/'
         } else {
           setChecking(false) // DBにレコードなし → 選択画面を表示
@@ -27,14 +29,14 @@ export default function OnboardingPage() {
       .catch(() => setChecking(false))
   }, [isLoaded, user])
 
-  const handleSubmit = async (role: 'client' | 'professional') => {
+  const handleSubmit = async () => {
     setFormError('')
     setLoading(true)
     try {
       const res = await fetch('/api/onboarding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role }),
+        body: JSON.stringify({ role: 'professional' }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -43,7 +45,7 @@ export default function OnboardingPage() {
         return
       }
       if (data.success) {
-        window.location.href = role === 'professional' ? '/setup' : '/'
+        window.location.href = '/setup'
       }
     } catch (err) {
       console.error(err)
@@ -88,12 +90,12 @@ export default function OnboardingPage() {
         ようこそ！
       </h1>
       <p style={{ fontSize: 14, color: '#888', marginBottom: 32, textAlign: 'center' }}>
-        あなたに合った使い方を選んでください
+        プロフェッショナルアカウントを作成します
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16, width: '100%', maxWidth: 400 }}>
         <button
-          onClick={() => handleSubmit('professional')}
+          onClick={handleSubmit}
           disabled={loading}
           style={{
             background: '#1A1A2E', color: '#fff', border: 'none',
@@ -107,24 +109,6 @@ export default function OnboardingPage() {
           <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', lineHeight: 1.5 }}>
             トレーナー・治療家・インストラクター等<br/>
             クライアントからの「強み」を集めて可視化します
-          </div>
-        </button>
-
-        <button
-          onClick={() => handleSubmit('client')}
-          disabled={loading}
-          style={{
-            background: '#fff', color: '#1A1A2E',
-            border: '1.5px solid #ddd', borderRadius: 12,
-            padding: '20px 24px', cursor: 'pointer',
-            textAlign: 'left', opacity: loading ? 0.6 : 1,
-          }}
-        >
-          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>
-            一般として始める
-          </div>
-          <div style={{ fontSize: 12, color: '#888', lineHeight: 1.5 }}>
-            プロに投票する・マイプルーフでおすすめを共有する
           </div>
         </button>
       </div>
