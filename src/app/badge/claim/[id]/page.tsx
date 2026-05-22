@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from 'react'
 import { useParams } from 'next/navigation'
 import { useUser, SignInButton } from '@clerk/nextjs'
 
-type Status = 'loading' | 'show_badge' | 'claiming' | 'invalid' | 'already' | 'success' | 'error'
+type Status = 'loading' | 'show_badge' | 'claiming' | 'invalid' | 'already' | 'success' | 'not_pro' | 'error'
 
 function ClaimContent() {
   const params = useParams()
@@ -56,6 +56,7 @@ function ClaimContent() {
       })
       const data = await res.json()
       if (data.error === 'already') { setStatus('already'); return }
+      if (data.error === 'not_pro') { setStatus('not_pro'); return }
       if (data.error) { setStatus('error'); return }
       setStatus('success')
     } catch {
@@ -123,6 +124,24 @@ function ClaimContent() {
             </button>
           </SignInButton>
         )}
+      </div>
+    )
+  }
+
+  // 非プロ拒否（バッジ取得はプロアカウントが必要）
+  if (status === 'not_pro' && badge) {
+    return (
+      <div className="max-w-md mx-auto text-center py-16 px-4">
+        {badge.image_url && (
+          <img src={badge.image_url} alt={badge.name}
+            className="w-24 h-24 mx-auto mb-4 rounded-xl object-cover opacity-50" />
+        )}
+        <h1 className="text-xl font-bold text-[#1A1A2E] mb-4">バッジを取得できません</h1>
+        <p className="text-gray-500 mb-6">バッジを取得するにはプロアカウントが必要です。</p>
+        <a href="/sign-up"
+          className="inline-block px-8 py-3 bg-[#1A1A2E] text-white font-medium rounded-lg hover:bg-[#2a2a4e] transition">
+          プロ登録はこちら
+        </a>
       </div>
     )
   }

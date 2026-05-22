@@ -39,13 +39,21 @@ export async function POST(req: NextRequest) {
 
   if (existing) return NextResponse.json({ error: 'already', badge })
 
-  // professional_idを取得（プロなら入れる、一般ユーザーはnull）
+  // professional_idを取得（プロのみバッジ取得可能）
   const { data: pro } = await supabase
     .from('professionals')
     .select('id')
     .eq('user_id', userId)
     .is('deactivated_at', null)
     .maybeSingle()
+
+  // 非プロのバッジ取得を拒否（新規一般メンバー作成路を閉鎖）
+  if (!pro) {
+    return NextResponse.json(
+      { error: 'not_pro', badge },
+      { status: 403 }
+    )
+  }
 
   // org_membersにinsert
   const { error } = await supabase
@@ -54,7 +62,7 @@ export async function POST(req: NextRequest) {
       organization_id: level.organization_id,
       credential_level_id: level.id,
       user_id: userId,
-      professional_id: pro?.id || null,
+      professional_id: pro.id,
       role: 'member',
       is_owner: false,
       status: 'active',
