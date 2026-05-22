@@ -32,7 +32,6 @@ export default function OrgPublicPage() {
   const [members, setMembers] = useState<any[]>([])
   const [aggregate, setAggregate] = useState<any>(null)
   const [levelAggregates, setLevelAggregates] = useState<any[]>([])
-  const [generalCount, setGeneralCount] = useState(0)
   const [proofTopMembers, setProofTopMembers] = useState<any[]>([])
   const [topStrengthItems, setTopStrengthItems] = useState<{ label: string; count: number }[]>([])
   const [recentComments, setRecentComments] = useState<any[]>([])
@@ -68,7 +67,6 @@ export default function OrgPublicPage() {
       setMembers(data.members || [])
       setAggregate(data.aggregate || null)
       setLevelAggregates(data.levelAggregates || [])
-      setGeneralCount(data.general_count || 0)
       setProofTopMembers(data.proofTopMembers || [])
       setTopStrengthItems(data.topStrengthItems || [])
       setRecentComments(data.recentComments || [])
@@ -212,27 +210,6 @@ export default function OrgPublicPage() {
               </div>
             </a>
           ))}
-        </div>
-      )}
-
-      {/* 一般メンバーカード */}
-      {generalCount > 0 && (
-        <div className="mb-6">
-          <a
-            href={`/org/${orgId}/generals`}
-            className="block bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:border-[#C4A35A] transition"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center text-xl flex-shrink-0">
-                👥
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-bold text-[#1A1A2E]">一般メンバー（{generalCount}名）</div>
-                <div className="text-xs text-gray-400 mt-1">バッジを取得した一般会員</div>
-              </div>
-              <span className="text-gray-300 text-sm">→</span>
-            </div>
-          </a>
         </div>
       )}
 
