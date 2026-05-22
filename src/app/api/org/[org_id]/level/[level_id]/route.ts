@@ -25,10 +25,11 @@ export async function GET(
       supabase.from('credential_levels').select('*').eq('id', levelId).maybeSingle(),
       supabase
         .from('org_members')
-        .select('professional_id, user_id')
+        .select('professional_id')
         .eq('organization_id', orgId)
         .eq('credential_level_id', levelId)
-        .eq('status', 'active'),
+        .eq('status', 'active')
+        .not('professional_id', 'is', null),
     ])
 
     if (!orgResult.data) return NextResponse.json({ error: '団体が見つかりません' }, { status: 404 })
@@ -81,37 +82,10 @@ export async function GET(
       })
       .sort((a: any, b: any) => b.total_votes - a.total_votes)
 
-    // 一般会員（professional_idなし）→ clientsから取得
-    const generalUserIds = allMembers
-      .filter((m: any) => !m.professional_id && m.user_id)
-      .map((m: any) => m.user_id)
-    let clientMap = new Map<string, any>()
-    if (generalUserIds.length > 0) {
-      const { data: clientData } = await supabase
-        .from('clients')
-        .select('user_id, nickname, photo_url')
-        .in('user_id', generalUserIds)
-      for (const c of (clientData || [])) {
-        clientMap.set(c.user_id, c)
-      }
-    }
-    const generalMembers = allMembers
-      .filter((m: any) => !m.professional_id)
-      .map((m: any) => {
-        const client = m.user_id ? clientMap.get(m.user_id) : null
-        return {
-          user_id: m.user_id || null,
-          display_name: client?.nickname || '一般会員',
-          photo_url: client?.photo_url || null,
-        }
-      })
-
     return NextResponse.json({
       org: orgResult.data,
       level: levelResult.data,
       professionals,
-      generals: generalMembers,
-      general_count: generalMembers.length,
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
