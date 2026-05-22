@@ -104,74 +104,40 @@ export async function GET(
         .eq('organization_id', orgId)
         .order('sort_order', { ascending: true })
 
-      // 各credential_levelごとにorg_membersから直接取得（VIEWキャッシュ回避）
+      // 各credential_levelごとにorg_membersから直接取得（プロのみ・VIEWキャッシュ回避）
       const levelIds = (levels || []).map((cl: any) => cl.id)
       const { data: levelMembersRaw } = await supabase
         .from('org_members')
-        .select('professional_id, user_id, credential_level_id, professionals(id, name, photo_url)')
+        .select('professional_id, credential_level_id, professionals(id, name, photo_url)')
         .eq('organization_id', orgId)
         .eq('status', 'active')
         .not('credential_level_id', 'is', null)
+        .not('professional_id', 'is', null)
         .in('credential_level_id', levelIds)
 
-      // 一般会員のuser_idsを収集してclientsから名前・写真を取得
-      const generalUserIdsInLevels = (levelMembersRaw || [])
-        .filter((m: any) => !m.professional_id && m.user_id)
-        .map((m: any) => m.user_id)
-      const uniqueGeneralUserIds = Array.from(new Set(generalUserIdsInLevels))
-
-      let levelClientMap = new Map<string, any>()
-      if (uniqueGeneralUserIds.length > 0) {
-        const { data: clientData } = await supabase
-          .from('clients')
-          .select('user_id, nickname, photo_url')
-          .in('user_id', uniqueGeneralUserIds)
-        for (const c of (clientData || [])) {
-          levelClientMap.set(c.user_id, c)
-        }
-      }
-
-      // credential_level_id別にグループ化（プロ+一般の両方を含める）
+      // credential_level_id別にグループ化（プロのみ・professional_idで重複排除）
       const membersByLevelId = new Map<string, Map<string, any>>()
       for (const m of levelMembersRaw || []) {
-        if (!m.credential_level_id) continue  // credential_level_idなしはスキップ（バッジなし）
-        // キーはprofessional_id（プロ）またはuser_id（一般）
-        const memberKey = m.professional_id || m.user_id
-        if (!memberKey) continue  // 両方NULLは無視
+        if (!m.credential_level_id || !m.professional_id) continue
         if (!membersByLevelId.has(m.credential_level_id)) {
           membersByLevelId.set(m.credential_level_id, new Map())
         }
         const levelMap = membersByLevelId.get(m.credential_level_id)!
-        if (!levelMap.has(memberKey)) {
-          levelMap.set(memberKey, m)
+        if (!levelMap.has(m.professional_id)) {
+          levelMap.set(m.professional_id, m)
         }
       }
 
       levelAggregates = (levels || []).map((cl: any) => {
         const levelMap = membersByLevelId.get(cl.id)
         const membersInLevel = levelMap ? Array.from(levelMap.values()) : []
-        const memberDetails = membersInLevel.map((m: any) => {
-          if (m.professional_id) {
-            // プロ会員
-            return {
-              professional_id: m.professional_id,
-              user_id: null,
-              is_pro: true,
-              name: m.professionals?.name || '',
-              photo_url: m.professionals?.photo_url || null,
-            }
-          } else {
-            // 一般会員
-            const client = m.user_id ? levelClientMap.get(m.user_id) : null
-            return {
-              professional_id: null,
-              user_id: m.user_id,
-              is_pro: false,
-              name: client?.nickname || '一般会員',
-              photo_url: client?.photo_url || null,
-            }
-          }
-        })
+        const memberDetails = membersInLevel.map((m: any) => ({
+          professional_id: m.professional_id,
+          user_id: null,
+          is_pro: true,
+          name: m.professionals?.name || '',
+          photo_url: m.professionals?.photo_url || null,
+        }))
         return {
           level_id: cl.id,
           organization_id: cl.organization_id,
@@ -183,29 +149,6 @@ export async function GET(
           members: memberDetails,
         }
       })
-    }
-
-    // 一般メンバー取得（professional_idなし・user_idあり・重複なし）
-    const { data: generalMembersRaw } = await supabase
-      .from('org_members')
-      .select('user_id')
-      .eq('organization_id', orgId)
-      .is('professional_id', null)
-      .not('user_id', 'is', null)
-
-    const uniqueUserIds = Array.from(new Set((generalMembersRaw || []).map((m: any) => m.user_id)))
-
-    let generalMembers: any[] = []
-    if (uniqueUserIds.length > 0) {
-      const { data: clientData } = await supabase
-        .from('clients')
-        .select('user_id, nickname, photo_url')
-        .in('user_id', uniqueUserIds)
-      generalMembers = (clientData || []).map((c: any) => ({
-        user_id: c.user_id,
-        display_name: c.nickname || '一般会員',
-        photo_url: c.photo_url || null,
-      }))
     }
 
     // プルーフ別トップメンバー集計（professionalIdsを直接使用、org_members JOINを排除）
@@ -328,7 +271,7 @@ export async function GET(
       }
     }
 
-    return NextResponse.json({ org, members, aggregate, levelAggregates, general_count: uniqueUserIds.length, generals: generalMembers, proofTopMembers, topStrengthItems, recentComments })
+    return NextResponse.json({ org, members, aggregate, levelAggregates, proofTopMembers, topStrengthItems, recentComments })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
