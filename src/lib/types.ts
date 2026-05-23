@@ -28,7 +28,6 @@ export interface Professional {
   profession_type: 'trainer' | 'therapist' | 'yoga' | 'nutrition' | 'other' | null
   is_founding_member: boolean
   badges: Badge[]
-  card_mode: 'pro' | 'general' | null
   // Phase A2: アクセス情報
   address: string | null
   nearest_station: string | null
