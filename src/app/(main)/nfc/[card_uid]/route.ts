@@ -51,40 +51,32 @@ export async function GET(
     }
 
     // ═══ パターンA: user_id のみ（professional_id NULL）═══
-    // professional_id がなくても user_id でプロを検索し、card_mode で分岐
+    // professional_id がなくても user_id でプロを検索して補完
     if (card.user_id && !card.professional_id) {
       const { data: proByUser } = await supabase
         .from('professionals')
-        .select('id, card_mode, selected_proofs, name, contact_email, user_id, last_nfc_notify_at')
+        .select('id, selected_proofs, name, contact_email, user_id, last_nfc_notify_at')
         .eq('user_id', card.user_id)
         .maybeSingle()
 
-      if (proByUser && proByUser.card_mode !== 'general') {
-        // プロが存在し card_mode が 'pro' or null → 投票モードへ
+      if (proByUser) {
         // nfc_cards.professional_id を補完して以降の処理に合流
         card.professional_id = proByUser.id
-        // proを後続で使えるよう変数を設定せず、パターンBに合流
       } else {
-        // プロ未登録 or card_mode='general' → トップへ
+        // プロ未登録 → トップへ
         return NextResponse.redirect(new URL('/', request.url))
       }
     }
 
     // ═══ パターンB: professional_id あり → 既存ロジック ═══
-    // 2. プロの情報取得（card_mode含む）
+    // 2. プロの情報取得
     const { data: pro } = await supabase
       .from('professionals')
-      .select('id, selected_proofs, name, contact_email, user_id, last_nfc_notify_at, card_mode')
+      .select('id, selected_proofs, name, contact_email, user_id, last_nfc_notify_at')
       .eq('id', card.professional_id)
       .maybeSingle()
 
-    // 2.5 card_mode が 'general' ならトップへ
-    // (card_mode カラム自体は STOP 6/8 で削除予定)
-    if (pro && pro.card_mode === 'general') {
-      return NextResponse.redirect(new URL('/', request.url))
-    }
-
-    // 3. プロモード: 強み登録チェック
+    // 3. 強み登録チェック
     const selectedProofs = pro?.selected_proofs || []
     if (!pro || selectedProofs.length === 0) {
       // 強み未登録 → 準備中ページにリダイレクト + プロに通知メール
