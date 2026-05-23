@@ -30,7 +30,7 @@ export async function POST() {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // NFCカードを一般モードに移行
+    // NFCカードのプロ紐付けを解除(deactivated アカウント用)
     if (pro) {
       const { error: nfcError } = await supabase
         .from('nfc_cards')
