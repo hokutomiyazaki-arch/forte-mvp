@@ -6,6 +6,7 @@ export async function sendWeeklyEmail(
   to: string,
   name: string,
   html: string,
+  subject: string = '今週のあなたのプルーフ｜REALPROOF Weekly',
 ): Promise<{ success: boolean; error?: string }> {
   const resendKey = process.env.RESEND_API_KEY
   if (!resendKey) {
@@ -22,7 +23,7 @@ export async function sendWeeklyEmail(
       body: JSON.stringify({
         from: 'REALPROOF <noreply@realproof.jp>',
         to,
-        subject: `今週のあなたのプルーフ｜REALPROOF Weekly`,
+        subject,
         html,
       }),
     })

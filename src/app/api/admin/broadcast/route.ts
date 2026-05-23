@@ -280,7 +280,7 @@ export async function POST(req: NextRequest) {
         console.log(`[broadcast] LINE ${result.success ? 'sent' : 'failed'}: ${r.name}`)
       } else if (r.sendChannel === 'email' && r.email) {
         const emailHtml = generateBroadcastEmailHTML(r.name, expandedBody)
-        const result = await sendWeeklyEmail(r.email, r.name, emailHtml)
+        const result = await sendWeeklyEmail(r.email, r.name, emailHtml, emailSubject)
         if (result.success) {
           sentEmail++
         } else {
