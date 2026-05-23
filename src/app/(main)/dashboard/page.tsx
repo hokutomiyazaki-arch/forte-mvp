@@ -15,7 +15,6 @@ import type { VoiceComment } from '@/components/card/types'
 import VoiceReplyModal from '@/components/VoiceReplyModal'
 import CertificationModal from '@/components/CertificationModal'
 import ImageCropper from '@/components/ImageCropper'
-import CardModeSwitch from '@/components/CardModeSwitch'
 import InstallPrompt from '@/components/InstallPrompt'
 import { PREFECTURES } from '@/lib/prefectures'
 import XDayCountdown from '@/components/XDayCountdown'
@@ -2753,10 +2752,6 @@ export default function DashboardPage() {
         {nfcSuccess && (
           <p style={{ fontSize: 13, color: '#22C55E', marginTop: 12 }}>{nfcSuccess}</p>
         )}
-      </div>
-
-      <div style={{ marginTop: 16 }}>
-        {pro && <CardModeSwitch professionalId={pro.id} initialCardMode={pro.card_mode || 'pro'} />}
       </div>
       </>)}
 
