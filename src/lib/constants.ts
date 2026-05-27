@@ -67,6 +67,46 @@ export const TIER_DISPLAY: Record<CertificationTier, { icon: string; label: stri
   LEGEND: { icon: '💎', label: 'LEGEND' },
 }
 
+// ===== メダル画像パス (CertifiableTier のみ) =====
+
+/**
+ * メダル画像のパス定義。
+ * - og:    1200x630 の OGP 画像 (400px 角想定)
+ * - large: ダッシュボード等の大表示 (200px 角)
+ * - small: バッジ・リスト用 (64px 角)
+ *
+ * PROVEN にはメダル無し。SPECIALIST 以上のみ画像が存在する。
+ */
+export const MEDAL_PATHS: Record<CertifiableTier, { og: string; large: string; small: string }> = {
+  SPECIALIST: {
+    og: '/medals/specialist-400.png',
+    large: '/medals/specialist-200.png',
+    small: '/medals/specialist-64.png',
+  },
+  MASTER: {
+    og: '/medals/master-400.png',
+    large: '/medals/master-200.png',
+    small: '/medals/master-64.png',
+  },
+  LEGEND: {
+    og: '/medals/legend-400.png',
+    large: '/medals/legend-200.png',
+    small: '/medals/legend-64.png',
+  },
+} as const
+
+/**
+ * ティア → メダル画像パスのヘルパー。
+ * PROVEN / 未達 / null は null を返す (メダル無し)。
+ */
+export function getMedalPath(
+  tier: CertificationTier | null,
+  size: 'og' | 'large' | 'small' = 'og'
+): string | null {
+  if (!tier || tier === 'PROVEN') return null
+  return MEDAL_PATHS[tier][size]
+}
+
 /**
  * 認定申請の料金 + Stripe 決済リンク (CertifiableTier 別)
  *   - SPECIALIST: 初回は無料、2 回目以降の更新は ¥11,000
