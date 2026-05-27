@@ -13,9 +13,76 @@
 import { auth } from '@clerk/nextjs/server'
 import { getCardData } from '@/lib/card-data'
 import CardClient from './components/CardClient'
+import type { Metadata } from 'next'
+import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+
+/**
+ * SNS 共有時の OGP / Twitter Card / 検索エンジン向け metadata。
+ * OG 画像は /api/og/card/[id] で動的生成 (Phase 3.5 で実装済み)。
+ *
+ * 名前ロジック・deactivated 除外ロジックは /api/og/card/[id] と完全に整合。
+ * 名前優先順: name → `last_name first_name` → 'REALPROOF Pro'
+ */
+export async function generateMetadata(
+  { params }: { params: Promise<{ id: string }> }
+): Promise<Metadata> {
+  const { id } = await params
+
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+
+  const { data: pro } = await supabase
+    .from('professionals')
+    .select('name, last_name, first_name, title')
+    .eq('id', id)
+    .is('deactivated_at', null)
+    .maybeSingle()
+
+  // 名前ロジック (/api/og/card/[id] と完全同一)
+  const nameField = (pro?.name || '').trim()
+  const combined = `${(pro?.last_name || '').trim()} ${(pro?.first_name || '').trim()}`.trim()
+  const displayName = nameField || combined || 'REALPROOF Pro'
+
+  const title = (pro?.title || '').trim()
+  const description = title
+    ? `${displayName}（${title}）のREALPROOFカード — クライアントが証明する本物の強み`
+    : `${displayName}のREALPROOFカード — クライアントが証明する本物の強み`
+
+  const ogImageUrl = `https://realproof.jp/api/og/card/${id}`
+  const cardUrl = `https://realproof.jp/card/${id}`
+
+  return {
+    title: `${displayName} | REALPROOF`,
+    description,
+    openGraph: {
+      title: `${displayName} | REALPROOF`,
+      description,
+      url: cardUrl,
+      siteName: 'REALPROOF',
+      images: [
+        {
+          url: ogImageUrl,
+          width: 1200,
+          height: 630,
+          alt: `${displayName}のREALPROOFカード`,
+        },
+      ],
+      locale: 'ja_JP',
+      type: 'profile',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: `${displayName} | REALPROOF`,
+      description,
+      images: [ogImageUrl],
+    },
+  }
+}
 
 export default async function CardPage({
   params,
