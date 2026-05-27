@@ -2611,7 +2611,7 @@ export default function DashboardPage() {
 
       {/* Proof Chart */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
-        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+        <div className="flex items-center justify-between mb-4 gap-3">
           <h2 className="text-lg font-bold text-[#1A1A2E]">プルーフチャート</h2>
           {pro && (
             <ShareButton

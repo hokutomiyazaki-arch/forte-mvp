@@ -368,7 +368,7 @@ export async function GET(
                 'linear-gradient(108deg, #1A1A2E 0%, #1A1A2E 58%, #F5F1E8 58.1%, #F5F1E8 100%)',
               color: '#FAFAF7',
               fontFamily: 'NotoSansJP',
-              padding: 24,
+              padding: 80,
               position: 'relative',
             }}
           >
@@ -566,7 +566,7 @@ export async function GET(
             backgroundColor: '#1A1A2E',
             color: '#FAFAF7',
             fontFamily: 'NotoSansJP',
-            padding: 24,
+            padding: 80,
             position: 'relative',
           }}
         >
