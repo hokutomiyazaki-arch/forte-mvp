@@ -68,10 +68,10 @@ function truncateLabel(text: string, maxLen: number = 18): string {
 /** プルーフ名の動的フォントサイズ (モードA 用、左カラム幅に応じた段階縮小) */
 function getProofFontSize(label: string): number {
   const len = Array.from(label).length
-  if (len <= 8) return 140
-  if (len <= 12) return 120
-  if (len <= 16) return 100
-  return 88
+  if (len <= 8) return 120
+  if (len <= 12) return 100
+  if (len <= 16) return 88
+  return 76
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -205,8 +205,8 @@ function CornerAccents() {
           position: 'absolute',
           top: 24,
           left: 24,
-          width: 28,
-          height: 28,
+          width: 20,
+          height: 20,
           borderTop: '2px solid #C4A35A',
           borderLeft: '2px solid #C4A35A',
         }}
@@ -217,8 +217,8 @@ function CornerAccents() {
           position: 'absolute',
           top: 24,
           right: 24,
-          width: 28,
-          height: 28,
+          width: 20,
+          height: 20,
           borderTop: '2px solid #C4A35A',
           borderRight: '2px solid #C4A35A',
         }}
@@ -229,8 +229,8 @@ function CornerAccents() {
           position: 'absolute',
           bottom: 24,
           left: 24,
-          width: 28,
-          height: 28,
+          width: 20,
+          height: 20,
           borderBottom: '2px solid #C4A35A',
           borderLeft: '2px solid #C4A35A',
         }}
@@ -241,8 +241,8 @@ function CornerAccents() {
           position: 'absolute',
           bottom: 24,
           right: 24,
-          width: 28,
-          height: 28,
+          width: 20,
+          height: 20,
           borderBottom: '2px solid #C4A35A',
           borderRight: '2px solid #C4A35A',
         }}
@@ -365,7 +365,7 @@ export async function GET(
                 'radial-gradient(circle at 30% 50%, #252544 0%, #1A1A2E 70%)',
               color: '#FAFAF7',
               fontFamily: 'NotoSansJP',
-              padding: 36,
+              padding: 24,
               position: 'relative',
             }}
           >
@@ -376,7 +376,7 @@ export async function GET(
                 width: '100%',
                 height: '100%',
                 border: '1px solid rgba(196, 163, 90, 0.35)',
-                padding: 44,
+                padding: 32,
               }}
             >
               {/* 左カラム (CEO 指示: paddingLeft: 24 追加) */}
@@ -391,10 +391,10 @@ export async function GET(
                 }}
               >
                 {/* REAL PROOF 小ラベル */}
-                <div style={{ display: 'flex', marginBottom: 28 }}>
+                <div style={{ display: 'flex', marginBottom: 20 }}>
                   <span
                     style={{
-                      fontSize: 20,
+                      fontSize: 18,
                       color: '#C4A35A',
                       letterSpacing: 4,
                       fontWeight: 700,
@@ -408,7 +408,7 @@ export async function GET(
                 <div style={{ display: 'flex', marginBottom: 12 }}>
                   <span
                     style={{
-                      fontSize: 64,
+                      fontSize: 56,
                       color: '#C4A35A',
                       fontWeight: 700,
                       lineHeight: 1.05,
@@ -419,7 +419,7 @@ export async function GET(
                 </div>
 
                 {/* プルーフ名 (動的サイズ、最大の主役) */}
-                <div style={{ display: 'flex', marginBottom: 32 }}>
+                <div style={{ display: 'flex', marginBottom: 20 }}>
                   <span
                     style={{
                       fontSize: mainFontSize,
@@ -439,7 +439,7 @@ export async function GET(
                     height: 1,
                     width: 240,
                     backgroundColor: 'rgba(196,163,90,0.4)',
-                    marginBottom: 22,
+                    marginBottom: 20,
                   }}
                 />
 
@@ -454,7 +454,7 @@ export async function GET(
                   <AvatarBlock
                     photoDataUri={photoDataUri}
                     initial={initial}
-                    size={90}
+                    size={72}
                   />
                   <div
                     style={{
@@ -465,7 +465,7 @@ export async function GET(
                     <div style={{ display: 'flex' }}>
                       <span
                         style={{
-                          fontSize: 48,
+                          fontSize: 40,
                           fontWeight: 700,
                           color: '#FAFAF7',
                           lineHeight: 1.1,
@@ -478,7 +478,7 @@ export async function GET(
                       <div style={{ display: 'flex', marginTop: 4 }}>
                         <span
                           style={{
-                            fontSize: 26,
+                            fontSize: 22,
                             color: 'rgba(250,250,247,0.7)',
                           }}
                         >
@@ -510,10 +510,10 @@ export async function GET(
                       position: 'absolute',
                       top: '50%',
                       left: '50%',
-                      width: 600,
-                      height: 600,
-                      marginTop: -300,
-                      marginLeft: -300,
+                      width: 500,
+                      height: 500,
+                      marginTop: -250,
+                      marginLeft: -250,
                       backgroundImage:
                         'radial-gradient(circle, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 60%)',
                     }}
@@ -521,16 +521,16 @@ export async function GET(
                   {/* メダル本体 */}
                   <img
                     src={bigMedalDataUri}
-                    width={420}
-                    height={420}
+                    width={380}
+                    height={380}
                     style={{ objectFit: 'contain' }}
                   />
                   {/* ティアラベル */}
                   {tierLabel ? (
-                    <div style={{ display: 'flex', marginTop: 12 }}>
+                    <div style={{ display: 'flex', marginTop: 10 }}>
                       <span
                         style={{
-                          fontSize: 28,
+                          fontSize: 22,
                           color: '#C4A35A',
                           letterSpacing: 2,
                           fontWeight: 700,
@@ -580,7 +580,7 @@ export async function GET(
             backgroundColor: '#1A1A2E',
             color: '#FAFAF7',
             fontFamily: 'NotoSansJP',
-            padding: 36,
+            padding: 24,
             position: 'relative',
           }}
         >
@@ -591,7 +591,7 @@ export async function GET(
               width: '100%',
               height: '100%',
               border: '1px solid rgba(196, 163, 90, 0.35)',
-              padding: 44,
+              padding: 32,
             }}
           >
             {/* 左カラム: 顔写真ヘッダー + プルーフ3行 */}
@@ -626,7 +626,7 @@ export async function GET(
                   <div style={{ display: 'flex' }}>
                     <span
                       style={{
-                        fontSize: 36,
+                        fontSize: 40,
                         fontWeight: 700,
                         color: '#FAFAF7',
                         lineHeight: 1.1,
@@ -781,10 +781,10 @@ export async function GET(
               <div style={{ display: 'flex' }}>
                 <span
                   style={{
-                    fontSize: 64,
+                    fontSize: 36,
                     color: '#C4A35A',
                     fontWeight: 700,
-                    letterSpacing: 6,
+                    letterSpacing: 4,
                   }}
                 >
                   REAL
@@ -793,10 +793,10 @@ export async function GET(
               <div style={{ display: 'flex', marginTop: 4 }}>
                 <span
                   style={{
-                    fontSize: 64,
+                    fontSize: 36,
                     color: '#FAFAF7',
                     fontWeight: 700,
-                    letterSpacing: 6,
+                    letterSpacing: 4,
                   }}
                 >
                   PROOF
