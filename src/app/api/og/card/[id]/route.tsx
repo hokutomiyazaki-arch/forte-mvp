@@ -64,6 +64,18 @@ function getDisplayName(pro: ProRecord): string {
 }
 
 /**
+ * 表示用ラベルの文字数制限。日本語の長文プルーフ名で OGP 枠を突き破らない保険。
+ * 22px フォント + 左カラム幅 (約 600px) では 25 文字までが安全圏。
+ */
+function truncateLabel(text: string, maxLen: number = 25): string {
+  if (!text) return ''
+  // [...text] で書記素クラスタ単位の安全な分割 (絵文字・サロゲートペア対策)
+  const chars = Array.from(text)
+  if (chars.length <= maxLen) return text
+  return chars.slice(0, maxLen - 1).join('') + '…'
+}
+
+/**
  * ArrayBuffer → base64 文字列 (Edge Runtime 対応、Buffer polyfill に依存しない)
  * 32KB チャンクで分割して stack overflow を回避。
  */
@@ -215,9 +227,10 @@ export async function GET(
   }
 
   // === Step 3: マージ ===
+  // ラベルは表示用に 25 文字でトリミング (長文プルーフ名で右側 tier+count が枠外に出る保険)
   const topProofs: TopProof[] = topVoteRows.map((row) => ({
     id: row.proof_id,
-    label: labelMap.get(String(row.proof_id)) || '—',
+    label: truncateLabel(labelMap.get(String(row.proof_id)) || '—', 25),
     voteCount: row.vote_count || 0,
   }))
 
@@ -400,7 +413,7 @@ export async function GET(
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        padding: '14px 22px',
+                        padding: '12px 20px',
                         backgroundColor: accent
                           ? 'rgba(196,163,90,0.08)'
                           : 'rgba(250,250,247,0.04)',
@@ -415,20 +428,20 @@ export async function GET(
                         style={{
                           display: 'flex',
                           alignItems: 'center',
-                          gap: 14,
+                          gap: 12,
                         }}
                       >
                         {badgeDataUri ? (
                           <img
                             src={badgeDataUri}
-                            width={40}
-                            height={40}
+                            width={28}
+                            height={28}
                             style={{ objectFit: 'contain' }}
                           />
                         ) : null}
                         <span
                           style={{
-                            fontSize: 28,
+                            fontSize: 22,
                             color: '#FAFAF7',
                           }}
                         >
@@ -440,17 +453,17 @@ export async function GET(
                         style={{
                           display: 'flex',
                           alignItems: 'center',
-                          gap: 12,
+                          gap: 10,
                         }}
                       >
                         {tier ? (
                           <div style={{ display: 'flex' }}>
                             <span
                               style={{
-                                fontSize: 14,
+                                fontSize: 12,
                                 color: tierColor,
                                 fontWeight: 700,
-                                letterSpacing: 1,
+                                letterSpacing: 2,
                               }}
                             >
                               {tier}
@@ -460,7 +473,7 @@ export async function GET(
                         <div style={{ display: 'flex' }}>
                           <span
                             style={{
-                              fontSize: 32,
+                              fontSize: 26,
                               fontWeight: 700,
                               color: tier ? tierColor : '#FAFAF7',
                             }}
