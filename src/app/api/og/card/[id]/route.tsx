@@ -36,6 +36,15 @@ type TopProof = {
   voteCount: number
 }
 
+// ===== カラーマップ (OGP 専用、ティアの金属色階調) =====
+
+const TIER_COLOR_MAP: Record<CertificationTier, string> = {
+  PROVEN: '#9B7C50',     // ブロンズ
+  SPECIALIST: '#C0C0C0', // シルバー
+  MASTER: '#C4A35A',     // ゴールド (ブランド色)
+  LEGEND: '#E5E4E2',     // プラチナ
+}
+
 // ===== ヘルパー =====
 
 /**
@@ -68,8 +77,22 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
       Array.from(bytes.subarray(i, i + chunkSize))
     )
   }
-  // globalThis.btoa は Edge Runtime / Browser 共通で利用可能
   return btoa(binary)
+}
+
+/**
+ * URL から画像を fetch して data URI に変換。失敗時は null。
+ */
+async function fetchAsDataUri(url: string, fallbackMime = 'image/png'): Promise<string | null> {
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const buf = await res.arrayBuffer()
+    const ct = res.headers.get('content-type') || fallbackMime
+    return `data:${ct};base64,${arrayBufferToBase64(buf)}`
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -88,6 +111,12 @@ function getHighestTier(proofs: TopProof[]): CertificationTier | null {
 function getOgMedalPath(tier: CertificationTier | null): string | null {
   if (!tier || tier === 'PROVEN') return null
   return MEDAL_PATHS[tier as CertifiableTier].og
+}
+
+/** プルーフ行用の 64px メダルパス。PROVEN / 未達は null */
+function getSmallMedalPath(tier: CertificationTier | null): string | null {
+  if (!tier || tier === 'PROVEN') return null
+  return MEDAL_PATHS[tier as CertifiableTier].small
 }
 
 // ===== フォールバック OGP (プロ未存在 / DB エラー / Satori エラー時) =====
@@ -169,10 +198,8 @@ export async function GET(
   const proofIds = topVoteRows.map((r) => r.proof_id).filter(Boolean)
 
   // === Step 2: proof_items から label を解決 ===
-  // ⚠️ vote_summary.proof_id (text) と proof_items.id (uuid) の型不一致。
-  //    Supabase の .in() は内部で自動キャストするが、空配列が返ってきたら明示キャスト要検討。
   // ⚠️ proof_id が "custom_xxx" 形式 (custom proof) のケースは proof_items に存在しない。
-  //    Phase 3 ではフォールバック '—' とする。custom_proofs 対応は STOP 3 で要相談。
+  //    CEO 判断 (STOP 3) でカスタムプルーフ対応はスキップ → '—' フォールバック維持。
   const labelMap = new Map<string, string>()
   if (proofIds.length > 0) {
     const { data: proofRowsRaw } = await supabase
@@ -194,44 +221,41 @@ export async function GET(
     voteCount: row.vote_count || 0,
   }))
 
-  // === 最高ティア & メダル画像取得 ===
+  // === 最高ティア & メダル群の path 確定 ===
   const highestTier = getHighestTier(topProofs)
-  const medalAsset = getOgMedalPath(highestTier)
+  const bigMedalAsset = getOgMedalPath(highestTier)
+  const origin = new URL(request.url).origin
 
-  let medalDataUri: string | null = null
-  if (medalAsset) {
-    try {
-      const origin = new URL(request.url).origin
-      const medalRes = await fetch(`${origin}${medalAsset}`)
-      if (medalRes.ok) {
-        const buf = await medalRes.arrayBuffer()
-        medalDataUri = `data:image/png;base64,${arrayBufferToBase64(buf)}`
-      }
-    } catch {
-      medalDataUri = null
-    }
-  }
-
-  // === 顔写真取得 (フォールバック: イニシャル) ===
-  let avatarDataUri: string | null = null
-  if (pro.photo_url) {
-    try {
-      const avatarRes = await fetch(pro.photo_url)
-      if (avatarRes.ok) {
-        const buf = await avatarRes.arrayBuffer()
-        const contentType = avatarRes.headers.get('content-type') || 'image/jpeg'
-        avatarDataUri = `data:${contentType};base64,${arrayBufferToBase64(buf)}`
-      }
-    } catch {
-      avatarDataUri = null
-    }
-  }
+  // === Step 4: 画像 fetch を Promise.all で並列化 (Edge Runtime タイムアウト回避) ===
+  // - 顔写真 (photo_url、外部 URL)
+  // - 大メダル (right column の 380px)
+  // - 各プルーフ行のティアバッジ (40px 表示用 64px 画像、最大 3 個)
+  const [
+    avatarDataUri,
+    bigMedalDataUri,
+    proofBadgeDataUris,
+  ] = await Promise.all([
+    pro.photo_url
+      ? fetchAsDataUri(pro.photo_url, 'image/jpeg')
+      : Promise.resolve<string | null>(null),
+    bigMedalAsset
+      ? fetchAsDataUri(`${origin}${bigMedalAsset}`)
+      : Promise.resolve<string | null>(null),
+    Promise.all(
+      topProofs.map((proof) => {
+        const tier = getCertificationTier(proof.voteCount)
+        const smallPath = getSmallMedalPath(tier)
+        if (!smallPath) return Promise.resolve<string | null>(null)
+        return fetchAsDataUri(`${origin}${smallPath}`)
+      })
+    ),
+  ])
 
   const displayName = getDisplayName(pro)
   const title = (pro.title || '').trim()
   const initial = displayName.charAt(0) || '?'
 
-  // === Satori の制約: 全 div に display: 'flex' を明示 / テキストノードは <span> に分離 ===
+  // === Satori 制約: 全 div に display 明示 / テキストノードは <span> に分離 ===
   try {
     return new ImageResponse(
       (
@@ -243,235 +267,333 @@ export async function GET(
             backgroundColor: '#1A1A2E',
             color: '#FAFAF7',
             fontFamily: 'NotoSansJP',
-            padding: '60px 80px',
+            padding: 36,
+            position: 'relative',
           }}
         >
-          {/* ===== 左側: プロ情報 + プルーフ ===== */}
+          {/* ===== 内側ゴールドフレーム ===== */}
           <div
             style={{
               display: 'flex',
-              flexDirection: 'column',
-              flex: 1,
-              paddingRight: 40,
+              width: '100%',
+              height: '100%',
+              border: '1px solid rgba(196, 163, 90, 0.35)',
+              padding: 44,
             }}
           >
-            {/* ヘッダー: 顔写真 + 名前 + 肩書 */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                marginBottom: 40,
-              }}
-            >
-              {avatarDataUri ? (
-                <img
-                  src={avatarDataUri}
-                  width={120}
-                  height={120}
-                  style={{
-                    borderRadius: 60,
-                    marginRight: 28,
-                    objectFit: 'cover',
-                  }}
-                />
-              ) : (
-                <div
-                  style={{
-                    display: 'flex',
-                    width: 120,
-                    height: 120,
-                    borderRadius: 60,
-                    backgroundColor: '#2a2a4e',
-                    marginRight: 28,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: 48,
-                      color: '#C4A35A',
-                      fontWeight: 700,
-                    }}
-                  >
-                    {initial}
-                  </span>
-                </div>
-              )}
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    marginBottom: title ? 8 : 0,
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: 48,
-                      fontWeight: 700,
-                      lineHeight: 1.1,
-                    }}
-                  >
-                    {displayName}
-                  </span>
-                </div>
-                {title ? (
-                  <div style={{ display: 'flex' }}>
-                    <span
-                      style={{
-                        fontSize: 22,
-                        color: 'rgba(250,250,247,0.6)',
-                      }}
-                    >
-                      {title}
-                    </span>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-
-            {/* セパレータ */}
-            <div
-              style={{
-                display: 'flex',
-                height: 1,
-                backgroundColor: 'rgba(196,163,90,0.3)',
-                marginBottom: 32,
-              }}
-            />
-
-            {/* トッププルーフ 3つ */}
+            {/* ===== 左カラム: プロ情報 + プルーフ ===== */}
             <div
               style={{
                 display: 'flex',
                 flexDirection: 'column',
-                gap: 16,
+                flex: 1,
+                paddingRight: 40,
               }}
             >
-              {topProofs.map((proof) => {
-                const tier = getCertificationTier(proof.voteCount)
-                const gold = tier !== null
-                return (
+              {/* ヘッダー: 顔写真 + 名前 + 肩書 */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  marginBottom: 32,
+                }}
+              >
+                {avatarDataUri ? (
+                  <img
+                    src={avatarDataUri}
+                    width={120}
+                    height={120}
+                    style={{
+                      borderRadius: 60,
+                      marginRight: 28,
+                      objectFit: 'cover',
+                    }}
+                  />
+                ) : (
                   <div
-                    key={proof.id}
                     style={{
                       display: 'flex',
+                      width: 120,
+                      height: 120,
+                      borderRadius: 60,
+                      backgroundColor: '#2a2a4e',
+                      marginRight: 28,
                       alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '16px 24px',
-                      backgroundColor: gold
-                        ? 'rgba(196,163,90,0.08)'
-                        : 'rgba(250,250,247,0.04)',
-                      borderRadius: 12,
-                      border: gold
-                        ? '1px solid rgba(196,163,90,0.3)'
-                        : '1px solid rgba(250,250,247,0.06)',
+                      justifyContent: 'center',
                     }}
                   >
+                    <span
+                      style={{
+                        fontSize: 48,
+                        color: '#C4A35A',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {initial}
+                    </span>
+                  </div>
+                )}
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      marginBottom: title ? 8 : 0,
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: 48,
+                        fontWeight: 700,
+                        lineHeight: 1.1,
+                      }}
+                    >
+                      {displayName}
+                    </span>
+                  </div>
+                  {title ? (
                     <div style={{ display: 'flex' }}>
                       <span
                         style={{
-                          fontSize: 28,
-                          color: '#FAFAF7',
+                          fontSize: 22,
+                          color: 'rgba(250,250,247,0.6)',
                         }}
                       >
-                        {proof.label}
+                        {title}
                       </span>
                     </div>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* セパレータ */}
+              <div
+                style={{
+                  display: 'flex',
+                  height: 1,
+                  backgroundColor: 'rgba(196,163,90,0.3)',
+                  marginBottom: 28,
+                }}
+              />
+
+              {/* トッププルーフ 3つ */}
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 14,
+                }}
+              >
+                {topProofs.map((proof, idx) => {
+                  const tier = getCertificationTier(proof.voteCount)
+                  const tierColor = tier ? TIER_COLOR_MAP[tier] : '#FAFAF7'
+                  const accent = tier !== null
+                  const badgeDataUri = proofBadgeDataUris[idx]
+                  return (
                     <div
+                      key={proof.id}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 12,
+                        justifyContent: 'space-between',
+                        padding: '14px 22px',
+                        backgroundColor: accent
+                          ? 'rgba(196,163,90,0.08)'
+                          : 'rgba(250,250,247,0.04)',
+                        borderRadius: 12,
+                        border: accent
+                          ? '1px solid rgba(196,163,90,0.3)'
+                          : '1px solid rgba(250,250,247,0.06)',
                       }}
                     >
-                      {tier ? (
+                      {/* 左: バッジ + ラベル */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 14,
+                        }}
+                      >
+                        {badgeDataUri ? (
+                          <img
+                            src={badgeDataUri}
+                            width={40}
+                            height={40}
+                            style={{ objectFit: 'contain' }}
+                          />
+                        ) : null}
+                        <span
+                          style={{
+                            fontSize: 28,
+                            color: '#FAFAF7',
+                          }}
+                        >
+                          {proof.label}
+                        </span>
+                      </div>
+                      {/* 右: ティア + 票数 */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 12,
+                        }}
+                      >
+                        {tier ? (
+                          <div style={{ display: 'flex' }}>
+                            <span
+                              style={{
+                                fontSize: 14,
+                                color: tierColor,
+                                fontWeight: 700,
+                                letterSpacing: 1,
+                              }}
+                            >
+                              {tier}
+                            </span>
+                          </div>
+                        ) : null}
                         <div style={{ display: 'flex' }}>
                           <span
                             style={{
-                              fontSize: 14,
-                              color: '#C4A35A',
+                              fontSize: 32,
                               fontWeight: 700,
-                              letterSpacing: 1,
+                              color: tier ? tierColor : '#FAFAF7',
                             }}
                           >
-                            {tier}
+                            {proof.voteCount}
                           </span>
                         </div>
-                      ) : null}
-                      <div style={{ display: 'flex' }}>
-                        <span
-                          style={{
-                            fontSize: 32,
-                            fontWeight: 700,
-                            color: gold ? '#C4A35A' : '#FAFAF7',
-                          }}
-                        >
-                          {proof.voteCount}
-                        </span>
                       </div>
                     </div>
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
+
+              {/* フッター: REAL PROOF ロゴ */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  marginTop: 'auto',
+                  paddingTop: 28,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 700,
+                    color: '#C4A35A',
+                    letterSpacing: 4,
+                  }}
+                >
+                  REAL
+                </span>
+                <span
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 700,
+                    color: '#FAFAF7',
+                    letterSpacing: 4,
+                    marginLeft: 8,
+                  }}
+                >
+                  PROOF
+                </span>
+              </div>
             </div>
 
-            {/* フッター: REAL PROOF ロゴ */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                marginTop: 'auto',
-                paddingTop: 32,
-              }}
-            >
-              <span
+            {/* ===== 右カラム: 大メダル + 最高認定ラベル ===== */}
+            {bigMedalDataUri ? (
+              <div
                 style={{
-                  fontSize: 18,
-                  fontWeight: 700,
-                  color: '#C4A35A',
-                  letterSpacing: 4,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 380,
                 }}
               >
-                REAL
-              </span>
-              <span
-                style={{
-                  fontSize: 18,
-                  fontWeight: 700,
-                  color: '#FAFAF7',
-                  letterSpacing: 4,
-                  marginLeft: 8,
-                }}
-              >
-                PROOF
-              </span>
-            </div>
+                <img
+                  src={bigMedalDataUri}
+                  width={360}
+                  height={360}
+                  style={{ objectFit: 'contain' }}
+                />
+                <div
+                  style={{
+                    display: 'flex',
+                    marginTop: 16,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 22,
+                      color: '#C4A35A',
+                      letterSpacing: 2,
+                      fontWeight: 700,
+                    }}
+                  >
+                    最高認定
+                  </span>
+                </div>
+              </div>
+            ) : null}
           </div>
 
-          {/* ===== 右側: メダル ===== */}
-          {medalDataUri ? (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 380,
-              }}
-            >
-              <img
-                src={medalDataUri}
-                width={380}
-                height={380}
-                style={{ objectFit: 'contain' }}
-              />
-            </div>
-          ) : null}
+          {/* ===== 4 コーナーアクセント (L字、絶対配置) ===== */}
+          <div
+            style={{
+              display: 'flex',
+              position: 'absolute',
+              top: 24,
+              left: 24,
+              width: 28,
+              height: 28,
+              borderTop: '2px solid #C4A35A',
+              borderLeft: '2px solid #C4A35A',
+            }}
+          />
+          <div
+            style={{
+              display: 'flex',
+              position: 'absolute',
+              top: 24,
+              right: 24,
+              width: 28,
+              height: 28,
+              borderTop: '2px solid #C4A35A',
+              borderRight: '2px solid #C4A35A',
+            }}
+          />
+          <div
+            style={{
+              display: 'flex',
+              position: 'absolute',
+              bottom: 24,
+              left: 24,
+              width: 28,
+              height: 28,
+              borderBottom: '2px solid #C4A35A',
+              borderLeft: '2px solid #C4A35A',
+            }}
+          />
+          <div
+            style={{
+              display: 'flex',
+              position: 'absolute',
+              bottom: 24,
+              right: 24,
+              width: 28,
+              height: 28,
+              borderBottom: '2px solid #C4A35A',
+              borderRight: '2px solid #C4A35A',
+            }}
+          />
         </div>
       ),
       {
@@ -486,14 +608,12 @@ export async function GET(
           },
         ],
         headers: {
-          // CDN で 1 時間キャッシュ。新規投票での即時反映が必要なら短縮する。
           'Cache-Control': 'public, max-age=3600, s-maxage=3600',
         },
       }
     )
   } catch (err) {
     // Satori レンダエラーで真っ白になるのを防ぐ最終フォールバック
-    // Vercel Logs で `OG_RENDER_ERROR:` を検索すれば原因特定可能
     console.error('OG_RENDER_ERROR:', err)
     return buildFallbackOg(fontData, 60)
   }
