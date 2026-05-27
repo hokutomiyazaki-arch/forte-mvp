@@ -90,9 +90,9 @@ function getOgMedalPath(tier: CertificationTier | null): string | null {
   return MEDAL_PATHS[tier as CertifiableTier].og
 }
 
-// ===== デフォルト OGP (プロ未存在 / DB エラー時) =====
+// ===== フォールバック OGP (プロ未存在 / DB エラー / Satori エラー時) =====
 
-function buildDefaultOg(fontData: ArrayBuffer) {
+function buildFallbackOg(fontData: ArrayBuffer, cacheMaxAge = 300) {
   return new ImageResponse(
     (
       <div
@@ -108,7 +108,7 @@ function buildDefaultOg(fontData: ArrayBuffer) {
           fontFamily: 'NotoSansJP',
         }}
       >
-        REAL PROOF
+        <span>REAL PROOF</span>
       </div>
     ),
     {
@@ -118,8 +118,7 @@ function buildDefaultOg(fontData: ArrayBuffer) {
         { name: 'NotoSansJP', data: fontData, style: 'normal', weight: 700 },
       ],
       headers: {
-        // プロ未存在時は短めにキャッシュ (後でプロ作成された場合に備えて)
-        'Cache-Control': 'public, max-age=300, s-maxage=300',
+        'Cache-Control': `public, max-age=${cacheMaxAge}, s-maxage=${cacheMaxAge}`,
       },
     }
   )
@@ -139,7 +138,6 @@ export async function GET(
   ).then((res) => res.arrayBuffer())
 
   // Supabase client (service_role)
-  // ⚠️ Edge Runtime では process.env は Vercel が injection してくれる
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -156,7 +154,7 @@ export async function GET(
   const pro = proRaw as ProRecord | null
 
   if (!pro) {
-    return buildDefaultOg(fontData)
+    return buildFallbackOg(fontData, 300)
   }
 
   // === Step 1: vote_summary でトップ3 proof_id 取得 ===
@@ -233,242 +231,270 @@ export async function GET(
   const title = (pro.title || '').trim()
   const initial = displayName.charAt(0) || '?'
 
-  return new ImageResponse(
-    (
-      <div
-        style={{
-          display: 'flex',
-          width: '100%',
-          height: '100%',
-          backgroundColor: '#1A1A2E',
-          color: '#FAFAF7',
-          fontFamily: 'NotoSansJP',
-          padding: '60px 80px',
-        }}
-      >
-        {/* ===== 左側: プロ情報 + プルーフ ===== */}
+  // === Satori の制約: 全 div に display: 'flex' を明示 / テキストノードは <span> に分離 ===
+  try {
+    return new ImageResponse(
+      (
         <div
           style={{
             display: 'flex',
-            flexDirection: 'column',
-            flex: 1,
-            paddingRight: 40,
+            width: '100%',
+            height: '100%',
+            backgroundColor: '#1A1A2E',
+            color: '#FAFAF7',
+            fontFamily: 'NotoSansJP',
+            padding: '60px 80px',
           }}
         >
-          {/* ヘッダー: 顔写真 + 名前 + 肩書 */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              marginBottom: 40,
-            }}
-          >
-            {avatarDataUri ? (
-              <img
-                src={avatarDataUri}
-                width={120}
-                height={120}
-                style={{
-                  borderRadius: 60,
-                  marginRight: 28,
-                  objectFit: 'cover',
-                }}
-              />
-            ) : (
-              <div
-                style={{
-                  width: 120,
-                  height: 120,
-                  borderRadius: 60,
-                  backgroundColor: '#2a2a4e',
-                  marginRight: 28,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 48,
-                  color: '#C4A35A',
-                  fontWeight: 700,
-                }}
-              >
-                {initial}
-              </div>
-            )}
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 48,
-                  fontWeight: 700,
-                  marginBottom: title ? 8 : 0,
-                  lineHeight: 1.1,
-                }}
-              >
-                {displayName}
-              </div>
-              {title && (
-                <div
-                  style={{
-                    fontSize: 22,
-                    color: 'rgba(250,250,247,0.6)',
-                  }}
-                >
-                  {title}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* セパレータ */}
-          <div
-            style={{
-              height: 1,
-              backgroundColor: 'rgba(196,163,90,0.3)',
-              marginBottom: 32,
-            }}
-          />
-
-          {/* トッププルーフ 3つ */}
+          {/* ===== 左側: プロ情報 + プルーフ ===== */}
           <div
             style={{
               display: 'flex',
               flexDirection: 'column',
-              gap: 16,
+              flex: 1,
+              paddingRight: 40,
             }}
           >
-            {topProofs.map((proof) => {
-              const tier = getCertificationTier(proof.voteCount)
-              const gold = tier !== null
-              return (
+            {/* ヘッダー: 顔写真 + 名前 + 肩書 */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                marginBottom: 40,
+              }}
+            >
+              {avatarDataUri ? (
+                <img
+                  src={avatarDataUri}
+                  width={120}
+                  height={120}
+                  style={{
+                    borderRadius: 60,
+                    marginRight: 28,
+                    objectFit: 'cover',
+                  }}
+                />
+              ) : (
                 <div
-                  key={proof.id}
                   style={{
                     display: 'flex',
+                    width: 120,
+                    height: 120,
+                    borderRadius: 60,
+                    backgroundColor: '#2a2a4e',
+                    marginRight: 28,
                     alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '16px 24px',
-                    backgroundColor: gold
-                      ? 'rgba(196,163,90,0.08)'
-                      : 'rgba(250,250,247,0.04)',
-                    borderRadius: 12,
-                    border: gold
-                      ? '1px solid rgba(196,163,90,0.3)'
-                      : '1px solid rgba(250,250,247,0.06)',
+                    justifyContent: 'center',
                   }}
                 >
-                  <div
+                  <span
                     style={{
-                      fontSize: 28,
-                      color: '#FAFAF7',
+                      fontSize: 48,
+                      color: '#C4A35A',
+                      fontWeight: 700,
                     }}
                   >
-                    {proof.label}
+                    {initial}
+                  </span>
+                </div>
+              )}
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    marginBottom: title ? 8 : 0,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 48,
+                      fontWeight: 700,
+                      lineHeight: 1.1,
+                    }}
+                  >
+                    {displayName}
+                  </span>
+                </div>
+                {title ? (
+                  <div style={{ display: 'flex' }}>
+                    <span
+                      style={{
+                        fontSize: 22,
+                        color: 'rgba(250,250,247,0.6)',
+                      }}
+                    >
+                      {title}
+                    </span>
                   </div>
+                ) : null}
+              </div>
+            </div>
+
+            {/* セパレータ */}
+            <div
+              style={{
+                display: 'flex',
+                height: 1,
+                backgroundColor: 'rgba(196,163,90,0.3)',
+                marginBottom: 32,
+              }}
+            />
+
+            {/* トッププルーフ 3つ */}
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 16,
+              }}
+            >
+              {topProofs.map((proof) => {
+                const tier = getCertificationTier(proof.voteCount)
+                const gold = tier !== null
+                return (
                   <div
+                    key={proof.id}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 12,
+                      justifyContent: 'space-between',
+                      padding: '16px 24px',
+                      backgroundColor: gold
+                        ? 'rgba(196,163,90,0.08)'
+                        : 'rgba(250,250,247,0.04)',
+                      borderRadius: 12,
+                      border: gold
+                        ? '1px solid rgba(196,163,90,0.3)'
+                        : '1px solid rgba(250,250,247,0.06)',
                     }}
                   >
-                    {tier && (
-                      <div
+                    <div style={{ display: 'flex' }}>
+                      <span
                         style={{
-                          fontSize: 14,
-                          color: '#C4A35A',
-                          fontWeight: 700,
-                          letterSpacing: 1,
+                          fontSize: 28,
+                          color: '#FAFAF7',
                         }}
                       >
-                        {tier}
-                      </div>
-                    )}
+                        {proof.label}
+                      </span>
+                    </div>
                     <div
                       style={{
-                        fontSize: 32,
-                        fontWeight: 700,
-                        color: gold ? '#C4A35A' : '#FAFAF7',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 12,
                       }}
                     >
-                      {proof.voteCount}
+                      {tier ? (
+                        <div style={{ display: 'flex' }}>
+                          <span
+                            style={{
+                              fontSize: 14,
+                              color: '#C4A35A',
+                              fontWeight: 700,
+                              letterSpacing: 1,
+                            }}
+                          >
+                            {tier}
+                          </span>
+                        </div>
+                      ) : null}
+                      <div style={{ display: 'flex' }}>
+                        <span
+                          style={{
+                            fontSize: 32,
+                            fontWeight: 700,
+                            color: gold ? '#C4A35A' : '#FAFAF7',
+                          }}
+                        >
+                          {proof.voteCount}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
+
+            {/* フッター: REAL PROOF ロゴ */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                marginTop: 'auto',
+                paddingTop: 32,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 18,
+                  fontWeight: 700,
+                  color: '#C4A35A',
+                  letterSpacing: 4,
+                }}
+              >
+                REAL
+              </span>
+              <span
+                style={{
+                  fontSize: 18,
+                  fontWeight: 700,
+                  color: '#FAFAF7',
+                  letterSpacing: 4,
+                  marginLeft: 8,
+                }}
+              >
+                PROOF
+              </span>
+            </div>
           </div>
 
-          {/* フッター: REAL PROOF ロゴ */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              marginTop: 'auto',
-              paddingTop: 32,
-            }}
-          >
-            <span
+          {/* ===== 右側: メダル ===== */}
+          {medalDataUri ? (
+            <div
               style={{
-                fontSize: 18,
-                fontWeight: 700,
-                color: '#C4A35A',
-                letterSpacing: 4,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 380,
               }}
             >
-              REAL
-            </span>
-            <span
-              style={{
-                fontSize: 18,
-                fontWeight: 700,
-                color: '#FAFAF7',
-                letterSpacing: 4,
-                marginLeft: 8,
-              }}
-            >
-              PROOF
-            </span>
-          </div>
+              <img
+                src={medalDataUri}
+                width={380}
+                height={380}
+                style={{ objectFit: 'contain' }}
+              />
+            </div>
+          ) : null}
         </div>
-
-        {/* ===== 右側: メダル ===== */}
-        {medalDataUri && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 380,
-            }}
-          >
-            <img
-              src={medalDataUri}
-              width={380}
-              height={380}
-              style={{ objectFit: 'contain' }}
-            />
-          </div>
-        )}
-      </div>
-    ),
-    {
-      width: 1200,
-      height: 630,
-      fonts: [
-        {
-          name: 'NotoSansJP',
-          data: fontData,
-          style: 'normal',
-          weight: 700,
+      ),
+      {
+        width: 1200,
+        height: 630,
+        fonts: [
+          {
+            name: 'NotoSansJP',
+            data: fontData,
+            style: 'normal',
+            weight: 700,
+          },
+        ],
+        headers: {
+          // CDN で 1 時間キャッシュ。新規投票での即時反映が必要なら短縮する。
+          'Cache-Control': 'public, max-age=3600, s-maxage=3600',
         },
-      ],
-      headers: {
-        // CDN で 1 時間キャッシュ。新規投票での即時反映が必要なら短縮する。
-        'Cache-Control': 'public, max-age=3600, s-maxage=3600',
-      },
-    }
-  )
+      }
+    )
+  } catch (err) {
+    // Satori レンダエラーで真っ白になるのを防ぐ最終フォールバック
+    // Vercel Logs で `OG_RENDER_ERROR:` を検索すれば原因特定可能
+    console.error('OG_RENDER_ERROR:', err)
+    return buildFallbackOg(fontData, 60)
+  }
 }
