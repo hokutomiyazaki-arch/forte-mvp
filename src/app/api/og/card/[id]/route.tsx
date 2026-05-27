@@ -68,10 +68,10 @@ function truncateLabel(text: string, maxLen: number = 18): string {
 /** プルーフ名の動的フォントサイズ (モードA 用、左カラム幅に応じた段階縮小) */
 function getProofFontSize(label: string): number {
   const len = Array.from(label).length
-  if (len <= 8) return 96
-  if (len <= 12) return 80
-  if (len <= 16) return 68
-  return 60
+  if (len <= 8) return 80
+  if (len <= 12) return 64
+  if (len <= 16) return 56
+  return 48
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -205,8 +205,8 @@ function CornerAccents({ rightColor = '#C4A35A' }: { rightColor?: string } = {})
         style={{
           display: 'flex',
           position: 'absolute',
-          top: 24,
-          left: 24,
+          top: 80,
+          left: 80,
           width: 32,
           height: 32,
           borderTop: `4px solid ${LEFT}`,
@@ -217,8 +217,8 @@ function CornerAccents({ rightColor = '#C4A35A' }: { rightColor?: string } = {})
         style={{
           display: 'flex',
           position: 'absolute',
-          top: 24,
-          right: 24,
+          top: 80,
+          right: 80,
           width: 32,
           height: 32,
           borderTop: `4px solid ${rightColor}`,
@@ -229,8 +229,8 @@ function CornerAccents({ rightColor = '#C4A35A' }: { rightColor?: string } = {})
         style={{
           display: 'flex',
           position: 'absolute',
-          bottom: 24,
-          left: 24,
+          bottom: 80,
+          left: 80,
           width: 32,
           height: 32,
           borderBottom: `4px solid ${LEFT}`,
@@ -241,8 +241,8 @@ function CornerAccents({ rightColor = '#C4A35A' }: { rightColor?: string } = {})
         style={{
           display: 'flex',
           position: 'absolute',
-          bottom: 24,
-          right: 24,
+          bottom: 80,
+          right: 80,
           width: 32,
           height: 32,
           borderBottom: `4px solid ${rightColor}`,
