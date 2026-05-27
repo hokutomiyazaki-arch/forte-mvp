@@ -17,7 +17,6 @@ type ProRecord = {
   last_name: string | null
   first_name: string | null
   title: string | null
-  photo_url: string | null
 }
 
 type VoteSummaryRow = {
@@ -30,55 +29,41 @@ type ProofItemRow = {
   label: string | null
 }
 
-type TopProof = {
-  id: string
-  label: string
-  voteCount: number
-}
-
-// ===== カラーマップ (OGP 専用、ティアの金属色階調) =====
-
-const TIER_COLOR_MAP: Record<CertificationTier, string> = {
-  PROVEN: '#9B7C50',     // ブロンズ
-  SPECIALIST: '#C0C0C0', // シルバー
-  MASTER: '#C4A35A',     // ゴールド (ブランド色)
-  LEGEND: '#E5E4E2',     // プラチナ
-}
-
 // ===== ヘルパー =====
 
-/**
- * 名前ロジック (CEO 指示):
- *   name 優先 → 空なら last_name + ' ' + first_name → それも空なら 'REALPROOF Pro'
- */
 function getDisplayName(pro: ProRecord): string {
   const name = (pro.name || '').trim()
   if (name) return name
-
   const last = (pro.last_name || '').trim()
   const first = (pro.first_name || '').trim()
   const combined = `${last} ${first}`.trim()
   if (combined) return combined
-
   return 'REALPROOF Pro'
 }
 
 /**
- * 表示用ラベルの文字数制限。日本語の長文プルーフ名で OGP 枠を突き破らない保険。
- * 22px フォント + 左カラム幅 (約 600px) では 25 文字までが安全圏。
+ * 18 文字超は末尾「…」省略（OGP 大文字描画時の崩れ防止保険）。
+ * Array.from() で書記素クラスタ単位の安全分割 (downlevelIteration ルール準拠 + 絵文字対策)。
  */
-function truncateLabel(text: string, maxLen: number = 25): string {
+function truncateLabel(text: string, maxLen: number = 18): string {
   if (!text) return ''
-  // [...text] で書記素クラスタ単位の安全な分割 (絵文字・サロゲートペア対策)
   const chars = Array.from(text)
   if (chars.length <= maxLen) return text
   return chars.slice(0, maxLen - 1).join('') + '…'
 }
 
 /**
- * ArrayBuffer → base64 文字列 (Edge Runtime 対応、Buffer polyfill に依存しない)
- * 32KB チャンクで分割して stack overflow を回避。
+ * プルーフ名の文字数に応じてフォントサイズを動的決定（CEO 指示）。
+ * 左カラムの実描画幅は約 550px。大きすぎると枠外に出るため段階的に縮小。
  */
+function getProofFontSize(label: string): number {
+  const len = Array.from(label).length
+  if (len <= 8) return 140
+  if (len <= 12) return 120
+  if (len <= 16) return 100
+  return 88
+}
+
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer)
   let binary = ''
@@ -92,9 +77,6 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary)
 }
 
-/**
- * URL から画像を fetch して data URI に変換。失敗時は null。
- */
 async function fetchAsDataUri(url: string, fallbackMime = 'image/png'): Promise<string | null> {
   try {
     const res = await fetch(url)
@@ -107,31 +89,12 @@ async function fetchAsDataUri(url: string, fallbackMime = 'image/png'): Promise<
   }
 }
 
-/**
- * トッププルーフ群の中の最高ティアを返す。
- * 優先順: LEGEND > MASTER > SPECIALIST > PROVEN > null
- */
-function getHighestTier(proofs: TopProof[]): CertificationTier | null {
-  const order: CertificationTier[] = ['LEGEND', 'MASTER', 'SPECIALIST', 'PROVEN']
-  for (const tier of order) {
-    if (proofs.some((p) => getCertificationTier(p.voteCount) === tier)) return tier
-  }
-  return null
-}
-
-/** PROVEN / 未達は null、SPECIALIST 以上はメダル画像パスを返す */
 function getOgMedalPath(tier: CertificationTier | null): string | null {
   if (!tier || tier === 'PROVEN') return null
   return MEDAL_PATHS[tier as CertifiableTier].og
 }
 
-/** プルーフ行用の 64px メダルパス。PROVEN / 未達は null */
-function getSmallMedalPath(tier: CertificationTier | null): string | null {
-  if (!tier || tier === 'PROVEN') return null
-  return MEDAL_PATHS[tier as CertifiableTier].small
-}
-
-// ===== フォールバック OGP (プロ未存在 / DB エラー / Satori エラー時) =====
+// ===== フォールバック OGP =====
 
 function buildFallbackOg(fontData: ArrayBuffer, cacheMaxAge = 300) {
   return new ImageResponse(
@@ -173,102 +136,100 @@ export async function GET(
 ) {
   const proId = params.id
 
-  // フォント読み込み (Edge Runtime 対応)
+  // フォント読み込み
   const fontData = await fetch(
     new URL('../../../../../../public/fonts/NotoSansJP-subset.ttf', import.meta.url)
   ).then((res) => res.arrayBuffer())
 
-  // Supabase client (service_role)
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  // プロ情報取得 (deactivate 済みは OGP も出さない = デフォルトに落とす)
+  // プロ情報取得 (顔写真は新レイアウトで未使用なので photo_url 取得しない)
   const { data: proRaw } = await supabase
     .from('professionals')
-    .select('id, name, last_name, first_name, title, photo_url')
+    .select('id, name, last_name, first_name, title')
     .eq('id', proId)
     .is('deactivated_at', null)
     .maybeSingle()
 
   const pro = proRaw as ProRecord | null
-
   if (!pro) {
     return buildFallbackOg(fontData, 300)
   }
 
-  // === Step 1: vote_summary でトップ3 proof_id 取得 ===
+  // === vote_summary でトップ 1 件のみ取得 (CEO 指示: コピー駆動の主役を 1 つに) ===
   const { data: voteRowsRaw } = await supabase
     .from('vote_summary')
     .select('proof_id, vote_count')
     .eq('professional_id', proId)
     .order('vote_count', { ascending: false })
-    .limit(3)
+    .limit(1)
 
   const topVoteRows: VoteSummaryRow[] = (voteRowsRaw as VoteSummaryRow[]) || []
-  const proofIds = topVoteRows.map((r) => r.proof_id).filter(Boolean)
+  const topVote = topVoteRows[0] ?? null
 
-  // === Step 2: proof_items から label を解決 ===
-  // ⚠️ proof_id が "custom_xxx" 形式 (custom proof) のケースは proof_items に存在しない。
-  //    CEO 判断 (STOP 3) でカスタムプルーフ対応はスキップ → '—' フォールバック維持。
-  const labelMap = new Map<string, string>()
-  if (proofIds.length > 0) {
+  // proof_items から label 解決 (1 件のみ)
+  let topProofLabel: string = ''
+  if (topVote?.proof_id) {
     const { data: proofRowsRaw } = await supabase
       .from('proof_items')
       .select('id, label')
-      .in('id', proofIds)
-    const proofRows: ProofItemRow[] = (proofRowsRaw as ProofItemRow[]) || []
-    for (const item of proofRows) {
-      if (item.id && item.label) {
-        labelMap.set(String(item.id), item.label)
-      }
-    }
+      .eq('id', topVote.proof_id)
+      .maybeSingle()
+    const proofRow = proofRowsRaw as ProofItemRow | null
+    topProofLabel = proofRow?.label || ''
   }
 
-  // === Step 3: マージ ===
-  // ラベルは表示用に 25 文字でトリミング (長文プルーフ名で右側 tier+count が枠外に出る保険)
-  const topProofs: TopProof[] = topVoteRows.map((row) => ({
-    id: row.proof_id,
-    label: truncateLabel(labelMap.get(String(row.proof_id)) || '—', 25),
-    voteCount: row.vote_count || 0,
-  }))
+  // === 表示モード判定 ===
+  const voteCount = topVote?.vote_count ?? 0
+  const tier = voteCount > 0 ? getCertificationTier(voteCount) : null
 
-  // === 最高ティア & メダル群の path 確定 ===
-  const highestTier = getHighestTier(topProofs)
-  const bigMedalAsset = getOgMedalPath(highestTier)
-  const origin = new URL(request.url).origin
+  type DisplayMode = 'no-proof' | 'pre-proven' | 'proven-plus'
+  let displayMode: DisplayMode
+  if (!topVote || voteCount === 0 || !topProofLabel) {
+    displayMode = 'no-proof'
+  } else if (tier === null) {
+    displayMode = 'pre-proven'
+  } else {
+    displayMode = 'proven-plus'
+  }
 
-  // === Step 4: 画像 fetch を Promise.all で並列化 (Edge Runtime タイムアウト回避) ===
-  // - 顔写真 (photo_url、外部 URL)
-  // - 大メダル (right column の 380px)
-  // - 各プルーフ行のティアバッジ (40px 表示用 64px 画像、最大 3 個)
-  const [
-    avatarDataUri,
-    bigMedalDataUri,
-    proofBadgeDataUris,
-  ] = await Promise.all([
-    pro.photo_url
-      ? fetchAsDataUri(pro.photo_url, 'image/jpeg')
+  // メダル: SPECIALIST/MASTER/LEGEND のみ (PROVEN はメダルなし)
+  const showMedalColumn = !!tier && tier !== 'PROVEN'
+  const medalAsset = getOgMedalPath(tier)
+
+  // === メダル fetch (並列構造維持、ただし最大 1 個) ===
+  const [medalDataUri] = await Promise.all([
+    medalAsset
+      ? fetchAsDataUri(`${new URL(request.url).origin}${medalAsset}`)
       : Promise.resolve<string | null>(null),
-    bigMedalAsset
-      ? fetchAsDataUri(`${origin}${bigMedalAsset}`)
-      : Promise.resolve<string | null>(null),
-    Promise.all(
-      topProofs.map((proof) => {
-        const tier = getCertificationTier(proof.voteCount)
-        const smallPath = getSmallMedalPath(tier)
-        if (!smallPath) return Promise.resolve<string | null>(null)
-        return fetchAsDataUri(`${origin}${smallPath}`)
-      })
-    ),
   ])
 
+  // === コピー文 + メイン主役テキスト + 動的フォントサイズ ===
   const displayName = getDisplayName(pro)
   const title = (pro.title || '').trim()
-  const initial = displayName.charAt(0) || '?'
 
-  // === Satori 制約: 全 div に display 明示 / テキストノードは <span> に分離 ===
+  let copyText: string | null = null
+  let mainText: string
+  switch (displayMode) {
+    case 'no-proof':
+      copyText = null
+      mainText = 'REALPROOF認定プロフェッショナル'
+      break
+    case 'pre-proven':
+      copyText = 'クライアントが証明する'
+      mainText = truncateLabel(topProofLabel, 18)
+      break
+    case 'proven-plus':
+      copyText = `${voteCount}人が証明！`
+      mainText = truncateLabel(topProofLabel, 18)
+      break
+  }
+  const mainFontSize = getProofFontSize(mainText)
+  const tierLabel = showMedalColumn && tier ? `${tier} 認定` : null
+
   try {
     return new ImageResponse(
       (
@@ -277,7 +238,10 @@ export async function GET(
             display: 'flex',
             width: '100%',
             height: '100%',
-            backgroundColor: '#1A1A2E',
+            // radial-gradient で中央に光、外周にダークネイビー (CEO 指示)
+            backgroundColor: '#1A1A2E',  // fallback
+            backgroundImage:
+              'radial-gradient(circle at 30% 50%, #252544 0%, #1A1A2E 70%)',
             color: '#FAFAF7',
             fontFamily: 'NotoSansJP',
             padding: 36,
@@ -294,271 +258,150 @@ export async function GET(
               padding: 44,
             }}
           >
-            {/* ===== 左カラム: プロ情報 + プルーフ ===== */}
+            {/* ===== 左カラム ===== */}
             <div
               style={{
                 display: 'flex',
                 flexDirection: 'column',
                 flex: 1,
-                paddingRight: 40,
+                paddingRight: showMedalColumn ? 32 : 0,
+                justifyContent: 'center',
               }}
             >
-              {/* ヘッダー: 顔写真 + 名前 + 肩書 */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  marginBottom: 32,
-                }}
-              >
-                {avatarDataUri ? (
-                  <img
-                    src={avatarDataUri}
-                    width={120}
-                    height={120}
-                    style={{
-                      borderRadius: 60,
-                      marginRight: 28,
-                      objectFit: 'cover',
-                    }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      display: 'flex',
-                      width: 120,
-                      height: 120,
-                      borderRadius: 60,
-                      backgroundColor: '#2a2a4e',
-                      marginRight: 28,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: 48,
-                        color: '#C4A35A',
-                        fontWeight: 700,
-                      }}
-                    >
-                      {initial}
-                    </span>
-                  </div>
-                )}
-                <div
+              {/* 上: REAL PROOF 小ラベル */}
+              <div style={{ display: 'flex', marginBottom: 28 }}>
+                <span
                   style={{
-                    display: 'flex',
-                    flexDirection: 'column',
+                    fontSize: 20,
+                    color: '#C4A35A',
+                    letterSpacing: 4,
+                    fontWeight: 700,
                   }}
                 >
-                  <div
-                    style={{
-                      display: 'flex',
-                      marginBottom: title ? 8 : 0,
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: 48,
-                        fontWeight: 700,
-                        lineHeight: 1.1,
-                      }}
-                    >
-                      {displayName}
-                    </span>
-                  </div>
-                  {title ? (
-                    <div style={{ display: 'flex' }}>
-                      <span
-                        style={{
-                          fontSize: 22,
-                          color: 'rgba(250,250,247,0.6)',
-                        }}
-                      >
-                        {title}
-                      </span>
-                    </div>
-                  ) : null}
-                </div>
+                  REAL PROOF
+                </span>
               </div>
 
-              {/* セパレータ */}
+              {/* コピー文 (ゴールド) — no-proof モードでは表示しない */}
+              {copyText ? (
+                <div style={{ display: 'flex', marginBottom: 12 }}>
+                  <span
+                    style={{
+                      fontSize: 64,
+                      color: '#C4A35A',
+                      fontWeight: 700,
+                      lineHeight: 1.05,
+                    }}
+                  >
+                    {copyText}
+                  </span>
+                </div>
+              ) : null}
+
+              {/* メイン主役テキスト (白、最大の主役) */}
+              <div style={{ display: 'flex', marginBottom: 32 }}>
+                <span
+                  style={{
+                    fontSize: mainFontSize,
+                    color: '#FAFAF7',
+                    fontWeight: 700,
+                    lineHeight: 1.05,
+                  }}
+                >
+                  {mainText}
+                </span>
+              </div>
+
+              {/* 区切り線 */}
               <div
                 style={{
                   display: 'flex',
                   height: 1,
-                  backgroundColor: 'rgba(196,163,90,0.3)',
-                  marginBottom: 28,
+                  width: 240,
+                  backgroundColor: 'rgba(196,163,90,0.4)',
+                  marginBottom: 22,
                 }}
               />
 
-              {/* トッププルーフ 3つ */}
+              {/* 下: プロ名 + 肩書 */}
               <div
                 style={{
                   display: 'flex',
-                  flexDirection: 'column',
-                  gap: 14,
+                  alignItems: 'baseline',
+                  gap: 16,
                 }}
               >
-                {topProofs.map((proof, idx) => {
-                  const tier = getCertificationTier(proof.voteCount)
-                  const tierColor = tier ? TIER_COLOR_MAP[tier] : '#FAFAF7'
-                  const accent = tier !== null
-                  const badgeDataUri = proofBadgeDataUris[idx]
-                  return (
-                    <div
-                      key={proof.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '12px 20px',
-                        backgroundColor: accent
-                          ? 'rgba(196,163,90,0.08)'
-                          : 'rgba(250,250,247,0.04)',
-                        borderRadius: 12,
-                        border: accent
-                          ? '1px solid rgba(196,163,90,0.3)'
-                          : '1px solid rgba(250,250,247,0.06)',
-                      }}
-                    >
-                      {/* 左: バッジ + ラベル */}
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 12,
-                        }}
-                      >
-                        {badgeDataUri ? (
-                          <img
-                            src={badgeDataUri}
-                            width={28}
-                            height={28}
-                            style={{ objectFit: 'contain' }}
-                          />
-                        ) : null}
-                        <span
-                          style={{
-                            fontSize: 22,
-                            color: '#FAFAF7',
-                          }}
-                        >
-                          {proof.label}
-                        </span>
-                      </div>
-                      {/* 右: ティア + 票数 */}
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 10,
-                        }}
-                      >
-                        {tier ? (
-                          <div style={{ display: 'flex' }}>
-                            <span
-                              style={{
-                                fontSize: 12,
-                                color: tierColor,
-                                fontWeight: 700,
-                                letterSpacing: 2,
-                              }}
-                            >
-                              {tier}
-                            </span>
-                          </div>
-                        ) : null}
-                        <div style={{ display: 'flex' }}>
-                          <span
-                            style={{
-                              fontSize: 26,
-                              fontWeight: 700,
-                              color: tier ? tierColor : '#FAFAF7',
-                            }}
-                          >
-                            {proof.voteCount}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-
-              {/* フッター: REAL PROOF ロゴ */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  marginTop: 'auto',
-                  paddingTop: 28,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 18,
-                    fontWeight: 700,
-                    color: '#C4A35A',
-                    letterSpacing: 4,
-                  }}
-                >
-                  REAL
+                <span style={{ fontSize: 36, fontWeight: 700, color: '#FAFAF7' }}>
+                  {displayName}
                 </span>
-                <span
-                  style={{
-                    fontSize: 18,
-                    fontWeight: 700,
-                    color: '#FAFAF7',
-                    letterSpacing: 4,
-                    marginLeft: 8,
-                  }}
-                >
-                  PROOF
-                </span>
+                {title ? (
+                  <span
+                    style={{
+                      fontSize: 22,
+                      color: 'rgba(250,250,247,0.7)',
+                    }}
+                  >
+                    {title}
+                  </span>
+                ) : null}
               </div>
             </div>
 
-            {/* ===== 右カラム: 大メダル + 最高認定ラベル ===== */}
-            {bigMedalDataUri ? (
+            {/* ===== 右カラム: メダル + 後光 + ティアラベル ===== */}
+            {showMedalColumn && medalDataUri ? (
               <div
                 style={{
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  width: 380,
+                  width: 450,
+                  position: 'relative',
+                  overflow: 'hidden',
                 }}
               >
-                <img
-                  src={bigMedalDataUri}
-                  width={360}
-                  height={360}
-                  style={{ objectFit: 'contain' }}
-                />
+                {/* 後光 (光円、絶対配置でメダル背後に) */}
                 <div
                   style={{
                     display: 'flex',
-                    marginTop: 16,
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    width: 600,
+                    height: 600,
+                    marginTop: -300,
+                    marginLeft: -300,
+                    backgroundImage:
+                      'radial-gradient(circle, rgba(196,163,90,0.18) 0%, rgba(196,163,90,0) 65%)',
                   }}
-                >
-                  <span
-                    style={{
-                      fontSize: 22,
-                      color: '#C4A35A',
-                      letterSpacing: 2,
-                      fontWeight: 700,
-                    }}
-                  >
-                    最高認定
-                  </span>
-                </div>
+                />
+                {/* メダル本体 */}
+                <img
+                  src={medalDataUri}
+                  width={420}
+                  height={420}
+                  style={{ objectFit: 'contain' }}
+                />
+                {/* ティアラベル */}
+                {tierLabel ? (
+                  <div style={{ display: 'flex', marginTop: 12 }}>
+                    <span
+                      style={{
+                        fontSize: 28,
+                        color: '#C4A35A',
+                        letterSpacing: 2,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {tierLabel}
+                    </span>
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>
 
-          {/* ===== 4 コーナーアクセント (L字、絶対配置) ===== */}
+          {/* ===== 4 コーナーアクセント ===== */}
           <div
             style={{
               display: 'flex',
@@ -613,12 +456,7 @@ export async function GET(
         width: 1200,
         height: 630,
         fonts: [
-          {
-            name: 'NotoSansJP',
-            data: fontData,
-            style: 'normal',
-            weight: 700,
-          },
+          { name: 'NotoSansJP', data: fontData, style: 'normal', weight: 700 },
         ],
         headers: {
           'Cache-Control': 'public, max-age=3600, s-maxage=3600',
@@ -626,7 +464,6 @@ export async function GET(
       }
     )
   } catch (err) {
-    // Satori レンダエラーで真っ白になるのを防ぐ最終フォールバック
     console.error('OG_RENDER_ERROR:', err)
     return buildFallbackOg(fontData, 60)
   }
