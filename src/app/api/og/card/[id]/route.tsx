@@ -68,10 +68,10 @@ function truncateLabel(text: string, maxLen: number = 18): string {
 /** プルーフ名の動的フォントサイズ (モードA 用、左カラム幅に応じた段階縮小) */
 function getProofFontSize(label: string): number {
   const len = Array.from(label).length
-  if (len <= 8) return 120
-  if (len <= 12) return 100
-  if (len <= 16) return 88
-  return 76
+  if (len <= 8) return 96
+  if (len <= 12) return 80
+  if (len <= 16) return 68
+  return 60
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -193,10 +193,12 @@ function AvatarBlock({
   )
 }
 
-// ===== 4 コーナーアクセント (両モード共通) =====
+// ===== 4 コーナーアクセント =====
+// モードA は右側白背景になるため、右上・右下をダーク色に切り替える (rightColor で制御)。
 // computed property の TS 型推論を避けるため、4 個を個別に展開する。
 
-function CornerAccents() {
+function CornerAccents({ rightColor = '#C4A35A' }: { rightColor?: string } = {}) {
+  const LEFT = '#C4A35A'
   return (
     <>
       <div
@@ -205,10 +207,10 @@ function CornerAccents() {
           position: 'absolute',
           top: 24,
           left: 24,
-          width: 20,
-          height: 20,
-          borderTop: '2px solid #C4A35A',
-          borderLeft: '2px solid #C4A35A',
+          width: 32,
+          height: 32,
+          borderTop: `4px solid ${LEFT}`,
+          borderLeft: `4px solid ${LEFT}`,
         }}
       />
       <div
@@ -217,10 +219,10 @@ function CornerAccents() {
           position: 'absolute',
           top: 24,
           right: 24,
-          width: 20,
-          height: 20,
-          borderTop: '2px solid #C4A35A',
-          borderRight: '2px solid #C4A35A',
+          width: 32,
+          height: 32,
+          borderTop: `4px solid ${rightColor}`,
+          borderRight: `4px solid ${rightColor}`,
         }}
       />
       <div
@@ -229,10 +231,10 @@ function CornerAccents() {
           position: 'absolute',
           bottom: 24,
           left: 24,
-          width: 20,
-          height: 20,
-          borderBottom: '2px solid #C4A35A',
-          borderLeft: '2px solid #C4A35A',
+          width: 32,
+          height: 32,
+          borderBottom: `4px solid ${LEFT}`,
+          borderLeft: `4px solid ${LEFT}`,
         }}
       />
       <div
@@ -241,10 +243,10 @@ function CornerAccents() {
           position: 'absolute',
           bottom: 24,
           right: 24,
-          width: 20,
-          height: 20,
-          borderBottom: '2px solid #C4A35A',
-          borderRight: '2px solid #C4A35A',
+          width: 32,
+          height: 32,
+          borderBottom: `4px solid ${rightColor}`,
+          borderRight: `4px solid ${rightColor}`,
         }}
       />
     </>
@@ -360,9 +362,10 @@ export async function GET(
               display: 'flex',
               width: '100%',
               height: '100%',
-              backgroundColor: '#1A1A2E',
+              backgroundColor: '#1A1A2E',  // fallback
+              // 斜め分割: 左58% ダークネイビー / 右42% クリーム白 (メダル視認性向上)
               backgroundImage:
-                'radial-gradient(circle at 30% 50%, #252544 0%, #1A1A2E 70%)',
+                'linear-gradient(108deg, #1A1A2E 0%, #1A1A2E 58%, #F5F1E8 58.1%, #F5F1E8 100%)',
               color: '#FAFAF7',
               fontFamily: 'NotoSansJP',
               padding: 24,
@@ -375,7 +378,7 @@ export async function GET(
                 display: 'flex',
                 width: '100%',
                 height: '100%',
-                border: '1px solid rgba(196, 163, 90, 0.35)',
+                border: '3px solid #C4A35A',
                 padding: 32,
               }}
             >
@@ -490,7 +493,7 @@ export async function GET(
                 </div>
               </div>
 
-              {/* 右カラム: 後光 + メダル + ティアラベル */}
+              {/* 右カラム: メダル + ティアラベル (白背景になったので後光は削除) */}
               {bigMedalDataUri ? (
                 <div
                   style={{
@@ -499,25 +502,8 @@ export async function GET(
                     alignItems: 'center',
                     justifyContent: 'center',
                     width: 450,
-                    position: 'relative',
-                    overflow: 'hidden',
                   }}
                 >
-                  {/* 後光 (白系、CEO 指示で変更: ゴールド → 白系で黒リボンと分離) */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      position: 'absolute',
-                      top: '50%',
-                      left: '50%',
-                      width: 500,
-                      height: 500,
-                      marginTop: -250,
-                      marginLeft: -250,
-                      backgroundImage:
-                        'radial-gradient(circle, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 60%)',
-                    }}
-                  />
                   {/* メダル本体 */}
                   <img
                     src={bigMedalDataUri}
@@ -525,13 +511,13 @@ export async function GET(
                     height={380}
                     style={{ objectFit: 'contain' }}
                   />
-                  {/* ティアラベル */}
+                  {/* ティアラベル (白背景上なのでダーク色に) */}
                   {tierLabel ? (
                     <div style={{ display: 'flex', marginTop: 10 }}>
                       <span
                         style={{
                           fontSize: 22,
-                          color: '#C4A35A',
+                          color: '#1A1A2E',
                           letterSpacing: 2,
                           fontWeight: 700,
                         }}
@@ -544,8 +530,8 @@ export async function GET(
               ) : null}
             </div>
 
-            {/* 4 コーナーアクセント */}
-            <CornerAccents />
+            {/* 4 コーナーアクセント (モードA: 右側は白背景になるためダーク色) */}
+            <CornerAccents rightColor="#1A1A2E" />
           </div>
         ),
         {
@@ -590,7 +576,7 @@ export async function GET(
               display: 'flex',
               width: '100%',
               height: '100%',
-              border: '1px solid rgba(196, 163, 90, 0.35)',
+              border: '3px solid #C4A35A',
               padding: 32,
             }}
           >
