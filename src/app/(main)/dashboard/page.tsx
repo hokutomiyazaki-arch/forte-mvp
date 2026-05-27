@@ -22,6 +22,7 @@ import { isPersonalityV2 } from '@/lib/personality'
 import { validateBookingUrl, validateSocialHandle } from '@/lib/validation'
 import { getProVoteCount } from '@/lib/vote-count'
 import BookingUrlBanner from '@/components/BookingUrlBanner'
+import ShareButton from '@/components/ShareButton'
 import BusinessInfoTab from '@/components/dashboard/BusinessInfoTab'
 import { createClient as createSupabaseClient } from '@/lib/supabase'
 
@@ -2610,7 +2611,20 @@ export default function DashboardPage() {
 
       {/* Proof Chart */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
-        <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">プルーフチャート</h2>
+        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+          <h2 className="text-lg font-bold text-[#1A1A2E]">プルーフチャート</h2>
+          {pro && (
+            <ShareButton
+              proId={pro.id}
+              proName={
+                pro.name?.trim() ||
+                `${pro.last_name || ''}${pro.first_name || ''}`.trim() ||
+                'REALPROOF Pro'
+              }
+              variant="primary"
+            />
+          )}
+        </div>
         <ForteChart
           votes={votes}
           personalityVotes={personalityVotes}
