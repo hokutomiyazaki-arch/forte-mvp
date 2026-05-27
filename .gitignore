@@ -26,6 +26,9 @@ next-env.d.ts
 # DB dump backups (PII 含むため絶対 commit しない)
 /backups/
 
+# OGP フォント中間ファイル (scripts/subset-font.sh で再生成可能、9MB あるので Git 管理外)
+/public/fonts/NotoSansJP-Variable.ttf
+
 # 実行ログ(commit しない)
 /logs/
 
