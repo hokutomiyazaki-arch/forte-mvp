@@ -57,6 +57,11 @@ export async function GET(request: Request) {
 
     const { data: professionals, error: prosError } = await proQuery
 
+    const targetId = '6de99be3-8602-4295-95ca-be912d08e28f'
+    console.log('[SEARCH-DIAG] professionals.length:', professionals?.length || 0)
+    console.log('[SEARCH-DIAG] 濱武 in professionals?:', professionals?.some(p => p.id === targetId))
+    console.log('[SEARCH-DIAG] 濱武 entry:', professionals?.find(p => p.id === targetId))
+
     if (prosError) throw prosError
     if (!professionals || professionals.length === 0) {
       return NextResponse.json({ professionals: [] }, {
@@ -75,6 +80,10 @@ export async function GET(request: Request) {
       .eq('status', 'confirmed')
       .eq('vote_type', 'proof')
       .limit(10000)
+
+    console.log('[SEARCH-DIAG] proofVotes.length:', proofVotes?.length || 0)
+    console.log('[SEARCH-DIAG] 濱武 vote count in proofVotes:',
+      proofVotes?.filter(v => v.professional_id === targetId).length || 0)
 
     // リピーター率用: 全投票のnormalized_email+session_countを取得（session_countフォールバック対応）
     const { data: allVotesForRepeater } = await supabase
@@ -268,6 +277,8 @@ export async function GET(request: Request) {
         stat.proofItemCounts[itemId] = (stat.proofItemCounts[itemId] || 0) + 1
       }
     }
+
+    console.log('[SEARCH-DIAG] 濱武 stat:', proStats.get(targetId))
 
     // プロデータの組み立て
     let result = professionals.map(pro => {
@@ -494,6 +505,9 @@ export async function GET(request: Request) {
       }
     }).filter((p): p is NonNullable<typeof p> => p !== null)
 
+    console.log('[SEARCH-DIAG] result.length after null filter:', result.length)
+    console.log('[SEARCH-DIAG] 濱武 in result?:', result.some(p => p.id === targetId))
+
     // テキスト検索フィルタ
     if (query) {
       const q = query.toLowerCase()
@@ -591,6 +605,9 @@ export async function GET(request: Request) {
           result.sort((a, b) => b.recentProofs - a.recentProofs)
       }
     }
+
+    console.log('[SEARCH-DIAG] FINAL result.length:', result.length)
+    console.log('[SEARCH-DIAG] FINAL 濱武 in result?:', result.some(p => p.id === targetId))
 
     return NextResponse.json({
       professionals: result,
