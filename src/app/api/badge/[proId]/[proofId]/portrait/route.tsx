@@ -1,9 +1,71 @@
 import { ImageResponse } from 'next/og'
+import { createClient } from '@supabase/supabase-js'
+import {
+  getCertificationTier,
+  MEDAL_PATHS,
+  type CertificationTier,
+  type CertifiableTier,
+} from '@/lib/constants'
 
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
 
+// ===== 型定義 =====
+
+type ProRecord = {
+  id: string
+  name: string | null
+  last_name: string | null
+  first_name: string | null
+  title: string | null
+}
+
+type VoteSummaryRow = {
+  proof_id: string
+  vote_count: number | null
+}
+
+type ProofItemRow = {
+  id: string
+  label: string | null
+}
+
+// ===== ティア別カラー(称号テキスト用) =====
+
+const TIER_TITLE_COLOR: Record<CertifiableTier, string> = {
+  SPECIALIST: '#C0C0C0', // シルバー
+  MASTER: '#C4A35A',     // ゴールド
+  LEGEND: '#E5E4E2',     // プラチナ
+}
+
+// ===== 背景画像パス(CertifiableTier のみ) =====
+
+const BADGE_BG_PATHS: Record<CertifiableTier, string> = {
+  SPECIALIST: '/badge-bg-specialist.png',
+  MASTER: '/badge-bg-master.png',
+  LEGEND: '/badge-bg-legend.png',
+}
+
 // ===== ヘルパー =====
+
+function getDisplayName(pro: ProRecord): string {
+  const name = (pro.name || '').trim()
+  if (name) return name
+  const last = (pro.last_name || '').trim()
+  const first = (pro.first_name || '').trim()
+  const combined = `${last} ${first}`.trim()
+  if (combined) return combined
+  return 'REALPROOF Pro'
+}
+
+/** プルーフ名の動的フォントサイズ (背景画像のテキスト幅に保守的に収める) */
+function getProofFontSize(label: string): number {
+  const len = Array.from(label).length
+  if (len <= 8) return 64
+  if (len <= 12) return 52
+  if (len <= 16) return 44
+  return 38
+}
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer)
@@ -35,7 +97,7 @@ async function fetchAsDataUri(
 
 // ===== フォールバック (1080x1350 透過) =====
 
-function buildFallback(fontData: ArrayBuffer) {
+function buildFallback(fontData: ArrayBuffer, message = 'REAL PROOF') {
   return new ImageResponse(
     (
       <div
@@ -50,7 +112,7 @@ function buildFallback(fontData: ArrayBuffer) {
         }}
       >
         <span style={{ fontSize: 40, color: '#C4A35A', letterSpacing: 4 }}>
-          REAL PROOF
+          {message}
         </span>
       </div>
     ),
@@ -71,14 +133,10 @@ function buildFallback(fontData: ArrayBuffer) {
 
 export async function GET(
   request: Request,
-  _ctx: { params: { proId: string; proofId: string } }
+  { params }: { params: { proId: string; proofId: string } }
 ) {
-  // PoC: proId / proofId は受け取るが無視してハードコード返却
-  const proName = '岡本 如弘'
-  const title = '柔道整復師'
-  const proofLabel = '痛みが取れた'
-  const voteCount = 56
-  const tier = 'MASTER'
+  const proId = params.proId
+  const proofId = params.proofId
 
   const fontData = await fetch(
     new URL(
@@ -87,8 +145,95 @@ export async function GET(
     )
   ).then((res) => res.arrayBuffer())
 
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+
+  // === プロ情報取得 ===
+  const { data: proRaw } = await supabase
+    .from('professionals')
+    .select('id, name, last_name, first_name, title')
+    .eq('id', proId)
+    .is('deactivated_at', null)
+    .maybeSingle()
+
+  const pro = proRaw as ProRecord | null
+  if (!pro) {
+    return buildFallback(fontData)
+  }
+
+  // === vote_summary から該当プルーフの票数を取得 ===
+  // proofId 指定なし(または該当行なし)時は top1 プルーフにフォールバック
+  let voteRow: VoteSummaryRow | null = null
+
+  if (proofId) {
+    const { data: targetVoteRaw } = await supabase
+      .from('vote_summary')
+      .select('proof_id, vote_count')
+      .eq('professional_id', proId)
+      .eq('proof_id', proofId)
+      .maybeSingle()
+    voteRow = (targetVoteRaw as VoteSummaryRow | null) ?? null
+  }
+
+  if (!voteRow) {
+    const { data: topVoteRaw } = await supabase
+      .from('vote_summary')
+      .select('proof_id, vote_count')
+      .eq('professional_id', proId)
+      .order('vote_count', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    voteRow = (topVoteRaw as VoteSummaryRow | null) ?? null
+  }
+
+  const voteCount = voteRow?.vote_count ?? 0
+  const tier: CertificationTier | null =
+    voteCount > 0 ? getCertificationTier(voteCount) : null
+
+  // === SPECIALIST 未満 (PROVEN / 未達) は今回はフォールバック ===
+  // 背景画像とメダルが SPECIALIST 以上のみ存在するため
+  if (
+    !tier ||
+    !(tier === 'SPECIALIST' || tier === 'MASTER' || tier === 'LEGEND')
+  ) {
+    return buildFallback(fontData, 'REAL PROOF')
+  }
+
+  const certTier: CertifiableTier = tier
+
+  // === プルーフ名取得 ===
+  let proofLabel = '本物の強み'
+  if (voteRow?.proof_id) {
+    const { data: proofRaw } = await supabase
+      .from('proof_items')
+      .select('id, label')
+      .eq('id', voteRow.proof_id)
+      .maybeSingle()
+    const proofItem = proofRaw as ProofItemRow | null
+    if (proofItem?.label) {
+      proofLabel = proofItem.label
+    }
+  }
+
+  const displayName = getDisplayName(pro)
+  const title = (pro.title || '').trim()
   const origin = new URL(request.url).origin
-  const medalDataUri = await fetchAsDataUri(`${origin}/medals/master-400.png`)
+
+  // === 画像並列取得 ===
+  const [bgDataUri, medalDataUri] = await Promise.all([
+    fetchAsDataUri(`${origin}${BADGE_BG_PATHS[certTier]}`),
+    fetchAsDataUri(`${origin}${MEDAL_PATHS[certTier].og}`),
+  ])
+
+  if (!bgDataUri) {
+    // 背景画像が読めない場合はフォールバック
+    return buildFallback(fontData)
+  }
+
+  const titleColor = TIER_TITLE_COLOR[certTier]
+  const proofFontSize = getProofFontSize(proofLabel)
 
   try {
     return new ImageResponse(
@@ -103,191 +248,175 @@ export async function GET(
             fontFamily: 'NotoSansJP',
           }}
         >
-          {/* === Layer 1: 内側カード背景 (960x1230、ダークネイビー+ゴールド枠) === */}
-          <div
+          {/* === Layer 1: 背景画像 (ティア別、最背面) === */}
+          <img
+            src={bgDataUri}
+            width={1080}
+            height={1350}
             style={{
-              display: 'flex',
               position: 'absolute',
-              top: 60,
-              left: 60,
-              width: 960,
-              height: 1230,
-              backgroundColor: '#1A1A2E',
-              borderRadius: 24,
-              border: '3px solid #C4A35A',
+              top: 0,
+              left: 0,
+              width: 1080,
+              height: 1350,
             }}
           />
 
-          {/* === Layer 2: 立体リボン SVG (カード左右端から透過エリアにはみ出す) === */}
-          <svg
-            width="1080"
-            height="1350"
-            viewBox="0 0 1080 1350"
-            style={{ position: 'absolute', top: 0, left: 0 }}
-          >
-            <defs>
-              <linearGradient
-                id="ribbonGold"
-                x1="0%"
-                y1="0%"
-                x2="100%"
-                y2="0%"
-              >
-                <stop offset="0%" stopColor="#8B6914" />
-                <stop offset="50%" stopColor="#E5C77B" />
-                <stop offset="100%" stopColor="#8B6914" />
-              </linearGradient>
-            </defs>
-            {/* ドロップシャドウ (本体より 8px 下にずらす) */}
-            <path
-              d="M -100,408 L 1180,628 L 1180,748 L -100,528 Z"
-              fill="#000000"
-              opacity="0.2"
+          {/* === Layer 2: メダル画像 (中央上、ティア別) === */}
+          {medalDataUri ? (
+            <img
+              src={medalDataUri}
+              width={400}
+              height={400}
+              style={{
+                position: 'absolute',
+                top: 180,
+                left: 340,
+                width: 400,
+                height: 400,
+              }}
             />
-            {/* リボン本体 (ゴールドグラデ) */}
-            <path
-              d="M -100,400 L 1180,620 L 1180,740 L -100,520 Z"
-              fill="url(#ribbonGold)"
-            />
-            {/* 左端折り返し (暗色で立体感) */}
-            <path
-              d="M -100,520 L -100,400 L -160,380 L -160,500 Z"
-              fill="#5A4410"
-            />
-            {/* 右端折り返し */}
-            <path
-              d="M 1180,620 L 1180,740 L 1240,760 L 1240,640 Z"
-              fill="#5A4410"
-            />
-            {/* ハイライト (上端に明色の細線) */}
-            <line
-              x1="-100"
-              y1="415"
-              x2="1180"
-              y2="635"
-              stroke="#F5DFA0"
-              strokeWidth="3"
-              opacity="0.5"
-            />
-          </svg>
+          ) : null}
 
-          {/* === Layer 3: コンテンツ (メダル/テキスト/フッター、リボンの上に重ねる) === */}
+          {/* === Layer 3: テキストオーバーレイ === */}
+
+          {/* 称号 (MASTER / SPECIALIST / LEGEND) */}
           <div
             style={{
               display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
               position: 'absolute',
-              top: 60,
-              left: 60,
-              width: 960,
-              height: 1230,
+              top: 620,
+              left: 0,
+              width: 1080,
+              justifyContent: 'center',
             }}
           >
-            {/* メダル (リボン中央に重なる位置) */}
-            <div style={{ display: 'flex', marginTop: 90 }}>
-              {medalDataUri ? (
-                <img
-                  src={medalDataUri}
-                  width={400}
-                  height={400}
-                  style={{ objectFit: 'contain' }}
-                />
-              ) : (
-                <div style={{ display: 'flex', width: 400, height: 400 }} />
-              )}
-            </div>
-
-            {/* 称号テキスト (MASTER) */}
-            <div style={{ display: 'flex', marginTop: 28 }}>
-              <span
-                style={{
-                  fontSize: 80,
-                  color: '#C4A35A',
-                  fontWeight: 700,
-                  letterSpacing: 4,
-                }}
-              >
-                {tier}
-              </span>
-            </div>
-
-            {/* セパレータ */}
-            <div
+            <span
               style={{
-                display: 'flex',
-                width: 200,
-                height: 2,
-                backgroundColor: '#C4A35A',
-                opacity: 0.5,
-                marginTop: 18,
-              }}
-            />
-
-            {/* プルーフ名 */}
-            <div style={{ display: 'flex', marginTop: 22 }}>
-              <span
-                style={{
-                  fontSize: 64,
-                  color: '#FAFAF7',
-                  fontWeight: 700,
-                }}
-              >
-                {proofLabel}
-              </span>
-            </div>
-
-            {/* 票数 (56 を主役級に強調、縦並び中央揃え) */}
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                marginTop: 50,
+                fontSize: 72,
+                color: titleColor,
+                fontWeight: 800,
+                letterSpacing: 4,
               }}
             >
-              <div style={{ display: 'flex' }}>
-                <span
-                  style={{
-                    fontSize: 130,
-                    color: '#C4A35A',
-                    fontWeight: 800,
-                    lineHeight: 1,
-                  }}
-                >
-                  {voteCount}
-                </span>
-              </div>
-              <div style={{ display: 'flex', marginTop: 8 }}>
-                <span
-                  style={{
-                    fontSize: 40,
-                    color: '#FAFAF7',
-                  }}
-                >
-                  人が証明
-                </span>
-              </div>
-            </div>
+              {certTier}
+            </span>
+          </div>
 
-            {/* 余白スペーサー (証明書らしい余白の美) */}
-            <div style={{ display: 'flex', flex: 1 }} />
+          {/* セパレータ横線 */}
+          <div
+            style={{
+              display: 'flex',
+              position: 'absolute',
+              top: 720,
+              left: 440,
+              width: 200,
+              height: 2,
+              backgroundColor: '#C4A35A',
+              opacity: 0.5,
+            }}
+          />
 
-            {/* プロ名 */}
-            <div style={{ display: 'flex' }}>
-              <span
-                style={{
-                  fontSize: 44,
-                  color: '#FAFAF7',
-                  fontWeight: 600,
-                }}
-              >
-                {proName}
-              </span>
-            </div>
+          {/* プルーフ名 */}
+          <div
+            style={{
+              display: 'flex',
+              position: 'absolute',
+              top: 760,
+              left: 0,
+              width: 1080,
+              justifyContent: 'center',
+            }}
+          >
+            <span
+              style={{
+                fontSize: proofFontSize,
+                color: '#FAFAF7',
+                fontWeight: 700,
+              }}
+            >
+              {proofLabel}
+            </span>
+          </div>
 
-            {/* 肩書 */}
-            <div style={{ display: 'flex', marginTop: 8 }}>
+          {/* 票数 (大) */}
+          <div
+            style={{
+              display: 'flex',
+              position: 'absolute',
+              top: 880,
+              left: 0,
+              width: 1080,
+              justifyContent: 'center',
+            }}
+          >
+            <span
+              style={{
+                fontSize: 130,
+                color: '#C4A35A',
+                fontWeight: 800,
+                lineHeight: 1,
+              }}
+            >
+              {voteCount}
+            </span>
+          </div>
+
+          {/* 「人が証明」 */}
+          <div
+            style={{
+              display: 'flex',
+              position: 'absolute',
+              top: 1030,
+              left: 0,
+              width: 1080,
+              justifyContent: 'center',
+            }}
+          >
+            <span
+              style={{
+                fontSize: 40,
+                color: '#FAFAF7',
+              }}
+            >
+              人が証明
+            </span>
+          </div>
+
+          {/* プロ名 */}
+          <div
+            style={{
+              display: 'flex',
+              position: 'absolute',
+              top: 1110,
+              left: 0,
+              width: 1080,
+              justifyContent: 'center',
+            }}
+          >
+            <span
+              style={{
+                fontSize: 44,
+                color: '#FAFAF7',
+                fontWeight: 600,
+              }}
+            >
+              {displayName}
+            </span>
+          </div>
+
+          {/* 肩書 */}
+          {title ? (
+            <div
+              style={{
+                display: 'flex',
+                position: 'absolute',
+                top: 1175,
+                left: 0,
+                width: 1080,
+                justifyContent: 'center',
+              }}
+            >
               <span
                 style={{
                   fontSize: 24,
@@ -297,33 +426,51 @@ export async function GET(
                 {title}
               </span>
             </div>
+          ) : null}
 
-            {/* フッター: REAL PROOF */}
-            <div style={{ display: 'flex', marginTop: 40 }}>
-              <span
-                style={{
-                  fontSize: 20,
-                  color: '#C4A35A',
-                  letterSpacing: 4,
-                  fontWeight: 700,
-                }}
-              >
-                REAL PROOF
-              </span>
-            </div>
+          {/* REAL PROOF */}
+          <div
+            style={{
+              display: 'flex',
+              position: 'absolute',
+              top: 1245,
+              left: 0,
+              width: 1080,
+              justifyContent: 'center',
+            }}
+          >
+            <span
+              style={{
+                fontSize: 20,
+                color: '#C4A35A',
+                letterSpacing: 4,
+                fontWeight: 700,
+              }}
+            >
+              REAL PROOF
+            </span>
+          </div>
 
-            {/* URL */}
-            <div style={{ display: 'flex', marginTop: 8, marginBottom: 36 }}>
-              <span
-                style={{
-                  fontSize: 16,
-                  color: 'rgba(196, 163, 90, 0.6)',
-                  letterSpacing: 2,
-                }}
-              >
-                realproof.jp
-              </span>
-            </div>
+          {/* URL */}
+          <div
+            style={{
+              display: 'flex',
+              position: 'absolute',
+              top: 1290,
+              left: 0,
+              width: 1080,
+              justifyContent: 'center',
+            }}
+          >
+            <span
+              style={{
+                fontSize: 16,
+                color: 'rgba(196, 163, 90, 0.6)',
+                letterSpacing: 2,
+              }}
+            >
+              realproof.jp
+            </span>
           </div>
         </div>
       ),
@@ -334,7 +481,7 @@ export async function GET(
           { name: 'NotoSansJP', data: fontData, style: 'normal', weight: 700 },
         ],
         headers: {
-          'Cache-Control': 'public, max-age=60, s-maxage=60',
+          'Cache-Control': 'public, max-age=3600, s-maxage=3600',
         },
       }
     )
