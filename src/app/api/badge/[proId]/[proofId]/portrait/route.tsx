@@ -98,56 +98,93 @@ export async function GET(
             display: 'flex',
             width: '100%',
             height: '100%',
+            position: 'relative',
             backgroundColor: 'transparent',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 60,
             fontFamily: 'NotoSansJP',
           }}
         >
-          {/* 内側カード 960x1230 */}
+          {/* === Layer 1: 内側カード背景 (960x1230、ダークネイビー+ゴールド枠) === */}
           <div
             style={{
               display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
+              position: 'absolute',
+              top: 60,
+              left: 60,
               width: 960,
               height: 1230,
               backgroundColor: '#1A1A2E',
               borderRadius: 24,
               border: '3px solid #C4A35A',
-              position: 'relative',
-              overflow: 'hidden',
+            }}
+          />
+
+          {/* === Layer 2: 立体リボン SVG (カード左右端から透過エリアにはみ出す) === */}
+          <svg
+            width="1080"
+            height="1350"
+            viewBox="0 0 1080 1350"
+            style={{ position: 'absolute', top: 0, left: 0 }}
+          >
+            <defs>
+              <linearGradient
+                id="ribbonGold"
+                x1="0%"
+                y1="0%"
+                x2="100%"
+                y2="0%"
+              >
+                <stop offset="0%" stopColor="#8B6914" />
+                <stop offset="50%" stopColor="#E5C77B" />
+                <stop offset="100%" stopColor="#8B6914" />
+              </linearGradient>
+            </defs>
+            {/* ドロップシャドウ (本体より 8px 下にずらす) */}
+            <path
+              d="M -100,408 L 1180,628 L 1180,748 L -100,528 Z"
+              fill="#000000"
+              opacity="0.2"
+            />
+            {/* リボン本体 (ゴールドグラデ) */}
+            <path
+              d="M -100,400 L 1180,620 L 1180,740 L -100,520 Z"
+              fill="url(#ribbonGold)"
+            />
+            {/* 左端折り返し (暗色で立体感) */}
+            <path
+              d="M -100,520 L -100,400 L -160,380 L -160,500 Z"
+              fill="#5A4410"
+            />
+            {/* 右端折り返し */}
+            <path
+              d="M 1180,620 L 1180,740 L 1240,760 L 1240,640 Z"
+              fill="#5A4410"
+            />
+            {/* ハイライト (上端に明色の細線) */}
+            <line
+              x1="-100"
+              y1="415"
+              x2="1180"
+              y2="635"
+              stroke="#F5DFA0"
+              strokeWidth="3"
+              opacity="0.5"
+            />
+          </svg>
+
+          {/* === Layer 3: コンテンツ (メダル/テキスト/フッター、リボンの上に重ねる) === */}
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              position: 'absolute',
+              top: 60,
+              left: 60,
+              width: 960,
+              height: 1230,
             }}
           >
-            {/* 斜めゴールドリボン(背景) */}
-            <svg
-              width="960"
-              height="1230"
-              viewBox="0 0 960 1230"
-              style={{ position: 'absolute', top: 0, left: 0 }}
-            >
-              <defs>
-                <linearGradient
-                  id="ribbonGold"
-                  x1="0%"
-                  y1="0%"
-                  x2="100%"
-                  y2="0%"
-                >
-                  <stop offset="0%" stopColor="#8B6914" />
-                  <stop offset="50%" stopColor="#E5C77B" />
-                  <stop offset="100%" stopColor="#8B6914" />
-                </linearGradient>
-              </defs>
-              <path
-                d="M 0,180 L 960,420 L 960,520 L 0,280 Z"
-                fill="url(#ribbonGold)"
-                opacity="0.85"
-              />
-            </svg>
-
-            {/* メダル */}
+            {/* メダル (リボン中央に重なる位置) */}
             <div style={{ display: 'flex', marginTop: 90 }}>
               {medalDataUri ? (
                 <img
@@ -200,36 +237,44 @@ export async function GET(
               </span>
             </div>
 
-            {/* 票数表記 (56 を大きめ + 説明文) */}
+            {/* 票数 (56 を主役級に強調、縦並び中央揃え) */}
             <div
               style={{
                 display: 'flex',
+                flexDirection: 'column',
                 alignItems: 'center',
-                marginTop: 56,
+                marginTop: 50,
               }}
             >
-              <span
-                style={{
-                  fontSize: 48,
-                  color: '#C4A35A',
-                  fontWeight: 700,
-                }}
-              >
-                {voteCount}
-              </span>
-              <span
-                style={{
-                  fontSize: 36,
-                  color: '#C4A35A',
-                  marginLeft: 10,
-                }}
-              >
-                クライアントが証明 ✓
-              </span>
+              <div style={{ display: 'flex' }}>
+                <span
+                  style={{
+                    fontSize: 130,
+                    color: '#C4A35A',
+                    fontWeight: 800,
+                    lineHeight: 1,
+                  }}
+                >
+                  {voteCount}
+                </span>
+              </div>
+              <div style={{ display: 'flex', marginTop: 8 }}>
+                <span
+                  style={{
+                    fontSize: 40,
+                    color: '#FAFAF7',
+                  }}
+                >
+                  人が証明
+                </span>
+              </div>
             </div>
 
+            {/* 余白スペーサー (証明書らしい余白の美) */}
+            <div style={{ display: 'flex', flex: 1 }} />
+
             {/* プロ名 */}
-            <div style={{ display: 'flex', marginTop: 32 }}>
+            <div style={{ display: 'flex' }}>
               <span
                 style={{
                   fontSize: 44,
@@ -253,11 +298,8 @@ export async function GET(
               </span>
             </div>
 
-            {/* 下端余白スペーサー */}
-            <div style={{ display: 'flex', flex: 1 }} />
-
             {/* フッター: REAL PROOF */}
-            <div style={{ display: 'flex', marginBottom: 10 }}>
+            <div style={{ display: 'flex', marginTop: 40 }}>
               <span
                 style={{
                   fontSize: 20,
@@ -271,7 +313,7 @@ export async function GET(
             </div>
 
             {/* URL */}
-            <div style={{ display: 'flex', marginBottom: 36 }}>
+            <div style={{ display: 'flex', marginTop: 8, marginBottom: 36 }}>
               <span
                 style={{
                   fontSize: 16,
