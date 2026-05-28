@@ -159,13 +159,18 @@ export async function GET(
     .maybeSingle()
 
   const pro = proRaw as ProRecord | null
+  console.log('[badge-dbg] pro:', pro?.id ?? 'NOT_FOUND', 'name:', pro?.name)
   if (!pro) {
+    console.log('[badge-dbg] FB: no pro')
     return buildFallback(fontData)
   }
 
   // === vote_summary から該当プルーフの票数を取得 ===
   // proofId 指定なし(または該当行なし)時は top1 プルーフにフォールバック
+  console.log('[badge-dbg] proofId param:', proofId)
   let voteRow: VoteSummaryRow | null = null
+  let matchedVoteRow: VoteSummaryRow | null = null
+  let top1Row: VoteSummaryRow | null = null
 
   if (proofId) {
     const { data: targetVoteRaw } = await supabase
@@ -174,8 +179,10 @@ export async function GET(
       .eq('professional_id', proId)
       .eq('proof_id', proofId)
       .maybeSingle()
-    voteRow = (targetVoteRaw as VoteSummaryRow | null) ?? null
+    matchedVoteRow = (targetVoteRaw as VoteSummaryRow | null) ?? null
+    voteRow = matchedVoteRow
   }
+  console.log('[badge-dbg] matched row:', JSON.stringify(matchedVoteRow ?? null))
 
   if (!voteRow) {
     const { data: topVoteRaw } = await supabase
@@ -185,12 +192,17 @@ export async function GET(
       .order('vote_count', { ascending: false })
       .limit(1)
       .maybeSingle()
-    voteRow = (topVoteRaw as VoteSummaryRow | null) ?? null
+    top1Row = (topVoteRaw as VoteSummaryRow | null) ?? null
+    voteRow = top1Row
   }
+  console.log('[badge-dbg] top1 fallback row:', JSON.stringify(top1Row ?? null))
 
   const voteCount = voteRow?.vote_count ?? 0
+  console.log('[badge-dbg] final voteCount:', voteCount)
+
   const tier: CertificationTier | null =
     voteCount > 0 ? getCertificationTier(voteCount) : null
+  console.log('[badge-dbg] tier:', tier)
 
   // === SPECIALIST 未満 (PROVEN / 未達) は今回はフォールバック ===
   // 背景画像とメダルが SPECIALIST 以上のみ存在するため
@@ -198,6 +210,7 @@ export async function GET(
     !tier ||
     !(tier === 'SPECIALIST' || tier === 'MASTER' || tier === 'LEGEND')
   ) {
+    console.log('[badge-dbg] FB: tier invalid', tier, voteCount)
     return buildFallback(fontData, 'REAL PROOF')
   }
 
@@ -222,15 +235,31 @@ export async function GET(
   const origin = new URL(request.url).origin
 
   // === 画像並列取得 ===
-  const [bgDataUri, medalDataUri] = await Promise.all([
-    fetchAsDataUri(`${origin}${BADGE_BG_PATHS[certTier]}`),
-    fetchAsDataUri(`${origin}${MEDAL_PATHS[certTier].og}`),
-  ])
+  const bgUrl = `${origin}${BADGE_BG_PATHS[certTier]}`
+  const medalUrl = `${origin}${MEDAL_PATHS[certTier].og}`
+  console.log('[badge-dbg] bg url:', bgUrl)
+
+  let bgDataUri: string | null = null
+  let medalDataUri: string | null = null
+  try {
+    const results = await Promise.all([
+      fetchAsDataUri(bgUrl),
+      fetchAsDataUri(medalUrl),
+    ])
+    bgDataUri = results[0]
+    medalDataUri = results[1]
+  } catch (err) {
+    console.log('[badge-dbg] FB: bg load fail', String(err))
+    return buildFallback(fontData)
+  }
 
   if (!bgDataUri) {
     // 背景画像が読めない場合はフォールバック
+    console.log('[badge-dbg] FB: bg load fail (null)', bgUrl)
     return buildFallback(fontData)
   }
+
+  console.log('[badge-dbg] rendering full badge OK')
 
   const titleColor = TIER_TITLE_COLOR[certTier]
   const proofFontSize = getProofFontSize(proofLabel)
