@@ -109,9 +109,30 @@ function getSmallMedalPath(tier: CertificationTier | null): string | null {
   return MEDAL_PATHS[tier as CertifiableTier].small
 }
 
+// ===== レスポンスヘッダー組み立て =====
+// download=1 のとき Content-Disposition: attachment を付与 (未指定は inline)
+
+function buildResponseHeaders(
+  isDownload: boolean,
+  cacheMaxAge: number
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Cache-Control': `public, max-age=${cacheMaxAge}, s-maxage=${cacheMaxAge}`,
+  }
+  if (isDownload) {
+    headers['Content-Disposition'] =
+      'attachment; filename="realproof-card.png"'
+  }
+  return headers
+}
+
 // ===== フォールバック OGP =====
 
-function buildFallbackOg(fontData: ArrayBuffer, cacheMaxAge = 300) {
+function buildFallbackOg(
+  fontData: ArrayBuffer,
+  cacheMaxAge = 300,
+  isDownload = false
+) {
   return new ImageResponse(
     (
       <div
@@ -136,9 +157,7 @@ function buildFallbackOg(fontData: ArrayBuffer, cacheMaxAge = 300) {
       fonts: [
         { name: 'NotoSansJP', data: fontData, style: 'normal', weight: 700 },
       ],
-      headers: {
-        'Cache-Control': `public, max-age=${cacheMaxAge}, s-maxage=${cacheMaxAge}`,
-      },
+      headers: buildResponseHeaders(isDownload, cacheMaxAge),
     }
   )
 }
@@ -261,6 +280,13 @@ export async function GET(
 ) {
   const proId = params.id
 
+  // === クエリパラメータ (任意): proofId / download ===
+  // proofId 未指定 → 従来通り top1 を使用
+  // download=1 → Content-Disposition: attachment を付与 (未指定は inline)
+  const reqUrl = new URL(request.url)
+  const proofIdParam = (reqUrl.searchParams.get('proofId') || '').trim() || null
+  const isDownload = reqUrl.searchParams.get('download') === '1'
+
   const fontData = await fetch(
     new URL('../../../../../../public/fonts/NotoSansJP-subset.ttf', import.meta.url)
   ).then((res) => res.arrayBuffer())
@@ -280,7 +306,7 @@ export async function GET(
 
   const pro = proRaw as ProRecord | null
   if (!pro) {
-    return buildFallbackOg(fontData, 300)
+    return buildFallbackOg(fontData, 300, isDownload)
   }
 
   // === vote_summary 取得: top 3 (モードB 用)。tier 判定は [0] = top 1 ===
@@ -309,8 +335,40 @@ export async function GET(
     }
   }
 
+  // === proofId 指定があれば top1 を該当行に差し替え ===
+  // - top3 内にあればそれを採用 (追加 fetch 不要)
+  // - top3 外なら単独 fetch、ラベルも別途解決
+  // - 該当なし or 未指定 → overrideRow=null (従来通り top1 = topVoteRows[0])
+  let overrideRow: VoteSummaryRow | null = null
+  if (proofIdParam) {
+    const matchedInTop = topVoteRows.find((r) => r.proof_id === proofIdParam)
+    if (matchedInTop) {
+      overrideRow = matchedInTop
+    } else {
+      const { data: targetRowRaw } = await supabase
+        .from('vote_summary')
+        .select('proof_id, vote_count')
+        .eq('professional_id', proId)
+        .eq('proof_id', proofIdParam)
+        .maybeSingle()
+      overrideRow = (targetRowRaw as VoteSummaryRow | null) ?? null
+      if (overrideRow && !labelMap.has(String(overrideRow.proof_id))) {
+        const { data: proofRaw } = await supabase
+          .from('proof_items')
+          .select('id, label')
+          .eq('id', overrideRow.proof_id)
+          .maybeSingle()
+        const proofItem = proofRaw as ProofItemRow | null
+        if (proofItem?.id && proofItem?.label) {
+          labelMap.set(String(proofItem.id), proofItem.label)
+        }
+      }
+    }
+  }
+
   // === レイアウト分岐用ティア判定 ===
-  const top1 = topVoteRows[0]
+  // proofId 指定で該当行があれば overrideRow を top1 として採用、それ以外は従来通り
+  const top1 = overrideRow ?? topVoteRows[0]
   const voteCount = top1?.vote_count ?? 0
   const tier = voteCount > 0 ? getCertificationTier(voteCount) : null
   const isModeA = tier === 'SPECIALIST' || tier === 'MASTER' || tier === 'LEGEND'
@@ -540,9 +598,7 @@ export async function GET(
           fonts: [
             { name: 'NotoSansJP', data: fontData, style: 'normal', weight: 700 },
           ],
-          headers: {
-            'Cache-Control': 'public, max-age=3600, s-maxage=3600',
-          },
+          headers: buildResponseHeaders(isDownload, 3600),
         }
       )
     }
@@ -830,13 +886,11 @@ export async function GET(
         fonts: [
           { name: 'NotoSansJP', data: fontData, style: 'normal', weight: 700 },
         ],
-        headers: {
-          'Cache-Control': 'public, max-age=3600, s-maxage=3600',
-        },
+        headers: buildResponseHeaders(isDownload, 3600),
       }
     )
   } catch (err) {
     console.error('OG_RENDER_ERROR:', err)
-    return buildFallbackOg(fontData, 60)
+    return buildFallbackOg(fontData, 60, isDownload)
   }
 }
