@@ -67,6 +67,14 @@ function getProofFontSize(label: string): number {
   return 38
 }
 
+/** 票数の動的フォントサイズ (桁数で縮小) */
+function getCountFontSize(count: number): number {
+  const digits = String(count).length
+  if (digits <= 2) return 120
+  if (digits === 3) return 100
+  return 84
+}
+
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer)
   let binary = ''
@@ -359,37 +367,70 @@ export async function GET(
             </span>
           </div>
 
-          {/* 票数表記「N人が証明」を一行に統一 (両方ゴールド、baseline揃え) */}
+          {/* 票数表記「N人が証明」を横いっぱい強調 (上下罫線で挟む) */}
           <div
             style={{
               display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
               position: 'absolute',
-              top: 920,
-              left: 0,
-              width: 1080,
-              alignItems: 'baseline',
-              justifyContent: 'center',
-              gap: 8,
+              top: 874,
+              left: 140,
+              width: 800,
             }}
           >
-            <span
+            {/* 上罫線 */}
+            <div
               style={{
-                fontSize: 80,
-                color: '#C4A35A',
-                fontWeight: 800,
+                display: 'flex',
+                width: '100%',
+                height: 2,
+                backgroundColor: '#C4A35A',
+                opacity: 0.55,
+                marginBottom: 24,
+              }}
+            />
+            {/* N人が証明 (一行、Satori安定のため flex-end 揃え) */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'flex-end',
+                justifyContent: 'center',
+                gap: 14,
               }}
             >
-              {voteCount}
-            </span>
-            <span
+              <span
+                style={{
+                  fontSize: getCountFontSize(voteCount),
+                  color: '#C4A35A',
+                  fontWeight: 800,
+                  lineHeight: 1,
+                }}
+              >
+                {voteCount}
+              </span>
+              <span
+                style={{
+                  fontSize: 56,
+                  color: '#C4A35A',
+                  fontWeight: 600,
+                  lineHeight: 1.4,
+                }}
+              >
+                人が証明
+              </span>
+            </div>
+            {/* 下罫線 */}
+            <div
               style={{
-                fontSize: 40,
-                color: '#C4A35A',
-                fontWeight: 600,
+                display: 'flex',
+                width: '100%',
+                height: 2,
+                backgroundColor: '#C4A35A',
+                opacity: 0.55,
+                marginTop: 24,
               }}
-            >
-              人が証明
-            </span>
+            />
           </div>
 
           {/* プロ名 */}
