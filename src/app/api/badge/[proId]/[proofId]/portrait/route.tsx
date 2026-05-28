@@ -359,44 +359,33 @@ export async function GET(
             </span>
           </div>
 
-          {/* 票数 (大) */}
+          {/* 票数表記「N人が証明」を一行に統一 (両方ゴールド、baseline揃え) */}
           <div
             style={{
               display: 'flex',
               position: 'absolute',
-              top: 880,
+              top: 920,
               left: 0,
               width: 1080,
+              alignItems: 'baseline',
               justifyContent: 'center',
+              gap: 8,
             }}
           >
             <span
               style={{
-                fontSize: 130,
+                fontSize: 80,
                 color: '#C4A35A',
                 fontWeight: 800,
-                lineHeight: 1,
               }}
             >
               {voteCount}
             </span>
-          </div>
-
-          {/* 「人が証明」 */}
-          <div
-            style={{
-              display: 'flex',
-              position: 'absolute',
-              top: 1030,
-              left: 0,
-              width: 1080,
-              justifyContent: 'center',
-            }}
-          >
             <span
               style={{
                 fontSize: 40,
-                color: '#FAFAF7',
+                color: '#C4A35A',
+                fontWeight: 600,
               }}
             >
               人が証明
