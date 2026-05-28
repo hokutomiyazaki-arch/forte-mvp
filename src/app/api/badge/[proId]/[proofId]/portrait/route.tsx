@@ -239,19 +239,10 @@ export async function GET(
   const medalUrl = `${origin}${MEDAL_PATHS[certTier].og}`
   console.log('[badge-dbg] bg url:', bgUrl)
 
-  let bgDataUri: string | null = null
-  let medalDataUri: string | null = null
-  try {
-    const results = await Promise.all([
-      fetchAsDataUri(bgUrl),
-      fetchAsDataUri(medalUrl),
-    ])
-    bgDataUri = results[0]
-    medalDataUri = results[1]
-  } catch (err) {
-    console.log('[badge-dbg] FB: bg load fail', String(err))
-    return buildFallback(fontData)
-  }
+  const [bgDataUri, medalDataUri] = await Promise.all([
+    fetchAsDataUri(bgUrl),
+    fetchAsDataUri(medalUrl),
+  ])
 
   if (!bgDataUri) {
     // 背景画像が読めない場合はフォールバック
