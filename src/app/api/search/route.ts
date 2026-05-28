@@ -27,6 +27,39 @@ const CATEGORY_TAB_MAP: Record<string, string[]> = {
   skill: ['skill'],
 }
 
+// votes テーブルの全件ページネーション取得ヘルパー
+// 真因対応: Supabase max-rows=1000 でキャップされる問題を回避するため
+// .range() で 1000 件ずつ取得し、空ページに当たるまで継続する。
+// 決定的順序が必須なので .order('id') を強制する。
+// 注意: 呼び出し側が created_at 順を要求する場合は、戻り値を JS 側でソートし直すこと。
+async function fetchAllVotesPaginated(
+  supabase: any,
+  proIds: string[],
+  selectCols: string,
+  voteType: string | null
+) {
+  const all: any[] = []
+  let from = 0
+  const pageSize = 1000
+  while (true) {
+    let q = supabase
+      .from('votes')
+      .select(selectCols)
+      .in('professional_id', proIds)
+      .eq('status', 'confirmed')
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1)
+    if (voteType) q = q.eq('vote_type', voteType)
+    const { data, error } = await q
+    if (error) { console.error('[VOTES-PAGINATE] error:', error); break }
+    if (!data || data.length === 0) break
+    all.push(...data)
+    if (data.length < pageSize) break
+    from += pageSize
+  }
+  return all
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const category = searchParams.get('category') || 'multi'
@@ -72,27 +105,34 @@ export async function GET(request: Request) {
     const proIds = professionals.map(p => p.id)
 
     // 投票データを一括取得（プルーフ投票: スコア計算用）
-    // Supabaseデフォルト1000行制限を回避
-    const { data: proofVotes } = await supabase
-      .from('votes')
-      .select('id, professional_id, created_at, vote_type, comment, normalized_email, selected_proof_ids, selected_personality_ids')
-      .in('professional_id', proIds)
-      .eq('status', 'confirmed')
-      .eq('vote_type', 'proof')
-      .limit(10000)
+    // 真因対応(2026-05-28): .limit(10000) は Supabase max-rows=1000 でキャップされる。
+    // ヘルパーで全件ページネーション取得する。
+    const proofVotes = await fetchAllVotesPaginated(
+      supabase,
+      proIds,
+      'id, professional_id, created_at, vote_type, comment, normalized_email, selected_proof_ids, selected_personality_ids',
+      'proof'
+    )
 
     console.log('[SEARCH-DIAG] proofVotes.length:', proofVotes?.length || 0)
     console.log('[SEARCH-DIAG] 濱武 vote count in proofVotes:',
       proofVotes?.filter(v => v.professional_id === targetId).length || 0)
 
     // リピーター率用: 全投票のnormalized_email+session_countを取得（session_countフォールバック対応）
-    const { data: allVotesForRepeater } = await supabase
-      .from('votes')
-      .select('id, professional_id, normalized_email, session_count, created_at')
-      .in('professional_id', proIds)
-      .eq('status', 'confirmed')
-      .order('created_at', { ascending: true })
-      .limit(10000)
+    // 真因対応(2026-05-28): .limit(10000) は Supabase max-rows=1000 でキャップされる。
+    // ヘルパーで全件取得（ID順）→ 集計前に JS 側で created_at ASC ソートし直す。
+    // ※ ソート必須: 下のリピーター集計ループは「最初に遭遇した票」を firstVoteId/
+    //   firstSessionCount として保存するため、created_at の昇順=最古優先が前提。
+    const allVotesForRepeater = await fetchAllVotesPaginated(
+      supabase,
+      proIds,
+      'id, professional_id, normalized_email, session_count, created_at',
+      null
+    )
+    allVotesForRepeater.sort(
+      (a: any, b: any) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    )
 
     // proof_items のtab情報を取得
     const { data: proofItems } = await supabase
