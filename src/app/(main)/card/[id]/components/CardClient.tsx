@@ -785,14 +785,28 @@ export default function CardClient({ cardData }: Props) {
                             <TierBadge tier={certTier} size="lg" showLabel={false} />
                           </div>
                         )}
-                        {/* ティアラベル: SPECIALIST/MASTER/LEGEND はメダル画像 + テキスト、PROVEN は 🛡 絵文字 */}
+                        {/* ティアラベル: テキストのみ (メダル画像は左上絶対配置で表示済)。PROVEN は 🛡 絵文字 + テキスト */}
                         {certTier ? (
                           <div style={{ marginBottom: 4 }}>
-                            <TierBadge tier={certTier} size="sm" showLabel />
+                            <span style={{
+                              fontSize: 12,
+                              fontWeight: 'bold' as const,
+                              color: '#C4A35A',
+                              letterSpacing: '0.05em',
+                            }}>
+                              {certTier}
+                            </span>
                           </div>
                         ) : isProven ? (
                           <div style={{ marginBottom: 4 }}>
-                            <TierBadge tier="PROVEN" size="sm" showLabel />
+                            <span style={{
+                              fontSize: 12,
+                              fontWeight: 'bold' as const,
+                              color: '#C4A35A',
+                              letterSpacing: '0.05em',
+                            }}>
+                              🛡 PROVEN
+                            </span>
                           </div>
                         ) : null}
                         <div style={{ marginBottom: 6 }}>
@@ -896,14 +910,28 @@ export default function CardClient({ cardData }: Props) {
                               <TierBadge tier={certTier} size="lg" showLabel={false} />
                             </div>
                           )}
-                          {/* ティアラベル: SPECIALIST/MASTER/LEGEND はメダル画像 + テキスト、PROVEN は 🛡 絵文字 */}
+                          {/* ティアラベル: テキストのみ (メダル画像は左上絶対配置で表示済)。PROVEN は 🛡 絵文字 + テキスト */}
                           {certTier ? (
                             <div style={{ marginBottom: 2 }}>
-                              <TierBadge tier={certTier} size="sm" showLabel />
+                              <span style={{
+                                fontSize: 12,
+                                fontWeight: 'bold' as const,
+                                color: '#C4A35A',
+                                letterSpacing: '0.05em',
+                              }}>
+                                {certTier}
+                              </span>
                             </div>
                           ) : isProven ? (
                             <div style={{ marginBottom: 2 }}>
-                              <TierBadge tier="PROVEN" size="sm" showLabel />
+                              <span style={{
+                                fontSize: 12,
+                                fontWeight: 'bold' as const,
+                                color: '#C4A35A',
+                                letterSpacing: '0.05em',
+                              }}>
+                                🛡 PROVEN
+                              </span>
                             </div>
                           ) : null}
                           <div style={{ marginBottom: 4 }}>
