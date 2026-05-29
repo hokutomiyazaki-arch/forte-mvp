@@ -89,6 +89,13 @@ function getBarColor(rank: number): string {
   return '#C4A35A55'
 }
 
+// 強みプルーフカードのティア別配色 (SPECIALIST 以上のみ。PROVEN/未達は白背景+グレー枠)
+const TIER_CARD_STYLE: Record<'LEGEND' | 'MASTER' | 'SPECIALIST', { bg: string; border: string }> = {
+  LEGEND:     { bg: '#0A0A1A', border: '#E5E4E2' }, // 漆黒 + プラチナ
+  MASTER:     { bg: '#1A1A2E', border: '#C4A35A' }, // 濃紺 + ゴールド
+  SPECIALIST: { bg: '#2A3858', border: '#C0C0C0' }, // 薄紺 + シルバー
+}
+
 // SVGリングチャート（人柄プルーフ用 — 30票以上💎、50票以上★ティア）
 function RingChart({ label, count, max, size: sizeProp }: { label: string; count: number; max: number; size?: number }) {
   const isMaster = count >= 50  // MASTER_THRESHOLD
@@ -738,39 +745,47 @@ export default function CardClient({ cardData }: Props) {
                   {top3.map((v, i) => {
                     const pct = (v.vote_count / maxVotes) * 100
                     const certTier = getCertifiableTier(v.vote_count)  // SPECIALIST/MASTER/LEGEND/null
-                    const isSpecialist = !!certTier  // ≥ 30
                     const isProven = v.vote_count >= PROVEN_THRESHOLD
                     const nextTier = getNextTier(v.vote_count)
-                    const tier = isSpecialist ? 'specialist' : v.vote_count > 10 ? 'strong' : 'normal'
-                    const cardBg = tier === 'normal' ? T.cardBg : '#1A1A2E'
-                    const cardBorder = tier === 'specialist' ? '#C4A35A' : tier === 'normal' ? T.cardBorder : '#2A2A3E'
-                    const cardBorderWidth = tier === 'specialist' ? '1.5px' : '1px'
-                    const labelColor = isSpecialist ? '#C4A35A' : tier === 'strong' ? '#FFFFFF' : T.text
-                    const countColor = isSpecialist ? '#C4A35A' : tier === 'strong' ? '#FFFFFF' : T.gold
-                    const barTrack = tier === 'normal' ? '#F0EDE6' : '#2A2A3E'
-                    const barFill = isSpecialist
+                    // ティア別カードスタイル: SPECIALIST+ はティア別bg+枠、それ以外は白背景+グレー枠で統一
+                    const cardStyle = certTier ? TIER_CARD_STYLE[certTier] : null
+                    const cardBg = cardStyle ? cardStyle.bg : T.cardBg
+                    const cardBorder = cardStyle ? cardStyle.border : T.cardBorder
+                    const cardBorderWidth = cardStyle ? '2px' : '1px'
+                    const labelColor = certTier ? '#C4A35A' : isProven ? PROVEN_GOLD : T.text
+                    const countColor = certTier ? '#C4A35A' : isProven ? PROVEN_GOLD : T.gold
+                    const barTrack = certTier ? '#2A2A3E' : '#F0EDE6'
+                    const barFill = certTier
                       ? 'linear-gradient(90deg, #C4A35A, #E8D9A8)'
                       : isProven ? PROVEN_GOLD : getBarColor(i)
-                    const barHeight = isSpecialist ? 5 : 8
+                    const barHeight = certTier ? 5 : 8
                     return (
                       <div key={v.category} style={{
                         background: cardBg,
                         border: `${cardBorderWidth} solid ${cardBorder}`,
                         borderRadius: 14,
                         padding: 18,
+                        // SPECIALIST+ はメダルはみ出しスペース確保 + 隣カードとの間隔追加
+                        paddingTop: certTier ? 32 : 18,
+                        marginTop: certTier ? 24 : 0,
                         cursor: 'pointer',
-                        overflow: 'hidden',
+                        // SPECIALIST+ はメダルはみ出しのため overflow:visible、他は overflow:hidden
+                        overflow: certTier ? 'visible' as const : 'hidden' as const,
                         position: 'relative' as const,
                       }}
                         onClick={() => v.proof_id && toggleProofDates(v.proof_id)}>
-                        {/* SPECIALIST トップライン */}
-                        {isSpecialist && (
+                        {/* メダル左上はみ出し配置 (SPECIALIST+ のみ、半分はみ出し) */}
+                        {certTier && (
                           <div style={{
-                            position: 'absolute' as const, top: 0, left: 0, right: 0, height: 3,
-                            background: 'linear-gradient(90deg, #C4A35A, #E8D9A8, #C4A35A)',
-                          }} />
+                            position: 'absolute' as const,
+                            top: -24,
+                            left: 16,
+                            zIndex: 2,
+                          }}>
+                            <TierBadge tier={certTier} size="lg" showLabel={false} />
+                          </div>
                         )}
-                        {/* ティアラベル: SPECIALIST/MASTER/LEGEND はメダル画像、PROVEN は 🛡 絵文字 */}
+                        {/* ティアラベル: SPECIALIST/MASTER/LEGEND はメダル画像 + テキスト、PROVEN は 🛡 絵文字 */}
                         {certTier ? (
                           <div style={{ marginBottom: 4 }}>
                             <TierBadge tier={certTier} size="sm" showLabel />
@@ -785,10 +800,10 @@ export default function CardClient({ cardData }: Props) {
                             <span style={{ fontSize: 15, fontWeight: 700, color: labelColor, lineHeight: 1.5, overflowWrap: 'anywhere' as const }}>
                               {v.strength_label || v.category}
                             </span>
-                            <span style={{ fontSize: isSpecialist ? 18 : 16, fontWeight: 'bold', color: countColor, fontFamily: T.fontMono, flexShrink: 0 }}>{v.vote_count}</span>
+                            <span style={{ fontSize: certTier ? 18 : 16, fontWeight: 'bold', color: countColor, fontFamily: T.fontMono, flexShrink: 0 }}>{v.vote_count}</span>
                           </div>
                           {v.strength_label && (
-                            <div style={{ fontSize: 11, color: tier === 'normal' ? T.textMuted : 'rgba(255,255,255,0.55)', marginTop: 2 }}>
+                            <div style={{ fontSize: 11, color: certTier ? 'rgba(255,255,255,0.55)' : T.textMuted, marginTop: 2 }}>
                               {v.category}
                             </div>
                           )}
@@ -815,26 +830,26 @@ export default function CardClient({ cardData }: Props) {
                           </div>
                         )}
                         {!certTier && isProven && nextTier && (
-                          <div style={{ fontSize: 10, color: 'rgba(250,250,247,0.4)', textAlign: 'right' as const, marginTop: 6 }}>
+                          <div style={{ fontSize: 10, color: 'rgba(196,163,90,0.5)', textAlign: 'right' as const, marginTop: 6 }}>
                             あと{nextTier.remaining}票で{TIER_DISPLAY[nextTier.tier].label}
                           </div>
                         )}
                         {/* 日付アコーディオン */}
                         {v.proof_id && expandedProofId === v.proof_id && (
-                          <div style={{ marginTop: 10, borderTop: `1px solid ${tier === 'normal' ? T.divider : '#3A3A4E'}`, paddingTop: 10 }}>
+                          <div style={{ marginTop: 10, borderTop: `1px solid ${certTier ? '#3A3A4E' : T.divider}`, paddingTop: 10 }}>
                             {proofDatesLoading === v.proof_id ? (
-                              <div style={{ fontSize: 11, color: tier === 'normal' ? T.textMuted : 'rgba(255,255,255,0.5)' }}>読み込み中...</div>
+                              <div style={{ fontSize: 11, color: certTier ? 'rgba(255,255,255,0.5)' : T.textMuted }}>読み込み中...</div>
                             ) : (proofDatesCache[v.proof_id] || []).length > 0 ? (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                <div style={{ fontSize: 10, fontWeight: 700, color: tier === 'normal' ? T.textMuted : 'rgba(255,255,255,0.5)', letterSpacing: 1, marginBottom: 2 }}>投票日</div>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: certTier ? 'rgba(255,255,255,0.5)' : T.textMuted, letterSpacing: 1, marginBottom: 2 }}>投票日</div>
                                 {(proofDatesCache[v.proof_id] || []).map((date, di) => (
-                                  <div key={di} style={{ fontSize: 11, color: tier === 'normal' ? T.textSub : 'rgba(255,255,255,0.7)', fontFamily: T.fontMono }}>
+                                  <div key={di} style={{ fontSize: 11, color: certTier ? 'rgba(255,255,255,0.7)' : T.textSub, fontFamily: T.fontMono }}>
                                     {date}
                                   </div>
                                 ))}
                               </div>
                             ) : (
-                              <div style={{ fontSize: 11, color: tier === 'normal' ? T.textMuted : 'rgba(255,255,255,0.5)' }}>日付データなし</div>
+                              <div style={{ fontSize: 11, color: certTier ? 'rgba(255,255,255,0.5)' : T.textMuted }}>日付データなし</div>
                             )}
                           </div>
                         )}
@@ -851,23 +866,37 @@ export default function CardClient({ cardData }: Props) {
                     {rest.map((v, i) => {
                       const pct = (v.vote_count / maxVotes) * 100
                       const certTier = getCertifiableTier(v.vote_count)  // SPECIALIST/MASTER/LEGEND/null
-                      const isSpecialist = !!certTier
                       const isProven = v.vote_count >= PROVEN_THRESHOLD
                       const nextTier = getNextTier(v.vote_count)
+                      // ティア別カードスタイル (SPECIALIST 以上のみ。PROVEN以下はテキスト行のまま)
+                      const cardStyle = certTier ? TIER_CARD_STYLE[certTier] : null
                       return (
                         <div key={v.category} style={{
                           width: '100%', cursor: 'pointer',
-                          ...(isSpecialist ? { border: '1.5px solid #C4A35A', borderRadius: 10, padding: '10px 12px', background: '#1A1A2E', position: 'relative' as const, overflow: 'hidden' } : {}),
+                          ...(cardStyle ? {
+                            border: `2px solid ${cardStyle.border}`,
+                            borderRadius: 10,
+                            padding: '10px 12px',
+                            paddingTop: 28,        // メダルはみ出し分の上余白
+                            marginTop: 24,         // 上のrowとの間隔(メダルはみ出し分)
+                            background: cardStyle.bg,
+                            position: 'relative' as const,
+                            overflow: 'visible' as const,  // メダルはみ出しを許可
+                          } : {}),
                         }}
                           onClick={() => v.proof_id && toggleProofDates(v.proof_id)}>
-                          {/* SPECIALIST トップライン */}
-                          {isSpecialist && (
+                          {/* メダル左上はみ出し配置 (SPECIALIST+ のみ、半分はみ出し) */}
+                          {certTier && (
                             <div style={{
-                              position: 'absolute' as const, top: 0, left: 0, right: 0, height: 3,
-                              background: 'linear-gradient(90deg, #C4A35A, #E8D9A8, #C4A35A)',
-                            }} />
+                              position: 'absolute' as const,
+                              top: -24,
+                              left: 12,
+                              zIndex: 2,
+                            }}>
+                              <TierBadge tier={certTier} size="lg" showLabel={false} />
+                            </div>
                           )}
-                          {/* ティアラベル: SPECIALIST/MASTER/LEGEND はメダル画像、PROVEN は 🛡 絵文字 */}
+                          {/* ティアラベル: SPECIALIST/MASTER/LEGEND はメダル画像 + テキスト、PROVEN は 🛡 絵文字 */}
                           {certTier ? (
                             <div style={{ marginBottom: 2 }}>
                               <TierBadge tier={certTier} size="sm" showLabel />
@@ -879,13 +908,13 @@ export default function CardClient({ cardData }: Props) {
                           ) : null}
                           <div style={{ marginBottom: 4 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                              <span style={{ fontSize: 13, fontWeight: 600, color: isSpecialist ? '#C4A35A' : isProven ? PROVEN_GOLD : T.text, lineHeight: 1.5, overflowWrap: 'anywhere' as const }}>
+                              <span style={{ fontSize: 13, fontWeight: 600, color: certTier ? '#C4A35A' : isProven ? PROVEN_GOLD : T.text, lineHeight: 1.5, overflowWrap: 'anywhere' as const }}>
                                 {v.strength_label || v.category}
                               </span>
-                              <span style={{ fontSize: isSpecialist ? 15 : 13, color: isSpecialist ? '#C4A35A' : isProven ? PROVEN_GOLD : T.textMuted, fontFamily: T.fontMono, flexShrink: 0, fontWeight: isSpecialist ? 'bold' : undefined }}>{v.vote_count}</span>
+                              <span style={{ fontSize: certTier ? 15 : 13, color: certTier ? '#C4A35A' : isProven ? PROVEN_GOLD : T.textMuted, fontFamily: T.fontMono, flexShrink: 0, fontWeight: certTier ? 'bold' : undefined }}>{v.vote_count}</span>
                             </div>
                             {v.strength_label && (
-                              <div style={{ fontSize: 10, color: isSpecialist ? 'rgba(255,255,255,0.55)' : T.textMuted, marginTop: 2 }}>
+                              <div style={{ fontSize: 10, color: certTier ? 'rgba(255,255,255,0.55)' : T.textMuted, marginTop: 2 }}>
                                 {v.category}
                               </div>
                             )}
@@ -897,10 +926,10 @@ export default function CardClient({ cardData }: Props) {
                               </div>
                             )}
                           </div>
-                          <div style={{ width: '100%', height: 5, background: isSpecialist ? '#2A2A3E' : '#F0EDE6', borderRadius: 99 }}>
+                          <div style={{ width: '100%', height: 5, background: certTier ? '#2A2A3E' : '#F0EDE6', borderRadius: 99 }}>
                             <div style={{
                               height: 5, borderRadius: 99,
-                              background: isSpecialist ? 'linear-gradient(90deg, #C4A35A, #E8D9A8)' : isProven ? PROVEN_GOLD : getBarColor(3),
+                              background: certTier ? 'linear-gradient(90deg, #C4A35A, #E8D9A8)' : isProven ? PROVEN_GOLD : getBarColor(3),
                               width: animated ? `${pct}%` : '0%',
                               transition: `width 1.2s ease ${(i + 3) * 0.08}s`,
                             }} />
@@ -912,26 +941,26 @@ export default function CardClient({ cardData }: Props) {
                             </div>
                           )}
                           {!certTier && isProven && nextTier && (
-                            <div style={{ fontSize: 10, color: 'rgba(250,250,247,0.4)', textAlign: 'right' as const, marginTop: 4 }}>
+                            <div style={{ fontSize: 10, color: 'rgba(196,163,90,0.5)', textAlign: 'right' as const, marginTop: 4 }}>
                               あと{nextTier.remaining}票で{TIER_DISPLAY[nextTier.tier].label}
                             </div>
                           )}
                           {/* 日付アコーディオン */}
                           {v.proof_id && expandedProofId === v.proof_id && (
-                            <div style={{ marginTop: 8, borderTop: `1px solid ${isSpecialist ? '#3A3A4E' : T.divider}`, paddingTop: 8 }}>
+                            <div style={{ marginTop: 8, borderTop: `1px solid ${certTier ? '#3A3A4E' : T.divider}`, paddingTop: 8 }}>
                               {proofDatesLoading === v.proof_id ? (
-                                <div style={{ fontSize: 11, color: isSpecialist ? 'rgba(255,255,255,0.5)' : T.textMuted }}>読み込み中...</div>
+                                <div style={{ fontSize: 11, color: certTier ? 'rgba(255,255,255,0.5)' : T.textMuted }}>読み込み中...</div>
                               ) : (proofDatesCache[v.proof_id] || []).length > 0 ? (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                                  <div style={{ fontSize: 10, fontWeight: 700, color: isSpecialist ? 'rgba(255,255,255,0.5)' : T.textMuted, letterSpacing: 1, marginBottom: 2 }}>投票日</div>
+                                  <div style={{ fontSize: 10, fontWeight: 700, color: certTier ? 'rgba(255,255,255,0.5)' : T.textMuted, letterSpacing: 1, marginBottom: 2 }}>投票日</div>
                                   {(proofDatesCache[v.proof_id] || []).map((date, di) => (
-                                    <div key={di} style={{ fontSize: 11, color: isSpecialist ? 'rgba(255,255,255,0.7)' : T.textSub, fontFamily: T.fontMono }}>
+                                    <div key={di} style={{ fontSize: 11, color: certTier ? 'rgba(255,255,255,0.7)' : T.textSub, fontFamily: T.fontMono }}>
                                       {date}
                                     </div>
                                   ))}
                                 </div>
                               ) : (
-                                <div style={{ fontSize: 11, color: isSpecialist ? 'rgba(255,255,255,0.5)' : T.textMuted }}>日付データなし</div>
+                                <div style={{ fontSize: 11, color: certTier ? 'rgba(255,255,255,0.5)' : T.textMuted }}>日付データなし</div>
                               )}
                             </div>
                           )}
