@@ -73,6 +73,9 @@ export default function Navbar() {
           {isPro && (
             <a href="/dashboard" onClick={closeMenu} style={{ ...menuLinkStyle, color: '#C4A35A', fontWeight: 700 }}>ダッシュボード</a>
           )}
+          {isPro && (
+            <a href="/dashboard?tab=badges" onClick={closeMenu} style={menuLinkStyle}>獲得バッジ</a>
+          )}
           {/* 設定（プロのみ） */}
           {isPro && (
             <>

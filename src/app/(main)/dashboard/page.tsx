@@ -145,8 +145,10 @@ export default function DashboardPage() {
   const [selectedProofIds, setSelectedProofIds] = useState<Set<string>>(new Set())
   const [customProofs, setCustomProofs] = useState<CustomProof[]>([])
   const [activeTab, setActiveTab] = useState('healing')
-  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'card' | 'org' | 'myorgs' | 'guide' | 'business-info'>('profile')
+  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'card' | 'org' | 'myorgs' | 'guide' | 'business-info' | 'badges'>('profile')
   const [openSections, setOpenSections] = useState<Set<string>>(new Set())
+  // 獲得バッジビュー: HTMLコピーのトースト
+  const [badgeToast, setBadgeToast] = useState<string | null>(null)
   // userRole removed: /api/dashboard の role レスポンスで判定
   const [proofSaving, setProofSaving] = useState(false)
   const [proofSaved, setProofSaved] = useState(false)
@@ -328,7 +330,7 @@ export default function DashboardPage() {
   const tabParam = searchParams.get('tab')
   useEffect(() => {
     if (!tabParam || loading) return
-    const validTabs = ['profile', 'proofs', 'rewards', 'voices', 'card', 'myorgs', 'org', 'guide', 'business-info']
+    const validTabs = ['profile', 'proofs', 'rewards', 'voices', 'card', 'myorgs', 'org', 'guide', 'business-info', 'badges']
     if (validTabs.includes(tabParam)) {
       setDashboardTab(tabParam as any)
       if (tabParam === 'myorgs' && selectedMemberOrgId) {
@@ -1837,7 +1839,7 @@ export default function DashboardPage() {
 
   const daysSinceRegistration = getDaysSinceRegistration()
 
-  const isSettingsTab = ['proofs', 'rewards', 'card', 'myorgs', 'org', 'guide', 'business-info'].includes(dashboardTab)
+  const isSettingsTab = ['proofs', 'rewards', 'card', 'myorgs', 'org', 'guide', 'business-info', 'badges'].includes(dashboardTab)
 
   function toggleSection(id: string) {
     setOpenSections(prev => {
@@ -2977,6 +2979,151 @@ export default function DashboardPage() {
           </div>
         )
       })()}
+
+      </>)}
+
+      {/* ═══ Tab: 獲得バッジ ═══ */}
+      {dashboardTab === 'badges' && (<>
+
+      {/* 獲得バッジ */}
+      <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
+        <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">獲得バッジ</h2>
+        <p className="text-sm text-[#9CA3AF] mb-4">
+          SPECIALIST 以上の認定バッジを画像でダウンロードしたり、サイトに埋め込むHTMLをコピーできます。
+        </p>
+
+        {(() => {
+          // 表示条件 (絶対): vote_count >= 30 + proof_id 存在 + 標準プルーフのみ(custom_除外)
+          const eligibleBadges = [...votes]
+            .filter(v =>
+              v.vote_count >= SPECIALIST_THRESHOLD &&
+              !!v.proof_id &&
+              !v.proof_id.startsWith('custom_')
+            )
+            .sort((a, b) => b.vote_count - a.vote_count)
+
+          if (!pro || eligibleBadges.length === 0) {
+            return (
+              <div className="py-8 text-center">
+                <p className="text-sm text-[#1A1A2E] font-medium mb-2">
+                  まだバッジを獲得していません
+                </p>
+                <p className="text-xs text-[#9CA3AF] mb-4">
+                  30 プルーフを集めると SPECIALIST 認定バッジが付与されます
+                </p>
+                <a
+                  href="/dashboard?tab=proofs"
+                  className="inline-flex items-center gap-1 text-sm font-medium text-[#C4A35A] hover:text-[#b3923f] transition-colors"
+                >
+                  「強み設定」へ →
+                </a>
+              </div>
+            )
+          }
+
+          return (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {eligibleBadges.map(item => {
+                const proofId = item.proof_id as string
+                const proofLabel = item.strength_label || item.category
+                const tier = getCertifiableTier(item.vote_count) || 'SPECIALIST'
+                const tierLower = tier.toLowerCase()
+                const medalSrc = `/medals/${tierLower}-64.png`
+                const portraitUrl = `/api/badge/${pro.id}/${proofId}/portrait?download=1`
+                const landscapeUrl = `/api/og/card/${pro.id}?proofId=${proofId}&download=1`
+                const proName = pro.name || ''
+                const embedHtml =
+                  `<a href="https://realproof.jp/card/${pro.id}" target="_blank" rel="noopener">\n` +
+                  `  <img \n` +
+                  `    src="https://realproof.jp/api/og/card/${pro.id}?proofId=${proofId}" \n` +
+                  `    alt="REALPROOF ${tier}認定 - ${proofLabel} - ${proName}" \n` +
+                  `    width="600" \n` +
+                  `    style="max-width:100%;height:auto;"\n` +
+                  `  />\n` +
+                  `</a>`
+
+                return (
+                  <div
+                    key={proofId}
+                    className="border border-[#E5E7EB] rounded-xl p-4 bg-[#FAFAF7]"
+                  >
+                    {/* ヘッダー: メダル + ティア + 票数 */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <img
+                          src={medalSrc}
+                          alt={tier}
+                          width={32}
+                          height={32}
+                          style={{ width: 32, height: 32, objectFit: 'contain' }}
+                        />
+                        <span
+                          className="text-xs font-bold tracking-widest"
+                          style={{ color: '#C4A35A' }}
+                        >
+                          {tier}
+                        </span>
+                      </div>
+                      <span className="text-xs text-[#9CA3AF]">
+                        {item.vote_count}人が証明
+                      </span>
+                    </div>
+
+                    {/* プルーフ名 */}
+                    <div className="text-base font-bold text-[#1A1A2E] mb-4">
+                      {proofLabel}
+                    </div>
+
+                    {/* 操作ボタン3つ */}
+                    <div className="flex flex-col gap-2">
+                      <button
+                        type="button"
+                        onClick={() => window.open(portraitUrl, '_blank')}
+                        className="w-full px-3 py-2 rounded-lg border border-[#C4A35A] bg-white text-xs font-bold text-[#C4A35A] hover:bg-[#C4A35A]/5 transition-colors"
+                      >
+                        縦長PNG (1080×1350)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => window.open(landscapeUrl, '_blank')}
+                        className="w-full px-3 py-2 rounded-lg border border-[#C4A35A] bg-white text-xs font-bold text-[#C4A35A] hover:bg-[#C4A35A]/5 transition-colors"
+                      >
+                        横長PNG (1200×630)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(embedHtml)
+                            setBadgeToast('HTMLをコピーしました')
+                          } catch {
+                            setBadgeToast('コピーに失敗しました')
+                          }
+                          setTimeout(() => setBadgeToast(null), 2500)
+                        }}
+                        className="w-full px-3 py-2 rounded-lg bg-[#1A1A2E] text-xs font-bold text-white hover:bg-[#2a2a4e] transition-colors"
+                      >
+                        HTMLをコピー
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })()}
+      </div>
+
+      {/* トースト (HTMLコピー成功/失敗) */}
+      {badgeToast && (
+        <div
+          className="fixed left-1/2 z-50 px-4 py-3 rounded-lg bg-[#1A1A2E] text-white text-sm shadow-lg"
+          style={{ bottom: 24, transform: 'translateX(-50%)' }}
+          role="status"
+        >
+          {badgeToast}
+        </div>
+      )}
 
       </>)}
 
