@@ -3033,13 +3033,13 @@ export default function DashboardPage() {
                 const landscapeUrl = `/api/og/card/${pro.id}?proofId=${proofId}&download=1`
                 const proName = pro.name || ''
                 const embedHtml =
-                  `<a href="https://realproof.jp/card/${pro.id}" target="_blank" rel="noopener">\n` +
-                  `  <img \n` +
-                  `    src="https://realproof.jp/api/og/card/${pro.id}?proofId=${proofId}" \n` +
-                  `    alt="REALPROOF ${tier}認定 - ${proofLabel} - ${proName}" \n` +
-                  `    width="600" \n` +
-                  `    style="max-width:100%;height:auto;"\n` +
-                  `  />\n` +
+                  `<a href="https://realproof.jp/card/${pro.id}" target="_blank" rel="noopener"\n` +
+                  `   style="display:inline-block;text-align:center;text-decoration:none;font-family:sans-serif;">\n` +
+                  `  <img src="https://realproof.jp/medals/${tierLower}-400.png"\n` +
+                  `       alt="REALPROOF ${tier}認定 - ${proofLabel} - ${proName}"\n` +
+                  `       width="120" style="display:block;margin:0 auto;" />\n` +
+                  `  <div style="font-size:14px;color:#1A1A2E;font-weight:bold;margin-top:8px;">${proofLabel}</div>\n` +
+                  `  <div style="font-size:11px;color:#C4A35A;margin-top:2px;">${item.vote_count}人が証明 · ${proName}</div>\n` +
                   `</a>`
 
                 return (
