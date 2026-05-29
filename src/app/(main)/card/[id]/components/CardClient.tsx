@@ -13,6 +13,7 @@ import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels
 import { COLORS, FONTS } from '@/lib/design-tokens'
 import { trackPageView, trackEvent } from '@/lib/tracking'
 import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, MASTER_THRESHOLD, LEGEND_THRESHOLD, PROVEN_GOLD, TAB_DISPLAY_NAMES, getCertifiableTier, getNextTier, TIER_DISPLAY } from '@/lib/constants'
+import { TierBadge } from '@/components/TierBadge'
 import {
   PERSONALITY_CATEGORIES,
   PersonalityCategory,
@@ -769,21 +770,14 @@ export default function CardClient({ cardData }: Props) {
                             background: 'linear-gradient(90deg, #C4A35A, #E8D9A8, #C4A35A)',
                           }} />
                         )}
-                        {/* ティアラベル: SPECIALIST(🏆) / MASTER(👑) / LEGEND(💎) / PROVEN(🛡) */}
+                        {/* ティアラベル: SPECIALIST/MASTER/LEGEND はメダル画像、PROVEN は 🛡 絵文字 */}
                         {certTier ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-                            <span style={{
-                              fontSize: 10, fontWeight: 500, letterSpacing: 0.5, color: '#1A1A2E',
-                              background: '#C4A35A', padding: '2px 8px', borderRadius: 10,
-                            }}>
-                              {TIER_DISPLAY[certTier].icon} {TIER_DISPLAY[certTier].label}
-                            </span>
+                          <div style={{ marginBottom: 4 }}>
+                            <TierBadge tier={certTier} size="sm" showLabel />
                           </div>
                         ) : isProven ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-                            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, color: PROVEN_GOLD }}>
-                              🛡 PROVEN
-                            </span>
+                          <div style={{ marginBottom: 4 }}>
+                            <TierBadge tier="PROVEN" size="sm" showLabel />
                           </div>
                         ) : null}
                         <div style={{ marginBottom: 6 }}>
@@ -873,21 +867,14 @@ export default function CardClient({ cardData }: Props) {
                               background: 'linear-gradient(90deg, #C4A35A, #E8D9A8, #C4A35A)',
                             }} />
                           )}
-                          {/* ティアラベル: SPECIALIST(🏆) / MASTER(👑) / LEGEND(💎) / PROVEN(🛡) */}
+                          {/* ティアラベル: SPECIALIST/MASTER/LEGEND はメダル画像、PROVEN は 🛡 絵文字 */}
                           {certTier ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
-                              <span style={{
-                                fontSize: 10, fontWeight: 500, letterSpacing: 0.5, color: '#1A1A2E',
-                                background: '#C4A35A', padding: '2px 8px', borderRadius: 10,
-                              }}>
-                                {TIER_DISPLAY[certTier].icon} {TIER_DISPLAY[certTier].label}
-                              </span>
+                            <div style={{ marginBottom: 2 }}>
+                              <TierBadge tier={certTier} size="sm" showLabel />
                             </div>
                           ) : isProven ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
-                              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: PROVEN_GOLD }}>
-                                🛡 PROVEN
-                              </span>
+                            <div style={{ marginBottom: 2 }}>
+                              <TierBadge tier="PROVEN" size="sm" showLabel />
                             </div>
                           ) : null}
                           <div style={{ marginBottom: 4 }}>

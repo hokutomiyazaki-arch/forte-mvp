@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react'
 import { PREFECTURES } from '@/lib/prefectures'
 import { COLORS, FONTS } from '@/lib/design-tokens'
-import { SPECIALIST_THRESHOLD } from '@/lib/constants'
 import { isPersonalityV2 } from '@/lib/personality'
+import { TierBadge, getTierFromVotes } from '@/components/TierBadge'
 
 const T = { ...COLORS, font: FONTS.main }
 
@@ -463,7 +463,19 @@ export default function SearchPage() {
                         marginTop: 10, padding: '6px 10px', background: 'rgba(196,163,90,0.06)',
                         borderRadius: 8, display: 'flex', alignItems: 'center', gap: 6,
                       }}>
-                        <span style={{ fontSize: 12 }}>{proof.votes >= SPECIALIST_THRESHOLD ? '🏆' : '\u2B50'}</span>
+                        {(() => {
+                          // SPECIALIST/MASTER/LEGEND はメダル画像で区別、SPECIALIST 未達は ⭐ を維持
+                          const proofTier = getTierFromVotes(proof.votes)
+                          const certTier =
+                            proofTier === 'SPECIALIST' || proofTier === 'MASTER' || proofTier === 'LEGEND'
+                              ? proofTier
+                              : null
+                          return certTier ? (
+                            <TierBadge tier={certTier} size="sm" showLabel={false} />
+                          ) : (
+                            <span style={{ fontSize: 12 }}>{'⭐'}</span>
+                          )
+                        })()}
                         <span style={{ fontSize: 12, fontWeight: 700, color: T.dark }}>
                           {proof.strengthLabel}
                         </span>

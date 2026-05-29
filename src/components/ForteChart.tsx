@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { VoteSummary, Professional } from '@/lib/types'
 import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, PROVEN_GOLD, TAB_DISPLAY_NAMES, getCertificationTier, getCertifiableTier, TIER_DISPLAY } from '@/lib/constants'
+import { TierBadge } from './TierBadge'
 
 interface PersonalitySummary {
   category: string
@@ -74,8 +75,8 @@ export default function ForteChart({ votes, personalityVotes = [], professional,
               const isSpecialist = v.vote_count >= SPECIALIST_THRESHOLD
               const tier = getCertificationTier(v.vote_count)
               const barColor = isProven ? PROVEN_GOLD : '#1A1A2E'
-              // ティア別アイコン: PROVEN(🛡)/SPECIALIST(🏆)/MASTER(👑)/LEGEND(💎)
-              const mark = tier ? ` ${TIER_DISPLAY[tier].icon}` : ''
+              // ティアバッジ: PROVEN(🛡)/SPECIALIST/MASTER/LEGEND(メダル画像)
+              // 票数の左にバッジを配置 (showLabel=false で画像/絵文字のみ)
               const slug = v.proof_id || v.category
               const appStatus = certMap.get(slug)
               const hasApplied = !!appStatus
@@ -87,8 +88,17 @@ export default function ForteChart({ votes, personalityVotes = [], professional,
                         {v.strength_label || v.category}
                       </span>
                       {showLabels && (
-                        <span className="text-sm font-bold" style={{ color: isProven ? PROVEN_GOLD : '#1A1A2E' }}>
-                          {v.vote_count}{mark}
+                        <span
+                          className="text-sm font-bold"
+                          style={{
+                            color: isProven ? PROVEN_GOLD : '#1A1A2E',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                        >
+                          {tier && <TierBadge tier={tier} size="sm" showLabel={false} />}
+                          <span>{v.vote_count}</span>
                         </span>
                       )}
                     </div>
