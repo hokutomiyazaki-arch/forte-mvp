@@ -147,8 +147,6 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState('healing')
   const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'card' | 'org' | 'myorgs' | 'guide' | 'business-info'>('profile')
   const [openSections, setOpenSections] = useState<Set<string>>(new Set())
-  // バッジDLドロップダウン: 開いている proof_id (同時1つ)
-  const [openDownloadFor, setOpenDownloadFor] = useState<string | null>(null)
   // userRole removed: /api/dashboard の role レスポンスで判定
   const [proofSaving, setProofSaving] = useState(false)
   const [proofSaved, setProofSaved] = useState(false)
@@ -2928,125 +2926,51 @@ export default function DashboardPage() {
               {votedItems.map(item => {
                 const isSelected = featuredProofId === item.proof_id
                 const isProven = item.vote_count >= PROVEN_THRESHOLD
-                // バッジDL表示条件: SPECIALIST以上(>=30) + 標準プルーフのみ(proof_id がUUID、custom_*除外)
-                const proofIdStr = item.proof_id || ''
-                const showDownload =
-                  !!pro &&
-                  item.vote_count >= SPECIALIST_THRESHOLD &&
-                  !!proofIdStr &&
-                  !proofIdStr.startsWith('custom_')
-                const isDownloadOpen = openDownloadFor === proofIdStr
                 return (
-                  <div
+                  <button
                     key={item.proof_id || item.category}
-                    className="flex items-stretch gap-2"
+                    disabled={featuredProofSaving}
+                    onClick={async () => {
+                      const newId = isSelected ? null : (item.proof_id || null)
+                      setFeaturedProofSaving(true)
+                      try {
+                        const res = await fetch('/api/dashboard/set-featured-proof', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ proofItemId: newId }),
+                        })
+                        if (res.ok) {
+                          setFeaturedProofId(newId)
+                        }
+                      } catch {}
+                      setFeaturedProofSaving(false)
+                    }}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-colors ${
+                      isSelected
+                        ? 'border-[#C4A35A] bg-[#C4A35A]/5'
+                        : 'border-[#E5E7EB] hover:border-[#C4A35A]/50'
+                    } disabled:opacity-50`}
                   >
-                    <button
-                      disabled={featuredProofSaving}
-                      onClick={async () => {
-                        const newId = isSelected ? null : (item.proof_id || null)
-                        setFeaturedProofSaving(true)
-                        try {
-                          const res = await fetch('/api/dashboard/set-featured-proof', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ proofItemId: newId }),
-                          })
-                          if (res.ok) {
-                            setFeaturedProofId(newId)
-                          }
-                        } catch {}
-                        setFeaturedProofSaving(false)
-                      }}
-                      className={`flex-1 flex items-center justify-between px-4 py-3 rounded-lg border transition-colors ${
-                        isSelected
-                          ? 'border-[#C4A35A] bg-[#C4A35A]/5'
-                          : 'border-[#E5E7EB] hover:border-[#C4A35A]/50'
-                      } disabled:opacity-50`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm font-bold" style={{ color: isSelected ? '#C4A35A' : 'transparent', minWidth: 16 }}>
-                          {isSelected ? '✓' : ''}
-                        </span>
-                        <div className="text-left">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-[#1A1A2E]">{item.strength_label || item.category}</span>
-                            {isProven && (
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(196,163,90,0.1)', color: '#C4A35A' }}>
-                                PROVEN
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-xs text-[#9CA3AF]">{item.vote_count} proofs</div>
-                        </div>
-                      </div>
-                      <span className="text-xs font-medium" style={{ color: isSelected ? '#C4A35A' : '#9CA3AF' }}>
-                        {isSelected ? '表示中' : '選択'}
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-bold" style={{ color: isSelected ? '#C4A35A' : 'transparent', minWidth: 16 }}>
+                        {isSelected ? '✓' : ''}
                       </span>
-                    </button>
-                    {showDownload && pro && (
-                      <div className="relative">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setOpenDownloadFor(prev =>
-                              prev === proofIdStr ? null : proofIdStr
-                            )
-                          }
-                          className="h-full px-3 py-3 rounded-lg border border-[#C4A35A] bg-white text-xs font-bold text-[#C4A35A] whitespace-nowrap hover:bg-[#C4A35A]/5 transition-colors"
-                          aria-expanded={isDownloadOpen}
-                          aria-haspopup="true"
-                        >
-                          バッジDL {isDownloadOpen ? '▲' : '▼'}
-                        </button>
-                        {isDownloadOpen && (
-                          <div
-                            className="absolute right-0 top-full mt-1 w-64 bg-white border border-[#E5E7EB] rounded-lg shadow-lg z-10 overflow-hidden"
-                            role="menu"
-                          >
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onClick={() => {
-                                window.open(
-                                  `/api/badge/${pro.id}/${proofIdStr}/portrait?download=1`,
-                                  '_blank'
-                                )
-                                setOpenDownloadFor(null)
-                              }}
-                              className="w-full text-left px-4 py-3 hover:bg-[#FAFAF7] border-b border-[#E5E7EB] transition-colors"
-                            >
-                              <div className="text-sm font-bold text-[#1A1A2E]">
-                                縦長 1080×1350
-                              </div>
-                              <div className="text-xs text-[#9CA3AF]">
-                                Instagram / サイト埋め込み
-                              </div>
-                            </button>
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onClick={() => {
-                                window.open(
-                                  `/api/og/card/${pro.id}?proofId=${proofIdStr}&download=1`,
-                                  '_blank'
-                                )
-                                setOpenDownloadFor(null)
-                              }}
-                              className="w-full text-left px-4 py-3 hover:bg-[#FAFAF7] transition-colors"
-                            >
-                              <div className="text-sm font-bold text-[#1A1A2E]">
-                                横長 1200×630
-                              </div>
-                              <div className="text-xs text-[#9CA3AF]">
-                                X / サイトヘッダー
-                              </div>
-                            </button>
-                          </div>
-                        )}
+                      <div className="text-left">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-[#1A1A2E]">{item.strength_label || item.category}</span>
+                          {isProven && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(196,163,90,0.1)', color: '#C4A35A' }}>
+                              PROVEN
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-[#9CA3AF]">{item.vote_count} proofs</div>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                    <span className="text-xs font-medium" style={{ color: isSelected ? '#C4A35A' : '#9CA3AF' }}>
+                      {isSelected ? '表示中' : '選択'}
+                    </span>
+                  </button>
                 )
               })}
             </div>
