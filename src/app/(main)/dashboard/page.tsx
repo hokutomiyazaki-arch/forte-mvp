@@ -3034,12 +3034,14 @@ export default function DashboardPage() {
                 const proName = pro.name || ''
                 const embedHtml =
                   `<a href="https://realproof.jp/card/${pro.id}" target="_blank" rel="noopener"\n` +
-                  `   style="display:inline-block;text-align:center;text-decoration:none;font-family:sans-serif;">\n` +
+                  `   style="display:inline-block;text-align:center;text-decoration:none;font-family:sans-serif;\n` +
+                  `          background:#FFFFFF;border:1px solid #E8E2D5;border-radius:12px;\n` +
+                  `          padding:20px 24px;box-shadow:0 2px 8px rgba(26,26,46,0.08);">\n` +
                   `  <img src="https://realproof.jp/medals/${tierLower}-400.png"\n` +
                   `       alt="REALPROOF ${tier}認定 - ${proofLabel} - ${proName}"\n` +
                   `       width="120" style="display:block;margin:0 auto;" />\n` +
-                  `  <div style="font-size:14px;color:#1A1A2E;font-weight:bold;margin-top:8px;">${proofLabel}</div>\n` +
-                  `  <div style="font-size:11px;color:#C4A35A;margin-top:2px;">${item.vote_count}人が証明 · ${proName}</div>\n` +
+                  `  <div style="font-size:15px;color:#1A1A2E;font-weight:bold;margin-top:10px;">${proofLabel}</div>\n` +
+                  `  <div style="font-size:12px;color:#9A7B3A;font-weight:600;margin-top:3px;">${item.vote_count}人が証明 · ${proName}</div>\n` +
                   `</a>`
 
                 return (
