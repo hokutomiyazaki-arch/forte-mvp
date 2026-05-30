@@ -171,23 +171,30 @@ export default function BadgeGuidePage() {
           WordPressなら「カスタムHTML」ブロック、メルマガ（Kit等）なら「HTMLを貼り付け」欄に貼ってください。
         </blockquote>
 
-        {/* 画像スロット（北斗提供スクショを後日差し込み） */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            minHeight: 180,
-            border: `1px dashed ${BORDER}`,
-            borderRadius: 12,
-            background: '#FFFFFF',
-            color: '#9CA3AF',
-            fontSize: 13,
-            margin: '24px 0',
-          }}
-        >
-          〔ここに貼り付け後の表示例スクリーンショット〕
-        </div>
+        {/* 貼り付け後の表示例（メルマガに埋め込んだ実例） */}
+        <figure style={{ margin: '24px 0' }}>
+          <img
+            src="/support/badge-embed-example.png"
+            alt="メルマガにHTMLメダルを埋め込んだ表示例。SPECIALIST認定メダルとプルーフ名・証明数が表示されている。"
+            style={{
+              display: 'block',
+              width: '100%',
+              height: 'auto',
+              border: `1px solid ${BORDER}`,
+              borderRadius: 12,
+            }}
+          />
+          <figcaption
+            style={{
+              fontSize: 12,
+              color: '#9CA3AF',
+              textAlign: 'center',
+              marginTop: 8,
+            }}
+          >
+            メルマガ（Kit）に貼り付けた表示例
+          </figcaption>
+        </figure>
 
         <div
           style={{
