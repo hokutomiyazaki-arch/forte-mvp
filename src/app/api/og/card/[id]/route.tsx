@@ -110,28 +110,20 @@ function getSmallMedalPath(tier: CertificationTier | null): string | null {
 }
 
 // ===== レスポンスヘッダー組み立て =====
-// download=1 のとき Content-Disposition: attachment を付与 (未指定は inline)
+// 常に inline 応答 (iOS Safari で Content-Disposition: attachment を _blank で開くと
+// 白画面になる問題を回避。縦長 portrait route と挙動統一)。
 
-function buildResponseHeaders(
-  isDownload: boolean,
-  cacheMaxAge: number
-): Record<string, string> {
-  const headers: Record<string, string> = {
+function buildResponseHeaders(cacheMaxAge: number): Record<string, string> {
+  return {
     'Cache-Control': `public, max-age=${cacheMaxAge}, s-maxage=${cacheMaxAge}`,
   }
-  if (isDownload) {
-    headers['Content-Disposition'] =
-      'attachment; filename="realproof-card.png"'
-  }
-  return headers
 }
 
 // ===== フォールバック OGP =====
 
 function buildFallbackOg(
   fontData: ArrayBuffer,
-  cacheMaxAge = 300,
-  isDownload = false
+  cacheMaxAge = 300
 ) {
   return new ImageResponse(
     (
@@ -157,7 +149,7 @@ function buildFallbackOg(
       fonts: [
         { name: 'NotoSansJP', data: fontData, style: 'normal', weight: 700 },
       ],
-      headers: buildResponseHeaders(isDownload, cacheMaxAge),
+      headers: buildResponseHeaders(cacheMaxAge),
     }
   )
 }
@@ -280,12 +272,11 @@ export async function GET(
 ) {
   const proId = params.id
 
-  // === クエリパラメータ (任意): proofId / download ===
+  // === クエリパラメータ (任意): proofId ===
   // proofId 未指定 → 従来通り top1 を使用
-  // download=1 → Content-Disposition: attachment を付与 (未指定は inline)
+  // (注) download=1 クエリは無視。常に inline 応答に統一済 (iOS Safari 白画面対策)。
   const reqUrl = new URL(request.url)
   const proofIdParam = (reqUrl.searchParams.get('proofId') || '').trim() || null
-  const isDownload = reqUrl.searchParams.get('download') === '1'
 
   const fontData = await fetch(
     new URL('../../../../../../public/fonts/NotoSansJP-subset.ttf', import.meta.url)
@@ -306,7 +297,7 @@ export async function GET(
 
   const pro = proRaw as ProRecord | null
   if (!pro) {
-    return buildFallbackOg(fontData, 300, isDownload)
+    return buildFallbackOg(fontData, 300)
   }
 
   // === vote_summary 取得: top 3 (モードB 用)。tier 判定は [0] = top 1 ===
@@ -598,7 +589,7 @@ export async function GET(
           fonts: [
             { name: 'NotoSansJP', data: fontData, style: 'normal', weight: 700 },
           ],
-          headers: buildResponseHeaders(isDownload, 3600),
+          headers: buildResponseHeaders(3600),
         }
       )
     }
@@ -886,11 +877,11 @@ export async function GET(
         fonts: [
           { name: 'NotoSansJP', data: fontData, style: 'normal', weight: 700 },
         ],
-        headers: buildResponseHeaders(isDownload, 3600),
+        headers: buildResponseHeaders(3600),
       }
     )
   } catch (err) {
     console.error('OG_RENDER_ERROR:', err)
-    return buildFallbackOg(fontData, 60, isDownload)
+    return buildFallbackOg(fontData, 60)
   }
 }

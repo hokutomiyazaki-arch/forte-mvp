@@ -3030,7 +3030,7 @@ export default function DashboardPage() {
                 const tierLower = tier.toLowerCase()
                 const medalSrc = `/medals/${tierLower}-64.png`
                 const portraitUrl = `/api/badge/${pro.id}/${proofId}/portrait?download=1`
-                const landscapeUrl = `/api/og/card/${pro.id}?proofId=${proofId}&download=1`
+                const landscapeUrl = `/api/og/card/${pro.id}?proofId=${proofId}`
                 const proName = pro.name || ''
                 const embedHtml =
                   `<a href="https://realproof.jp/card/${pro.id}" target="_blank" rel="noopener"\n` +
