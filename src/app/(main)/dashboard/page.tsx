@@ -3104,6 +3104,12 @@ export default function DashboardPage() {
                       >
                         HTMLをコピー
                       </button>
+                      <a
+                        href="/support/badge-guide"
+                        className="w-full text-center px-3 py-1 text-xs font-medium text-[#9A7B3A] hover:text-[#C4A35A] transition-colors"
+                      >
+                        使い方はこちら →
+                      </a>
                     </div>
                   </div>
                 )
