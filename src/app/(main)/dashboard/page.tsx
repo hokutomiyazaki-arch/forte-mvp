@@ -3032,16 +3032,13 @@ export default function DashboardPage() {
                 const portraitUrl = `/api/badge/${pro.id}/${proofId}/portrait?download=1`
                 const landscapeUrl = `/api/og/card/${pro.id}?proofId=${proofId}`
                 const proName = pro.name || ''
+                // 改ざん防止: 票数・プルーフ名・プロ名はサーバー生成画像に焼き込み、
+                // 埋め込みHTMLは <a><img> のみ。票数は画像側で常に最新化される。
                 const embedHtml =
-                  `<a href="https://realproof.jp/card/${pro.id}" target="_blank" rel="noopener"\n` +
-                  `   style="display:inline-block;text-align:center;text-decoration:none;font-family:sans-serif;\n` +
-                  `          background:#FFFFFF;border:1px solid #E8E2D5;border-radius:12px;\n` +
-                  `          padding:20px 24px;box-shadow:0 2px 8px rgba(26,26,46,0.08);">\n` +
-                  `  <img src="https://realproof.jp/medals/${tierLower}-400.png"\n` +
-                  `       alt="REALPROOF ${tier}認定 - ${proofLabel} - ${proName}"\n` +
-                  `       width="120" style="display:block;margin:0 auto;" />\n` +
-                  `  <div style="font-size:15px;color:#1A1A2E;font-weight:bold;margin-top:10px;">${proofLabel}</div>\n` +
-                  `  <div style="font-size:12px;color:#9A7B3A;font-weight:600;margin-top:3px;">${item.vote_count}人が証明 · ${proName}</div>\n` +
+                  `<a href="https://realproof.jp/card/${pro.id}" target="_blank" rel="noopener">\n` +
+                  `  <img src="https://realproof.jp/api/medal/${pro.id}/${proofId}"\n` +
+                  `       alt="REALPROOF ${tier}認定 ${proofLabel} ${item.vote_count}人が証明 ${proName}"\n` +
+                  `       width="240" style="display:block;border:0;" />\n` +
                   `</a>`
 
                 return (
