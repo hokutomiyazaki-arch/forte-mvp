@@ -111,31 +111,43 @@ export async function POST(req: NextRequest) {
     }
 
     // --- ハッシュチェーン処理 START ---
-    const { data: latestVote } = await supabase
-      .from('votes')
-      .select('proof_hash')
-      .not('proof_hash', 'is', null)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    const prevHash = latestVote?.proof_hash || GENESIS_HASH
-    const nonce = generateNonce()
     // Date.toISOString() は "Z" 末尾。Postgres timestamptz は "+00:00" を返すため、
     // 「INSERT 時 hash 計算」と「verify 時 SELECT 取得値」を一致させるため
     // hash chain 用の format は "+00:00" に統一する。
     const createdAt = normalizeTimestampForHash(new Date().toISOString())
+    const resolvedVoteType = vote_data.vote_type || 'proof'
 
-    const proofHash = computeProofHash({
-      voter_email: normalizeEmail(email),
-      professional_id: professional_id,
-      vote_type: vote_data.vote_type || 'proof',
-      selected_proof_ids: vote_data.selected_proof_ids || null,
-      comment: vote_data.comment || null,
-      created_at: createdAt,
-      nonce: nonce,
-      prev_hash: prevHash,
-    })
+    // Approach C (STOP 2a): 鎖は vote_type='proof' 限定のグローバル1本。
+    // proof 票のみ chain 3カラム (proof_hash/prev_hash/proof_nonce) を付与し、
+    // 非proof票 (personality_only / hopeful 等) は null のまま挿入する。
+    let prevHash: string | null = null
+    let nonce: string | null = null
+    let proofHash: string | null = null
+    if (resolvedVoteType === 'proof') {
+      const { data: latestVote } = await supabase
+        .from('votes')
+        .select('proof_hash')
+        .eq('vote_type', 'proof')
+        .not('proof_hash', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      const resolvedPrev = latestVote?.proof_hash || GENESIS_HASH
+      const newNonce = generateNonce()
+      proofHash = computeProofHash({
+        voter_email: normalizeEmail(email),
+        professional_id: professional_id,
+        vote_type: resolvedVoteType,
+        selected_proof_ids: vote_data.selected_proof_ids || null,
+        comment: vote_data.comment || null,
+        created_at: createdAt,
+        nonce: newNonce,
+        prev_hash: resolvedPrev,
+      })
+      prevHash = resolvedPrev
+      nonce = newNonce
+    }
     // --- ハッシュチェーン処理 END ---
 
     // --- Phase 1 Step 2: メール認証は画像なし、プロ判定のみ ---
@@ -152,7 +164,7 @@ export async function POST(req: NextRequest) {
         voter_email: email,
         normalized_email: normalizeEmail(email),
         client_user_id: null,
-        vote_type: vote_data.vote_type || 'proof',
+        vote_type: resolvedVoteType,
         vote_weight: 1.0,
         selected_proof_ids: vote_data.selected_proof_ids || null,
         selected_personality_ids: vote_data.selected_personality_ids || null,

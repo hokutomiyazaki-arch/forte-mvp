@@ -353,29 +353,41 @@ export async function GET(request: NextRequest) {
     }
 
     // --- ハッシュチェーン処理 START ---
-    const { data: latestVote } = await supabaseAdmin
-      .from('votes')
-      .select('proof_hash')
-      .not('proof_hash', 'is', null)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    const prevHash = latestVote?.proof_hash || GENESIS_HASH
-    const nonce = generateNonce()
     // hash chain 用に "+00:00" 形式で統一 (DB 返却値と一致させる)
     const createdAt = normalizeTimestampForHash(new Date().toISOString())
+    const resolvedVoteType = voteData.vote_type || 'personality_only'
 
-    const proofHash = computeProofHash({
-      voter_email: normalizeEmail(email),
-      professional_id,
-      vote_type: voteData.vote_type || 'personality_only',
-      selected_proof_ids: voteData.selected_proof_ids || null,
-      comment: voteData.comment || null,
-      created_at: createdAt,
-      nonce,
-      prev_hash: prevHash,
-    })
+    // Approach C (STOP 2a): 鎖は vote_type='proof' 限定のグローバル1本。
+    // proof 票のみ chain 3カラム (proof_hash/prev_hash/proof_nonce) を付与し、
+    // 非proof票 (personality_only / hopeful 等) は null のまま挿入する。
+    let prevHash: string | null = null
+    let nonce: string | null = null
+    let proofHash: string | null = null
+    if (resolvedVoteType === 'proof') {
+      const { data: latestVote } = await supabaseAdmin
+        .from('votes')
+        .select('proof_hash')
+        .eq('vote_type', 'proof')
+        .not('proof_hash', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      const resolvedPrev = latestVote?.proof_hash || GENESIS_HASH
+      const newNonce = generateNonce()
+      proofHash = computeProofHash({
+        voter_email: normalizeEmail(email),
+        professional_id,
+        vote_type: resolvedVoteType,
+        selected_proof_ids: voteData.selected_proof_ids || null,
+        comment: voteData.comment || null,
+        created_at: createdAt,
+        nonce: newNonce,
+        prev_hash: resolvedPrev,
+      })
+      prevHash = resolvedPrev
+      nonce = newNonce
+    }
     // --- ハッシュチェーン処理 END ---
 
     // --- Phase 1 Step 2: プロ判定（LINE は Clerk session なし、email のみで判定） ---
@@ -394,7 +406,7 @@ export async function GET(request: NextRequest) {
         normalized_email: normalizeEmail(email),
         client_user_id: null,
         vote_weight: 1.0,
-        vote_type: voteData.vote_type || 'personality_only',
+        vote_type: resolvedVoteType,
         selected_proof_ids: voteData.selected_proof_ids || null,
         selected_personality_ids: voteData.selected_personality_ids || null,
         selected_reward_id: voteData.selected_reward_id || null,
