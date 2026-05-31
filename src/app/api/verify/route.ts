@@ -8,16 +8,40 @@ export async function GET() {
   try {
     const supabase = getSupabaseAdmin()
 
-    const { data: votes, error } = await supabase
-      .from('votes')
-      .select(
-        'voter_email, normalized_email, professional_id, vote_type, selected_proof_ids, comment, created_at, proof_nonce, proof_hash, prev_hash'
-      )
-      .eq('vote_type', 'proof')
-      .not('proof_hash', 'is', null)
-      .order('created_at', { ascending: true })
+    // ⚠️ Supabase JS のデフォルト 1000 行上限を回避するため .range() で全 proof 票を取得する。
+    //    順序は migrate と一致させる必要があるため created_at ASC + id ASC の複合キーで取得。
+    //    各ページは同一の全順序で並ぶため、from を順送りした連結結果は全体として整列済みになる。
+    const PAGE = 1000
+    const votes: Array<{
+      id: string
+      voter_email: string
+      normalized_email: string | null
+      professional_id: string
+      vote_type: string
+      selected_proof_ids: string[] | null
+      comment: string | null
+      created_at: string
+      proof_nonce: string
+      proof_hash: string
+      prev_hash: string
+    }> = []
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from('votes')
+        .select(
+          'id, voter_email, normalized_email, professional_id, vote_type, selected_proof_ids, comment, created_at, proof_nonce, proof_hash, prev_hash'
+        )
+        .eq('vote_type', 'proof')
+        .not('proof_hash', 'is', null)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, from + PAGE - 1)
 
-    if (error) throw error
+      if (error) throw error
+      if (!data || data.length === 0) break
+      votes.push(...(data as typeof votes))
+      if (data.length < PAGE) break
+    }
 
     if (!votes || votes.length === 0) {
       return NextResponse.json({

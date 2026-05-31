@@ -26,22 +26,51 @@ async function migrate() {
   console.log(`🔗 Hash Chain Migration ${DRY_RUN ? '(DRY RUN)' : '(LIVE)'}`)
   console.log('---')
 
-  // 全プルーフを時系列順に取得（ハッシュ未設定のものも含む）
-  const { data: votes, error } = await supabase
-    .from('votes')
-    .select('id, voter_email, normalized_email, professional_id, vote_type, selected_proof_ids, comment, created_at')
-    .eq('vote_type', 'proof')
-    .order('created_at', { ascending: true })
+  // 全プルーフを時系列順に取得（ハッシュ未設定のものも含む）。
+  // ⚠️ Supabase JS のデフォルト 1000 行上限を回避するため .range() で全ページ取得する。
+  //    チャンクごとに鎖を作らず、全件を集約・ソートしてから1本の鎖を構築すること
+  //    （チャンク境界で prev_hash が切れるのを防ぐ）。
+  //    順序の決定性のため created_at ASC + id ASC の複合キーで取得する。
+  type ProofRow = {
+    id: string
+    voter_email: string
+    normalized_email: string | null
+    professional_id: string
+    vote_type: string
+    selected_proof_ids: string[] | null
+    comment: string | null
+    created_at: string
+  }
+  const PAGE = 1000
+  const fetched: ProofRow[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('votes')
+      .select('id, voter_email, normalized_email, professional_id, vote_type, selected_proof_ids, comment, created_at')
+      .eq('vote_type', 'proof')
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + PAGE - 1)
 
-  if (error) {
-    console.error('❌ Failed to fetch votes:', error.message)
-    process.exit(1)
+    if (error) {
+      console.error('❌ Failed to fetch votes:', error.message)
+      process.exit(1)
+    }
+    if (!data || data.length === 0) break
+    fetched.push(...(data as ProofRow[]))
+    if (data.length < PAGE) break
   }
 
-  if (!votes || votes.length === 0) {
+  if (fetched.length === 0) {
     console.log('No proofs found.')
     return
   }
+
+  // 全件を集約後、created_at ASC（同値は id ASC）で明示ソートしてから連結する（破壊的 sort 回避）
+  const votes = [...fetched].sort((a, b) => {
+    if (a.created_at !== b.created_at) return a.created_at < b.created_at ? -1 : 1
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+  })
 
   console.log(`Found ${votes.length} proofs to process`)
 
