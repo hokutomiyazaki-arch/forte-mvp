@@ -755,6 +755,58 @@ function VoteForm() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [proId, authLoaded])
 
+  // ── 認証キャンセル/失効後の入力復元（recoverable error 時のみ） ──
+  // LINE/Google 認証をキャンセル・失効して ?error=xxx で戻ると React state が
+  // 空になるため、saveVoteDataToSession() が残した 'pending_vote' から復元する。
+  // load() が wave2 でリワードのデフォルト選択をセットする(699行)ため、
+  // それを上書きできるよう loading 完了後に1度だけ実行する。
+  const restoredRef = useRef(false)
+  useEffect(() => {
+    if (loading) return
+    if (isPreview) return
+    if (restoredRef.current) return
+
+    const reason = mapAuthErrorParamToReason(searchParams.get('error'))
+    if (!isRecoverableAuthError(reason)) return
+
+    let raw: string | null = null
+    try {
+      raw = sessionStorage.getItem('pending_vote')
+    } catch {
+      return
+    }
+    if (!raw) return
+
+    let data: any
+    try {
+      data = JSON.parse(raw)
+    } catch {
+      return
+    }
+    // 別プロの保存データで現在の投票セッションを汚さない
+    if (!data || data.professional_id !== proId) return
+
+    restoredRef.current = true
+
+    if (Array.isArray(data.selected_proof_ids)) {
+      setSelectedProofIds(new Set(data.selected_proof_ids))
+    }
+    if (Array.isArray(data.selected_personality_ids)) {
+      setSelectedPersonalityIds(new Set(data.selected_personality_ids))
+    }
+    if (typeof data.selected_reward_id === 'string' && data.selected_reward_id) {
+      setSelectedRewardId(data.selected_reward_id)
+    }
+    if (typeof data.comment === 'string') {
+      setComment(data.comment)
+    }
+    // hopeful（「気になっている」）は selected_proof_ids=null で保存されるため vote_type で判定
+    if (data.vote_type === 'hopeful') {
+      setIsHopeful(true)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, proId])
+
   // ── 強みプルーフ選択 ──
   function toggleProofId(id: string) {
     if (isHopeful) return
@@ -892,6 +944,7 @@ function VoteForm() {
         channel,
       })
       await markTokenUsedFromClient(getQrToken())
+      sessionStorage.removeItem('pending_vote')
     } catch (e) {
       console.error('hopeful vote error:', e)
       // エラーでも完了画面は表示する（UXを壊さない）
@@ -1136,6 +1189,7 @@ function VoteForm() {
       }
 
       await markTokenUsedFromClient(voteDataSnapshot.qr_token || '')
+      sessionStorage.removeItem('pending_vote')
 
       if (insertedVote?.id) {
         fetch('/api/keyword/match-vote', {
@@ -1274,6 +1328,7 @@ function VoteForm() {
     }
 
     await markTokenUsedFromClient(voteData.qr_token || '')
+    sessionStorage.removeItem('pending_vote')
 
     if (insertedVote?.id) {
       fetch('/api/keyword/match-vote', {
@@ -1475,6 +1530,7 @@ function VoteForm() {
     }
 
     await markTokenUsedFromClient(getQrToken())
+    sessionStorage.removeItem('pending_vote')
 
     // メアドをPROOFリストに保存
     const { error: emailInsertError } = await (supabase as any).from('vote_emails').insert({
@@ -1587,6 +1643,7 @@ function VoteForm() {
       const data = await res.json().catch(() => ({}))
 
       if (res.ok && data.success) {
+        sessionStorage.removeItem('pending_vote')
         const rid = data.client_reward_id || ''
         window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${data.vote_id}${rid ? `&rid=${rid}` : ''}`
         return
@@ -1763,6 +1820,7 @@ function VoteForm() {
       }
 
       await markTokenUsedFromClient(voteDataSnapshot.qr_token || '')
+      sessionStorage.removeItem('pending_vote')
 
       // vote_emails 記録（失敗しても投票は成立）
       try {
