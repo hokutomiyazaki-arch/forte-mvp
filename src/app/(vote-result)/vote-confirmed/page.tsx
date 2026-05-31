@@ -81,6 +81,16 @@ function ConfirmedContent() {
   const [isAndroid, setIsAndroid] = useState(false)
   const [isLineBrowser, setIsLineBrowser] = useState(false)
 
+  // 投票成立後の残骸クリア。Google/LINE 成功はサーバー側 INSERT → /vote-confirmed
+  // 遷移のため vote/[id]/page.tsx の removeItem を通らない。ここで下書きを消す。
+  useEffect(() => {
+    try {
+      sessionStorage.removeItem('pending_vote')
+    } catch {
+      // sessionStorage 不可環境では無視
+    }
+  }, [])
+
   useEffect(() => {
     const ua = navigator.userAgent
     setIsIOS(/iPad|iPhone|iPod/.test(ua) && !(window as any).MSStream)

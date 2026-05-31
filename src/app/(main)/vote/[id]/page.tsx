@@ -755,9 +755,11 @@ function VoteForm() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [proId, authLoaded])
 
-  // ── 認証キャンセル/失効後の入力復元（recoverable error 時のみ） ──
-  // LINE/Google 認証をキャンセル・失効して ?error=xxx で戻ると React state が
-  // 空になるため、saveVoteDataToSession() が残した 'pending_vote' から復元する。
+  // ── 認証離脱後の入力復元 ──
+  // LINE/Google 認証をキャンセル・失効して ?error=xxx で戻る場合に加え、
+  // 認証画面からブラウザ「戻る」で復帰した場合（callback を通らず ?error= が付かない）
+  // にも対応するため、error param には依存せず pending_vote の有無で復元する。
+  // saveVoteDataToSession() が { savedAt, data } 形式で残した値を読む。
   // load() が wave2 でリワードのデフォルト選択をセットする(699行)ため、
   // それを上書きできるよう loading 完了後に1度だけ実行する。
   const restoredRef = useRef(false)
@@ -765,9 +767,6 @@ function VoteForm() {
     if (loading) return
     if (isPreview) return
     if (restoredRef.current) return
-
-    const reason = mapAuthErrorParamToReason(searchParams.get('error'))
-    if (!isRecoverableAuthError(reason)) return
 
     let raw: string | null = null
     try {
@@ -777,12 +776,17 @@ function VoteForm() {
     }
     if (!raw) return
 
-    let data: any
+    let parsed: any
     try {
-      data = JSON.parse(raw)
+      parsed = JSON.parse(raw)
     } catch {
       return
     }
+    // 保存形式 { savedAt, data }。30分超の古い下書きは復元しない（TTL）
+    const savedAt = parsed?.savedAt
+    if (typeof savedAt !== 'number' || Date.now() - savedAt > 30 * 60 * 1000) return
+
+    const data = parsed?.data
     // 別プロの保存データで現在の投票セッションを汚さない
     if (!data || data.professional_id !== proId) return
 
@@ -866,7 +870,8 @@ function VoteForm() {
       qr_token: getQrToken() || null,
       channel,
     }
-    sessionStorage.setItem('pending_vote', JSON.stringify(voteData))
+    // savedAt 付きで保存（ブラウザ「戻る」復帰時に TTL 判定するため）
+    sessionStorage.setItem('pending_vote', JSON.stringify({ savedAt: Date.now(), data: voteData }))
   }
 
   // ── 投票データをオブジェクトとして構築 ──
