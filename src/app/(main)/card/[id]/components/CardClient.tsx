@@ -202,6 +202,14 @@ export default function CardClient({ cardData }: Props) {
     }>) {
       voteCountMap.set(v.personality_id, v.vote_count)
     }
+    // 「厳しさの中に愛がある」(archived, interpersonal) の過去票を
+    // 「情熱がある→情熱的」(inner) に表示統合（合算）。votes テーブルは無改変。
+    const MERGE_FROM = 'da4bc7ed-a3d1-49ee-9703-232cc9a784e2' // 厳しさの中に愛がある
+    const MERGE_TO = 'ddc04d71-d3da-45f0-b058-166a4fff3db4'   // 情熱がある→情熱的
+    const mergeVotes = voteCountMap.get(MERGE_FROM) || 0
+    if (mergeVotes > 0) {
+      voteCountMap.set(MERGE_TO, (voteCountMap.get(MERGE_TO) || 0) + mergeVotes)
+    }
     const allItems: PersonalityItemWithVotes[] = (
       cardData.personalityItems as Array<{
         id: string
@@ -230,7 +238,10 @@ export default function CardClient({ cardData }: Props) {
       cardData.personalityItems as Array<{ is_active: boolean | null }>
     )
       .map((item, idx) => ({ raw: item, processed: allItems[idx] }))
-      .filter(({ raw, processed }) => raw.is_active === false && processed.votes > 0)
+      // 寄せ元(MERGE_FROM)は「情熱的」に合算済みのため、アーカイブ欄から除外し二重表示を防ぐ
+      .filter(({ raw, processed }) =>
+        raw.is_active === false && processed.votes > 0 && processed.id !== MERGE_FROM
+      )
       .map(({ processed }) => processed)
   }
 

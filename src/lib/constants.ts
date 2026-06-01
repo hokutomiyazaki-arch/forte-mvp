@@ -262,8 +262,28 @@ export const STRENGTH_ENGLISH_NAMES: Record<string, string> = {
   '食と身体の関係を教える': 'Food-Body Connection Education',
 };
 
-/** personality_items.label → 英語名 (17 項目、うち末尾2つはアーカイブ) */
+/**
+ * personality_items.label → 英語名
+ * フラットUI化(2026-06)で label を形容詞化。下記「新label」を北斗が DB UPDATE する。
+ * 旧labelは過去票の英訳保持のため残置（id→label 解決が旧labelに当たるケースの保険）。
+ */
 export const PERSONALITY_ENGLISH_NAMES: Record<string, string> = {
+  // ===== 新label（形容詞化・フラットUI 2026-06）=====
+  '誠実': 'Sincere',
+  '情熱的': 'Passionate',
+  '本気': 'Wholehearted',
+  '気楽': 'Easygoing',
+  '未来思考': 'Future-focused',
+  '話しやすい': 'Approachable',
+  '聞き上手': 'Great listener',
+  '察しがいい': 'Perceptive',
+  'フラット': 'Down-to-earth',
+  '前向き': 'Positive',
+  'テンポがいい': 'Good rhythm',
+  '楽しい': 'Fun',
+  '包容力がある': 'Accepting',
+  '真面目': 'Earnest',
+  // ===== 旧label（過去票English保持用・残置）=====
   // inner (内面性)
   '誠実で信頼できる': 'Sincere & Trustworthy',
   '情熱がある': 'Passionate',

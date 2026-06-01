@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { useUser, useSignUp, useSignIn } from '@clerk/nextjs'
@@ -498,6 +498,20 @@ function VoteForm() {
   const [personalityItems, setPersonalityItems] = useState<PersonalityItem[]>([])
   const [selectedPersonalityIds, setSelectedPersonalityIds] = useState<Set<string>>(new Set())
   const MAX_PERSONALITY = 3
+  // パーソナリティ投票はフラットUIに固定（アコーディオン廃止・カテゴリ見出し非表示）。
+  // V2分岐（isPersonalityV2）は通さない。アコーディオン本体は残置（呼ばれなくなるだけ）。
+  const PERSONALITY_FLAT = true
+  // 表示直前にシャッフル（マウント毎1回）。選択はid基準なので並び変化は機能に無害。
+  const shuffledPersonalityItems = useMemo(() => {
+    const arr = personalityItems.slice()
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      const tmp = arr[i]
+      arr[i] = arr[j]
+      arr[j] = tmp
+    }
+    return arr
+  }, [personalityItems])
 
   // リワード
   const [proRewards, setProRewards] = useState<RewardItem[]>([])
@@ -2233,7 +2247,7 @@ function VoteForm() {
             <div style={S.title}>
               <span style={{ color: "#C4A35A" }}>{pro.name?.split(/[\s　]/)[0]}</span>さんはどんな人でしたか？
             </div>
-            {isPersonalityV2() ? (
+            {!PERSONALITY_FLAT && isPersonalityV2() ? (
               <div style={{
                 fontSize: 13,
                 color: "#8B8B9A",
@@ -2251,7 +2265,7 @@ function VoteForm() {
               <div style={S.subtitle}>あてはまるものを選んでください（任意）</div>
             )}
 
-            {isPersonalityV2() ? (
+            {!PERSONALITY_FLAT && isPersonalityV2() ? (
               <PersonalityCategoryAccordions
                 items={personalityItems}
                 selectedIds={selectedPersonalityIds}
@@ -2270,7 +2284,7 @@ function VoteForm() {
               />
             ) : (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 28 }}>
-                {personalityItems.map(item => {
+                {shuffledPersonalityItems.map(item => {
                   const isSelected = selectedPersonalityIds.has(item.id)
                   const disabled = selectedPersonalityIds.size >= 3 && !isSelected
                   return (
@@ -2297,7 +2311,7 @@ function VoteForm() {
               </div>
             )}
 
-            {isPersonalityV2() && (
+            {!PERSONALITY_FLAT && isPersonalityV2() && (
               <div style={{
                 fontSize: 11,
                 color: "rgba(139,139,154,0.7)",
