@@ -758,7 +758,7 @@ function VoteForm() {
   // TEMP-DEBUG: 復元の発火条件を画面に常時表示する診断用バナー。後で grep "TEMP-DEBUG" して一括削除。
   // React の return 分岐に依存せず document.body へ命令的に描画するため、
   // loading画面・各 early return・bfcache「戻る」復帰のいずれでも表示が持続する。
-  const debugPartsRef = useRef<{ pageshow?: string; restore?: string }>({}) // TEMP-DEBUG
+  const debugPartsRef = useRef<{ pageshow?: string; restore?: string; state?: string }>({}) // TEMP-DEBUG
   function paintDebug() { // TEMP-DEBUG
     if (typeof document === 'undefined') return
     let el = document.getElementById('__restore_debug__')
@@ -769,7 +769,7 @@ function VoteForm() {
       document.body.appendChild(el)
     }
     const p = debugPartsRef.current
-    el.textContent = `${p.pageshow || 'pageshow:?'}\n${p.restore || 'restore:?'}`
+    el.textContent = `${p.pageshow || 'pageshow:?'}\n${p.restore || 'restore:?'}\n${p.state || 'state:?'}`
   }
 
   // TEMP-DEBUG: pageshow で bfcache 復帰(e.persisted)を捕捉し、その時点の pending_vote 状態を表示。
@@ -856,8 +856,8 @@ function VoteForm() {
 
     restoredRef.current = true
 
-    // TEMP-DEBUG: 復元が実際に走ったことを可視化
-    debugPartsRef.current.restore += ' | RESTORE_RAN'
+    // TEMP-DEBUG: 復元が実際に走ったこと＋保存データの中身サイズを可視化（復元setter実行の直前）
+    debugPartsRef.current.restore += ` | RESTORE_RAN d.proof=${(data.selected_proof_ids || []).length} d.pers=${(data.selected_personality_ids || []).length} d.cmt=${(data.comment || '').length} d.reward=${data.selected_reward_id ? 'Y' : 'N'} d.vtype=${data.vote_type}`
     paintDebug()
 
     if (Array.isArray(data.selected_proof_ids)) {
@@ -878,6 +878,14 @@ function VoteForm() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, proId])
+
+  // TEMP-DEBUG: 投票画面のライブ state（復元後に値が入っているか / ウィザードのステップ）を可視化。
+  // 依存配列はプリミティブのみ。ステップ変数は voteStep（VoteStep, 523行）。
+  useEffect(() => {
+    debugPartsRef.current.state = `state: proof=${selectedProofIds.size} pers=${selectedPersonalityIds.size} cmt=${comment.length} step=${voteStep}`
+    paintDebug()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProofIds.size, selectedPersonalityIds.size, comment.length, voteStep])
 
   // ── 強みプルーフ選択 ──
   function toggleProofId(id: string) {
