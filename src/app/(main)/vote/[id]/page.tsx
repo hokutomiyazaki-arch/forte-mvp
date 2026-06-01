@@ -755,54 +755,6 @@ function VoteForm() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [proId, authLoaded])
 
-  // TEMP-DEBUG: 復元の発火条件を画面に常時表示する診断用バナー。後で grep "TEMP-DEBUG" して一括削除。
-  // React の return 分岐に依存せず document.body へ命令的に描画するため、
-  // loading画面・各 early return・bfcache「戻る」復帰のいずれでも表示が持続する。
-  const debugPartsRef = useRef<{ pageshow?: string; restore?: string; state?: string }>({}) // TEMP-DEBUG
-  function paintDebug() { // TEMP-DEBUG
-    if (typeof document === 'undefined') return
-    let el = document.getElementById('__restore_debug__')
-    if (!el) {
-      el = document.createElement('div')
-      el.id = '__restore_debug__'
-      el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#d00;color:#fff;font-size:11px;line-height:1.45;padding:4px 8px;font-family:monospace;white-space:pre-wrap;word-break:break-all;'
-      document.body.appendChild(el)
-    }
-    const p = debugPartsRef.current
-    el.textContent = `${p.pageshow || 'pageshow:?'}\n${p.restore || 'restore:?'}\n${p.state || 'state:?'}`
-  }
-
-  // TEMP-DEBUG: pageshow で bfcache 復帰(e.persisted)を捕捉し、その時点の pending_vote 状態を表示。
-  useEffect(() => {
-    function onPageShow(e: PageTransitionEvent) {
-      let line: string
-      try {
-        const raw = sessionStorage.getItem('pending_vote')
-        if (!raw) {
-          line = `BF=${e.persisted} | pv=absent`
-        } else {
-          let age = '?', match = '?'
-          try {
-            const pj = JSON.parse(raw)
-            const sa = pj?.savedAt
-            age = typeof sa === 'number' ? `${Math.round((Date.now() - sa) / 1000)}s` : 'NaN'
-            match = String(!!pj?.data && pj.data.professional_id === proId)
-          } catch {
-            age = 'parseError'
-          }
-          line = `BF=${e.persisted} | pv=present age=${age} match=${match}`
-        }
-      } catch {
-        line = `BF=${e.persisted} | pv=readError`
-      }
-      debugPartsRef.current.pageshow = line
-      paintDebug()
-    }
-    window.addEventListener('pageshow', onPageShow)
-    return () => window.removeEventListener('pageshow', onPageShow)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [proId])
-
   // ── 認証離脱後の入力復元 ──
   // LINE/Google 認証をキャンセル・失効して ?error=xxx で戻る場合に加え、
   // 認証画面からブラウザ「戻る」で復帰した場合（callback を通らず ?error= が付かない）
@@ -812,22 +764,6 @@ function VoteForm() {
   // それを上書きできるよう loading 完了後に1度だけ実行する。
   const restoredRef = useRef(false)
   useEffect(() => {
-    // TEMP-DEBUG: この effect が走ったこと＋ゲート各条件を可視化（本体ロジックは下で従来通り）。
-    {
-      let pvExists = false, ttlOk = false, matchOk = false
-      try {
-        const r = sessionStorage.getItem('pending_vote')
-        pvExists = !!r
-        if (r) {
-          const pj = JSON.parse(r)
-          const sa = pj?.savedAt
-          ttlOk = typeof sa === 'number' && Date.now() - sa <= 30 * 60 * 1000
-          matchOk = !!pj?.data && pj.data.professional_id === proId
-        }
-      } catch { /* TEMP-DEBUG */ }
-      debugPartsRef.current.restore = `restore-effect RAN | loading=${loading} preview=${isPreview} alreadyRestored=${restoredRef.current} pv=${pvExists} ttlOk=${ttlOk} match=${matchOk}`
-      paintDebug()
-    }
     if (loading) return
     if (isPreview) return
     if (restoredRef.current) return
@@ -855,10 +791,6 @@ function VoteForm() {
     if (!data || data.professional_id !== proId) return
 
     restoredRef.current = true
-
-    // TEMP-DEBUG: 復元が実際に走ったこと＋保存データの中身サイズ＋保存ステップを可視化（復元setter実行の直前）
-    debugPartsRef.current.restore += ` | RESTORE_RAN d.proof=${(data.selected_proof_ids || []).length} d.pers=${(data.selected_personality_ids || []).length} d.cmt=${(data.comment || '').length} d.reward=${data.selected_reward_id ? 'Y' : 'N'} d.vtype=${data.vote_type} d.step=${parsed.step ?? 'none'}`
-    paintDebug()
 
     if (Array.isArray(data.selected_proof_ids)) {
       setSelectedProofIds(new Set(data.selected_proof_ids))
@@ -891,14 +823,6 @@ function VoteForm() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, proId])
-
-  // TEMP-DEBUG: 投票画面のライブ state（復元後に値が入っているか / ウィザードのステップ）を可視化。
-  // 依存配列はプリミティブのみ。ステップ変数は voteStep（VoteStep, 523行）。
-  useEffect(() => {
-    debugPartsRef.current.state = `state: proof=${selectedProofIds.size} pers=${selectedPersonalityIds.size} cmt=${comment.length} step=${voteStep}`
-    paintDebug()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedProofIds.size, selectedPersonalityIds.size, comment.length, voteStep])
 
   // ── 強みプルーフ選択 ──
   function toggleProofId(id: string) {
