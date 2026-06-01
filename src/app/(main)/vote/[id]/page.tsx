@@ -807,7 +807,7 @@ function VoteForm() {
   // LINE/Google 認証をキャンセル・失効して ?error=xxx で戻る場合に加え、
   // 認証画面からブラウザ「戻る」で復帰した場合（callback を通らず ?error= が付かない）
   // にも対応するため、error param には依存せず pending_vote の有無で復元する。
-  // saveVoteDataToSession() が { savedAt, data } 形式で残した値を読む。
+  // saveVoteDataToSession() が { savedAt, data, step } 形式で残した値を読む。
   // load() が wave2 でリワードのデフォルト選択をセットする(699行)ため、
   // それを上書きできるよう loading 完了後に1度だけ実行する。
   const restoredRef = useRef(false)
@@ -856,8 +856,8 @@ function VoteForm() {
 
     restoredRef.current = true
 
-    // TEMP-DEBUG: 復元が実際に走ったこと＋保存データの中身サイズを可視化（復元setter実行の直前）
-    debugPartsRef.current.restore += ` | RESTORE_RAN d.proof=${(data.selected_proof_ids || []).length} d.pers=${(data.selected_personality_ids || []).length} d.cmt=${(data.comment || '').length} d.reward=${data.selected_reward_id ? 'Y' : 'N'} d.vtype=${data.vote_type}`
+    // TEMP-DEBUG: 復元が実際に走ったこと＋保存データの中身サイズ＋保存ステップを可視化（復元setter実行の直前）
+    debugPartsRef.current.restore += ` | RESTORE_RAN d.proof=${(data.selected_proof_ids || []).length} d.pers=${(data.selected_personality_ids || []).length} d.cmt=${(data.comment || '').length} d.reward=${data.selected_reward_id ? 'Y' : 'N'} d.vtype=${data.vote_type} d.step=${parsed.step ?? 'none'}`
     paintDebug()
 
     if (Array.isArray(data.selected_proof_ids)) {
@@ -875,6 +875,19 @@ function VoteForm() {
     // hopeful（「気になっている」）は selected_proof_ids=null で保存されるため vote_type で判定
     if (data.vote_type === 'hopeful') {
       setIsHopeful(true)
+    }
+
+    // 認証離脱前のウィザードステップへ復帰（intro/done/hopeful_done は対象外）。
+    // goToWithHistory は現在の voteStep(=intro)を stepHistory に積んでから遷移するため、
+    // auth に着地後にウィザード内「戻る」(goBack)を押すと intro に戻れる（履歴整合）。
+    const RESTORABLE_STEPS: VoteStep[] = ['proofs', 'personality', 'comment', 'reward', 'auth']
+    const savedStep = parsed?.step
+    if (
+      typeof savedStep === 'string' &&
+      RESTORABLE_STEPS.includes(savedStep as VoteStep) &&
+      savedStep !== voteStep
+    ) {
+      goToWithHistory(savedStep as VoteStep)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, proId])
@@ -931,7 +944,8 @@ function VoteForm() {
   }
 
   // ── 投票データをsessionStorageに保存（LINE/Google認証用） ──
-  function saveVoteDataToSession() {
+  // stepSnapshot: 認証離脱時点の voteStep を呼び出し元から渡す（stale state 防止）。
+  function saveVoteDataToSession(stepSnapshot: VoteStep) {
     const allSelectedProofIds = Array.from(selectedProofIds)
     const hasProofs = allSelectedProofIds.length > 0
     const proofIdsToSend = isHopeful ? null : (hasProofs ? allSelectedProofIds : null)
@@ -946,8 +960,8 @@ function VoteForm() {
       qr_token: getQrToken() || null,
       channel,
     }
-    // savedAt 付きで保存（ブラウザ「戻る」復帰時に TTL 判定するため）
-    sessionStorage.setItem('pending_vote', JSON.stringify({ savedAt: Date.now(), data: voteData }))
+    // savedAt: TTL判定用 / step: 認証から戻った時に元のウィザードステップへ復帰するため
+    sessionStorage.setItem('pending_vote', JSON.stringify({ savedAt: Date.now(), data: voteData, step: stepSnapshot }))
   }
 
   // ── 投票データをオブジェクトとして構築 ──
@@ -1045,8 +1059,8 @@ function VoteForm() {
     }
 
     setError('')
-    // sessionStorageにもバックアップ保存（二重防御）
-    saveVoteDataToSession()
+    // sessionStorageにもバックアップ保存（二重防御）。現在の voteStep を一緒に保存。
+    saveVoteDataToSession(voteStep)
 
     const voteDataParam = encodeURIComponent(JSON.stringify(voteDataSnapshot))
     window.location.href = `/api/vote-auth/line?professional_id=${proId}&qr_token=${getQrToken()}&vote_data=${voteDataParam}`
@@ -1065,8 +1079,8 @@ function VoteForm() {
     }
 
     setError('')
-    // sessionStorageにもバックアップ保存（二重防御）
-    saveVoteDataToSession()
+    // sessionStorageにもバックアップ保存（二重防御）。現在の voteStep を一緒に保存。
+    saveVoteDataToSession(voteStep)
 
     const voteDataParam = encodeURIComponent(JSON.stringify(voteDataSnapshot))
     window.location.href = `/api/vote-auth/google?professional_id=${proId}&qr_token=${getQrToken()}&vote_data=${voteDataParam}`
@@ -1163,8 +1177,8 @@ function VoteForm() {
       return
     }
 
-    // sessionStorageにもバックアップ保存（二重防御）
-    saveVoteDataToSession()
+    // sessionStorageにもバックアップ保存（二重防御）。現在の voteStep を一緒に保存。
+    saveVoteDataToSession(voteStep)
 
     setIsSubmitting(true)
     setError('')
@@ -1702,8 +1716,8 @@ function VoteForm() {
       return
     }
 
-    // sessionStorageにもバックアップ保存（二重防御）
-    saveVoteDataToSession()
+    // sessionStorageにもバックアップ保存（二重防御）。現在の voteStep を一緒に保存。
+    saveVoteDataToSession(voteStep)
 
     setIsSubmitting(true)
     setError('')
