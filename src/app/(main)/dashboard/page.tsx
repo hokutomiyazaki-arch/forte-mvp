@@ -2985,6 +2985,36 @@ export default function DashboardPage() {
       {/* ═══ Tab: 獲得バッジ ═══ */}
       {dashboardTab === 'badges' && (<>
 
+      {/* カードリンク (プロ単位で1つ。バッジ未保有でも表示) */}
+      {pro && (
+        <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
+          <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">あなたの公開カード</h2>
+          <p className="text-sm text-[#9CA3AF] mb-4">
+            お客さまに見せる公開カードページのリンクです。SNSのプロフィールやメールの署名などに貼れます。
+          </p>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <code className="flex-1 px-3 py-2 rounded-lg bg-[#FAFAF7] border border-[#E5E7EB] text-xs text-[#1A1A2E] break-all">
+              https://realproof.jp/card/{pro.id}
+            </code>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(`https://realproof.jp/card/${pro.id}`)
+                  setBadgeToast('カードリンクをコピーしました')
+                } catch {
+                  setBadgeToast('コピーに失敗しました')
+                }
+                setTimeout(() => setBadgeToast(null), 2500)
+              }}
+              className="shrink-0 px-4 py-2 rounded-lg bg-[#1A1A2E] text-xs font-bold text-white hover:bg-[#2a2a4e] transition-colors"
+            >
+              カードリンクをコピー
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 獲得バッジ */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
         <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">獲得バッジ</h2>
