@@ -268,7 +268,17 @@ export const STRENGTH_ENGLISH_NAMES: Record<string, string> = {
  * 旧labelは過去票の英訳保持のため残置（id→label 解決が旧labelに当たるケースの保険）。
  */
 export const PERSONALITY_ENGLISH_NAMES: Record<string, string> = {
-  // ===== 新label（形容詞化・フラットUI 2026-06）=====
+  // ===== タイプ制（9タイプ・2026-06）=====
+  '冒険者タイプ': 'Adventurer',
+  '職人タイプ': 'Craftsman',
+  '情熱家タイプ': 'Passionate',
+  '友達タイプ': 'Friend',
+  '兄貴・姉御タイプ': 'Dependable',
+  '愛情タイプ': 'Nurturing',
+  'ムードメーカータイプ': 'Entertainer',
+  '僧侶タイプ': 'Sage',
+  '天然タイプ': 'Free Spirit',
+  // ===== 旧label（形容詞化・フラットUI 2026-06・過去票用に残置）=====
   '誠実': 'Sincere',
   '情熱的': 'Passionate',
   '本気': 'Wholehearted',

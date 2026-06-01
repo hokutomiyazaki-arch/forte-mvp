@@ -9,20 +9,15 @@ import { useEffect, useState, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import type { CardData } from '@/lib/card-data'
 import { Professional, VoteSummary } from '@/lib/types'
-import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
+import { resolveProofLabels } from '@/lib/proof-labels'
 import { COLORS, FONTS } from '@/lib/design-tokens'
 import { trackPageView, trackEvent } from '@/lib/tracking'
 import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, MASTER_THRESHOLD, LEGEND_THRESHOLD, PROVEN_GOLD, TAB_DISPLAY_NAMES, getCertifiableTier, getNextTier, TIER_DISPLAY } from '@/lib/constants'
 import { TierBadge } from '@/components/TierBadge'
 import {
-  PERSONALITY_CATEGORIES,
   PersonalityCategory,
-  calculateRank,
-  isPersonalityV2,
-  getCategoryMeta,
-  getCategoryPalette,
 } from '@/lib/personality'
-import PersonalityDonut from '@/components/PersonalityDonut'
+// PersonalityDonut は残置（呼ばれなくなるだけ）。トップ3タイプ表示に統一。
 // VoiceShareModal removed — public card is view-only
 import RelatedPros from '@/components/RelatedPros'
 import { SupportersStrip } from '@/components/card/SupportersStrip'
@@ -33,6 +28,7 @@ interface PersonalityItemWithVotes {
   id: string
   label: string
   personality_label: string
+  description: string | null
   category: PersonalityCategory
   votes: number
 }
@@ -97,63 +93,6 @@ const TIER_CARD_STYLE: Record<'LEGEND' | 'MASTER' | 'SPECIALIST', { bg: string; 
 }
 
 // SVGリングチャート（人柄プルーフ用 — 30票以上💎、50票以上★ティア）
-function RingChart({ label, count, max, size: sizeProp }: { label: string; count: number; max: number; size?: number }) {
-  const isMaster = count >= 50  // MASTER_THRESHOLD
-  const isDiamond = count >= 30 // SPECIALIST_THRESHOLD
-  const hasTier = isMaster || isDiamond
-  const size = sizeProp || (hasTier ? 68 : 76)
-  const strokeWidth = hasTier ? 2.5 : 4
-  const radius = (size - strokeWidth) / 2
-  const circumference = 2 * Math.PI * radius
-  const pct = max > 0 ? count / max : 0
-  const offset = circumference * (1 - pct)
-  const bgFill = isMaster ? 'rgba(196,163,90,0.08)' : isDiamond ? 'rgba(196,163,90,0.06)' : 'none'
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        <circle cx={size / 2} cy={size / 2} r={radius} fill={bgFill} stroke="#F0EDE6" strokeWidth={strokeWidth} />
-        <circle
-          cx={size / 2} cy={size / 2} r={radius} fill="none"
-          stroke={T.gold} strokeWidth={strokeWidth}
-          strokeDasharray={circumference} strokeDashoffset={offset}
-          strokeLinecap="round"
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-          style={{ transition: 'stroke-dashoffset 1.2s ease' }}
-        />
-        {hasTier ? (
-          <>
-            {/* ティアアイコン */}
-            {isMaster ? (
-              <g transform={`translate(${size / 2 - 8}, ${size / 2 - 16})`}>
-                <path d="M8 1L10.2 5.5L15 6.2L11.5 9.6L12.4 14.4L8 12.1L3.6 14.4L4.5 9.6L1 6.2L5.8 5.5L8 1Z" fill="#C4A35A"/>
-              </g>
-            ) : (
-              <text x={size / 2} y={size / 2 - 8} textAnchor="middle" dominantBaseline="central"
-                fontSize="13">
-                💎
-              </text>
-            )}
-            {/* 数字（下） */}
-            <text x={size / 2} y={size / 2 + 10} textAnchor="middle" dominantBaseline="central"
-              fill={T.gold} fontSize="16" fontWeight="bold" fontFamily={T.fontMono}>
-              {count}
-            </text>
-          </>
-        ) : (
-          <text x={size / 2} y={size / 2} textAnchor="middle" dominantBaseline="central"
-            fill={T.gold} fontSize="18" fontWeight="bold" fontFamily={T.fontMono}>
-            {count}
-          </text>
-        )}
-      </svg>
-      <div style={{ fontSize: 11, fontWeight: 'bold', color: T.text, textAlign: 'center', marginTop: 6, lineHeight: 1.3 }}>
-        {label}
-      </div>
-    </div>
-  )
-}
-
 interface Props {
   cardData: CardData
 }
@@ -184,17 +123,13 @@ export default function CardClient({ cardData }: Props) {
         )
       : []
 
-  let initialPersonalityVotes: { category: string; vote_count: number }[] = []
+  // タイプ制: is_active=true の personality_items のみを集計対象に、votes 降順トップ3を表示。
+  // 旧項目は is_active=false で自動除外。新タイプidのハードコードは不要。
   let initialPersonalityV2Items: PersonalityItemWithVotes[] = []
-  let initialArchivedPersonality: PersonalityItemWithVotes[] = []
   if (
     cardData.personalitySummary.length > 0 &&
     cardData.personalityItems.length > 0
   ) {
-    initialPersonalityVotes = resolvePersonalityLabels(
-      cardData.personalitySummary,
-      cardData.personalityItems
-    )
     const voteCountMap = new Map<string, number>()
     for (const v of cardData.personalitySummary as Array<{
       personality_id: string
@@ -202,19 +137,12 @@ export default function CardClient({ cardData }: Props) {
     }>) {
       voteCountMap.set(v.personality_id, v.vote_count)
     }
-    // 「厳しさの中に愛がある」(archived, interpersonal) の過去票を
-    // 「情熱がある→情熱的」(inner) に表示統合（合算）。votes テーブルは無改変。
-    const MERGE_FROM = 'da4bc7ed-a3d1-49ee-9703-232cc9a784e2' // 厳しさの中に愛がある
-    const MERGE_TO = 'ddc04d71-d3da-45f0-b058-166a4fff3db4'   // 情熱がある→情熱的
-    const mergeVotes = voteCountMap.get(MERGE_FROM) || 0
-    if (mergeVotes > 0) {
-      voteCountMap.set(MERGE_TO, (voteCountMap.get(MERGE_TO) || 0) + mergeVotes)
-    }
     const allItems: PersonalityItemWithVotes[] = (
       cardData.personalityItems as Array<{
         id: string
         label: string
         personality_label: string | null
+        description: string | null
         category: PersonalityCategory | null
         is_active: boolean | null
       }>
@@ -222,6 +150,7 @@ export default function CardClient({ cardData }: Props) {
       id: item.id,
       label: item.label,
       personality_label: item.personality_label || item.label,
+      description: item.description ?? null,
       category: (item.category || 'inner') as PersonalityCategory,
       votes: voteCountMap.get(item.id) || 0,
     }))
@@ -233,15 +162,6 @@ export default function CardClient({ cardData }: Props) {
     )
       .map((item, idx) => ({ raw: item, processed: allItems[idx] }))
       .filter(({ raw }) => raw.is_active !== false && !!raw.category)
-      .map(({ processed }) => processed)
-    initialArchivedPersonality = (
-      cardData.personalityItems as Array<{ is_active: boolean | null }>
-    )
-      .map((item, idx) => ({ raw: item, processed: allItems[idx] }))
-      // 寄せ元(MERGE_FROM)は「情熱的」に合算済みのため、アーカイブ欄から除外し二重表示を防ぐ
-      .filter(({ raw, processed }) =>
-        raw.is_active === false && processed.votes > 0 && processed.id !== MERGE_FROM
-      )
       .map(({ processed }) => processed)
   }
 
@@ -280,17 +200,9 @@ export default function CardClient({ cardData }: Props) {
   // ── useState (props 由来は不変、インタラクションのみ setter 使用) ──
   const [pro] = useState<Professional | null>(initialPro)
   const [votes] = useState<VoteSummary[]>(initialVotes)
-  const [personalityVotes] = useState<{ category: string; vote_count: number }[]>(
-    initialPersonalityVotes
-  )
   const [personalityV2Items] = useState<PersonalityItemWithVotes[]>(
     initialPersonalityV2Items
   )
-  const [archivedPersonality] = useState<PersonalityItemWithVotes[]>(
-    initialArchivedPersonality
-  )
-  const [selectedDonutCategory, setSelectedDonutCategory] =
-    useState<PersonalityCategory | null>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [comments] = useState<VoiceComment[]>(cardData.comments as any)
   // supporters の重複排除: photo_url 単位 (Map の最初に挿入された値が残る)
@@ -524,36 +436,19 @@ export default function CardClient({ cardData }: Props) {
 
   const displayBadges = filterAndSortBadges(pro.badges || [])
   const sortedVotes = [...votes].sort((a, b) => b.vote_count - a.vote_count)
-  const sortedPersonality = [...personalityVotes].sort((a, b) => b.vote_count - a.vote_count)
   const rawMax = Math.max(...sortedVotes.map(v => v.vote_count), 1)
   const maxVotes = Math.ceil(rawMax * 1.5)
-  const totalPersonality = sortedPersonality.reduce((s, v) => s + v.vote_count, 0)
-  const maxPersonality = Math.max(...sortedPersonality.map(v => v.vote_count), 1)
   const voiceCount = comments.length
 
   const top3 = sortedVotes.slice(0, 3)
   const rest = sortedVotes.slice(3)
 
-  // V2: カテゴリ別ドーナツ用データ
-  const useV2 = isPersonalityV2()
-  const v2ByCategory = (cat: PersonalityCategory) => {
-    const items = personalityV2Items.filter(i => i.category === cat)
-    const totalVotes = items.reduce((s, i) => s + i.votes, 0)
-    const sorted = [...items].sort((a, b) => b.votes - a.votes)
-    const top = sorted.length > 0 && sorted[0].votes > 0 ? sorted[0] : null
-    return {
-      items: sorted,
-      totalVotes,
-      top,
-      rank: calculateRank(totalVotes),
-    }
-  }
-  const v2Categories = PERSONALITY_CATEGORIES.map(meta => ({
-    meta,
-    data: v2ByCategory(meta.key),
-  }))
-  const v2HasAnyVotes = v2Categories.some(c => c.data.totalVotes > 0)
-  const v2AllZero = !v2HasAnyVotes
+  // タイプ制: 全タイプ横断の単一ランキング（votes 降順トップ3）
+  const personalityTotal = personalityV2Items.reduce((s, i) => s + i.votes, 0)
+  const personalityTop3 = [...personalityV2Items]
+    .filter(i => i.votes > 0)
+    .sort((a, b) => b.votes - a.votes)
+    .slice(0, 3)
 
   return (
     <div style={{ background: T.bg, minHeight: '100vh', maxWidth: 420, margin: '0 auto', padding: 16, fontFamily: T.font }}>
@@ -1021,106 +916,49 @@ export default function CardClient({ cardData }: Props) {
             </>
           )}
 
-          {/* PERSONALITY PROOFS */}
-          {useV2 ? (
-            (personalityV2Items.length > 0) && (
-              <>
-                <div style={{ fontSize: 10, fontWeight: 700, color: T.textMuted, letterSpacing: 2, textTransform: 'uppercase', fontFamily: T.fontMono, marginBottom: 10, marginTop: 16 }}>
-                  PERSONALITY PROOFS
-                </div>
-                <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: 18 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                    {v2Categories.map(({ meta, data }) => (
-                      <PersonalityDonut
-                        key={meta.key}
-                        category={meta.key}
-                        items={data.items}
-                        topItem={data.top}
-                        totalVotes={data.totalVotes}
-                        rank={data.rank}
-                        isSelected={selectedDonutCategory === meta.key}
-                        onTap={() => setSelectedDonutCategory(prev => prev === meta.key ? null : meta.key)}
-                      />
-                    ))}
-                  </div>
-                  {v2AllZero && (
-                    <div style={{ textAlign: 'center', marginTop: 14, fontSize: 12, color: T.textSub }}>
-                      これから物語が刻まれる
-                    </div>
-                  )}
-                  {selectedDonutCategory && (() => {
-                    const cat = v2Categories.find(c => c.meta.key === selectedDonutCategory)
-                    if (!cat) return null
-                    const { meta, data } = cat
-                    return (
-                      <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${T.cardBorder}` }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12, fontSize: 13, fontWeight: 700, color: T.text }}>
-                          <span>{meta.emoji}</span>
-                          <span>{meta.name}</span>
-                          <span style={{ color: meta.color }}>{data.rank.icon} {data.rank.name}</span>
-                          {data.rank.level > 0 && (
-                            <span style={{ color: T.textMuted, fontWeight: 500, fontSize: 12 }}>Lv.{data.rank.level}</span>
-                          )}
-                          <span style={{ marginLeft: 'auto', color: T.textMuted, fontWeight: 500, fontSize: 12 }}>{data.totalVotes}票</span>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                          {(() => {
-                            const palette = getCategoryPalette(meta.key)
-                            // 票数 > 0 の項目だけ palette[0..3] を割り当てる
-                            const ranked = data.items.filter(i => i.votes > 0)
-                            const colorByItemId = new Map<string, string>()
-                            ranked.forEach((item, idx) => {
-                              colorByItemId.set(item.id, palette[Math.min(idx, 4)])
-                            })
-                            return data.items.map(item => {
-                              const pct = data.totalVotes > 0 ? Math.round((item.votes / data.totalVotes) * 100) : 0
-                              const barColor = colorByItemId.get(item.id) || palette[4]
-                              return (
-                                <div key={item.id}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 12, marginBottom: 3 }}>
-                                    <span style={{ color: T.text, fontWeight: 600 }}>{item.personality_label}</span>
-                                    <span style={{ color: T.textMuted }}>{item.votes}票{data.totalVotes > 0 ? ` (${pct}%)` : ''}</span>
-                                  </div>
-                                  <div style={{ width: '100%', height: 4, background: palette[4], borderRadius: 99 }}>
-                                    <div style={{ width: `${pct}%`, height: 4, background: barColor, borderRadius: 99 }} />
-                                  </div>
-                                </div>
-                              )
-                            })
-                          })()}
-                        </div>
-                        {data.rank.votesToNext !== null && data.rank.nextThreshold !== null && (() => {
-                          const next = calculateRank(data.rank.nextThreshold)
-                          return (
-                            <div style={{ textAlign: 'center', marginTop: 12, fontSize: 12, color: T.textSub }}>
-                              あと{data.rank.votesToNext}票で {next.icon} {next.name} へ
+          {/* PERSONALITY PROOFS — トップ3タイプ表示 */}
+          {personalityV2Items.length > 0 && (
+            <>
+              <div style={{ fontSize: 10, fontWeight: 700, color: T.textMuted, letterSpacing: 2, textTransform: 'uppercase', fontFamily: T.fontMono, marginBottom: 10, marginTop: 16 }}>
+                PERSONALITY PROOFS
+              </div>
+              <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: 18 }}>
+                {personalityTop3.length > 0 ? (
+                  <>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                      {personalityTop3.map((item, idx) => {
+                        const pct = personalityTotal > 0 ? Math.round((item.votes / personalityTotal) * 100) : 0
+                        const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'
+                        return (
+                          <div key={item.id}>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+                              <span style={{ fontSize: 16 }}>{medal}</span>
+                              <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{item.label}</span>
+                              <span style={{ marginLeft: 'auto', fontSize: 12, color: T.textMuted, fontFamily: T.fontMono }}>{item.votes}票 ({pct}%)</span>
                             </div>
-                          )
-                        })()}
-                      </div>
-                    )
-                  })()}
-                </div>
-              </>
-            )
-          ) : (
-            sortedPersonality.length > 0 && (
-              <>
-                <div style={{ fontSize: 10, fontWeight: 700, color: T.textMuted, letterSpacing: 2, textTransform: 'uppercase', fontFamily: T.fontMono, marginBottom: 10, marginTop: 16 }}>
-                  PERSONALITY PROOFS
-                </div>
-                <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: 18 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-around' }}>
-                    {sortedPersonality.slice(0, 3).map(v => (
-                      <RingChart key={v.category} label={v.category} count={v.vote_count} max={maxPersonality} />
-                    ))}
+                            {item.description && (
+                              <div style={{ fontSize: 11, color: T.textSub, lineHeight: 1.5, marginLeft: 24, marginBottom: 6 }}>
+                                {item.description}
+                              </div>
+                            )}
+                            <div style={{ width: '100%', height: 4, background: '#F0EDE6', borderRadius: 99 }}>
+                              <div style={{ width: `${pct}%`, height: 4, background: T.gold, borderRadius: 99 }} />
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <div style={{ textAlign: 'center', marginTop: 14, fontSize: 12, color: T.textSub }}>
+                      パーソナリティへの投票 計 <span style={{ fontWeight: 'bold', color: T.gold }}>{personalityTotal}</span>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ textAlign: 'center', fontSize: 12, color: T.textSub }}>
+                    これから物語が刻まれる
                   </div>
-                  <div style={{ textAlign: 'center', marginTop: 14, fontSize: 12, color: T.textSub }}>
-                    パーソナリティへの投票 計 <span style={{ fontWeight: 'bold', color: T.gold }}>{totalPersonality}</span>
-                  </div>
-                </div>
-              </>
-            )
+                )}
+              </div>
+            </>
           )}
 
           {/* CLIENT COMPOSITION BAR */}
@@ -1186,7 +1024,7 @@ export default function CardClient({ cardData }: Props) {
             </>
           )}
 
-          {sortedVotes.length === 0 && sortedPersonality.length === 0 && (
+          {sortedVotes.length === 0 && personalityV2Items.length === 0 && (
             <div style={{ textAlign: 'center', padding: '32px 0', color: T.textMuted, fontSize: 13 }}>
               まだプルーフがありません
             </div>

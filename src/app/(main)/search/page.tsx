@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { PREFECTURES } from '@/lib/prefectures'
 import { COLORS, FONTS } from '@/lib/design-tokens'
-import { isPersonalityV2 } from '@/lib/personality'
 import { TierBadge, getTierFromVotes } from '@/components/TierBadge'
 
 const T = { ...COLORS, font: FONTS.main }
@@ -488,7 +487,6 @@ export default function SearchPage() {
 
                   {/* パーソナリティTOP */}
                   {(() => {
-                    if (isPersonalityV2()) {
                       const cats = p.topPersonalitiesByCategory
                       if (!cats) return null
                       const labels: string[] = []
@@ -503,17 +501,6 @@ export default function SearchPage() {
                           {'\uD83D\uDCAC'} {labels.join(' × ')}
                         </div>
                       )
-                    }
-                    if (p.topPersonality) {
-                      return (
-                        <div style={{
-                          marginTop: 6, fontSize: 12, color: T.textSub, fontWeight: 600,
-                        }}>
-                          {'\uD83D\uDCAC'} {p.topPersonality.label}
-                        </div>
-                      )
-                    }
-                    return null
                   })()}
 
                   {/* Voiceスニペット */}

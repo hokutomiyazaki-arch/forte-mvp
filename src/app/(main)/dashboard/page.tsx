@@ -18,7 +18,6 @@ import ImageCropper from '@/components/ImageCropper'
 import InstallPrompt from '@/components/InstallPrompt'
 import { PREFECTURES } from '@/lib/prefectures'
 import XDayCountdown from '@/components/XDayCountdown'
-import { isPersonalityV2 } from '@/lib/personality'
 import { validateBookingUrl, validateSocialHandle } from '@/lib/validation'
 import { getProVoteCount } from '@/lib/vote-count'
 import BookingUrlBanner from '@/components/BookingUrlBanner'
@@ -2636,7 +2635,7 @@ export default function DashboardPage() {
       </div>
 
       {/* アーカイブ（旧パーソナリティで過去票がある項目） */}
-      {isPersonalityV2() && archivedPersonality.length > 0 && (() => {
+      {archivedPersonality.length > 0 && (() => {
         const archMax = Math.max(...archivedPersonality.map(a => a.votes), 1)
         return (
           <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
