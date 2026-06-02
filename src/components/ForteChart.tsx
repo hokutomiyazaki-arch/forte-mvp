@@ -153,34 +153,7 @@ export default function ForteChart({ votes, personalityVotes = [], professional,
         </div>
       )}
 
-      {/* パーソナリティプルーフ */}
-      {sortedPersonality.length > 0 && (
-        <div className="pt-2 border-t border-gray-100">
-          <h3 className="text-sm font-bold text-[#C4A35A] mb-3 flex items-center gap-1">
-            パーソナリティ
-          </h3>
-          <div className="space-y-2">
-            {sortedPersonality.map(v => (
-              <div key={v.category}>
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-sm font-medium text-[#C4A35A]">
-                    {v.category}
-                  </span>
-                  {showLabels && (
-                    <span className="text-sm text-[#C4A35A] font-bold">{v.vote_count}</span>
-                  )}
-                </div>
-                <div className="w-full bg-gray-100 rounded-full h-3">
-                  <div
-                    className="bg-[#C4A35A] h-3 rounded-full transition-all duration-500"
-                    style={{ width: `${(v.vote_count / maxVotes) * 100}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* パーソナリティの一覧表示は撤去（PersonalityPodium「印象トップ3」に統一） */}
 
       {sortedResults.length === 0 && sortedPersonality.length === 0 && (
         <p className="text-gray-400 text-sm text-center py-4">まだプルーフがありません</p>
