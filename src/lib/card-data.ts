@@ -134,7 +134,7 @@ export async function getCardData(
     // 4. 人柄サマリー
     supabase.from('personality_summary').select('*').eq('professional_id', proId),
     // 5. 人柄項目マスタ（category / is_active 含む）
-    supabase.from('personality_items').select('id, label, personality_label, description, category, is_active, sort_order'),
+    supabase.from('personality_items').select('id, label, personality_label, description, category, is_active, sort_order, image_url'),
     // 6. コメント付き投票
     supabase.from('votes')
       .select('id, comment, created_at, normalized_email, display_mode, client_photo_url, auth_display_name, voter_professional_id')

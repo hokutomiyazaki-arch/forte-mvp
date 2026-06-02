@@ -31,6 +31,28 @@ interface PersonalityItemWithVotes {
   description: string | null
   category: PersonalityCategory
   votes: number
+  image_url: string | null
+}
+
+// パーソナリティ・レベル装飾の票数閾値（後で調整可）
+const PERSONALITY_TIER = { bronze: 5, silver: 15, gold: 30 }
+
+// 票数 → レベル枠スタイル（全部CSS・画像/DB追加なし）
+function getPersonalityTierStyle(votes: number): {
+  ring: string
+  glow: string
+  badge: string | null
+} {
+  if (votes >= PERSONALITY_TIER.gold) {
+    return { ring: '#C4A35A', glow: '0 0 12px 2px #C4A35A66', badge: '💎' }
+  }
+  if (votes >= PERSONALITY_TIER.silver) {
+    return { ring: '#C0C0C0', glow: 'none', badge: '⭐' }
+  }
+  if (votes >= PERSONALITY_TIER.bronze) {
+    return { ring: '#CD7F32', glow: 'none', badge: null }
+  }
+  return { ring: 'transparent', glow: 'none', badge: null }
 }
 
 // デザイントークンのローカルショートカット
@@ -145,6 +167,7 @@ export default function CardClient({ cardData }: Props) {
         description: string | null
         category: PersonalityCategory | null
         is_active: boolean | null
+        image_url: string | null
       }>
     ).map(item => ({
       id: item.id,
@@ -153,6 +176,7 @@ export default function CardClient({ cardData }: Props) {
       description: item.description ?? null,
       category: (item.category || 'inner') as PersonalityCategory,
       votes: voteCountMap.get(item.id) || 0,
+      image_url: item.image_url ?? null,
     }))
     initialPersonalityV2Items = (
       cardData.personalityItems as Array<{
@@ -925,29 +949,65 @@ export default function CardClient({ cardData }: Props) {
               <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: 18 }}>
                 {personalityTop3.length > 0 ? (
                   <>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                      {personalityTop3.map((item, idx) => {
+                    {(() => {
+                      // 横並び表彰台: 中央=1位(大)、左=2位・右=3位(小)
+                      const order =
+                        personalityTop3.length === 1
+                          ? [{ item: personalityTop3[0], rank: 0 }]
+                          : personalityTop3.length === 2
+                          ? [
+                              { item: personalityTop3[1], rank: 1 },
+                              { item: personalityTop3[0], rank: 0 },
+                            ]
+                          : [
+                              { item: personalityTop3[1], rank: 1 },
+                              { item: personalityTop3[0], rank: 0 },
+                              { item: personalityTop3[2], rank: 2 },
+                            ]
+                      const renderChar = ({ item, rank }: { item: PersonalityItemWithVotes; rank: number }) => {
                         const pct = personalityTotal > 0 ? Math.round((item.votes / personalityTotal) * 100) : 0
-                        const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'
+                        const tier = getPersonalityTierStyle(item.votes)
+                        const isFirst = rank === 0
+                        const imgSize = isFirst ? 130 : 100
+                        const medal = rank === 0 ? '🥇' : rank === 1 ? '🥈' : '🥉'
                         return (
-                          <div key={item.id}>
-                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
-                              <span style={{ fontSize: 16 }}>{medal}</span>
-                              <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{item.label}</span>
-                              <span style={{ marginLeft: 'auto', fontSize: 12, color: T.textMuted, fontFamily: T.fontMono }}>{item.votes}票 ({pct}%)</span>
-                            </div>
-                            {item.description && (
-                              <div style={{ fontSize: 11, color: T.textSub, lineHeight: 1.5, marginLeft: 24, marginBottom: 6 }}>
-                                {item.description}
+                          <div key={item.id} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 6 }}>
+                            {item.image_url && (
+                              <div style={{
+                                width: imgSize, height: imgSize, borderRadius: '50%',
+                                border: tier.ring === 'transparent' ? '2px solid transparent' : `3px solid ${tier.ring}`,
+                                boxShadow: tier.glow,
+                                background: '#FAF8F3', overflow: 'hidden', position: 'relative',
+                                display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+                              }}>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={item.image_url} alt={item.label} style={{ width: '92%', height: '92%', objectFit: 'contain' }} />
+                                {tier.badge && (
+                                  <span style={{ position: 'absolute', top: -2, right: -2, fontSize: isFirst ? 18 : 15 }}>{tier.badge}</span>
+                                )}
                               </div>
                             )}
-                            <div style={{ width: '100%', height: 4, background: '#F0EDE6', borderRadius: 99 }}>
-                              <div style={{ width: `${pct}%`, height: 4, background: T.gold, borderRadius: 99 }} />
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                              <span style={{ fontSize: isFirst ? 16 : 13 }}>{medal}</span>
+                              <span style={{ fontSize: isFirst ? 14 : 12, fontWeight: 700, color: T.text }}>{item.label}</span>
                             </div>
+                            <span style={{ fontSize: 11, color: T.textMuted, fontFamily: T.fontMono }}>{item.votes}票 ({pct}%)</span>
                           </div>
                         )
-                      })}
-                    </div>
+                      }
+                      return (
+                        <>
+                          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 8 }}>
+                            {order.map(renderChar)}
+                          </div>
+                          {personalityTop3[0].description && (
+                            <div style={{ textAlign: 'center', fontSize: 11, color: T.textSub, lineHeight: 1.5, marginTop: 12, padding: '0 8px' }}>
+                              {personalityTop3[0].description}
+                            </div>
+                          )}
+                        </>
+                      )
+                    })()}
                     <div style={{ textAlign: 'center', marginTop: 14, fontSize: 12, color: T.textSub }}>
                       パーソナリティへの投票 計 <span style={{ fontWeight: 'bold', color: T.gold }}>{personalityTotal}</span>
                     </div>
