@@ -7,6 +7,7 @@ import { calcQrTokenExpiry } from '@/lib/qr-token'
 import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYPES, getRewardType, FNT_NEURO_APPS } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import ForteChart from '@/components/ForteChart'
+import { PersonalityPodium, type PersonalityPodiumItem } from '@/components/card/PersonalityPodium'
 import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, PROVEN_GOLD, PROVEN_GRADIENT, TAB_ORDER, TAB_DISPLAY_NAMES, getCertifiableTier, TIER_DISPLAY } from '@/lib/constants'
 import VoiceShareModal from '@/components/VoiceShareCard'
 import DashboardVoiceCard, { type DashboardVoice } from '@/components/dashboard/DashboardVoiceCard'
@@ -70,6 +71,8 @@ export default function DashboardPage() {
   const [votes, setVotes] = useState<VoteSummary[]>([])
   const [personalityVotes, setPersonalityVotes] = useState<{category: string, vote_count: number}[]>([])
   const [archivedPersonality, setArchivedPersonality] = useState<{ label: string; personality_label: string; votes: number }[]>([])
+  // タイプ制: is_active なタイプの「お客さんが見た印象」トップ3表示用
+  const [personalityTypeItems, setPersonalityTypeItems] = useState<PersonalityPodiumItem[]>([])
   const [totalVotes, setTotalVotes] = useState(0)
   const [bookmarkCount, setBookmarkCount] = useState(0)
   const [firstTimerCount, setFirstTimerCount] = useState(0)
@@ -544,6 +547,25 @@ export default function DashboardPage() {
             .filter(item => item.votes > 0)
             .sort((a, b) => b.votes - a.votes)
           setArchivedPersonality(archived)
+
+          // タイプ制: is_active なタイプ（旧項目は is_active=false で自動除外）
+          const typeItems: PersonalityPodiumItem[] = (data.personalityItems as Array<{
+            id: string
+            label: string
+            description: string | null
+            category: string | null
+            is_active: boolean | null
+            image_url: string | null
+          }>)
+            .filter(item => item.is_active !== false && !!item.category)
+            .map(item => ({
+              id: item.id,
+              label: item.label,
+              description: item.description ?? null,
+              votes: voteCountMap.get(item.id) || 0,
+              image_url: item.image_url ?? null,
+            }))
+          setPersonalityTypeItems(typeItems)
         }
 
         setTotalVotes(data.totalVotes || 0)
@@ -2633,6 +2655,20 @@ export default function DashboardPage() {
           certApplications={certApplications}
         />
       </div>
+
+      {/* パーソナリティ — お客さんが見た印象トップ3（公開カードと同じ表彰台） */}
+      {personalityTypeItems.length > 0 && (
+        <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
+          <PersonalityPodium
+            items={personalityTypeItems}
+            proName={
+              pro?.name?.trim() ||
+              `${pro?.last_name || ''}${pro?.first_name || ''}`.trim() ||
+              'あなた'
+            }
+          />
+        </div>
+      )}
 
       {/* アーカイブ（旧パーソナリティで過去票がある項目） */}
       {archivedPersonality.length > 0 && (() => {

@@ -35,6 +35,7 @@ interface PersonalityItem {
   sort_order: number
   category?: 'inner' | 'interpersonal' | 'atmosphere' | null
   is_active?: boolean | null
+  image_url?: string | null
 }
 
 interface RewardItem {
@@ -657,7 +658,7 @@ function VoteForm() {
         // プロ情報
         (supabase as any).from('professionals').select('*').eq('id', proId).maybeSingle(),
         // 人柄プルーフ（プロ情報に依存しない、is_active=true のみ）
-        (supabase as any).from('personality_items').select('id, label, personality_label, description, category, is_active, sort_order').eq('is_active', true).order('sort_order'),
+        (supabase as any).from('personality_items').select('id, label, personality_label, description, category, is_active, sort_order, image_url').eq('is_active', true).order('sort_order'),
       ])
 
       // QRチェック結果（プレビューモードではスキップ）
@@ -2258,7 +2259,7 @@ function VoteForm() {
                     key={item.id}
                     onClick={() => togglePersonalityId(item.id)}
                     style={{
-                      display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3,
+                      display: "flex", flexDirection: "row", alignItems: "center", gap: 12,
                       padding: "12px 16px", borderRadius: 14, width: "100%", textAlign: "left",
                       border: isSelected
                         ? "2px solid #C4A35A"
@@ -2268,17 +2269,30 @@ function VoteForm() {
                       cursor: "pointer",
                     }}
                   >
-                    <span style={{ fontSize: 14, fontWeight: isSelected ? 700 : 500 }}>
-                      {item.label}
-                    </span>
-                    {item.description && (
-                      <span style={{
-                        fontSize: 11, lineHeight: 1.5,
-                        color: isSelected ? "rgba(196,163,90,0.85)" : "rgba(250,250,247,0.55)",
+                    {item.image_url && (
+                      <div style={{
+                        flexShrink: 0, width: 52, height: 52, borderRadius: "50%",
+                        background: "rgba(255,255,255,0.06)", overflow: "hidden",
+                        display: "flex", alignItems: "flex-end", justifyContent: "center",
+                        border: isSelected ? "2px solid #C4A35A" : "1.5px solid rgba(196,163,90,0.24)",
                       }}>
-                        {item.description}
-                      </span>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={item.image_url} alt={item.label} style={{ width: "92%", height: "92%", objectFit: "contain" }} />
+                      </div>
                     )}
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3, minWidth: 0 }}>
+                      <span style={{ fontSize: 14, fontWeight: isSelected ? 700 : 500 }}>
+                        {item.label}
+                      </span>
+                      {item.description && (
+                        <span style={{
+                          fontSize: 11, lineHeight: 1.5,
+                          color: isSelected ? "rgba(196,163,90,0.85)" : "rgba(250,250,247,0.55)",
+                        }}>
+                          {item.description}
+                        </span>
+                      )}
+                    </div>
                   </button>
                 )
               })}
