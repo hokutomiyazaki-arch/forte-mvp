@@ -168,9 +168,10 @@ export default function DashboardPage() {
   // /api/dashboard/voices からダッシュボード専用整形済みデータを受け取る。
   // 公開ページとは異なり display_mode は無視、auth_method ベースで client 表示を判定。
   const [voiceComments, setVoiceComments] = useState<DashboardVoice[]>([])
-  // 公開中の顔写真 (display_mode='photo' + client_photo_url あり)。コメント有無に依らず取得。
-  // /api/dashboard/photos から取得。個人情報 (メアド/電話) は含まない。
-  const [publishedPhotos, setPublishedPhotos] = useState<{ id: string; client_photo_url: string | null; name: string; created_at: string }[]>([])
+  // 公開中の顔写真 (display_mode IN ('photo','pro_link'))。コメント有無に依らず取得。
+  // /api/dashboard/photos から取得。個人情報 (メアド/電話/userId) は含まない。
+  // type='client': クライアント顔写真 / type='pro': プロからの認定 (pro_link、proCardHref あり)。
+  const [publishedPhotos, setPublishedPhotos] = useState<{ id: string; type: 'client' | 'pro'; name: string; photo_url: string; created_at: string; proCardHref: string | null }[]>([])
   const [voicePhrases, setVoicePhrases] = useState<{ id: number; text: string; is_default: boolean; sort_order: number }[]>([])
   const [expandedVoice, setExpandedVoice] = useState<string | null>(null)
   const [phraseSelecting, setPhraseSelecting] = useState<string | null>(null)
@@ -252,10 +253,16 @@ export default function DashboardPage() {
   // 公開中の顔写真セクション専用の削除 (Voices カードとは別 state)。
   // API は Voices タブと同じ remove-photo を流用。楽観的更新でリストから除外 → 失敗時に元位置へ復元。
   const handlePublishedPhotoDelete = async (voteId: string) => {
-    if (!confirm('この顔写真の公開を取り消します。よろしいですか？')) return
     const backupIndex = publishedPhotos.findIndex(p => p.id === voteId)
     if (backupIndex === -1) return
     const backup = publishedPhotos[backupIndex]
+
+    // pro_link (プロからの認定) の場合だけ、認定リンクも一緒に消える旨を注意（A案）。
+    // クライアント顔は従来通りの文言。
+    const confirmMsg = backup.type === 'pro'
+      ? `この顔写真の公開を取り消します。よろしいですか？\n\n※ ${backup.name}さんからの認定リンク（顔写真とプロフィールへのリンク）も一緒に削除されます。`
+      : 'この顔写真の公開を取り消します。よろしいですか？'
+    if (!confirm(confirmMsg)) return
 
     setPublishedPhotos(prev => prev.filter(p => p.id !== voteId))  // ⚠️ !== 比較
 
@@ -3641,22 +3648,34 @@ export default function DashboardPage() {
           公開中の顔写真
         </h2>
         <p className="text-xs text-[#9CA3AF] mb-4">
-          お客さんが「顔写真を出してOK」と同意してくれた写真です。公開を取り消すとカードや一覧から非表示になります。
+          お客さん（クライアント顔）や、あなたを認定してくれたプロ（プロからの認定）の顔写真です。公開を取り消すとカードや一覧から非表示になります。
         </p>
         {publishedPhotos.length > 0 ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12 }}>
             {publishedPhotos.map(p => (
               <div key={p.id} style={{ border: '1px solid #E8E4DC', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                {p.client_photo_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={p.client_photo_url} alt={p.name} referrerPolicy="no-referrer" style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover' as const }} />
-                ) : (
-                  <div style={{ width: 72, height: 72, borderRadius: '50%', background: '#F0EDE6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#A0A0A0', fontSize: 24 }}>
-                    {p.name.charAt(0)}
-                  </div>
-                )}
+                <div style={{ position: 'relative' as const, width: 72, height: 72 }}>
+                  {p.photo_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={p.photo_url} alt={p.name} referrerPolicy="no-referrer" style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover' as const }} />
+                  ) : (
+                    <div style={{ width: 72, height: 72, borderRadius: '50%', background: '#F0EDE6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#A0A0A0', fontSize: 24 }}>
+                      {p.name.charAt(0)}
+                    </div>
+                  )}
+                  {/* プロからの認定 (pro_link) には ✓ バッジ（公開カードの SupportersStrip と同じ青チェック） */}
+                  {p.type === 'pro' && (
+                    <div aria-label="プロアカウント" style={{ position: 'absolute' as const, bottom: -2, right: -2, width: 18, height: 18, borderRadius: '50%', background: '#1976D2', border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 10, lineHeight: 1, fontWeight: 700 }}>
+                      ✓
+                    </div>
+                  )}
+                </div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', textAlign: 'center' as const, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
                   {p.name}
+                </div>
+                {/* 種別ラベル: プロからの認定 / クライアント */}
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: p.type === 'pro' ? '#1976D2' : '#A0A0A0' }}>
+                  {p.type === 'pro' ? 'プロからの認定' : 'クライアント'}
                 </div>
                 <div style={{ fontSize: 11, color: '#9CA3AF' }}>
                   {new Date(p.created_at).toLocaleDateString('ja-JP')}
@@ -3673,7 +3692,7 @@ export default function DashboardPage() {
         ) : (
           <div className="text-center py-8">
             <p className="text-gray-400 text-sm">公開中の顔写真はありません。</p>
-            <p className="text-gray-400 text-xs mt-1">お客さんが顔写真の公開に同意するとここに表示されます。</p>
+            <p className="text-gray-400 text-xs mt-1">お客さんやプロが顔写真の公開に同意するとここに表示されます。</p>
           </div>
         )}
       </div>
