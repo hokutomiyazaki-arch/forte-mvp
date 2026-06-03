@@ -6,7 +6,7 @@
  *   旧 'use client' page.tsx (commit 04618ca) のロジックを移植。
  */
 import { useEffect, useState, useRef } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import type { CardData } from '@/lib/card-data'
 import { Professional, VoteSummary } from '@/lib/types'
 import { resolveProofLabels } from '@/lib/proof-labels'
@@ -101,6 +101,7 @@ interface Props {
 
 export default function CardClient({ cardData }: Props) {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const id = cardData.pro?.id || ''
   const tabParam = searchParams.get('tab')
   const highlightParam = searchParams.get('highlight') || ''
@@ -383,6 +384,14 @@ export default function CardClient({ cardData }: Props) {
 
   // Supporter アイコンタップ時: Voices タブ切替 → 該当コメントへスクロール → 2秒間ハイライト
   const handleSupporterClick = (voteId: string) => {
+    // pro_link 票（linkHref あり）は投票者プロのカードへ直接遷移。
+    // コメント有無に依らず dead-end しない（コメント無し pro_link のサイレント空振り解消）。
+    const supporter = supporters.find((s) => s.vote_id === voteId)
+    if (supporter?.linkHref) {
+      router.push(supporter.linkHref)
+      return
+    }
+    // クライアント顔(photo)票は従来通り Voices タブへスクロール。
     setActiveTab('voices')
     // タブ切替後にDOMが描画されるのを待つ
     setTimeout(() => {

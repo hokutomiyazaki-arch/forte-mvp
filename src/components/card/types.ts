@@ -41,4 +41,7 @@ export interface Supporter {
   display_name: string
   is_pro: boolean
   created_at: string
+  // pro_link 票のみ: 投票者プロのカード '/card/{voter_professional_id}'。
+  // クライアント顔(photo)票では undefined（クリックで Voices タブにスクロールする従来挙動）。
+  linkHref?: string
 }
