@@ -168,6 +168,9 @@ export default function DashboardPage() {
   // /api/dashboard/voices からダッシュボード専用整形済みデータを受け取る。
   // 公開ページとは異なり display_mode は無視、auth_method ベースで client 表示を判定。
   const [voiceComments, setVoiceComments] = useState<DashboardVoice[]>([])
+  // 公開中の顔写真 (display_mode='photo' + client_photo_url あり)。コメント有無に依らず取得。
+  // /api/dashboard/photos から取得。個人情報 (メアド/電話) は含まない。
+  const [publishedPhotos, setPublishedPhotos] = useState<{ id: string; client_photo_url: string | null; name: string; created_at: string }[]>([])
   const [voicePhrases, setVoicePhrases] = useState<{ id: number; text: string; is_default: boolean; sort_order: number }[]>([])
   const [expandedVoice, setExpandedVoice] = useState<string | null>(null)
   const [phraseSelecting, setPhraseSelecting] = useState<string | null>(null)
@@ -243,6 +246,37 @@ export default function DashboardPage() {
       // ロールバック: バックアップで該当 voice を復元
       setVoiceComments(prev => prev.map(v => v.id === voiceId ? backup : v))
       throw err  // DashboardVoiceCard 側 handleConfirmAction の catch で alert 表示
+    }
+  }
+
+  // 公開中の顔写真セクション専用の削除 (Voices カードとは別 state)。
+  // API は Voices タブと同じ remove-photo を流用。楽観的更新でリストから除外 → 失敗時に元位置へ復元。
+  const handlePublishedPhotoDelete = async (voteId: string) => {
+    if (!confirm('この顔写真の公開を取り消します。よろしいですか？')) return
+    const backupIndex = publishedPhotos.findIndex(p => p.id === voteId)
+    if (backupIndex === -1) return
+    const backup = publishedPhotos[backupIndex]
+
+    setPublishedPhotos(prev => prev.filter(p => p.id !== voteId))  // ⚠️ !== 比較
+
+    try {
+      const res = await fetch(`/api/dashboard/voices/${voteId}/remove-photo`, {
+        method: 'POST',
+        cache: 'no-store',
+      })
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}))
+        throw new Error(errBody.error || '削除に失敗しました')
+      }
+    } catch (err) {
+      // ロールバック: 元の位置に再挿入
+      setPublishedPhotos(prev => {
+        const restored = [...prev]
+        restored.splice(backupIndex, 0, backup)
+        return restored
+      })
+      console.error('[handlePublishedPhotoDelete] failed:', err)
+      alert(err instanceof Error ? err.message : '削除に失敗しました')
     }
   }
 
@@ -405,9 +439,10 @@ export default function DashboardPage() {
       try {
         // 専用APIで1リクエスト（サーバー側Promise.all並列 + role判定込み）
         // ダッシュボード Voices タブ専用の voices エンドポイントも並行 fetch
-        const [res, voicesRes] = await Promise.all([
+        const [res, voicesRes, photosRes] = await Promise.all([
           fetch('/api/dashboard'),
           fetch('/api/dashboard/voices'),
+          fetch('/api/dashboard/photos'),
         ])
         if (!res.ok) {
           console.error('[dashboard] API error:', res.status)
@@ -417,6 +452,9 @@ export default function DashboardPage() {
         const data = await res.json()
         const voicesData = voicesRes.ok
           ? await voicesRes.json().catch(() => null)
+          : null
+        const photosData = photosRes.ok
+          ? await photosRes.json().catch(() => null)
           : null
 
         // ロールチェック: /api/dashboard のレスポンスから判定
@@ -590,6 +628,8 @@ export default function DashboardPage() {
         // Voices: /api/dashboard/voices からダッシュボード専用整形済みデータを使う
         // (/api/dashboard 側の data.voiceComments は使わない)
         if (voicesData?.voices) setVoiceComments(voicesData.voices)
+        // 公開中の顔写真 (コメント有無に依らない一覧)
+        if (photosData?.photos) setPublishedPhotos(photosData.photos)
         if (data.gratitudePhrases) setVoicePhrases(data.gratitudePhrases)
 
         // NFCカード
@@ -3588,6 +3628,52 @@ export default function DashboardPage() {
           <div className="text-center py-8">
             <p className="text-gray-400 text-sm">コメントがまだありません。</p>
             <p className="text-gray-400 text-xs mt-1">クライアントからコメント付き投票が届くとここに表示されます。</p>
+          </div>
+        )}
+      </div>
+
+      {/* 公開中の顔写真 — display_mode='photo' の票をコメント有無に依らず一覧表示 */}
+      <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
+        <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#A0A0A0', letterSpacing: 2, textTransform: 'uppercase' as const, fontFamily: "'Inter', sans-serif", display: 'block', marginBottom: 4 }}>
+            PHOTOS — {publishedPhotos.length}
+          </span>
+          公開中の顔写真
+        </h2>
+        <p className="text-xs text-[#9CA3AF] mb-4">
+          お客さんが「顔写真を出してOK」と同意してくれた写真です。公開を取り消すとカードや一覧から非表示になります。
+        </p>
+        {publishedPhotos.length > 0 ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12 }}>
+            {publishedPhotos.map(p => (
+              <div key={p.id} style={{ border: '1px solid #E8E4DC', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                {p.client_photo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={p.client_photo_url} alt={p.name} referrerPolicy="no-referrer" style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover' as const }} />
+                ) : (
+                  <div style={{ width: 72, height: 72, borderRadius: '50%', background: '#F0EDE6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#A0A0A0', fontSize: 24 }}>
+                    {p.name.charAt(0)}
+                  </div>
+                )}
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', textAlign: 'center' as const, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
+                  {p.name}
+                </div>
+                <div style={{ fontSize: 11, color: '#9CA3AF' }}>
+                  {new Date(p.created_at).toLocaleDateString('ja-JP')}
+                </div>
+                <button
+                  onClick={() => handlePublishedPhotoDelete(p.id)}
+                  style={{ marginTop: 2, padding: '6px 12px', border: '1px solid #E5E7EB', background: 'transparent', color: '#9CA3AF', borderRadius: 8, fontSize: 11, cursor: 'pointer' }}
+                >
+                  公開を取り消す
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <p className="text-gray-400 text-sm">公開中の顔写真はありません。</p>
+            <p className="text-gray-400 text-xs mt-1">お客さんが顔写真の公開に同意するとここに表示されます。</p>
           </div>
         )}
       </div>
