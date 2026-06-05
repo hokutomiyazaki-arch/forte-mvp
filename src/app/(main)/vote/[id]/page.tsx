@@ -2091,8 +2091,7 @@ function VoteForm() {
 
             {/* メイン見出し */}
             <div style={{ color: "#FAFAF7", fontSize: 18, fontWeight: 700, marginBottom: 24, lineHeight: 1.6 }}>
-              今日感じた“本物”を、<br />
-              声で残してください。
+              今日感じた“リアルな変化”を教えてください。
             </div>
 
             {/* 注意書きブロック（新設） */}
@@ -2108,13 +2107,7 @@ function VoteForm() {
               lineHeight: 1.7,
             }}>
               <div>
-                ⚠️ “変わった”と思ったものだけ選んでください。
-              </div>
-              <div style={{ marginTop: 4 }}>
-                当てはまるものが無ければスキップでOK。
-              </div>
-              <div style={{ marginTop: 4, fontSize: 11, color: "rgba(250,250,247,0.75)" }}>
-                （プロには分かりません）
+                変化を感じたものだけでOK。無ければスキップ可。
               </div>
             </div>
 
@@ -2169,9 +2162,8 @@ function VoteForm() {
         >
           <div style={{ width: "100%" }}>
             <div style={S.title}>
-              どんなところがよかったですか？
+              実感した変化（1〜3つ）
             </div>
-            <div style={S.subtitle}>あてはまるものを選んでください（任意・最大3つ）</div>
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 28 }}>
               {allProofDisplayItems.map(item => {
@@ -2247,9 +2239,9 @@ function VoteForm() {
         >
           <div style={{ width: "100%" }}>
             <div style={S.title}>
-              <span style={{ color: "#C4A35A" }}>{pro.name?.split(/[\s　]/)[0]}</span>さんはどんな人でしたか？
+              <span style={{ color: "#C4A35A" }}>{pro.name?.split(/[\s　]/)[0]}</span>さんの印象は？
             </div>
-            <div style={S.subtitle}>一番しっくりくるタイプを1つ選んでください（任意）</div>
+            <div style={S.subtitle}>しっくりくるものを1つ・スキップも自由</div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 28 }}>
               {shuffledPersonalityItems.map(item => {
@@ -2322,13 +2314,13 @@ function VoteForm() {
           onBack={goBack}
         >
           <div style={{ width: "100%" }}>
-            <div style={S.title}>ひとこと伝えるとしたら？</div>
+            <div style={S.title}>どんな変化がありましたか？</div>
             <div style={S.subtitle}>100文字まで（任意です）</div>
 
             <textarea
               value={comment}
               onChange={e => setComment(e.target.value.slice(0, 100))}
-              placeholder="例: 長年悩んでいた腰痛が1回で改善しました…"
+              placeholder="例: 朝、身体が軽くなった気がした… 感じたままでOK"
               style={{
                 width: "100%", borderRadius: 12, resize: "none",
                 border: "1.5px solid rgba(196,163,90,0.27)",
@@ -2367,7 +2359,7 @@ function VoteForm() {
         >
           <div style={{ width: "100%" }}>
             <div style={S.title}>
-              {pro.name}さんからお礼が届いています 🎁
+              プレゼントを選んでください 🎁
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
@@ -2409,10 +2401,6 @@ function VoteForm() {
                   </button>
                 )
               })}
-            </div>
-
-            <div style={{ color: "#8B8B9A", fontSize: 12, textAlign: "center", marginBottom: 20 }}>
-              ※ リワードの受け取りは任意です。
             </div>
 
             <button
