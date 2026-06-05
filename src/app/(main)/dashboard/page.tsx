@@ -2763,6 +2763,12 @@ export default function DashboardPage() {
         <p className="text-sm text-[#9CA3AF] mb-4">
           カード裏面のIDを入力すると、お客さんがカードにスマホをかざすだけで投票ページに飛べるようになります。
         </p>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/images/nfc-card-back.png"
+          alt="NFCカード裏面のID記載位置"
+          style={{ width: '100%', maxWidth: '320px', borderRadius: '8px', marginTop: '12px' }}
+        />
 
         {nfcCard ? (
           <div>
