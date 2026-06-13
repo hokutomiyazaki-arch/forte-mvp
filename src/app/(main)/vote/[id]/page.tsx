@@ -12,6 +12,7 @@ import { markTokenUsedFromClient } from '@/lib/qr-token'
 import { checkProCooldownFromClient, PRO_COOLDOWN_MESSAGE } from '@/lib/vote-cooldown'
 import { Suspense } from 'react'
 import { PERSONALITY_CATEGORIES, PersonalityCategory } from '@/lib/personality'
+import { useShouldShowOAuth } from '@/hooks/useShouldShowOAuth'
 // AuthMethodSelector は login ページで使用。投票ページはフォーム内のためインライン実装
 
 interface ProofItem {
@@ -551,6 +552,10 @@ function VoteForm() {
   const [phoneSending, setPhoneSending] = useState(false)
   const [phoneVerifying, setPhoneVerifying] = useState(false)
   const [phoneStep, setPhoneStep] = useState<'input' | 'verify'>('input')
+
+  // OAuth（Google/LINE）許可リスト判定: 標準ブラウザ確定時のみ true
+  // 非標準ブラウザ（らくらくホン等）/WebView では false → SMS/メールコード認証のみ表示
+  const showOAuth = useShouldShowOAuth()
 
   // フォールバック認証
   const [showFallback, setShowFallback] = useState(false)
@@ -2519,8 +2524,8 @@ function VoteForm() {
               </button>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {/* LINE */}
-                {!showFallback && emailCodeStep === 'input' && (
+                {/* LINE — 標準ブラウザ確定時のみ（showOAuth） */}
+                {showOAuth && !showFallback && emailCodeStep === 'input' && (
                   <button
                     onClick={() => handleLineVote()}
                     style={{
@@ -2646,8 +2651,8 @@ function VoteForm() {
                   </div>
                 )}
 
-                {/* Google */}
-                {!showFallback && emailCodeStep === 'input' && (
+                {/* Google — 標準ブラウザ確定時のみ（showOAuth） */}
+                {showOAuth && !showFallback && emailCodeStep === 'input' && (
                   <button
                     onClick={() => handleGoogleVote()}
                     style={{
@@ -2666,8 +2671,8 @@ function VoteForm() {
                   </button>
                 )}
 
-                {/* ── 区切り線 ── */}
-                {!showFallback && emailCodeStep === 'input' && (
+                {/* ── 区切り線 ── OAuth 表示時のみ（非表示時は SMS→メールが自然に並ぶ） */}
+                {showOAuth && !showFallback && emailCodeStep === 'input' && (
                   <div style={{
                     display: "flex", alignItems: "center", gap: 12,
                     margin: "10px 0 6px",
