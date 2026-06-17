@@ -1817,7 +1817,23 @@ function VoteForm() {
           if (proByEmail?.id) voterProfessionalId = proByEmail.id
         }
       }
-      const clientPhotoUrl = clerkUser.imageUrl || null
+      // Clerk の揮発URLをサーバー経由で Storage(client-photos) にコピーして永続化。
+      // ルート失敗時も null で続行（写真は付帯処理、投票フローを止めない）。
+      let clientPhotoUrl: string | null = null
+      try {
+        const persistRes = await fetch('/api/vote-auth/persist-photo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          cache: 'no-store',
+          body: JSON.stringify({ sourceUrl: clerkUser.imageUrl || null }),
+        })
+        if (persistRes.ok) {
+          const persistData = await persistRes.json()
+          clientPhotoUrl = persistData.url || null
+        }
+      } catch (e) {
+        console.warn('[IMG_PERSIST] client persist-photo fetch failed', e)
+      }
       const displayMode = voterProfessionalId ? 'pro_link' : 'hidden'
 
       // 投票INSERT（Clerk認証済みなので status='confirmed'）
