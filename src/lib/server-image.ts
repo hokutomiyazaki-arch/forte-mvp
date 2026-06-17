@@ -21,8 +21,14 @@ export async function persistExternalImage(opts: {
   sourceUrl: string | null | undefined
   bucket: string // 'avatars' | 'client-photos'
   path: string // 例 `${userId}/avatar.jpg` / `photos/migrated-${crypto.randomUUID()}.jpg`
+  /**
+   * 永続URLに `?t=${Date.now()}` を付けるか。デフォルト false。
+   * - avatars: パス固定（{userId}/avatar.jpg）でupsert上書きされるため cacheBust: true（写真変更後の stale 対策。既存コードの慣習に合わせる）。
+   * - client-photos: パスがアップロード毎に一意で stale 問題が無く、既存 upload-client-photo も ?t= 無し。URL形状を揃えるため付けない（=false のまま）。
+   */
+  cacheBust?: boolean
 }): Promise<string | null> {
-  const { sourceUrl, bucket, path } = opts
+  const { sourceUrl, bucket, path, cacheBust = false } = opts
 
   // 1. falsy → null
   if (!sourceUrl) return null
@@ -66,7 +72,7 @@ export async function persistExternalImage(opts: {
       return null
     }
 
-    return `${urlData.publicUrl}?t=${Date.now()}`
+    return cacheBust ? `${urlData.publicUrl}?t=${Date.now()}` : urlData.publicUrl
   } catch (e) {
     console.warn('[IMG_PERSIST] unexpected error', { error: e instanceof Error ? e.message : String(e), bucket, path })
     return null

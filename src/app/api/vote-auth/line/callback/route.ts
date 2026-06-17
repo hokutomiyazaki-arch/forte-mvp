@@ -10,6 +10,8 @@ import { claimLineCallback } from '@/lib/line-idempotency'
 import { markTokenUsed } from '@/lib/qr-token'
 import { checkProCooldown } from '@/lib/vote-cooldown'
 import { matchVoteComment } from '@/lib/keyword-matcher'
+import { persistExternalImage } from '@/lib/server-image'
+import { randomUUID } from 'crypto'
 
 export const dynamic = 'force-dynamic'
 
@@ -396,6 +398,12 @@ export async function GET(request: NextRequest) {
       null
     )
     const clientPhotoUrl = lineProfile?.pictureUrl || null
+    // LINE Profile の揮発URLを Storage(client-photos) にコピーして永続化。失敗時は null（写真なしへ降格）。
+    const persistedClientPhotoUrl = await persistExternalImage({
+      sourceUrl: clientPhotoUrl,
+      bucket: 'client-photos',
+      path: `photos/migrated-${randomUUID()}.jpg`,
+    })
 
     // Step 7: 投票INSERT（LINEで認証済みなので status='confirmed'）
     const { data: insertedVote, error: voteError } = await supabaseAdmin
@@ -425,7 +433,7 @@ export async function GET(request: NextRequest) {
         // --- Phase 1 Step 2 追加（display_mode は pro なら pro_link 自動） ---
         // NULL = 同意 UI 未操作。NO 押下時は VoteConsentSection 側で 'hidden' に UPDATE される。
         display_mode: voterProfessionalId ? 'pro_link' : null,
-        client_photo_url: clientPhotoUrl,
+        client_photo_url: persistedClientPhotoUrl,
         voter_professional_id: voterProfessionalId,
       })
       .select()

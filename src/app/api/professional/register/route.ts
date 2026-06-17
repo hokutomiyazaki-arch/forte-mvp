@@ -1,6 +1,9 @@
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { persistExternalImage } from '@/lib/server-image'
+
+export const dynamic = 'force-dynamic'
 
 export async function POST() {
   const { userId } = await auth()
@@ -38,6 +41,13 @@ export async function POST() {
   // 新規作成 — clientsからlast_name/first_nameを取得してコピー
   const user = await currentUser()
   const clerkImageUrl = user?.imageUrl || null
+  // Clerk の揮発URLを Supabase Storage(avatars) にコピーして永続化。失敗時は null（写真なしへ降格）。
+  const persistedPhotoUrl = await persistExternalImage({
+    sourceUrl: clerkImageUrl,
+    bucket: 'avatars',
+    path: `${userId}/avatar.jpg`,
+    cacheBust: true,
+  })
 
   const { data: clientData } = await supabase
     .from('clients')
@@ -55,7 +65,7 @@ export async function POST() {
     last_name: lastName || null,
     first_name: firstName || null,
     title: '', // title は NOT NULL、ダッシュボードで後から設定
-    photo_url: clerkImageUrl,
+    photo_url: persistedPhotoUrl,
   }).select('id').maybeSingle()
 
   if (newPro) {

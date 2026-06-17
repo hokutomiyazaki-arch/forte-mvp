@@ -1,6 +1,9 @@
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { persistExternalImage } from '@/lib/server-image'
+
+export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
   const { userId } = await auth()
@@ -36,12 +39,19 @@ export async function POST(request: Request) {
     .maybeSingle()
 
   if (!existingClient) {
+    // Clerk の揮発URLを Storage(avatars) にコピー。professionals とは衝突しないキーで保存。
+    const persistedClientPhotoUrl = await persistExternalImage({
+      sourceUrl: clerkImageUrl,
+      bucket: 'avatars',
+      path: `${userId}/client-avatar.jpg`,
+      cacheBust: true,
+    })
     await supabase.from('clients').insert({
       user_id: userId,
       nickname: displayName,
       last_name: finalLastName || '未設定',
       first_name: finalFirstName,
-      photo_url: clerkImageUrl,
+      photo_url: persistedClientPhotoUrl,
     })
   }
 
@@ -54,6 +64,13 @@ export async function POST(request: Request) {
       .maybeSingle()
 
     if (!existingPro) {
+      // Clerk の揮発URLを Storage(avatars) にコピーして永続化。
+      const persistedProPhotoUrl = await persistExternalImage({
+        sourceUrl: clerkImageUrl,
+        bucket: 'avatars',
+        path: `${userId}/avatar.jpg`,
+        cacheBust: true,
+      })
       const { data: newPro } = await supabase.from('professionals').insert({
         user_id: userId,
         name: displayName, // /setup の Step 1 で上書き
@@ -61,7 +78,7 @@ export async function POST(request: Request) {
         first_name: finalFirstName,
         store_name: null,
         title: '', // /setup の Step 1 で上書き
-        photo_url: clerkImageUrl,
+        photo_url: persistedProPhotoUrl,
       }).select('id').maybeSingle()
 
       // org_membersにuser_idで仮登録されたレコードのprofessional_idを自動補完
