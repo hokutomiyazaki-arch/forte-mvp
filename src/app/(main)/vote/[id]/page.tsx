@@ -1818,14 +1818,13 @@ function VoteForm() {
         }
       }
       // Clerk の揮発URLをサーバー経由で Storage(client-photos) にコピーして永続化。
+      // 画像はサーバー側でセッションから引く（SSRF対策でbodyは送らない）。
       // ルート失敗時も null で続行（写真は付帯処理、投票フローを止めない）。
       let clientPhotoUrl: string | null = null
       try {
         const persistRes = await fetch('/api/vote-auth/persist-photo', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           cache: 'no-store',
-          body: JSON.stringify({ sourceUrl: clerkUser.imageUrl || null }),
         })
         if (persistRes.ok) {
           const persistData = await persistRes.json()
