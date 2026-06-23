@@ -51,7 +51,7 @@ async function fetchAllVotesPaginated(
       .range(from, from + pageSize - 1)
     if (voteType) q = q.eq('vote_type', voteType)
     const { data, error } = await q
-    if (error) { console.error('[VOTES-PAGINATE] error:', error); break }
+    if (error) { console.error('votes pagination error:', error); break }
     if (!data || data.length === 0) break
     all.push(...data)
     if (data.length < pageSize) break
@@ -90,11 +90,6 @@ export async function GET(request: Request) {
 
     const { data: professionals, error: prosError } = await proQuery
 
-    const targetId = '6de99be3-8602-4295-95ca-be912d08e28f'
-    console.log('[SEARCH-DIAG] professionals.length:', professionals?.length || 0)
-    console.log('[SEARCH-DIAG] 濱武 in professionals?:', professionals?.some(p => p.id === targetId))
-    console.log('[SEARCH-DIAG] 濱武 entry:', professionals?.find(p => p.id === targetId))
-
     if (prosError) throw prosError
     if (!professionals || professionals.length === 0) {
       return NextResponse.json({ professionals: [] }, {
@@ -113,10 +108,6 @@ export async function GET(request: Request) {
       'id, professional_id, created_at, vote_type, comment, normalized_email, selected_proof_ids, selected_personality_ids',
       'proof'
     )
-
-    console.log('[SEARCH-DIAG] proofVotes.length:', proofVotes?.length || 0)
-    console.log('[SEARCH-DIAG] 濱武 vote count in proofVotes:',
-      proofVotes?.filter(v => v.professional_id === targetId).length || 0)
 
     // リピーター率用: 全投票のnormalized_email+session_countを取得（session_countフォールバック対応）
     // 真因対応(2026-05-28): .limit(10000) は Supabase max-rows=1000 でキャップされる。
@@ -317,8 +308,6 @@ export async function GET(request: Request) {
         stat.proofItemCounts[itemId] = (stat.proofItemCounts[itemId] || 0) + 1
       }
     }
-
-    console.log('[SEARCH-DIAG] 濱武 stat:', proStats.get(targetId))
 
     // プロデータの組み立て
     let result = professionals.map(pro => {
@@ -545,9 +534,6 @@ export async function GET(request: Request) {
       }
     }).filter((p): p is NonNullable<typeof p> => p !== null)
 
-    console.log('[SEARCH-DIAG] result.length after null filter:', result.length)
-    console.log('[SEARCH-DIAG] 濱武 in result?:', result.some(p => p.id === targetId))
-
     // テキスト検索フィルタ
     if (query) {
       const q = query.toLowerCase()
@@ -645,9 +631,6 @@ export async function GET(request: Request) {
           result.sort((a, b) => b.recentProofs - a.recentProofs)
       }
     }
-
-    console.log('[SEARCH-DIAG] FINAL result.length:', result.length)
-    console.log('[SEARCH-DIAG] FINAL 濱武 in result?:', result.some(p => p.id === targetId))
 
     return NextResponse.json({
       professionals: result,
