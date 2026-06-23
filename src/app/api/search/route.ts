@@ -45,7 +45,6 @@ async function fetchAllVotesPaginated(
     let q = supabase
       .from('votes')
       .select(selectCols)
-      .in('professional_id', proIds)
       .eq('status', 'confirmed')
       .order('id', { ascending: true })
       .range(from, from + pageSize - 1)
