@@ -336,6 +336,33 @@ async function fetchAllActiveProfessionals(supabase: any) {
   return { data: all, error: null }
 }
 
+// レポート本文用: 全期間の proof 票を全件ページネーション取得するヘルパー（総投票数 / 最新投票日算出用）
+// 真因対応: .range() 無しだと Supabase max-rows=1000 でキャップされる（現在 proof 票 1,900件超）。
+// 取得カラム・フィルタ（vote_type='proof', status='confirmed'）は元クエリと同一。
+// 元クエリは created_at 降順で、downstream は「最初に出会った票=最新」を前提にするため、
+// ページネーションは .order('id') で決定的に行い、取得後に created_at 降順へ並べ直して元の順序を再現する。
+async function fetchAllProofVotesForReport(supabase: any) {
+  const all: any[] = []
+  let from = 0
+  const pageSize = 1000
+  while (true) {
+    const { data, error } = await supabase
+      .from('votes')
+      .select('professional_id, created_at')
+      .eq('vote_type', 'proof')
+      .eq('status', 'confirmed')
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1)
+    if (error) return { data: all, error }
+    if (!data || data.length === 0) break
+    all.push(...data)
+    if (data.length < pageSize) break
+    from += pageSize
+  }
+  all.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  return { data: all, error: null }
+}
+
 export async function generateAllWeeklyReports(): Promise<WeeklyProData[]> {
   const supabase = getSupabaseAdmin()
 
@@ -373,13 +400,8 @@ export async function generateAllWeeklyReports(): Promise<WeeklyProData[]> {
     supabase
       .from('proof_items')
       .select('id, label, strength_label, tab'),
-    // 5. 全期間の投票（total count + 最新投票日特定用）
-    supabase
-      .from('votes')
-      .select('professional_id, created_at')
-      .eq('vote_type', 'proof')
-      .eq('status', 'confirmed')
-      .order('created_at', { ascending: false }),
+    // 5. 全期間の投票（total count + 最新投票日特定用）— 全件ページネーション取得
+    fetchAllProofVotesForReport(supabase),
     // 6. 褒めテンプレート（全件）
     supabase
       .from('praise_templates')
