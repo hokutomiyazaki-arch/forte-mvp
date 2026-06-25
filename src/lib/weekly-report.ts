@@ -312,6 +312,30 @@ export async function getWeeklyReportContent(weekStart: string): Promise<WeeklyR
 // メイン: 全プロの WeeklyProData 一括生成
 // ============================================================
 
+// 送信対象プロ全員を全件ページネーション取得するヘルパー（予防修正）
+// 真因対応: .range() 無しだと Supabase max-rows=1000 でキャップされる。
+// 現在271人で未到達だが将来の地雷を防ぐ。
+// 取得カラム・フィルタ（deactivated_at IS NULL）は元クエリと同一、順序キー + ページネーションのみ追加。
+async function fetchAllActiveProfessionals(supabase: any) {
+  const all: any[] = []
+  let from = 0
+  const pageSize = 1000
+  while (true) {
+    const { data, error } = await supabase
+      .from('professionals')
+      .select('id, user_id, name, last_name, first_name, title, contact_email, line_messaging_user_id, selected_proofs, weekly_report_unsubscribed')
+      .is('deactivated_at', null)
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1)
+    if (error) return { data: all, error }
+    if (!data || data.length === 0) break
+    all.push(...data)
+    if (data.length < pageSize) break
+    from += pageSize
+  }
+  return { data: all, error: null }
+}
+
 export async function generateAllWeeklyReports(): Promise<WeeklyProData[]> {
   const supabase = getSupabaseAdmin()
 
@@ -330,11 +354,8 @@ export async function generateAllWeeklyReports(): Promise<WeeklyProData[]> {
     allVotesRes,
     praiseRes,
   ] = await Promise.all([
-    // 1. アクティブなプロ全員（user_id含む: Clerkメール取得用）
-    supabase
-      .from('professionals')
-      .select('id, user_id, name, last_name, first_name, title, contact_email, line_messaging_user_id, selected_proofs, weekly_report_unsubscribed')
-      .is('deactivated_at', null),
+    // 1. アクティブなプロ全員（user_id含む: Clerkメール取得用）— 全件ページネーション取得
+    fetchAllActiveProfessionals(supabase),
     // 2. 全期間の投票サマリー（weighted / per-item）
     supabase
       .from('vote_summary')
