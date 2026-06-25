@@ -802,6 +802,7 @@ export default function AdminDashboard() {
   // Broadcast state
   const [bcTarget, setBcTarget] = useState<'all' | 'line' | 'email' | 'professional'>('all')
   const [bcProId, setBcProId] = useState('')
+  const [bcSearch, setBcSearch] = useState('')
   const [bcChannel, setBcChannel] = useState<'auto' | 'line' | 'email'>('auto')
   const [bcTemplate, setBcTemplate] = useState<'custom' | 'founding' | 'achievement'>('custom')
   const [bcSubject, setBcSubject] = useState('')
@@ -1638,6 +1639,17 @@ export default function AdminDashboard() {
         {bcTarget === 'professional' && (
           <div style={{ marginBottom: 14 }}>
             <div style={{ color: C.gray, fontSize: 11, marginBottom: 4 }}>プロを選択</div>
+            <input
+              type="text"
+              value={bcSearch}
+              onChange={e => setBcSearch(e.target.value)}
+              placeholder="名前で検索"
+              style={{
+                width: '100%', padding: '8px 12px', borderRadius: 7, marginBottom: 8,
+                background: C.surfaceLight, color: C.cream, border: `1px solid ${C.grayDark}`,
+                fontSize: 13, boxSizing: 'border-box',
+              }}
+            />
             <select
               value={bcProId}
               onChange={e => setBcProId(e.target.value)}
@@ -1648,9 +1660,11 @@ export default function AdminDashboard() {
               }}
             >
               <option value="">選択してください</option>
-              {pros.map(p => (
-                <option key={p.id} value={p.id}>{p.n}（{p.v}票）</option>
-              ))}
+              {pros
+                .filter(p => bcSearch === '' || (p.n ?? '').includes(bcSearch))
+                .map(p => (
+                  <option key={p.id} value={p.id}>{p.n}（{p.tier}・{p.v}票）</option>
+                ))}
             </select>
           </div>
         )}
