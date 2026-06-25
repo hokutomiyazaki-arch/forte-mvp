@@ -58,6 +58,7 @@ interface ProData {
   pv: number
   eng: string
   lv: string | null
+  tier?: string
 }
 
 interface ChannelData {
@@ -586,11 +587,22 @@ async function fetchDashboardData() {
     ? secondDayPlusVoteCounts.reduce((a, b) => a + b, 0) / secondDayPlusVoteCounts.length
     : 0
 
-  // プロ一覧をアクティブプロのみにフィルター
-  const activeProsSet = new Set(activeProsIds)
-  if (pros) {
-    pros = pros.filter(p => activeProsSet.has(String(p.id)))
+  // プロ一覧は全プロを残し、各プロに段階(tier)を付与する
+  // （activeProsIds はアクティブ統計カードで引き続き使用）
+  const proTier = (id: string | number): string => {
+    const dates = proVoteDates[String(id)]
+    if (!dates || dates.length === 0) return '登録のみ'
+    if (dates.length === 1) return 'お試し'
+    return '定着'
   }
+  if (pros) {
+    pros = pros.map(p => ({ ...p, tier: proTier(p.id) }))
+  }
+
+  // 3段階の内訳（母数 = deactivated_at IS NULL の全プロ）
+  const settledProsCount = activeProCount // 投票日2日以上
+  const trialProsCount = Object.values(proVoteDates).filter(d => d.length === 1).length // 投票日1日
+  const registeredOnlyCount = Math.max(0, totalProsCount - settledProsCount - trialProsCount) // 投票0
 
   // リワード設定数をproIDごとにカウント
   const rewardCountMap: Record<string, number> = {}
@@ -608,7 +620,7 @@ async function fetchDashboardData() {
     }
   })
 
-  return { goNogo, pros, authMethods, dailyTrend, dailyProofs, channels, shares, activeProCount, inactiveProCount, activeProRate, avgVotesSecondDayPlus, rewardCountMap, orgMap }
+  return { goNogo, pros, authMethods, dailyTrend, dailyProofs, channels, shares, activeProCount, inactiveProCount, activeProRate, avgVotesSecondDayPlus, registeredOnlyCount, trialProsCount, settledProsCount, rewardCountMap, orgMap }
 }
 
 // ============================================================
@@ -629,6 +641,9 @@ export default function AdminDashboard() {
   const [inactiveProCount, setInactiveProCount] = useState(0)
   const [activeProRate, setActiveProRate] = useState(0)
   const [avgVotesSecondDayPlus, setAvgVotesSecondDayPlus] = useState(0)
+  const [registeredOnlyCount, setRegisteredOnlyCount] = useState(0)
+  const [trialProsCount, setTrialProsCount] = useState(0)
+  const [settledProsCount, setSettledProsCount] = useState(0)
   const [rewardCountMap, setRewardCountMap] = useState<Record<string, number>>({})
   const [orgMap, setOrgMap] = useState<Record<string, string[]>>({})
 
@@ -811,6 +826,9 @@ export default function AdminDashboard() {
       setInactiveProCount(result.inactiveProCount)
       setActiveProRate(result.activeProRate)
       setAvgVotesSecondDayPlus(result.avgVotesSecondDayPlus)
+      setRegisteredOnlyCount(result.registeredOnlyCount)
+      setTrialProsCount(result.trialProsCount)
+      setSettledProsCount(result.settledProsCount)
       setRewardCountMap(result.rewardCountMap)
       setOrgMap(result.orgMap)
 
@@ -988,16 +1006,21 @@ export default function AdminDashboard() {
 
       {/* [A2] アクティブプロ統計 */}
       <Sec>アクティブプロ統計（TBU除外）</Sec>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,minmax(0,1fr))', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,minmax(0,1fr))', gap: 10 }}>
         <div style={{ background: 'white', borderRadius: 10, padding: '18px 20px', border: '1px solid rgba(26,26,46,0.1)' }}>
-          <div style={{ color: '#1A1A2E', fontSize: 13, fontWeight: 700, marginBottom: 4 }}>アクティブプロ</div>
-          <div style={{ color: '#1A1A2E', fontSize: 36, fontWeight: 700, lineHeight: 1 }}>{activeProCount}<span style={{ fontSize: 16 }}>人</span></div>
-          <div style={{ color: '#C4A35A', fontSize: 11, fontWeight: 700, marginTop: 6 }}>複数日に跨る使用者</div>
+          <div style={{ color: '#1A1A2E', fontSize: 13, fontWeight: 700, marginBottom: 4 }}>登録のみ</div>
+          <div style={{ color: '#1A1A2E', fontSize: 36, fontWeight: 700, lineHeight: 1 }}>{registeredOnlyCount}<span style={{ fontSize: 16 }}>人</span></div>
+          <div style={{ color: '#1A1A2E', fontSize: 11, fontWeight: 700, marginTop: 6 }}>未投票</div>
         </div>
         <div style={{ background: 'white', borderRadius: 10, padding: '18px 20px', border: '1px solid rgba(26,26,46,0.1)' }}>
-          <div style={{ color: '#1A1A2E', fontSize: 13, fontWeight: 700, marginBottom: 4 }}>非アクティブ</div>
-          <div style={{ color: '#1A1A2E', fontSize: 36, fontWeight: 700, lineHeight: 1 }}>{inactiveProCount}<span style={{ fontSize: 16 }}>人</span></div>
-          <div style={{ color: '#1A1A2E', fontSize: 11, fontWeight: 700, marginTop: 6 }}>初日のみ or 未投票</div>
+          <div style={{ color: '#1A1A2E', fontSize: 13, fontWeight: 700, marginBottom: 4 }}>お試し</div>
+          <div style={{ color: '#1A1A2E', fontSize: 36, fontWeight: 700, lineHeight: 1 }}>{trialProsCount}<span style={{ fontSize: 16 }}>人</span></div>
+          <div style={{ color: '#1A1A2E', fontSize: 11, fontWeight: 700, marginTop: 6 }}>投票日1日のみ</div>
+        </div>
+        <div style={{ background: 'white', borderRadius: 10, padding: '18px 20px', border: '1px solid rgba(26,26,46,0.1)' }}>
+          <div style={{ color: '#1A1A2E', fontSize: 13, fontWeight: 700, marginBottom: 4 }}>定着</div>
+          <div style={{ color: '#1A1A2E', fontSize: 36, fontWeight: 700, lineHeight: 1 }}>{settledProsCount}<span style={{ fontSize: 16 }}>人</span></div>
+          <div style={{ color: '#C4A35A', fontSize: 11, fontWeight: 700, marginTop: 6 }}>投票日2日以上</div>
         </div>
         <div style={{ background: 'white', borderRadius: 10, padding: '18px 20px', border: '1px solid rgba(26,26,46,0.1)' }}>
           <div style={{ color: '#1A1A2E', fontSize: 13, fontWeight: 700, marginBottom: 4 }}>アクティブ率</div>
