@@ -336,6 +336,31 @@ function MiniBar({ data, dk, color, h = 80 }: {
 // データ取得 & マッピング
 // ============================================================
 
+// votes(vote_type='proof') を全件ページネーション取得するヘルパー
+// 真因対応: .range() 無しだと Supabase max-rows=1000 でキャップされるため、
+// .order('id') で決定的順序を強制し 1000 件ずつ取得する。
+// 取得カラム・フィルタは元クエリと同一（順序キー追加のみ）。
+// 注意: proVoteDates は created_at の日付で集計するため取得順序は集計に影響しない。
+async function fetchAllProofVotes(supabase: any) {
+  const all: any[] = []
+  let from = 0
+  const pageSize = 1000
+  while (true) {
+    const { data, error } = await supabase
+      .from('votes')
+      .select('professional_id, created_at')
+      .eq('vote_type', 'proof')
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1)
+    if (error) return { data: all, error }
+    if (!data || data.length === 0) break
+    all.push(...data)
+    if (data.length < pageSize) break
+    from += pageSize
+  }
+  return { data: all, error: null }
+}
+
 async function fetchDashboardData() {
   const supabase = createClientComponentClient()
 
@@ -361,8 +386,8 @@ async function fetchDashboardData() {
     supabase.from('page_views').select('page_type').in('page_type', ['share_profile_self', 'share_profile_other', 'share_voice']),
     // シェア分析: シェア経由PV
     supabase.from('page_views').select('source').eq('page_type', 'pro_profile').in('source', ['pro_share', 'client_share', 'voice_share']),
-    // アクティブプロ判定用: 全proofタイプのvotes
-    supabase.from('votes').select('professional_id, created_at').eq('vote_type', 'proof'),
+    // アクティブプロ判定用: 全proofタイプのvotes（全件ページネーション取得）
+    fetchAllProofVotes(supabase),
     // 全登録プロ数（deactivated除外）
     supabase.from('professionals').select('*', { count: 'exact', head: true }).is('deactivated_at', null),
     // リワード設定数
