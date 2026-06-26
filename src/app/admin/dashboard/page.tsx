@@ -79,6 +79,10 @@ interface ShareAnalytics {
   pv1: number
   pv2: number
   pv3: number
+  pvVote: number   // vote_share（投票後シェア）経由のPV
+  bkPro: number    // pro_share 経由の予約/相談
+  bkClient: number // client_share 経由の予約/相談
+  bkVote: number   // vote_share 経由の予約/相談
 }
 
 interface DailyTrendData {
@@ -362,6 +366,52 @@ async function fetchAllProofVotes(supabase: any) {
   return { data: all, error: null }
 }
 
+// シェア→PV: シェア経由でカードに着地した page_views を全件ページネーション取得
+// （page_type='pro_profile' + source が share 種別）。集計は target_id(pid) × source。
+async function fetchAllSharePvs(supabase: any) {
+  const all: any[] = []
+  let from = 0
+  const pageSize = 1000
+  while (true) {
+    const { data, error } = await supabase
+      .from('page_views')
+      .select('target_id, source')
+      .eq('page_type', 'pro_profile')
+      .in('source', ['pro_share', 'client_share', 'vote_share'])
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1)
+    if (error) return { data: all, error }
+    if (!data || data.length === 0) break
+    all.push(...data)
+    if (data.length < pageSize) break
+    from += pageSize
+  }
+  return { data: all, error: null }
+}
+
+// シェア→予約: シェア経由の着地から発生した予約/相談クリックを全件ページネーション取得
+// （event_type が booking/consultation + source あり）。集計は professional_id × source。
+async function fetchAllShareBookings(supabase: any) {
+  const all: any[] = []
+  let from = 0
+  const pageSize = 1000
+  while (true) {
+    const { data, error } = await supabase
+      .from('tracking_events')
+      .select('professional_id, source')
+      .in('event_type', ['booking_click', 'consultation_click'])
+      .not('source', 'is', null)
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1)
+    if (error) return { data: all, error }
+    if (!data || data.length === 0) break
+    all.push(...data)
+    if (data.length < pageSize) break
+    from += pageSize
+  }
+  return { data: all, error: null }
+}
+
 async function fetchDashboardData() {
   const supabase = createClientComponentClient()
 
@@ -370,7 +420,7 @@ async function fetchDashboardData() {
   const fourteenDaysAgo = new Date()
   fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
 
-  const [goRes, proRes, authRes, trendRes, proofRes, qrTokensRes, votesForChRes, shareCountRes, sharePvRes, allVotesRes, totalProsRes, rewardCountsRes, orgMembersRes] = await Promise.all([
+  const [goRes, proRes, authRes, trendRes, proofRes, qrTokensRes, shareBookingsRes, shareCountRes, sharePvRes, allVotesRes, totalProsRes, rewardCountsRes, orgMembersRes] = await Promise.all([
     supabase.from('admin_go_nogo').select('*').maybeSingle(),
     supabase.from('admin_pro_status').select('*'),
     // 認証方式別
@@ -381,12 +431,12 @@ async function fetchDashboardData() {
     supabase.from('votes').select('created_at, professional_id').eq('status', 'confirmed').eq('vote_type', 'proof').gte('created_at', fourteenDaysAgo.toISOString()),
     // チャネル別: votes.channel
     supabase.from('votes').select('channel').eq('status', 'confirmed'),
-    // (旧qr_token分析 — 廃止、Promise.allの構造維持)
-    Promise.resolve({ data: null, error: null }),
+    // シェア分析: シェア経由の予約/相談（tracking_events.source 別・全件ページネーション）
+    fetchAllShareBookings(supabase),
     // シェア分析: シェア数
     supabase.from('page_views').select('page_type').in('page_type', ['share_profile_self', 'share_profile_other', 'share_voice']),
-    // シェア分析: シェア経由PV
-    supabase.from('page_views').select('source').eq('page_type', 'pro_profile').in('source', ['pro_share', 'client_share', 'voice_share']),
+    // シェア分析: シェア経由PV（page_views.pro_profile × source・全件ページネーション）
+    fetchAllSharePvs(supabase),
     // アクティブプロ判定用: 全proofタイプのvotes（全件ページネーション取得）
     fetchAllProofVotes(supabase),
     // 全登録プロ数（deactivated除外）
@@ -522,7 +572,7 @@ async function fetchDashboardData() {
   }
 
   // シェア分析マッピング
-  const shares: ShareAnalytics = { s1: 0, s2: 0, s3: 0, pv1: 0, pv2: 0, pv3: 0 }
+  const shares: ShareAnalytics = { s1: 0, s2: 0, s3: 0, pv1: 0, pv2: 0, pv3: 0, pvVote: 0, bkPro: 0, bkClient: 0, bkVote: 0 }
   if (shareCountRes.data && !shareCountRes.error && Array.isArray(shareCountRes.data)) {
     shareCountRes.data.forEach((row: any) => {
       if (row.page_type === 'share_profile_self') shares.s1++
@@ -530,11 +580,21 @@ async function fetchDashboardData() {
       else if (row.page_type === 'share_voice') shares.s3++
     })
   }
+  // シェア→PV（source × target_id で集計可能なデータ。ここでは種別別の合計に集約）
   if (sharePvRes.data && !sharePvRes.error && Array.isArray(sharePvRes.data)) {
     sharePvRes.data.forEach((row: any) => {
       if (row.source === 'pro_share') shares.pv1++
       else if (row.source === 'client_share') shares.pv2++
-      else if (row.source === 'voice_share') shares.pv3++
+      else if (row.source === 'vote_share') shares.pvVote++
+      // ※ S3(Voice)はPNG画像シェアでURL計測不可のため pv3 は常に0（計測対象外）
+    })
+  }
+  // シェア→予約/相談（source × professional_id で集計可能なデータ。種別別の合計に集約）
+  if (shareBookingsRes.data && !shareBookingsRes.error && Array.isArray(shareBookingsRes.data)) {
+    shareBookingsRes.data.forEach((row: any) => {
+      if (row.source === 'pro_share') shares.bkPro++
+      else if (row.source === 'client_share') shares.bkClient++
+      else if (row.source === 'vote_share') shares.bkVote++
     })
   }
 
@@ -636,7 +696,7 @@ export default function AdminDashboard() {
   const [authMethods, setAuthMethods] = useState<AuthMethodData[]>([])
   const [dailyTrend, setDailyTrend] = useState<DailyTrendData[]>([])
   const [dailyProofs, setDailyProofs] = useState<DailyProofData[]>([])
-  const [shares, setShares] = useState<ShareAnalytics>({ s1: 0, s2: 0, s3: 0, pv1: 0, pv2: 0, pv3: 0 })
+  const [shares, setShares] = useState<ShareAnalytics>({ s1: 0, s2: 0, s3: 0, pv1: 0, pv2: 0, pv3: 0, pvVote: 0, bkPro: 0, bkClient: 0, bkVote: 0 })
   const [activeProCount, setActiveProCount] = useState(0)
   const [inactiveProCount, setInactiveProCount] = useState(0)
   const [activeProRate, setActiveProRate] = useState(0)
@@ -1118,6 +1178,30 @@ export default function AdminDashboard() {
               <div>
                 <div style={{ color: C.gray, fontSize: 10, marginBottom: 2 }}>→ PV</div>
                 <div style={{ color: x.p > 0 ? C.gold : C.grayDark, fontSize: 24, fontWeight: 700 }}>{x.p}</div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* [D1] シェア→PV/予約（種別別） */}
+      <Sec>シェア経由の成果（種別別）</Sec>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
+        {[
+          { l: 'pro_share（プロ自身）', pv: shares.pv1, bk: shares.bkPro },
+          { l: 'client_share（カードシェア）', pv: shares.pv2, bk: shares.bkClient },
+          { l: 'vote_share（投票後シェア）', pv: shares.pvVote, bk: shares.bkVote },
+        ].map(x => (
+          <div key={x.l} style={{ background: C.surface, borderRadius: 10, padding: 18 }}>
+            <div style={{ color: C.gold, fontSize: 11, fontWeight: 600, marginBottom: 10 }}>{x.l}</div>
+            <div style={{ display: 'flex', gap: 20 }}>
+              <div>
+                <div style={{ color: C.gray, fontSize: 10, marginBottom: 2 }}>→ PV</div>
+                <div style={{ color: x.pv > 0 ? C.gold : C.grayDark, fontSize: 24, fontWeight: 700 }}>{x.pv}</div>
+              </div>
+              <div>
+                <div style={{ color: C.gray, fontSize: 10, marginBottom: 2 }}>→ 予約/相談</div>
+                <div style={{ color: x.bk > 0 ? C.green : C.grayDark, fontSize: 24, fontWeight: 700 }}>{x.bk}</div>
               </div>
             </div>
           </div>
