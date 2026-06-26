@@ -1120,45 +1120,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ═══ S10: FOUNDING MEMBER ═══ */}
-      <section style={{ backgroundColor: '#1A1A2E', padding: '80px 24px' }}>
-        <div className={inner}>
-          <Reveal>
-            <div className="text-center">
-              <div style={{ color: '#C4A35A', fontSize: '12px', letterSpacing: '3px', fontFamily: "'Inter', sans-serif", fontWeight: 500, marginBottom: '12px' }}>FOUNDING MEMBER</div>
-              <h2 style={{ color: '#FAFAF7', fontSize: '22px', fontWeight: 700, marginBottom: '20px' }}>
-                最初の仲間だけの特権。<br />35,000人のネットワークに参加。<br />ただし、条件がある。
-              </h2>
-              <p style={{ color: '#FAFAF7', fontSize: '15px', marginBottom: '28px' }}>
-                クライアントから5票以上を集めた人だけが、<br className="hidden md:inline" />
-                Founding Memberになれる。
-              </p>
-            </div>
-
-            <div className="max-w-sm mx-auto mb-8">
-              {['35,000人のメルマガでREALPROOFの思想とFoundingメンバーを拡散', '新しい時代の始まりを肌で体感', '一緒にREALPROOFの文化を作る', 'プラットフォーム改善に直接関われる', '永久にFounding Memberバッジが表示される'].map((item, i) => (
-                <div key={i} className="flex items-start gap-3 mb-3">
-                  <span style={{ color: '#C4A35A', fontSize: '14px', marginTop: '2px', flexShrink: 0 }}>✦</span>
-                  <span style={{ color: '#FAFAF7', fontSize: '15px' }}>{item}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex justify-center">
-              <button onClick={() => { window.location.href = isSignedIn ? '/auth-redirect' : '/sign-up'; }} style={{ backgroundColor: 'transparent', color: '#C4A35A', fontWeight: 700, fontSize: '16px',
-                padding: '16px 32px', borderRadius: '8px', border: '1.5px solid #C4A35A', cursor: 'pointer',
-                width: '100%', maxWidth: '340px', fontFamily: "'Noto Sans JP', sans-serif" }}>
-                Founding Memberに挑戦する →
-              </button>
-            </div>
-
-            <p className="text-center" style={{ color: '#9A9A9A', fontSize: '11px', marginTop: '16px' }}>
-              現在プロ登録するとFounding Memberには自動で登録されます。
-            </p>
-          </Reveal>
-        </div>
-      </section>
-
       {/* ═══ FOR STORES LINK ═══ */}
       <div style={{ textAlign: 'center', padding: '24px', borderTop: '1px solid rgba(255,255,255,0.08)', backgroundColor: '#1A1A2E' }}>
         <a
