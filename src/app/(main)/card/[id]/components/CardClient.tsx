@@ -1353,9 +1353,10 @@ export default function CardClient({ cardData }: Props) {
         </div>
         <button
           onClick={async () => {
-            const url = `${window.location.origin}/card/${id}`
             // S1(自分のカード) vs S2(他者のカード) 判定
             const isSelf = !!(currentUserId && pro && currentUserId === pro.user_id)
+            const src = isSelf ? 'pro_share' : 'client_share'
+            const url = `${window.location.origin}/card/${id}?src=${src}&pid=${id}`
             trackPageView(
               isSelf ? 'share_profile_self' : 'share_profile_other',
               id

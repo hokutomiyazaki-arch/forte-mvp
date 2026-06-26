@@ -134,7 +134,7 @@ function ConfirmedContent() {
     const shareData = {
       title: `${proName} | REALPROOF`,
       text: `${proName}さん、おすすめです！`,
-      url: `${window.location.origin}/card/${proId}`
+      url: `${window.location.origin}/card/${proId}?src=vote_share&pid=${proId}`
     }
 
     if (navigator.share) {
