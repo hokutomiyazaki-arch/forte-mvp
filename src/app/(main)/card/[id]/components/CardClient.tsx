@@ -105,6 +105,9 @@ export default function CardClient({ cardData }: Props) {
   const id = cardData.pro?.id || ''
   const tabParam = searchParams.get('tab')
   const highlightParam = searchParams.get('highlight') || ''
+  // シェア経由の着地を識別する src（?src=pro_share/client_share/vote_share）。
+  // 着地時の値をクリックまで保持する（リロードで消えてよい＝同一セッション内で十分）。
+  const [shareSrc] = useState(() => searchParams.get('src') || '')
   const highlightScrollRef = useRef(false)
   const hashScrollRef = useRef(false)
 
@@ -322,8 +325,13 @@ export default function CardClient({ cardData }: Props) {
   useEffect(() => {
     if (id) {
       trackEvent(id, 'card_view')
+      // シェア経由の着地のみ page_views に pro_profile として記録（シェア→PV集計用）。
+      // source は trackPageView 内の getSource() が ?src を拾う。card_view 記録は変更しない。
+      if (shareSrc) {
+        trackPageView('pro_profile', id)
+      }
     }
-  }, [id])
+  }, [id, shareSrc])
 
   // ハイライトスクロール
   useEffect(() => {
@@ -1307,7 +1315,7 @@ export default function CardClient({ cardData }: Props) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
         {pro.booking_url && (
           <a href={pro.booking_url} target="_blank" rel="noopener"
-            onClick={() => trackEvent(id, 'booking_click')}
+            onClick={() => trackEvent(id, 'booking_click', shareSrc || undefined)}
             style={{
               display: 'block', textAlign: 'center', padding: 15, borderRadius: 14,
               background: T.dark, color: T.gold, fontWeight: 700, fontSize: 14,
@@ -1318,7 +1326,7 @@ export default function CardClient({ cardData }: Props) {
         )}
         {pro.contact_email && (
           <a href={(() => { const subject = encodeURIComponent(`REAL PROOFを見て相談：${pro.name}さん`); const body = encodeURIComponent(`${pro.name}さん\n\nREAL PROOFであなたのプロフィールを拝見し、ご相談したくご連絡しました。\n\n`); return `mailto:${pro.contact_email}?subject=${subject}&body=${body}` })()}
-            onClick={() => trackEvent(id, 'consultation_click')}
+            onClick={() => trackEvent(id, 'consultation_click', shareSrc || undefined)}
             style={{
               display: 'block', textAlign: 'center', padding: 14, borderRadius: 14,
               background: 'transparent', border: `1.5px solid ${T.dark}`, color: T.dark,

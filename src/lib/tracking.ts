@@ -119,19 +119,23 @@ function getVisitorId(): string | null {
  * PV・クリックイベントを記録（tracking_events テーブル）
  * fire-and-forget パターン: fetch の結果を await しない
  */
-export function trackEvent(professionalId: string, eventType: string): void {
+export function trackEvent(professionalId: string, eventType: string, source?: string): void {
   if (typeof window === 'undefined') return
 
   const visitorId = getVisitorId()
 
+  const payload: Record<string, any> = {
+    professional_id: professionalId,
+    event_type: eventType,
+    visitor_id: visitorId,
+  }
+  // source はオプショナル。指定された時のみ送る（既存呼び出しは無改修で動く）
+  if (source) payload.source = source
+
   fetch('/api/tracking', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      professional_id: professionalId,
-      event_type: eventType,
-      visitor_id: visitorId,
-    }),
+    body: JSON.stringify(payload),
   }).catch(() => {
     // トラッキング失敗は無視（UXに影響させない）
   })
