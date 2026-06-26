@@ -66,6 +66,7 @@ interface QueryState {
   orderCol?: string
   orderOpts?: any
   limitVal?: number
+  rangeVal?: [number, number]
   isMaybeSingle?: boolean
   returnSelect?: string
 }
@@ -177,6 +178,11 @@ class QueryBuilder {
     return this
   }
 
+  range(from: number, to: number) {
+    this.state.rangeVal = [from, to]
+    return this
+  }
+
   maybeSingle() {
     this.state.isMaybeSingle = true
     return this
@@ -235,6 +241,7 @@ class QueryBuilder {
 
     if (state.orderCol) query.order = { column: state.orderCol, options: state.orderOpts }
     if (state.limitVal) query.limit = state.limitVal
+    if (state.rangeVal) query.range = state.rangeVal
     if (state.isMaybeSingle) query.maybeSingle = true
 
     try {
