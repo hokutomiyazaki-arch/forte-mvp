@@ -40,20 +40,6 @@ function getNameFontSize(name: string): number {
   return 36
 }
 
-// ===== 4 コーナーアクセント（card 版と同トーン） =====
-
-function CornerAccents() {
-  const GOLD = '#C4A35A'
-  return (
-    <>
-      <div style={{ display: 'flex', position: 'absolute', top: 80, left: 80, width: 32, height: 32, borderTop: `4px solid ${GOLD}`, borderLeft: `4px solid ${GOLD}` }} />
-      <div style={{ display: 'flex', position: 'absolute', top: 80, right: 80, width: 32, height: 32, borderTop: `4px solid ${GOLD}`, borderRight: `4px solid ${GOLD}` }} />
-      <div style={{ display: 'flex', position: 'absolute', bottom: 80, left: 80, width: 32, height: 32, borderBottom: `4px solid ${GOLD}`, borderLeft: `4px solid ${GOLD}` }} />
-      <div style={{ display: 'flex', position: 'absolute', bottom: 80, right: 80, width: 32, height: 32, borderBottom: `4px solid ${GOLD}`, borderRight: `4px solid ${GOLD}` }} />
-    </>
-  )
-}
-
 // ===== 数値スタットブロック =====
 
 function StatBlock({ value, label }: { value: number; label: string }) {
@@ -167,9 +153,6 @@ export async function GET(
             <StatBlock value={totalVotes} label="累計証明（件）" />
           </div>
         </div>
-
-        {/* 4 コーナーアクセント */}
-        <CornerAccents />
       </div>
     ),
     {
