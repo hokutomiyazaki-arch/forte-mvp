@@ -141,7 +141,10 @@ export async function GET() {
           total_votes: proofVotesMap.get(m.professional_id) || 0,
           organization_id: org.id,
         })),
-    ].sort((a: any, b: any) => (Number(b.total_votes) || 0) - (Number(a.total_votes) || 0))
+    ].sort((a: any, b: any) =>
+      ((Number(b.total_votes) || 0) - (Number(a.total_votes) || 0)) ||
+      String(a.professional_id).localeCompare(String(b.professional_id))
+    )
 
     // 5. メンバーの強みデータ取得（投票内訳 + proof_itemsマスタ）
     const allProIds = mergedMembers.map((m: any) => m.professional_id).filter(Boolean)

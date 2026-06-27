@@ -94,7 +94,10 @@ export async function GET(
 
     const members = uniqueMembers
       .map((m: any) => ({ ...m, total_votes: votesMap.get(m.professional_id) || 0 }))
-      .sort((a: any, b: any) => b.total_votes - a.total_votes)
+      .sort((a: any, b: any) =>
+        (b.total_votes - a.total_votes) ||
+        String(a.professional_id).localeCompare(String(b.professional_id))
+      )
 
     let levelAggregates: any[] = []
     if (org.type === 'credential' || org.type === 'education') {
