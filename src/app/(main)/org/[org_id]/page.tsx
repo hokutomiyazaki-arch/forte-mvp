@@ -36,6 +36,7 @@ export default function OrgPublicPage() {
   const [topStrengthItems, setTopStrengthItems] = useState<{ label: string; count: number }[]>([])
   const [recentComments, setRecentComments] = useState<any[]>([])
   const [error, setError] = useState('')
+  const [shareCopied, setShareCopied] = useState(false)
 
   useEffect(() => {
     load()
@@ -110,6 +111,29 @@ export default function OrgPublicPage() {
         {org.location && (
           <p className="text-sm text-gray-500 mt-1">📍 {org.location}</p>
         )}
+
+        {/* シェアボタン（navigator.share優先・非対応はクリップボードコピー） */}
+        <div className="mt-4">
+          <button
+            onClick={async () => {
+              const url = `https://realproof.jp/org/${orgId}`
+              if (navigator.share) {
+                try {
+                  await navigator.share({ title: org.name, url })
+                } catch { /* cancelled */ }
+              } else {
+                try {
+                  await navigator.clipboard.writeText(url)
+                  setShareCopied(true)
+                  setTimeout(() => setShareCopied(false), 2000)
+                } catch { /* ignore */ }
+              }
+            }}
+            className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#1A1A2E] text-white text-sm font-medium rounded-xl hover:bg-[#2a2a4e] transition"
+          >
+            {shareCopied ? 'コピーしました！' : 'この団体をシェア'}
+          </button>
+        </div>
       </div>
 
       {/* 説明 */}
