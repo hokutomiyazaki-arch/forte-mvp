@@ -129,6 +129,7 @@ interface DailyRegistrationData {
   date: string
   dateRaw: string
   count: number
+  registrants: { id: string; name: string }[]
 }
 
 // ============================================================
@@ -389,7 +390,7 @@ async function fetchAllRegistrations(supabase: any) {
   while (true) {
     const { data, error } = await supabase
       .from('professionals')
-      .select('created_at')
+      .select('id, name, created_at')
       .order('id', { ascending: true })
       .range(from, from + pageSize - 1)
     if (error) return { data: all, error }
@@ -684,25 +685,26 @@ async function fetchDashboardData() {
     landingSources = [...pinned, ...rest]
   }
 
-  // プロ新規登録数マッピング（professionals.created_at を日付でカウント）。
-  // 累計 = 全登録数（退会含む・deactivated_at フィルタなし）、
-  // 日別 = 直近14日分を日付降順。既存「日別プルーフ獲得者」の byDate 集計と同型。
+  // プロ新規登録数マッピング（professionals.created_at を日付で集計）。
+  // 累計 = 全登録数（退会含む・deactivated_at フィルタなし・全行数のまま）、
+  // 日別 = 直近14日分を日付降順。各日に登録者リスト [{id, name}] を保持。
   let totalRegistrations = 0
   let dailyRegistrations: DailyRegistrationData[] | null = null
   if (registrationRes.data && !registrationRes.error && Array.isArray(registrationRes.data)) {
     totalRegistrations = registrationRes.data.length
     const cutoff = fourteenDaysAgo.toISOString().split('T')[0]
-    const byDate: Record<string, number> = {}
+    const byDate: Record<string, { id: string; name: string }[]> = {}
     registrationRes.data.forEach((row: any) => {
       const date = row.created_at ? row.created_at.split('T')[0] : null
       if (!date) return
       if (date < cutoff) return
-      byDate[date] = (byDate[date] || 0) + 1
+      if (!byDate[date]) byDate[date] = []
+      byDate[date].push({ id: row.id, name: (row.name || '').trim() || '—' })
     })
     dailyRegistrations = Object.entries(byDate)
-      .map(([dateRaw, count]) => {
+      .map(([dateRaw, registrants]) => {
         const dt = new Date(dateRaw)
-        return { date: `${dt.getMonth() + 1}/${dt.getDate()}`, dateRaw, count }
+        return { date: `${dt.getMonth() + 1}/${dt.getDate()}`, dateRaw, count: registrants.length, registrants }
       })
       .sort((a, b) => b.dateRaw.localeCompare(a.dateRaw))
   }
@@ -1428,9 +1430,9 @@ export default function AdminDashboard() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${C.grayDark}` }}>
-                  {['日付', '新規登録数'].map(h => (
+                  {['日付', 'プロ名', '登録数'].map(h => (
                     <th key={h} style={{
-                      textAlign: h === '新規登録数' ? 'right' : 'left', padding: '10px 12px', color: C.gray,
+                      textAlign: 'left', padding: '10px 12px', color: C.gray,
                       fontWeight: 500, fontSize: 10, letterSpacing: '0.04em',
                     }}>
                       {h}
@@ -1440,16 +1442,26 @@ export default function AdminDashboard() {
               </thead>
               <tbody>
                 {dailyRegistrations.map(dr => (
-                  <tr key={dr.dateRaw} style={{ borderBottom: `1px solid ${C.grayDark}15` }}>
-                    <td style={{ padding: '10px 12px', color: C.gray, fontSize: 11 }}>{dr.date}</td>
-                    <td style={{
-                      textAlign: 'right', padding: '10px 12px',
-                      color: dr.count >= 3 ? C.gold : C.cream,
-                      fontWeight: dr.count >= 3 ? 700 : 400, fontSize: 16,
-                    }}>
-                      {dr.count}
-                    </td>
-                  </tr>
+                  dr.registrants.map((r, i) => (
+                    <tr key={`${dr.dateRaw}-${r.id}`} style={{ borderBottom: `1px solid ${C.grayDark}15` }}>
+                      <td style={{ padding: '10px 12px', color: C.gray, fontSize: 11 }}>
+                        {i === 0 ? dr.date : ''}
+                      </td>
+                      <td style={{ padding: '10px 12px', fontWeight: 500 }}>
+                        <a href={`/card/${r.id}`} target="_blank" rel="noopener noreferrer"
+                          style={{ color: C.gold, textDecoration: 'underline' }}>
+                          {r.name}
+                        </a>
+                      </td>
+                      <td style={{
+                        padding: '10px 12px',
+                        color: dr.count >= 3 ? C.gold : C.cream,
+                        fontWeight: dr.count >= 3 ? 700 : 400,
+                      }}>
+                        {i === 0 ? dr.count : ''}
+                      </td>
+                    </tr>
+                  ))
                 ))}
               </tbody>
             </table>
