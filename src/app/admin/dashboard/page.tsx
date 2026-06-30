@@ -124,6 +124,12 @@ interface DailyProofData {
   daily_votes: number
 }
 
+interface DailyRegistrationData {
+  date: string
+  dateRaw: string
+  count: number
+}
+
 // ============================================================
 // サンプルデータ（フォールバック用）
 // ============================================================
@@ -371,6 +377,29 @@ async function fetchAllProofVotes(supabase: any) {
   return { data: all, error: null }
 }
 
+// プロ新規登録: professionals の created_at を全件ページネーション取得するヘルパー。
+// 真因対応: .range() 無しだと Supabase max-rows=1000 でキャップされるため、
+// .order('id') で決定的順序を強制し 1000 件ずつ取得する（fetchAllProofVotes と同型）。
+// 累計は退会含む全登録数を見るため deactivated_at フィルタは付けない。
+async function fetchAllRegistrations(supabase: any) {
+  const all: any[] = []
+  let from = 0
+  const pageSize = 1000
+  while (true) {
+    const { data, error } = await supabase
+      .from('professionals')
+      .select('created_at')
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1)
+    if (error) return { data: all, error }
+    if (!data || data.length === 0) break
+    all.push(...data)
+    if (data.length < pageSize) break
+    from += pageSize
+  }
+  return { data: all, error: null }
+}
+
 // シェア→PV: シェア経由でカードに着地した page_views を全件ページネーション取得
 // （page_type='pro_profile' + source が share 種別）。集計は target_id(pid) × source。
 async function fetchAllSharePvs(supabase: any) {
@@ -449,7 +478,7 @@ async function fetchDashboardData() {
   const fourteenDaysAgo = new Date()
   fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
 
-  const [goRes, proRes, authRes, trendRes, proofRes, qrTokensRes, shareBookingsRes, shareCountRes, sharePvRes, allVotesRes, totalProsRes, rewardCountsRes, orgMembersRes, landingSourceRes] = await Promise.all([
+  const [goRes, proRes, authRes, trendRes, proofRes, qrTokensRes, shareBookingsRes, shareCountRes, sharePvRes, allVotesRes, totalProsRes, rewardCountsRes, orgMembersRes, landingSourceRes, registrationRes] = await Promise.all([
     supabase.from('admin_go_nogo').select('*').maybeSingle(),
     supabase.from('admin_pro_status').select('*'),
     // 認証方式別
@@ -476,6 +505,8 @@ async function fetchDashboardData() {
     supabase.from('org_members').select('professional_id, organizations(name)').not('professional_id', 'is', null),
     // 流入元別 着地数: 着地ページの page_views を source 別に全件取得
     fetchAllLandingSources(supabase),
+    // プロ新規登録: professionals の created_at を全件取得（退会含む）
+    fetchAllRegistrations(supabase),
   ])
 
   // Go/No-Go マッピング
@@ -651,6 +682,29 @@ async function fetchDashboardData() {
     landingSources = [...pinned, ...rest]
   }
 
+  // プロ新規登録数マッピング（professionals.created_at を日付でカウント）。
+  // 累計 = 全登録数（退会含む・deactivated_at フィルタなし）、
+  // 日別 = 直近14日分を日付降順。既存「日別プルーフ獲得者」の byDate 集計と同型。
+  let totalRegistrations = 0
+  let dailyRegistrations: DailyRegistrationData[] | null = null
+  if (registrationRes.data && !registrationRes.error && Array.isArray(registrationRes.data)) {
+    totalRegistrations = registrationRes.data.length
+    const cutoff = fourteenDaysAgo.toISOString().split('T')[0]
+    const byDate: Record<string, number> = {}
+    registrationRes.data.forEach((row: any) => {
+      const date = row.created_at ? row.created_at.split('T')[0] : null
+      if (!date) return
+      if (date < cutoff) return
+      byDate[date] = (byDate[date] || 0) + 1
+    })
+    dailyRegistrations = Object.entries(byDate)
+      .map(([dateRaw, count]) => {
+        const dt = new Date(dateRaw)
+        return { date: `${dt.getMonth() + 1}/${dt.getDate()}`, dateRaw, count }
+      })
+      .sort((a, b) => b.dateRaw.localeCompare(a.dateRaw))
+  }
+
   // ============================================================
   // アクティブプロ判定（TBU除外ロジック）
   // ============================================================
@@ -733,7 +787,7 @@ async function fetchDashboardData() {
     }
   })
 
-  return { goNogo, pros, authMethods, dailyTrend, dailyProofs, channels, shares, landingSources, activeProCount, inactiveProCount, activeProRate, avgVotesSecondDayPlus, registeredOnlyCount, trialProsCount, settledProsCount, rewardCountMap, orgMap }
+  return { goNogo, pros, authMethods, dailyTrend, dailyProofs, channels, shares, landingSources, dailyRegistrations, totalRegistrations, activeProCount, inactiveProCount, activeProRate, avgVotesSecondDayPlus, registeredOnlyCount, trialProsCount, settledProsCount, rewardCountMap, orgMap }
 }
 
 // ============================================================
@@ -751,6 +805,8 @@ export default function AdminDashboard() {
   const [dailyProofs, setDailyProofs] = useState<DailyProofData[]>([])
   const [shares, setShares] = useState<ShareAnalytics>({ s1: 0, s2: 0, s3: 0, pv1: 0, pv2: 0, pv3: 0, pvVote: 0, bkPro: 0, bkClient: 0, bkVote: 0 })
   const [landingSources, setLandingSources] = useState<LandingSourceData[]>([])
+  const [dailyRegistrations, setDailyRegistrations] = useState<DailyRegistrationData[]>([])
+  const [totalRegistrations, setTotalRegistrations] = useState(0)
   const [activeProCount, setActiveProCount] = useState(0)
   const [inactiveProCount, setInactiveProCount] = useState(0)
   const [activeProRate, setActiveProRate] = useState(0)
@@ -938,6 +994,8 @@ export default function AdminDashboard() {
       if (result.dailyProofs) { setDailyProofs(result.dailyProofs) }
       if (result.shares) { setShares(result.shares) }
       if (result.landingSources) { setLandingSources(result.landingSources) }
+      if (result.dailyRegistrations) { setDailyRegistrations(result.dailyRegistrations) }
+      setTotalRegistrations(result.totalRegistrations)
       setActiveProCount(result.activeProCount)
       setInactiveProCount(result.inactiveProCount)
       setActiveProRate(result.activeProRate)
@@ -1341,6 +1399,50 @@ export default function AdminDashboard() {
                       </td>
                     </tr>
                   ))
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* [D2.5] プロ新規登録数（日別・累計） */}
+      <Sec>プロ新規登録数（日別・累計）</Sec>
+      <div style={{ background: C.surface, borderRadius: 10, padding: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 16 }}>
+          <span style={{ color: C.gray, fontSize: 11 }}>累計登録数（退会含む）</span>
+          <span style={{ color: C.gold, fontSize: 28, fontWeight: 700 }}>{totalRegistrations}</span>
+          <span style={{ color: C.gray, fontSize: 11 }}>名</span>
+        </div>
+        {dailyRegistrations.length === 0 ? (
+          <div style={{ color: C.gray, fontSize: 13, textAlign: 'center', padding: 20 }}>直近14日の新規登録なし</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.grayDark}` }}>
+                  {['日付', '新規登録数'].map(h => (
+                    <th key={h} style={{
+                      textAlign: h === '新規登録数' ? 'right' : 'left', padding: '10px 12px', color: C.gray,
+                      fontWeight: 500, fontSize: 10, letterSpacing: '0.04em',
+                    }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {dailyRegistrations.map(dr => (
+                  <tr key={dr.dateRaw} style={{ borderBottom: `1px solid ${C.grayDark}15` }}>
+                    <td style={{ padding: '10px 12px', color: C.gray, fontSize: 11 }}>{dr.date}</td>
+                    <td style={{
+                      textAlign: 'right', padding: '10px 12px',
+                      color: dr.count >= 3 ? C.gold : C.cream,
+                      fontWeight: dr.count >= 3 ? 700 : 400, fontSize: 16,
+                    }}>
+                      {dr.count}
+                    </td>
+                  </tr>
                 ))}
               </tbody>
             </table>
