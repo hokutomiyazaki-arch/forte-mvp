@@ -72,6 +72,11 @@ interface AuthMethodData {
   count: number
 }
 
+interface LandingSourceData {
+  source: string
+  count: number
+}
+
 interface ShareAnalytics {
   s1: number
   s2: number
@@ -412,6 +417,30 @@ async function fetchAllShareBookings(supabase: any) {
   return { data: all, error: null }
 }
 
+// 流入元別 着地数: 着地ページ（home / search / pro_profile）の page_views を
+// source 別に全件ページネーション取得（1000行 truncation 対策・fetchAllSharePvs と同型）。
+// 既存シェア分析の IN句・if 分岐には触れず、独立して全 source を集計する。
+async function fetchAllLandingSources(supabase: any) {
+  const all: any[] = []
+  let from = 0
+  const pageSize = 1000
+  while (true) {
+    const { data, error } = await supabase
+      .from('page_views')
+      .select('source')
+      .in('page_type', ['home', 'search', 'pro_profile'])
+      .not('source', 'is', null)
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1)
+    if (error) return { data: all, error }
+    if (!data || data.length === 0) break
+    all.push(...data)
+    if (data.length < pageSize) break
+    from += pageSize
+  }
+  return { data: all, error: null }
+}
+
 async function fetchDashboardData() {
   const supabase = createClientComponentClient()
 
@@ -420,7 +449,7 @@ async function fetchDashboardData() {
   const fourteenDaysAgo = new Date()
   fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
 
-  const [goRes, proRes, authRes, trendRes, proofRes, qrTokensRes, shareBookingsRes, shareCountRes, sharePvRes, allVotesRes, totalProsRes, rewardCountsRes, orgMembersRes] = await Promise.all([
+  const [goRes, proRes, authRes, trendRes, proofRes, qrTokensRes, shareBookingsRes, shareCountRes, sharePvRes, allVotesRes, totalProsRes, rewardCountsRes, orgMembersRes, landingSourceRes] = await Promise.all([
     supabase.from('admin_go_nogo').select('*').maybeSingle(),
     supabase.from('admin_pro_status').select('*'),
     // 認証方式別
@@ -445,6 +474,8 @@ async function fetchDashboardData() {
     supabase.from('rewards').select('professional_id').not('professional_id', 'is', null),
     // 団体メンバーシップ
     supabase.from('org_members').select('professional_id, organizations(name)').not('professional_id', 'is', null),
+    // 流入元別 着地数: 着地ページの page_views を source 別に全件取得
+    fetchAllLandingSources(supabase),
   ])
 
   // Go/No-Go マッピング
@@ -598,6 +629,28 @@ async function fetchDashboardData() {
     })
   }
 
+  // 流入元別 着地数マッピング（source を動的に集計）。
+  // 外部チャネル（xday_client/xday_pro/xday/ig/youtube）を上に固定表示し、
+  // 残りの source は件数降順で続ける。
+  const PINNED_SOURCES = ['xday_client', 'xday_pro', 'xday', 'ig', 'youtube']
+  let landingSources: LandingSourceData[] | null = null
+  if (landingSourceRes.data && !landingSourceRes.error && Array.isArray(landingSourceRes.data)) {
+    const sourceCounts: Record<string, number> = {}
+    landingSourceRes.data.forEach((row: any) => {
+      const src = row.source || 'direct'
+      sourceCounts[src] = (sourceCounts[src] || 0) + 1
+    })
+    const pinned: LandingSourceData[] = PINNED_SOURCES.map(src => ({
+      source: src,
+      count: sourceCounts[src] || 0,
+    }))
+    const rest: LandingSourceData[] = Object.entries(sourceCounts)
+      .filter(([src]) => !PINNED_SOURCES.includes(src))
+      .map(([source, count]) => ({ source, count }))
+      .sort((a, b) => b.count - a.count)
+    landingSources = [...pinned, ...rest]
+  }
+
   // ============================================================
   // アクティブプロ判定（TBU除外ロジック）
   // ============================================================
@@ -680,7 +733,7 @@ async function fetchDashboardData() {
     }
   })
 
-  return { goNogo, pros, authMethods, dailyTrend, dailyProofs, channels, shares, activeProCount, inactiveProCount, activeProRate, avgVotesSecondDayPlus, registeredOnlyCount, trialProsCount, settledProsCount, rewardCountMap, orgMap }
+  return { goNogo, pros, authMethods, dailyTrend, dailyProofs, channels, shares, landingSources, activeProCount, inactiveProCount, activeProRate, avgVotesSecondDayPlus, registeredOnlyCount, trialProsCount, settledProsCount, rewardCountMap, orgMap }
 }
 
 // ============================================================
@@ -697,6 +750,7 @@ export default function AdminDashboard() {
   const [dailyTrend, setDailyTrend] = useState<DailyTrendData[]>([])
   const [dailyProofs, setDailyProofs] = useState<DailyProofData[]>([])
   const [shares, setShares] = useState<ShareAnalytics>({ s1: 0, s2: 0, s3: 0, pv1: 0, pv2: 0, pv3: 0, pvVote: 0, bkPro: 0, bkClient: 0, bkVote: 0 })
+  const [landingSources, setLandingSources] = useState<LandingSourceData[]>([])
   const [activeProCount, setActiveProCount] = useState(0)
   const [inactiveProCount, setInactiveProCount] = useState(0)
   const [activeProRate, setActiveProRate] = useState(0)
@@ -883,6 +937,7 @@ export default function AdminDashboard() {
       if (result.dailyTrend) { setDailyTrend(result.dailyTrend) }
       if (result.dailyProofs) { setDailyProofs(result.dailyProofs) }
       if (result.shares) { setShares(result.shares) }
+      if (result.landingSources) { setLandingSources(result.landingSources) }
       setActiveProCount(result.activeProCount)
       setInactiveProCount(result.inactiveProCount)
       setActiveProRate(result.activeProRate)
@@ -1206,6 +1261,47 @@ export default function AdminDashboard() {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* [D1.5] 流入元別 着地数（チャネル別） */}
+      <Sec>流入元別 着地数（チャネル別）</Sec>
+      <div style={{ background: C.surface, borderRadius: 10, padding: 18 }}>
+        {landingSources.length === 0 ? (
+          <div style={{ color: C.gray, fontSize: 13, textAlign: 'center', padding: 20 }}>データなし</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.grayDark}` }}>
+                  {['流入元 (src)', '着地数'].map(h => (
+                    <th key={h} style={{
+                      textAlign: h === '着地数' ? 'right' : 'left', padding: '10px 12px', color: C.gray,
+                      fontWeight: 500, fontSize: 10, letterSpacing: '0.04em',
+                    }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {landingSources.map(ls => {
+                  const isExternal = ['xday_client', 'xday_pro', 'xday', 'ig', 'youtube'].includes(ls.source)
+                  return (
+                    <tr key={ls.source} style={{ borderBottom: `1px solid ${C.grayDark}15` }}>
+                      <td style={{ padding: '10px 12px', color: isExternal ? C.gold : C.cream, fontWeight: isExternal ? 600 : 500 }}>
+                        {ls.source}
+                        {isExternal && <span style={{ color: C.gray, fontSize: 9, marginLeft: 6 }}>外部</span>}
+                      </td>
+                      <td style={{ textAlign: 'right', padding: '10px 12px', color: ls.count > 0 ? C.cream : C.grayDark, fontWeight: 700, fontSize: 16 }}>
+                        {ls.count}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* [D2] Daily Proof Gainers */}
