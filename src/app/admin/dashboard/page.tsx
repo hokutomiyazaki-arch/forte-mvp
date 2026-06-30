@@ -121,6 +121,7 @@ interface DailyProofData {
   date: string
   dateRaw: string
   pro_name: string
+  professional_id: string
   daily_votes: number
 }
 
@@ -588,13 +589,13 @@ async function fetchDashboardData() {
     })
   }
   if (proofRes.data && !proofRes.error && Array.isArray(proofRes.data)) {
-    const byDatePro: Record<string, { pro_name: string; count: number; dateRaw: string }> = {}
+    const byDatePro: Record<string, { pro_name: string; professional_id: string; count: number; dateRaw: string }> = {}
     proofRes.data.forEach((row: any) => {
       const date = row.created_at ? row.created_at.split('T')[0] : null
       if (!date) return
       const proName = proNameMap.get(row.professional_id) || '—'
       const key = `${date}_${row.professional_id}`
-      if (!byDatePro[key]) byDatePro[key] = { pro_name: proName, count: 0, dateRaw: date }
+      if (!byDatePro[key]) byDatePro[key] = { pro_name: proName, professional_id: row.professional_id, count: 0, dateRaw: date }
       byDatePro[key].count++
     })
     dailyProofs = Object.entries(byDatePro)
@@ -604,6 +605,7 @@ async function fetchDashboardData() {
           date: `${dt.getMonth() + 1}/${dt.getDate()}`,
           dateRaw: data.dateRaw,
           pro_name: data.pro_name,
+          professional_id: data.professional_id,
           daily_votes: data.count,
         }
       })
@@ -1389,7 +1391,12 @@ export default function AdminDashboard() {
                       <td style={{ padding: '10px 12px', color: C.gray, fontSize: 11 }}>
                         {i === 0 ? dp.date : ''}
                       </td>
-                      <td style={{ padding: '10px 12px', color: C.cream, fontWeight: 500 }}>{dp.pro_name}</td>
+                      <td style={{ padding: '10px 12px', fontWeight: 500 }}>
+                        <a href={`/card/${dp.professional_id}`} target="_blank" rel="noopener noreferrer"
+                          style={{ color: C.gold, textDecoration: 'underline' }}>
+                          {dp.pro_name}
+                        </a>
+                      </td>
                       <td style={{
                         padding: '10px 12px',
                         color: dp.daily_votes >= 3 ? C.gold : C.cream,
