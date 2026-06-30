@@ -132,6 +132,12 @@ interface DailyRegistrationData {
   registrants: { id: string; name: string }[]
 }
 
+interface ProfileShareData {
+  professional_id: string
+  name: string
+  count: number
+}
+
 // ============================================================
 // サンプルデータ（フォールバック用）
 // ============================================================
@@ -402,6 +408,29 @@ async function fetchAllRegistrations(supabase: any) {
   return { data: all, error: null }
 }
 
+// S1 シェア: page_type='share_profile_self' の page_views を全件ページネーション取得。
+// target_id = シェア主プロ本人の professional_id（professionals.id）。
+// fetchAllSharePvs と同型（順序キー .order('id') + .range() で 1000 行キャップ回避）。
+async function fetchAllProfileShares(supabase: any) {
+  const all: any[] = []
+  let from = 0
+  const pageSize = 1000
+  while (true) {
+    const { data, error } = await supabase
+      .from('page_views')
+      .select('target_id')
+      .eq('page_type', 'share_profile_self')
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1)
+    if (error) return { data: all, error }
+    if (!data || data.length === 0) break
+    all.push(...data)
+    if (data.length < pageSize) break
+    from += pageSize
+  }
+  return { data: all, error: null }
+}
+
 // シェア→PV: シェア経由でカードに着地した page_views を全件ページネーション取得
 // （page_type='pro_profile' + source が share 種別）。集計は target_id(pid) × source。
 async function fetchAllSharePvs(supabase: any) {
@@ -480,7 +509,7 @@ async function fetchDashboardData() {
   const fourteenDaysAgo = new Date()
   fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
 
-  const [goRes, proRes, authRes, trendRes, proofRes, qrTokensRes, shareBookingsRes, shareCountRes, sharePvRes, allVotesRes, totalProsRes, rewardCountsRes, orgMembersRes, landingSourceRes, registrationRes] = await Promise.all([
+  const [goRes, proRes, authRes, trendRes, proofRes, qrTokensRes, shareBookingsRes, shareCountRes, sharePvRes, allVotesRes, totalProsRes, rewardCountsRes, orgMembersRes, landingSourceRes, registrationRes, profileShareRes] = await Promise.all([
     supabase.from('admin_go_nogo').select('*').maybeSingle(),
     supabase.from('admin_pro_status').select('*'),
     // 認証方式別
@@ -509,6 +538,8 @@ async function fetchDashboardData() {
     fetchAllLandingSources(supabase),
     // プロ新規登録: professionals の created_at を全件取得（退会含む）
     fetchAllRegistrations(supabase),
+    // S1 シェア: page_type='share_profile_self' を全件取得（target_id=シェア主の professional_id）
+    fetchAllProfileShares(supabase),
   ])
 
   // Go/No-Go マッピング
@@ -709,6 +740,32 @@ async function fetchDashboardData() {
       .sort((a, b) => b.dateRaw.localeCompare(a.dateRaw))
   }
 
+  // シェアしてくれているプロ(S1)マッピング。
+  // target_id(=シェア主の professional_id)別にシェア回数を集計し、
+  // professionals 直引き(registrationRes の id,name)で名前付与（投票実績ゼロのプロもカバー）。
+  // シェア回数 降順。名前が引けない id は '—' フォールバック。
+  let profileShares: ProfileShareData[] | null = null
+  if (profileShareRes.data && !profileShareRes.error && Array.isArray(profileShareRes.data)) {
+    const nameById = new Map<string, string>()
+    if (registrationRes.data && Array.isArray(registrationRes.data)) {
+      registrationRes.data.forEach((row: any) => {
+        nameById.set(row.id, (row.name || '').trim() || '—')
+      })
+    }
+    const shareCounts: Record<string, number> = {}
+    profileShareRes.data.forEach((row: any) => {
+      if (!row.target_id) return
+      shareCounts[row.target_id] = (shareCounts[row.target_id] || 0) + 1
+    })
+    profileShares = Object.entries(shareCounts)
+      .map(([professional_id, count]) => ({
+        professional_id,
+        name: nameById.get(professional_id) || '—',
+        count,
+      }))
+      .sort((a, b) => b.count - a.count)
+  }
+
   // ============================================================
   // アクティブプロ判定（TBU除外ロジック）
   // ============================================================
@@ -791,7 +848,7 @@ async function fetchDashboardData() {
     }
   })
 
-  return { goNogo, pros, authMethods, dailyTrend, dailyProofs, channels, shares, landingSources, dailyRegistrations, totalRegistrations, activeProCount, inactiveProCount, activeProRate, avgVotesSecondDayPlus, registeredOnlyCount, trialProsCount, settledProsCount, rewardCountMap, orgMap }
+  return { goNogo, pros, authMethods, dailyTrend, dailyProofs, channels, shares, landingSources, dailyRegistrations, totalRegistrations, profileShares, activeProCount, inactiveProCount, activeProRate, avgVotesSecondDayPlus, registeredOnlyCount, trialProsCount, settledProsCount, rewardCountMap, orgMap }
 }
 
 // ============================================================
@@ -809,6 +866,7 @@ export default function AdminDashboard() {
   const [dailyProofs, setDailyProofs] = useState<DailyProofData[]>([])
   const [shares, setShares] = useState<ShareAnalytics>({ s1: 0, s2: 0, s3: 0, pv1: 0, pv2: 0, pv3: 0, pvVote: 0, bkPro: 0, bkClient: 0, bkVote: 0 })
   const [landingSources, setLandingSources] = useState<LandingSourceData[]>([])
+  const [profileShares, setProfileShares] = useState<ProfileShareData[]>([])
   const [dailyRegistrations, setDailyRegistrations] = useState<DailyRegistrationData[]>([])
   const [totalRegistrations, setTotalRegistrations] = useState(0)
   const [activeProCount, setActiveProCount] = useState(0)
@@ -998,6 +1056,7 @@ export default function AdminDashboard() {
       if (result.dailyProofs) { setDailyProofs(result.dailyProofs) }
       if (result.shares) { setShares(result.shares) }
       if (result.landingSources) { setLandingSources(result.landingSources) }
+      if (result.profileShares) { setProfileShares(result.profileShares) }
       if (result.dailyRegistrations) { setDailyRegistrations(result.dailyRegistrations) }
       setTotalRegistrations(result.totalRegistrations)
       setActiveProCount(result.activeProCount)
@@ -1360,6 +1419,50 @@ export default function AdminDashboard() {
                     </tr>
                   )
                 })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* [D1.6] シェアしてくれているプロ(S1) */}
+      <Sec>シェアしてくれているプロ（S1）</Sec>
+      <div style={{ background: C.surface, borderRadius: 10, padding: 18 }}>
+        {profileShares.length === 0 ? (
+          <div style={{ color: C.gray, fontSize: 13, textAlign: 'center', padding: 20 }}>データなし</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.grayDark}` }}>
+                  {['プロ名', 'シェア回数'].map(h => (
+                    <th key={h} style={{
+                      textAlign: h === 'シェア回数' ? 'right' : 'left', padding: '10px 12px', color: C.gray,
+                      fontWeight: 500, fontSize: 10, letterSpacing: '0.04em',
+                    }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {profileShares.map(ps => (
+                  <tr key={ps.professional_id} style={{ borderBottom: `1px solid ${C.grayDark}15` }}>
+                    <td style={{ padding: '10px 12px', fontWeight: 500 }}>
+                      <a href={`/card/${ps.professional_id}`} target="_blank" rel="noopener noreferrer"
+                        style={{ color: C.gold, textDecoration: 'underline' }}>
+                        {ps.name}
+                      </a>
+                    </td>
+                    <td style={{
+                      textAlign: 'right', padding: '10px 12px',
+                      color: ps.count >= 3 ? C.gold : C.cream,
+                      fontWeight: ps.count >= 3 ? 700 : 400, fontSize: 16,
+                    }}>
+                      {ps.count}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
