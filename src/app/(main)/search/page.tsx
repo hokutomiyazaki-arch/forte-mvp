@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { PREFECTURES } from '@/lib/prefectures'
 import { COLORS, FONTS } from '@/lib/design-tokens'
 import { TierBadge, getTierFromVotes } from '@/components/TierBadge'
+import { trackPageView } from '@/lib/tracking'
 
 const T = { ...COLORS, font: FONTS.main }
 
@@ -106,6 +107,11 @@ export default function SearchPage() {
   const [chipsExpanded, setChipsExpanded] = useState(false)
   const [activeKeywordId, setActiveKeywordId] = useState<string | null>(null)
   const [matchedKeywords, setMatchedKeywords] = useState<string[]>([])
+
+  // 着地計測: ?src= を検索ページ着地として記録（source は trackPageView 内の getSource() が拾う）
+  useEffect(() => {
+    trackPageView('search')
+  }, [])
 
   // チップデータ取得（フィルタ変更ごとに再取得・取得時にシャッフル+「もっと見る」リセット）
   useEffect(() => {

@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import ProofCalculator from '@/components/lp/ProofCalculator'
+import { trackPageView } from '@/lib/tracking'
 
 // ─── Horizontal Swipe ───
 function SwipeSlider({ children, darkDots = false }: { children: React.ReactNode[]; darkDots?: boolean }) {
@@ -195,6 +196,11 @@ export default function Home() {
   useEffect(() => {
     const t = setTimeout(() => setHeroLoaded(true), 200);
     return () => clearTimeout(t);
+  }, []);
+
+  // 着地計測: ?src= をトップ着地として記録（source は trackPageView 内の getSource() が拾う）
+  useEffect(() => {
+    trackPageView('home');
   }, []);
 
   const sectionPad: React.CSSProperties = { padding: '80px 24px' };
