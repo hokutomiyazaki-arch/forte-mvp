@@ -181,9 +181,9 @@ export async function GET() {
         .select('id, created_at, professional_id, professionals(id, name, title, photo_url, prefecture, area_description)')
         .eq('user_id', userId)
         .order('created_at', { ascending: false }),
-      // 認定申請（Lv.2 SPECIALIST）
+      // 認定申請（Lv.2 SPECIALIST）。application_group_id は初回グループ判定に使用
       supabase.from('certification_applications')
-        .select('category_slug, status')
+        .select('category_slug, status, application_group_id')
         .eq('professional_id', proId),
       // 受け取ったリワード: client_emailマッチ（メール or 電話番号）
       identifier

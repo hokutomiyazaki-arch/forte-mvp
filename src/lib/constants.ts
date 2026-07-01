@@ -123,6 +123,21 @@ export const CERTIFICATION_PRICING: Record<CertifiableTier, {
   LEGEND:     { amount: 55000, label: '¥55,000', stripeUrl: 'https://buy.stripe.com/5kQ9AUbbraiy0oA2Toffy0k' },
 } as const
 
+/**
+ * 認定申請の「物理プロダクト」料金（CEO確定 2026-07-02）。
+ * 課金は物理プロダクト単位・一律価格で、申請カテゴリ数では変わらない（加算もしない）。
+ *   - pvc   : 名入りPVCカード（Specialist以上で申請可）。**初回グループは無料**、2回目以降は課金。
+ *   - metal : 金属カード（Master以上で申請可・任意オプション）。選択時のみ課金。
+ *   - shield: 盾（Legend以上で申請可・任意オプション）。選択時のみ課金。
+ * 金属カードと盾は独立して選択でき、両方選ぶと加算される。
+ * ※ 賞状は常に「申請した認定項目の枚数分」（無料で付属）。
+ */
+export const CERTIFICATION_PRODUCT_PRICING = {
+  pvc: 5500,
+  metal: 9800,
+  shield: 15500,
+} as const
+
 /** PROVEN / SPECIALIST 共通ゴールドカラー */
 export const PROVEN_GOLD = '#D4A843';
 

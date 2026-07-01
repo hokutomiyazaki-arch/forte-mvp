@@ -362,8 +362,9 @@ export default function DashboardPage() {
   const [memberAccordionOpen, setMemberAccordionOpen] = useState<Record<string, boolean>>({})
 
   // 認定申請 state
-  const [certApplications, setCertApplications] = useState<{category_slug: string; status: string}[]>([])
-  const [certModal, setCertModal] = useState<{slug: string; name: string; count: number} | null>(null)
+  const [certApplications, setCertApplications] = useState<{category_slug: string; status: string; application_group_id?: string | null}[]>([])
+  // 複数カテゴリ一括申請モーダルの開閉フラグ（対象カテゴリは描画時に votes から算出）
+  const [certModal, setCertModal] = useState<boolean>(false)
   const [dismissedCerts, setDismissedCerts] = useState<string[]>([])
 
   const { user: clerkUser, isLoaded: authLoaded } = useUser()
@@ -404,21 +405,19 @@ export default function DashboardPage() {
   }, [editParam, loading, pro])
 
   // Navbar「認定申請」メニューからの導線: /dashboard?action=certification で
-  // 最も票数の多い未申請カテゴリの認定モーダルを自動オープン
+  // 複数カテゴリ一括申請モーダルを自動オープン（対象は描画時に算出）
   const actionParam = searchParams.get('action')
   const certActionRef = useRef(false)
   useEffect(() => {
     if (actionParam !== 'certification') return
     if (certActionRef.current || loading || !pro || votes.length === 0) return
     const appliedSlugs = certApplications.map(app => app.category_slug)
-    const eligible = votes
-      .filter(v => v.vote_count >= SPECIALIST_THRESHOLD && !appliedSlugs.includes(v.proof_id || v.category))
-      .slice()
-      .sort((a, b) => b.vote_count - a.vote_count)
-    if (eligible.length === 0) return
+    const hasEligible = votes.some(
+      v => v.vote_count >= SPECIALIST_THRESHOLD && !appliedSlugs.includes(v.proof_id || v.category)
+    )
+    if (!hasEligible) return
     certActionRef.current = true
-    const top = eligible[0]
-    setCertModal({ slug: top.proof_id || top.category, name: top.category, count: top.vote_count })
+    setCertModal(true)
   }, [actionParam, loading, pro, votes.length, certApplications.length])
 
   // Phase 2: 累積投票数取得 (BookingUrlBanner の表示用)
@@ -2620,7 +2619,7 @@ export default function DashboardPage() {
                 )
               })()}
               <button
-                onClick={() => setCertModal({ slug: cat.proof_id, name: cat.label, count: cat.vote_count })}
+                onClick={() => setCertModal(true)}
                 style={{
                   background: PROVEN_GOLD,
                   color: '#1A1A2E',
@@ -4442,22 +4441,34 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* 認定申請モーダル */}
-      {certModal && pro && (
-        <CertificationModal
-          professionalId={pro.id}
-          categorySlug={certModal.slug}
-          categoryName={certModal.name}
-          proofCount={certModal.count}
-          topPersonality={personalityVotes.length > 0 ? [...personalityVotes].sort((a, b) => b.vote_count - a.vote_count)[0].category : null}
-          isFirstApplication={certApplications.length === 0}
-          onClose={() => setCertModal(null)}
-          onComplete={() => {
-            setCertApplications(prev => [...prev, { category_slug: certModal.slug, status: 'pending' }])
-            // モーダルは閉じない → 完了画面を表示し、ユーザーが「ダッシュボードに戻る」を押して閉じる
-          }}
-        />
-      )}
+      {/* 認定申請モーダル（複数カテゴリ一括） */}
+      {certModal && pro && (() => {
+        const appliedSlugs = certApplications.map(a => a.category_slug)
+        const eligibleCerts = votes
+          .filter(v => v.vote_count >= SPECIALIST_THRESHOLD && !appliedSlugs.includes(v.proof_id || v.category))
+          .slice()
+          .sort((a, b) => b.vote_count - a.vote_count)
+          .map(v => ({
+            slug: v.proof_id || v.category,
+            name: v.category,
+            count: v.vote_count,
+            tier: getCertifiableTier(v.vote_count) || 'SPECIALIST',
+          }))
+        return (
+          <CertificationModal
+            professionalId={pro.id}
+            categories={eligibleCerts}
+            topPersonality={personalityVotes.length > 0 ? [...personalityVotes].sort((a, b) => b.vote_count - a.vote_count)[0].category : null}
+            /* 初回グループ = 過去に application_group_id 付き申請が無い（旧・単発NULL申請は初回無料枠を消費しない） */
+            isFirstApplication={certApplications.every(a => !a.application_group_id)}
+            onClose={() => setCertModal(false)}
+            onComplete={(_nums, appliedNow) => {
+              setCertApplications(prev => [...prev, ...appliedNow.map(s => ({ category_slug: s, status: 'pending' }))])
+              // モーダルは閉じない → 完了画面を表示し、ユーザーが「ダッシュボードに戻る」を押して閉じる
+            }}
+          />
+        )
+      })()}
 
       <InstallPrompt />
     </div>
