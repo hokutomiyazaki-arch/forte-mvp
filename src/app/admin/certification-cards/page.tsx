@@ -62,6 +62,22 @@ type ProSummary = {
   cardRegistered: boolean
 }
 
+type CertTier = 'SPECIALIST' | 'MASTER' | 'LEGEND' | 'IMMORTAL'
+type ApiCertificate = {
+  proofId: string
+  categoryJa: string
+  categoryEn: string
+  voteCount: number
+  tier: CertTier | null
+  milestone: number | null
+  certNumber: string | null
+  dateText: string
+}
+type ApiCertificates = { proId: string; nameRomaji: string; entries: ApiCertificate[] }
+
+// 賞状の編集状態（日付は行ごとに上書き可）
+type EditCert = ApiCertificate & { dateEdit: string }
+
 // 編集可能な項目状態
 type EditItem = ApiItem & { visible: boolean }
 
@@ -98,6 +114,13 @@ export default function CertificationCardsPage() {
 
   const [previewPayload, setPreviewPayload] = useState<string | null>(null)
 
+  // タブ（カード / 賞状）
+  const [tab, setTab] = useState<'card' | 'cert'>('card')
+  // 賞状
+  const [certNameRomaji, setCertNameRomaji] = useState('')
+  const [certs, setCerts] = useState<EditCert[]>([])
+  const [certPreview, setCertPreview] = useState<Record<string, string>>({}) // proofId -> payload
+
   // プロ一覧ロード
   useEffect(() => {
     fetch('/api/admin/certification-card/data', { cache: 'no-store' })
@@ -131,6 +154,10 @@ export default function CertificationCardsPage() {
         setNeedsMint(d.needsMint)
         setItems(d.items.map((it) => ({ ...it, visible: true })))
         setNextCertNumber(j.nextCertNumber ?? null)
+        const c = j.certificates as ApiCertificates | null
+        setCertNameRomaji(c?.nameRomaji ?? '')
+        setCerts((c?.entries ?? []).map((e) => ({ ...e, dateEdit: e.dateText })))
+        setCertPreview({})
       })
       .catch(() => setError('データ取得に失敗しました'))
       .finally(() => setLoading(false))
@@ -206,6 +233,49 @@ export default function CertificationCardsPage() {
     URL.revokeObjectURL(a.href)
   }
 
+  // ===== 賞状 =====
+  const certPayload = (c: EditCert): string =>
+    b64Payload({
+      nameRomaji: certNameRomaji,
+      tier: c.tier ?? 'SPECIALIST',
+      milestone: c.milestone ?? 30,
+      categoryJa: c.categoryJa,
+      categoryEn: c.categoryEn,
+      certNumber: c.certNumber ?? '',
+      dateText: c.dateEdit,
+    })
+
+  const certUrl = (c: EditCert) =>
+    `/api/admin/certification-card/render/certificate?d=${encodeURIComponent(certPayload(c))}`
+
+  const refreshCertPreview = (c: EditCert) =>
+    setCertPreview((prev) => ({ ...prev, [c.proofId]: certPayload(c) }))
+
+  const setCertDate = (proofId: string, v: string) =>
+    setCerts((prev) => prev.map((c) => (c.proofId === proofId ? { ...c, dateEdit: v } : c)))
+
+  const downloadCert = async (c: EditCert) => {
+    const res = await fetch(certUrl(c), { cache: 'no-store' })
+    if (!res.ok) {
+      setError(`賞状生成に失敗しました (${res.status})`)
+      return
+    }
+    const blob = await res.blob()
+    const safeName = certNameRomaji.replace(/\s+/g, '')
+    const safeCat = c.categoryEn.replace(/[^A-Za-z0-9]+/g, '')
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `RP-cert_${c.certNumber || 'X'}_${safeName}_${safeCat}.png`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(a.href)
+  }
+
+  const downloadAllCerts = async () => {
+    for (const c of certs) await downloadCert(c)
+  }
+
   const filteredPros = pros.filter((p) => p.nameKanji.includes(search) || p.proId.includes(search))
 
   const previewUrl = (side: 'front' | 'back') =>
@@ -215,9 +285,9 @@ export default function CertificationCardsPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.cream, padding: 24, fontFamily: 'sans-serif' }}>
-      <h1 style={{ fontSize: 24, color: C.gold, marginBottom: 4 }}>認定カード生成</h1>
+      <h1 style={{ fontSize: 24, color: C.gold, marginBottom: 4 }}>認定カード・賞状 生成</h1>
       <p style={{ fontSize: 13, color: C.gray, marginBottom: 20 }}>
-        プロを選択 → 内容を確認・補正 → 表裏PNG（2035×1300）をダウンロード。
+        プロを選択 → タブでカード / 賞状を切替 → 内容を確認・補正 → PNGをダウンロード。
       </p>
 
       {error && (
@@ -264,6 +334,14 @@ export default function CertificationCardsPage() {
 
           {!loading && selectedProId && (
             <>
+              {/* タブ切替（カード / 賞状） */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                <button onClick={() => setTab('card')} style={tabBtn(tab === 'card')}>認定カード</button>
+                <button onClick={() => setTab('cert')} style={tabBtn(tab === 'cert')}>認定賞状（{certs.length}枚）</button>
+              </div>
+
+              {tab === 'card' && (
+              <>
               {/* card_uid 状態（再利用 / backfill / mint の3分岐。在庫プールは流用しない） */}
               {cardRegistered && !cardProfessionalIdMissing && (
                 <div style={{ background: C.surface, padding: 12, borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
@@ -384,12 +462,77 @@ export default function CertificationCardsPage() {
                   </div>
                 </div>
               )}
+              </>
+              )}
+
+              {tab === 'cert' && (
+              <>
+                <div style={{ background: C.surface, padding: 12, borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
+                  <div style={{ color: C.gray, marginBottom: 8 }}>
+                    賞状は1カテゴリ=1枚。認定番号は既存のものをそのまま表示（新規採番なし）。ティアは実績票数(30/50/100/500)で背景を自動出し分け。日付は申請日（上書き可）。
+                  </div>
+                  <label style={{ fontSize: 12, color: C.gray }}>
+                    氏名（ローマ字・全カテゴリ共通・標準表記に自動整形済み）
+                    <input value={certNameRomaji} onChange={(e) => setCertNameRomaji(e.target.value)}
+                      style={{ display: 'block', width: '100%', maxWidth: 420, padding: 8, borderRadius: 6, border: `1px solid ${C.surfaceLight}`, background: C.bg, color: C.cream, marginTop: 4 }} />
+                  </label>
+                </div>
+
+                {certs.length === 0 && (
+                  <div style={{ color: C.gray, fontSize: 13 }}>認定申請（カテゴリ）がありません。</div>
+                )}
+
+                {certs.length > 0 && (
+                  <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+                    <button onClick={downloadAllCerts} style={btnGold}>全カテゴリの賞状をDL（{certs.length}枚）</button>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                  {certs.map((c) => (
+                    <div key={c.proofId} style={{ border: `1px solid ${C.surfaceLight}`, borderRadius: 10, padding: 14 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontSize: 15 }}>{c.categoryJa} <span style={{ color: C.gray, fontSize: 12 }}>{c.categoryEn}</span></div>
+                          <div style={{ fontSize: 12, color: C.gray }}>
+                            <span style={{ color: C.gold }}>{c.tier ?? '—'}</span> ・ {c.milestone}+ ・ 認定番号 {c.certNumber ?? '—'} ・ {c.voteCount}票
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <label style={{ fontSize: 11, color: C.gray }}>日付
+                            <input value={c.dateEdit} onChange={(e) => setCertDate(c.proofId, e.target.value)}
+                              style={{ width: 130, padding: 6, borderRadius: 6, border: `1px solid ${C.surfaceLight}`, background: C.bg, color: C.cream, marginLeft: 6 }} />
+                          </label>
+                          <button onClick={() => refreshCertPreview(c)} style={btnGold}>プレビュー</button>
+                          <button onClick={() => downloadCert(c)} style={btnOutline}>DL</button>
+                        </div>
+                      </div>
+                      {certPreview[c.proofId] && (
+                        <div style={{ marginTop: 12 }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={certUrl(c)} alt={c.categoryEn} style={{ width: '100%', maxWidth: 640, border: `1px solid ${C.surfaceLight}`, borderRadius: 8 }} />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+              )}
             </>
           )}
         </div>
       </div>
     </div>
   )
+}
+
+function tabBtn(active: boolean): React.CSSProperties {
+  return {
+    padding: '8px 18px', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 13,
+    border: `1px solid ${C.gold}`,
+    background: active ? C.gold : 'transparent',
+    color: active ? '#1a1a1a' : C.gold,
+  }
 }
 
 const arrowBtn: React.CSSProperties = {

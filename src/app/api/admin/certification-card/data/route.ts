@@ -13,6 +13,7 @@ import { cookies } from 'next/headers'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import {
   buildCardData,
+  buildCertificates,
   listCertifiablePros,
   getNextCertNumber,
 } from '@/lib/certification-card'
@@ -37,11 +38,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ pros })
   }
 
-  const data = await buildCardData(supabase, proId)
+  const [data, certificates] = await Promise.all([
+    buildCardData(supabase, proId),
+    buildCertificates(supabase, proId),
+  ])
   if (!data) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 })
   }
 
   const nextCertNumber = await getNextCertNumber(supabase)
-  return NextResponse.json({ data, nextCertNumber })
+  return NextResponse.json({ data, certificates, nextCertNumber })
 }

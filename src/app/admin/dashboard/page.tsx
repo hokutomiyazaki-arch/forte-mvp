@@ -1212,6 +1212,17 @@ export default function AdminDashboard() {
             {loading ? '読み込み中...' : dataSource === 'live' ? '● LIVE DATA' : '● SAMPLE DATA'}
           </div>
           <a
+            href="/admin/certification-cards"
+            style={{
+              background: C.gold, border: `1px solid ${C.gold}`,
+              color: '#1a1a1a', padding: '8px 16px', borderRadius: 7,
+              fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+              textDecoration: 'none',
+            }}
+          >
+            <span style={{ fontSize: 14 }}>🪪</span> 認定カード・賞状 生成
+          </a>
+          <a
             href="/downloads/REALPROOF_クライアント説明チラシ.pdf"
             download
             style={{

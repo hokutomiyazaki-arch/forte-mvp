@@ -335,6 +335,146 @@ export async function buildCardData(
   }
 }
 
+// ============================================================
+// 認定賞状（Certificate）— 1カテゴリ=1枚
+// ============================================================
+//
+// ⚠️ 賞状ティアのしきい値は【30/50/100/500】。カードのメダル判定(15/30/50/100・
+//    getCertificationTier)とは別系列。混同禁止。賞状に PROVEN(15) は無い。
+
+export type CertificateTier = 'SPECIALIST' | 'MASTER' | 'LEGEND' | 'IMMORTAL'
+
+/** 賞状ティア判定（そのカテゴリの生proof票数）。30未満は null（認定対象外）。 */
+export function getCertificateTier(voteCount: number): CertificateTier | null {
+  if (voteCount >= 500) return 'IMMORTAL'
+  if (voteCount >= 100) return 'LEGEND'
+  if (voteCount >= 50) return 'MASTER'
+  if (voteCount >= 30) return 'SPECIALIST'
+  return null
+}
+
+/** 賞状ティア → 節目の数字（N+ 表示用。生票数は出さない）。 */
+export const CERTIFICATE_TIER_MILESTONE: Record<CertificateTier, number> = {
+  SPECIALIST: 30,
+  MASTER: 50,
+  LEGEND: 100,
+  IMMORTAL: 500,
+}
+
+/**
+ * ローマ字を標準表記に整形：各単語の先頭のみ大文字（Title Case）。
+ * 例: "YURIKA OTA" → "Yurika Ota" / "Naohiro Okamoto" → "Naohiro Okamoto"
+ * ※ 姓名の順序（名 姓）自動是正は行わない（判定困難なため）。最終は編集プレビューで確定。
+ */
+export function normalizeRomaji(s: string | null | undefined): string {
+  return (s || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ')
+}
+
+/** applied_at(ISO) → "YYYY.MM.DD" */
+function formatCertDate(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
+  return m ? `${m[1]}.${m[2]}.${m[3]}` : ''
+}
+
+export type CertificateEntry = {
+  /** proof_items.id (= category_slug) */
+  proofId: string
+  categoryJa: string
+  categoryEn: string
+  voteCount: number
+  /** 賞状ティア（30/50/100/500）。認定済み前提だが、万一30未満なら null */
+  tier: CertificateTier | null
+  /** 節目 N+（30/50/100/500）。tier に対応 */
+  milestone: number | null
+  certNumber: string | null
+  /** applied_at 由来 "YYYY.MM.DD" */
+  dateText: string
+}
+
+export type CertificateData = {
+  proId: string
+  /** 標準整形済みローマ字（初期値。編集プレビューで確定） */
+  nameRomaji: string
+  entries: CertificateEntry[]
+}
+
+/**
+ * proId の賞状データ（認定申請=カテゴリごとに1エントリ）を組み立てる。
+ * 認定番号は既存 certification_number をそのまま使う（新規採番はしない）。
+ */
+export async function buildCertificates(
+  sb: SupabaseClient,
+  proId: string
+): Promise<CertificateData | null> {
+  const { data: appsRaw } = await sb
+    .from('certification_applications')
+    .select('category_slug, certification_number, full_name_romaji, applied_at')
+    .eq('professional_id', proId)
+  const apps =
+    (appsRaw as {
+      category_slug: string | null
+      certification_number: string | null
+      full_name_romaji: string | null
+      applied_at: string | null
+    }[] | null) ?? []
+  if (apps.length === 0) return null
+
+  const slugs = Array.from(new Set(apps.map((a) => a.category_slug).filter(Boolean))) as string[]
+  const piMap = new Map<string, { strength_label: string | null }>()
+  if (slugs.length > 0) {
+    const { data: piRaw } = await sb
+      .from('proof_items')
+      .select('id, strength_label')
+      .in('id', slugs)
+    for (const p of (piRaw as { id: string; strength_label: string | null }[] | null) ?? []) {
+      piMap.set(p.id, { strength_label: p.strength_label })
+    }
+  }
+
+  const { data: vsRaw } = await sb
+    .from('vote_summary')
+    .select('proof_id, vote_count')
+    .eq('professional_id', proId)
+  const vcMap = new Map(
+    ((vsRaw as { proof_id: string; vote_count: number | null }[] | null) ?? []).map((r) => [
+      r.proof_id,
+      r.vote_count ?? 0,
+    ])
+  )
+
+  const entries: CertificateEntry[] = apps
+    .filter((a) => a.category_slug)
+    .map((a) => {
+      const strengthJa = piMap.get(a.category_slug as string)?.strength_label ?? ''
+      const voteCount = vcMap.get(a.category_slug as string) ?? 0
+      const tier = getCertificateTier(voteCount)
+      return {
+        proofId: a.category_slug as string,
+        categoryJa: strengthJa,
+        categoryEn: STRENGTH_ENGLISH_NAMES[strengthJa] ?? strengthJa,
+        voteCount,
+        tier,
+        milestone: tier ? CERTIFICATE_TIER_MILESTONE[tier] : null,
+        certNumber: a.certification_number,
+        dateText: formatCertDate(a.applied_at),
+      }
+    })
+    // 認定番号の発行順（若い番号）で安定ソート
+    .sort((x, y) => (x.certNumber || '').localeCompare(y.certNumber || ''))
+
+  return {
+    proId,
+    nameRomaji: normalizeRomaji(apps[0].full_name_romaji),
+    entries,
+  }
+}
+
 // ===== 認定者一覧（プロ選択UI用） =====
 
 export type CertifiableProSummary = {
