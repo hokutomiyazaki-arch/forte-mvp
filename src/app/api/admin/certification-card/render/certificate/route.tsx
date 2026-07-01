@@ -4,10 +4,14 @@
  * GET /api/admin/certification-card/render/certificate?d={base64(JSON:CertificateRenderInput)}
  *   → 2000×1414 PNG。背景はティア別 cert-bg-{tier}.png。
  * GET ...&format=pdf
- *   → 上記PNGを A4横(297×210mm) PDF にフルページ貼り込み（RGBのまま・家庭用プリンタ向け）。
+ *   → 上記PNGを A4横(297×210mm) PDF にフルページ貼り込み（RGB・家庭用プリンタ向け）。
+ *
+ * ローカル素材（フォント/背景）は fs.readFile（絶対パス）で読む。
  */
 import { ImageResponse } from 'next/og'
 import { PDFDocument } from 'pdf-lib'
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
 import {
   buildCertificateElement,
   certBgPath,
@@ -17,32 +21,23 @@ import {
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-// A4横（297×210mm）をポイント換算（1mm = 2.834645669pt）。賞状PNGは√2比なので歪みなくフルページ配置。
 const MM_TO_PT = 2.834645669
 const A4_LANDSCAPE_W = 297 * MM_TO_PT // ≈ 841.89
 const A4_LANDSCAPE_H = 210 * MM_TO_PT // ≈ 595.28
 
-// PNG(RGB) を A4横 PDF にフルページ貼り込み（RGBのまま・塗り足し/トンボなし）
-async function pngToA4Pdf(pngBytes: ArrayBuffer): Promise<Uint8Array> {
-  const pdf = await PDFDocument.create()
-  const page = pdf.addPage([A4_LANDSCAPE_W, A4_LANDSCAPE_H])
-  const img = await pdf.embedPng(pngBytes)
-  page.drawImage(img, { x: 0, y: 0, width: A4_LANDSCAPE_W, height: A4_LANDSCAPE_H })
-  return pdf.save()
-}
+const pubPath = (rel: string) => path.join(process.cwd(), 'public', rel.replace(/^\//, ''))
 
-// 既存OGルートと同じ import.meta.url 相対パターン（ルートファイル基準・7階層上）
-function loadFontData(): Promise<ArrayBuffer> {
-  return fetch(
-    new URL('../../../../../../../public/fonts/NotoSansJP-subset.ttf', import.meta.url)
-  ).then((r) => r.arrayBuffer())
+async function readPubArrayBuffer(rel: string): Promise<ArrayBuffer> {
+  const b = await readFile(pubPath(rel))
+  return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer
 }
-
-// 氏名(ローマ字)用 Playfair Display（Latinサブセット）
-function loadNameFontData(): Promise<ArrayBuffer> {
-  return fetch(
-    new URL('../../../../../../../public/fonts/PlayfairDisplay-subset.ttf', import.meta.url)
-  ).then((r) => r.arrayBuffer())
+async function readPubDataUri(rel: string): Promise<string | null> {
+  try {
+    const b = await readFile(pubPath(rel))
+    return `data:image/png;base64,${b.toString('base64')}`
+  } catch {
+    return null
+  }
 }
 
 function isAdmin(request: Request): boolean {
@@ -54,15 +49,13 @@ function decodePayload(d: string): CertificateRenderInput {
   return JSON.parse(Buffer.from(d, 'base64').toString('utf-8')) as CertificateRenderInput
 }
 
-async function fetchDataUri(origin: string, path: string): Promise<string | null> {
-  try {
-    const res = await fetch(`${origin}${path}`, { cache: 'no-store' })
-    if (!res.ok) return null
-    const buf = await res.arrayBuffer()
-    return `data:image/png;base64,${Buffer.from(buf).toString('base64')}`
-  } catch {
-    return null
-  }
+// PNG(RGB) を A4横 PDF にフルページ貼り込み
+async function pngToA4Pdf(pngBytes: ArrayBuffer): Promise<Uint8Array> {
+  const pdf = await PDFDocument.create()
+  const page = pdf.addPage([A4_LANDSCAPE_W, A4_LANDSCAPE_H])
+  const img = await pdf.embedPng(pngBytes)
+  page.drawImage(img, { x: 0, y: 0, width: A4_LANDSCAPE_W, height: A4_LANDSCAPE_H })
+  return pdf.save()
 }
 
 export async function GET(request: Request) {
@@ -79,25 +72,28 @@ export async function GET(request: Request) {
     return new Response('invalid payload', { status: 400 })
   }
 
-  const [fontData, nameFontData, backgroundDataUri] = await Promise.all([
-    loadFontData(),
-    loadNameFontData(),
-    fetchDataUri(url.origin, certBgPath(input.tier)),
-  ])
+  try {
+    const [fontData, nameFontData, backgroundDataUri] = await Promise.all([
+      readPubArrayBuffer('fonts/NotoSansJP-subset.ttf'),
+      readPubArrayBuffer('fonts/PlayfairDisplay-subset.ttf'),
+      readPubDataUri(certBgPath(input.tier)),
+    ])
 
-  const { element, options } = buildCertificateElement(input, { fontData, nameFontData, backgroundDataUri })
-  const png = new ImageResponse(element, options)
+    const { element, options } = buildCertificateElement(input, { fontData, nameFontData, backgroundDataUri })
+    const png = new ImageResponse(element, options)
 
-  if (url.searchParams.get('format') === 'pdf') {
-    const pngBytes = await png.arrayBuffer()
-    const pdfBytes = await pngToA4Pdf(pngBytes)
-    return new Response(Buffer.from(pdfBytes), {
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Cache-Control': 'no-store',
-      },
-    })
+    if (url.searchParams.get('format') === 'pdf') {
+      const pngBytes = await png.arrayBuffer()
+      const pdfBytes = await pngToA4Pdf(pngBytes)
+      return new Response(Buffer.from(pdfBytes), {
+        headers: { 'Content-Type': 'application/pdf', 'Cache-Control': 'no-store' },
+      })
+    }
+
+    return png
+  } catch (err) {
+    const msg = err instanceof Error ? `${err.message}\n${err.stack || ''}` : String(err)
+    console.error('[render/certificate] error:', msg)
+    return new Response(`RENDER_ERROR(certificate): ${msg}`, { status: 500 })
   }
-
-  return png
 }

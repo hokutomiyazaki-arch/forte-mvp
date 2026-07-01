@@ -4,22 +4,28 @@
  * GET /api/admin/certification-card/render/front?d={base64(JSON:CardRenderInput)}
  * → 2035×1300 RGB PNG（透過なし）
  *
- * d ペイロードは管理UIの編集後の最終表示値。DBは引かず自己完結（プレビュー=生成が一致）。
+ * ローカル素材（フォント/背景）は fs.readFile（絶対パス）で読む。
+ * ※ fetch(new URL(..., import.meta.url)) は nodejs runtime だと file:// 化して
+ *    本番(undici)で弾かれ 500 になるため使わない。public 素材は next.config の
+ *    outputFileTracingIncludes で lambda に同梱している。
  */
 import { ImageResponse } from 'next/og'
-import {
-  buildFrontElement,
-  type CardRenderInput,
-} from '@/lib/certification-card-render'
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
+import { buildFrontElement, type CardRenderInput } from '@/lib/certification-card-render'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-// 既存OGルートと同じ import.meta.url 相対パターン（ルートファイル基準・7階層上）
-function loadFontData(): Promise<ArrayBuffer> {
-  return fetch(
-    new URL('../../../../../../../public/fonts/NotoSansJP-subset.ttf', import.meta.url)
-  ).then((r) => r.arrayBuffer())
+const pubPath = (rel: string) => path.join(process.cwd(), 'public', rel)
+
+async function readPubArrayBuffer(rel: string): Promise<ArrayBuffer> {
+  const b = await readFile(pubPath(rel))
+  return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer
+}
+async function readPubDataUri(rel: string): Promise<string> {
+  const b = await readFile(pubPath(rel))
+  return `data:image/png;base64,${b.toString('base64')}`
 }
 
 function isAdmin(request: Request): boolean {
@@ -28,25 +34,11 @@ function isAdmin(request: Request): boolean {
 }
 
 function decodePayload(d: string): CardRenderInput {
-  const json = Buffer.from(d, 'base64').toString('utf-8')
-  return JSON.parse(json) as CardRenderInput
-}
-
-async function fetchDataUri(origin: string, path: string): Promise<string | null> {
-  try {
-    const res = await fetch(`${origin}${path}`, { cache: 'no-store' })
-    if (!res.ok) return null
-    const buf = await res.arrayBuffer()
-    return `data:image/png;base64,${Buffer.from(buf).toString('base64')}`
-  } catch {
-    return null
-  }
+  return JSON.parse(Buffer.from(d, 'base64').toString('utf-8')) as CardRenderInput
 }
 
 export async function GET(request: Request) {
-  if (!isAdmin(request)) {
-    return new Response('Unauthorized', { status: 401 })
-  }
+  if (!isAdmin(request)) return new Response('Unauthorized', { status: 401 })
 
   const url = new URL(request.url)
   const d = url.searchParams.get('d')
@@ -59,10 +51,17 @@ export async function GET(request: Request) {
     return new Response('invalid payload', { status: 400 })
   }
 
-  const [fontData, backgroundDataUri] = await Promise.all([
-    loadFontData(),
-    fetchDataUri(url.origin, '/card-assets/front-bg.png'),
-  ])
-  const { element, options } = buildFrontElement(input, { fontData, backgroundDataUri })
-  return new ImageResponse(element, options)
+  try {
+    const [fontData, backgroundDataUri] = await Promise.all([
+      readPubArrayBuffer('fonts/NotoSansJP-subset.ttf'),
+      readPubDataUri('card-assets/front-bg.png').catch(() => null),
+    ])
+    const { element, options } = buildFrontElement(input, { fontData, backgroundDataUri })
+    return new ImageResponse(element, options)
+  } catch (err) {
+    // 診断用（原因確認後に外す）。admin限定ルートなのでスタック開示可。
+    const msg = err instanceof Error ? `${err.message}\n${err.stack || ''}` : String(err)
+    console.error('[render/front] error:', msg)
+    return new Response(`RENDER_ERROR(front): ${msg}`, { status: 500 })
+  }
 }

@@ -1,5 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // 認定カード/賞状の @vercel/og ルートが fs.readFile で読む public 素材を
+  // サーバーレス関数バンドルに確実に同梱する（Vercelでは public/ は既定でlambda外のため）
+  outputFileTracingIncludes: {
+    '/api/admin/certification-card/render/front': ['./public/fonts/**', './public/card-assets/**'],
+    '/api/admin/certification-card/render/back': ['./public/fonts/**', './public/card-assets/**', './public/medals/**'],
+    '/api/admin/certification-card/render/certificate': ['./public/fonts/**', './public/card-assets/**'],
+  },
   images: {
     remotePatterns: [
       {
