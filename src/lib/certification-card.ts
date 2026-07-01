@@ -8,7 +8,10 @@
  * - 認定番号は certification_applications.certification_number を単一の真実として継続。
  *   新テーブルは作らない。未採番の申請にだけ「既存max+1（>=0013）」で採番。
  * - メダルのティアは §9 の生proof票数（15/30/50/100）で判定。payment_tier は使わない。
- * - SPECIALTY項目は申請（category_slug = proof_items.id）ベースで確定。票からの推定はしない。
+ * - SPECIALTY項目は【実績ベース】(CEO変更 2026-07-01): vote_summary の生proof票数が
+ *   15票以上(PROVEN_THRESHOLD)の proof_id を全て拾い、票数降順。表示は最大6件（UI/描画で上位6件に絞る）。
+ *   ※以前は申請(category_slug)ベースだったが、申請1件のプロで獲得実績が反映されない問題があり変更。
+ *   認定番号は申請の category_slug と一致する項目にのみ参考表示（カードには載せない）。
  * - 肩書: organization → 無ければ professionals.title ＋ store_name → 編集プレビューで最終補正。
  * - 既存カード解決: professional_id OR professionals.user_id の両方で探す。
  *
@@ -26,6 +29,7 @@ import {
   STRENGTH_ENGLISH_NAMES,
   PERSONALITY_ENGLISH_NAMES,
   getCertificationTier,
+  PROVEN_THRESHOLD,
   type CertificationTier,
 } from '@/lib/constants'
 
@@ -213,49 +217,53 @@ export async function buildCardData(
     .maybeSingle()
   const pro = (proRaw as ProRow | null) ?? null
 
-  // 3. category_slug(=proof_items.id) を一括解決
-  const slugs = Array.from(new Set(apps.map((a) => a.category_slug).filter(Boolean))) as string[]
-  const { data: piRaw } = await sb
-    .from('proof_items')
-    .select('id, label, strength_label, tab')
-    .in('id', slugs)
-  const piMap = new Map(
-    ((piRaw as { id: string; label: string | null; strength_label: string | null; tab: string | null }[] | null) ?? []).map(
-      (p) => [p.id, p]
-    )
-  )
-
-  // 4. 各項目の生proof票数（vote_summary）
+  // 3. 実績ベースの項目: vote_summary から 15票以上(PROVEN_THRESHOLD)の proof_id を全取得（票数降順）
   const { data: vsRaw } = await sb
     .from('vote_summary')
     .select('proof_id, vote_count')
     .eq('professional_id', proId)
-  const vcMap = new Map(
-    ((vsRaw as { proof_id: string; vote_count: number | null }[] | null) ?? []).map((r) => [
-      r.proof_id,
-      r.vote_count ?? 0,
-    ])
-  )
+  const achieved = ((vsRaw as { proof_id: string; vote_count: number | null }[] | null) ?? [])
+    .map((r) => ({ proofId: r.proof_id, voteCount: r.vote_count ?? 0 }))
+    .filter((r) => r.voteCount >= PROVEN_THRESHOLD)
+    .sort((a, b) => b.voteCount - a.voteCount)
 
-  // 5. 項目組み立て（票数降順）
-  const items: CardItem[] = apps
-    .filter((a) => a.category_slug)
-    .map((a) => {
-      const pi = piMap.get(a.category_slug as string)
-      const strengthJa = pi?.strength_label ?? ''
-      const voteCount = vcMap.get(a.category_slug as string) ?? 0
-      return {
-        proofId: a.category_slug as string,
-        labelJa: pi?.label ?? '',
-        strengthJa,
-        strengthEn: STRENGTH_ENGLISH_NAMES[strengthJa] ?? strengthJa,
-        tab: pi?.tab ?? null,
-        voteCount,
-        tier: getCertificationTier(voteCount),
-        certNumber: a.certification_number,
-      }
-    })
-    .sort((x, y) => y.voteCount - x.voteCount)
+  // 4. proof_items ラベルを一括解決
+  const proofIds = achieved.map((a) => a.proofId)
+  const piMap = new Map<
+    string,
+    { id: string; label: string | null; strength_label: string | null; tab: string | null }
+  >()
+  if (proofIds.length > 0) {
+    const { data: piRaw } = await sb
+      .from('proof_items')
+      .select('id, label, strength_label, tab')
+      .in('id', proofIds)
+    for (const p of (piRaw as { id: string; label: string | null; strength_label: string | null; tab: string | null }[] | null) ?? []) {
+      piMap.set(p.id, p)
+    }
+  }
+
+  // 4b. 申請の認定番号マップ（proof_id = category_slug に一致する項目にのみ参考付与）
+  const appCertMap = new Map<string, string>()
+  for (const a of apps) {
+    if (a.category_slug && a.certification_number) appCertMap.set(a.category_slug, a.certification_number)
+  }
+
+  // 5. 項目組み立て（票数降順・実績ベース）
+  const items: CardItem[] = achieved.map((a) => {
+    const pi = piMap.get(a.proofId)
+    const strengthJa = pi?.strength_label ?? ''
+    return {
+      proofId: a.proofId,
+      labelJa: pi?.label ?? '',
+      strengthJa,
+      strengthEn: STRENGTH_ENGLISH_NAMES[strengthJa] ?? strengthJa,
+      tab: pi?.tab ?? null,
+      voteCount: a.voteCount,
+      tier: getCertificationTier(a.voteCount),
+      certNumber: appCertMap.get(a.proofId) ?? null,
+    }
+  })
 
   const highestTier = items.reduce<CertificationTier | null>(
     (acc, it) => higherTier(acc, it.tier),
