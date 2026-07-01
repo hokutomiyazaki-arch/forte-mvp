@@ -32,6 +32,17 @@ function decodePayload(d: string): CardRenderInput {
   return JSON.parse(json) as CardRenderInput
 }
 
+async function fetchDataUri(origin: string, path: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${origin}${path}`, { cache: 'no-store' })
+    if (!res.ok) return null
+    const buf = await res.arrayBuffer()
+    return `data:image/png;base64,${Buffer.from(buf).toString('base64')}`
+  } catch {
+    return null
+  }
+}
+
 export async function GET(request: Request) {
   if (!isAdmin(request)) {
     return new Response('Unauthorized', { status: 401 })
@@ -48,7 +59,10 @@ export async function GET(request: Request) {
     return new Response('invalid payload', { status: 400 })
   }
 
-  const fontData = await loadFontData()
-  const { element, options } = buildFrontElement(input, { fontData })
+  const [fontData, backgroundDataUri] = await Promise.all([
+    loadFontData(),
+    fetchDataUri(url.origin, '/card-assets/front-bg.png'),
+  ])
+  const { element, options } = buildFrontElement(input, { fontData, backgroundDataUri })
   return new ImageResponse(element, options)
 }

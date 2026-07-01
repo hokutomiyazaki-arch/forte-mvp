@@ -101,6 +101,13 @@ function higherTier(
 
 // ===== 表示名ヘルパー =====
 
+/**
+ * カード表示用の氏名を「姓　名」（全角スペース区切り）に組む。
+ * - full_name_kanji が last_name で始まれば そこで分割（例: 田中雄己 + 田中 → 田中　雄己）
+ *   ※ full_name_kanji の漢字を尊重（professionals.first_name が仮名の場合でも崩れない）
+ * - 既に空白入りなら全角スペースへ正規化
+ * - それ以外は last_name＋first_name / proName / フォールバック
+ */
 function resolveNameKanji(
   appKanji: string | null | undefined,
   proName: string | null | undefined,
@@ -108,10 +115,22 @@ function resolveNameKanji(
   first: string | null | undefined
 ): string {
   const a = (appKanji || '').trim()
-  if (a) return a
+  const l = (last || '').trim()
+  const f = (first || '').trim()
+
+  if (a) {
+    if (l && a.startsWith(l)) {
+      const rest = a.slice(l.length).trim()
+      return rest ? `${l}　${rest}` : a
+    }
+    if (/\s/.test(a)) return a.replace(/\s+/, '　')
+    if (l && f) return `${l}　${f}`
+    return a
+  }
+
   const n = (proName || '').trim()
-  if (n) return n
-  const combined = `${(last || '').trim()} ${(first || '').trim()}`.trim()
+  if (n) return /\s/.test(n) ? n.replace(/\s+/, '　') : n
+  const combined = `${l}　${f}`.trim()
   return combined || 'REALPROOF Pro'
 }
 

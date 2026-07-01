@@ -1,14 +1,21 @@
 /**
- * 認定カード生成 — レンダリング層
+ * 認定カード生成 — レンダリング層（背景ハイブリッド方式）
  *
  * 表(front) / 裏(back) の @vercel/og 用「要素 + オプション」を組み立てる純粋関数。
  * ImageResponse には依存しない（ルートは next/og、ローカルテストは @vercel/og で
  * それぞれ new ImageResponse(element, options) する）。
  *
- * 出力仕様（§3・確定）: 2035×1300px / RGB / PNG / 透過なし（背景は必ず塗る）。
+ * 出力仕様（§3・確定）: 2035×1300px / RGB / PNG / 透過なし。
  *
- * ハイブリッド対応: assets.backgroundDataUri を渡すと固定背景画像を全面に敷き、
- * 可変パーツだけ上に描く（§4）。未指定なら背景もコードで描画（CEO承認: コード先行）。
+ * ハイブリッド（CEO提供の Canva 背景に合わせる・2026-07-01）:
+ * - assets.backgroundDataUri に public/card-assets/{front,back}-bg.png を全面に敷く。
+ * - 背景に焼き込み済みの要素はコードで描かない（二重防止）:
+ *     front: REAL PROOF ロゴ / 金帯 / 弧
+ *     back : VERIFIED BY CLIENTS / SPECIALTY / 上下の金帯 / フッター(REALPROOF—Issued by...)
+ * - コードは可変要素だけを背景の空きゾーンに座標配置:
+ *     front: 氏名(漢字) / ローマ字 / 肩書・所属（金帯より下の氏名ゾーン中央）
+ *     back : 項目リスト（SPECIALTY下・左）＋各項目テキスト直後のメダル、右側に大QR＋card_uid
+ * - tier語・人柄は Canva デザインに枠が無いため描かない（ティアは項目メダルで表現）。
  */
 import type { CertificationTier, CertifiableTier } from '@/lib/constants'
 
@@ -16,15 +23,30 @@ import type { CertificationTier, CertifiableTier } from '@/lib/constants'
 export const CARD_W = 2035
 export const CARD_H = 1300
 
-// ===== カラートークン（既存カードOG準拠） =====
+// ===== カラートークン =====
 const COL = {
-  bgDark: '#14142B',
-  bgDark2: '#1A1A2E',
+  bgDark: '#0A0A0A',
   gold: '#C4A35A',
-  goldSoft: 'rgba(196,163,90,0.35)',
   cream: '#FAFAF7',
-  creamDim: 'rgba(250,250,247,0.72)',
-  grey: 'rgba(250,250,247,0.55)',
+  creamDim: 'rgba(250,250,247,0.78)',
+  grey: 'rgba(250,250,247,0.6)',
+}
+
+// ===== Canva背景に合わせた座標（2035×1300基準・目視調整） =====
+const FRONT_LAYOUT = {
+  // front-bg: REAL PROOF ロゴ下端 ≈ y656、金帯上端 ≈ y855。
+  // その約200pxの帯に、上下へ余白を残して氏名ブロックを中央配置（金帯より下には置かない）。
+  contentTop: 668,
+  contentHeight: 172,
+}
+const BACK_LAYOUT = {
+  // back-bg: 上部金帯 ≈ y190 / SPECIALTY ≈ y312 / 下部金帯 ≈ y1153。
+  zoneTop: 360, // SPECIALTY ラベルの下から項目開始
+  zoneBottom: 1140, // 下部金帯の上（重ならない）
+  itemsLeft: 90,
+  qrSize: 580, // カード高さの約45%（Canva版に合わせ大きく）
+  qrTop: 381, // 金帯内側の上下中央あたり（中心 ≈ y671）
+  qrRight: 130,
 }
 
 // ===== 入力型 =====
@@ -53,7 +75,7 @@ export type CardAssets = {
   qrDataUri?: string | null
   /** ティア別メダル data URI（SPECIALIST/MASTER/LEGEND のみ） */
   medalDataUris?: Partial<Record<CertifiableTier, string | null>>
-  /** 固定背景画像（ハイブリッド用・任意） */
+  /** 固定背景画像（Canva front-bg/back-bg） */
   backgroundDataUri?: string | null
 }
 
@@ -80,7 +102,7 @@ function medalFor(
 }
 
 // ===== 背景（全面）=====
-// backgroundDataUri があればそれを敷く。無ければコードで塗る（グラデ + 弧の代替）。
+// backgroundDataUri（Canva PNG）があればそれを敷く。無ければ黒＋グラデでフォールバック。
 
 function Background({ bg }: { bg?: string | null }) {
   if (bg) {
@@ -103,52 +125,24 @@ function Background({ bg }: { bg?: string | null }) {
         width: CARD_W,
         height: CARD_H,
         backgroundColor: COL.bgDark,
-        backgroundImage: `radial-gradient(circle at 78% 18%, rgba(196,163,90,0.16) 0%, rgba(196,163,90,0) 42%), linear-gradient(135deg, ${COL.bgDark} 0%, ${COL.bgDark2} 55%, #241B33 100%)`,
+        backgroundImage: `radial-gradient(circle at 78% 18%, rgba(196,163,90,0.16) 0%, rgba(196,163,90,0) 42%), linear-gradient(135deg, #14142B 0%, #1A1A2E 55%, #241B33 100%)`,
       }}
     />
   )
 }
 
-// ===== ゴールド二重枠 =====
-
-function GoldFrame({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        position: 'absolute',
-        top: 46,
-        left: 46,
-        width: CARD_W - 92,
-        height: CARD_H - 92,
-        border: `4px solid ${COL.gold}`,
-        boxSizing: 'border-box',
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          width: '100%',
-          height: '100%',
-          border: `1px solid ${COL.goldSoft}`,
-          margin: 10,
-          boxSizing: 'border-box',
-        }}
-      >
-        {children}
-      </div>
-    </div>
-  )
-}
-
 // ============================================================
-// 表（FRONT）
+// 表（FRONT）— 金帯より下に氏名/ローマ字/肩書を中央配置
 // ============================================================
 
 export function buildFrontElement(input: CardRenderInput, assets: CardAssets) {
   const { nameKanji, nameRomaji, organization } = input
+  // 姓名＋ローマ字を横1行に収めるため、氏名(漢字)長でサイズ段階調整
+  // （ロゴ下〜金帯上の帯に収める前提でやや控えめ）
   const nameLen = Array.from(nameKanji).length
-  const nameSize = nameLen <= 6 ? 168 : nameLen <= 9 ? 132 : 104
+  const nameSize = nameLen <= 6 ? 76 : nameLen <= 9 ? 64 : 54
+  // ローマ字は日本語氏名の約55%を目安に一回り大きく
+  const romajiSize = nameLen <= 6 ? 44 : nameLen <= 9 ? 38 : 32
 
   const element = (
     <div
@@ -163,62 +157,45 @@ export function buildFrontElement(input: CardRenderInput, assets: CardAssets) {
       }}
     >
       <Background bg={assets.backgroundDataUri} />
-      <GoldFrame>
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            width: '100%',
-            height: '100%',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 80,
-            boxSizing: 'border-box',
-          }}
-        >
-          {/* REAL PROOF ワードマーク */}
-          <div style={{ display: 'flex', marginBottom: 40 }}>
-            <span style={{ fontSize: 40, color: COL.gold, letterSpacing: 16, fontWeight: 700 }}>
-              REAL PROOF
-            </span>
-          </div>
 
-          {/* 認定ラベル */}
-          <div style={{ display: 'flex', marginBottom: 44 }}>
-            <span style={{ fontSize: 26, color: COL.creamDim, letterSpacing: 8 }}>
-              CERTIFIED PROFESSIONAL
-            </span>
-          </div>
-
-          {/* 氏名（漢字・主役） */}
-          <div style={{ display: 'flex', marginBottom: 18 }}>
-            <span style={{ fontSize: nameSize, color: COL.cream, fontWeight: 700, lineHeight: 1.05 }}>
-              {nameKanji}
-            </span>
-          </div>
-
-          {/* ローマ字 */}
+      {/* 氏名ゾーン（金帯より下・中央） */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          position: 'absolute',
+          left: 0,
+          top: FRONT_LAYOUT.contentTop,
+          width: CARD_W,
+          height: FRONT_LAYOUT.contentHeight,
+          alignItems: 'center',
+          justifyContent: 'center',
+          paddingLeft: 100,
+          paddingRight: 100,
+          boxSizing: 'border-box',
+        }}
+      >
+        {/* 1行目: 姓　名　ローマ字（スペース区切り・横1行） */}
+        <div style={{ display: 'flex', alignItems: 'baseline' }}>
+          <span style={{ fontSize: nameSize, color: COL.cream, fontWeight: 700, lineHeight: 1.05 }}>
+            {nameKanji}
+          </span>
           {nameRomaji ? (
-            <div style={{ display: 'flex', marginBottom: 40 }}>
-              <span style={{ fontSize: 52, color: COL.creamDim, letterSpacing: 6 }}>
-                {nameRomaji}
-              </span>
-            </div>
-          ) : null}
-
-          {/* 区切り線 */}
-          <div style={{ display: 'flex', width: 340, height: 2, backgroundColor: COL.goldSoft, marginBottom: 36 }} />
-
-          {/* 肩書・所属 */}
-          {organization ? (
-            <div style={{ display: 'flex', maxWidth: 1500, justifyContent: 'center', textAlign: 'center' }}>
-              <span style={{ fontSize: 40, color: COL.creamDim, lineHeight: 1.35, textAlign: 'center' }}>
-                {organization}
-              </span>
-            </div>
+            <span style={{ fontSize: romajiSize, color: COL.creamDim, letterSpacing: 4, marginLeft: 32 }}>
+              {nameRomaji}
+            </span>
           ) : null}
         </div>
-      </GoldFrame>
+
+        {/* 2行目: 肩書（代表1つ・編集プレビューで確定した値）*/}
+        {organization ? (
+          <div style={{ display: 'flex', marginTop: 18, maxWidth: 1700, justifyContent: 'center' }}>
+            <span style={{ fontSize: 42, color: COL.creamDim, lineHeight: 1.25, textAlign: 'center' }}>
+              {organization}
+            </span>
+          </div>
+        ) : null}
+      </div>
     </div>
   )
 
@@ -226,24 +203,30 @@ export function buildFrontElement(input: CardRenderInput, assets: CardAssets) {
 }
 
 // ============================================================
-// 裏（BACK）
+// 裏（BACK）— SPECIALTY下に項目リスト（テキスト直後にメダル）、右に大QR＋card_uid
 // ============================================================
 
 export function buildBackElement(input: CardRenderInput, assets: CardAssets) {
-  const { highestTier, personalityJa, personalityEn, cardUid } = input
+  const { cardUid } = input
   const items = input.items.slice(0, 6)
   const n = items.length
 
-  // 項目数に応じた段階サイズ（§4.3）。N=6 でもフッターと衝突しないよう段階縮小。
+  // 項目数に応じた段階サイズ。
+  // 英語(サブ)ラベルは印刷で潰れないよう一回り大きく＆日本語との行間(lineGap)・
+  // 項目間隔(rowGap)を広めに。6項目でも金帯/フッターに重ならない範囲で再バランス。
   const sizing =
     n <= 2
-      ? { jaSize: 68, enSize: 34, medalSize: 140, rowGap: 40, rowPadY: 22 }
+      ? { jaSize: 80, enSize: 40, medalSize: 150, gap: 30, lineGap: 10, rowGap: 46 }
       : n <= 4
-        ? { jaSize: 58, enSize: 30, medalSize: 118, rowGap: 24, rowPadY: 16 }
+        ? { jaSize: 68, enSize: 34, medalSize: 128, gap: 26, lineGap: 10, rowGap: 34 }
         : n === 5
-          ? { jaSize: 48, enSize: 25, medalSize: 100, rowGap: 16, rowPadY: 12 }
-          : { jaSize: 42, enSize: 22, medalSize: 88, rowGap: 12, rowPadY: 8 }
-  const { jaSize, enSize, medalSize, rowGap, rowPadY } = sizing
+          ? { jaSize: 58, enSize: 30, medalSize: 108, gap: 22, lineGap: 8, rowGap: 26 }
+          : { jaSize: 52, enSize: 28, medalSize: 92, gap: 18, lineGap: 8, rowGap: 22 }
+  const { jaSize, enSize, medalSize, gap, lineGap, rowGap } = sizing
+
+  const qrX = CARD_W - BACK_LAYOUT.qrSize - BACK_LAYOUT.qrRight
+  const itemsWidth = qrX - BACK_LAYOUT.itemsLeft - 48
+  const zoneHeight = BACK_LAYOUT.zoneBottom - BACK_LAYOUT.zoneTop
 
   const element = (
     <div
@@ -258,137 +241,71 @@ export function buildBackElement(input: CardRenderInput, assets: CardAssets) {
       }}
     >
       <Background bg={assets.backgroundDataUri} />
-      <GoldFrame>
+
+      {/* 右側: 大QR ＋ card_uid（QRのすぐ下） */}
+      {assets.qrDataUri ? (
         <div
           style={{
             display: 'flex',
             flexDirection: 'column',
-            width: '100%',
-            height: '100%',
-            padding: 64,
-            boxSizing: 'border-box',
+            position: 'absolute',
+            left: qrX,
+            top: BACK_LAYOUT.qrTop,
+            width: BACK_LAYOUT.qrSize,
+            alignItems: 'center',
           }}
         >
-          {/* ヘッダー行: 左=タイトル群 / 右=QR */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            {/* 左: VERIFIED BY CLIENTS + 最高ティア + SPECIALTY */}
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex' }}>
-                <span style={{ fontSize: 24, color: COL.creamDim, letterSpacing: 8 }}>
-                  VERIFIED BY CLIENTS
-                </span>
-              </div>
-              {highestTier ? (
-                <div style={{ display: 'flex', marginTop: 10 }}>
-                  <span style={{ fontSize: 96, color: COL.gold, fontWeight: 700, letterSpacing: 4, lineHeight: 1 }}>
-                    {highestTier}
-                  </span>
-                </div>
-              ) : null}
-              <div style={{ display: 'flex', marginTop: 14 }}>
-                <span style={{ fontSize: 30, color: COL.gold, letterSpacing: 10 }}>SPECIALTY</span>
-              </div>
-            </div>
-
-            {/* 右: QR + card_uid */}
-            {assets.qrDataUri ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <img
-                  src={assets.qrDataUri}
-                  width={230}
-                  height={230}
-                  style={{ borderRadius: 12 }}
-                />
-                <div style={{ display: 'flex', marginTop: 8 }}>
-                  <span style={{ fontSize: 26, color: COL.creamDim, letterSpacing: 2 }}>{cardUid}</span>
-                </div>
-              </div>
-            ) : (
-              <div style={{ display: 'flex' }}>
-                <span style={{ fontSize: 26, color: COL.creamDim }}>{cardUid}</span>
-              </div>
-            )}
-          </div>
-
-          {/* 項目リスト（縦中央寄せ） */}
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              flex: 1,
-              justifyContent: 'center',
-              gap: rowGap,
-              paddingTop: 20,
-              paddingBottom: 20,
-            }}
-          >
-            {items.map((it, idx) => {
-              const medal = medalFor(it.tier, assets.medalDataUris)
-              return (
-                <div
-                  key={idx}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    paddingTop: rowPadY,
-                    paddingBottom: rowPadY,
-                    paddingLeft: 20,
-                    paddingRight: 20,
-                    borderBottom: `1px solid ${COL.goldSoft}`,
-                  }}
-                >
-                  {/* 左: 日本語 + 英語（2段） */}
-                  <div style={{ display: 'flex', flexDirection: 'column', flex: 1, paddingRight: 24 }}>
-                    <div style={{ display: 'flex' }}>
-                      <span style={{ fontSize: jaSize, color: COL.cream, fontWeight: 700, lineHeight: 1.1 }}>
-                        {it.strengthJa}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', marginTop: 4 }}>
-                      <span style={{ fontSize: enSize, color: COL.grey, letterSpacing: 2 }}>
-                        {it.strengthEn}
-                      </span>
-                    </div>
-                  </div>
-                  {/* 右: メダル */}
-                  {medal ? (
-                    <img src={medal} width={medalSize} height={medalSize} style={{ objectFit: 'contain' }} />
-                  ) : (
-                    <div style={{ display: 'flex', width: medalSize, height: medalSize }} />
-                  )}
-                </div>
-              )
-            })}
-          </div>
-
-          {/* フッター: 人柄 + ブランド */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-            {personalityJa ? (
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <div style={{ display: 'flex' }}>
-                  <span style={{ fontSize: 22, color: COL.gold, letterSpacing: 6 }}>PERSONALITY</span>
-                </div>
-                <div style={{ display: 'flex', marginTop: 6, alignItems: 'baseline' }}>
-                  <span style={{ fontSize: 44, color: COL.cream, fontWeight: 700 }}>{personalityJa}</span>
-                  {personalityEn ? (
-                    <span style={{ fontSize: 30, color: COL.creamDim, marginLeft: 16 }}>
-                      {personalityEn}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            ) : (
-              <div style={{ display: 'flex' }} />
-            )}
-            <div style={{ display: 'flex' }}>
-              <span style={{ fontSize: 28, color: COL.gold, letterSpacing: 8, fontWeight: 700 }}>
-                REAL PROOF
-              </span>
-            </div>
+          <img
+            src={assets.qrDataUri}
+            width={BACK_LAYOUT.qrSize}
+            height={BACK_LAYOUT.qrSize}
+            style={{ borderRadius: 10 }}
+          />
+          <div style={{ display: 'flex', marginTop: 16 }}>
+            <span style={{ fontSize: 34, color: COL.creamDim, letterSpacing: 3 }}>{cardUid}</span>
           </div>
         </div>
-      </GoldFrame>
+      ) : null}
+
+      {/* 左側: 項目リスト（SPECIALTY下・縦中央寄せ）。各行はテキスト直後にメダル */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          position: 'absolute',
+          left: BACK_LAYOUT.itemsLeft,
+          top: BACK_LAYOUT.zoneTop,
+          width: itemsWidth,
+          height: zoneHeight,
+          justifyContent: 'center',
+          gap: rowGap,
+        }}
+      >
+        {items.map((it, idx) => {
+          const medal = medalFor(it.tier, assets.medalDataUris)
+          return (
+            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap }}>
+              {/* 日本語 + 英語（2段） */}
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex' }}>
+                  <span style={{ fontSize: jaSize, color: COL.cream, fontWeight: 700, lineHeight: 1.08 }}>
+                    {it.strengthJa}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', marginTop: lineGap }}>
+                  <span style={{ fontSize: enSize, color: COL.creamDim, letterSpacing: 2 }}>
+                    {it.strengthEn}
+                  </span>
+                </div>
+              </div>
+              {/* テキストのすぐ右にメダル（PROVEN/未達は無し） */}
+              {medal ? (
+                <img src={medal} width={medalSize} height={medalSize} style={{ objectFit: 'contain' }} />
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 
@@ -404,7 +321,6 @@ export function buildBackElement(input: CardRenderInput, assets: CardAssets) {
  * 誤り訂正 H / 濃色 #1A1A2E / 背景白（§6.4）。
  */
 export async function buildQrDataUri(cardUid: string): Promise<string> {
-  // 動的 import（edge/node 双方で使えるように）
   const QRCode = (await import('qrcode')).default
   const url = `https://realproof.jp/nfc/${cardUid}`
   return QRCode.toDataURL(url, {

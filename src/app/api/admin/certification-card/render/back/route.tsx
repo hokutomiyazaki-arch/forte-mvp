@@ -76,9 +76,10 @@ export async function GET(request: Request) {
     }
   }
 
-  const [fontData, qrDataUri, medalEntries] = await Promise.all([
+  const [fontData, qrDataUri, backgroundDataUri, medalEntries] = await Promise.all([
     loadFontData(),
     buildQrDataUri(input.cardUid),
+    fetchMedalDataUri(origin, '/card-assets/back-bg.png'),
     Promise.all(
       Array.from(neededTiers).map(async (tier) => {
         const uri = await fetchMedalDataUri(origin, MEDAL_PATHS[tier].og)
@@ -90,7 +91,7 @@ export async function GET(request: Request) {
   const medalDataUris: Partial<Record<CertifiableTier, string | null>> = {}
   for (const [tier, uri] of medalEntries) medalDataUris[tier] = uri
 
-  const assets: CardAssets = { fontData, qrDataUri, medalDataUris }
+  const assets: CardAssets = { fontData, qrDataUri, medalDataUris, backgroundDataUri }
   const { element, options } = buildBackElement(input, assets)
   return new ImageResponse(element, options)
 }
