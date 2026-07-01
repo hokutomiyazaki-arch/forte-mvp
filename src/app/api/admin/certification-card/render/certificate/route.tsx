@@ -1,10 +1,13 @@
 /**
- * 認定賞状 — PNG レンダリング（1カテゴリ=1枚）
+ * 認定賞状 — PNG / PDF レンダリング（1カテゴリ=1枚）
  *
  * GET /api/admin/certification-card/render/certificate?d={base64(JSON:CertificateRenderInput)}
- * → 2000×1414 PNG。背景はティア別 cert-bg-{tier}.png。
+ *   → 2000×1414 PNG。背景はティア別 cert-bg-{tier}.png。
+ * GET ...&format=pdf
+ *   → 上記PNGを A4横(297×210mm) PDF にフルページ貼り込み（RGBのまま・家庭用プリンタ向け）。
  */
 import { ImageResponse } from 'next/og'
+import { PDFDocument } from 'pdf-lib'
 import {
   buildCertificateElement,
   certBgPath,
@@ -13,6 +16,20 @@ import {
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+// A4横（297×210mm）をポイント換算（1mm = 2.834645669pt）。賞状PNGは√2比なので歪みなくフルページ配置。
+const MM_TO_PT = 2.834645669
+const A4_LANDSCAPE_W = 297 * MM_TO_PT // ≈ 841.89
+const A4_LANDSCAPE_H = 210 * MM_TO_PT // ≈ 595.28
+
+// PNG(RGB) を A4横 PDF にフルページ貼り込み（RGBのまま・塗り足し/トンボなし）
+async function pngToA4Pdf(pngBytes: ArrayBuffer): Promise<Uint8Array> {
+  const pdf = await PDFDocument.create()
+  const page = pdf.addPage([A4_LANDSCAPE_W, A4_LANDSCAPE_H])
+  const img = await pdf.embedPng(pngBytes)
+  page.drawImage(img, { x: 0, y: 0, width: A4_LANDSCAPE_W, height: A4_LANDSCAPE_H })
+  return pdf.save()
+}
 
 // 既存OGルートと同じ import.meta.url 相対パターン（ルートファイル基準・7階層上）
 function loadFontData(): Promise<ArrayBuffer> {
@@ -69,5 +86,18 @@ export async function GET(request: Request) {
   ])
 
   const { element, options } = buildCertificateElement(input, { fontData, nameFontData, backgroundDataUri })
-  return new ImageResponse(element, options)
+  const png = new ImageResponse(element, options)
+
+  if (url.searchParams.get('format') === 'pdf') {
+    const pngBytes = await png.arrayBuffer()
+    const pdfBytes = await pngToA4Pdf(pngBytes)
+    return new Response(Buffer.from(pdfBytes), {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Cache-Control': 'no-store',
+      },
+    })
+  }
+
+  return png
 }

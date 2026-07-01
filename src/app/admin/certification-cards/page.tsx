@@ -254,8 +254,9 @@ export default function CertificationCardsPage() {
   const setCertDate = (proofId: string, v: string) =>
     setCerts((prev) => prev.map((c) => (c.proofId === proofId ? { ...c, dateEdit: v } : c)))
 
-  const downloadCert = async (c: EditCert) => {
-    const res = await fetch(certUrl(c), { cache: 'no-store' })
+  const downloadCert = async (c: EditCert, format: 'png' | 'pdf' = 'png') => {
+    const url = certUrl(c) + (format === 'pdf' ? '&format=pdf' : '')
+    const res = await fetch(url, { cache: 'no-store' })
     if (!res.ok) {
       setError(`賞状生成に失敗しました (${res.status})`)
       return
@@ -265,15 +266,15 @@ export default function CertificationCardsPage() {
     const safeCat = c.categoryEn.replace(/[^A-Za-z0-9]+/g, '')
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = `RP-cert_${c.certNumber || 'X'}_${safeName}_${safeCat}.png`
+    a.download = `RP-cert_${c.certNumber || 'X'}_${safeName}_${safeCat}.${format}`
     document.body.appendChild(a)
     a.click()
     a.remove()
     URL.revokeObjectURL(a.href)
   }
 
-  const downloadAllCerts = async () => {
-    for (const c of certs) await downloadCert(c)
+  const downloadAllCerts = async (format: 'png' | 'pdf' = 'pdf') => {
+    for (const c of certs) await downloadCert(c, format)
   }
 
   const filteredPros = pros.filter((p) => p.nameKanji.includes(search) || p.proId.includes(search))
@@ -483,8 +484,9 @@ export default function CertificationCardsPage() {
                 )}
 
                 {certs.length > 0 && (
-                  <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-                    <button onClick={downloadAllCerts} style={btnGold}>全カテゴリの賞状をDL（{certs.length}枚）</button>
+                  <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+                    <button onClick={() => downloadAllCerts('pdf')} style={btnGold}>全カテゴリの賞状をPDFでDL（{certs.length}枚）</button>
+                    <button onClick={() => downloadAllCerts('png')} style={btnOutline}>全カテゴリPNG</button>
                   </div>
                 )}
 
@@ -504,7 +506,8 @@ export default function CertificationCardsPage() {
                               style={{ width: 130, padding: 6, borderRadius: 6, border: `1px solid ${C.surfaceLight}`, background: C.bg, color: C.cream, marginLeft: 6 }} />
                           </label>
                           <button onClick={() => refreshCertPreview(c)} style={btnGold}>プレビュー</button>
-                          <button onClick={() => downloadCert(c)} style={btnOutline}>DL</button>
+                          <button onClick={() => downloadCert(c, 'pdf')} style={btnGold}>PDF</button>
+                          <button onClick={() => downloadCert(c, 'png')} style={btnOutline}>PNG</button>
                         </div>
                       </div>
                       {certPreview[c.proofId] && (
