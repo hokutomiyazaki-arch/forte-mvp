@@ -60,6 +60,7 @@ type ProSummary = {
   itemCount: number
   cardUid: string | null
   cardRegistered: boolean
+  pending: boolean
 }
 
 type CertTier = 'SPECIALIST' | 'MASTER' | 'LEGEND' | 'IMMORTAL'
@@ -72,6 +73,10 @@ type ApiCertificate = {
   milestone: number | null
   certNumber: string | null
   dateText: string
+  shipped: boolean
+  shippedTier: CertTier | null
+  levelUp: boolean
+  fromApplication: boolean
 }
 type ApiCertificates = { proId: string; nameRomaji: string; entries: ApiCertificate[] }
 
@@ -277,6 +282,32 @@ export default function CertificationCardsPage() {
     for (const c of certs) await downloadCert(c, format)
   }
 
+  // 送付済みトグル（採番はサーバー側で確定）
+  const toggleShipped = async (c: EditCert, shipped: boolean) => {
+    const res = await fetch('/api/admin/certification-card/ship', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
+      body: JSON.stringify({ proId: selectedProId, proofId: c.proofId, shipped }),
+    })
+    const data = await res.json()
+    if (!res.ok) { setError(data.error || '送付状態の更新に失敗しました'); return }
+    setCerts((prev) => prev.map((x) => x.proofId === c.proofId ? {
+      ...x,
+      shipped: data.shipped,
+      certNumber: data.certNumber ?? x.certNumber,
+      shippedTier: data.shipped ? (data.tier ?? x.tier) : x.shippedTier,
+      levelUp: false,
+    } : x))
+  }
+
+  // 申請中フラグを消す
+  const clearPending = async (proId: string) => {
+    const res = await fetch('/api/admin/certification-card/pending', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
+      body: JSON.stringify({ proId }),
+    })
+    if (res.ok) setPros((prev) => prev.map((p) => p.proId === proId ? { ...p, pending: false } : p))
+  }
+
   const filteredPros = pros.filter((p) => p.nameKanji.includes(search) || p.proId.includes(search))
 
   const previewUrl = (side: 'front' | 'back') =>
@@ -308,20 +339,31 @@ export default function CertificationCardsPage() {
           />
           <div style={{ maxHeight: 520, overflowY: 'auto', border: `1px solid ${C.surfaceLight}`, borderRadius: 8 }}>
             {filteredPros.map((p) => (
-              <button
+              <div
                 key={p.proId}
                 onClick={() => setSelectedProId(p.proId)}
                 style={{
-                  display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px',
+                  padding: '10px 12px',
                   background: selectedProId === p.proId ? C.surfaceLight : 'transparent',
-                  border: 'none', borderBottom: `1px solid ${C.surface}`, color: C.cream, cursor: 'pointer',
+                  borderBottom: `1px solid ${C.surface}`, color: C.cream, cursor: 'pointer',
                 }}
               >
-                <div style={{ fontSize: 14 }}>{p.nameKanji}</div>
-                <div style={{ fontSize: 11, color: C.gray }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 14, flex: 1 }}>{p.nameKanji}</span>
+                  {p.pending && (
+                    <>
+                      <span style={{ fontSize: 10, color: '#1a1a1a', background: C.amber, borderRadius: 999, padding: '2px 8px', fontWeight: 700, whiteSpace: 'nowrap' }}>申請中</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); clearPending(p.proId) }}
+                        style={{ fontSize: 10, color: C.gray, background: 'transparent', border: `1px solid ${C.surfaceLight}`, borderRadius: 6, padding: '2px 6px', cursor: 'pointer' }}
+                      >消す</button>
+                    </>
+                  )}
+                </div>
+                <div style={{ fontSize: 11, color: C.gray, marginTop: 2 }}>
                   {p.itemCount}項目 ・ {p.cardRegistered ? `card ${p.cardUid}` : 'カードなし（要mint）'}
                 </div>
-              </button>
+              </div>
             ))}
             {filteredPros.length === 0 && (
               <div style={{ padding: 12, fontSize: 12, color: C.gray }}>該当なし</div>
@@ -470,7 +512,9 @@ export default function CertificationCardsPage() {
               <>
                 <div style={{ background: C.surface, padding: 12, borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
                   <div style={{ color: C.gray, marginBottom: 8 }}>
-                    賞状は1カテゴリ=1枚。認定番号は既存のものをそのまま表示（新規採番なし）。ティアは実績票数(30/50/100/500)で背景を自動出し分け。日付は申請日（上書き可）。
+                    賞状は1カテゴリ=1枚。SPECIALIST以上(30票)の達成項目を全て自動表示（新達成も随時反映）。
+                    認定番号は「送付済み」チェック時に確定採番（未確定はプレビュー）。ティアは実績票数(30/50/100/500)で背景自動。
+                    送付後にレベルアップすると <span style={{ color: C.amber }}>⬆レベルアップ未送付</span> が付きます（要再送）。日付は上書き可。
                   </div>
                   <label style={{ fontSize: 12, color: C.gray }}>
                     氏名（ローマ字・全カテゴリ共通・標準表記に自動整形済み）
@@ -492,15 +536,29 @@ export default function CertificationCardsPage() {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                   {certs.map((c) => (
-                    <div key={c.proofId} style={{ border: `1px solid ${C.surfaceLight}`, borderRadius: 10, padding: 14 }}>
+                    <div key={c.proofId} style={{
+                      border: `1px solid ${c.levelUp ? C.amber : C.surfaceLight}`, borderRadius: 10, padding: 14,
+                      background: c.shipped && !c.levelUp ? 'rgba(34,197,94,0.06)' : 'transparent',
+                    }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
                         <div>
-                          <div style={{ fontSize: 15 }}>{c.categoryJa} <span style={{ color: C.gray, fontSize: 12 }}>{c.categoryEn}</span></div>
+                          <div style={{ fontSize: 15, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            {c.categoryJa} <span style={{ color: C.gray, fontSize: 12 }}>{c.categoryEn}</span>
+                            {c.levelUp && (
+                              <span style={{ fontSize: 10, color: '#1a1a1a', background: C.amber, borderRadius: 999, padding: '2px 8px', fontWeight: 700 }}>
+                                ⬆ レベルアップ未送付
+                              </span>
+                            )}
+                          </div>
                           <div style={{ fontSize: 12, color: C.gray }}>
-                            <span style={{ color: C.gold }}>{c.tier ?? '—'}</span> ・ {c.milestone}+ ・ 認定番号 {c.certNumber ?? '—'} ・ {c.voteCount}票
+                            <span style={{ color: C.gold }}>{c.tier ?? '—'}</span> ・ {c.milestone}+ ・ 認定番号 {c.certNumber ?? 'プレビュー(未確定)'} ・ {c.voteCount}票
                           </div>
                         </div>
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                          <label style={{ fontSize: 12, color: c.shipped ? C.green : C.cream, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+                            <input type="checkbox" checked={c.shipped} onChange={(e) => toggleShipped(c, e.target.checked)} />
+                            送付済み
+                          </label>
                           <label style={{ fontSize: 11, color: C.gray }}>日付
                             <input value={c.dateEdit} onChange={(e) => setCertDate(c.proofId, e.target.value)}
                               style={{ width: 130, padding: 6, borderRadius: 6, border: `1px solid ${C.surfaceLight}`, background: C.bg, color: C.cream, marginLeft: 6 }} />
