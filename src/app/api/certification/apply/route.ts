@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { auth } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { OPS_EMAIL, STRENGTH_ENGLISH_NAMES, PERSONALITY_ENGLISH_NAMES, SPECIALIST_THRESHOLD, getCertifiableTier, TIER_DISPLAY, CERTIFICATION_PRODUCT_PRICING, type CertifiableTier } from '@/lib/constants'
+import { setCertPending } from '@/lib/certification-card'
 
 export const dynamic = 'force-dynamic'
 
@@ -236,6 +237,13 @@ export async function POST(req: NextRequest) {
 
     if (inserted.length === 0) {
       return NextResponse.json({ error: 'Insert failed' }, { status: 500 })
+    }
+
+    // 「申請中」フラグを点灯（管理画面の賞状ツールで運営が消せる。新規申請で再点灯）
+    try {
+      await setCertPending(supabase, professionalId)
+    } catch (err) {
+      console.error('[certification/apply] setCertPending failed:', err)
     }
 
     // ===== 認定メール用の集計（全スペシャリスト項目・達成日） =====

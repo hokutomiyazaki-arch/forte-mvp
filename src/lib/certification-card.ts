@@ -30,6 +30,7 @@ import {
   PERSONALITY_ENGLISH_NAMES,
   getCertificationTier,
   PROVEN_THRESHOLD,
+  SPECIALIST_THRESHOLD,
   type CertificationTier,
 } from '@/lib/constants'
 
@@ -361,6 +362,14 @@ export const CERTIFICATE_TIER_MILESTONE: Record<CertificateTier, number> = {
   IMMORTAL: 500,
 }
 
+/** 賞状ティアの序列（レベルアップ判定用） */
+const CERT_TIER_RANK: Record<CertificateTier, number> = {
+  SPECIALIST: 1,
+  MASTER: 2,
+  LEGEND: 3,
+  IMMORTAL: 4,
+}
+
 /**
  * ローマ字を標準表記に整形：各単語の先頭のみ大文字（Title Case）。
  * 例: "YURIKA OTA" → "Yurika Ota" / "Naohiro Okamoto" → "Naohiro Okamoto"
@@ -392,9 +401,18 @@ export type CertificateEntry = {
   tier: CertificateTier | null
   /** 節目 N+（30/50/100/500）。tier に対応 */
   milestone: number | null
+  /** 表示用認定番号。申請があればその番号／送付採番済みなら certificates.cert_number／未確定は null（プレビュー） */
   certNumber: string | null
   /** applied_at 由来 "YYYY.MM.DD" */
   dateText: string
+  /** 送付済み手動チェック（certificates.shipped） */
+  shipped: boolean
+  /** 送付チェック時のティア（certificates.shipped_tier） */
+  shippedTier: CertificateTier | null
+  /** 送付後にレベルアップ（現ティア > shippedTier）＝要再送 */
+  levelUp: boolean
+  /** このカテゴリが申請(certification_applications)由来か（番号が申請で確定済み） */
+  fromApplication: boolean
 }
 
 export type CertificateData = {
@@ -405,13 +423,17 @@ export type CertificateData = {
 }
 
 /**
- * proId の賞状データ（認定申請=カテゴリごとに1エントリ）を組み立てる。
- * 認定番号は既存 certification_number をそのまま使う（新規採番はしない）。
+ * proId の賞状データを【実績ベース】で組み立てる（CEO確定 2026-07-02）。
+ * - 表示範囲＝vote_summary の 30票(SPECIALIST)以上 全カテゴリ（申請有無を問わず・自動反映）。
+ * - 認定番号＝(1)申請があればその番号 (2)certificates 採番済みならそれ (3)どちらも無ければ null＝プレビュー。
+ * - 送付済み(shipped)・shipped_tier は certificates テーブル由来。levelUp＝現ティア>shipped_tier。
+ * 申請が1件も無いプロは対象外（null）。
  */
 export async function buildCertificates(
   sb: SupabaseClient,
   proId: string
 ): Promise<CertificateData | null> {
+  // 申請（名前・番号・申請日の参照元）
   const { data: appsRaw } = await sb
     .from('certification_applications')
     .select('category_slug, certification_number, full_name_romaji, applied_at')
@@ -424,55 +446,192 @@ export async function buildCertificates(
       applied_at: string | null
     }[] | null) ?? []
   if (apps.length === 0) return null
-
-  const slugs = Array.from(new Set(apps.map((a) => a.category_slug).filter(Boolean))) as string[]
-  const piMap = new Map<string, { strength_label: string | null }>()
-  if (slugs.length > 0) {
-    const { data: piRaw } = await sb
-      .from('proof_items')
-      .select('id, strength_label')
-      .in('id', slugs)
-    for (const p of (piRaw as { id: string; strength_label: string | null }[] | null) ?? []) {
-      piMap.set(p.id, { strength_label: p.strength_label })
-    }
+  const appByCat = new Map<string, { certification_number: string | null; applied_at: string | null }>()
+  for (const a of apps) {
+    if (a.category_slug) appByCat.set(a.category_slug, { certification_number: a.certification_number, applied_at: a.applied_at })
   }
 
+  // 実績（30票以上の全カテゴリ）
   const { data: vsRaw } = await sb
     .from('vote_summary')
     .select('proof_id, vote_count')
     .eq('professional_id', proId)
-  const vcMap = new Map(
-    ((vsRaw as { proof_id: string; vote_count: number | null }[] | null) ?? []).map((r) => [
-      r.proof_id,
-      r.vote_count ?? 0,
-    ])
-  )
+  const achieved = ((vsRaw as { proof_id: string; vote_count: number | null }[] | null) ?? [])
+    .map((r) => ({ proofId: r.proof_id, voteCount: r.vote_count ?? 0 }))
+    .filter((r) => r.voteCount >= SPECIALIST_THRESHOLD)
+    .sort((a, b) => b.voteCount - a.voteCount)
 
-  const entries: CertificateEntry[] = apps
-    .filter((a) => a.category_slug)
-    .map((a) => {
-      const strengthJa = piMap.get(a.category_slug as string)?.strength_label ?? ''
-      const voteCount = vcMap.get(a.category_slug as string) ?? 0
-      const tier = getCertificateTier(voteCount)
-      return {
-        proofId: a.category_slug as string,
-        categoryJa: strengthJa,
-        categoryEn: STRENGTH_ENGLISH_NAMES[strengthJa] ?? strengthJa,
-        voteCount,
-        tier,
-        milestone: tier ? CERTIFICATE_TIER_MILESTONE[tier] : null,
-        certNumber: a.certification_number,
-        dateText: formatCertDate(a.applied_at),
-      }
-    })
-    // 認定番号の発行順（若い番号）で安定ソート
-    .sort((x, y) => (x.certNumber || '').localeCompare(y.certNumber || ''))
+  // ラベル
+  const proofIds = achieved.map((a) => a.proofId)
+  const piMap = new Map<string, string>()
+  if (proofIds.length > 0) {
+    const { data: piRaw } = await sb.from('proof_items').select('id, strength_label').in('id', proofIds)
+    for (const p of (piRaw as { id: string; strength_label: string | null }[] | null) ?? []) {
+      if (p.strength_label) piMap.set(p.id, p.strength_label)
+    }
+  }
+
+  // certificates 状態（送付済み・shipped_tier・採番済み番号）
+  const { data: certRaw } = await sb
+    .from('certificates')
+    .select('proof_id, cert_number, shipped, shipped_tier')
+    .eq('professional_id', proId)
+  const certByProof = new Map<
+    string,
+    { cert_number: string | null; shipped: boolean; shipped_tier: string | null }
+  >()
+  for (const c of (certRaw as { proof_id: string; cert_number: string | null; shipped: boolean | null; shipped_tier: string | null }[] | null) ?? []) {
+    certByProof.set(c.proof_id, { cert_number: c.cert_number, shipped: !!c.shipped, shipped_tier: c.shipped_tier })
+  }
+
+  const entries: CertificateEntry[] = achieved.map((a) => {
+    const strengthJa = piMap.get(a.proofId) ?? ''
+    const tier = getCertificateTier(a.voteCount)
+    const app = appByCat.get(a.proofId)
+    const cert = certByProof.get(a.proofId)
+    const fromApplication = !!app
+    // 番号解決: 申請 → certificates採番 → null(プレビュー)
+    const certNumber = app?.certification_number ?? cert?.cert_number ?? null
+    const shipped = cert?.shipped ?? false
+    const shippedTier = (cert?.shipped_tier as CertificateTier | null) ?? null
+    const levelUp =
+      shipped && !!shippedTier && !!tier && CERT_TIER_RANK[tier] > CERT_TIER_RANK[shippedTier]
+    return {
+      proofId: a.proofId,
+      categoryJa: strengthJa,
+      categoryEn: STRENGTH_ENGLISH_NAMES[strengthJa] ?? strengthJa,
+      voteCount: a.voteCount,
+      tier,
+      milestone: tier ? CERTIFICATE_TIER_MILESTONE[tier] : null,
+      certNumber,
+      dateText: formatCertDate(app?.applied_at ?? null),
+      shipped,
+      shippedTier,
+      levelUp,
+      fromApplication,
+    }
+  })
 
   return {
     proId,
     nameRomaji: normalizeRomaji(apps[0].full_name_romaji),
     entries,
   }
+}
+
+/** 認定番号の次番号を certification_applications + certificates 両テーブル横断で採番（max+1）。 */
+async function getNextCertNumberAcross(sb: SupabaseClient): Promise<string> {
+  const year = 2026
+  const prefix = `RP-${year}-`
+  let max = 0
+  const [{ data: a }, { data: c }] = await Promise.all([
+    sb.from('certification_applications').select('certification_number'),
+    sb.from('certificates').select('cert_number'),
+  ])
+  const scan = (v: string | null) => {
+    if (v && v.startsWith(prefix)) {
+      const n = parseInt(v.slice(prefix.length), 10)
+      if (!Number.isNaN(n) && n > max) max = n
+    }
+  }
+  for (const r of (a as { certification_number: string | null }[] | null) ?? []) scan(r.certification_number)
+  for (const r of (c as { cert_number: string | null }[] | null) ?? []) scan(r.cert_number)
+  return `${prefix}${String(max + 1).padStart(4, '0')}`
+}
+
+/**
+ * 賞状の「送付済み」トグル（管理者操作）。
+ * - shipped=true: certificates を upsert（shipped_tier=現ティア, shipped_at=now()）。
+ *   申請由来でなく未採番なら、この時に認定番号を採番（両テーブル横断 max+1・UNIQUEリトライ）。
+ * - shipped=false: shipped を落とすのみ（採番済み番号は保持＝再利用しない）。
+ * 戻り値: 更新後の { proofId, shipped, certNumber, tier }。
+ */
+export async function setCertificateShipped(
+  sb: SupabaseClient,
+  proId: string,
+  proofId: string,
+  shipped: boolean
+): Promise<{ ok: boolean; error?: string; proofId: string; shipped: boolean; certNumber: string | null; tier: CertificateTier | null }> {
+  // 現ティア（ライブ票数）
+  const { data: vs } = await sb
+    .from('vote_summary')
+    .select('vote_count')
+    .eq('professional_id', proId)
+    .eq('proof_id', proofId)
+    .maybeSingle()
+  const voteCount = (vs as { vote_count: number | null } | null)?.vote_count ?? 0
+  const tier = getCertificateTier(voteCount)
+  if (shipped && !tier) {
+    return { ok: false, error: 'not_certified', proofId, shipped: false, certNumber: null, tier: null }
+  }
+
+  // 既存 certificates 行 / 申請の番号
+  const [{ data: existing }, { data: app }] = await Promise.all([
+    sb.from('certificates').select('cert_number, shipped_tier').eq('professional_id', proId).eq('proof_id', proofId).maybeSingle(),
+    sb.from('certification_applications').select('certification_number').eq('professional_id', proId).eq('category_slug', proofId).maybeSingle(),
+  ])
+  const existingRow = existing as { cert_number: string | null; shipped_tier: string | null } | null
+  const appNumber = (app as { certification_number: string | null } | null)?.certification_number ?? null
+
+  // 保存する cert_number: 申請番号は certificates 側には持たない(表示時に解決)。
+  // 未申請 & 送付 & 未採番 のときだけ新規採番。
+  let certNumberToStore: string | null = existingRow?.cert_number ?? null
+  if (shipped && !appNumber && !certNumberToStore) {
+    // 採番（UNIQUE違反リトライ）
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const candidate = await getNextCertNumberAcross(sb)
+      const { error } = await sb.from('certificates').upsert(
+        {
+          professional_id: proId,
+          proof_id: proofId,
+          cert_number: candidate,
+          shipped: true,
+          shipped_tier: tier,
+          shipped_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'professional_id,proof_id' }
+      )
+      if (!error) {
+        return { ok: true, proofId, shipped: true, certNumber: candidate, tier }
+      }
+      if (error.code === '23505') continue // 番号衝突 → 採り直し
+      return { ok: false, error: error.message, proofId, shipped: false, certNumber: null, tier }
+    }
+    return { ok: false, error: 'number_assign_failed', proofId, shipped: false, certNumber: null, tier }
+  }
+
+  // 通常 upsert（採番不要）
+  const { error } = await sb.from('certificates').upsert(
+    {
+      professional_id: proId,
+      proof_id: proofId,
+      cert_number: certNumberToStore,
+      shipped,
+      shipped_tier: shipped ? tier : (existingRow?.shipped_tier ?? null),
+      shipped_at: shipped ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'professional_id,proof_id' }
+  )
+  if (error) {
+    return { ok: false, error: error.message, proofId, shipped: false, certNumber: certNumberToStore, tier }
+  }
+  return { ok: true, proofId, shipped, certNumber: appNumber ?? certNumberToStore, tier }
+}
+
+/** 「申請中」フラグを立てる（新規申請時。apply ルートから呼ぶ）。 */
+export async function setCertPending(sb: SupabaseClient, proId: string): Promise<void> {
+  await sb
+    .from('certification_pending')
+    .upsert({ professional_id: proId, pending: true, updated_at: new Date().toISOString() }, { onConflict: 'professional_id' })
+}
+
+/** 「申請中」フラグを消す（管理者操作）。 */
+export async function clearCertPending(sb: SupabaseClient, proId: string): Promise<void> {
+  await sb
+    .from('certification_pending')
+    .upsert({ professional_id: proId, pending: false, updated_at: new Date().toISOString() }, { onConflict: 'professional_id' })
 }
 
 // ===== 認定者一覧（プロ選択UI用） =====
@@ -483,6 +642,8 @@ export type CertifiableProSummary = {
   itemCount: number
   cardUid: string | null
   cardRegistered: boolean
+  /** 未処理の申請がある（申請中バッジ点灯） */
+  pending: boolean
 }
 
 /**
@@ -535,6 +696,17 @@ export async function listCertifiablePros(
     )
   const cards = (cardsRaw as NfcCardRow[] | null) ?? []
 
+  // 「申請中」フラグ一括取得
+  const { data: pendRaw } = await sb
+    .from('certification_pending')
+    .select('professional_id, pending')
+    .in('professional_id', proIds)
+  const pendingSet = new Set(
+    ((pendRaw as { professional_id: string; pending: boolean | null }[] | null) ?? [])
+      .filter((r) => r.pending)
+      .map((r) => r.professional_id)
+  )
+
   const result: CertifiableProSummary[] = []
   for (const [proId, info] of Array.from(byPro.entries())) {
     const pInfo = proInfo.get(proId)
@@ -549,6 +721,7 @@ export async function listCertifiablePros(
       itemCount: info.count,
       cardUid: active?.card_uid ?? null,
       cardRegistered: !!active,
+      pending: pendingSet.has(proId),
     })
   }
   return result.sort((a, b) => a.nameKanji.localeCompare(b.nameKanji, 'ja'))
