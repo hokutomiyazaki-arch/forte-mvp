@@ -40,13 +40,15 @@ const FRONT_LAYOUT = {
   contentHeight: 172,
 }
 const BACK_LAYOUT = {
-  // back-bg: 上部金帯 ≈ y190 / SPECIALTY ≈ y312 / 下部金帯 ≈ y1153。
-  zoneTop: 360, // SPECIALTY ラベルの下から項目開始
-  zoneBottom: 1140, // 下部金帯の上（重ならない）
+  // back-bg（実測・2035×1300空間）: 上部金帯 ≈ y200 / SPECIALTY下端 ≈ y265 / 下側の金バー ≈ y1155。
+  // 項目ゾーン = SPECIALTY下〜下側金バー上。この範囲で space-evenly により上下余白＋項目間を均等配置。
+  zoneTop: 300,
+  zoneBottom: 1140,
   itemsLeft: 90,
-  qrSize: 580, // カード高さの約45%（Canva版に合わせ大きく）
-  qrTop: 381, // 金帯内側の上下中央あたり（中心 ≈ y671）
+  qrSize: 580, // カード高さの約45%
   qrRight: 130,
+  // QR はゾーン中央に合わせる（中心 ≈ (300+1140)/2 = 720）
+  qrTop: 430, // 720 - qrSize/2
 }
 
 // ===== 入力型 =====
@@ -214,15 +216,16 @@ export function buildBackElement(input: CardRenderInput, assets: CardAssets) {
   // 項目数に応じた段階サイズ。
   // 英語(サブ)ラベルは印刷で潰れないよう一回り大きく＆日本語との行間(lineGap)・
   // 項目間隔(rowGap)を広めに。6項目でも金帯/フッターに重ならない範囲で再バランス。
+  // 縦位置は space-evenly で均等配置するため rowGap は使わない（サイズのみ段階調整）。
   const sizing =
     n <= 2
-      ? { jaSize: 80, enSize: 40, medalSize: 150, gap: 30, lineGap: 10, rowGap: 46 }
+      ? { jaSize: 80, enSize: 40, medalSize: 150, gap: 30, lineGap: 10 }
       : n <= 4
-        ? { jaSize: 68, enSize: 34, medalSize: 128, gap: 26, lineGap: 10, rowGap: 34 }
+        ? { jaSize: 68, enSize: 34, medalSize: 128, gap: 26, lineGap: 10 }
         : n === 5
-          ? { jaSize: 58, enSize: 30, medalSize: 108, gap: 22, lineGap: 8, rowGap: 26 }
-          : { jaSize: 52, enSize: 28, medalSize: 92, gap: 18, lineGap: 8, rowGap: 22 }
-  const { jaSize, enSize, medalSize, gap, lineGap, rowGap } = sizing
+          ? { jaSize: 58, enSize: 30, medalSize: 108, gap: 22, lineGap: 8 }
+          : { jaSize: 52, enSize: 28, medalSize: 92, gap: 18, lineGap: 8 }
+  const { jaSize, enSize, medalSize, gap, lineGap } = sizing
 
   const qrX = CARD_W - BACK_LAYOUT.qrSize - BACK_LAYOUT.qrRight
   const itemsWidth = qrX - BACK_LAYOUT.itemsLeft - 48
@@ -267,7 +270,7 @@ export function buildBackElement(input: CardRenderInput, assets: CardAssets) {
         </div>
       ) : null}
 
-      {/* 左側: 項目リスト（SPECIALTY下・縦中央寄せ）。各行はテキスト直後にメダル */}
+      {/* 左側: 項目リスト（SPECIALTY下〜下側金バーの間に space-evenly で均等配置）。各行はテキスト直後にメダル */}
       <div
         style={{
           display: 'flex',
@@ -277,8 +280,7 @@ export function buildBackElement(input: CardRenderInput, assets: CardAssets) {
           top: BACK_LAYOUT.zoneTop,
           width: itemsWidth,
           height: zoneHeight,
-          justifyContent: 'center',
-          gap: rowGap,
+          justifyContent: 'space-around',
         }}
       >
         {items.map((it, idx) => {
