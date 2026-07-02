@@ -2236,13 +2236,14 @@ export default function AdminDashboard() {
 
       {/* 散布図 */}
       {trackingStats.length > 0 && (
-        <div style={{ background: C.surface, borderRadius: 10, padding: 20, marginTop: 14, overflowX: 'hidden' }}>
+        <div style={{ background: C.surface, borderRadius: 10, padding: 20, marginTop: 14, width: '100%', maxWidth: '100%', overflow: 'hidden', boxSizing: 'border-box' }}>
           <div style={{ color: C.cream, fontSize: 13, fontWeight: 600, marginBottom: 14 }}>
             プルーフ数 × クリック数の相関
           </div>
-          {/* recharts ResponsiveContainer が親を押し広げるのを防ぐ（minWidth:0 で縮小可能に） */}
-          <div style={{ width: '100%', minWidth: 0, height: 350 }}>
-            <ResponsiveContainer width="100%" height="100%">
+          {/* recharts ResponsiveContainer が親幅を測れず(width:-1)巨大化→親を押し広げるのを防ぐ。
+              位置基準を作り、幅を確定させ、overflow で封じ、ResponsiveContainer には minWidth={0} を付与。 */}
+          <div style={{ position: 'relative', width: '100%', maxWidth: '100%', minWidth: 0, height: 350, overflow: 'hidden' }}>
+            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <ScatterChart margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={C.grayDark + '44'} />
                 <XAxis
