@@ -1288,6 +1288,7 @@ export default function AdminDashboard() {
         <Placeholder message="データなし" />
       ) : (
         <div style={{ background: C.surface, borderRadius: 10, padding: 18 }}>
+          <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${C.grayDark}` }}>
@@ -1314,6 +1315,7 @@ export default function AdminDashboard() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
@@ -2234,11 +2236,12 @@ export default function AdminDashboard() {
 
       {/* 散布図 */}
       {trackingStats.length > 0 && (
-        <div style={{ background: C.surface, borderRadius: 10, padding: 20, marginTop: 14 }}>
+        <div style={{ background: C.surface, borderRadius: 10, padding: 20, marginTop: 14, overflowX: 'hidden' }}>
           <div style={{ color: C.cream, fontSize: 13, fontWeight: 600, marginBottom: 14 }}>
             プルーフ数 × クリック数の相関
           </div>
-          <div style={{ width: '100%', height: 350 }}>
+          {/* recharts ResponsiveContainer が親を押し広げるのを防ぐ（minWidth:0 で縮小可能に） */}
+          <div style={{ width: '100%', minWidth: 0, height: 350 }}>
             <ResponsiveContainer width="100%" height="100%">
               <ScatterChart margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={C.grayDark + '44'} />
