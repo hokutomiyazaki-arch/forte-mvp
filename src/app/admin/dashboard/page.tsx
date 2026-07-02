@@ -1085,6 +1085,36 @@ export default function AdminDashboard() {
     loadTracking()
   }, [loadData])
 
+  // 【一時診断】横スクロール原因の特定：ビューポート幅を超える要素を Console に列挙。
+  // 原因確定後に削除する。
+  useEffect(() => {
+    const scan = () => {
+      const docW = document.documentElement.clientWidth
+      const offenders: { tag: string; cls: string; w: number; right: number }[] = []
+      document.querySelectorAll<HTMLElement>('body *').forEach((el) => {
+        const r = el.getBoundingClientRect()
+        if (r.right > docW + 2 || r.width > docW + 2) {
+          offenders.push({
+            tag: el.tagName.toLowerCase(),
+            cls: (el.className && typeof el.className === 'string' ? el.className : '').slice(0, 60),
+            w: Math.round(r.width),
+            right: Math.round(r.right),
+          })
+        }
+      })
+      // 最も右にはみ出す順
+      offenders.sort((a, b) => b.right - a.right)
+      console.warn(
+        `[H-SCROLL DIAG] viewport=${docW} / scrollWidth=${document.documentElement.scrollWidth} / offenders=${offenders.length}`
+      )
+      offenders.slice(0, 15).forEach((o, i) =>
+        console.warn(`  #${i + 1} <${o.tag} class="${o.cls}"> width=${o.w} right=${o.right}`)
+      )
+    }
+    const t = setTimeout(scan, 1800)
+    return () => clearTimeout(t)
+  }, [])
+
   // Broadcast テンプレート定義
   const BROADCAST_TEMPLATES: Record<string, { subject: string; body: string }> = {
     founding: {
