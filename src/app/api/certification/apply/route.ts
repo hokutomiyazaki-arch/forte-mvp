@@ -44,6 +44,7 @@ export async function POST(req: NextRequest) {
       phone,
       wantMetal,
       wantShield,
+      usePhotoOnCard,
     } = body
 
     // カテゴリ入力の正規化（配列優先・単一は後方互換）
@@ -205,6 +206,8 @@ export async function POST(req: NextRequest) {
             payment_status: r.paymentStatus,
             payment_tier: r.tier,
             payment_amount: r.paymentAmount,
+            // 金属選択時は顔写真非対応のため false。未指定は既定 true（写真あり運用踏襲）
+            use_photo_on_card: wantMetal ? false : (usePhotoOnCard !== false),
           })
           .select('id, certification_number')
           .maybeSingle()

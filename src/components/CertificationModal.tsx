@@ -46,6 +46,15 @@ export default function CertificationModal({
   // 物理アップグレード（独立オプション）
   const [wantMetal, setWantMetal] = useState(false)
   const [wantShield, setWantShield] = useState(false)
+  // プロフィール写真をカードに使うか（初期ON）。金属選択時は強制OFF＋ロック。
+  const [usePhotoOnCard, setUsePhotoOnCard] = useState(true)
+
+  // 金属カードのON/OFFに連動して顔写真チェックを制御
+  const onToggleMetal = (checked: boolean) => {
+    setWantMetal(checked)
+    if (checked) setUsePhotoOnCard(false) // 金属＝顔写真非対応 → 強制OFF
+    else setUsePhotoOnCard(true) // PVCに戻したら初期値ONへ
+  }
 
   // フォームフィールド
   const [fullNameKanji, setFullNameKanji] = useState('')
@@ -122,6 +131,8 @@ export default function CertificationModal({
           categories: selectedList.map((c) => ({ categorySlug: c.slug, proofCount: c.count })),
           wantMetal: wantMetalEff,
           wantShield: wantShieldEff,
+          // 金属選択時は顔写真非対応のため強制 false
+          usePhotoOnCard: wantMetal ? false : usePhotoOnCard,
           topPersonality,
           fullNameKanji: fullNameKanji.trim(),
           fullNameRomaji: fullNameRomaji.trim(),
@@ -238,7 +249,7 @@ export default function CertificationModal({
                 <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {metalEligible && (
                     <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: 12, borderRadius: 8, border: '1px dashed #C4A35A', background: 'white', cursor: 'pointer' }}>
-                      <input type="checkbox" checked={wantMetal} onChange={(e) => setWantMetal(e.target.checked)} style={{ marginTop: 3 }} />
+                      <input type="checkbox" checked={wantMetal} onChange={(e) => onToggleMetal(e.target.checked)} style={{ marginTop: 3 }} />
                       <span style={{ fontSize: 13, lineHeight: 1.6, color: '#374151' }}>
                         <strong>金属カード</strong>にアップグレード <span style={{ color: '#C4A35A', fontWeight: 700 }}>（＋{yen(CERTIFICATION_PRODUCT_PRICING.metal)}）</span><br />
                         <span style={{ fontSize: 11, color: '#888' }}>Master以上で選択可。カテゴリ数に関わらず一律。</span>
@@ -256,6 +267,27 @@ export default function CertificationModal({
                   )}
                 </div>
               )}
+
+              {/* 顔写真をカードに使うか（初期ON。金属選択中は強制OFF＋ロック） */}
+              <div style={{ marginTop: 12 }}>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: 12, borderRadius: 8, border: '1px solid #E5E5E0', background: wantMetal ? '#F3F3F1' : 'white', cursor: wantMetal ? 'not-allowed' : 'pointer', opacity: wantMetal ? 0.6 : 1 }}>
+                  <input
+                    type="checkbox"
+                    checked={wantMetal ? false : usePhotoOnCard}
+                    disabled={wantMetal}
+                    onChange={(e) => setUsePhotoOnCard(e.target.checked)}
+                    style={{ marginTop: 3 }}
+                  />
+                  <span style={{ fontSize: 13, lineHeight: 1.6, color: '#374151' }}>
+                    <strong>プロフィール写真をカードに使用する</strong><br />
+                    {wantMetal ? (
+                      <span style={{ fontSize: 11, color: '#C4A35A' }}>金属カードは顔写真非対応のため、顔写真は使用されません。</span>
+                    ) : (
+                      <span style={{ fontSize: 11, color: '#888' }}>別の写真を使いたい場合は、先にプロフィール写真を変更してから申請してください。</span>
+                    )}
+                  </span>
+                </label>
+              </div>
 
               {/* 料金プレビュー */}
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(196,163,90,0.3)', fontSize: 14, color: '#1A1A2E' }}>

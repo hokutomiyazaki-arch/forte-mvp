@@ -44,6 +44,7 @@ type ApiCardData = {
   title: string | null
   storeName: string | null
   photoUrl: string | null
+  usePhotoOnCard: boolean
   topPersonalityJa: string | null
   topPersonalityEn: string | null
   highestTier: Tier
@@ -111,6 +112,7 @@ export default function CertificationCardsPage() {
   const [personalityJa, setPersonalityJa] = useState<string | null>(null)
   const [personalityEn, setPersonalityEn] = useState<string | null>(null)
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
+  const [usePhoto, setUsePhoto] = useState(true)
   const [cardUid, setCardUid] = useState<string | null>(null)
   const [cardRegistered, setCardRegistered] = useState(false)
   const [cardProfessionalIdMissing, setCardProfessionalIdMissing] = useState(false)
@@ -155,6 +157,7 @@ export default function CertificationCardsPage() {
         setPersonalityJa(d.topPersonalityJa)
         setPersonalityEn(d.topPersonalityEn)
         setPhotoUrl(d.photoUrl)
+        setUsePhoto(d.usePhotoOnCard !== false && !!d.photoUrl)
         setCardUid(d.cardUid)
         setCardRegistered(d.cardRegistered)
         setCardProfessionalIdMissing(d.cardProfessionalIdMissing)
@@ -195,7 +198,7 @@ export default function CertificationCardsPage() {
       highestTier,
       personalityJa,
       personalityEn,
-      photoUrl,
+      photoUrl: usePhoto ? photoUrl : null,
       items: visibleItems.map((it) => ({
         strengthJa: it.strengthJa,
         strengthEn: it.strengthEn,
@@ -203,7 +206,7 @@ export default function CertificationCardsPage() {
       })),
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nameKanji, nameRomaji, organization, cardUid, highestTier, personalityJa, personalityEn, photoUrl, items])
+  }, [nameKanji, nameRomaji, organization, cardUid, highestTier, personalityJa, personalityEn, photoUrl, usePhoto, items])
 
   const refreshPreview = () => setPreviewPayload(buildPayload())
 
@@ -474,6 +477,14 @@ export default function CertificationCardsPage() {
                   )
                 })}
               </div>
+
+              {/* 顔写真トグル（申請時の選択で初期化。写真未設定のプロでは非表示） */}
+              {photoUrl && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 13, color: C.cream }}>
+                  <input type="checkbox" checked={usePhoto} onChange={(e) => setUsePhoto(e.target.checked)} />
+                  表に顔写真を使う（申請者の選択で初期化・金属選択者はOFF。ここで上書き可）
+                </label>
+              )}
 
               {/* アクション */}
               <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>

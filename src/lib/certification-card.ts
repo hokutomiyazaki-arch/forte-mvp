@@ -67,6 +67,8 @@ export type CardData = {
   title: string | null
   storeName: string | null
   photoUrl: string | null
+  /** 申請時に選んだ「カードに顔写真を使う」か（最新申請の値・既定true）。管理UIのトグル初期値 */
+  usePhotoOnCard: boolean
   topPersonalityJa: string | null
   topPersonalityEn: string | null
   /** 全項目の最高ティア（裏カード上部の語） */
@@ -198,6 +200,8 @@ type CertAppRow = {
   top_personality: string | null
   organization: string | null
   status: string | null
+  use_photo_on_card: boolean | null
+  applied_at: string | null
 }
 
 type ProRow = {
@@ -222,11 +226,15 @@ export async function buildCardData(
   const { data: appsRaw } = await sb
     .from('certification_applications')
     .select(
-      'professional_id, category_slug, certification_number, full_name_kanji, full_name_romaji, top_personality, organization, status'
+      'professional_id, category_slug, certification_number, full_name_kanji, full_name_romaji, top_personality, organization, status, use_photo_on_card, applied_at'
     )
     .eq('professional_id', proId)
   const apps = (appsRaw as CertAppRow[] | null) ?? []
   if (apps.length === 0) return null
+
+  // 顔写真をカードに使うか：最新申請(applied_at)の値。既定 true（写真あり運用踏襲）。
+  const latestApp = [...apps].sort((a, b) => (b.applied_at || '').localeCompare(a.applied_at || ''))[0]
+  const usePhotoOnCard = latestApp?.use_photo_on_card !== false
 
   // 2. professionals 行
   const { data: proRaw } = await sb
@@ -325,6 +333,7 @@ export async function buildCardData(
     title: pro?.title ?? null,
     storeName: pro?.store_name ?? null,
     photoUrl: pro?.photo_url ?? null,
+    usePhotoOnCard,
     topPersonalityJa,
     topPersonalityEn,
     highestTier,
