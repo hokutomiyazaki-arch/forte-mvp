@@ -110,6 +110,7 @@ export default function CertificationCardsPage() {
   const [orgFallbackUsed, setOrgFallbackUsed] = useState(false)
   const [personalityJa, setPersonalityJa] = useState<string | null>(null)
   const [personalityEn, setPersonalityEn] = useState<string | null>(null)
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null)
   const [cardUid, setCardUid] = useState<string | null>(null)
   const [cardRegistered, setCardRegistered] = useState(false)
   const [cardProfessionalIdMissing, setCardProfessionalIdMissing] = useState(false)
@@ -153,6 +154,7 @@ export default function CertificationCardsPage() {
         setOrgFallbackUsed(d.orgFallbackUsed)
         setPersonalityJa(d.topPersonalityJa)
         setPersonalityEn(d.topPersonalityEn)
+        setPhotoUrl(d.photoUrl)
         setCardUid(d.cardUid)
         setCardRegistered(d.cardRegistered)
         setCardProfessionalIdMissing(d.cardProfessionalIdMissing)
@@ -193,6 +195,7 @@ export default function CertificationCardsPage() {
       highestTier,
       personalityJa,
       personalityEn,
+      photoUrl,
       items: visibleItems.map((it) => ({
         strengthJa: it.strengthJa,
         strengthEn: it.strengthEn,
@@ -200,7 +203,7 @@ export default function CertificationCardsPage() {
       })),
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nameKanji, nameRomaji, organization, cardUid, highestTier, personalityJa, personalityEn, items])
+  }, [nameKanji, nameRomaji, organization, cardUid, highestTier, personalityJa, personalityEn, photoUrl, items])
 
   const refreshPreview = () => setPreviewPayload(buildPayload())
 

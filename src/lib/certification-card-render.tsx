@@ -69,6 +69,8 @@ export type CardRenderInput = {
   personalityEn: string | null
   /** 表示対象の項目（UIで並び替え・ON/OFF・最大6件に絞った最終形） */
   items: CardRenderItem[]
+  /** 顔写真URL（設定者のみ・表front用）。ルート側で data URI 化して assets.photoDataUri に渡す */
+  photoUrl?: string | null
 }
 
 export type CardAssets = {
@@ -145,6 +147,9 @@ export function buildFrontElement(input: CardRenderInput, assets: CardAssets) {
   const nameSize = nameLen <= 6 ? 76 : nameLen <= 9 ? 64 : 54
   // ローマ字は日本語氏名の約55%を目安に一回り大きく
   const romajiSize = nameLen <= 6 ? 44 : nameLen <= 9 ? 38 : 32
+  // 顔写真（設定者のみ）。氏名ブロックとバランスする円形サイズ。
+  const hasPhoto = !!assets.photoDataUri
+  const photoSize = 150
 
   const element = (
     <div
@@ -160,11 +165,11 @@ export function buildFrontElement(input: CardRenderInput, assets: CardAssets) {
     >
       <Background bg={assets.backgroundDataUri} />
 
-      {/* 氏名ゾーン（金帯より下・中央） */}
+      {/* 氏名ゾーン（金帯より下・中央）。顔写真がある場合は [丸写真][氏名ブロック] の横並びを中央寄せ。 */}
       <div
         style={{
           display: 'flex',
-          flexDirection: 'column',
+          flexDirection: 'row',
           position: 'absolute',
           left: 0,
           top: FRONT_LAYOUT.contentTop,
@@ -172,31 +177,52 @@ export function buildFrontElement(input: CardRenderInput, assets: CardAssets) {
           height: FRONT_LAYOUT.contentHeight,
           alignItems: 'center',
           justifyContent: 'center',
+          gap: hasPhoto ? 40 : 0,
           paddingLeft: 100,
           paddingRight: 100,
           boxSizing: 'border-box',
         }}
       >
-        {/* 1行目: 姓　名　ローマ字（スペース区切り・横1行） */}
-        <div style={{ display: 'flex', alignItems: 'baseline' }}>
-          <span style={{ fontSize: nameSize, color: COL.cream, fontWeight: 700, lineHeight: 1.05 }}>
-            {nameKanji}
-          </span>
-          {nameRomaji ? (
-            <span style={{ fontSize: romajiSize, color: COL.creamDim, letterSpacing: 4, marginLeft: 32 }}>
-              {nameRomaji}
+        {/* 顔写真（設定者のみ・円形トリミング。無ければ何も描かない＝空の丸枠を出さない） */}
+        {hasPhoto ? (
+          <img
+            src={assets.photoDataUri as string}
+            width={photoSize}
+            height={photoSize}
+            style={{
+              width: photoSize,
+              height: photoSize,
+              borderRadius: photoSize / 2,
+              objectFit: 'cover',
+              border: `3px solid ${COL.gold}`,
+              flexShrink: 0,
+            }}
+          />
+        ) : null}
+
+        {/* 氏名ブロック（写真ありは左寄せ・無しは中央） */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: hasPhoto ? 'flex-start' : 'center' }}>
+          {/* 1行目: 姓　名　ローマ字（スペース区切り・横1行） */}
+          <div style={{ display: 'flex', alignItems: 'baseline' }}>
+            <span style={{ fontSize: nameSize, color: COL.cream, fontWeight: 700, lineHeight: 1.05 }}>
+              {nameKanji}
             </span>
+            {nameRomaji ? (
+              <span style={{ fontSize: romajiSize, color: COL.creamDim, letterSpacing: 4, marginLeft: 32 }}>
+                {nameRomaji}
+              </span>
+            ) : null}
+          </div>
+
+          {/* 2行目: 肩書（代表1つ・編集プレビューで確定した値）*/}
+          {organization ? (
+            <div style={{ display: 'flex', marginTop: 18, maxWidth: 1500 }}>
+              <span style={{ fontSize: 42, color: COL.creamDim, lineHeight: 1.25, textAlign: hasPhoto ? 'left' : 'center' }}>
+                {organization}
+              </span>
+            </div>
           ) : null}
         </div>
-
-        {/* 2行目: 肩書（代表1つ・編集プレビューで確定した値）*/}
-        {organization ? (
-          <div style={{ display: 'flex', marginTop: 18, maxWidth: 1700, justifyContent: 'center' }}>
-            <span style={{ fontSize: 42, color: COL.creamDim, lineHeight: 1.25, textAlign: 'center' }}>
-              {organization}
-            </span>
-          </div>
-        ) : null}
       </div>
     </div>
   )

@@ -12,6 +12,7 @@
 import { ImageResponse } from 'next/og'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
+import sharp from 'sharp'
 import { buildFrontElement, type CardRenderInput } from '@/lib/certification-card-render'
 
 export const runtime = 'nodejs'
@@ -26,6 +27,18 @@ async function readPubArrayBuffer(rel: string): Promise<ArrayBuffer> {
 async function readPubDataUri(rel: string): Promise<string> {
   const b = await readFile(pubPath(rel))
   return `data:image/png;base64,${b.toString('base64')}`
+}
+// 外部URL（顔写真＝Supabase/Clerk等）を data URI 化
+async function fetchRemoteDataUri(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, { cache: 'no-store' })
+    if (!res.ok) return null
+    const ct = res.headers.get('content-type') || 'image/jpeg'
+    const buf = await res.arrayBuffer()
+    return `data:${ct};base64,${Buffer.from(buf).toString('base64')}`
+  } catch {
+    return null
+  }
 }
 
 function isAdmin(request: Request): boolean {
@@ -52,12 +65,18 @@ export async function GET(request: Request) {
   }
 
   try {
-    const [fontData, backgroundDataUri] = await Promise.all([
+    const [fontData, backgroundDataUri, photoDataUri] = await Promise.all([
       readPubArrayBuffer('fonts/NotoSansJP-subset.ttf'),
       readPubDataUri('card-assets/front-bg.png').catch(() => null),
+      input.photoUrl ? fetchRemoteDataUri(input.photoUrl) : Promise.resolve<string | null>(null),
     ])
-    const { element, options } = buildFrontElement(input, { fontData, backgroundDataUri })
-    return new ImageResponse(element, options)
+    const { element, options } = buildFrontElement(input, { fontData, backgroundDataUri, photoDataUri })
+    // ImageResponse は RGBA(PNG)。入稿事故防止に黒でフラット化して RGB(透過なし)へ。
+    const rgba = Buffer.from(await new ImageResponse(element, options).arrayBuffer())
+    const rgb = await sharp(rgba).flatten({ background: { r: 0, g: 0, b: 0 } }).png().toBuffer()
+    return new Response(new Uint8Array(rgb), {
+      headers: { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' },
+    })
   } catch (err) {
     // 診断用（原因確認後に外す）。admin限定ルートなのでスタック開示可。
     const msg = err instanceof Error ? `${err.message}\n${err.stack || ''}` : String(err)

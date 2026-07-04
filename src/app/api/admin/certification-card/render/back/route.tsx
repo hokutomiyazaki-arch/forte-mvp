@@ -9,6 +9,7 @@
 import { ImageResponse } from 'next/og'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
+import sharp from 'sharp'
 import {
   buildBackElement,
   buildQrDataUri,
@@ -82,7 +83,12 @@ export async function GET(request: Request) {
 
     const assets: CardAssets = { fontData, qrDataUri, medalDataUris, backgroundDataUri }
     const { element, options } = buildBackElement(input, assets)
-    return new ImageResponse(element, options)
+    // RGBA(PNG) を黒でフラット化して RGB(透過なし)へ統一
+    const rgba = Buffer.from(await new ImageResponse(element, options).arrayBuffer())
+    const rgb = await sharp(rgba).flatten({ background: { r: 0, g: 0, b: 0 } }).png().toBuffer()
+    return new Response(new Uint8Array(rgb), {
+      headers: { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' },
+    })
   } catch (err) {
     const msg = err instanceof Error ? `${err.message}\n${err.stack || ''}` : String(err)
     console.error('[render/back] error:', msg)
