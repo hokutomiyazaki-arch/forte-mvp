@@ -203,9 +203,6 @@ export default function CertificationModal({
             <div className="text-center mb-6">
               <h2 className="text-xl font-bold" style={{ color: PROVEN_GOLD }}>🏆 REALPROOF認定申請</h2>
               <p className="text-sm text-gray-600 mt-2">認定可能な強みをまとめて申請できます</p>
-              {topPersonality && (
-                <p className="text-xs text-gray-500 mt-1">最も評価された人柄: 「{topPersonality}」</p>
-              )}
             </div>
 
             {/* 上部・小さめの注記（申請可能プロダクトの目安） */}
@@ -368,9 +365,6 @@ export default function CertificationModal({
                   ))}
                 </ul>
               </div>
-              {topPersonality && (
-                <div className="flex justify-between"><span className="text-gray-500">最多人柄</span><span className="font-bold">{topPersonality}</span></div>
-              )}
               <hr className="my-2" />
               <div className="flex justify-between"><span className="text-gray-500">氏名（漢字）</span><span>{fullNameKanji}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">氏名（ローマ字）</span><span>{fullNameRomaji}</span></div>
