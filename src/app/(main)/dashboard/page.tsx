@@ -360,6 +360,8 @@ export default function DashboardPage() {
   const [memberResourcesLoading, setMemberResourcesLoading] = useState(false)
   const [hasOrgMembership, setHasOrgMembership] = useState(false)
   const [memberAccordionOpen, setMemberAccordionOpen] = useState<Record<string, boolean>>({})
+  // 団体IGシェア オプトアウト: 紹介を拒否している organization_id（行あり=OFF/拒否）
+  const [optoutOrgIds, setOptoutOrgIds] = useState<string[]>([])
 
   // 認定申請 state
   const [certApplications, setCertApplications] = useState<{category_slug: string; status: string; application_group_id?: string | null}[]>([])
@@ -659,6 +661,19 @@ export default function DashboardPage() {
               setHasOrgMembership(true)
               setSelectedMemberOrgId(orgsData[0].id)
               if (tabParam === 'myorgs') loadMemberResources(orgsData[0].id)
+
+              // 団体IGシェア オプトアウト状態を取得（行あり=紹介拒否=トグルOFF）
+              try {
+                const optoutRes = await fetch('/api/org-share-optout', { cache: 'no-store' })
+                if (optoutRes.ok) {
+                  const optoutData = await optoutRes.json()
+                  if (Array.isArray(optoutData?.organization_ids)) {
+                    setOptoutOrgIds(optoutData.organization_ids)
+                  }
+                }
+              } catch (err) {
+                console.error('[dashboard] optout load error:', err)
+              }
             }
           }
         } catch (err) {
@@ -874,6 +889,34 @@ export default function DashboardPage() {
   function handleMemberOrgChange(orgId: string) {
     setSelectedMemberOrgId(orgId)
     loadMemberResources(orgId)
+  }
+
+  // 団体IGシェア: 紹介許可トグル（allow=true→optout解除 / allow=false→optout登録）
+  async function toggleOrgShare(orgId: string, allow: boolean) {
+    const optout = !allow
+    // 楽観更新（配列は非破壊で組み替え）
+    setOptoutOrgIds(prev =>
+      optout
+        ? Array.from(new Set([...prev, orgId]))
+        : prev.filter(id => id !== orgId)
+    )
+    try {
+      const res = await fetch('/api/org-share-optout', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organization_id: orgId, optout }),
+      })
+      if (!res.ok) throw new Error('failed')
+    } catch (err) {
+      console.error('[dashboard] org share optout toggle error:', err)
+      // 失敗時ロールバック
+      setOptoutOrgIds(prev =>
+        optout
+          ? prev.filter(id => id !== orgId)
+          : Array.from(new Set([...prev, orgId]))
+      )
+    }
   }
 
   function addCustomForte(type: 'result' | 'personality') {
@@ -4300,6 +4343,43 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
+
+        {/* 団体IGシェア: 紹介許可トグル（デフォルトON=許可 / OFF=この団体の発信から除外） */}
+        {selectedMemberOrgId && (() => {
+          const currentOrg = memberOrgs.find(o => o.id === selectedMemberOrgId)
+          if (!currentOrg) return null
+          const allowed = !optoutOrgIds.includes(selectedMemberOrgId)
+          return (
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              gap: 12, marginBottom: 16, padding: '14px 16px',
+              background: '#fff', borderRadius: 12, border: '1px solid #E5E7EB',
+            }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E' }}>
+                  {currentOrg.name}の発信で、あなたの強みの紹介を許可する
+                </div>
+                <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4, lineHeight: 1.5 }}>
+                  オフにすると、この団体のSNS発信であなたの顔写真・強みが使われなくなります
+                </div>
+              </div>
+              <div
+                onClick={() => toggleOrgShare(selectedMemberOrgId, !allowed)}
+                style={{
+                  width: 44, height: 24, borderRadius: 12, flexShrink: 0,
+                  background: allowed ? '#C4A35A' : '#ccc',
+                  position: 'relative', transition: 'background 0.2s', cursor: 'pointer',
+                }}
+              >
+                <div style={{
+                  width: 20, height: 20, borderRadius: '50%', background: '#fff',
+                  position: 'absolute', top: 2, left: allowed ? 22 : 2,
+                  transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                }} />
+              </div>
+            </div>
+          )
+        })()}
 
         {/* 共有資料セクション（バッジ別アコーディオン） */}
         {memberResourcesLoading ? (
