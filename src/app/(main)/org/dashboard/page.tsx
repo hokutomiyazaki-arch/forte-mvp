@@ -1058,6 +1058,8 @@ export default function OrgDashboardPage() {
               strengths={orgStrengths}
               badges={badges}
               badgeHolderCounts={badgeHolderCounts}
+              logoUrl={org?.logo_url ?? null}
+              members={members}
             />
           </>
         )

@@ -37,6 +37,13 @@ export interface OrgBadge {
   name: string
   image_url: string | null
 }
+export interface OrgMemberFace {
+  professional_id: string
+  professional_name: string
+  photo_url: string | null
+  total_votes: number
+  title?: string | null
+}
 
 interface Props {
   orgName: string
@@ -45,7 +52,12 @@ interface Props {
   strengths: OrgStrength[]
   badges: OrgBadge[]
   badgeHolderCounts: Record<string, number>
+  logoUrl?: string | null   // organizations.logo_url（null なら非表示）
+  members?: OrgMemberFace[]  // total_votes 降順（org-dashboard が保証）。undefined なら顔写真ブロック非表示
 }
+
+// 顔写真ずらり: 表示上限（feed/stories）
+const FACE_MAX = { feed: 10, stories: 15 } as const
 
 // メダル画像（public/ 配下＝同一オリジン＝CORS安全）。proven は画像なし。
 const MEDAL_IMG: Record<string, string | null> = {
@@ -107,10 +119,14 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
 
 export default function OrgShareCard({
   orgName, memberCount, totalVotes, strengths, badges, badgeHolderCounts,
+  logoUrl, members,
 }: Props) {
   const [blockSummary, setBlockSummary] = useState(true)
   const [blockStrengths, setBlockStrengths] = useState(true)
   const [blockBadges, setBlockBadges] = useState(true)
+  // 追加トグル（デフォルト全ON）
+  const [showLogo, setShowLogo] = useState(true)
+  const [showFaces, setShowFaces] = useState(true)
   const [exportMode, setExportMode] = useState<'feed' | 'stories'>('feed')
   const [saving, setSaving] = useState(false)
   // 初期は上位3件ON（stories上限=3に合わせる。strengths は totalCount 降順で渡る前提）
@@ -125,8 +141,19 @@ export default function OrgShareCard({
     .filter(b => b.count > 0)
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
 
+  // バッジ選択（強み選択と同じパターン・デフォルト全選択。一意キーは OrgBadge.id）
+  const [selectedBadgeIds, setSelectedBadgeIds] = useState<string[]>(
+    () => sortedBadges.map(b => b.id)
+  )
+
   function toggleStrength(id: string) {
     setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
+  }
+
+  function toggleBadge(id: string) {
+    setSelectedBadgeIds(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     )
   }
@@ -194,11 +221,21 @@ export default function OrgShareCard({
   // preview は transform:scale で縮小表示し、export と完全一致させる。
   function CardFull({ mode }: { mode: 'feed' | 'stories' }) {
     const dim = BG[mode]
+    const isStories = mode === 'stories'
     const shownStrengths = strengths
       .filter(s => selectedIds.includes(s.proofItemId))
       .slice(0, dim.strengthMax)
-    const imgBadges = sortedBadges.slice(0, BADGE_IMG_MAX)
-    const foldedCount = sortedBadges.length - imgBadges.length
+    // 選択済みバッジのみ（デフォルト全選択）
+    const selectedBadges = sortedBadges.filter(b => selectedBadgeIds.includes(b.id))
+    const imgBadges = selectedBadges.slice(0, BADGE_IMG_MAX)
+    const foldedCount = selectedBadges.length - imgBadges.length
+    // 顔写真ずらり: photo_url ありのみ・total_votes 降順（非破壊コピーで安定化）
+    const faceMembers = (members ?? [])
+      .filter(m => !!m.photo_url)
+      .slice()
+      .sort((a, b) => (b.total_votes || 0) - (a.total_votes || 0))
+    const shownFaces = faceMembers.slice(0, FACE_MAX[mode])
+    const facesRemaining = memberCount - shownFaces.length
 
     return (
       <div style={{
@@ -212,6 +249,13 @@ export default function OrgShareCard({
         overflow: 'hidden',
       }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: mode === 'stories' ? 44 : 30, width: '100%' }}>
+
+          {/* ロゴ（proxy経由・logoUrl あるときのみ） */}
+          {showLogo && logoUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={badgeProxyUrl(logoUrl)} alt=""
+              style={{ height: 120, maxWidth: '70%', objectFit: 'contain', display: 'block' }} />
+          )}
 
           {/* ① サマリー */}
           {blockSummary && (
@@ -274,6 +318,30 @@ export default function OrgShareCard({
             </div>
           )}
 
+          {/* ④ 顔写真ずらり（proxy経由・円マスク・total_votes降順・序列ラベル無し） */}
+          {showFaces && shownFaces.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', alignItems: 'center', width: '100%' }}>
+              {shownFaces.map(m => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img key={m.professional_id} src={badgeProxyUrl(m.photo_url as string)} alt=""
+                  style={{
+                    width: 72, height: 72, borderRadius: '50%', objectFit: 'cover', display: 'block',
+                    border: '2px solid rgba(196,163,90,0.4)',
+                  }} />
+              ))}
+              {facesRemaining > 0 && (
+                <div style={{
+                  width: 72, height: 72, borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.10)', border: '2px solid rgba(196,163,90,0.4)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: NAME_LIGHT, fontSize: 20, fontWeight: 700, textAlign: 'center', lineHeight: 1.1,
+                }}>
+                  +{facesRemaining}名
+                </div>
+              )}
+            </div>
+          )}
+
           {/* フッター */}
           <div style={{ fontSize: 24, letterSpacing: 4, fontWeight: 700, color: '#8A7A50' }}>
             VERIFIED BY REALPROOF
@@ -302,10 +370,41 @@ export default function OrgShareCard({
       {/* ─── ブロック ON/OFF ─── */}
       <div style={{ maxWidth: 360, margin: '0 auto 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: '#8A7A50', letterSpacing: 1 }}>表示ブロック</div>
+        {/* ロゴトグルは logoUrl があるときのみ（null では ON にしても何も出ないため出さない） */}
+        {logoUrl && (
+          <Toggle label="団体ロゴを載せる" value={showLogo} onChange={setShowLogo} />
+        )}
         <Toggle label="① サマリー（声の数・在籍数）" value={blockSummary} onChange={setBlockSummary} />
-        <Toggle label="② 証明された強み" value={blockStrengths} onChange={setBlockStrengths} />
-        <Toggle label="③ 認定を持つプロ" value={blockBadges} onChange={setBlockBadges} />
+        <Toggle label="② 強みを載せる" value={blockStrengths} onChange={setBlockStrengths} />
+        <Toggle label="③ 認定バッジを載せる" value={blockBadges} onChange={setBlockBadges} />
+        {/* 顔写真トグルは members があるときのみ */}
+        {members && members.length > 0 && (
+          <Toggle label="④ 顔写真を載せる" value={showFaces} onChange={setShowFaces} />
+        )}
       </div>
+
+      {/* ─── バッジの表示選択（③ON時のみ・デフォルト全選択）─── */}
+      {blockBadges && sortedBadges.length > 0 && (
+        <div style={{ maxWidth: 360, margin: '0 auto 16px' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#8A7A50', letterSpacing: 1, marginBottom: 8 }}>
+            認定バッジの表示（外したいものだけ外す）
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
+            {sortedBadges.map(b => {
+              const checked = selectedBadgeIds.includes(b.id)
+              return (
+                <label key={b.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: INK,
+                }}>
+                  <input type="checkbox" checked={checked} onChange={() => toggleBadge(b.id)} />
+                  <span style={{ flex: 1 }}>{b.name}</span>
+                  <span style={{ color: GOLD, fontWeight: 700 }}>{b.count}名</span>
+                </label>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ─── 強みの表示項目選択（②ON時のみ）─── */}
       {blockStrengths && candidateStrengths.length > 0 && (

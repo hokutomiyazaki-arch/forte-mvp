@@ -26,7 +26,12 @@ function allowedHost(): string | null {
   }
 }
 
-const ALLOWED_PATH_PREFIX = '/storage/v1/object/public/badge-images/'
+// 同一 Supabase プロジェクトの public 配下・許可バケットのみ中継する（SSRFガード）。
+// badge-images: バッジ画像 + 団体ロゴ(org-logos/) / avatars: プロ本人の顔写真
+const ALLOWED_PATH_PREFIXES = [
+  '/storage/v1/object/public/badge-images/',
+  '/storage/v1/object/public/avatars/',
+]
 
 export async function GET(request: Request) {
   try {
@@ -43,13 +48,13 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Invalid url' }, { status: 400 })
     }
 
-    // SSRF検証: https のみ / Supabase ホスト / badge-images public パスのみ
+    // SSRF検証: https のみ / Supabase ホスト / 許可バケットの public パスのみ
     const host = allowedHost()
     if (
       parsed.protocol !== 'https:' ||
       !host ||
       parsed.host !== host ||
-      !parsed.pathname.startsWith(ALLOWED_PATH_PREFIX)
+      !ALLOWED_PATH_PREFIXES.some(p => parsed.pathname.startsWith(p))
     ) {
       return NextResponse.json({ error: 'Forbidden url' }, { status: 403 })
     }
