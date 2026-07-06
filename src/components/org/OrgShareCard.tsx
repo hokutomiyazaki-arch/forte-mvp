@@ -1,36 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { executeVoiceShare } from '@/lib/voice-share'
 
 /**
- * クロスオリジン画像を html2canvas で透過保持したまま焼くため data URI 化する。
- *
- * fetch方式は Supabase Storage への XHR CORS(ACAO) が通らず失敗していたため、
- * 「既に <img crossOrigin> で読み込めている経路」と同じ Image ロード → canvas.toDataURL に変更。
- * fetch を使わないので CORS プリフライトの影響を受けない。
- * 失敗（onerror / canvas taint で toDataURL 例外）時は null（呼び出し側で元URLにフォールバック）。
+ * バッジ画像は同一オリジンの proxy 経由で読む（html2canvas 透過保持のため）。
+ * Supabase Storage は画像レスポンスに CORS ヘッダを付けず、ブラウザ側の fetch/canvas 変換が
+ * 失敗して白背景に潰れていた。/api/badge-proxy でサーバー中継し、同一オリジン画像
+ * （＝メダル /medals/*.png と同条件）にすることで透過が焼ける。
  */
-function toDataUri(url: string): Promise<string | null> {
-  return new Promise<string | null>((resolve) => {
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas')
-        canvas.width = img.naturalWidth || img.width
-        canvas.height = img.naturalHeight || img.height
-        const ctx = canvas.getContext('2d')
-        if (!ctx || canvas.width === 0 || canvas.height === 0) { resolve(null); return }
-        ctx.drawImage(img, 0, 0) // 透過保持（背景を塗らない）
-        resolve(canvas.toDataURL('image/png'))
-      } catch {
-        resolve(null) // canvas 汚染時など
-      }
-    }
-    img.onerror = () => resolve(null)
-    img.src = url
-  })
+function badgeProxyUrl(url: string): string {
+  return `/api/badge-proxy?url=${encodeURIComponent(url)}`
 }
 
 /**
@@ -137,11 +117,6 @@ export default function OrgShareCard({
   const [selectedIds, setSelectedIds] = useState<string[]>(
     () => strengths.slice(0, 3).map(s => s.proofItemId)
   )
-  // バッジ画像の data URI キャッシュ（image_url → dataURI）。html2canvas 透過保持用（修正1）
-  const [badgeDataUris, setBadgeDataUris] = useState<Record<string, string>>({})
-  // data URI 変換中は共有ボタンを無効化（未変換のまま焼くと白背景が残るため）
-  const [badgesConverting, setBadgesConverting] = useState(false)
-
   const candidateStrengths = strengths.slice(0, STRENGTH_CANDIDATES)
 
   // バッジ: 人数降順、0人除外
@@ -149,34 +124,6 @@ export default function OrgShareCard({
     .map(b => ({ id: b.id, name: b.name, image_url: b.image_url, count: badgeHolderCounts[b.id] || 0 }))
     .filter(b => b.count > 0)
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
-
-  // 実際にカードへ焼く上位N種バッジの image_url のみ data URI 化（全件はしない）
-  const topBadgeUrls = sortedBadges
-    .slice(0, BADGE_IMG_MAX)
-    .map(b => b.image_url)
-    .filter((u): u is string => !!u)
-  const topBadgeKey = topBadgeUrls.join('|') // 依存配列用プリミティブ
-
-  useEffect(() => {
-    let cancelled = false
-    const urls = topBadgeKey ? topBadgeKey.split('|') : []
-    if (urls.length === 0) { setBadgesConverting(false); return }
-    setBadgesConverting(true)
-    ;(async () => {
-      const entries: Array<[string, string]> = []
-      for (const u of urls) {
-        const d = await toDataUri(u)
-        if (d) entries.push([u, d]) // 成功分のみ差し替え。失敗は元URLフォールバック
-      }
-      if (!cancelled) {
-        if (entries.length > 0) {
-          setBadgeDataUris(prev => ({ ...prev, ...Object.fromEntries(entries) }))
-        }
-        setBadgesConverting(false)
-      }
-    })()
-    return () => { cancelled = true }
-  }, [topBadgeKey])
 
   function toggleStrength(id: string) {
     setSelectedIds(prev =>
@@ -305,24 +252,20 @@ export default function OrgShareCard({
           {/* ③ バッジB（上位N種を実画像 + 残りは畳む）*/}
           {blockBadges && sortedBadges.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 28, justifyContent: 'center', alignItems: 'flex-start' }}>
-              {imgBadges.map(b => {
-                // data URI 化に成功していればそれを使う（透過保持）。未変換/失敗は元URL+crossOrigin にフォールバック。
-                const resolved = b.image_url ? (badgeDataUris[b.image_url] || b.image_url) : null
-                const isDataUri = !!resolved && resolved.startsWith('data:')
-                return (
-                  <div key={b.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 200 }}>
-                    {resolved ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={resolved} alt={b.name} crossOrigin={isDataUri ? undefined : 'anonymous'}
-                        style={{ width: 108, height: 108, objectFit: 'contain', display: 'block' }} />
-                    ) : (
-                      <div style={{ width: 108, height: 108, borderRadius: '50%', background: 'rgba(196,163,90,0.15)' }} />
-                    )}
-                    <div style={{ fontSize: 26, fontWeight: 600, textAlign: 'center', marginTop: 8, lineHeight: 1.3, color: NAME_LIGHT }}>{b.name}</div>
-                    <div style={{ fontSize: 26, fontWeight: 700, color: NUM_GOLD }}>{b.count}名</div>
-                  </div>
-                )
-              })}
+              {imgBadges.map(b => (
+                // 同一オリジン proxy 経由の素の <img>（メダルと同条件＝html2canvas で透過保持）。
+                <div key={b.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 200 }}>
+                  {b.image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={badgeProxyUrl(b.image_url)} alt={b.name}
+                      style={{ width: 108, height: 108, objectFit: 'contain', display: 'block' }} />
+                  ) : (
+                    <div style={{ width: 108, height: 108, borderRadius: '50%', background: 'rgba(196,163,90,0.15)' }} />
+                  )}
+                  <div style={{ fontSize: 26, fontWeight: 600, textAlign: 'center', marginTop: 8, lineHeight: 1.3, color: NAME_LIGHT }}>{b.name}</div>
+                  <div style={{ fontSize: 26, fontWeight: 700, color: NUM_GOLD }}>{b.count}名</div>
+                </div>
+              ))}
               {foldedCount > 0 && (
                 <div style={{ display: 'flex', alignItems: 'center', fontSize: 26, fontWeight: 600, color: SUBTLE_LIGHT, minHeight: 108 }}>
                   他 {foldedCount} 種
@@ -409,16 +352,15 @@ export default function OrgShareCard({
       </div>
 
       {/* ─── シェアボタン ─── */}
-      {/* バッジ data URI 変換中は無効化（未変換のまま焼くと白背景が残るため） */}
-      <button onClick={handleShare} disabled={saving || badgesConverting}
+      <button onClick={handleShare} disabled={saving}
         style={{
           display: 'block', width: '100%', maxWidth: 360, margin: '0 auto',
           padding: '16px 24px', background: GOLD, color: '#fff', fontWeight: 800, fontSize: 15,
           borderRadius: 14, border: 'none',
-          cursor: (saving || badgesConverting) ? 'not-allowed' : 'pointer',
-          opacity: (saving || badgesConverting) ? 0.6 : 1,
+          cursor: saving ? 'not-allowed' : 'pointer',
+          opacity: saving ? 0.6 : 1,
         }}>
-        {saving ? '生成中...' : badgesConverting ? '画像準備中...' : 'この団体カードをシェアする'}
+        {saving ? '生成中...' : 'この団体カードをシェアする'}
       </button>
 
       {/* ─── エクスポート用DOM（画面外・実寸）─── */}
