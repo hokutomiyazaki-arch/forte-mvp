@@ -1,14 +1,14 @@
 import { SignIn } from '@clerk/nextjs'
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
-import LineSignInSection from '@/components/LineSignInSection'
+import PwaLineSwap from '@/components/PwaLineSwap'
 
 export default function SignInPage() {
   return (
     <div className="min-h-screen bg-[#FAFAF7]">
       <Navbar />
       <div className="flex flex-col items-center justify-center pt-20 pb-12 px-4">
-        <LineSignInSection />
+        <PwaLineSwap />
         <SignIn
           fallbackRedirectUrl="/auth-redirect"
           appearance={{
