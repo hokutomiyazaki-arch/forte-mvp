@@ -1,7 +1,6 @@
 import { SignIn } from '@clerk/nextjs'
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
-import PwaLoginNotice from '@/components/PwaLoginNotice'
 import LineSignInSection from '@/components/LineSignInSection'
 
 export default function SignInPage() {
@@ -9,8 +8,6 @@ export default function SignInPage() {
     <div className="min-h-screen bg-[#FAFAF7]">
       <Navbar />
       <div className="flex flex-col items-center justify-center pt-20 pb-12 px-4">
-        <PwaLoginNotice />
-        <LineSignInSection />
         <SignIn
           fallbackRedirectUrl="/auth-redirect"
           appearance={{
@@ -27,6 +24,7 @@ export default function SignInPage() {
             }
           }}
         />
+        <LineSignInSection />
         <Link
           href="/"
           className="mt-6 text-sm text-gray-500 hover:text-[#C4A35A] transition-colors"
