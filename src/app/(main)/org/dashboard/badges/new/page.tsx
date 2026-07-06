@@ -48,8 +48,14 @@ export default function NewBadgePage() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    if (file.size > 5 * 1024 * 1024) {
-      setError('画像は5MB以下にしてください')
+    if (file.type !== 'image/png') {
+      setError('バッジ画像は透過PNGのみ対応しています')
+      e.target.value = ''
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setError('画像は2MB以下にしてください')
+      e.target.value = ''
       return
     }
 
@@ -78,12 +84,12 @@ export default function NewBadgePage() {
 
       // 画像アップロード
       if (imageBlob) {
-        const filePath = `${org.id}/${Date.now()}.jpg`
+        const filePath = `${org.id}/${Date.now()}.png`
 
         const formData = new FormData()
         formData.append('bucket', 'badge-images')
         formData.append('path', filePath)
-        formData.append('file', imageBlob, 'badge.jpg')
+        formData.append('file', imageBlob, 'badge.png')
 
         const uploadRes = await fetch('/api/storage', { method: 'POST', body: formData })
         const uploadData = await uploadRes.json()
@@ -169,11 +175,11 @@ export default function NewBadgePage() {
               <input
                 ref={imageInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/png"
                 onChange={handleImageChange}
                 style={{ display: 'none' }}
               />
-              <p className="text-xs text-gray-400 mt-1">PNG/JPG 5MB以下</p>
+              <p className="text-xs text-gray-400 mt-1">透過PNGのみ・2MB以下</p>
             </div>
           </div>
         </div>
@@ -231,6 +237,7 @@ export default function NewBadgePage() {
           onCropComplete={handleCropComplete}
           onCancel={() => setCropperSrc(null)}
           cropShape="rect"
+          format="png"
         />
       )}
     </div>

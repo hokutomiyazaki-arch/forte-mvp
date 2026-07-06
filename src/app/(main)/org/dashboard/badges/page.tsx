@@ -96,8 +96,14 @@ export default function OrgBadgesPage() {
   function handleEditImageFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 5 * 1024 * 1024) {
-      alert('画像は5MB以下にしてください')
+    if (file.type !== 'image/png') {
+      alert('バッジ画像は透過PNGのみ対応しています')
+      e.target.value = ''
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      alert('画像は2MB以下にしてください')
+      e.target.value = ''
       return
     }
     const reader = new FileReader()
@@ -112,8 +118,8 @@ export default function OrgBadgesPage() {
     try {
       const formData = new FormData()
       formData.append('bucket', 'badge-images')
-      formData.append('path', `${org.id}/${editingBadge.id}_${Date.now()}.jpg`)
-      formData.append('file', blob, 'badge.jpg')
+      formData.append('path', `${org.id}/${editingBadge.id}_${Date.now()}.png`)
+      formData.append('file', blob, 'badge.png')
       formData.append('upsert', 'true')
 
       const res = await fetch('/api/storage', { method: 'POST', body: formData })
@@ -578,11 +584,11 @@ export default function OrgBadgesPage() {
                   <input
                     ref={editImageInputRef}
                     type="file"
-                    accept="image/*"
+                    accept="image/png"
                     onChange={handleEditImageFileChange}
                     style={{ display: 'none' }}
                   />
-                  <p style={{ fontSize: '11px', color: '#AAA', marginTop: '4px' }}>PNG/JPG 5MB以下</p>
+                  <p style={{ fontSize: '11px', color: '#AAA', marginTop: '4px' }}>透過PNGのみ・2MB以下</p>
                 </div>
               </div>
             </div>
@@ -621,6 +627,7 @@ export default function OrgBadgesPage() {
           onCropComplete={handleEditCropComplete}
           onCancel={() => setEditCropperSrc(null)}
           cropShape="rect"
+          format="png"
         />
       )}
 

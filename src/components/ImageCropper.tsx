@@ -8,6 +8,8 @@ interface ImageCropperProps {
   onCancel: () => void;
   cropShape?: 'round' | 'rect';
   aspectRatio?: number;
+  /** 出力形式。既定 'jpeg'（白背景+jpeg）。'png' は白塗りをスキップし透過を保持して png 出力 */
+  format?: 'jpeg' | 'png';
 }
 
 export default function ImageCropper({
@@ -15,6 +17,7 @@ export default function ImageCropper({
   onCropComplete,
   onCancel,
   cropShape = 'round',
+  format = 'jpeg',
 }: ImageCropperProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -234,9 +237,11 @@ export default function ImageCropper({
       const outCtx = outCanvas.getContext('2d');
       if (!outCtx) throw new Error('Canvas context not available');
 
-      // 白背景を描画（JPEG変換時の黒背景を防止）
-      outCtx.fillStyle = '#FFFFFF';
-      outCtx.fillRect(0, 0, outputSize, outputSize);
+      // JPEG は透過を扱えないため白背景を敷く。PNG は透過保持のため塗らない（透明キャンバスのまま）。
+      if (format !== 'png') {
+        outCtx.fillStyle = '#FFFFFF';
+        outCtx.fillRect(0, 0, outputSize, outputSize);
+      }
 
       outCtx.drawImage(
         img,
@@ -247,8 +252,8 @@ export default function ImageCropper({
       const blob = await new Promise<Blob>((resolve, reject) => {
         outCanvas.toBlob(
           (b) => b ? resolve(b) : reject(new Error('toBlob failed')),
-          'image/jpeg',
-          0.9,
+          format === 'png' ? 'image/png' : 'image/jpeg',
+          0.9, // png では無視される
         );
       });
 
