@@ -4,24 +4,33 @@ import { useState, useEffect } from 'react'
 import { executeVoiceShare } from '@/lib/voice-share'
 
 /**
- * クロスオリジン画像を html2canvas で透過保持したまま焼くため、
- * ブラウザ→Storage 直fetchで data URI 化する（Next.js API/Clerk/Vercel を経由しない）。
- * 失敗時は null（呼び出し側で元URL＋crossOrigin にフォールバック）。
+ * クロスオリジン画像を html2canvas で透過保持したまま焼くため data URI 化する。
+ *
+ * fetch方式は Supabase Storage への XHR CORS(ACAO) が通らず失敗していたため、
+ * 「既に <img crossOrigin> で読み込めている経路」と同じ Image ロード → canvas.toDataURL に変更。
+ * fetch を使わないので CORS プリフライトの影響を受けない。
+ * 失敗（onerror / canvas taint で toDataURL 例外）時は null（呼び出し側で元URLにフォールバック）。
  */
-async function toDataUri(url: string): Promise<string | null> {
-  try {
-    const res = await fetch(url, { cache: 'no-store' })
-    if (!res.ok) return null
-    const blob = await res.blob()
-    return await new Promise<string | null>((resolve) => {
-      const fr = new FileReader()
-      fr.onloadend = () => resolve(typeof fr.result === 'string' ? fr.result : null)
-      fr.onerror = () => resolve(null)
-      fr.readAsDataURL(blob)
-    })
-  } catch {
-    return null
-  }
+function toDataUri(url: string): Promise<string | null> {
+  return new Promise<string | null>((resolve) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas')
+        canvas.width = img.naturalWidth || img.width
+        canvas.height = img.naturalHeight || img.height
+        const ctx = canvas.getContext('2d')
+        if (!ctx || canvas.width === 0 || canvas.height === 0) { resolve(null); return }
+        ctx.drawImage(img, 0, 0) // 透過保持（背景を塗らない）
+        resolve(canvas.toDataURL('image/png'))
+      } catch {
+        resolve(null) // canvas 汚染時など
+      }
+    }
+    img.onerror = () => resolve(null)
+    img.src = url
+  })
 }
 
 /**
@@ -130,6 +139,8 @@ export default function OrgShareCard({
   )
   // バッジ画像の data URI キャッシュ（image_url → dataURI）。html2canvas 透過保持用（修正1）
   const [badgeDataUris, setBadgeDataUris] = useState<Record<string, string>>({})
+  // data URI 変換中は共有ボタンを無効化（未変換のまま焼くと白背景が残るため）
+  const [badgesConverting, setBadgesConverting] = useState(false)
 
   const candidateStrengths = strengths.slice(0, STRENGTH_CANDIDATES)
 
@@ -149,14 +160,19 @@ export default function OrgShareCard({
   useEffect(() => {
     let cancelled = false
     const urls = topBadgeKey ? topBadgeKey.split('|') : []
+    if (urls.length === 0) { setBadgesConverting(false); return }
+    setBadgesConverting(true)
     ;(async () => {
       const entries: Array<[string, string]> = []
       for (const u of urls) {
         const d = await toDataUri(u)
         if (d) entries.push([u, d]) // 成功分のみ差し替え。失敗は元URLフォールバック
       }
-      if (!cancelled && entries.length > 0) {
-        setBadgeDataUris(prev => ({ ...prev, ...Object.fromEntries(entries) }))
+      if (!cancelled) {
+        if (entries.length > 0) {
+          setBadgeDataUris(prev => ({ ...prev, ...Object.fromEntries(entries) }))
+        }
+        setBadgesConverting(false)
       }
     })()
     return () => { cancelled = true }
@@ -269,16 +285,17 @@ export default function OrgShareCard({
           {blockStrengths && shownStrengths.length > 0 && (
             <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: mode === 'stories' ? 28 : 20 }}>
               {shownStrengths.map(s => (
+                // 縦積み統一（A案）: ラベル(上) → 数字(大・中央) → メダル(中央)。
+                // ラベルの長短に関わらず同じレイアウトで、数字を主役に中央配置。
                 <div key={s.proofItemId} style={{
                   background: 'rgba(255,255,255,0.06)', borderRadius: 20, padding: '22px 26px',
-                  border: '1px solid rgba(196,163,90,0.25)', textAlign: 'center',
+                  border: '1px solid rgba(196,163,90,0.25)',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'baseline', gap: 14, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 38, fontWeight: 600, lineHeight: 1.3, color: NAME_LIGHT }}>{s.label}</span>
-                    <span style={{ fontSize: 74, fontWeight: 800, color: NUM_GOLD, whiteSpace: 'nowrap' }}>
-                      {s.totalCount.toLocaleString()}<span style={{ fontSize: 26, fontWeight: 600 }}> 件</span>
-                    </span>
-                  </div>
+                  <span style={{ fontSize: 38, fontWeight: 600, lineHeight: 1.3, color: NAME_LIGHT, textAlign: 'center' }}>{s.label}</span>
+                  <span style={{ fontSize: 74, fontWeight: 800, color: NUM_GOLD, whiteSpace: 'nowrap', lineHeight: 1.1 }}>
+                    {s.totalCount.toLocaleString()}<span style={{ fontSize: 26, fontWeight: 600 }}> 件</span>
+                  </span>
                   {renderMedals(s.medals)}
                 </div>
               ))}
@@ -392,13 +409,16 @@ export default function OrgShareCard({
       </div>
 
       {/* ─── シェアボタン ─── */}
-      <button onClick={handleShare} disabled={saving}
+      {/* バッジ data URI 変換中は無効化（未変換のまま焼くと白背景が残るため） */}
+      <button onClick={handleShare} disabled={saving || badgesConverting}
         style={{
           display: 'block', width: '100%', maxWidth: 360, margin: '0 auto',
           padding: '16px 24px', background: GOLD, color: '#fff', fontWeight: 800, fontSize: 15,
-          borderRadius: 14, border: 'none', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1,
+          borderRadius: 14, border: 'none',
+          cursor: (saving || badgesConverting) ? 'not-allowed' : 'pointer',
+          opacity: (saving || badgesConverting) ? 0.6 : 1,
         }}>
-        {saving ? '生成中...' : 'この団体カードをシェアする'}
+        {saving ? '生成中...' : badgesConverting ? '画像準備中...' : 'この団体カードをシェアする'}
       </button>
 
       {/* ─── エクスポート用DOM（画面外・実寸）─── */}
