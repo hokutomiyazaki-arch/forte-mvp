@@ -1,12 +1,14 @@
 import { SignIn } from '@clerk/nextjs'
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
+import PwaLoginNotice from '@/components/PwaLoginNotice'
 
 export default function SignInPage() {
   return (
     <div className="min-h-screen bg-[#FAFAF7]">
       <Navbar />
       <div className="flex flex-col items-center justify-center pt-20 pb-12 px-4">
+        <PwaLoginNotice />
         <SignIn
           fallbackRedirectUrl="/auth-redirect"
           appearance={{
