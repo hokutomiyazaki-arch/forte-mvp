@@ -1,7 +1,28 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { executeVoiceShare } from '@/lib/voice-share'
+
+/**
+ * クロスオリジン画像を html2canvas で透過保持したまま焼くため、
+ * ブラウザ→Storage 直fetchで data URI 化する（Next.js API/Clerk/Vercel を経由しない）。
+ * 失敗時は null（呼び出し側で元URL＋crossOrigin にフォールバック）。
+ */
+async function toDataUri(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, { cache: 'no-store' })
+    if (!res.ok) return null
+    const blob = await res.blob()
+    return await new Promise<string | null>((resolve) => {
+      const fr = new FileReader()
+      fr.onloadend = () => resolve(typeof fr.result === 'string' ? fr.result : null)
+      fr.onerror = () => resolve(null)
+      fr.readAsDataURL(blob)
+    })
+  } catch {
+    return null
+  }
+}
 
 /**
  * 団体シェアカード（顔なし・匿名の客観素材のみ・背景フレームPNG）
@@ -29,7 +50,6 @@ export interface OrgBadge {
 }
 
 interface Props {
-  orgId: string
   orgName: string
   memberCount: number
   totalVotes: number
@@ -59,7 +79,10 @@ const STRENGTH_CANDIDATES = 12
 
 const GOLD = '#C4A35A'
 const INK = '#1A1A2E'
-const PAPER = '#F3EEE0'
+// ダーク背景フレーム上で読ませる明色（修正3/4/5）
+const NAME_LIGHT = '#F5F0E6'   // 団体名・強みラベル
+const NUM_GOLD = '#E8C874'     // 数字（件数・在籍数）を主役化
+const SUBTLE_LIGHT = '#D8CDB5' // 補助テキスト（の声/名在籍・他N種）
 
 // 団体名の長さで縮小（枠内に収める）
 function orgNameSize(name: string): number {
@@ -94,7 +117,7 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
 }
 
 export default function OrgShareCard({
-  orgId, orgName, memberCount, totalVotes, strengths, badges, badgeHolderCounts,
+  orgName, memberCount, totalVotes, strengths, badges, badgeHolderCounts,
 }: Props) {
   const [blockSummary, setBlockSummary] = useState(true)
   const [blockStrengths, setBlockStrengths] = useState(true)
@@ -105,6 +128,8 @@ export default function OrgShareCard({
   const [selectedIds, setSelectedIds] = useState<string[]>(
     () => strengths.slice(0, 3).map(s => s.proofItemId)
   )
+  // バッジ画像の data URI キャッシュ（image_url → dataURI）。html2canvas 透過保持用（修正1）
+  const [badgeDataUris, setBadgeDataUris] = useState<Record<string, string>>({})
 
   const candidateStrengths = strengths.slice(0, STRENGTH_CANDIDATES)
 
@@ -113,6 +138,29 @@ export default function OrgShareCard({
     .map(b => ({ id: b.id, name: b.name, image_url: b.image_url, count: badgeHolderCounts[b.id] || 0 }))
     .filter(b => b.count > 0)
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+
+  // 実際にカードへ焼く上位N種バッジの image_url のみ data URI 化（全件はしない）
+  const topBadgeUrls = sortedBadges
+    .slice(0, BADGE_IMG_MAX)
+    .map(b => b.image_url)
+    .filter((u): u is string => !!u)
+  const topBadgeKey = topBadgeUrls.join('|') // 依存配列用プリミティブ
+
+  useEffect(() => {
+    let cancelled = false
+    const urls = topBadgeKey ? topBadgeKey.split('|') : []
+    ;(async () => {
+      const entries: Array<[string, string]> = []
+      for (const u of urls) {
+        const d = await toDataUri(u)
+        if (d) entries.push([u, d]) // 成功分のみ差し替え。失敗は元URLフォールバック
+      }
+      if (!cancelled && entries.length > 0) {
+        setBadgeDataUris(prev => ({ ...prev, ...Object.fromEntries(entries) }))
+      }
+    })()
+    return () => { cancelled = true }
+  }, [topBadgeKey])
 
   function toggleStrength(id: string) {
     setSelectedIds(prev =>
@@ -208,11 +256,11 @@ export default function OrgShareCard({
               <div style={{ fontSize: 28, letterSpacing: 8, fontWeight: 700, color: GOLD }}>
                 CERTIFICATE OF PROOF
               </div>
-              <div style={{ fontSize: orgNameSize(orgName), fontWeight: 700, marginTop: 16, lineHeight: 1.15 }}>
+              <div style={{ fontSize: orgNameSize(orgName), fontWeight: 700, marginTop: 16, lineHeight: 1.15, color: NAME_LIGHT }}>
                 {orgName}
               </div>
-              <div style={{ fontSize: 32, color: '#6B5B38', marginTop: 16, lineHeight: 1.6 }}>
-                <b style={{ color: GOLD }}>{totalVotes.toLocaleString()}</b> の声 ／ <b>{memberCount}</b>名在籍
+              <div style={{ fontSize: 32, color: SUBTLE_LIGHT, marginTop: 16, lineHeight: 1.6 }}>
+                <b style={{ color: NUM_GOLD, fontSize: 40 }}>{totalVotes.toLocaleString()}</b> の声 ／ <b style={{ color: NUM_GOLD, fontSize: 40 }}>{memberCount}</b>名在籍
               </div>
             </div>
           )}
@@ -222,12 +270,12 @@ export default function OrgShareCard({
             <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: mode === 'stories' ? 28 : 20 }}>
               {shownStrengths.map(s => (
                 <div key={s.proofItemId} style={{
-                  background: `${PAPER}CC`, borderRadius: 20, padding: '22px 26px',
-                  border: `1px solid rgba(196,163,90,0.4)`, textAlign: 'center',
+                  background: 'rgba(255,255,255,0.06)', borderRadius: 20, padding: '22px 26px',
+                  border: '1px solid rgba(196,163,90,0.25)', textAlign: 'center',
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'baseline', gap: 14, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 38, fontWeight: 600, lineHeight: 1.3 }}>{s.label}</span>
-                    <span style={{ fontSize: 52, fontWeight: 800, color: GOLD, whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: 38, fontWeight: 600, lineHeight: 1.3, color: NAME_LIGHT }}>{s.label}</span>
+                    <span style={{ fontSize: 74, fontWeight: 800, color: NUM_GOLD, whiteSpace: 'nowrap' }}>
                       {s.totalCount.toLocaleString()}<span style={{ fontSize: 26, fontWeight: 600 }}> 件</span>
                     </span>
                   </div>
@@ -240,31 +288,31 @@ export default function OrgShareCard({
           {/* ③ バッジB（上位N種を実画像 + 残りは畳む）*/}
           {blockBadges && sortedBadges.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 28, justifyContent: 'center', alignItems: 'flex-start' }}>
-              {imgBadges.map(b => (
-                <div key={b.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 200 }}>
-                  {b.image_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={b.image_url} alt={b.name} crossOrigin="anonymous"
-                      style={{ width: 108, height: 108, objectFit: 'contain', display: 'block' }} />
-                  ) : (
-                    <div style={{ width: 108, height: 108, borderRadius: '50%', background: 'rgba(196,163,90,0.15)' }} />
-                  )}
-                  <div style={{ fontSize: 26, fontWeight: 600, textAlign: 'center', marginTop: 8, lineHeight: 1.3 }}>{b.name}</div>
-                  <div style={{ fontSize: 26, fontWeight: 700, color: GOLD }}>{b.count}名</div>
-                </div>
-              ))}
+              {imgBadges.map(b => {
+                // data URI 化に成功していればそれを使う（透過保持）。未変換/失敗は元URL+crossOrigin にフォールバック。
+                const resolved = b.image_url ? (badgeDataUris[b.image_url] || b.image_url) : null
+                const isDataUri = !!resolved && resolved.startsWith('data:')
+                return (
+                  <div key={b.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 200 }}>
+                    {resolved ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={resolved} alt={b.name} crossOrigin={isDataUri ? undefined : 'anonymous'}
+                        style={{ width: 108, height: 108, objectFit: 'contain', display: 'block' }} />
+                    ) : (
+                      <div style={{ width: 108, height: 108, borderRadius: '50%', background: 'rgba(196,163,90,0.15)' }} />
+                    )}
+                    <div style={{ fontSize: 26, fontWeight: 600, textAlign: 'center', marginTop: 8, lineHeight: 1.3, color: NAME_LIGHT }}>{b.name}</div>
+                    <div style={{ fontSize: 26, fontWeight: 700, color: NUM_GOLD }}>{b.count}名</div>
+                  </div>
+                )
+              })}
               {foldedCount > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', fontSize: 26, fontWeight: 600, color: '#6B5B38', minHeight: 108 }}>
+                <div style={{ display: 'flex', alignItems: 'center', fontSize: 26, fontWeight: 600, color: SUBTLE_LIGHT, minHeight: 108 }}>
                   他 {foldedCount} 種
                 </div>
               )}
             </div>
           )}
-
-          {/* 誘導行 */}
-          <div style={{ fontSize: 30, fontWeight: 700, color: INK }}>
-            ▶ realproof.jp/org/{orgId}
-          </div>
 
           {/* フッター */}
           <div style={{ fontSize: 24, letterSpacing: 4, fontWeight: 700, color: '#8A7A50' }}>

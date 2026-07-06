@@ -1052,7 +1052,6 @@ export default function OrgDashboardPage() {
             </div>
             <OrgShareCard
               key={org.id}
-              orgId={org.id}
               orgName={org.name}
               memberCount={Number(aggregate?.active_member_count) || members.length}
               totalVotes={Number(aggregate?.total_org_votes) || 0}
