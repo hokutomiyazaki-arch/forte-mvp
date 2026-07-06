@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { getCertifiableTier, getCertificationTier } from '@/lib/constants'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +19,15 @@ export const dynamic = 'force-dynamic'
  *    既存 strengthDistribution は vote_type フィルタ無し（全票集計）だが、
  *    シェアカードは「プルーフ（強み）票」だけを根拠にするため 'proof' に限定する。
  *    安易に strengthDistribution 側へ合わせないこと（公開ページの分布数字とは別物）。
+ *
+ * medals（各強みの tier別メダル数・匿名の人数のみ）:
+ *   項目別票数（vote_summary の professional_id × proof_id × vote_count）を tier判定し、
+ *   proof_id ごとに tier別の「人数」を集計する。閾値は新規定義せず既存関数に委譲:
+ *     getCertifiableTier … 30/50/100 → SPECIALIST/MASTER/LEGEND
+ *     getCertificationTier … 15 → PROVEN（フォールバック用）
+ *   フォールバック: その強みで specialist以上(spec+master+legend)が 0 のときだけ proven を出す。
+ *   1人でも specialist以上がいれば proven=0（下位ティアは見せない）。
+ *   IMMORTAL は閾値未確定・画像なしのため今回集計しない（将来のUI非改修化のため immortal:0 は返す）。
  */
 export async function GET(
   _req: NextRequest,
@@ -85,14 +95,60 @@ export async function GET(
       labelOf.set(pi.id, pi.label || '')
     }
 
-    // ── 5. totalCount 降順（同数は proofItemId 昇順で決定的に）。count>0 を全件返す ──
+    // ── 5. tier別メダル数集計（vote_summary: professional_id × proof_id × vote_count）──
+    // vote_summary は vote_type='proof' & confirmed のみ。team members に絞り、1000行キャップ対策で
+    // range + order（professional_id, proof_id の複合で決定的）ページネーション。
+    type MedalAcc = { legend: number; master: number; specialist: number; provenCandidate: number }
+    const medalAcc = new Map<string, MedalAcc>()
+    const ensureAcc = (pid: string): MedalAcc => {
+      let a = medalAcc.get(pid)
+      if (!a) { a = { legend: 0, master: 0, specialist: 0, provenCandidate: 0 }; medalAcc.set(pid, a) }
+      return a
+    }
+
+    let vsFrom = 0
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const { data, error } = await supabase
+        .from('vote_summary')
+        .select('proof_id, vote_count')
+        .in('professional_id', memberIds)
+        .order('professional_id', { ascending: true })
+        .order('proof_id', { ascending: true })
+        .range(vsFrom, vsFrom + PAGE - 1)
+      if (error) throw error
+      const rows = (data || []) as { proof_id: string; vote_count: number | null }[]
+      for (const r of rows) {
+        if (!r.proof_id) continue
+        const count = r.vote_count ?? 0
+        const tier = getCertifiableTier(count) // 30/50/100 → SPECIALIST/MASTER/LEGEND
+        if (tier === 'LEGEND') ensureAcc(r.proof_id).legend += 1
+        else if (tier === 'MASTER') ensureAcc(r.proof_id).master += 1
+        else if (tier === 'SPECIALIST') ensureAcc(r.proof_id).specialist += 1
+        else if (getCertificationTier(count) === 'PROVEN') ensureAcc(r.proof_id).provenCandidate += 1 // 15〜29
+      }
+      if (rows.length < PAGE) break
+      vsFrom += PAGE
+    }
+
+    // ── 6. totalCount 降順（同数は proofItemId 昇順で決定的に）。count>0 を全件返す ──
     const strengths = Array.from(totalByItem.entries())
       .filter(([, total]) => total > 0)
-      .map(([proofItemId, total]) => ({
-        proofItemId,
-        label: labelOf.get(proofItemId) || '',
-        totalCount: total,
-      }))
+      .map(([proofItemId, total]) => {
+        const a = medalAcc.get(proofItemId)
+        const legend = a?.legend || 0
+        const master = a?.master || 0
+        const specialist = a?.specialist || 0
+        // specialist以上が1人でもいれば proven は出さない（フォールバックのみ）
+        const specPlus = legend + master + specialist
+        const proven = specPlus > 0 ? 0 : (a?.provenCandidate || 0)
+        return {
+          proofItemId,
+          label: labelOf.get(proofItemId) || '',
+          totalCount: total,
+          medals: { immortal: 0, legend, master, specialist, proven },
+        }
+      })
       .sort((a, b) =>
         b.totalCount - a.totalCount ||
         a.proofItemId.localeCompare(b.proofItemId)
