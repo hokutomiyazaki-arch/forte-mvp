@@ -2,6 +2,7 @@ import { SignIn } from '@clerk/nextjs'
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import PwaLineSwap from '@/components/PwaLineSwap'
+import PwaStandaloneDebug from '@/components/PwaStandaloneDebug'
 
 export default function SignInPage() {
   return (
@@ -9,6 +10,7 @@ export default function SignInPage() {
       <Navbar />
       <div className="flex flex-col items-center justify-center pt-20 pb-12 px-4">
         <PwaLineSwap />
+        <PwaStandaloneDebug />
         <SignIn
           fallbackRedirectUrl="/auth-redirect"
           appearance={{
