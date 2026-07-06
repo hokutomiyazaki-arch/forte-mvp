@@ -21,7 +21,7 @@ function LineSignInInner() {
   }
 
   return (
-    <div className="w-full max-w-sm mt-4">
+    <div className="w-full max-w-sm mx-auto mb-4">
       {errorMessage && (
         <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4">
           <p className="text-sm text-red-700 leading-relaxed">{errorMessage}</p>
