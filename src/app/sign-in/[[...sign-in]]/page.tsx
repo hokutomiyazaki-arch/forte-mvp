@@ -2,6 +2,7 @@ import { SignIn } from '@clerk/nextjs'
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import PwaLoginNotice from '@/components/PwaLoginNotice'
+import LineSignInSection from '@/components/LineSignInSection'
 
 export default function SignInPage() {
   return (
@@ -9,6 +10,7 @@ export default function SignInPage() {
       <Navbar />
       <div className="flex flex-col items-center justify-center pt-20 pb-12 px-4">
         <PwaLoginNotice />
+        <LineSignInSection />
         <SignIn
           fallbackRedirectUrl="/auth-redirect"
           appearance={{
@@ -19,6 +21,9 @@ export default function SignInPage() {
               headerSubtitle: 'text-gray-500',
               socialButtonsBlockButton: 'border-gray-200',
               formButtonPrimary: 'bg-[#1A1A2E] hover:bg-[#2a2a4e]',
+              // PWA非互換のClerk標準LINEボタンを非表示 → 自前LINEボタン(LineSignInSection)に一本化
+              socialButtonsBlockButton__line: 'hidden',
+              socialButtonsIconButton__line: 'hidden',
             }
           }}
         />
