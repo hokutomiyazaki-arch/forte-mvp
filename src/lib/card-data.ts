@@ -125,7 +125,7 @@ export async function getCardData(
     badgeMembersResult,
     /* sessionCountResult */ ,
     velocityResult,
-    supportersResult,
+    /* supportersResult — 下で normalized_email 込み + range ページネーション取得 */ ,
     menusResult,
   ] = await Promise.all([
     // 1. プロ情報
@@ -167,13 +167,8 @@ export async function getCardData(
       .eq('professional_id', proId)
       .eq('status', 'confirmed')
       .order('created_at', { ascending: true }),
-    // 13. Supporters Strip 用（コメント有無に関わらず photo/pro_link の投票を取得）
-    supabase.from('votes')
-      .select('id, created_at, display_mode, client_photo_url, auth_display_name, voter_professional_id')
-      .eq('professional_id', proId).eq('status', 'confirmed')
-      .in('display_mode', ['photo', 'pro_link'])
-      .order('created_at', { ascending: false })
-      .limit(50),
+    // 13. (Supporters Strip 用 — Promise.all の外で range ページネーション取得。構造維持のためプレースホルダ)
+    Promise.resolve({ data: null, error: null }),
     // 14. サービス・案内 (is_active = true のみ)
     supabase.from('pro_menus')
       .select('id, name, price_text, category_tags, description, display_order')
@@ -248,7 +243,30 @@ export async function getCardData(
 
   // === comments / supporters 用の voter_pro マップを「別々に」構築 ===
   const commentsRaw = (commentsResult.data || []) as Array<VoteWithVoterPro & { comment: string; normalized_email: string | null }>
-  const supportersRaw = (supportersResult.data || []) as VoteWithVoterPro[]
+
+  // Supporters Strip 用: photo/pro_link の confirmed 票を全件ページネーション取得。
+  // normalized_email は「投票者同一性」の dedup キーとしてのみ使用し、レスポンス/Supporter型には
+  // 一切載せない（PII 保護・CLAUDE.md D）。1000行サイレントキャップ対策で range + order('id')。
+  type SupporterVote = VoteWithVoterPro & { normalized_email: string | null }
+  const supportersRaw: SupporterVote[] = []
+  {
+    const PAGE = 1000
+    let from = 0
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const { data, error } = await supabase.from('votes')
+        .select('id, created_at, display_mode, client_photo_url, auth_display_name, voter_professional_id, normalized_email')
+        .eq('professional_id', proId).eq('status', 'confirmed')
+        .in('display_mode', ['photo', 'pro_link'])
+        .order('id', { ascending: true })
+        .range(from, from + PAGE - 1)
+      if (error) break
+      const rows = (data || []) as SupporterVote[]
+      supportersRaw.push(...rows)
+      if (rows.length < PAGE) break
+      from += PAGE
+    }
+  }
 
   // (a) comments 用 voter_pro
   const commentsVoterProIds = Array.from(new Set(
@@ -332,11 +350,25 @@ export async function getCardData(
     }
   })
 
-  // === supporters 配列構築（写真URLが取得できるものだけ） ===
+  // === supporters 配列構築（写真URLが取得できるもの + 投票者単位で重複排除） ===
+  // 同じお客さんが複数回投票しても顔は1つ。dedup キーは投票者の同一性:
+  //   photo 票    → normalized_email
+  //   pro_link 票 → voter_professional_id
+  // created_at DESC で並べ「最新票」を代表として残す（旧: photo_url 単位だったため
+  // 同一人物が別画像で投票すると別人扱いになり顔が重複していた）。
+  // identity が取れない稀ケースは vote id で代替し、安全側（畳まない）に倒す。
+  const supportersSorted = [...supportersRaw].sort((a, b) => {
+    const t = new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    return t !== 0 ? t : b.id.localeCompare(a.id)
+  })
   const supporters: Supporter[] = []
-  for (const v of supportersRaw) {
+  const seenVoters = new Set<string>()
+  for (const v of supportersSorted) {
     if (v.display_mode === 'photo') {
       if (!v.client_photo_url) continue
+      const identity = v.normalized_email ? `email:${v.normalized_email}` : `vote:${v.id}`
+      if (seenVoters.has(identity)) continue
+      seenVoters.add(identity)
       supporters.push({
         vote_id: v.id,
         photo_url: v.client_photo_url,
@@ -348,6 +380,9 @@ export async function getCardData(
       if (!v.voter_professional_id) continue
       const voterPro = supportersVoterProsMap.get(v.voter_professional_id)
       if (!voterPro?.photo_url) continue
+      const identity = `pro:${v.voter_professional_id}`
+      if (seenVoters.has(identity)) continue
+      seenVoters.add(identity)
       supporters.push({
         vote_id: v.id,
         photo_url: voterPro.photo_url,

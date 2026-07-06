@@ -213,16 +213,11 @@ export default function CardClient({ cardData }: Props) {
   )
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [comments] = useState<VoiceComment[]>(cardData.comments as any)
-  // supporters の重複排除: photo_url 単位 (Map の最初に挿入された値が残る)
-  // cardData.supporters は created_at DESC 並びなので、最新の票が代表値として残る ✅
-  // pro_link 票 (同プロからの複数票): photo_url 同一 → 確実に dedup
-  // photo 票 (同人物の複数票): 同じ画像なら dedup、別画像なら独立 (別アバター扱いで許容)
-  const [supporters] = useState<Supporter[]>(() => {
-    const raw = cardData.supporters || []
-    return Array.from(
-      new Map(raw.map((s) => [s.photo_url, s])).values()
-    )
-  })
+  // supporters の重複排除はサーバー側 (card-data.ts) で投票者同一性
+  // (photo→normalized_email / pro_link→voter_professional_id) 単位に実施済み。
+  // ここでは cardData.supporters をそのまま使う（旧: photo_url 単位 dedup は別画像の
+  // 同一人物を畳めず顔重複の原因になっていたため撤去）。
+  const [supporters] = useState<Supporter[]>(() => cardData.supporters || [])
   const [tapHighlightVoteId, setTapHighlightVoteId] = useState<string | null>(null)
   const [totalVotes] = useState(cardData.totalVotes)
   // SSR で取得済みなので最初から false (旧 fetch 中の loading 表示は出さない)
