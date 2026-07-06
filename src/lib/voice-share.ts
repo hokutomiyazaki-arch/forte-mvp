@@ -34,7 +34,9 @@ import { trackPageView } from '@/lib/tracking'
  *   呼び出し元の区別は tracking event 名でのみ行う。
  */
 
-export type VoiceShareSource = 'dashboard' | 'popup'
+// 'org' = 団体シェアカード（匿名の客観素材）。vote/phrase に紐づかないため
+//         voice_shares INSERT / tracking はスキップし、画像生成コアだけ借りる。
+export type VoiceShareSource = 'dashboard' | 'popup' | 'org'
 export type VoiceShareExportMode = 'stories' | 'feed'
 
 export interface VoiceShareParams {
@@ -124,10 +126,12 @@ export async function executeVoiceShare(
     )
 
     // ── 4. tracking event 名 + voice_shares INSERT ヘルパー ──
+    // source==='org' は vote/phrase に紐づかない匿名の団体素材のため tracking/INSERT しない。
     const trackingPageType =
       params.source === 'popup' ? 'share_voice_popup' : 'share_voice'
     const supabase = createClient()
     const recordShare = async () => {
+      if (params.source === 'org') return
       trackPageView(trackingPageType, params.professionalId, params.voteId)
       const hash = crypto.randomUUID().replace(/-/g, '').slice(0, 12)
       await (supabase as any).from('voice_shares').insert({

@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import { RESULT_FORTES } from '@/lib/types'
 import { TAB_DISPLAY_NAMES } from '@/lib/constants'
 import ImageCropper from '@/components/ImageCropper'
+import OrgShareCard from '@/components/org/OrgShareCard'
 
 // recharts を dynamic import（SSR無効化）
 const RechartsCharts = dynamic(() => import('./RechartsCharts'), { ssr: false })
@@ -55,7 +56,13 @@ export default function OrgDashboardPage() {
   const [analyticsLoaded, setAnalyticsLoaded] = useState(false)
   const [selectedBadgeId, setSelectedBadgeId] = useState<string | null>(null)
   const [credentialLevels, setCredentialLevels] = useState<{ id: string; name: string }[]>([])
-  const [activeTab, setActiveTab] = useState<'overview' | 'analytics' | 'resources' | 'rewards'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'analytics' | 'resources' | 'rewards' | 'share'>('overview')
+  // 団体シェアカード用
+  const [badges, setBadges] = useState<{ id: string; name: string; image_url: string | null }[]>([])
+  const [badgeHolderCounts, setBadgeHolderCounts] = useState<Record<string, number>>({})
+  const [orgStrengths, setOrgStrengths] = useState<any[]>([])
+  const [orgStrengthsLoaded, setOrgStrengthsLoaded] = useState(false)
+  const [orgStrengthsLoading, setOrgStrengthsLoading] = useState(false)
   const [strengthDistribution, setStrengthDistribution] = useState<any[]>([])
   const [topStrengthItems, setTopStrengthItems] = useState<{ label: string; strength_label?: string; count: number }[]>([])
   const [error, setError] = useState('')
@@ -114,6 +121,8 @@ export default function OrgDashboardPage() {
       setAggregate(data.aggregate || null)
       setStrengthDistribution(data.strengthDistribution || [])
       setTopStrengthItems(data.topStrengthItems || [])
+      setBadges(data.badges || [])
+      setBadgeHolderCounts(data.badgeHolderCounts || {})
     } catch (err: any) {
       setError(err.message || 'データの取得に失敗しました')
     }
@@ -207,6 +216,29 @@ export default function OrgDashboardPage() {
   function handleAnalyticsTab() {
     setActiveTab('analytics')
     loadAnalytics()
+  }
+
+  // シェアタブ: top-strengths を遅延ロード（一度だけ）
+  async function loadOrgStrengths() {
+    if (orgStrengthsLoaded || orgStrengthsLoading || !org) return
+    setOrgStrengthsLoading(true)
+    try {
+      const res = await fetch(`/api/org/${org.id}/top-strengths`, { cache: 'no-store' })
+      if (res.ok) {
+        const data = await res.json()
+        setOrgStrengths(data.strengths || [])
+      }
+      setOrgStrengthsLoaded(true)
+    } catch (err) {
+      console.error('[org share] top-strengths load error:', err)
+    } finally {
+      setOrgStrengthsLoading(false)
+    }
+  }
+
+  function handleShareTab() {
+    setActiveTab('share')
+    loadOrgStrengths()
   }
 
   // バッジフィルタ変更時にproof-analytics + org-analyticsを再取得
@@ -683,6 +715,16 @@ export default function OrgDashboardPage() {
         >
           リワード
         </button>
+        <button
+          onClick={handleShareTab}
+          className={`flex-1 py-2 text-sm font-medium rounded-lg transition ${
+            activeTab === 'share'
+              ? 'bg-white text-[#1A1A2E] shadow-sm'
+              : 'text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          シェア
+        </button>
       </div>
 
       {/* サマリーカード（常に表示） */}
@@ -992,6 +1034,35 @@ export default function OrgDashboardPage() {
       )}
 
       {/* === 団体リワード管理タブ === */}
+      {/* === シェアタブ（顔なし・匿名の団体シェアカード）=== */}
+      {activeTab === 'share' && (
+        orgStrengthsLoading ? (
+          <div className="text-center py-16">
+            <div className="animate-spin w-8 h-8 border-2 border-[#C4A35A] border-t-transparent rounded-full mx-auto" />
+            <p className="text-gray-400 mt-4 text-sm">読み込み中...</p>
+          </div>
+        ) : (
+          <>
+            <div style={{ marginBottom: 16 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1A1A2E' }}>団体シェアカード</h3>
+              <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4, lineHeight: 1.6 }}>
+                クライアントの声に由来する匿名の数字だけで作る、Instagram用の画像です。<br />
+                個人の顔・名前は出しません（個人の発信は各プロのVoiceシェアで）。
+              </p>
+            </div>
+            <OrgShareCard
+              key={org.id}
+              orgName={org.name}
+              memberCount={Number(aggregate?.active_member_count) || members.length}
+              totalVotes={Number(aggregate?.total_org_votes) || 0}
+              strengths={orgStrengths}
+              badges={badges}
+              badgeHolderCounts={badgeHolderCounts}
+            />
+          </>
+        )
+      )}
+
       {activeTab === 'rewards' && (
         resourcesLoading ? (
           <div className="text-center py-16">
