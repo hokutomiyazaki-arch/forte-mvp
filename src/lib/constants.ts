@@ -12,17 +12,22 @@ export const MASTER_THRESHOLD = 50;
 /** Lv.4: 100プルーフ以上で LEGEND 認定 */
 export const LEGEND_THRESHOLD = 100;
 
+/** Lv.5: 500プルーフ以上で IMMORTAL（項目別・表示/メダルのみ。料金/物理カードは対象外） */
+export const IMMORTAL_THRESHOLD = 500;
+
 // ===== 認定ティア判定ヘルパー =====
 
-export type CertificationTier = 'PROVEN' | 'SPECIALIST' | 'MASTER' | 'LEGEND'
-/** 申請対象ティア (PROVEN は申請対象外、SPECIALIST 以上のみ) */
+// IMMORTAL は「表示/メダル」ラダーにのみ存在。料金/物理(CertifiableTier)には含めない。
+export type CertificationTier = 'PROVEN' | 'SPECIALIST' | 'MASTER' | 'LEGEND' | 'IMMORTAL'
+/** 申請対象ティア (PROVEN/IMMORTAL は申請対象外、SPECIALIST〜LEGEND のみ) */
 export type CertifiableTier = 'SPECIALIST' | 'MASTER' | 'LEGEND'
 
 /**
  * 票数からティアを判定。閾値未満は null。
- * 優先順: LEGEND > MASTER > SPECIALIST > PROVEN
+ * 優先順: IMMORTAL > LEGEND > MASTER > SPECIALIST > PROVEN
  */
 export function getCertificationTier(voteCount: number): CertificationTier | null {
+  if (voteCount >= IMMORTAL_THRESHOLD) return 'IMMORTAL'
   if (voteCount >= LEGEND_THRESHOLD) return 'LEGEND'
   if (voteCount >= MASTER_THRESHOLD) return 'MASTER'
   if (voteCount >= SPECIALIST_THRESHOLD) return 'SPECIALIST'
@@ -30,10 +35,15 @@ export function getCertificationTier(voteCount: number): CertificationTier | nul
   return null
 }
 
-/** 申請対象ティア (SPECIALIST 以上) のみ返す。PROVEN / 未達は null。 */
+/**
+ * 申請対象ティア (SPECIALIST 以上) のみ返す。PROVEN / 未達は null。
+ * ※ 500+(IMMORTAL相当)は料金/物理上 LEGEND 扱いに丸める（IMMORTAL は certifiable ではない）。
+ *    閾値未満は null。閾値から直接判定し、getCertificationTier の IMMORTAL を漏らさない。
+ */
 export function getCertifiableTier(voteCount: number): CertifiableTier | null {
-  const tier = getCertificationTier(voteCount)
-  if (tier === 'SPECIALIST' || tier === 'MASTER' || tier === 'LEGEND') return tier
+  if (voteCount >= LEGEND_THRESHOLD) return 'LEGEND'
+  if (voteCount >= MASTER_THRESHOLD) return 'MASTER'
+  if (voteCount >= SPECIALIST_THRESHOLD) return 'SPECIALIST'
   return null
 }
 
@@ -42,11 +52,12 @@ export function getCertifiableTier(voteCount: number): CertifiableTier | null {
  * - PROVEN 未達 / PROVEN: Next = SPECIALIST (30)
  * - SPECIALIST: Next = MASTER (50)
  * - MASTER: Next = LEGEND (100)
- * - LEGEND: null (最高ティア達成)
+ * - LEGEND: Next = IMMORTAL (500)
+ * - IMMORTAL(500+): null (最高ティア達成)
  */
 export function getNextTier(
   voteCount: number
-): { tier: CertifiableTier; threshold: number; remaining: number } | null {
+): { tier: CertifiableTier | 'IMMORTAL'; threshold: number; remaining: number } | null {
   if (voteCount < SPECIALIST_THRESHOLD) {
     return { tier: 'SPECIALIST', threshold: SPECIALIST_THRESHOLD, remaining: SPECIALIST_THRESHOLD - voteCount }
   }
@@ -55,6 +66,9 @@ export function getNextTier(
   }
   if (voteCount < LEGEND_THRESHOLD) {
     return { tier: 'LEGEND', threshold: LEGEND_THRESHOLD, remaining: LEGEND_THRESHOLD - voteCount }
+  }
+  if (voteCount < IMMORTAL_THRESHOLD) {
+    return { tier: 'IMMORTAL', threshold: IMMORTAL_THRESHOLD, remaining: IMMORTAL_THRESHOLD - voteCount }
   }
   return null
 }
@@ -65,6 +79,7 @@ export const TIER_DISPLAY: Record<CertificationTier, { icon: string; label: stri
   SPECIALIST: { icon: '🏆', label: 'SPECIALIST' },
   MASTER: { icon: '👑', label: 'MASTER' },
   LEGEND: { icon: '💎', label: 'LEGEND' },
+  IMMORTAL: { icon: '🔥', label: 'IMMORTAL' },
 }
 
 // ===== メダル画像パス (CertifiableTier のみ) =====

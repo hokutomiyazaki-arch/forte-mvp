@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { getCertifiableTier, getCertificationTier } from '@/lib/constants'
+import { getCertificationTier } from '@/lib/constants'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,11 +23,10 @@ export const dynamic = 'force-dynamic'
  * medals（各強みの tier別メダル数・匿名の人数のみ）:
  *   項目別票数（vote_summary の professional_id × proof_id × vote_count）を tier判定し、
  *   proof_id ごとに tier別の「人数」を集計する。閾値は新規定義せず既存関数に委譲:
- *     getCertifiableTier … 30/50/100 → SPECIALIST/MASTER/LEGEND
- *     getCertificationTier … 15 → PROVEN（フォールバック用）
- *   フォールバック: その強みで specialist以上(spec+master+legend)が 0 のときだけ proven を出す。
+ *     getCertificationTier … 500/100/50/30/15 → IMMORTAL/LEGEND/MASTER/SPECIALIST/PROVEN
+ *   フォールバック: その強みで specialist以上(immortal+legend+master+specialist)が 0 のときだけ proven を出す。
  *   1人でも specialist以上がいれば proven=0（下位ティアは見せない）。
- *   IMMORTAL は閾値未確定・画像なしのため今回集計しない（将来のUI非改修化のため immortal:0 は返す）。
+ *   IMMORTAL(項目別500票) はメダル画像あり。到達者0なら immortal:0 のまま。
  */
 export async function GET(
   _req: NextRequest,
@@ -98,11 +97,11 @@ export async function GET(
     // ── 5. tier別メダル数集計（vote_summary: professional_id × proof_id × vote_count）──
     // vote_summary は vote_type='proof' & confirmed のみ。team members に絞り、1000行キャップ対策で
     // range + order（professional_id, proof_id の複合で決定的）ページネーション。
-    type MedalAcc = { legend: number; master: number; specialist: number; provenCandidate: number }
+    type MedalAcc = { immortal: number; legend: number; master: number; specialist: number; provenCandidate: number }
     const medalAcc = new Map<string, MedalAcc>()
     const ensureAcc = (pid: string): MedalAcc => {
       let a = medalAcc.get(pid)
-      if (!a) { a = { legend: 0, master: 0, specialist: 0, provenCandidate: 0 }; medalAcc.set(pid, a) }
+      if (!a) { a = { immortal: 0, legend: 0, master: 0, specialist: 0, provenCandidate: 0 }; medalAcc.set(pid, a) }
       return a
     }
 
@@ -121,11 +120,13 @@ export async function GET(
       for (const r of rows) {
         if (!r.proof_id) continue
         const count = r.vote_count ?? 0
-        const tier = getCertifiableTier(count) // 30/50/100 → SPECIALIST/MASTER/LEGEND
-        if (tier === 'LEGEND') ensureAcc(r.proof_id).legend += 1
+        // 表示/メダルラダー（500/100/50/30/15 → IMMORTAL/LEGEND/MASTER/SPECIALIST/PROVEN）で集計。
+        const tier = getCertificationTier(count)
+        if (tier === 'IMMORTAL') ensureAcc(r.proof_id).immortal += 1
+        else if (tier === 'LEGEND') ensureAcc(r.proof_id).legend += 1
         else if (tier === 'MASTER') ensureAcc(r.proof_id).master += 1
         else if (tier === 'SPECIALIST') ensureAcc(r.proof_id).specialist += 1
-        else if (getCertificationTier(count) === 'PROVEN') ensureAcc(r.proof_id).provenCandidate += 1 // 15〜29
+        else if (tier === 'PROVEN') ensureAcc(r.proof_id).provenCandidate += 1 // 15〜29
       }
       if (rows.length < PAGE) break
       vsFrom += PAGE
@@ -136,17 +137,18 @@ export async function GET(
       .filter(([, total]) => total > 0)
       .map(([proofItemId, total]) => {
         const a = medalAcc.get(proofItemId)
+        const immortal = a?.immortal || 0
         const legend = a?.legend || 0
         const master = a?.master || 0
         const specialist = a?.specialist || 0
-        // specialist以上が1人でもいれば proven は出さない（フォールバックのみ）
-        const specPlus = legend + master + specialist
+        // specialist以上（immortal含む）が1人でもいれば proven は出さない（フォールバックのみ）
+        const specPlus = immortal + legend + master + specialist
         const proven = specPlus > 0 ? 0 : (a?.provenCandidate || 0)
         return {
           proofItemId,
           label: labelOf.get(proofItemId) || '',
           totalCount: total,
-          medals: { immortal: 0, legend, master, specialist, proven },
+          medals: { immortal, legend, master, specialist, proven },
         }
       })
       .sort((a, b) =>

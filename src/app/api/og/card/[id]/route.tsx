@@ -43,6 +43,7 @@ const TIER_COLOR_MAP: Record<CertificationTier, string> = {
   SPECIALIST: '#C0C0C0', // シルバー
   MASTER: '#C4A35A',     // ゴールド
   LEGEND: '#E5E4E2',     // プラチナ
+  IMMORTAL: '#B9F2FF',   // ダイヤモンド
 }
 
 // ===== ヘルパー =====
@@ -101,11 +102,13 @@ async function fetchAsDataUri(url: string, fallbackMime = 'image/png'): Promise<
 
 function getOgMedalPath(tier: CertificationTier | null): string | null {
   if (!tier || tier === 'PROVEN') return null
+  if (tier === 'IMMORTAL') return '/medals/immortal-400.png'
   return MEDAL_PATHS[tier as CertifiableTier].og
 }
 
 function getSmallMedalPath(tier: CertificationTier | null): string | null {
   if (!tier || tier === 'PROVEN') return null
+  if (tier === 'IMMORTAL') return '/medals/immortal-64.png'
   return MEDAL_PATHS[tier as CertifiableTier].small
 }
 
@@ -362,7 +365,7 @@ export async function GET(
   const top1 = overrideRow ?? topVoteRows[0]
   const voteCount = top1?.vote_count ?? 0
   const tier = voteCount > 0 ? getCertificationTier(voteCount) : null
-  const isModeA = tier === 'SPECIALIST' || tier === 'MASTER' || tier === 'LEGEND'
+  const isModeA = tier === 'SPECIALIST' || tier === 'MASTER' || tier === 'LEGEND' || tier === 'IMMORTAL'
 
   const displayName = getDisplayName(pro)
   const title = (pro.title || '').trim()

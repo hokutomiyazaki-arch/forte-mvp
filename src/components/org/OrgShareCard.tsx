@@ -39,7 +39,7 @@ interface Props {
 
 // メダル画像（public/ 配下＝同一オリジン＝CORS安全）。immortal / proven は画像なし。
 const MEDAL_IMG: Record<string, string | null> = {
-  immortal: null, // 画像未作成（閾値未確定）。個数ぶん描くが 0 なので何も出ない
+  immortal: '/medals/immortal-64.png', // 項目別500票。到達者0なら個数0で非表示
   legend: '/medals/legend-64.png',
   master: '/medals/master-64.png',
   specialist: '/medals/specialist-64.png',

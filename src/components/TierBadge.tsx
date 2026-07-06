@@ -12,7 +12,6 @@
 import {
   getCertificationTier,
   type CertificationTier,
-  type CertifiableTier,
 } from '@/lib/constants'
 
 export type Tier = CertificationTier
@@ -43,11 +42,12 @@ const LABEL_FONT_PX: Record<TierSize, number> = {
   lg: 14,
 }
 
-// メダル画像パス (SPECIALIST/MASTER/LEGEND のみ。/public/medals/ 配下)
-const MEDAL_PATHS: Record<CertifiableTier, string> = {
+// メダル画像パス (PROVEN 以外＝SPECIALIST/MASTER/LEGEND/IMMORTAL。/public/medals/ 配下)
+const MEDAL_PATHS: Record<Exclude<CertificationTier, 'PROVEN'>, string> = {
   SPECIALIST: '/medals/specialist-64.png',
   MASTER: '/medals/master-64.png',
   LEGEND: '/medals/legend-64.png',
+  IMMORTAL: '/medals/immortal-64.png',
 }
 
 const GOLD = '#C4A35A'

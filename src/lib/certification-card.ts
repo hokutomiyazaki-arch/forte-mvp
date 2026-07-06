@@ -91,6 +91,7 @@ const TIER_RANK: Record<CertificationTier, number> = {
   SPECIALIST: 2,
   MASTER: 3,
   LEGEND: 4,
+  IMMORTAL: 5,
 }
 
 function higherTier(
