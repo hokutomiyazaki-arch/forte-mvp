@@ -366,12 +366,15 @@ const METAL_FRONT_LAYOUT = {
   contentHeight: 172,
 }
 const METAL_BACK_LAYOUT = {
-  zoneTop: 300,
-  zoneBottom: 1140,
-  itemsLeft: 90,
+  // 上下ゴールドライン（カード座標で中心 ≈ y216 / y1161、中央 ≈ y688.5）の真ん中に
+  // 項目ブロックが来るよう、ゾーンを中央 y688 に対称配置（space-around で上下均等）。
+  zoneTop: 268,
+  zoneBottom: 1109,
+  // テンプレ左端の装飾枠に強み項目が接しないよう内側へ余白を確保。
+  itemsLeft: 175,
   qrSize: 560,
   qrRight: 140,
-  qrTop: 440, // 720 - qrSize/2
+  qrTop: 408, // 上下ラインの中央 y688 に QR 中心を合わせる（688 - qrSize/2）。項目ブロックと左右で揃える
 }
 
 /** ティア名テキスト（彫刻対象は SPECIALIST/MASTER/LEGEND のみ。PROVEN/未達は null＝彫らない）。 */
