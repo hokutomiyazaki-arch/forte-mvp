@@ -85,6 +85,7 @@ export default function DashboardPage() {
   const [pinIssuing, setPinIssuing] = useState(false)
   const [pinError, setPinError] = useState('')
   const [voteUrlCopied, setVoteUrlCopied] = useState(false)
+  const [isOnlineOpen, setIsOnlineOpen] = useState(false) // 「オンラインの方はこちら」開閉（初期＝閉じ）
   const [editing, setEditing] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
@@ -2337,7 +2338,16 @@ export default function DashboardPage() {
 
               {/* オンラインセッション用（token無し直リンク + 4桁PIN） */}
               <div className="mt-6 pt-6 border-t border-gray-100 text-left">
-                <h3 className="text-base font-bold text-[#1A1A2E] mb-1">🖥 オンラインの方はこちら</h3>
+                <div
+                  onClick={() => setIsOnlineOpen(prev => !prev)}
+                  className="flex items-center justify-between cursor-pointer"
+                >
+                  <h3 className="text-base font-bold text-[#1A1A2E] mb-1">🖥 オンラインの方はこちら</h3>
+                  <span className="text-gray-400 text-sm ml-2 shrink-0">{isOnlineOpen ? '▲' : '▼'}</span>
+                </div>
+
+                {isOnlineOpen && (
+                  <>
                 <p className="text-sm text-gray-500 mb-4">
                   QRが読み取れない場合、スマホでZoom等に参加中のお客様へURLと4桁番号をお伝えください。
                 </p>
@@ -2385,6 +2395,8 @@ export default function DashboardPage() {
                     <p className="text-xs text-gray-500 mb-1">番号</p>
                     <p className="text-4xl font-bold tracking-[0.3em] text-[#1A1A2E]">{votePin}</p>
                   </div>
+                )}
+                  </>
                 )}
               </div>
             </>
