@@ -85,6 +85,15 @@ export type CardData = {
   wantMetal: boolean
   /** 申請で盾を選んだか（いずれかの申請行が want_shield=true）。表示用 */
   wantShield: boolean
+  /** 入金状況サマリ（Stripe Webhook で payment_status が自動更新される） */
+  payment: {
+    /** 未入金（payment_status='pending'）の申請がある＝発送/制作前に入金確認が必要 */
+    hasUnpaid: boolean
+    /** 未入金分の合計金額（円） */
+    unpaidAmount: number
+    /** これまでに入金済み（payment_status='paid'）の申請がある */
+    anyPaid: boolean
+  }
   items: CardItem[]
 }
 
@@ -208,6 +217,8 @@ type CertAppRow = {
   use_photo_on_card: boolean | null
   want_metal: boolean | null
   want_shield: boolean | null
+  payment_status: string | null
+  payment_amount: number | null
   applied_at: string | null
 }
 
@@ -233,11 +244,19 @@ export async function buildCardData(
   const { data: appsRaw } = await sb
     .from('certification_applications')
     .select(
-      'professional_id, category_slug, certification_number, full_name_kanji, full_name_romaji, top_personality, organization, status, use_photo_on_card, want_metal, want_shield, applied_at'
+      'professional_id, category_slug, certification_number, full_name_kanji, full_name_romaji, top_personality, organization, status, use_photo_on_card, want_metal, want_shield, payment_status, payment_amount, applied_at'
     )
     .eq('professional_id', proId)
   const apps = (appsRaw as CertAppRow[] | null) ?? []
   if (apps.length === 0) return null
+
+  // 入金サマリ: pending 行が未入金。payment_amount は代表行に載る（他行0）ため pending 行合算でグループ総額。
+  const pendingRows = apps.filter((a) => a.payment_status === 'pending')
+  const payment = {
+    hasUnpaid: pendingRows.length > 0,
+    unpaidAmount: pendingRows.reduce((s, a) => s + (a.payment_amount || 0), 0),
+    anyPaid: apps.some((a) => a.payment_status === 'paid'),
+  }
 
   // 顔写真をカードに使うか：最新申請(applied_at)の値。既定 true（写真あり運用踏襲）。
   const latestApp = [...apps].sort((a, b) => (b.applied_at || '').localeCompare(a.applied_at || ''))[0]
@@ -354,6 +373,7 @@ export async function buildCardData(
     needsMint: !card,
     wantMetal,
     wantShield,
+    payment,
     items,
   }
 }
@@ -668,6 +688,8 @@ export type CertifiableProSummary = {
   pending: boolean
   /** 金属カードを申請した（一覧に「金属」バッジ表示） */
   wantMetal: boolean
+  /** 未入金の申請がある（一覧に「未入金」バッジ表示・発送前の入金確認用） */
+  hasUnpaid: boolean
 }
 
 /**
@@ -679,17 +701,19 @@ export async function listCertifiablePros(
 ): Promise<CertifiableProSummary[]> {
   const { data: appsRaw } = await sb
     .from('certification_applications')
-    .select('professional_id, full_name_kanji, want_metal')
-  const apps = (appsRaw as { professional_id: string; full_name_kanji: string | null; want_metal: boolean | null }[] | null) ?? []
+    .select('professional_id, full_name_kanji, want_metal, payment_status')
+  const apps = (appsRaw as { professional_id: string; full_name_kanji: string | null; want_metal: boolean | null; payment_status: string | null }[] | null) ?? []
 
-  const byPro = new Map<string, { nameKanji: string; count: number; wantMetal: boolean }>()
+  const byPro = new Map<string, { nameKanji: string; count: number; wantMetal: boolean; hasUnpaid: boolean }>()
   for (const a of apps) {
+    const unpaid = a.payment_status === 'pending'
     const cur = byPro.get(a.professional_id)
     if (cur) {
       cur.count += 1
       if (a.want_metal === true) cur.wantMetal = true
+      if (unpaid) cur.hasUnpaid = true
     } else {
-      byPro.set(a.professional_id, { nameKanji: (a.full_name_kanji || '').trim(), count: 1, wantMetal: a.want_metal === true })
+      byPro.set(a.professional_id, { nameKanji: (a.full_name_kanji || '').trim(), count: 1, wantMetal: a.want_metal === true, hasUnpaid: unpaid })
     }
   }
 
@@ -751,6 +775,7 @@ export async function listCertifiablePros(
       cardRegistered: !!active,
       pending: pendingSet.has(proId),
       wantMetal: info.wantMetal,
+      hasUnpaid: info.hasUnpaid,
     })
   }
   return result.sort((a, b) => a.nameKanji.localeCompare(b.nameKanji, 'ja'))
