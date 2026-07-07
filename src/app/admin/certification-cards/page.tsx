@@ -499,15 +499,17 @@ export default function CertificationCardsPage() {
                 ) : (
                   <span style={{ color: C.gray, border: `1px solid ${C.surfaceLight}`, borderRadius: 6, padding: '3px 10px' }}>無料（決済不要）</span>
                 )}
-                {payment.hasUnpaid ? (
+                {payment.hasUnpaid && (
                   <button onClick={() => setPaid(true)} style={{ ...btnOutline, padding: '4px 12px', fontSize: 12, borderColor: C.green, color: C.green }}>
                     入金済みにする
                   </button>
-                ) : payment.anyPaid ? (
+                )}
+                {/* 入金済みが1件でもあれば、いつでも取消可能（過去分・誤操作・Webup前の補正を戻せる） */}
+                {payment.anyPaid && (
                   <button onClick={() => setPaid(false)} style={{ ...btnOutline, padding: '4px 12px', fontSize: 12, color: C.gray, borderColor: C.surfaceLight }}>
-                    未入金に戻す
+                    入金確認を消す（未入金に戻す）
                   </button>
-                ) : null}
+                )}
                 {payment.hasUnpaid && (
                   <span style={{ color: C.amber, fontSize: 12 }}>※ 入金確認まで制作・発送を保留してください</span>
                 )}
