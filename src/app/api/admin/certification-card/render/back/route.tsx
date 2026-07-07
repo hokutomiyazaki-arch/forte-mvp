@@ -66,10 +66,10 @@ export async function GET(request: Request) {
 
     if (isMetal) {
       // 金属: 単色ゴールドQR＋金属テンプレ背景。メダル画像は読まない（ティア名テキストで代替）。
-      // ティア名は Playfair（セリフ）で英語ラベルと書体差別化。
+      // ティア名は Cinzel（彫刻ローマン体）で英語ラベル（サンセリフ）と書体差別化。
       const [fontData, tierFontData, qrDataUri, backgroundDataUri] = await Promise.all([
         readPubArrayBuffer('fonts/NotoSansJP-subset.ttf'),
-        readPubArrayBuffer('fonts/PlayfairDisplay-subset.ttf'),
+        readPubArrayBuffer('fonts/Cinzel-subset.ttf'),
         buildQrDataUriMetal(input.cardUid),
         readPubDataUri('card-assets/back-bg-metal.png'),
       ])

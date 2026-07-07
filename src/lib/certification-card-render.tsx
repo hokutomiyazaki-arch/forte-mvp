@@ -87,7 +87,7 @@ export type CardAssets = {
   medalDataUris?: Partial<Record<CertifiableTier, string | null>>
   /** 固定背景画像（Canva front-bg/back-bg） */
   backgroundDataUri?: string | null
-  /** 金属裏面のティア名テキスト専用フォント（Playfair Display）。英語サブラベルと書体を差別化する */
+  /** 金属裏面のティア名テキスト専用フォント（Cinzel＝彫刻ローマン体）。英語サブラベルと書体を差別化する */
   tierFontData?: ArrayBuffer | null
 }
 
@@ -499,8 +499,8 @@ export function buildBackElementMetal(input: CardRenderInput, assets: CardAssets
   const itemsWidth = qrX - METAL_BACK_LAYOUT.itemsLeft - 48
   const zoneHeight = METAL_BACK_LAYOUT.zoneBottom - METAL_BACK_LAYOUT.zoneTop
 
-  // ティア名の書体: 専用フォント(Playfair)があればそれ、無ければ NotoSansJP にフォールバック
-  const tierFamily = assets.tierFontData ? 'Playfair' : 'NotoSansJP'
+  // ティア名の書体: 専用フォント(Cinzel)があればそれ、無ければ NotoSansJP にフォールバック
+  const tierFamily = assets.tierFontData ? 'TierFont' : 'NotoSansJP'
 
   const element = (
     <div
@@ -557,7 +557,7 @@ export function buildBackElementMetal(input: CardRenderInput, assets: CardAssets
           const tierText = tierTextFor(it.tier)
           return (
             <div key={idx} style={{ display: 'flex', flexDirection: 'column' }}>
-              {/* 1段目: 日本語強み ＋ その真横にティア名（Playfairセリフで英語ラベルと差別化・単色ゴールド） */}
+              {/* 1段目: 日本語強み ＋ その真横にティア名（Cinzelの彫刻ローマン体で英語ラベルと差別化・単色ゴールド） */}
               <div style={{ display: 'flex', alignItems: 'baseline' }}>
                 <span style={{ fontSize: jaSize, color: METAL_GOLD, fontWeight: 700, lineHeight: 1.08 }}>
                   {it.strengthJa}
@@ -581,9 +581,9 @@ export function buildBackElementMetal(input: CardRenderInput, assets: CardAssets
     </div>
   )
 
-  // NotoSansJP（日本語/英語）＋ Playfair（ティア名）を両方登録
+  // NotoSansJP(日本語/英語)＋ Cinzel(ティア名)を両方登録
   const fonts: OgOptions['fonts'] = [{ name: 'NotoSansJP', data: assets.fontData, style: 'normal', weight: 700 }]
-  if (assets.tierFontData) fonts.push({ name: 'Playfair', data: assets.tierFontData, style: 'normal', weight: 700 })
+  if (assets.tierFontData) fonts.push({ name: 'TierFont', data: assets.tierFontData, style: 'normal', weight: 700 })
   return { element, options: { width: CARD_W, height: CARD_H, fonts } }
 }
 
