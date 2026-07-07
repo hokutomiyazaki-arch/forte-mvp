@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useLayoutEffect } from 'react'
 import { executeVoiceShare } from '@/lib/voice-share'
 
 /**
@@ -57,7 +57,7 @@ interface Props {
 }
 
 // 顔写真ずらり: 表示上限（feed/stories）
-const FACE_MAX = { feed: 10, stories: 15 } as const
+const FACE_MAX = { feed: 7, stories: 15 } as const
 
 // メダル画像（public/ 配下＝同一オリジン＝CORS安全）。proven は画像なし。
 const MEDAL_IMG: Record<string, string | null> = {
@@ -237,6 +237,24 @@ export default function OrgShareCard({
     const shownFaces = faceMembers.slice(0, FACE_MAX[mode])
     const facesRemaining = memberCount - shownFaces.length
 
+    // ── 4:5(および9:16)固定枠に中身を自動縮小して収める ──
+    // 内側カラムの素の高さ(scrollHeight・transform非依存)を測り、利用可能高さに収まる縮小率を出す。
+    // ★依存はプリミティブのみ(配列/ref/fitScale は入れない=無限ループ防止)。
+    const innerRef = useRef<HTMLDivElement>(null)
+    const [fitScale, setFitScale] = useState(1)
+    useLayoutEffect(() => {
+      const el = innerRef.current
+      if (!el) return
+      const contentH = el.scrollHeight
+      const availH = dim.h - dim.padY * 2
+      const k = availH > 0 && contentH > 0 ? Math.min(1, availH / contentH) : 1
+      setFitScale(k)
+    }, [
+      mode, dim.h, dim.padY,
+      showLogo, blockSummary, blockStrengths, blockBadges, showFaces,
+      selectedIds.length, selectedBadgeIds.length, shownFaces.length,
+    ])
+
     return (
       <div style={{
         width: dim.w, height: dim.h,
@@ -248,7 +266,12 @@ export default function OrgShareCard({
         fontFamily: "'Inter', 'Noto Sans JP', sans-serif", color: INK,
         overflow: 'hidden',
       }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: mode === 'stories' ? 44 : 30, width: '100%' }}>
+        <div ref={innerRef} style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          gap: mode === 'stories' ? 44 : 30, width: '100%',
+          transform: fitScale < 1 ? `scale(${fitScale})` : undefined,
+          transformOrigin: 'center center',
+        }}>
 
           {/* ロゴ（proxy経由・logoUrl あるときのみ） */}
           {showLogo && logoUrl && (
