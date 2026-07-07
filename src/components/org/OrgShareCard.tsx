@@ -222,9 +222,19 @@ export default function OrgShareCard({
   function CardFull({ mode }: { mode: 'feed' | 'stories' }) {
     const dim = BG[mode]
     const isStories = mode === 'stories'
+    // 強み(②)以外の4トグル(ロゴ/サマリー/バッジ/顔写真)の ON 数。※state基準でカウント
+    // (logoUrl/members が無く実際に出ない場合でも state 値で数える＝CEOロジックはトグル基準)。
+    const otherBlocksOn =
+      (showLogo ? 1 : 0) +
+      (blockSummary ? 1 : 0) +
+      (blockBadges ? 1 : 0) +
+      (showFaces ? 1 : 0)
+    // feed のみ動的: 他ON 0〜1個→3件 / 2個以上→2件。stories は従来値(strengthMax=3)を維持。
+    const strengthLimit =
+      mode === 'stories' ? dim.strengthMax : (otherBlocksOn <= 1 ? 3 : 2)
     const shownStrengths = strengths
       .filter(s => selectedIds.includes(s.proofItemId))
-      .slice(0, dim.strengthMax)
+      .slice(0, strengthLimit)
     // 選択済みバッジのみ（デフォルト全選択）
     const selectedBadges = sortedBadges.filter(b => selectedBadgeIds.includes(b.id))
     const imgBadges = selectedBadges.slice(0, BADGE_IMG_MAX)
