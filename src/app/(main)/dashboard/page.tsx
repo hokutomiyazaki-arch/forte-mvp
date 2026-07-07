@@ -80,6 +80,11 @@ export default function DashboardPage() {
   const [regularCount, setRegularCount] = useState(0)
   const [qrUrl, setQrUrl] = useState('')
   const [qrRefreshed, setQrRefreshed] = useState(false)
+  // オンラインセッション用 投票PIN
+  const [votePin, setVotePin] = useState('')
+  const [pinIssuing, setPinIssuing] = useState(false)
+  const [pinError, setPinError] = useState('')
+  const [voteUrlCopied, setVoteUrlCopied] = useState(false)
   const [editing, setEditing] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
@@ -1108,6 +1113,31 @@ export default function DashboardPage() {
     await db.insert('qr_tokens', { professional_id: pro.id, token, expires_at: expiresAt })
     const voteUrl = `${window.location.origin}/vote/${pro.id}?token=${token}&channel=dashboard`
     setQrUrl(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(voteUrl)}`)
+  }
+
+  // オンラインセッション用の投票PINを発行（旧PIN失効＋新規4桁生成）
+  async function issueVotePin() {
+    if (!pro) return
+    setPinIssuing(true)
+    setPinError('')
+    try {
+      const res = await fetch('/api/vote-pin/issue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ professional_id: pro.id }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.pin) {
+        setPinError('番号の発行に失敗しました。時間をおいて再度お試しください。')
+        return
+      }
+      setVotePin(json.pin)
+    } catch {
+      setPinError('番号の発行に失敗しました。時間をおいて再度お試しください。')
+    } finally {
+      setPinIssuing(false)
+    }
   }
 
   // NFC カード登録
@@ -2304,6 +2334,59 @@ export default function DashboardPage() {
                   24時間限定QRコードを発行する
                 </button>
               )}
+
+              {/* オンラインセッション用（token無し直リンク + 4桁PIN） */}
+              <div className="mt-6 pt-6 border-t border-gray-100 text-left">
+                <h3 className="text-base font-bold text-[#1A1A2E] mb-1">🖥 オンラインの方はこちら</h3>
+                <p className="text-sm text-gray-500 mb-4">
+                  QRが読み取れない場合、スマホでZoom等に参加中のお客様へURLと4桁番号をお伝えください。
+                </p>
+
+                <div className="flex items-center gap-2 mb-4">
+                  <input
+                    type="text"
+                    readOnly
+                    value={`https://realproof.jp/vote/${pro.id}`}
+                    className="flex-1 min-w-0 text-sm bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-[#1A1A2E]"
+                  />
+                  <button
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(`https://realproof.jp/vote/${pro.id}`)
+                        setVoteUrlCopied(true)
+                        setTimeout(() => setVoteUrlCopied(false), 2000)
+                      } catch {
+                        setVoteUrlCopied(false)
+                      }
+                    }}
+                    className="shrink-0 px-4 py-2 text-sm bg-[#1A1A2E] text-white rounded-lg hover:opacity-90 transition"
+                  >
+                    {voteUrlCopied ? 'コピー済み ✓' : 'コピー'}
+                  </button>
+                </div>
+
+                <button
+                  onClick={issueVotePin}
+                  disabled={pinIssuing}
+                  className="px-6 py-3 bg-[#C4A35A] text-white rounded-lg hover:bg-[#b3944f] transition disabled:opacity-50"
+                >
+                  {pinIssuing ? '発行中…' : 'セッション用の番号を発行'}
+                </button>
+                <p className="text-xs text-gray-400 mt-2">
+                  ※1回の投票で使い切りです。新しく発行すると前の番号は使えなくなります
+                </p>
+
+                {pinError && (
+                  <p className="text-sm text-red-500 mt-3">{pinError}</p>
+                )}
+
+                {votePin && (
+                  <div className="mt-4 text-center bg-gray-50 rounded-xl py-4">
+                    <p className="text-xs text-gray-500 mb-1">番号</p>
+                    <p className="text-4xl font-bold tracking-[0.3em] text-[#1A1A2E]">{votePin}</p>
+                  </div>
+                )}
+              </div>
             </>
           )
         })()}

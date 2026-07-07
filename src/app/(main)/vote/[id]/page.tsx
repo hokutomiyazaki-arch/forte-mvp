@@ -466,6 +466,9 @@ function VoteForm() {
   const [error, setError] = useState('')
   const [alreadyVoted, setAlreadyVoted] = useState(false)
   const [tokenExpired, setTokenExpired] = useState(false)
+  // オンライン投票PIN（token無し直リンク経由のみ必須）
+  const [pinInput, setPinInput] = useState('')
+  const [pinError, setPinError] = useState('')
   const [isSelfVote, setIsSelfVote] = useState(false)
   const [showPreviewBanner, setShowPreviewBanner] = useState(true)
 
@@ -927,6 +930,42 @@ function VoteForm() {
     }
   }
 
+  // ── オンライン投票PIN検証（token無し直リンク経由のみ） ──
+  // token 有り（QR経由）は従来通りPIN不要 → {ok:true, pinId:null} を返して素通り。
+  // token 無し → pinInput を vote_pins と照合。ヒットしなければ ok:false で投票を止める。
+  async function verifyVotePin(): Promise<{ ok: boolean; pinId: string | null }> {
+    if (getQrToken()) return { ok: true, pinId: null }
+    const pin = pinInput.trim()
+    if (!/^\d{4}$/.test(pin)) {
+      setPinError('4桁の認証番号を入力してください')
+      return { ok: false, pinId: null }
+    }
+    const { data } = await (supabase as any)
+      .from('vote_pins')
+      .select('id')
+      .eq('professional_id', proId)
+      .eq('pin', pin)
+      .is('used_at', null)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle()
+    if (!data) {
+      setPinError('番号が正しくないか、有効期限が切れています')
+      return { ok: false, pinId: null }
+    }
+    setPinError('')
+    return { ok: true, pinId: data.id }
+  }
+
+  // 投票成立直後にPINを使用済みにする（既存の markTokenUsedFromClient と同じ思想）
+  async function markVotePinUsed(pinId: string | null) {
+    if (!pinId) return
+    try {
+      await (supabase as any).from('vote_pins').update({ used_at: new Date().toISOString() }).eq('id', pinId)
+    } catch (e) {
+      console.error('[markVotePinUsed] error:', e)
+    }
+  }
+
   // ── hopeful投票（「気になっている」用） ──
   const handleSaveReward = async () => {
     const url = window.location.href
@@ -992,7 +1031,7 @@ function VoteForm() {
   }
 
   // ── LINE認証で投票 ──
-  function handleLineVote() {
+  async function handleLineVote() {
     if (isPreview) return // プレビューモードでは投票しない
     // 🔒 SNAPSHOT: 認証前にstateを固定（stale state対策）
     const voteDataSnapshot = buildVoteData()
@@ -1003,16 +1042,24 @@ function VoteForm() {
       return
     }
 
+    // PIN gate（token無し直リンクのみ。QR経由は pinId=null で素通り）
+    const linePin = await verifyVotePin()
+    if (!linePin.ok) return
+
     setError('')
     // sessionStorageにもバックアップ保存（二重防御）。現在の voteStep を一緒に保存。
     saveVoteDataToSession(voteStep)
+
+    // LINEはサーバー側callbackで投票が成立し、クライアントに戻らないため、
+    // 離脱前にPINを使用済みにする（1回で使い切り）。
+    await markVotePinUsed(linePin.pinId)
 
     const voteDataParam = encodeURIComponent(JSON.stringify(voteDataSnapshot))
     window.location.href = `/api/vote-auth/line?professional_id=${proId}&qr_token=${getQrToken()}&vote_data=${voteDataParam}`
   }
 
   // ── Google認証で投票 ──
-  function handleGoogleVote() {
+  async function handleGoogleVote() {
     if (isPreview) return // プレビューモードでは投票しない
     // 🔒 SNAPSHOT: 認証前にstateを固定（stale state対策）
     const voteDataSnapshot = buildVoteData()
@@ -1023,9 +1070,17 @@ function VoteForm() {
       return
     }
 
+    // PIN gate（token無し直リンクのみ。QR経由は pinId=null で素通り）
+    const googlePin = await verifyVotePin()
+    if (!googlePin.ok) return
+
     setError('')
     // sessionStorageにもバックアップ保存（二重防御）。現在の voteStep を一緒に保存。
     saveVoteDataToSession(voteStep)
+
+    // Googleはサーバー側callbackで投票が成立し、クライアントに戻らないため、
+    // 離脱前にPINを使用済みにする（1回で使い切り）。
+    await markVotePinUsed(googlePin.pinId)
 
     const voteDataParam = encodeURIComponent(JSON.stringify(voteDataSnapshot))
     window.location.href = `/api/vote-auth/google?professional_id=${proId}&qr_token=${getQrToken()}&vote_data=${voteDataParam}`
@@ -1121,6 +1176,10 @@ function VoteForm() {
       setError('投票データの取得に失敗しました。もう一度お試しください。')
       return
     }
+
+    // PIN gate（token無し直リンクのみ。QR経由は pinId=null で素通り）
+    const phonePin = await verifyVotePin()
+    if (!phonePin.ok) return
 
     // sessionStorageにもバックアップ保存（二重防御）。現在の voteStep を一緒に保存。
     saveVoteDataToSession(voteStep)
@@ -1229,6 +1288,7 @@ function VoteForm() {
       }
 
       await markTokenUsedFromClient(voteDataSnapshot.qr_token || '')
+      await markVotePinUsed(phonePin.pinId)
       sessionStorage.removeItem('pending_vote')
 
       if (insertedVote?.id) {
@@ -1306,6 +1366,10 @@ function VoteForm() {
       formattedPhone = '+81' + formattedPhone.slice(1)
     }
 
+    // PIN gate（token無し直リンクのみ。QR経由は pinId=null で素通り）
+    const fbPin = await verifyVotePin()
+    if (!fbPin.ok) { setIsSubmitting(false); return }
+
     // ── 重複チェック（7日リピート / 30分クールダウン / 1分ダブルサブミット） ──
     const fbDupeResult = await checkVoteDuplicates(supabase, {
       voterIdentifier: formattedPhone,
@@ -1368,6 +1432,7 @@ function VoteForm() {
     }
 
     await markTokenUsedFromClient(voteData.qr_token || '')
+    await markVotePinUsed(fbPin.pinId)
     sessionStorage.removeItem('pending_vote')
 
     if (insertedVote?.id) {
@@ -1661,6 +1726,10 @@ function VoteForm() {
       return
     }
 
+    // PIN gate（token無し直リンクのみ。QR経由は pinId=null で素通り）
+    const emailPin = await verifyVotePin()
+    if (!emailPin.ok) return
+
     // sessionStorageにもバックアップ保存（二重防御）。現在の voteStep を一緒に保存。
     saveVoteDataToSession(voteStep)
 
@@ -1683,6 +1752,7 @@ function VoteForm() {
       const data = await res.json().catch(() => ({}))
 
       if (res.ok && data.success) {
+        await markVotePinUsed(emailPin.pinId)
         sessionStorage.removeItem('pending_vote')
         const rid = data.client_reward_id || ''
         window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${data.vote_id}${rid ? `&rid=${rid}` : ''}`
@@ -1735,6 +1805,10 @@ function VoteForm() {
       setError('投票データの取得に失敗しました。もう一度お試しください。')
       return
     }
+
+    // PIN gate（token無し直リンクのみ。QR経由は pinId=null で素通り）
+    const clerkPin = await verifyVotePin()
+    if (!clerkPin.ok) return
 
     setIsSubmitting(true)
     setError('')
@@ -1875,6 +1949,7 @@ function VoteForm() {
       }
 
       await markTokenUsedFromClient(voteDataSnapshot.qr_token || '')
+      await markVotePinUsed(clerkPin.pinId)
       sessionStorage.removeItem('pending_vote')
 
       // vote_emails 記録（失敗しても投票は成立）
@@ -2479,6 +2554,44 @@ function VoteForm() {
               あなたの声を届けるために<br />
               確認をお願いしています。
             </div>
+
+            {/* オンライン投票PIN（token無し直リンク経由のみ必須。QR経由は表示しない） */}
+            {!getQrToken() && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "#FAFAF7", marginBottom: 8 }}>
+                  4桁の認証番号を入力
+                </div>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={pinInput}
+                  onChange={(e) => {
+                    setPinInput(e.target.value.replace(/\D/g, "").slice(0, 4))
+                    setPinError("")
+                  }}
+                  placeholder="＿＿＿＿"
+                  style={{
+                    width: "100%",
+                    textAlign: "center",
+                    letterSpacing: "0.5em",
+                    fontSize: 24,
+                    padding: "12px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(255,255,255,0.2)",
+                    background: "rgba(255,255,255,0.05)",
+                    color: "#FAFAF7",
+                    boxSizing: "border-box",
+                  }}
+                />
+                <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 6 }}>
+                  担当者からお聞きした番号を入力してください
+                </div>
+                {pinError && (
+                  <div style={{ fontSize: 13, color: "#FCA5A5", marginTop: 6 }}>{pinError}</div>
+                )}
+              </div>
+            )}
 
             {error && (
               <div style={{
