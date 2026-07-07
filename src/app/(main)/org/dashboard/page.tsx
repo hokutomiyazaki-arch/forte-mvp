@@ -283,8 +283,14 @@ export default function OrgDashboardPage() {
   const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 5 * 1024 * 1024) {
-      alert('画像は5MB以下にしてください')
+    if (file.type !== 'image/png') {
+      alert('ロゴは透過PNGのみ対応しています')
+      e.target.value = ''
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      alert('画像は2MB以下にしてください')
+      e.target.value = ''
       return
     }
     const reader = new FileReader()
@@ -300,8 +306,8 @@ export default function OrgDashboardPage() {
     try {
       const formData = new FormData()
       formData.append('bucket', 'badge-images')
-      formData.append('path', `org-logos/${org.id}/${Date.now()}.jpg`)
-      formData.append('file', blob, 'logo.jpg')
+      formData.append('path', `org-logos/${org.id}/${Date.now()}.png`)
+      formData.append('file', blob, 'logo.png')
       formData.append('upsert', 'true')
 
       const res = await fetch('/api/storage', { method: 'POST', body: formData })
@@ -1469,7 +1475,7 @@ export default function OrgDashboardPage() {
               <input
                 ref={logoInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/png"
                 onChange={handleLogoFileChange}
                 style={{ display: 'none' }}
               />
@@ -1537,6 +1543,7 @@ export default function OrgDashboardPage() {
           onCropComplete={handleLogoCropComplete}
           onCancel={() => setCropperSrc(null)}
           cropShape="rect"
+          format="png"
         />
       )}
     </div>
