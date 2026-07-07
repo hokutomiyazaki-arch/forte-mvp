@@ -87,6 +87,8 @@ export type CardAssets = {
   medalDataUris?: Partial<Record<CertifiableTier, string | null>>
   /** 固定背景画像（Canva front-bg/back-bg） */
   backgroundDataUri?: string | null
+  /** 金属裏面のティア名テキスト専用フォント（Playfair Display）。英語サブラベルと書体を差別化する */
+  tierFontData?: ArrayBuffer | null
 }
 
 type OgOptions = {
@@ -497,6 +499,9 @@ export function buildBackElementMetal(input: CardRenderInput, assets: CardAssets
   const itemsWidth = qrX - METAL_BACK_LAYOUT.itemsLeft - 48
   const zoneHeight = METAL_BACK_LAYOUT.zoneBottom - METAL_BACK_LAYOUT.zoneTop
 
+  // ティア名の書体: 専用フォント(Playfair)があればそれ、無ければ NotoSansJP にフォールバック
+  const tierFamily = assets.tierFontData ? 'Playfair' : 'NotoSansJP'
+
   const element = (
     <div
       style={{
@@ -551,26 +556,24 @@ export function buildBackElementMetal(input: CardRenderInput, assets: CardAssets
         {items.map((it, idx) => {
           const tierText = tierTextFor(it.tier)
           return (
-            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap }}>
-              {/* 日本語 + 英語（2段・単色ゴールド） */}
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <div style={{ display: 'flex' }}>
-                  <span style={{ fontSize: jaSize, color: METAL_GOLD, fontWeight: 700, lineHeight: 1.08 }}>
-                    {it.strengthJa}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', marginTop: lineGap }}>
-                  <span style={{ fontSize: enSize, color: METAL_GOLD, letterSpacing: 2 }}>
-                    {it.strengthEn}
-                  </span>
-                </div>
-              </div>
-              {/* テキストのすぐ右にティア名（メダル画像の代替。PROVEN/未達は描かない） */}
-              {tierText ? (
-                <span style={{ display: 'flex', fontSize: tierSize, color: METAL_GOLD, fontWeight: 700, letterSpacing: 3 }}>
-                  {tierText}
+            <div key={idx} style={{ display: 'flex', flexDirection: 'column' }}>
+              {/* 1段目: 日本語強み ＋ その真横にティア名（Playfairセリフで英語ラベルと差別化・単色ゴールド） */}
+              <div style={{ display: 'flex', alignItems: 'baseline' }}>
+                <span style={{ fontSize: jaSize, color: METAL_GOLD, fontWeight: 700, lineHeight: 1.08 }}>
+                  {it.strengthJa}
                 </span>
-              ) : null}
+                {tierText ? (
+                  <span style={{ fontSize: tierSize, color: METAL_GOLD, fontFamily: tierFamily, fontWeight: 700, letterSpacing: 5, marginLeft: gap }}>
+                    {tierText}
+                  </span>
+                ) : null}
+              </div>
+              {/* 2段目: 英語ラベル（サブ・サンセリフ） */}
+              <div style={{ display: 'flex', marginTop: lineGap }}>
+                <span style={{ fontSize: enSize, color: METAL_GOLD, letterSpacing: 2 }}>
+                  {it.strengthEn}
+                </span>
+              </div>
             </div>
           )
         })}
@@ -578,7 +581,10 @@ export function buildBackElementMetal(input: CardRenderInput, assets: CardAssets
     </div>
   )
 
-  return { element, options: baseOptions(assets.fontData) }
+  // NotoSansJP（日本語/英語）＋ Playfair（ティア名）を両方登録
+  const fonts: OgOptions['fonts'] = [{ name: 'NotoSansJP', data: assets.fontData, style: 'normal', weight: 700 }]
+  if (assets.tierFontData) fonts.push({ name: 'Playfair', data: assets.tierFontData, style: 'normal', weight: 700 })
+  return { element, options: { width: CARD_W, height: CARD_H, fonts } }
 }
 
 // ============================================================

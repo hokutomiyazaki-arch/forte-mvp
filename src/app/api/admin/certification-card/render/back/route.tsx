@@ -66,12 +66,14 @@ export async function GET(request: Request) {
 
     if (isMetal) {
       // 金属: 単色ゴールドQR＋金属テンプレ背景。メダル画像は読まない（ティア名テキストで代替）。
-      const [fontData, qrDataUri, backgroundDataUri] = await Promise.all([
+      // ティア名は Playfair（セリフ）で英語ラベルと書体差別化。
+      const [fontData, tierFontData, qrDataUri, backgroundDataUri] = await Promise.all([
         readPubArrayBuffer('fonts/NotoSansJP-subset.ttf'),
+        readPubArrayBuffer('fonts/PlayfairDisplay-subset.ttf'),
         buildQrDataUriMetal(input.cardUid),
         readPubDataUri('card-assets/back-bg-metal.png'),
       ])
-      const assets: CardAssets = { fontData, qrDataUri, backgroundDataUri }
+      const assets: CardAssets = { fontData, tierFontData, qrDataUri, backgroundDataUri }
       const { element, options } = buildBackElementMetal(input, assets)
       const rgba = Buffer.from(await new ImageResponse(element, options).arrayBuffer())
       const rgb = await sharp(rgba).flatten({ background: { r: 0, g: 0, b: 0 } }).png().toBuffer()
