@@ -25,6 +25,7 @@
  *   在庫プール(unlinked)には一切触れない。
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { randomBytes } from 'crypto'
 import {
   STRENGTH_ENGLISH_NAMES,
   PERSONALITY_ENGLISH_NAMES,
@@ -179,6 +180,89 @@ export async function resolveExistingCard(
   if (rows.length === 0) return null
   // active を優先、無ければ先頭
   return rows.find((r) => r.status === 'active') ?? rows[0]
+}
+
+// ===== 新規 card_uid 発番（mint・§16・🛑CEO承認後） =====
+
+/**
+ * 本人専用の新規 card_uid を1つ mint して nfc_cards に作成する。
+ *
+ * ⚠️ card_uid モデル遵守（[[feedback_nfc_card_uid_model]]）:
+ * - 在庫(unlinked)プールは物理カードが実在するため流用しない。必ず新しい一意 uid を生成する。
+ * - 二重mint防止: 既に本人のカード(professional_id OR user_id)があれば mint せず既存 uid を返す
+ *   （created=false）。1人1uid を保証し /nfc/ 衝突を防ぐ。
+ * - 発番形式は RP-XXXX（曖昧文字 O/0/I/1/L を除外した4文字）。miteca への手入力ミス対策。
+ * - status='active'・本人(professional_id/user_id)に紐付け。以降 resolveExistingCard が拾う。
+ */
+export async function mintCardForPro(
+  sb: SupabaseClient,
+  proId: string
+): Promise<{ ok: boolean; error?: string; cardUid: string | null; created: boolean }> {
+  // 本人（deactivated 除外）と user_id を解決
+  const { data: proRaw } = await sb
+    .from('professionals')
+    .select('id, user_id')
+    .eq('id', proId)
+    .is('deactivated_at', null)
+    .maybeSingle()
+  const pro = proRaw as { id: string; user_id: string | null } | null
+  if (!pro) return { ok: false, error: 'pro_not_found', cardUid: null, created: false }
+
+  // 二重mint防止: 既存カードがあればそれを返す（新規発番しない）
+  const existing = await resolveExistingCard(sb, proId, pro.user_id)
+  if (existing) return { ok: true, cardUid: existing.card_uid, created: false }
+
+  // 一意 card_uid を生成（衝突リトライ）。曖昧文字除外アルファベット。
+  const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const bytes = randomBytes(4)
+    let code = ''
+    for (let i = 0; i < 4; i++) code += ALPHABET[bytes[i] % ALPHABET.length]
+    const cardUid = `RP-${code}`
+
+    // 既存 uid と衝突しないことを確認（在庫含む全 nfc_cards）
+    const { data: dup } = await sb.from('nfc_cards').select('card_uid').eq('card_uid', cardUid).maybeSingle()
+    if (dup) continue
+
+    const now = new Date().toISOString()
+    const { error } = await sb.from('nfc_cards').insert({
+      card_uid: cardUid,
+      professional_id: proId,
+      user_id: pro.user_id,
+      status: 'active',
+      linked_at: now,
+      updated_at: now,
+    })
+    if (!error) return { ok: true, cardUid, created: true }
+    if (error.code === '23505') continue // uid UNIQUE 衝突 → 採り直し
+    return { ok: false, error: error.message, cardUid: null, created: false }
+  }
+  return { ok: false, error: 'mint_failed', cardUid: null, created: false }
+}
+
+// ===== 入金状況の手動更新（Webhook 導入前の決済・銀行振込・過去分の補正用） =====
+
+/**
+ * プロの申請の payment_status を手動で切り替える（管理者操作）。
+ * - paid=true : payment_status='pending' の行を 'paid' に（未入金 → 入金済み）
+ * - paid=false: payment_status='paid' の行を 'pending' に戻す（誤操作の取消）
+ * free 行（決済不要）は対象外。戻り値の updated は更新行数。
+ */
+export async function setApplicationsPaid(
+  sb: SupabaseClient,
+  proId: string,
+  paid: boolean
+): Promise<{ ok: boolean; error?: string; updated: number }> {
+  const fromStatus = paid ? 'pending' : 'paid'
+  const toStatus = paid ? 'paid' : 'pending'
+  const { data, error } = await sb
+    .from('certification_applications')
+    .update({ payment_status: toStatus })
+    .eq('professional_id', proId)
+    .eq('payment_status', fromStatus)
+    .select('id')
+  if (error) return { ok: false, error: error.message, updated: 0 }
+  return { ok: true, updated: data?.length ?? 0 }
 }
 
 // ===== 認定番号の次番号（RP-2026-NNNN, >=0013） =====

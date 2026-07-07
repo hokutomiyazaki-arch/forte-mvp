@@ -334,6 +334,53 @@ export default function CertificationCardsPage() {
     if (res.ok) setPros((prev) => prev.map((p) => p.proId === proId ? { ...p, pending: false } : p))
   }
 
+  // プロ一覧を再取得（mint/入金でバッジを更新するため）
+  const reloadPros = () => {
+    fetch('/api/admin/certification-card/data', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((j) => setPros(j.pros ?? []))
+      .catch(() => {})
+  }
+
+  // 新規 card_uid を発番（mint）。ボタン1つで完結。確認ダイアログ付き。
+  const [minting, setMinting] = useState(false)
+  const doMint = async () => {
+    if (!selectedProId || minting) return
+    if (!window.confirm(
+      'この人に新規 card_uid を1つ発番（mint）して nfc_cards に作成します。\n' +
+      '在庫は流用せず本人専用の番号を作ります。miteca発注時のNFC欄にも同じ番号を入力してください。\n\nよろしいですか？'
+    )) return
+    setError(null)
+    setMinting(true)
+    try {
+      const res = await fetch('/api/admin/certification-card/mint', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
+        body: JSON.stringify({ proId: selectedProId }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error || 'mint に失敗しました'); return }
+      loadPro(selectedProId)
+      reloadPros()
+    } finally {
+      setMinting(false)
+    }
+  }
+
+  // 入金状況の手動切替（入金済み ⇄ 未入金）
+  const setPaid = async (paid: boolean) => {
+    if (!selectedProId) return
+    if (!window.confirm(paid ? 'この申請を「入金済み」にします。よろしいですか？' : '「未入金」に戻します。よろしいですか？')) return
+    setError(null)
+    const res = await fetch('/api/admin/certification-card/payment', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
+      body: JSON.stringify({ proId: selectedProId, paid }),
+    })
+    const data = await res.json()
+    if (!res.ok) { setError(data.error || '入金状況の更新に失敗しました'); return }
+    loadPro(selectedProId)
+    reloadPros()
+  }
+
   const filteredPros = pros.filter((p) => p.nameKanji.includes(search) || p.proId.includes(search))
 
   const previewUrl = (side: 'front' | 'back') =>
@@ -452,6 +499,15 @@ export default function CertificationCardsPage() {
                 ) : (
                   <span style={{ color: C.gray, border: `1px solid ${C.surfaceLight}`, borderRadius: 6, padding: '3px 10px' }}>無料（決済不要）</span>
                 )}
+                {payment.hasUnpaid ? (
+                  <button onClick={() => setPaid(true)} style={{ ...btnOutline, padding: '4px 12px', fontSize: 12, borderColor: C.green, color: C.green }}>
+                    入金済みにする
+                  </button>
+                ) : payment.anyPaid ? (
+                  <button onClick={() => setPaid(false)} style={{ ...btnOutline, padding: '4px 12px', fontSize: 12, color: C.gray, borderColor: C.surfaceLight }}>
+                    未入金に戻す
+                  </button>
+                ) : null}
                 {payment.hasUnpaid && (
                   <span style={{ color: C.amber, fontSize: 12 }}>※ 入金確認まで制作・発送を保留してください</span>
                 )}
@@ -482,11 +538,15 @@ export default function CertificationCardsPage() {
               {needsMint && (
                 <div style={{ background: '#2a2410', border: `1px solid ${C.amber}`, padding: 14, borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
                   <div style={{ color: C.amber, fontWeight: 700, marginBottom: 6 }}>⚠ 本人のカードが1枚もありません — 新規 mint が必要（🛑 §16・承認後）</div>
-                  <div style={{ color: C.gray }}>
+                  <div style={{ color: C.gray, marginBottom: 12 }}>
                     認定カードには本人専用の card_uid が必要です。<strong>在庫(unlinked)プールは物理カードが実在するため流用しません</strong>
                     （同一 uid の二枚化＝/nfc/ 衝突になる）。§16 の発番で新しい card_uid を1つ mint し nfc_cards に作成してから生成します。
                     mint はCEO承認後にのみ実行します。
                   </div>
+                  <button onClick={doMint} disabled={minting}
+                    style={{ ...btnGold, opacity: minting ? 0.5 : 1, cursor: minting ? 'not-allowed' : 'pointer' }}>
+                    {minting ? '発番中…' : '新規 card_uid を発番（mint）してこの人に紐付け'}
+                  </button>
                 </div>
               )}
 
