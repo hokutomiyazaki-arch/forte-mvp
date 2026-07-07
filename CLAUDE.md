@@ -1,201 +1,165 @@
-# REALPROOF 開発ルール
+# REALPROOF 開発ルール（forte-mvp 専用）
+
+> グローバル共通ルール（コミュニケーション・診断規律・破壊的操作の5段階など）は
+> `~/.claude/CLAUDE.md` 側に集約済み。このファイルには **REALPROOF 固有** のことだけを書く。
+> 各項目の背景・コード例・過去インシデントは `LESSONS.md` 参照。
 
 ## 🚨 絶対ルール（最優先）
-- **ブランチを作らない。常にmainに直接コミット・push。**
-- worktreeも作らない。
-- `git checkout -b` は使わない。
+- **ブランチを作らない。常に main に直接コミット。** worktree も作らない。`git checkout -b` は使わない。
+- **`git push` はしない → ほくとが GitHub Desktop で手動**（現運用のまま）。
+  - 理由：forte-mvp は Desktop 上で **iCloud 同期下**にあり、CC が git 操作すると `.git` の conflict copy が生まれる。**git 操作は GitHub Desktop のみ**。
+- `npm run build` はしない → ほくと手動。型チェックのみ `npx tsc --noEmit`。
+- 各 🛑 STOP ポイントで CEO 承認待ち。DB 操作（Supabase SQL Editor）・push・本番検証はほくたが実施。
 
 ## 鉄則
-- getUser()は使わない。常にgetSession()
-- .single()は使わない。常に.maybeSingle()
-- 1修正=1コミット。修正後 npm run build 確認
-- 「まずコードを見せて、変更はまだしないで」が安全
-- 新規ファイル作成時は `git status` で Untracked がないこと確認
-- 「ついでに直す」誘惑は別タスクに分離。スコープを膨らませない
+- `getUser()` は使わない。常に `getSession()`。
+- `.single()` は使わない。常に `.maybeSingle()`。
+- 新規 API route には `export const dynamic = 'force-dynamic'` 必須。
+- `fetch` には `cache: 'no-store'` 必須。
+- `useEffect` 依存配列は**プリミティブのみ**（オブジェクト/配列 禁止 → 無限ループ）。
+- 1修正=1コミット。「ついでに直す」は別タスクに分離。
+- 認証・非同期処理の前に `const snapshot = buildXxx()` で全 state を固定（stale state 対策）。
+- DB INSERT は最終確認後に**1回だけ**。「pending → 後で更新」パターン禁止。
 
-## 認証の注意
-- signUpとsignInは別コードパス
-- login/page.tsx は地雷原。変更時は全フロー確認
-- router.push()ではなくwindow.location.hrefを使う
-- 認証や非同期処理の前に `const snapshot = buildXxx()` で全 state を固定（stale state対策）
-- DB INSERT は最終確認後に1回だけ。「pending → 後で更新」パターン禁止
+## 認証の注意（Clerk / LINE）
+- signUp と signIn は別コードパス。`login/page.tsx` は地雷原。変更時は全フロー確認。
+- 遷移は `router.push()` ではなく `window.location.href`。
+- Clerk 認証パターン：`auth()` → `professionals` を `user_id` で絞る。
+- **LINE Login の user ID ≠ LINE Messaging API の user ID**（別物）。
+- **iOS PWA × Clerk 標準ソーシャル OAuth = `authorization_invalid` で死ぬ**（Clerk が OAuth state を cookie 保持 → PWA の storage 分離で戻り時に読めない）。
+  - 回避＝自前 ticket フロー：`/api/auth/line/start`（素302・state を URL 埋め）→ callback で `signInTokens.createSignInToken` → フロントで `signIn.create({strategy:'ticket'})` → `setActive`。cookie 非依存で PWA でも通る。
+  - PWA 時のみ `PwaLineSwap.tsx` がカード内 Clerk-LINE ボタンの click を capture で乗っ取る（Clerk はボタンを非同期描画するので `MutationObserver` で付け直し必須）。
+  - **通常ブラウザは何も乗っ取らない**（従来通り）。ここは触らない。
+- `useSearchParams` を使うページは `<Suspense>` でラップ必須。
 
 # ============================================================
 # 🛑 頻発バグ防止チェックリスト
 # ============================================================
 
-> 該当領域を触る前に該当カテゴリを確認すること。
-> 詳細・コード例・過去インシデントは `LESSONS.md` 参照。
-
 ## A. キャッシュ・SSR（Vercel）
-
-- [ ] 新規 API route には `export const dynamic = 'force-dynamic'`
-- [ ] Supabase createClient で `cache: 'no-store'` を fetch wrapper に設定
-- [ ] 「データが反映されない」→ **Step 0 はハードリフレッシュ**（Cmd+Shift+R）
-- [ ] OGP画像/バッジは `?v=N` でキャッシュバスト（特にLINEは強烈にキャッシュ）
-- [ ] Vercel Function Region は `hnd1`（東京）。米国だと +3秒
-- [ ] 「表示されない」調査順序: **キャッシュ排除 → API直叩き → DB → コード**
+- [ ] 新規 API route には `export const dynamic = 'force-dynamic'`。
+- [ ] Supabase の fetch wrapper に `cache: 'no-store'`（`getSupabaseAdmin()` に設定済み）。
+- [ ] 「データが反映されない」→ **Step 0 はハードリフレッシュ**（Cmd+Shift+R）。
+- [ ] **「Ready」表示 ≠ 最新ビルド配信**。挙動が変わらない時は **Use existing Build Cache を外してクリーン再デプロイ**。
+- [ ] OGP画像/バッジは `?v=N` でキャッシュバスト（LINE は特に強烈にキャッシュ）。
+- [ ] Vercel Function Region は `hnd1`（東京）。米国だと +3秒。
+- [ ] **静的ファイル読み込み**：`fetch(new URL(..., import.meta.url))` は Vercel Node ランタイムで `file://` になり失敗 → **`fs.readFile(process.cwd() + '/public/...')`** を使う。
+- [ ] 外部に配るURLは **`origin` でなく `realproof.jp` をハードコード**（preview デプロイのURLが顧客に届くのを防ぐ）。
+- [ ] 調査順序：**キャッシュ排除 → API直叩き → DB → コード**。
 
 ## B. State管理（React）
-
-- [ ] `useEffect` 依存配列に **オブジェクト/配列を入れない**（無限ループ）
-- [ ] 認証/非同期の前に `const snap = buildVoteData()` で snapshot
-- [ ] 投票・送信処理は snapshot のみ使用、useState を再読み取りしない
-- [ ] **配列を破壊的に触らない**（`votes.sort()` ではなく `[...votes].sort()`）
-  - ※ `dashboard/page.tsx:3124` に既知の潜在バグあり、別途修正予定
-- [ ] 同一目的のデータ組み立ては必ず共通関数に集約。コピペは必ずズレる
-- [ ] `onAuthStateChange` と `useEffect` を併用しない（競合してフリーズ）
+- [ ] `useEffect` 依存配列にオブジェクト/配列を入れない。
+- [ ] 認証/非同期の前に `const snap = buildVoteData()` で snapshot。送信処理は snapshot のみ使用、useState を再読み取りしない。
+- [ ] **配列を破壊的に触らない**（`votes.sort()` ではなく `[...votes].sort()`）。
+- [ ] 同一目的のデータ組み立ては共通関数に集約。コピペは必ずズレる。
+- [ ] `onAuthStateChange` と `useEffect` を併用しない（競合してフリーズ）。
 
 ## C. DB・Supabase スキーマ落とし穴
-
-- [ ] **存在しないカラムを SELECT しても null が返る**（エラーにならない）
-- [ ] よくある誤推測:
-      `display_name` ❌ → `name` ✅／
-      `email` ❌ → `contact_email` ✅／
-      `clerk_user_id` ❌ → `user_id` (TEXT) ✅／
-      `selected_proofs` ❌ → `selected_proof_ids` (TEXT[]) ✅／
-      `voted_at` ❌ → `created_at` ✅
-- [ ] **存在しないテーブル**: `professional_badges` / `org_badge_levels` は実在しない
-- [ ] **VIEW（INSERT/UPDATE 不可）**: `vote_summary` / `active_ranking` / `personality_summary`
-- [ ] `org_members` JOIN は **必ず DISTINCT**（1プロ×1バッジで複数行、文末教訓も参照）
-- [ ] 検索・重複チェックは `normalized_email`、`voter_email` は表示用
-- [ ] `professionals` 全クエリに `.is('deactivated_at', null)`（自分自身/ID指定/管理画面除く）
-- [ ] FK制約が消えると `.select('table(...)')` の JOIN がサイレントに空を返す
-- [ ] timestamp カラムに文字列を入れない（`'expired'` ❌ → `new Date().toISOString()` ✅）
-- [ ] カラム名確認は `information_schema.columns` で実態を見る
+- [ ] **存在しないカラムを SELECT しても null が返る**（エラーにならない）。カラム名確認は `information_schema.columns` で実態を見る。
+- [ ] よくある誤推測：
+      `display_name` ❌→`name` ✅／`email` ❌→`contact_email` ✅／`image_url` ❌→**`photo_url`** ✅（professionals）／
+      `clerk_user_id` ❌→`user_id`(TEXT) ✅／`selected_proofs` ❌→`selected_proof_ids`(TEXT[]) ✅／`voted_at` ❌→`created_at` ✅
+- [ ] `clients` テーブル：`user_id / nickname / last_name / first_name`（**email カラム無し**）。
+- [ ] `org_members`：`invited_at / accepted_at / removed_at`（**created_at 無し**）。
+- [ ] `votes`：voter 識別は **`auth_provider_id`**（`voter_user_id` は無い）。
+- [ ] **存在しないテーブル**：`professional_badges` / `org_badge_levels` は実在しない。
+      バッジ定義＝**`credential_levels`**／バッジ割当＝**`org_members.credential_level_id`**。
+- [ ] **VIEW（INSERT/UPDATE 不可）**：`vote_summary` / `active_ranking` / `personality_summary`。
+- [ ] `vote_summary` は **`vote_type='proof' AND selected_proof_ids IS NOT NULL`** で絞る → personality_only / hopeful 票はカウントに出ない。
+- [ ] `org_members` JOIN は **必ず DISTINCT**（1プロ×バッジ数だけ複数行）。重複削除は3カラム `(organization_id, professional_id, credential_level_id)` で（下の事故教訓参照）。
+- [ ] 検索・重複チェックは `normalized_email`、`voter_email` は表示用。
+- [ ] `professionals` 全クエリに `.is('deactivated_at', null)`（自分/ID指定/管理画面は除く）。`deactivated_at` = ソフトデリート（null=active）。
+- [ ] FK制約が消えると `.select('table(...)')` の JOIN がサイレントに空を返す。
+- [ ] timestamp カラムに文字列を入れない（`'expired'` ❌ → `new Date().toISOString()` ✅）。
+- [ ] **Supabase の暗黙キャップ `max-rows=1000`**：`.limit(10000)` を信じるな。**1000件超は必ず `.range()` + `.order('id')` でページネーション**（ORDER BY の無い LIMIT/range は非決定的で intermittent バグの元）。5/28 の検索バグの真因。
+- [ ] カテゴリ表示名は DB でなく **`src/lib/constants.ts` の `TAB_DISPLAY_NAMES`**。
+- [ ] 効果カテゴリは**9種**（治療・回復/体の機能改善/ボディメイク/パフォーマンス/マインド/発見・気づき/指導力/ビューティー/栄養・生活）・**85項目・最大9選択**。
+- [ ] `vote_type` は `hopeful` / `proof` / `personality_only` の3種。
 
 ## D. 外部連携（LINE / Email / mailto）
+- [ ] LINE 内蔵ブラウザは callback が2回発火 → 冪等性／中断リカバリ。
+- [ ] LINE 初回送信は reply、**2回目以降は push**（`line_user_id` 永続化必須）。
+- [ ] **LINE Flex Message で `letterSpacing` / `lineHeight` / `padding` は使えない**（400 エラー）。
+- [ ] mailto: 各パラメータを個別に `encodeURIComponent()` + `&` 連結。PC では動かないことがある（QR/スマホ前提）。
+- [ ] Resend は送信専用。返信必要なら `reply-to` or 「返信不可」明記。認証はリンククリック NG → **6桁コード入力**。
+- [ ] API レスポンスに `voter_email` / `normalized_email` / `voter_phone` を**絶対含めない**。
 
-- [ ] **LINE 内蔵ブラウザは callback が2回発火**する → 冪等性／中断状態リカバリを意識
-- [ ] LINE 初回送信は reply、**2回目以降は push**（`line_user_id` 永続化必須）
-- [ ] mailto: 各パラメータを **個別に `encodeURIComponent()` + `&` で連結**
-- [ ] mailto は **PC では動かないことがある** → スマホで確認（QR導線が前提）
-- [ ] **Resend は送信専用**。返信が必要なら `reply-to` 設定 or 「返信不可」明記
-- [ ] メール認証は **リンククリック方式 NG → 6桁コード入力方式**（モバイル+キャリアメール対応）
-- [ ] API レスポンスに `voter_email` / `normalized_email` / `voter_phone` を**絶対含めない**
-
-## E. DB破壊的操作（5段階安全プロトコル）
-
-DELETE / UPDATE（広範囲）/ DROP COLUMN は**必ず**:
-
-1. **調査** — 対象を SELECT、件数・内容・影響範囲を把握
-2. **バックアップ** — SELECT INTO 別テーブル または CSV
-3. **プレビュー** — 同じ WHERE で SELECT、影響行を全表示
-4. **明示承認** — CEO に件数報告 → GO 待ち
-5. **実行+検証** — RETURNING 付き、件数を検証
-
-加えて:
-
-- [ ] **Supabase SQL Editor で BEGIN/COMMIT を分けない**（セッション境界でROLLBACKされる）
-- [ ] WHERE 句で**二重安全装置**（例: `AND contact_email IS NULL`）
-- [ ] **PITR 未契約**（5秒粒度の復元不可）、daily backup は前日深夜のみ
-- [ ] 「一括クリーンアップ」のような包括提案は**絶対禁止**。範囲を明示
-- [ ] 1件のサンプルで全体を結論づけない。より広い母集団のSQLで再確認
+## E. DB破壊的操作（REALPROOF 固有の追加）
+- グローバルの5段階に加えて：
+- [ ] **Supabase SQL Editor で BEGIN/COMMIT を分けない**（セッション境界で ROLLBACK される）。`RETURNING` で実行＆確認する。
+- [ ] **PITR 未契約**（5秒粒度の復元不可）、daily backup は前日深夜のみ。
+- [ ] **DROP COLUMN 安全プロトコル（神山事件）**：① 新値へ `SET DEFAULT` → ② 残存レコードを `UPDATE` → ③ `SELECT` 全件確認 → ④ `DROP`。
+      ※ `column_default` が残ると、コード側から参照ゼロでも新規 INSERT が旧値を運ぶ。
+- [ ] **テストデータ削除順**：`voice_shares` → `vote_confirmations` → `votes`（`vote_emails` はスキップ、VIEW は削除不要）。
 
 ## F. 投票パス・バリデーション（追加・修正時）
-
-新しい投票パスは **クライアント5 + サーバー3 = 計8パス**全てに同じ検証を適用。
-INSERT 前に必ず:
-
+新しい投票パスは **クライアント5 + サーバー3 = 計8パス**全てに同じ検証を適用。INSERT 前に必ず：
 - [ ] QRトークン検証（**`used_at IS NULL`** + `expires_at > NOW()`、Set 1）
 - [ ] セルフ投票チェック（`user_id` ベース）
-- [ ] voter単位30分クールダウン（**`normalized_email`**で、professional_id で絞らない）
-- [ ] プロ単位30分クールダウン（同一プロへの連続投票ブロック、Set 2）
-- [ ] 重複投票チェック（normalized_email + professional_id の UNIQUE）
+- [ ] voter単位30分クールダウン（**`normalized_email`** で、professional_id で絞らない）
+- [ ] プロ単位30分クールダウン（Set 2）
+- [ ] 重複投票チェック（`normalized_email` + `professional_id` の UNIQUE）
 - [ ] 1日3プロ制限
 - [ ] INSERT 後に `markTokenUsed*` を呼んで `used_at` 記録（Set 1 出口）
+- [ ] `vote/[id]` の動的セグメントは **`professionals.id` の UUID**（slug 変換なし）。
 
-指示書に「Nパス」と書いても **grep で実装網羅性を確認**せよ（過去にパス漏れあり）。
+指示書に「Nパス」と書いても **grep で実装網羅性を確認**（過去にパス漏れあり）。
 
-## G. デッドコード・コード一貫性
-
-- [ ] 「デッドコードかも」の推測で放置すると後でハマる
-- [ ] 判定基準は**3点証拠**: ① grep結果 ② UI導線（router.push/redirect）③ コミット履歴
-- [ ] 「ほとんど同じだけど少し違う」実装は diff時点で共通化
+## G. デッドコード・コード一貫性・チャンクグラフ
+- [ ] 「デッドコードかも」判定は**3点証拠**：① grep ② UI導線（router.push/redirect）③ コミット履歴。
+- [ ] 「ほとんど同じだけど少し違う」実装は diff 時点で共通化。
+- [ ] **API ファイルへの新規 import は Webpack のチャンクグラフを変え、Clerk middleware 検出を壊すことがある** → 新 import を足すより、**既存の共通関数の中に `cache: 'no-store'` を入れる**方を優先。
 
 ## H. 新しい error code を追加する時の3点セット
-
-callback / API で `?error=xxx` を返すなら**必ず3つ揃える**:
-
-1. callback / API 側の error 出力
-2. フロント側の error mapping（`vote-error-messages.ts`）
-3. 表示文言定義 + 受け取り側ハンドラ
-
-1つでも抜けるとサイレントに「不明エラー」or「auth_invalid」に落ちる。
+`?error=xxx` を返すなら**必ず3つ揃える**：① callback/API 側の error 出力 ② フロントの error mapping（`vote-error-messages.ts`）③ 表示文言 + ハンドラ。1つ抜けるとサイレントに「不明エラー」or「auth_invalid」に落ちる。
 
 ## I. 触ってはいけない既存実装（明示保護リスト）
-
-- 検索ハイライト機能（`?highlight=...`）
+- 検索ハイライト（`?highlight=...`）
 - リピーター/常連マーク表示
 - ハッシュチェーン関連
 - 既存の認証フロー
 - 既存の RewardReveal / RewardContent
+- **既存 QR 投票フロー**（`/vote/[token]`。オンライン投票 PIN は別導線として追加済み、QR 側は触らない）
+- **PWA×LINE の ticket フロー / `PwaLineSwap.tsx`**
+- 認定カード / 証明書自動生成システム
 
 新機能の指示書には**最初にこのリスト**を書く。
 
+## ⚠️ スケール既知リスク（X-Day 前に対応）
+- `/api/search` 等の「professionals 全件 → `.in(proIds)` で votes 全件取得 → JS 集計」は、35,000プロ規模で **`.in()` の URL 長 + メモリ**で破綻する。**Postgres 側集計（RPC/VIEW）へのリファクタが必須**。
+
 # ============================================================
-# Organization Feature (団体機能)
+# Organization Feature（団体機能）
 # ============================================================
 
-## Organization Feature — 4つの絶対原則
+## 4つの絶対原則
+1. **プルーフの所有権は常に「個人」。** 団体はビューレイヤーのみ（所有・管理・削除権なし）。
+2. **団体独自のプルーフは存在しない。** 個人プルーフの集約が団体のプルーフ。団体カテゴリを足した瞬間「手間のかかる Google 口コミ」になる。
+3. **団体QRは存在しない。** プロのQRが唯一の投票入口。
+4. **REALPROOF はバッジを作らない。** 発行・表示・証明するインフラを提供する（Shopify モデル）。
 
-1. **プルーフの所有権は常に「個人」にある。** 団体はビューレイヤー（閲覧層）のみ。プルーフデータの所有・管理・削除の権限は持たない。
-2. **団体独自のプルーフは存在しない。** 個人プルーフの集約が団体のプルーフ。団体レベルのプルーフカテゴリを追加した瞬間、「手間のかかるGoogle口コミ」になる。
-3. **団体QRは存在しない。** プロのQRが唯一の投票入口。団体QRは「誰が見せるのか」のdesign smell。
-4. **REALPROOFはバッジを作らない。** バッジを発行・表示・証明するインフラを提供する。Shopifyモデル。
+## 変更禁止リスト（Organization 実装時）
+`professionals`（store_id 追加しない）/ `votes` / `rewards` / `client_rewards` / `qr_tokens`（団体QR作らない）/ `vote_summary` / 投票フロー（`/vote/[token]`）。
 
-## Organization Feature — 変更禁止リスト
+## 新テーブル
+`organizations`（type: store/credential/education）/ `org_members`（status: pending/active/removed）/ `org_invitations` / `credential_levels`（バッジ定義）。
 
-以下のテーブル・機能はOrganization実装時に一切変更しない:
+## ロール / RLS
+- `owner`：団体オーナー。オーナーが同時にプロなら org_members に `is_owner=true` で自分も追加。
+- オーナーは自団体の org_members/org_invitations を管理可。プロは自分の所属を閲覧可。
+- プロは「店舗」からのみ自分で離脱可（資格バッジは団体のみ管理）。
+- オーナーは個別コメント・リワード設定・QRコードを**閲覧不可**。
 
-- `professionals` テーブル（store_idカラム追加しない）
-- `votes` テーブル（投票は常にプロ個人への行為）
-- `rewards` / `client_rewards` テーブル
-- `qr_tokens` テーブル（団体QRは作らない）
-- `vote_summary` ビュー
-- 投票フロー（/vote/[token]）
+## フェーズ
+- Phase 1A：店舗オーナーのコア（登録・招待・ダッシュボード・公開ページ）
+- Phase 1B：Badge Self-Service（credential_levels・claim URL・バッジ管理）
+- Phase 2：Analytics + Search + 有料プラン
 
-## Organization Feature — 新テーブル
-
-- `organizations`: 団体テーブル（type: store/credential/education）
-- `org_members`: 団体×プロの所属関係（status: pending/active/removed）
-- `org_invitations`: メール招待管理
-- `credential_levels`: バッジ定義（Phase 1Bで追加。Phase 1Aでは作らない）
-
-## Organization Feature — ロール
-
-- `owner`: 団体オーナー。usersテーブルのroleに追加
-- オーナーが同時にプロの場合: org_membersで is_owner=true として自分も追加
-
-## Organization Feature — RLS原則
-
-- オーナーは自分の団体のorg_members/org_invitationsを管理可能
-- プロは自分の所属情報を閲覧可能
-- プロは「店舗」からのみ自分で離脱可能（資格バッジは団体のみが管理）
-- オーナーは個別コメント・リワード設定・QRコードを閲覧不可
-
-## Organization Feature — フェーズ分割
-
-- **Phase 1A**: 店舗オーナーのコア機能（団体登録、メンバー招待、ダッシュボード、公開ページ）
-- **Phase 1B**: Badge Self-Service（credential_levels、claim URL、バッジ管理ダッシュボード）
-- **Phase 2**: Analytics + Search + 有料プラン
-
-## 教訓: org_members重複削除事故 (2026-03-13)
-
-org_membersは1プロ=複数行（バッジごとに1行）の設計。
-重複削除で DISTINCT ON (organization_id, professional_id) を使うと、
-正当なバッジ行（advance/master/TBU）まで消す。
-
-重複削除が必要な場合は必ず：
-DISTINCT ON (organization_id, professional_id, credential_level_id)
-の3カラムで行うこと。
-
-2026-03-13にadvance/master/TBUデータ消失→手動INSERT復旧。
+## 教訓：org_members 重複削除事故（2026-03-13）
+org_members は 1プロ=複数行（バッジごと1行）。重複削除で `DISTINCT ON (organization_id, professional_id)` を使うと正当なバッジ行（advance/master/TBU）まで消える。**必ず3カラム `(organization_id, professional_id, credential_level_id)`**。3/13 に advance/master/TBU 消失 → 手動 INSERT 復旧。
 
 # ============================================================
 # 詳細リファレンス
 # ============================================================
-
-このファイルのチェックリスト各項目の **背景・コード例・過去インシデント詳細** は
-`LESSONS.md` を参照。新しい教訓を得たら LESSONS.md に追記し、
-このファイルにはチェック1行だけ反映する運用。
+このファイルの各チェック項目の背景・コード例・過去インシデント詳細は `LESSONS.md` 参照。
+新しい教訓を得たら LESSONS.md に追記し、このファイルにはチェック1行だけ反映する運用。
