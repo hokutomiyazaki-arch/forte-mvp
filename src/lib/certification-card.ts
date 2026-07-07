@@ -81,6 +81,10 @@ export type CardData = {
   cardProfessionalIdMissing: boolean
   /** 本人のカードが1枚も無い（§16で新規mintが必要・🛑承認後）。在庫プールは流用しない */
   needsMint: boolean
+  /** 申請で金属カードを選んだか（いずれかの申請行が want_metal=true）。管理UIの材質トグル初期値＝金属 */
+  wantMetal: boolean
+  /** 申請で盾を選んだか（いずれかの申請行が want_shield=true）。表示用 */
+  wantShield: boolean
   items: CardItem[]
 }
 
@@ -202,6 +206,8 @@ type CertAppRow = {
   organization: string | null
   status: string | null
   use_photo_on_card: boolean | null
+  want_metal: boolean | null
+  want_shield: boolean | null
   applied_at: string | null
 }
 
@@ -227,7 +233,7 @@ export async function buildCardData(
   const { data: appsRaw } = await sb
     .from('certification_applications')
     .select(
-      'professional_id, category_slug, certification_number, full_name_kanji, full_name_romaji, top_personality, organization, status, use_photo_on_card, applied_at'
+      'professional_id, category_slug, certification_number, full_name_kanji, full_name_romaji, top_personality, organization, status, use_photo_on_card, want_metal, want_shield, applied_at'
     )
     .eq('professional_id', proId)
   const apps = (appsRaw as CertAppRow[] | null) ?? []
@@ -236,6 +242,10 @@ export async function buildCardData(
   // 顔写真をカードに使うか：最新申請(applied_at)の値。既定 true（写真あり運用踏襲）。
   const latestApp = [...apps].sort((a, b) => (b.applied_at || '').localeCompare(a.applied_at || ''))[0]
   const usePhotoOnCard = latestApp?.use_photo_on_card !== false
+
+  // 物理プロダクト選択：いずれかの申請行が true なら申請ありとみなす（グループ単位・全行同値だが安全側で some）。
+  const wantMetal = apps.some((a) => a.want_metal === true)
+  const wantShield = apps.some((a) => a.want_shield === true)
 
   // 2. professionals 行
   const { data: proRaw } = await sb
@@ -342,6 +352,8 @@ export async function buildCardData(
     cardRegistered: !!card,
     cardProfessionalIdMissing,
     needsMint: !card,
+    wantMetal,
+    wantShield,
     items,
   }
 }
@@ -654,6 +666,8 @@ export type CertifiableProSummary = {
   cardRegistered: boolean
   /** 未処理の申請がある（申請中バッジ点灯） */
   pending: boolean
+  /** 金属カードを申請した（一覧に「金属」バッジ表示） */
+  wantMetal: boolean
 }
 
 /**
@@ -665,14 +679,18 @@ export async function listCertifiablePros(
 ): Promise<CertifiableProSummary[]> {
   const { data: appsRaw } = await sb
     .from('certification_applications')
-    .select('professional_id, full_name_kanji')
-  const apps = (appsRaw as { professional_id: string; full_name_kanji: string | null }[] | null) ?? []
+    .select('professional_id, full_name_kanji, want_metal')
+  const apps = (appsRaw as { professional_id: string; full_name_kanji: string | null; want_metal: boolean | null }[] | null) ?? []
 
-  const byPro = new Map<string, { nameKanji: string; count: number }>()
+  const byPro = new Map<string, { nameKanji: string; count: number; wantMetal: boolean }>()
   for (const a of apps) {
     const cur = byPro.get(a.professional_id)
-    if (cur) cur.count += 1
-    else byPro.set(a.professional_id, { nameKanji: (a.full_name_kanji || '').trim(), count: 1 })
+    if (cur) {
+      cur.count += 1
+      if (a.want_metal === true) cur.wantMetal = true
+    } else {
+      byPro.set(a.professional_id, { nameKanji: (a.full_name_kanji || '').trim(), count: 1, wantMetal: a.want_metal === true })
+    }
   }
 
   const proIds = Array.from(byPro.keys())
@@ -732,6 +750,7 @@ export async function listCertifiablePros(
       cardUid: active?.card_uid ?? null,
       cardRegistered: !!active,
       pending: pendingSet.has(proId),
+      wantMetal: info.wantMetal,
     })
   }
   return result.sort((a, b) => a.nameKanji.localeCompare(b.nameKanji, 'ja'))

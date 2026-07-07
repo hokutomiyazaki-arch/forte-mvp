@@ -206,6 +206,9 @@ export async function POST(req: NextRequest) {
             payment_status: r.paymentStatus,
             payment_tier: r.tier,
             payment_amount: r.paymentAmount,
+            // 物理プロダクト選択（グループ単位・全行に同値）。管理ダッシュボードで金属/盾の申請を判別する。
+            want_metal: wantMetalEff,
+            want_shield: wantShieldEff,
             // 金属選択時は顔写真非対応のため false。未指定は既定 true（写真あり運用踏襲）
             use_photo_on_card: wantMetal ? false : (usePhotoOnCard !== false),
           })

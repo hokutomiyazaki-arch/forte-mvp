@@ -52,6 +52,8 @@ type ApiCardData = {
   cardRegistered: boolean
   cardProfessionalIdMissing: boolean
   needsMint: boolean
+  wantMetal: boolean
+  wantShield: boolean
   items: ApiItem[]
 }
 
@@ -62,6 +64,7 @@ type ProSummary = {
   cardUid: string | null
   cardRegistered: boolean
   pending: boolean
+  wantMetal: boolean
 }
 
 type CertTier = 'SPECIALIST' | 'MASTER' | 'LEGEND' | 'IMMORTAL'
@@ -121,6 +124,9 @@ export default function CertificationCardsPage() {
   const [nextCertNumber, setNextCertNumber] = useState<string | null>(null)
   // カード材質: pvc（フルカラー・メダル・顔写真）/ metal（レーザー彫刻・単色ゴールド・写真なし）
   const [cardVariant, setCardVariant] = useState<'pvc' | 'metal'>('pvc')
+  // 申請者が選んだ物理プロダクト（金属カード／盾）。材質トグルの初期化と発注の目安に使う。
+  const [appliedMetal, setAppliedMetal] = useState(false)
+  const [appliedShield, setAppliedShield] = useState(false)
 
   const [previewPayload, setPreviewPayload] = useState<string | null>(null)
 
@@ -164,6 +170,10 @@ export default function CertificationCardsPage() {
         setCardRegistered(d.cardRegistered)
         setCardProfessionalIdMissing(d.cardProfessionalIdMissing)
         setNeedsMint(d.needsMint)
+        // 申請で金属を選んでいれば材質トグルを金属で初期化（手動で切替可）
+        setCardVariant(d.wantMetal ? 'metal' : 'pvc')
+        setAppliedMetal(!!d.wantMetal)
+        setAppliedShield(!!d.wantShield)
         setItems(d.items.map((it) => ({ ...it, visible: true })))
         setNextCertNumber(j.nextCertNumber ?? null)
         const c = j.certificates as ApiCertificates | null
@@ -361,6 +371,9 @@ export default function CertificationCardsPage() {
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 14, flex: 1 }}>{p.nameKanji}</span>
+                  {p.wantMetal && (
+                    <span style={{ fontSize: 10, color: '#1a1a1a', background: C.gold, borderRadius: 999, padding: '2px 8px', fontWeight: 700, whiteSpace: 'nowrap' }}>金属</span>
+                  )}
                   {p.pending && (
                     <>
                       <span style={{ fontSize: 10, color: '#1a1a1a', background: C.amber, borderRadius: 999, padding: '2px 8px', fontWeight: 700, whiteSpace: 'nowrap' }}>申請中</span>
@@ -402,6 +415,15 @@ export default function CertificationCardsPage() {
                 <button onClick={() => setCardVariant('pvc')} style={tabBtn(cardVariant === 'pvc')}>PVC（フルカラー）</button>
                 <button onClick={() => setCardVariant('metal')} style={tabBtn(cardVariant === 'metal')}>金属（彫刻・単色ゴールド）</button>
               </div>
+              {(appliedMetal || appliedShield) && (
+                <div style={{ fontSize: 12, color: C.cream, background: 'rgba(201,168,76,0.12)', border: `1px solid ${C.gold}`, borderRadius: 8, padding: '8px 12px', marginBottom: 16 }}>
+                  申請者が選択した物理プロダクト:{' '}
+                  {appliedMetal && <strong style={{ color: C.gold }}>金属カード</strong>}
+                  {appliedMetal && appliedShield && ' ／ '}
+                  {appliedShield && <strong style={{ color: C.gold }}>盾</strong>}
+                  {appliedMetal && <span style={{ color: C.gray }}>（材質を金属で初期化済み）</span>}
+                </div>
+              )}
               {cardVariant === 'metal' && (
                 <div style={{ fontSize: 12, color: C.gray, marginBottom: 16, lineHeight: 1.6 }}>
                   金属カードはレーザー彫刻のため、全要素を単色ゴールドで描画・顔写真は使いません。
