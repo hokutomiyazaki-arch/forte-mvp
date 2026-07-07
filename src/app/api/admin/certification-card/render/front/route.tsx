@@ -13,7 +13,7 @@ import { ImageResponse } from 'next/og'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import sharp from 'sharp'
-import { buildFrontElement, type CardRenderInput } from '@/lib/certification-card-render'
+import { buildFrontElement, buildFrontElementMetal, type CardRenderInput } from '@/lib/certification-card-render'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -65,12 +65,17 @@ export async function GET(request: Request) {
   }
 
   try {
+    const isMetal = input.variant === 'metal'
+    // 金属は単色ゴールド・彫刻のため顔写真を使わない。背景も金属テンプレを読む。
+    const bgFile = isMetal ? 'card-assets/front-bg-metal.png' : 'card-assets/front-bg.png'
     const [fontData, backgroundDataUri, photoDataUri] = await Promise.all([
       readPubArrayBuffer('fonts/NotoSansJP-subset.ttf'),
-      readPubDataUri('card-assets/front-bg.png').catch(() => null),
-      input.photoUrl ? fetchRemoteDataUri(input.photoUrl) : Promise.resolve<string | null>(null),
+      readPubDataUri(bgFile).catch(() => null),
+      !isMetal && input.photoUrl ? fetchRemoteDataUri(input.photoUrl) : Promise.resolve<string | null>(null),
     ])
-    const { element, options } = buildFrontElement(input, { fontData, backgroundDataUri, photoDataUri })
+    const { element, options } = isMetal
+      ? buildFrontElementMetal(input, { fontData, backgroundDataUri })
+      : buildFrontElement(input, { fontData, backgroundDataUri, photoDataUri })
     // ImageResponse は RGBA(PNG)。入稿事故防止に黒でフラット化して RGB(透過なし)へ。
     const rgba = Buffer.from(await new ImageResponse(element, options).arrayBuffer())
     const rgb = await sharp(rgba).flatten({ background: { r: 0, g: 0, b: 0 } }).png().toBuffer()

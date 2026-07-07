@@ -12,7 +12,9 @@ import path from 'node:path'
 import sharp from 'sharp'
 import {
   buildBackElement,
+  buildBackElementMetal,
   buildQrDataUri,
+  buildQrDataUriMetal,
   type CardRenderInput,
   type CardAssets,
 } from '@/lib/certification-card-render'
@@ -60,6 +62,24 @@ export async function GET(request: Request) {
   }
 
   try {
+    const isMetal = input.variant === 'metal'
+
+    if (isMetal) {
+      // 金属: 単色ゴールドQR＋金属テンプレ背景。メダル画像は読まない（ティア名テキストで代替）。
+      const [fontData, qrDataUri, backgroundDataUri] = await Promise.all([
+        readPubArrayBuffer('fonts/NotoSansJP-subset.ttf'),
+        buildQrDataUriMetal(input.cardUid),
+        readPubDataUri('card-assets/back-bg-metal.png'),
+      ])
+      const assets: CardAssets = { fontData, qrDataUri, backgroundDataUri }
+      const { element, options } = buildBackElementMetal(input, assets)
+      const rgba = Buffer.from(await new ImageResponse(element, options).arrayBuffer())
+      const rgb = await sharp(rgba).flatten({ background: { r: 0, g: 0, b: 0 } }).png().toBuffer()
+      return new Response(new Uint8Array(rgb), {
+        headers: { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' },
+      })
+    }
+
     // 表示中の項目に必要なティアのメダルだけ読む
     const neededTiers = new Set<CertifiableTier>()
     for (const it of input.items) {

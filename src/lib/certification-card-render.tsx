@@ -71,6 +71,12 @@ export type CardRenderInput = {
   items: CardRenderItem[]
   /** 顔写真URL（設定者のみ・表front用）。ルート側で data URI 化して assets.photoDataUri に渡す */
   photoUrl?: string | null
+  /**
+   * カード材質。'pvc'（既定・フルカラー/メダル画像/顔写真）または
+   * 'metal'（レーザー彫刻・単色ゴールド/ティア名テキスト/顔写真なし）。
+   * metal は buildFrontElementMetal / buildBackElementMetal で描画する別系統。
+   */
+  variant?: 'pvc' | 'metal'
 }
 
 export type CardAssets = {
@@ -341,6 +347,238 @@ export function buildBackElement(input: CardRenderInput, assets: CardAssets) {
 }
 
 // ============================================================
+// 金属カード（レーザー彫刻・単色ゴールド）— PVC とは別系統
+// ============================================================
+//
+// 彫刻は単色のため、全要素を単色ゴールド1色で描く（グラデ・白文字・フルカラー無し）。
+// - メダル画像は使わず、各項目の横にティア名テキスト（SPECIALIST/MASTER/LEGEND）を彫る。
+//   PROVEN/未達はティア無しなので何も描かない。
+// - 顔写真は使わない（彫刻不可・呼び出し側で常に OFF）。
+// - 背景 = 金属テンプレ（assets.backgroundDataUri）。金帯や装飾がテンプレに焼き込まれていれば
+//   コード側では描かない（PVC 同様、可変要素だけを配置）。テンプレ未配置時は暗色フォールバック。
+
+// 彫刻用の単色ゴールド（全要素で共通）。
+const METAL_GOLD = '#C4A35A'
+
+// 金属テンプレに合わせた座標（PVC と別定義・テンプレ確定後に微調整可）。
+const METAL_FRONT_LAYOUT = {
+  contentTop: 668,
+  contentHeight: 172,
+}
+const METAL_BACK_LAYOUT = {
+  zoneTop: 300,
+  zoneBottom: 1140,
+  itemsLeft: 90,
+  qrSize: 560,
+  qrRight: 140,
+  qrTop: 440, // 720 - qrSize/2
+}
+
+/** ティア名テキスト（彫刻対象は SPECIALIST/MASTER/LEGEND のみ。PROVEN/未達は null＝彫らない）。 */
+function tierTextFor(tier: CertificationTier | null): string | null {
+  if (tier === 'SPECIALIST' || tier === 'MASTER' || tier === 'LEGEND') return tier
+  return null
+}
+
+// 金属テンプレ背景（全面）。無ければ暗色フォールバック（テンプレ配置前の確認用）。
+function MetalBackground({ bg }: { bg?: string | null }) {
+  if (bg) {
+    return (
+      <img
+        src={bg}
+        width={CARD_W}
+        height={CARD_H}
+        style={{ position: 'absolute', top: 0, left: 0, width: CARD_W, height: CARD_H, objectFit: 'cover' }}
+      />
+    )
+  }
+  return (
+    <div
+      style={{
+        display: 'flex',
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: CARD_W,
+        height: CARD_H,
+        backgroundColor: '#1C1A16',
+        backgroundImage: `linear-gradient(135deg, #2A2620 0%, #16140F 60%, #211D16 100%)`,
+      }}
+    />
+  )
+}
+
+// ---- 金属 表（FRONT）: 顔写真なし・氏名/ローマ字/肩書を単色ゴールドで中央配置 ----
+export function buildFrontElementMetal(input: CardRenderInput, assets: CardAssets) {
+  const { nameKanji, nameRomaji, organization } = input
+  const nameLen = Array.from(nameKanji).length
+  const nameSize = nameLen <= 6 ? 76 : nameLen <= 9 ? 64 : 54
+  const romajiSize = nameLen <= 6 ? 44 : nameLen <= 9 ? 38 : 32
+
+  const element = (
+    <div
+      style={{
+        display: 'flex',
+        position: 'relative',
+        width: CARD_W,
+        height: CARD_H,
+        backgroundColor: '#161410',
+        fontFamily: 'NotoSansJP',
+        color: METAL_GOLD,
+      }}
+    >
+      <MetalBackground bg={assets.backgroundDataUri} />
+
+      {/* 氏名ゾーン（中央）。金属は顔写真を使わないため常に中央寄せの単段ブロック。 */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          position: 'absolute',
+          left: 0,
+          top: METAL_FRONT_LAYOUT.contentTop,
+          width: CARD_W,
+          height: METAL_FRONT_LAYOUT.contentHeight,
+          alignItems: 'center',
+          justifyContent: 'center',
+          paddingLeft: 100,
+          paddingRight: 100,
+          boxSizing: 'border-box',
+        }}
+      >
+        {/* 1行目: 氏名（漢字）＋ローマ字（横1行） */}
+        <div style={{ display: 'flex', alignItems: 'baseline' }}>
+          <span style={{ fontSize: nameSize, color: METAL_GOLD, fontWeight: 700, lineHeight: 1.05 }}>
+            {nameKanji}
+          </span>
+          {nameRomaji ? (
+            <span style={{ fontSize: romajiSize, color: METAL_GOLD, letterSpacing: 4, marginLeft: 32 }}>
+              {nameRomaji}
+            </span>
+          ) : null}
+        </div>
+
+        {/* 2行目: 肩書・所属 */}
+        {organization ? (
+          <div style={{ display: 'flex', marginTop: 18, maxWidth: 1500 }}>
+            <span style={{ fontSize: 42, color: METAL_GOLD, lineHeight: 1.25, textAlign: 'center' }}>
+              {organization}
+            </span>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  )
+
+  return { element, options: baseOptions(assets.fontData) }
+}
+
+// ---- 金属 裏（BACK）: 項目リスト（メダルの代わりにティア名テキスト）＋QR＋card_uid、全て単色ゴールド ----
+export function buildBackElementMetal(input: CardRenderInput, assets: CardAssets) {
+  const { cardUid } = input
+  const items = input.items.slice(0, 6)
+  const n = items.length
+
+  // PVC と同じ段階サイズ。medalSize の代わりに tierSize（ティア名テキスト）を持つ。
+  const sizing =
+    n <= 2
+      ? { jaSize: 80, enSize: 40, tierSize: 44, gap: 30, lineGap: 10 }
+      : n <= 4
+        ? { jaSize: 68, enSize: 34, tierSize: 38, gap: 26, lineGap: 10 }
+        : n === 5
+          ? { jaSize: 58, enSize: 30, tierSize: 32, gap: 22, lineGap: 8 }
+          : { jaSize: 52, enSize: 28, tierSize: 30, gap: 18, lineGap: 8 }
+  const { jaSize, enSize, tierSize, gap, lineGap } = sizing
+
+  const qrX = CARD_W - METAL_BACK_LAYOUT.qrSize - METAL_BACK_LAYOUT.qrRight
+  const itemsWidth = qrX - METAL_BACK_LAYOUT.itemsLeft - 48
+  const zoneHeight = METAL_BACK_LAYOUT.zoneBottom - METAL_BACK_LAYOUT.zoneTop
+
+  const element = (
+    <div
+      style={{
+        display: 'flex',
+        position: 'relative',
+        width: CARD_W,
+        height: CARD_H,
+        backgroundColor: '#161410',
+        fontFamily: 'NotoSansJP',
+        color: METAL_GOLD,
+      }}
+    >
+      <MetalBackground bg={assets.backgroundDataUri} />
+
+      {/* 右側: 大QR ＋ card_uid（単色ゴールド） */}
+      {assets.qrDataUri ? (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            position: 'absolute',
+            left: qrX,
+            top: METAL_BACK_LAYOUT.qrTop,
+            width: METAL_BACK_LAYOUT.qrSize,
+            alignItems: 'center',
+          }}
+        >
+          <img
+            src={assets.qrDataUri}
+            width={METAL_BACK_LAYOUT.qrSize}
+            height={METAL_BACK_LAYOUT.qrSize}
+          />
+          <div style={{ display: 'flex', marginTop: 16 }}>
+            <span style={{ fontSize: 34, color: METAL_GOLD, letterSpacing: 3 }}>{cardUid}</span>
+          </div>
+        </div>
+      ) : null}
+
+      {/* 左側: 項目リスト（テキスト直後にティア名テキスト。PROVEN/未達はティア無し） */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          position: 'absolute',
+          left: METAL_BACK_LAYOUT.itemsLeft,
+          top: METAL_BACK_LAYOUT.zoneTop,
+          width: itemsWidth,
+          height: zoneHeight,
+          justifyContent: 'space-around',
+        }}
+      >
+        {items.map((it, idx) => {
+          const tierText = tierTextFor(it.tier)
+          return (
+            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap }}>
+              {/* 日本語 + 英語（2段・単色ゴールド） */}
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex' }}>
+                  <span style={{ fontSize: jaSize, color: METAL_GOLD, fontWeight: 700, lineHeight: 1.08 }}>
+                    {it.strengthJa}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', marginTop: lineGap }}>
+                  <span style={{ fontSize: enSize, color: METAL_GOLD, letterSpacing: 2 }}>
+                    {it.strengthEn}
+                  </span>
+                </div>
+              </div>
+              {/* テキストのすぐ右にティア名（メダル画像の代替。PROVEN/未達は描かない） */}
+              {tierText ? (
+                <span style={{ display: 'flex', fontSize: tierSize, color: METAL_GOLD, fontWeight: 700, letterSpacing: 3 }}>
+                  {tierText}
+                </span>
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+
+  return { element, options: baseOptions(assets.fontData) }
+}
+
+// ============================================================
 // QR data URI 生成（qrcode パッケージ）
 // ============================================================
 
@@ -356,6 +594,21 @@ export async function buildQrDataUri(cardUid: string): Promise<string> {
     margin: 1,
     scale: 8,
     color: { dark: '#1A1A2E', light: '#FFFFFF' },
+  })
+}
+
+/**
+ * 金属カード用 QR。彫刻は単色のため、モジュールを単色ゴールド・地を透過にして
+ * 金属テンプレ上に合成する（余白＝地は彫らない）。誤り訂正 H で粗く（潰れ耐性）。
+ */
+export async function buildQrDataUriMetal(cardUid: string): Promise<string> {
+  const QRCode = (await import('qrcode')).default
+  const url = `https://realproof.jp/nfc/${cardUid}`
+  return QRCode.toDataURL(url, {
+    errorCorrectionLevel: 'H',
+    margin: 1,
+    scale: 8,
+    color: { dark: METAL_GOLD, light: '#00000000' },
   })
 }
 

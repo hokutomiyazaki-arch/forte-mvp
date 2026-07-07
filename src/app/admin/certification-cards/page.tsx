@@ -119,6 +119,8 @@ export default function CertificationCardsPage() {
   const [needsMint, setNeedsMint] = useState(false)
   const [items, setItems] = useState<EditItem[]>([])
   const [nextCertNumber, setNextCertNumber] = useState<string | null>(null)
+  // カード材質: pvc（フルカラー・メダル・顔写真）/ metal（レーザー彫刻・単色ゴールド・写真なし）
+  const [cardVariant, setCardVariant] = useState<'pvc' | 'metal'>('pvc')
 
   const [previewPayload, setPreviewPayload] = useState<string | null>(null)
 
@@ -190,6 +192,7 @@ export default function CertificationCardsPage() {
   // プレビュー/生成用ペイロード
   const buildPayload = useCallback(() => {
     const uid = cardUid || 'RP-XXXX'
+    const isMetal = cardVariant === 'metal'
     return b64Payload({
       nameKanji,
       nameRomaji,
@@ -198,7 +201,9 @@ export default function CertificationCardsPage() {
       highestTier,
       personalityJa,
       personalityEn,
-      photoUrl: usePhoto ? photoUrl : null,
+      // 金属は彫刻不可のため顔写真を必ず OFF
+      photoUrl: !isMetal && usePhoto ? photoUrl : null,
+      variant: cardVariant,
       items: visibleItems.map((it) => ({
         strengthJa: it.strengthJa,
         strengthEn: it.strengthEn,
@@ -206,7 +211,7 @@ export default function CertificationCardsPage() {
       })),
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nameKanji, nameRomaji, organization, cardUid, highestTier, personalityJa, personalityEn, photoUrl, usePhoto, items])
+  }, [nameKanji, nameRomaji, organization, cardUid, highestTier, personalityJa, personalityEn, photoUrl, usePhoto, items, cardVariant])
 
   const refreshPreview = () => setPreviewPayload(buildPayload())
 
@@ -237,7 +242,7 @@ export default function CertificationCardsPage() {
     const safeName = nameKanji.replace(/\s+/g, '')
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = `RP-${cardUid || 'XXXX'}_${safeName}_${side}.png`
+    a.download = `RP-${cardUid || 'XXXX'}_${safeName}_${cardVariant}_${side}.png`
     document.body.appendChild(a)
     a.click()
     a.remove()
@@ -391,6 +396,20 @@ export default function CertificationCardsPage() {
 
               {tab === 'card' && (
               <>
+              {/* 材質切替（PVC / 金属）。金属は単色ゴールド・彫刻・顔写真なしの別系統 */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center' }}>
+                <span style={{ fontSize: 12, color: C.gray, marginRight: 4 }}>材質:</span>
+                <button onClick={() => setCardVariant('pvc')} style={tabBtn(cardVariant === 'pvc')}>PVC（フルカラー）</button>
+                <button onClick={() => setCardVariant('metal')} style={tabBtn(cardVariant === 'metal')}>金属（彫刻・単色ゴールド）</button>
+              </div>
+              {cardVariant === 'metal' && (
+                <div style={{ fontSize: 12, color: C.gray, marginBottom: 16, lineHeight: 1.6 }}>
+                  金属カードはレーザー彫刻のため、全要素を単色ゴールドで描画・顔写真は使いません。
+                  ティアはメダル画像ではなく <span style={{ color: C.gold }}>SPECIALIST / MASTER / LEGEND</span> のテキストで彫ります（PROVEN/未達は非表示）。
+                  背景は <code>public/card-assets/front-bg-metal.png</code> / <code>back-bg-metal.png</code> を配置すると反映されます（未配置時は暗色プレビュー）。
+                </div>
+              )}
+
               {/* card_uid 状態（再利用 / backfill / mint の3分岐。在庫プールは流用しない） */}
               {cardRegistered && !cardProfessionalIdMissing && (
                 <div style={{ background: C.surface, padding: 12, borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
@@ -478,8 +497,8 @@ export default function CertificationCardsPage() {
                 })}
               </div>
 
-              {/* 顔写真トグル（申請時の選択で初期化。写真未設定のプロでは非表示） */}
-              {photoUrl && (
+              {/* 顔写真トグル（申請時の選択で初期化。写真未設定のプロ・金属材質では非表示） */}
+              {photoUrl && cardVariant !== 'metal' && (
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 13, color: C.cream }}>
                   <input type="checkbox" checked={usePhoto} onChange={(e) => setUsePhoto(e.target.checked)} />
                   表に顔写真を使う（申請者の選択で初期化・金属選択者はOFF。ここで上書き可）
