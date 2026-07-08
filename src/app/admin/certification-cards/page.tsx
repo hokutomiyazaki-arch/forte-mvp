@@ -278,16 +278,17 @@ export default function CertificationCardsPage() {
   }
 
   // ===== 賞状 =====
-  const certPayload = (c: EditCert): string =>
-    b64Payload({
-      nameRomaji: certNameRomaji,
-      tier: c.tier ?? 'SPECIALIST',
-      milestone: c.milestone ?? 30,
-      categoryJa: c.categoryJa,
-      categoryEn: c.categoryEn,
-      certNumber: c.certNumber ?? '',
-      dateText: c.dateEdit,
-    })
+  // 賞状レンダリング入力（単票URL・一括PDFで共通利用）
+  const certObj = (c: EditCert) => ({
+    nameRomaji: certNameRomaji,
+    tier: c.tier ?? 'SPECIALIST',
+    milestone: c.milestone ?? 30,
+    categoryJa: c.categoryJa,
+    categoryEn: c.categoryEn,
+    certNumber: c.certNumber ?? '',
+    dateText: c.dateEdit,
+  })
+  const certPayload = (c: EditCert): string => b64Payload(certObj(c))
 
   const certUrl = (c: EditCert) =>
     `/api/admin/certification-card/render/certificate?d=${encodeURIComponent(certPayload(c))}`
@@ -318,6 +319,28 @@ export default function CertificationCardsPage() {
   }
 
   const downloadAllCerts = async (format: 'png' | 'pdf' = 'pdf') => {
+    if (certs.length === 0) return
+    // PDF は全カテゴリを1つの連続PDF（ページ続き）にまとめて1回でDL。PNGは性質上1枚ずつ。
+    if (format === 'pdf') {
+      const res = await fetch('/api/admin/certification-card/render/certificate-bundle', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
+        body: JSON.stringify({ certs: certs.map(certObj) }),
+      })
+      if (!res.ok) {
+        setError(`賞状の一括PDF生成に失敗しました (${res.status})`)
+        return
+      }
+      const blob = await res.blob()
+      const safeName = certNameRomaji.replace(/\s+/g, '')
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `RP-cert_${safeName}_${certs.length}枚.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(a.href)
+      return
+    }
     for (const c of certs) await downloadCert(c, format)
   }
 

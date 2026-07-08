@@ -8,6 +8,7 @@ const nextConfig = {
       '/api/admin/certification-card/render/front': ['./public/fonts/**', './public/card-assets/**'],
       '/api/admin/certification-card/render/back': ['./public/fonts/**', './public/card-assets/**', './public/medals/**'],
       '/api/admin/certification-card/render/certificate': ['./public/fonts/**', './public/card-assets/**'],
+      '/api/admin/certification-card/render/certificate-bundle': ['./public/fonts/**', './public/card-assets/**'],
     },
   },
   images: {
