@@ -408,8 +408,41 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ═══ S2: PAIN ═══ */}
+      {/* ═══ S1.5: INTRO MOVIE ═══ */}
       <section className="relative" style={{ ...sectionPad, paddingBottom: '24px', backgroundColor: '#FAFAF7', marginTop: '-80px', zIndex: 2, borderRadius: '24px 24px 0 0' }}>
+        <div className={inner}>
+          <Reveal>
+            <div className="text-center mb-8">
+              <div style={{ color: '#C4A35A', fontSize: '12px', letterSpacing: '3px', fontFamily: "'Inter', sans-serif", fontWeight: 500, marginBottom: '12px' }}>MOVIE</div>
+              <h2 style={{ color: '#1A1A2E', fontSize: 'clamp(20px, 4.5vw, 26px)', fontWeight: 700 }}>
+                90秒で分かる、REALPROOF。
+              </h2>
+            </div>
+          </Reveal>
+          <Reveal delay={0.15}>
+            <div style={{
+              position: 'relative',
+              paddingBottom: '56.25%',
+              height: 0,
+              borderRadius: '16px',
+              overflow: 'hidden',
+              boxShadow: '0 8px 32px rgba(26,26,46,0.12)',
+            }}>
+              <iframe
+                src="https://player.vimeo.com/video/1205625874?title=0&byline=0&portrait=0&dnt=1"
+                title="REALPROOF 紹介動画"
+                allow="fullscreen; picture-in-picture; clipboard-write"
+                allowFullScreen
+                loading="lazy"
+                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 0 }}
+              />
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ═══ S2: PAIN ═══ */}
+      <section className="relative" style={{ ...sectionPad, paddingBottom: '24px', backgroundColor: '#FAFAF7', zIndex: 2 }}>
         <div className={inner}>
           <Reveal>
             <div className="text-center" style={{ marginBottom: '48px' }}>
