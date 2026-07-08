@@ -95,6 +95,8 @@ export type CardData = {
     /** これまでに入金済み（payment_status='paid'）の申請がある */
     anyPaid: boolean
   }
+  /** 業者へのカード発注が完了した日時（ISO）。未発注は null（certification_pending.card_ordered_at） */
+  cardOrderedAt: string | null
   items: CardItem[]
 }
 
@@ -350,6 +352,14 @@ export async function buildCardData(
   const wantMetal = apps.some((a) => a.want_metal === true)
   const wantShield = apps.some((a) => a.want_shield === true)
 
+  // カード発注完了フラグ（certification_pending.card_ordered_at）
+  const { data: pendRow } = await sb
+    .from('certification_pending')
+    .select('card_ordered_at')
+    .eq('professional_id', proId)
+    .maybeSingle()
+  const cardOrderedAt = (pendRow as { card_ordered_at: string | null } | null)?.card_ordered_at ?? null
+
   // 2. professionals 行
   const { data: proRaw } = await sb
     .from('professionals')
@@ -458,6 +468,7 @@ export async function buildCardData(
     wantMetal,
     wantShield,
     payment,
+    cardOrderedAt,
     items,
   }
 }
@@ -760,6 +771,27 @@ export async function clearCertPending(sb: SupabaseClient, proId: string): Promi
     .upsert({ professional_id: proId, pending: false, updated_at: new Date().toISOString() }, { onConflict: 'professional_id' })
 }
 
+/**
+ * カードの「業者へ発注完了」フラグ（管理者操作）。
+ * ordered=true で card_ordered_at=now()、false で null にクリア。
+ * onConflict は professional_id・SET は card_ordered_at/updated_at のみなので pending は保持される。
+ * 戻り値: 設定後の card_ordered_at（ISO文字列 or null）。
+ */
+export async function setCardOrdered(
+  sb: SupabaseClient,
+  proId: string,
+  ordered: boolean
+): Promise<string | null> {
+  const cardOrderedAt = ordered ? new Date().toISOString() : null
+  await sb
+    .from('certification_pending')
+    .upsert(
+      { professional_id: proId, card_ordered_at: cardOrderedAt, updated_at: new Date().toISOString() },
+      { onConflict: 'professional_id' }
+    )
+  return cardOrderedAt
+}
+
 // ===== 認定者一覧（プロ選択UI用） =====
 
 export type CertifiableProSummary = {
@@ -774,6 +806,8 @@ export type CertifiableProSummary = {
   wantMetal: boolean
   /** 未入金の申請がある（一覧に「未入金」バッジ表示・発送前の入金確認用） */
   hasUnpaid: boolean
+  /** 業者へのカード発注が完了した日時（ISO）。未発注は null（一覧に「発注済」バッジ表示） */
+  cardOrderedAt: string | null
 }
 
 /**
@@ -832,16 +866,14 @@ export async function listCertifiablePros(
     )
   const cards = (cardsRaw as NfcCardRow[] | null) ?? []
 
-  // 「申請中」フラグ一括取得
+  // 「申請中」フラグ＋カード発注日を一括取得
   const { data: pendRaw } = await sb
     .from('certification_pending')
-    .select('professional_id, pending')
+    .select('professional_id, pending, card_ordered_at')
     .in('professional_id', proIds)
-  const pendingSet = new Set(
-    ((pendRaw as { professional_id: string; pending: boolean | null }[] | null) ?? [])
-      .filter((r) => r.pending)
-      .map((r) => r.professional_id)
-  )
+  const pendRows = (pendRaw as { professional_id: string; pending: boolean | null; card_ordered_at: string | null }[] | null) ?? []
+  const pendingSet = new Set(pendRows.filter((r) => r.pending).map((r) => r.professional_id))
+  const orderedMap = new Map(pendRows.map((r) => [r.professional_id, r.card_ordered_at]))
 
   const result: CertifiableProSummary[] = []
   for (const [proId, info] of Array.from(byPro.entries())) {
@@ -860,6 +892,7 @@ export async function listCertifiablePros(
       pending: pendingSet.has(proId),
       wantMetal: info.wantMetal,
       hasUnpaid: info.hasUnpaid,
+      cardOrderedAt: orderedMap.get(proId) ?? null,
     })
   }
   return result.sort((a, b) => a.nameKanji.localeCompare(b.nameKanji, 'ja'))

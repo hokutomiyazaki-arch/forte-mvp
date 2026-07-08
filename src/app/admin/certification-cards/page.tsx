@@ -55,6 +55,7 @@ type ApiCardData = {
   wantMetal: boolean
   wantShield: boolean
   payment: { hasUnpaid: boolean; unpaidAmount: number; anyPaid: boolean }
+  cardOrderedAt: string | null
   items: ApiItem[]
 }
 
@@ -67,6 +68,7 @@ type ProSummary = {
   pending: boolean
   wantMetal: boolean
   hasUnpaid: boolean
+  cardOrderedAt: string | null
 }
 
 type CertTier = 'SPECIALIST' | 'MASTER' | 'LEGEND' | 'IMMORTAL'
@@ -91,6 +93,14 @@ type EditCert = ApiCertificate & { dateEdit: string }
 
 // 編集可能な項目状態
 type EditItem = ApiItem & { visible: boolean }
+
+// ISO日時 → "YYYY/M/D"（発注日の簡易表示）
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
+  if (!m) return ''
+  return `${m[1]}/${Number(m[2])}/${Number(m[3])}`
+}
 
 // utf8-safe base64
 function b64Payload(obj: unknown): string {
@@ -131,6 +141,8 @@ export default function CertificationCardsPage() {
   const [appliedShield, setAppliedShield] = useState(false)
   // 入金状況（Stripe Webhook で自動更新される payment_status 由来）
   const [payment, setPayment] = useState<{ hasUnpaid: boolean; unpaidAmount: number; anyPaid: boolean }>({ hasUnpaid: false, unpaidAmount: 0, anyPaid: false })
+  // 業者へのカード発注が完了した日時（null=未発注）
+  const [cardOrderedAt, setCardOrderedAt] = useState<string | null>(null)
 
   const [previewPayload, setPreviewPayload] = useState<string | null>(null)
 
@@ -179,6 +191,7 @@ export default function CertificationCardsPage() {
         setAppliedMetal(!!d.wantMetal)
         setAppliedShield(!!d.wantShield)
         setPayment(d.payment ?? { hasUnpaid: false, unpaidAmount: 0, anyPaid: false })
+        setCardOrderedAt(d.cardOrderedAt ?? null)
         setItems(d.items.map((it) => ({ ...it, visible: true })))
         setNextCertNumber(j.nextCertNumber ?? null)
         const c = j.certificates as ApiCertificates | null
@@ -381,6 +394,20 @@ export default function CertificationCardsPage() {
     reloadPros()
   }
 
+  // カード発注完了の切替（チェックで日付記録・外すとクリア）
+  const setCardOrdered = async (ordered: boolean) => {
+    if (!selectedProId) return
+    setError(null)
+    const res = await fetch('/api/admin/certification-card/card-order', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
+      body: JSON.stringify({ proId: selectedProId, ordered }),
+    })
+    const data = await res.json()
+    if (!res.ok) { setError(data.error || '発注状況の更新に失敗しました'); return }
+    setCardOrderedAt(data.cardOrderedAt ?? null)
+    setPros((prev) => prev.map((p) => p.proId === selectedProId ? { ...p, cardOrderedAt: data.cardOrderedAt ?? null } : p))
+  }
+
   const filteredPros = pros.filter((p) => p.nameKanji.includes(search) || p.proId.includes(search))
 
   const previewUrl = (side: 'front' | 'back') =>
@@ -428,6 +455,9 @@ export default function CertificationCardsPage() {
                   )}
                   {p.hasUnpaid && (
                     <span style={{ fontSize: 10, color: '#fff', background: C.red, borderRadius: 999, padding: '2px 8px', fontWeight: 700, whiteSpace: 'nowrap' }}>未入金</span>
+                  )}
+                  {p.cardOrderedAt && (
+                    <span style={{ fontSize: 10, color: '#1a1a1a', background: C.green, borderRadius: 999, padding: '2px 8px', fontWeight: 700, whiteSpace: 'nowrap' }}>発注済 {fmtDate(p.cardOrderedAt)}</span>
                   )}
                   {p.pending && (
                     <>
@@ -512,6 +542,22 @@ export default function CertificationCardsPage() {
                 )}
                 {payment.hasUnpaid && (
                   <span style={{ color: C.amber, fontSize: 12 }}>※ 入金確認まで制作・発送を保留してください</span>
+                )}
+              </div>
+
+              {/* 業者へのカード発注 完了チェック（チェックで日付記録・発注済みか一目で確認） */}
+              <div style={{ marginBottom: 16, fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ color: C.gray }}>業者発注:</span>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: cardOrderedAt ? C.green : C.cream }}>
+                  <input type="checkbox" checked={!!cardOrderedAt} onChange={(e) => setCardOrdered(e.target.checked)} />
+                  カード発注 完了
+                </label>
+                {cardOrderedAt ? (
+                  <span style={{ color: '#1a1a1a', background: C.green, borderRadius: 6, padding: '3px 10px', fontWeight: 700 }}>
+                    発注済み {fmtDate(cardOrderedAt)}
+                  </span>
+                ) : (
+                  <span style={{ color: C.amber, fontSize: 12 }}>※ 未発注 — 業者への発注が済んだらチェック</span>
                 )}
               </div>
 
