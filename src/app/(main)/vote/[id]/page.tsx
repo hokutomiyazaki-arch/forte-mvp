@@ -275,7 +275,7 @@ function SplashScreen({ onDone }: { onDone: () => void }) {
         transition: "transform 0.65s cubic-bezier(0.34, 1.56, 0.64, 1)",
       }}>
         <img
-          src="/images/icon.png"
+          src="/images/icon.png?v=2"
           alt="REALPROOF"
           style={{
             width: 120,
