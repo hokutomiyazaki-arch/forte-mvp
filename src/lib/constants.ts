@@ -346,3 +346,6 @@ export const PERSONALITY_ENGLISH_NAMES: Record<string, string> = {
   '裏表がない': 'Genuine & Transparent',
   '距離感がちょうどいい': 'Perfect Sense of Distance',
 };
+
+// NFCカード販売価格（サーバー側の正。クライアントを信用しない）
+export const NFC_CARD_PRICE = { amount: 3000, label: '¥3,000（送料込み）' } as const;
