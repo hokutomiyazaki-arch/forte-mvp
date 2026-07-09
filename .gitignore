@@ -76,3 +76,7 @@ next-env.d.ts
 /*-instructions-v*.md
 /*-phase*-v*.md
 /weekly-report-supplement-*.md
+
+# 漏れ対応(2026-07-09): suffix付き(例 " (1)")・phase-cleanup系
+/*-instructions*.md
+/phase-cleanup-*.md

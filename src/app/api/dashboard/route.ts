@@ -135,6 +135,8 @@ export async function GET() {
       crByEmailResult,
       // クライアント構成（normalized_emailベース）
       clientCompositionResult,
+      // 総プルーフ数（vote_type='proof' のみ）
+      proofVoteCountResult,
     ] = await Promise.all([
       // リワード
       supabase.from('rewards').select('*').eq('professional_id', proId).order('sort_order'),
@@ -142,11 +144,12 @@ export async function GET() {
       supabase.from('vote_summary').select('*').eq('professional_id', proId),
       // パーソナリティサマリー
       supabase.from('personality_summary').select('*').eq('professional_id', proId),
-      // 投票（総数 + コメント付きを1クエリで取得）
+      // 投票（コメント付き Voice 抽出 + voter 集計用に全 vote_type を取得）
+      // ※「総プルーフ数」の件数はここでは出さず、別途 proofVoteCountResult（vote_type='proof'）で算出
       // v1.2 §11.4-2: display_mode/client_photo_url/auth_display_name/voter_professional_id を追加
       // normalized_email はサーバー内集計（voter_vote_count）のみで使用、レスポンスからは除外
       supabase.from('votes')
-        .select('id, comment, created_at, display_mode, client_photo_url, auth_display_name, voter_professional_id, normalized_email', { count: 'exact' })
+        .select('id, comment, created_at, display_mode, client_photo_url, auth_display_name, voter_professional_id, normalized_email')
         .eq('professional_id', proId)
         .eq('status', 'confirmed')
         .order('created_at', { ascending: false }),
@@ -198,6 +201,13 @@ export async function GET() {
         .select('normalized_email')
         .eq('professional_id', proId)
         .eq('status', 'confirmed'),
+      // 総プルーフ数: vote_type='proof' のみ（強み未選択の personality_only / hopeful は除外）
+      // LINE ウィークリーレポート(total_proofs) / vote_summary と定義を一致させる
+      supabase.from('votes')
+        .select('*', { count: 'exact', head: true })
+        .eq('professional_id', proId)
+        .eq('status', 'confirmed')
+        .eq('vote_type', 'proof'),
     ])
 
     if (isDev) console.log('[Dashboard API] Phase 2 done:', Date.now() - startTime, 'ms')
@@ -210,7 +220,10 @@ export async function GET() {
     //   - voter_pro: voter_professional_id をまとめ取り（N+1 回避）
     //   - normalized_email / voter_professional_id はレスポンスから除外（PII）
     // ────────────────────────────────────────
-    const totalVotes = votesResult.count || 0
+    // 総プルーフ数は proof 票のみカウント（強み未選択の空票 = personality_only/hopeful を除外）。
+    // votesResult は voiceComments 等の生成用に全 vote_type を保持するため、
+    // 表示用の件数は proofVoteCountResult（vote_type='proof'）を採用する。
+    const totalVotes = proofVoteCountResult.count || 0
     const allVotes = (votesResult.data || []) as Array<{
       id: string
       comment: string | null
