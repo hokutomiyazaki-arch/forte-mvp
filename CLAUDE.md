@@ -6,10 +6,11 @@
 
 ## 🚨 絶対ルール（最優先）
 - **ブランチを作らない。常に main に直接コミット。** worktree も作らない。`git checkout -b` は使わない。
-- **`git push` はしない → ほくとが GitHub Desktop で手動**（現運用のまま）。
-  - 理由：forte-mvp は Desktop 上で **iCloud 同期下**にあり、CC が git 操作すると `.git` の conflict copy が生まれる。**git 操作は GitHub Desktop のみ**。
+- **commit / push は CC が実施する。** 1修正ごとに CC が `git commit` → `git push`。
+  - コミット対象は**今回の修正ファイルだけを明示指定**（`git add <path>`）。`git add -A` / `git add .` は禁止（無関係な変更を巻き込むため）。
+  - ⚠️ **iCloud 同期リスク（未解消）**：forte-mvp は Desktop 上で iCloud 同期下にあり、git 操作で `.git` の conflict copy が生まれることがある。push 後は `find .git -name "* [0-9].*"` 等で conflict copy が出ていないか確認し、あれば報告する。
 - `npm run build` はしない → ほくと手動。型チェックのみ `npx tsc --noEmit`。
-- 各 🛑 STOP ポイントで CEO 承認待ち。DB 操作（Supabase SQL Editor）・push・本番検証はほくたが実施。
+- 各 🛑 STOP ポイントで CEO 承認待ち。DB 操作（Supabase SQL Editor）・本番検証はほくたが実施。
 
 ## 鉄則
 - `getUser()` は使わない。常に `getSession()`。
