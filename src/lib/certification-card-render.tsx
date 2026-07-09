@@ -368,15 +368,15 @@ const METAL_FRONT_LAYOUT = {
   contentHeight: 172,
 }
 const METAL_BACK_LAYOUT = {
-  // 上下ゴールドライン（カード座標で中心 ≈ y216 / y1161、中央 ≈ y688.5）の真ん中に
-  // 項目ブロックが来るよう、ゾーンを中央 y688 に対称配置（space-around で上下均等）。
-  zoneTop: 268,
-  zoneBottom: 1109,
-  // テンプレ左端の装飾枠に強み項目が接しないよう内側へ余白を確保。
-  itemsLeft: 175,
-  qrSize: 560,
-  qrRight: 140,
-  qrTop: 408, // 上下ラインの中央 y688 に QR 中心を合わせる（688 - qrSize/2）。項目ブロックと左右で揃える
+  // 新テンプレ（NFC対応）: カード左半分は NFC アンテナ＝彫刻不可のため使わない。
+  // 描画は右半分のみ。上下ゴールドライン（実測 y140 / y1178、中央 ≈ y659）の中に収める。
+  // 右領域は x ≈ 769〜2020。項目リスト（左）＋QR（右）を左右に並べる。
+  zoneTop: 220,   // 上ライン(140)の下に余白
+  zoneBottom: 1098, // 下ライン(1178)の上に余白。中央 = (220+1098)/2 = 659
+  itemsLeft: 812, // 右領域の左端(769)＋内側余白
+  qrSize: 420,
+  qrRight: 55, // カード右端からの余白（右領域右端 2020 の内側に収める）
+  qrTop: 449, // 659 - qrSize/2（項目と同じ中央 659 に揃える）
 }
 
 /** ティア名テキスト（彫刻対象は SPECIALIST/MASTER/LEGEND のみ。PROVEN/未達は null＝彫らない）。 */
@@ -484,15 +484,15 @@ export function buildBackElementMetal(input: CardRenderInput, assets: CardAssets
   const items = input.items.slice(0, 6)
   const n = items.length
 
-  // PVC と同じ段階サイズ。medalSize の代わりに tierSize（ティア名テキスト）を持つ。
+  // 右半分のみ（幅≈1250px）に収めるため、従来より一段小さめの段階サイズ。
   const sizing =
     n <= 2
-      ? { jaSize: 80, enSize: 40, tierSize: 44, gap: 30, lineGap: 10 }
+      ? { jaSize: 58, enSize: 27, tierSize: 30, gap: 20, lineGap: 8 }
       : n <= 4
-        ? { jaSize: 68, enSize: 34, tierSize: 38, gap: 26, lineGap: 10 }
+        ? { jaSize: 50, enSize: 24, tierSize: 27, gap: 18, lineGap: 7 }
         : n === 5
-          ? { jaSize: 58, enSize: 30, tierSize: 32, gap: 22, lineGap: 8 }
-          : { jaSize: 52, enSize: 28, tierSize: 30, gap: 18, lineGap: 8 }
+          ? { jaSize: 44, enSize: 22, tierSize: 25, gap: 16, lineGap: 6 }
+          : { jaSize: 40, enSize: 21, tierSize: 23, gap: 14, lineGap: 6 }
   const { jaSize, enSize, tierSize, gap, lineGap } = sizing
 
   const qrX = CARD_W - METAL_BACK_LAYOUT.qrSize - METAL_BACK_LAYOUT.qrRight
