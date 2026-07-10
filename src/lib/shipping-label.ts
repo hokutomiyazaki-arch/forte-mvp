@@ -1,13 +1,14 @@
 /**
- * 発送ラベル（認定申請者向け）の共通ロジック — 純粋関数のみ。
+ * 発送ラベルの共通ロジック — 純粋関数のみ。
  *
- * 対象は **認定申請者**（certification_applications テーブル）。
- * NFCカード購入者（card_orders）のラベルは別系統で扱う（このファイルの対象外）。
+ * 2系統の宛先を扱う（発送元 LABEL_SENDER と ParsedRecipient 型は共有）:
+ *   1) 認定申請者（certification_applications）→ recipientFromApplication()
+ *   2) NFCカード購入者（card_orders.shipping_address / Stripe JSONB）→ parseRecipient()
  *
  * ・発送元（差出人）の表記を単一ソース化。
- * ・certification_applications の住所カラムをラベル描画しやすい形に整形する。
+ * ・各テーブルの住所カラムをラベル描画しやすい共通形（ParsedRecipient）に整形する。
  *
- * 画像化はクライアント側（html2canvas）で行う。任意の申請者氏名・住所を扱うため
+ * 画像化はクライアント側（html2canvas）で行う。任意の氏名・住所を扱うため
  * subset フォント（public/fonts/*-subset.ttf）では豆腐になる → OS のシステムフォントで描く。
  */
 import { COMPANY_INFO } from './company-info'
@@ -57,6 +58,51 @@ export function recipientFromApplication(a: CertApplicationAddress): ParsedRecip
   const postalCode = clean(a.postal_code)
   const addressMain = [clean(a.prefecture), clean(a.city_address)].filter(Boolean).join('')
   const addressBuilding = clean(a.building)
+  const oneLine = [addressMain, addressBuilding].filter(Boolean).join(' ')
+
+  return {
+    name,
+    postalCode,
+    addressMain,
+    addressBuilding,
+    oneLine,
+    incomplete: !name || !postalCode || !addressMain,
+  }
+}
+
+// ── NFCカード購入者（card_orders.shipping_address / Stripe shipping_details 由来）──
+
+/** Stripe.Address 相当（JSONB から来る想定フィールド） */
+export interface StripeAddressLike {
+  postal_code?: string | null
+  state?: string | null
+  city?: string | null
+  line1?: string | null
+  line2?: string | null
+  country?: string | null
+}
+
+/** Stripe shipping_details 相当 */
+export interface ShippingDetailsLike {
+  name?: string | null
+  address?: StripeAddressLike | null
+}
+
+/**
+ * card_orders.shipping_address（JSONB）を宛先として整形する。
+ * 日本の住所順（都道府県→市区町村→番地→建物）で連結。日本語住所なので区切り空白は入れない。
+ */
+export function parseRecipient(
+  raw: unknown,
+  fallbackName?: string | null
+): ParsedRecipient {
+  const sd = (raw && typeof raw === 'object' ? raw : {}) as ShippingDetailsLike
+  const a = (sd.address && typeof sd.address === 'object' ? sd.address : {}) as StripeAddressLike
+
+  const name = clean(sd.name) || clean(fallbackName)
+  const postalCode = clean(a.postal_code)
+  const addressMain = [clean(a.state), clean(a.city), clean(a.line1)].filter(Boolean).join('')
+  const addressBuilding = clean(a.line2)
   const oneLine = [addressMain, addressBuilding].filter(Boolean).join(' ')
 
   return {

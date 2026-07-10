@@ -1224,6 +1224,17 @@ export default function AdminDashboard() {
             <span style={{ fontSize: 14 }}>🪪</span> 認定カード・賞状 生成
           </a>
           <a
+            href="/admin/card-orders"
+            style={{
+              background: C.surface, border: `1px solid ${C.grayDark}`,
+              color: C.cream, padding: '8px 16px', borderRadius: 7,
+              fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+              textDecoration: 'none',
+            }}
+          >
+            <span style={{ fontSize: 14 }}>📮</span> NFCカード発送管理
+          </a>
+          <a
             href="/downloads/REALPROOF_クライアント説明チラシ.pdf"
             download
             style={{
