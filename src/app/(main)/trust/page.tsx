@@ -86,7 +86,7 @@ export default function TrustPage() {
             fontFamily: T.fontSerif,
           }}
         >
-          この声は、その場でしか生まれません。
+          この声は、リアルな場でしか生まれません。
         </h1>
         <p
           style={{
