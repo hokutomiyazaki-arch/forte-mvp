@@ -68,7 +68,12 @@ export async function GET() {
     }
   }
 
-  // 申請グループ単位に集約（1回の申請＝1発送）。group_id が無い旧行は行単位で1グループ扱い。
+  // 発送先（氏名＋住所）単位に名寄せする。同じ人が別カテゴリを複数回申請しても
+  // 送り先が同じなら1発送1ラベルにまとめる（申請グループ単位だと重複表示になるため）。
+  const norm = (s: string | null | undefined) => (s ?? '').replace(/\s+/g, '').trim()
+  const dedupeKey = (r: AppRow) =>
+    [r.full_name_kanji, r.postal_code, r.prefecture, r.city_address, r.building].map(norm).join('|')
+
   type Group = {
     key: string
     professional_id: string | null
@@ -86,7 +91,7 @@ export async function GET() {
   }
   const groups = new Map<string, Group>()
   for (const r of rows) {
-    const key = r.application_group_id ?? `solo-${r.id}`
+    const key = dedupeKey(r)
     const cat = (r.category_slug && labelBySlug.get(r.category_slug)) || r.category_slug || ''
     const cur = groups.get(key)
     if (cur) {
