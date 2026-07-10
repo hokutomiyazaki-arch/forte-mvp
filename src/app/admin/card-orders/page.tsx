@@ -279,7 +279,11 @@ export default function CardOrdersLabelPage() {
         })
       }
       const pdfBytes = await pdf.save()
-      const blob = new Blob([pdfBytes], { type: 'application/pdf' })
+      // pdf.save() は Uint8Array<ArrayBufferLike>。Blob は ArrayBuffer を要求するので
+      // 実体のある ArrayBuffer にコピーしてから渡す（SharedArrayBuffer 型エラー回避）。
+      const ab = new ArrayBuffer(pdfBytes.byteLength)
+      new Uint8Array(ab).set(pdfBytes)
+      const blob = new Blob([ab], { type: 'application/pdf' })
       const now = new Date()
       const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
       const a = document.createElement('a')
