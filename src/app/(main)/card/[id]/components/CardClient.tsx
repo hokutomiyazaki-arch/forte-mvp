@@ -14,6 +14,7 @@ import { COLORS, FONTS } from '@/lib/design-tokens'
 import { trackPageView, trackEvent } from '@/lib/tracking'
 import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, MASTER_THRESHOLD, LEGEND_THRESHOLD, PROVEN_GOLD, TAB_DISPLAY_NAMES, getCertifiableTier, getNextTier, TIER_DISPLAY } from '@/lib/constants'
 import { TierBadge } from '@/components/TierBadge'
+import { BadgeShowcase, computeTierCounts, totalBadges } from '@/components/BadgeShowcase'
 import {
   PersonalityCategory,
 } from '@/lib/personality'
@@ -258,7 +259,6 @@ export default function CardClient({ cardData }: Props) {
   const [isBookmarked, setIsBookmarked] = useState(cardData.isBookmarked)
   const [bookmarkLoading, setBookmarkLoading] = useState(false)
   const [currentUserId] = useState<string | null>(cardData.currentUserId)
-  const [bookmarkCount] = useState(cardData.bookmarkCount)
   const [orgs] = useState<{ id: string; name: string; type: string }[]>(initialOrgs)
   const [credentialBadges] = useState<
     {
@@ -559,37 +559,22 @@ export default function CardClient({ cardData }: Props) {
           </div>
         </div>
         <div style={{ height: 1, background: T.divider, margin: '16px 0' }} />
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 24 }}>
-          <div style={{ textAlign: 'center' }}>
+        <div style={{ textAlign: 'center' }}>
+          {/* 総プルーフ数（残す） */}
+          <div>
             <span style={{ fontSize: 30, fontWeight: 'bold', color: T.gold, fontFamily: T.fontMono }}>{totalVotes}</span>
             <span style={{ fontSize: 13, color: T.textSub, marginLeft: 6 }}>proofs</span>
           </div>
+          {/* 称号アイコン一覧（旧 specialist/proven/♡ 統計を置き換え。SPECIALIST以上のみ・上位順・称号ゼロは非表示） */}
           {(() => {
-            const specialistCount = sortedVotes.filter(v => v.vote_count >= SPECIALIST_THRESHOLD).length
-            const provenCount = sortedVotes.filter(v => v.vote_count >= PROVEN_THRESHOLD).length
+            const tierCounts = computeTierCounts(sortedVotes.map(v => v.vote_count))
+            if (totalBadges(tierCounts) === 0) return null
             return (
-              <>
-                {specialistCount > 0 && (
-                  <div style={{ textAlign: 'center' }}>
-                    <span style={{ fontSize: 20, fontWeight: 'bold', color: '#C4A35A', fontFamily: T.fontMono }}>{specialistCount}</span>
-                    <span style={{ fontSize: 11, color: '#C4A35A', marginLeft: 4, fontWeight: 700 }}>specialist</span>
-                  </div>
-                )}
-                {provenCount > 0 && (
-                  <div style={{ textAlign: 'center' }}>
-                    <span style={{ fontSize: 20, fontWeight: 'bold', color: PROVEN_GOLD, fontFamily: T.fontMono }}>{provenCount}</span>
-                    <span style={{ fontSize: 11, color: PROVEN_GOLD, marginLeft: 4, fontWeight: 700 }}>proven</span>
-                  </div>
-                )}
-              </>
+              <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center' }}>
+                <BadgeShowcase counts={tierCounts} />
+              </div>
             )
           })()}
-          {bookmarkCount > 0 && (
-            <div style={{ textAlign: 'center' }}>
-              <span style={{ fontSize: 20, fontWeight: 'bold', color: T.text, fontFamily: T.fontMono }}>{bookmarkCount}</span>
-              <span style={{ fontSize: 11, color: T.textMuted, marginLeft: 4 }}>♡</span>
-            </div>
-          )}
         </div>
       </div>
 
@@ -974,31 +959,6 @@ export default function CardClient({ cardData }: Props) {
               </>
             )
           })()}
-
-          {/* BOOKMARK ENGAGEMENT */}
-          {bookmarkCount > 0 && (
-            <>
-              <div style={{ fontSize: 10, fontWeight: 700, color: T.textMuted, letterSpacing: 2, textTransform: 'uppercase', fontFamily: T.fontMono, marginBottom: 10, marginTop: 16 }}>
-                ENGAGEMENT
-              </div>
-              <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: 18 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8, gap: 8 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>♡ ブックマーク</span>
-                  <span style={{ fontSize: 16, fontWeight: 'bold', color: T.gold, fontFamily: T.fontMono, flexShrink: 0 }}>{bookmarkCount}</span>
-                </div>
-                <div style={{ width: '100%', height: 8, background: '#F0EDE6', borderRadius: 99 }}>
-                  <div style={{
-                    height: 8, borderRadius: 99, background: 'linear-gradient(90deg, #C4A35A, #D4B96A)',
-                    width: animated ? `${Math.min(bookmarkCount * 10, 100)}%` : '0%',
-                    transition: 'width 1.2s ease 0.3s',
-                  }} />
-                </div>
-                <div style={{ textAlign: 'center', marginTop: 10, fontSize: 11, color: T.textMuted }}>
-                  {bookmarkCount}人がこのプロに注目しています
-                </div>
-              </div>
-            </>
-          )}
 
           {sortedVotes.length === 0 && personalityV2Items.length === 0 && (
             <div style={{ textAlign: 'center', padding: '32px 0', color: T.textMuted, fontSize: 13 }}>
