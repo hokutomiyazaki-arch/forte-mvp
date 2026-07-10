@@ -440,6 +440,10 @@ export default function CertificationCardsPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.cream, padding: 24, fontFamily: 'sans-serif' }}>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        <a href="/admin" style={{ fontSize: 12, color: C.gray, textDecoration: 'none', border: `1px solid ${C.surfaceLight}`, borderRadius: 8, padding: '6px 12px' }}>← 管理トップ</a>
+        <a href="/admin/certification-labels" style={{ fontSize: 12, color: '#1a1a1a', background: C.gold, textDecoration: 'none', borderRadius: 8, padding: '6px 12px', fontWeight: 700 }}>発送ラベル（認定申請者）→</a>
+      </div>
       <h1 style={{ fontSize: 24, color: C.gold, marginBottom: 4 }}>認定カード・賞状 生成</h1>
       <p style={{ fontSize: 13, color: C.gray, marginBottom: 20 }}>
         プロを選択 → タブでカード / 賞状を切替 → 内容を確認・補正 → PNGをダウンロード。
