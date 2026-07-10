@@ -33,7 +33,7 @@ export interface VoiceComment {
   voter_vote_count: number
   /** Phase 3: プロからの返信。is_deleted=false のもののみ。未返信なら null。 */
   reply: VoiceReply | null
-  /** Phase 3 (事実タグ): この記録で本人が選んだ強みのカテゴリ表示名（最大2件・universal除外）。無ければ空配列。 */
+  /** Phase 3 (事実タグ): この記録で本人が選んだ強みの本文（proof_items.label＝長い方・最大3件・重複排除）。無ければ空配列。 */
   proofTags: string[]
 }
 
