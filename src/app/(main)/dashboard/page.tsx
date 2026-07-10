@@ -7,6 +7,7 @@ import { calcQrTokenExpiry } from '@/lib/qr-token'
 import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYPES, getRewardType, FNT_NEURO_APPS } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
 import ForteChart from '@/components/ForteChart'
+import { BadgeShowcase, computeTierCounts, totalBadges } from '@/components/BadgeShowcase'
 import { PersonalityPodium, type PersonalityPodiumItem } from '@/components/card/PersonalityPodium'
 import { PROVEN_THRESHOLD, SPECIALIST_THRESHOLD, PROVEN_GOLD, PROVEN_GRADIENT, TAB_ORDER, TAB_DISPLAY_NAMES, getCertifiableTier, TIER_DISPLAY } from '@/lib/constants'
 import VoiceShareModal from '@/components/VoiceShareCard'
@@ -2536,6 +2537,18 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* 称号アイコン表示（所属・認定の直上・自分の項目別ティア。総プルーフ数は出さない・称号ゼロは非表示） */}
+      {(() => {
+        const tierCounts = computeTierCounts(votes.map(v => v.vote_count))
+        if (totalBadges(tierCounts) === 0) return null
+        return (
+          <div className="bg-white rounded-xl p-5 shadow-sm mb-6">
+            <h3 className="text-sm font-bold text-[#1A1A2E] mb-3">獲得した称号</h3>
+            <BadgeShowcase counts={tierCounts} />
+          </div>
+        )
+      })()}
 
       {/* 所属・認定（org_membersベース） */}
       {activeOrgs.length > 0 && (
