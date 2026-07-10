@@ -119,6 +119,7 @@ export default function NfcCardLp() {
                 <ImgSlot file="back.jpg" width={900} height={1200} alt="カード裏面の番号" />
                 <ImgSlot file="dashboard-input.png" width={900} height={1200} alt="ダッシュボードの番号入力画面" />
               </div>
+              <p className="text-[#E8E2D5]/60 text-xs">※ 番号（RP-◯◯◯）はカードごとに異なります。画像はサンプルです。</p>
             </div>
             <div className="flex flex-col gap-2">
               <span className="text-[#C4A35A] font-bold text-sm tracking-wide">STEP 3 — かざす</span>
