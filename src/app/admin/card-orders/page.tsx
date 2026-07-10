@@ -451,6 +451,19 @@ export default function CardOrdersLabelPage() {
           発送チェックで状態を管理し、単票 PNG（ハガキ大シール用）と A4・4面ラベル台紙（92×131mm×4・角丸）用の PDF を出力できます。PDF はラベルを 90°回転してマスに合わせ、選んだ位置にだけ印刷します。
         </p>
 
+        <a
+          href="/downloads/REALPROOF_同梱チラシ.pdf"
+          download
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            background: C.gold, color: C.navy, border: 'none', borderRadius: 8,
+            padding: '9px 16px', fontSize: 13, fontWeight: 700, textDecoration: 'none',
+            marginBottom: 24,
+          }}
+        >
+          <span style={{ fontSize: 14 }}>↓</span> カード同梱チラシ（PDF）
+        </a>
+
         {error && (
           <div style={{ background: 'rgba(239,68,68,0.12)', border: `1px solid ${C.red}`, color: '#FCA5A5', padding: '12px 16px', borderRadius: 8, marginBottom: 20, fontSize: 13 }}>
             {error}
