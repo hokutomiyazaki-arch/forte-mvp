@@ -6,9 +6,8 @@
 
 ## 🚨 絶対ルール（最優先）
 - **ブランチを作らない。常に main に直接コミット。** worktree も作らない。`git checkout -b` は使わない。
-- **commit / push は CC が実施する。** 1修正ごとに CC が `git commit` → `git push`。
-  - コミット対象は**今回の修正ファイルだけを明示指定**（`git add <path>`）。`git add -A` / `git add .` は禁止（無関係な変更を巻き込むため）。
-  - ⚠️ **iCloud 同期リスク（未解消）**：forte-mvp は Desktop 上で iCloud 同期下にあり、git 操作で `.git` の conflict copy が生まれることがある。push 後は `find .git -name "* [0-9].*"` 等で conflict copy が出ていないか確認し、あれば報告する。
+- **CC は自動で commit / push しない（最優先・絶対）。** CC はファイルを編集するところまで。`git add` / `git commit` / `git push` は実行しない。commit と push はほくとが GitHub Desktop で行う。
+  - CC は編集後に「どのファイルを変更したか」を報告するだけ。git 操作の代行が必要なときは、ほくとが明示的に指示した場合のみ。
 - `npm run build` はしない → ほくと手動。型チェックのみ `npx tsc --noEmit`。
 - 各 🛑 STOP ポイントで CEO 承認待ち。DB 操作（Supabase SQL Editor）・本番検証はほくたが実施。
 
