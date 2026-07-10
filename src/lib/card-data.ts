@@ -13,6 +13,25 @@
 
 import { getSupabaseAdmin } from '@/lib/supabase'
 
+/**
+ * Phase 3 (Voice事実タグ): proof_items.tab → 顧客向けカテゴリ表示名。
+ * 検索ページ CATEGORIES と同じ一般客向け文言（CEO確定 2026-07-10）。
+ * ここで直接定義するのは、新規 import による Webpack チャンクグラフ破壊
+ * （過去: Clerk middleware 障害）を避けるため（CLAUDE.md G）。
+ * `universal` は表示名を持たせず、意図的に除外（タグ非表示）。
+ */
+const TAB_CUSTOMER_LABEL: Record<string, string> = {
+  healing: '痛みや不調を改善したい',
+  body: '機能的な体を手に入れたい',
+  bodymake: 'ボディメイクしたい',
+  performance: 'パフォーマンスを上げたい',
+  mind: '心を整えたい',
+  relax: 'リラックスしたい',
+  beauty: '美しくなりたい',
+  nutrition: '食事・栄養を改善したい',
+  skill: '技術指導を受けたい',
+}
+
 // ─── 内部型 ───
 interface VoteWithVoterPro {
   id: string
@@ -53,6 +72,8 @@ export interface EnrichedComment {
   voter_pro: VoterPro | null
   voter_vote_count: number
   reply: VoiceReply | null
+  /** Phase 3: この記録で本人が選んだ強みのカテゴリ表示名（最大2件・universal除外）。無ければ空配列。 */
+  proofTags: string[]
 }
 
 export interface Supporter {
@@ -140,7 +161,7 @@ export async function getCardData(
     supabase.from('personality_items').select('id, label, personality_label, description, category, is_active, sort_order, image_url'),
     // 6. コメント付き投票
     supabase.from('votes')
-      .select('id, comment, created_at, normalized_email, display_mode, client_photo_url, auth_display_name, voter_professional_id')
+      .select('id, comment, created_at, normalized_email, display_mode, client_photo_url, auth_display_name, voter_professional_id, selected_proof_ids')
       .eq('professional_id', proId).eq('status', 'confirmed')
       .not('comment', 'is', null).neq('comment', '').neq('comment', '[deleted]')
       .order('created_at', { ascending: false }),
@@ -242,7 +263,7 @@ export async function getCardData(
   }
 
   // === comments / supporters 用の voter_pro マップを「別々に」構築 ===
-  const commentsRaw = (commentsResult.data || []) as Array<VoteWithVoterPro & { comment: string; normalized_email: string | null }>
+  const commentsRaw = (commentsResult.data || []) as Array<VoteWithVoterPro & { comment: string; normalized_email: string | null; selected_proof_ids: string[] | null }>
 
   // Supporters Strip 用: photo/pro_link の confirmed 票を全件ページネーション取得。
   // normalized_email は「投票者同一性」の dedup キーとしてのみ使用し、レスポンス/Supporter型には
@@ -326,6 +347,13 @@ export async function getCardData(
     }
   }
 
+  // === Phase 3: proof_items の id → tab マップ（既存取得済み proofItemsResult を流用） ===
+  const itemTabMap: Record<string, string> = {}
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const item of (proofItemsResult.data || []) as any[]) {
+    if (item?.id && item?.tab) itemTabMap[item.id] = item.tab
+  }
+
   // === enrichedComments: 機密フィールドを除外し voter_pro / reply を付与 ===
   const enrichedComments: EnrichedComment[] = commentsRaw.map(c => {
     const info = c.normalized_email ? voterInfoMap[c.normalized_email] : undefined
@@ -337,6 +365,22 @@ export async function getCardData(
     const voter_pro = c.voter_professional_id
       ? commentsVoterProsMap.get(c.voter_professional_id) || null
       : null
+
+    // Phase 3: 事実タグ。selected_proof_ids → tab → 顧客向けラベル。
+    // カテゴリ単位で重複排除・universal 除外・最大2件。空/NULL なら空配列（エラーにしない）。
+    const proofIds = Array.isArray(c.selected_proof_ids) ? c.selected_proof_ids : []
+    const proofTags: string[] = []
+    const seenTab = new Set<string>()
+    for (const pid of proofIds) {
+      const tab = itemTabMap[pid]
+      if (!tab) continue
+      const label = TAB_CUSTOMER_LABEL[tab]  // universal は未定義 → 除外
+      if (!label || seenTab.has(tab)) continue
+      seenTab.add(tab)
+      proofTags.push(label)
+      if (proofTags.length >= 2) break
+    }
+
     return {
       id: c.id,
       comment: c.comment,
@@ -347,6 +391,7 @@ export async function getCardData(
       voter_pro,
       voter_vote_count: voterVoteCount,
       reply: replyMap.get(c.id) ?? null,
+      proofTags,
     }
   })
 

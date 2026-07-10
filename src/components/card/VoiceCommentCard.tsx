@@ -223,11 +223,32 @@ export function VoiceCommentCard({
         {renderComment()}
       </div>
 
-      {/* 日付 + リピーター/常連マーク（既存維持） */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+      {/* 記録日 ｜ 事実カテゴリタグ + リピーター/常連マーク */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 11, color: T.textMuted, fontFamily: T.fontMono }}>
           {new Date(vote.created_at).toLocaleDateString('ja-JP')}
         </div>
+        {/* Phase 3: 本人が選んだ強みのカテゴリ（既存データのみ・最大2件）。無ければ日付のみ。 */}
+        {vote.proofTags && vote.proofTags.length > 0 && (
+          <>
+            <span style={{ fontSize: 11, color: T.textMuted }}>｜</span>
+            {vote.proofTags.map((tag, i) => (
+              <span
+                key={i}
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: '#C4A35A',
+                  background: 'rgba(196,163,90,0.10)',
+                  padding: '2px 8px',
+                  borderRadius: 4,
+                }}
+              >
+                {tag}
+              </span>
+            ))}
+          </>
+        )}
         {vote.voter_vote_count >= 3 && (
           <div style={{ fontSize: 11, fontWeight: 600, color: '#C4A35A' }}>⭐ 常連</div>
         )}

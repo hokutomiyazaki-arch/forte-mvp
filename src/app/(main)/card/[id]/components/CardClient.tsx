@@ -1116,6 +1116,13 @@ export default function CardClient({ cardData }: Props) {
           <div style={{ fontSize: 10, fontWeight: 700, color: T.textMuted, letterSpacing: 2, textTransform: 'uppercase', fontFamily: T.fontMono, marginBottom: 10 }}>
             VOICES — {voiceCount} COMMENTS
           </div>
+          {/* Phase 3 任意追加: 信頼担保の1行リンク（/trust へ） */}
+          <div style={{ fontSize: 11, color: T.textSub, lineHeight: 1.6, marginBottom: 12 }}>
+            この声は、実際に会った本人しか記録できません。
+            <a href="/trust" style={{ color: T.gold, fontWeight: 700, textDecoration: 'none' }}>
+              仕組みをくわしく →
+            </a>
+          </div>
           {voiceCount > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {comments.map((c) => {
