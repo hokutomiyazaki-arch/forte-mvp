@@ -236,6 +236,25 @@ export default function SearchPage() {
         {/* ヘッダー */}
         <h1 style={{ fontSize: 20, fontWeight: 800, color: T.dark, marginBottom: 16 }}>プロを探す</h1>
 
+        {/* 信頼宣言ブロック（静的テキスト・初期HTMLに含まれる位置。検索UIの上） */}
+        <div style={{
+          marginBottom: 16, padding: '12px 14px',
+          background: T.cardBg, border: `1px solid ${T.cardBorder}`,
+          borderLeft: `3px solid ${T.gold}`, borderRadius: 10,
+        }}>
+          <p style={{ fontSize: 12, color: T.textSub, lineHeight: 1.7, margin: 0 }}>
+            ここに並ぶのは、★の数ではありません。<br />
+            実際にセッションを受けた本人が、その場でしか記録できない「声」の積み重ねです。<br />
+            書き換えられず、お金で順位も変わりません。
+          </p>
+          <a href="/trust" style={{
+            display: 'inline-block', marginTop: 6, fontSize: 12,
+            fontWeight: 700, color: T.gold, textDecoration: 'none',
+          }}>
+            仕組みをくわしく →
+          </a>
+        </div>
+
         {/* 説明テキスト */}
         <p style={{ fontSize: 14, color: T.textSub, marginBottom: 8, lineHeight: 1.6 }}>
           クライアントの声で証明されたプロが見つかります。悩みや不調をそのまま入力してみてください。
