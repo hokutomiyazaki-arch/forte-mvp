@@ -297,7 +297,7 @@ export default function CertificationLabelsPage() {
     <div style={{ minHeight: '100vh', background: C.pageBg, color: '#fff', padding: '32px 24px', fontFamily: 'sans-serif' }}>
       <div style={{ maxWidth: 1180, margin: '0 auto' }}>
         <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-          <a href="/admin" style={{ fontSize: 12, color: C.gray, textDecoration: 'none', border: `1px solid ${C.panelLine}`, borderRadius: 8, padding: '6px 12px' }}>← 管理トップ</a>
+          <a href="/admin/dashboard" style={{ fontSize: 12, color: C.gray, textDecoration: 'none', border: `1px solid ${C.panelLine}`, borderRadius: 8, padding: '6px 12px' }}>← 管理トップ</a>
           <a href="/admin/certification-cards" style={{ fontSize: 12, color: C.gray, textDecoration: 'none', border: `1px solid ${C.panelLine}`, borderRadius: 8, padding: '6px 12px' }}>認定カード生成へ</a>
         </div>
         <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>認定申請者 — 発送ラベル</h1>
