@@ -14,28 +14,11 @@ function wilsonScore(successes: number, total: number): number {
   return Math.max(0, numerator / denominator)
 }
 
-// JST基準の当日を数値シード化（例: 20260711）。翌0時JSTで値が変わる
-function getJstDailySeed(): number {
-  const jst = new Date(Date.now() + 9 * 60 * 60 * 1000)
-  return jst.getUTCFullYear() * 10000 + (jst.getUTCMonth() + 1) * 100 + jst.getUTCDate()
-}
-
-// 決定的乱数（同じseedなら常に同じ並び）
-function mulberry32(seed: number) {
-  return function () {
-    seed |= 0; seed = (seed + 0x6D2B79F5) | 0
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
-
-// Fisher-Yates（seed固定なので毎回同じ順で並ぶ）
-function seededShuffle<T>(arr: T[], seed: number): T[] {
-  const rng = mulberry32(seed)
+// Fisher-Yates（リロードごとにランダムな並びを返す）
+function shuffle<T>(arr: T[]): T[] {
   const a = [...arr]
   for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1))
+    const j = Math.floor(Math.random() * (i + 1))
     ;[a[i], a[j]] = [a[j], a[i]]
   }
   return a
@@ -605,8 +588,8 @@ export async function GET(request: Request) {
         p.totalProofs >= 5 &&
         p.lastProofAt && new Date(p.lastProofAt) >= ninetyDaysAgo
       )
-      // 日替わり決定的シャッフル（JST日付シード・全ユーザー共通・翌0時JSTで入替）
-      result = seededShuffle(result, getJstDailySeed())
+      // リロードごとにランダムシャッフル（毎リクエストで並びが変わる）
+      result = shuffle(result)
     }
     else if (category === 'none') {
       // 従来の複合スコア降順を維持（現状のロジックをそのまま残す）
