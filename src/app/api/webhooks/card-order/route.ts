@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { NFC_CARD_PRICE } from '@/lib/constants'
+import { buildSeq1Email } from '@/lib/card-order-emails'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -92,44 +93,24 @@ async function sendNotification(params: {
   }
 }
 
-// 購入者への注文確認メール（送信専用・返信不可）。NFC設定ページへの導線を含める。
-const CARD_SETUP_URL = 'https://realproof.jp/dashboard?tab=card'
-
-async function sendPurchaserThankYou(params: { name: string; email: string }) {
+// 購入者への①サンクスメール（メールシーケンス1通目・即時）。
+// 文面は src/lib/card-order-emails.ts の buildSeq1Email に集約（②③とトーン統一）。
+// 送信成功時に card_orders.seq1_sent_at を記録（既にセット済みなら更新しない=冪等）。
+async function sendPurchaserSeq1(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  params: { orderId: string | null; name: string; email: string }
+) {
   const resendKey = process.env.RESEND_API_KEY
   if (!resendKey) {
-    console.log('[card-order-webhook] No RESEND_API_KEY, skip purchaser email')
+    console.log('[card-order-webhook] No RESEND_API_KEY, skip seq1 email')
     return
   }
   if (!params.email) {
-    console.log('[card-order-webhook] no purchaser email, skip purchaser email')
+    console.log('[card-order-webhook] no purchaser email, skip seq1 email')
     return
   }
 
-  const greeting = params.name ? `${params.name} 様` : 'この度はありがとうございます'
-  const html = `
-    <div style="max-width:520px;margin:0 auto;font-family:sans-serif;">
-      <div style="background:#1A1A2E;padding:24px;border-radius:12px 12px 0 0;text-align:center;">
-        <h1 style="color:#C4A35A;font-size:16px;margin:0;letter-spacing:0.08em;">REAL PROOF</h1>
-      </div>
-      <div style="padding:28px 24px;background:#fff;border:1px solid #eee;color:#333;font-size:14px;line-height:1.9;">
-        <p style="margin:0 0 16px;">${greeting}</p>
-        <p style="margin:0 0 16px;">この度は REAL PROOF NFCカードをご注文いただきありがとうございます。ご注文を受け付けました（¥3,000／送料込み）。</p>
-        <p style="margin:0 0 8px;font-weight:bold;color:#1A1A2E;">この先の流れ</p>
-        <ol style="margin:0 0 20px;padding-left:20px;">
-          <li style="margin-bottom:6px;">5営業日以内にカードを発送します。</li>
-          <li style="margin-bottom:6px;">お手元に届いたら、下のページからログインし、カード裏面の番号（RP-◯◯◯）を入力してください。</li>
-          <li>それだけでカードはあなた専用になり、その日からセッション現場で使えます。</li>
-        </ol>
-        <div style="text-align:center;margin:24px 0;">
-          <a href="${CARD_SETUP_URL}" style="display:inline-block;background:#C4A35A;color:#1A1A2E;font-weight:bold;text-decoration:none;padding:14px 28px;border-radius:9999px;font-size:14px;">NFCカードを設定する →</a>
-        </div>
-        <p style="margin:0 0 4px;font-size:12px;color:#888;">ボタンが開かない場合は下のURLをブラウザに貼り付けてください：</p>
-        <p style="margin:0 0 20px;font-size:12px;color:#888;word-break:break-all;">${CARD_SETUP_URL}</p>
-        <p style="margin:0;font-size:12px;color:#aaa;">※ このメールは送信専用です。ご返信いただいてもお答えできません。</p>
-      </div>
-    </div>
-  `
+  const mail = buildSeq1Email({ name: params.name })
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -140,16 +121,31 @@ async function sendPurchaserThankYou(params: { name: string; email: string }) {
     body: JSON.stringify({
       from: 'REAL PROOF <noreply@realproof.jp>',
       to: params.email,
-      subject: '【REAL PROOF】ご注文ありがとうございます（NFCカード）',
-      html,
+      subject: mail.subject,
+      html: mail.html,
+      text: mail.text,
     }),
   })
 
   if (!res.ok) {
     const errBody = await res.text()
-    console.error('[card-order-webhook] purchaser email send failed:', res.status, errBody)
-  } else {
-    console.log('[card-order-webhook] purchaser email sent')
+    console.error('[card-order-webhook] seq1 email send failed:', res.status, errBody)
+    return
+  }
+  console.log('[card-order-webhook] seq1 email sent')
+
+  // 送信できた時だけ seq1_sent_at を記録（seq1_sent_at IS NULL 条件で二重記録も防ぐ）
+  if (!params.orderId) {
+    console.warn('[card-order-webhook] seq1 email sent but orderId missing; seq1_sent_at not recorded')
+    return
+  }
+  const { error: updateError } = await supabase
+    .from('card_orders')
+    .update({ seq1_sent_at: new Date().toISOString() })
+    .eq('id', params.orderId)
+    .is('seq1_sent_at', null)
+  if (updateError) {
+    console.error('[card-order-webhook] seq1_sent_at update failed:', updateError.message)
   }
 }
 
@@ -223,17 +219,22 @@ export async function POST(req: NextRequest) {
   }
 
   // INSERT（冪等性: stripe_session_id UNIQUE 衝突は「処理済み」として扱う）
-  const { error } = await supabase.from('card_orders').insert({
-    stripe_session_id: session.id,
-    stripe_payment_intent: paymentIntent,
-    email,
-    customer_name: customerName,
-    shipping_address: shipping, // { address, name } を丸ごと JSONB
-    amount: session.amount_total ?? NFC_CARD_PRICE.amount,
-    clerk_user_id: clerkUserId,
-    professional_id: professionalId,
-    status: 'paid',
-  })
+  // seq1_sent_at 記録のため id を返す
+  const { data: inserted, error } = await supabase
+    .from('card_orders')
+    .insert({
+      stripe_session_id: session.id,
+      stripe_payment_intent: paymentIntent,
+      email,
+      customer_name: customerName,
+      shipping_address: shipping, // { address, name } を丸ごと JSONB
+      amount: session.amount_total ?? NFC_CARD_PRICE.amount,
+      clerk_user_id: clerkUserId,
+      professional_id: professionalId,
+      status: 'paid',
+    })
+    .select('id')
+    .maybeSingle()
 
   if (error) {
     // 23505 = unique_violation（重複配信）。処理済みなので 200 でメール再送なし。
@@ -259,14 +260,15 @@ export async function POST(req: NextRequest) {
     console.error('[card-order-webhook] notification error:', err)
   }
 
-  // 購入者への注文確認メール（NFC設定ページ導線つき）。失敗しても 200・注文記録は残す。
+  // 購入者への①サンクスメール（即時）。失敗しても 200・注文記録は残す（失敗はログのみ）。
   try {
-    await sendPurchaserThankYou({
+    await sendPurchaserSeq1(supabase, {
+      orderId: inserted?.id ? String(inserted.id) : null,
       name: customerName ?? '',
       email: email ?? '',
     })
   } catch (err) {
-    console.error('[card-order-webhook] purchaser email error:', err)
+    console.error('[card-order-webhook] seq1 email error:', err)
   }
 
   console.log(`[card-order-webhook] recorded order for session ${session.id} (registered=${professionalId !== null})`)
