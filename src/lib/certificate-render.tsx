@@ -97,8 +97,17 @@ function Background({ bg }: { bg?: string | null }) {
 }
 
 export function buildCertificateElement(input: CertificateRenderInput, assets: CertificateAssets) {
-  const { nameRomaji, categoryJa, categoryEn, certNumber, dateText } = input
+  const { nameRomaji, categoryJa, categoryEn, certNumber, dateText, tier } = input
   const nameFamily = assets.nameFontData ? 'Playfair' : 'NotoSansJP'
+
+  // ティア別アクセント色（カテゴリ名・認定番号・日付）。
+  // SPECIALIST/MASTER=ゴールド / LEGEND=シルバー / IMMORTAL=ブラックゴールド。背景の装飾色に合わせる。
+  const accent =
+    tier === 'LEGEND'
+      ? { main: '#6E7377', label: '#5E6367' } // シルバー（白地で読める濃さ）
+      : tier === 'IMMORTAL'
+        ? { main: '#4A3E1C', label: '#4A3E1C' } // ブラックゴールド（黒寄りの深い金）
+        : { main: COL.gold, label: COL.label } // ゴールド（SPECIALIST/MASTER）
 
   const nameLen = nameRomaji.length
   const nameSize = nameLen <= 16 ? 112 : nameLen <= 22 ? 92 : 76
@@ -155,7 +164,7 @@ export function buildCertificateElement(input: CertificateRenderInput, assets: C
         }}
       >
         <div style={{ display: 'flex' }}>
-          <span style={{ fontSize: catSize, color: COL.gold, fontWeight: 700 }}>{categoryJa}</span>
+          <span style={{ fontSize: catSize, color: accent.main, fontWeight: 700 }}>{categoryJa}</span>
         </div>
         <div style={{ display: 'flex', marginTop: 10 }}>
           <span style={{ fontSize: 36, color: COL.sub, letterSpacing: 2 }}>{categoryEn}</span>
@@ -173,7 +182,7 @@ export function buildCertificateElement(input: CertificateRenderInput, assets: C
           justifyContent: 'center',
         }}
       >
-        <span style={{ fontSize: 34, color: COL.label, letterSpacing: 2 }}>{certNumber}</span>
+        <span style={{ fontSize: 34, color: accent.label, letterSpacing: 2 }}>{certNumber}</span>
       </div>
 
       {/* 日付（DATE の下線上） */}
@@ -187,7 +196,7 @@ export function buildCertificateElement(input: CertificateRenderInput, assets: C
           justifyContent: 'center',
         }}
       >
-        <span style={{ fontSize: 34, color: COL.label, letterSpacing: 2 }}>{dateText}</span>
+        <span style={{ fontSize: 34, color: accent.label, letterSpacing: 2 }}>{dateText}</span>
       </div>
     </div>
   )
