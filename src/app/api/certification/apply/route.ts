@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
       wantMetal,
       wantShield,
       usePhotoOnCard,
+      cardProofIds,
     } = body
 
     // カテゴリ入力の正規化（配列優先・単一は後方互換）
@@ -243,6 +244,18 @@ export async function POST(req: NextRequest) {
 
     if (inserted.length === 0) {
       return NextResponse.json({ error: 'Insert failed' }, { status: 500 })
+    }
+
+    // カード掲載項目（顧客が7件以上のとき選んだ最大6件）を保存。カード生成の既定に使う。
+    if (Array.isArray(cardProofIds) && cardProofIds.length > 0) {
+      try {
+        await supabase
+          .from('professionals')
+          .update({ card_proof_ids: cardProofIds.slice(0, 6) })
+          .eq('id', professionalId)
+      } catch (err) {
+        console.error('[certification/apply] save card_proof_ids failed:', err)
+      }
     }
 
     // 「申請中」フラグを点灯（管理画面の賞状ツールで運営が消せる。新規申請で再点灯）

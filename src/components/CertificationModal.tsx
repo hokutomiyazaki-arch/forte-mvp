@@ -41,8 +41,14 @@ export default function CertificationModal({
   const [applicationGroupId, setApplicationGroupId] = useState<string | null>(null)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
 
-  // 選択カテゴリ（デフォルト全選択）
-  const [selectedSlugs, setSelectedSlugs] = useState<string[]>(categories.map((c) => c.slug))
+  // 申請＝そのプロの30票以上の全カテゴリが自動対象（顧客はカテゴリを選ばない）。
+  // カード掲載は最大6件。達成が7件以上のときだけ顧客が「どれをカードに載せるか」を選ぶ。
+  const needsCardSelection = categories.length > 6
+  const [cardSlugs, setCardSlugs] = useState<string[]>(() =>
+    needsCardSelection
+      ? [...categories].sort((a, b) => b.count - a.count).slice(0, 6).map((c) => c.slug)
+      : categories.map((c) => c.slug)
+  )
   // 物理アップグレード（独立オプション）
   const [wantMetal, setWantMetal] = useState(false)
   const [wantShield, setWantShield] = useState(false)
@@ -67,9 +73,10 @@ export default function CertificationModal({
   const [phone, setPhone] = useState('')
 
   // ===== 選択・料金計算（物理プロダクト一律価格・カテゴリ数非依存）=====
-  const selectedList = categories.filter((c) => selectedSlugs.includes(c.slug))
-  const metalEligible = selectedList.some((c) => c.tier === 'MASTER' || c.tier === 'LEGEND') // Master以上
-  const shieldEligible = selectedList.some((c) => c.tier === 'LEGEND') // Legend以上
+  const allCats = categories // 申請＝全≥30（＝賞状の対象）
+  const cardCats = categories.filter((c) => cardSlugs.includes(c.slug)) // カード掲載（≤6）
+  const metalEligible = allCats.some((c) => c.tier === 'MASTER' || c.tier === 'LEGEND') // Master以上
+  const shieldEligible = allCats.some((c) => c.tier === 'LEGEND') // Legend以上
   const wantMetalEff = wantMetal && metalEligible
   const wantShieldEff = wantShield && shieldEligible
   const pvcCost = isFirstApplication ? 0 : CERTIFICATION_PRODUCT_PRICING.pvc
@@ -78,8 +85,11 @@ export default function CertificationModal({
   const totalAmount = pvcCost + metalCost + shieldCost
   const isFreeApplication = totalAmount === 0
 
-  const toggleCat = (slug: string) =>
-    setSelectedSlugs((prev) => (prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug]))
+  // カード掲載トグル（最大6件まで。6件選択済みで未選択を押しても追加しない）
+  const toggleCard = (slug: string) =>
+    setCardSlugs((prev) =>
+      prev.includes(slug) ? prev.filter((s) => s !== slug) : prev.length >= 6 ? prev : [...prev, slug]
+    )
 
   // 郵便番号→住所自動入力
   const fetchAddress = async (code: string) => {
@@ -103,7 +113,8 @@ export default function CertificationModal({
   }
 
   const validate = (): boolean => {
-    if (selectedList.length === 0) { setError('カテゴリを1つ以上選択してください'); return false }
+    if (allCats.length === 0) { setError('認定可能な強み（30票以上）がありません'); return false }
+    if (needsCardSelection && (cardCats.length === 0 || cardCats.length > 6)) { setError('カードに載せる強みを1〜6件選んでください'); return false }
     if (!fullNameKanji.trim()) { setError('氏名（漢字）を入力してください'); return false }
     if (!fullNameRomaji.trim()) { setError('氏名（ローマ字）を入力してください'); return false }
     if (postalCode.replace(/[^0-9]/g, '').length !== 7) { setError('郵便番号（7桁）を入力してください'); return false }
@@ -128,7 +139,10 @@ export default function CertificationModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           professionalId,
-          categories: selectedList.map((c) => ({ categorySlug: c.slug, proofCount: c.count })),
+          // 申請＝全≥30を自動対象（顧客はカテゴリ選択しない）
+          categories: allCats.map((c) => ({ categorySlug: c.slug, proofCount: c.count })),
+          // カードに載せる項目（≤6）。professionals.card_proof_ids に保存される
+          cardProofIds: cardCats.map((c) => c.slug),
           wantMetal: wantMetalEff,
           wantShield: wantShieldEff,
           // 金属選択時は顔写真非対応のため強制 false
@@ -156,7 +170,7 @@ export default function CertificationModal({
       setPaymentAmount(typeof data.paymentAmount === 'number' ? data.paymentAmount : 0)
       setApplicationGroupId(typeof data.applicationGroupId === 'string' ? data.applicationGroupId : null)
       setStep('complete')
-      onComplete(data.certificationNumbers || [], selectedList.map((c) => c.slug))
+      onComplete(data.certificationNumbers || [], allCats.map((c) => c.slug))
     } catch (err) {
       console.error('Certification apply error:', err)
       setError('ネットワークエラーが発生しました')
@@ -215,26 +229,37 @@ export default function CertificationModal({
 
             {/* カテゴリ選択 */}
             <div style={{ background: 'rgba(196,163,90,0.06)', border: '1px solid #C4A35A', borderRadius: 12, padding: 16, marginBottom: 20 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: '#C4A35A', marginBottom: 10 }}>
-                認定するカテゴリを選択（30票以上・未申請）
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#C4A35A', marginBottom: 6 }}>
+                認定される強み（30票以上・{allCats.length}件）
               </div>
-              {categories.length === 0 ? (
-                <p style={{ fontSize: 13, color: '#888', margin: 0 }}>現在、新たに認定申請できるカテゴリはありません。</p>
+              <div style={{ fontSize: 11, color: '#888', marginBottom: 10, lineHeight: 1.6 }}>
+                {needsCardSelection
+                  ? `賞状は${allCats.length}枚すべて発行されます。カードは6枠までのため、載せる6つを選んでください（${cardCats.length}/6）。`
+                  : `${allCats.length}件すべてがカードに載り、賞状も${allCats.length}枚発行されます（カテゴリ選択は不要）。`}
+              </div>
+              {allCats.length === 0 ? (
+                <p style={{ fontSize: 13, color: '#888', margin: 0 }}>認定可能な強み（30票以上）がありません。</p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {categories.map((c) => {
-                    const checked = selectedSlugs.includes(c.slug)
+                  {allCats.map((c) => {
+                    const onCard = cardSlugs.includes(c.slug)
                     const meta = TIER_DISPLAY[c.tier]
+                    const atLimit = needsCardSelection && !onCard && cardCats.length >= 6
                     return (
                       <label key={c.slug} style={{
                         display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8,
-                        border: `1px solid ${checked ? '#C4A35A' : 'rgba(196,163,90,0.25)'}`,
-                        background: checked ? 'rgba(196,163,90,0.10)' : 'white', cursor: 'pointer',
+                        border: `1px solid ${onCard ? '#C4A35A' : 'rgba(196,163,90,0.25)'}`,
+                        background: onCard ? 'rgba(196,163,90,0.10)' : 'white',
+                        cursor: needsCardSelection ? (atLimit ? 'not-allowed' : 'pointer') : 'default',
+                        opacity: atLimit ? 0.5 : 1,
                       }}>
-                        <input type="checkbox" checked={checked} onChange={() => toggleCat(c.slug)} />
+                        {needsCardSelection && (
+                          <input type="checkbox" checked={onCard} disabled={atLimit} onChange={() => toggleCard(c.slug)} />
+                        )}
                         <span style={{ flex: 1, fontSize: 14, color: '#1A1A2E' }}>{c.name}</span>
                         <span style={{ fontSize: 12, color: '#C4A35A', fontWeight: 700 }}>{meta.icon} {meta.label}</span>
                         <span style={{ fontSize: 12, color: '#888' }}>{c.count}票</span>
+                        {needsCardSelection && onCard && <span style={{ fontSize: 10, color: '#C4A35A', fontWeight: 700 }}>カード</span>}
                       </label>
                     )
                   })}
@@ -288,7 +313,7 @@ export default function CertificationModal({
 
               {/* 料金プレビュー */}
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(196,163,90,0.3)', fontSize: 14, color: '#1A1A2E' }}>
-                <div>このカードに載るカテゴリ: <strong>{selectedList.length}件</strong>／賞状: <strong>{selectedList.length}枚</strong>（無料付属）</div>
+                <div>カードに載る項目: <strong>{cardCats.length}件</strong>／賞状: <strong>{allCats.length}枚</strong>（無料付属）</div>
                 <div style={{ marginTop: 6, fontSize: 13, color: '#374151' }}>
                   名入りPVCカード: <strong>{pvcCost === 0 ? '無料（初回）' : yen(pvcCost)}</strong>
                   {wantMetalEff && <><br />金属カード: <strong>{yen(metalCost)}</strong></>}
@@ -358,12 +383,18 @@ export default function CertificationModal({
             <h2 className="text-lg font-bold text-center mb-4">以下の内容で申請します</h2>
             <div className="bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
               <div>
-                <span className="text-gray-500">認定カテゴリ（{selectedList.length}件）</span>
+                <span className="text-gray-500">認定される強み（{allCats.length}件・賞状{allCats.length}枚）</span>
                 <ul className="mt-1 list-disc pl-5">
-                  {selectedList.map((c) => (
-                    <li key={c.slug}>{c.name} <span className="text-gray-400">/ {TIER_DISPLAY[c.tier].label} / {c.count}票</span></li>
+                  {allCats.map((c) => (
+                    <li key={c.slug}>
+                      {c.name} <span className="text-gray-400">/ {TIER_DISPLAY[c.tier].label} / {c.count}票</span>
+                      {needsCardSelection && cardSlugs.includes(c.slug) && <span className="text-[#C4A35A] font-bold"> ・カード</span>}
+                    </li>
                   ))}
                 </ul>
+                {needsCardSelection && (
+                  <div className="text-xs text-gray-500 mt-1">カード掲載: {cardCats.length}件（上記「カード」印）</div>
+                )}
               </div>
               <hr className="my-2" />
               <div className="flex justify-between"><span className="text-gray-500">氏名（漢字）</span><span>{fullNameKanji}</span></div>
@@ -386,7 +417,7 @@ export default function CertificationModal({
                 {wantShieldEff && <> ／ 盾 <strong>{yen(shieldCost)}</strong></>}
               </div>
               <div className="text-sm mt-1" style={{ color: '#1A1A2E' }}>💰 合計: <strong>{isFreeApplication ? '無料' : yen(totalAmount)}</strong></div>
-              <div className="text-xs text-gray-600 mt-1">発行される賞状: {selectedList.length}枚</div>
+              <div className="text-xs text-gray-600 mt-1">発行される賞状: {allCats.length}枚</div>
               {!isFreeApplication && <div className="text-xs text-gray-600 mt-1">※ お支払いリンクは運営から別途ご連絡します。</div>}
             </div>
 
@@ -413,7 +444,7 @@ export default function CertificationModal({
             <div className="text-4xl mb-4">{paymentStatus === 'pending' ? '✅' : '🎉'}</div>
             <h2 className="text-xl font-bold mb-2">{paymentStatus === 'pending' ? '申請を受け付けました!' : '申請完了!'}</h2>
             <p className="text-sm text-gray-600 mb-4">
-              {selectedList.length}件の認定の賞状と、全認定を集約した名前入りプルーフカードをお届けします。
+              {allCats.length}件の認定の賞状と、名前入りプルーフカードをお届けします。
             </p>
 
             {paymentStatus === 'pending' && (

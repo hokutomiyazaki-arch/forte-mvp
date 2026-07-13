@@ -317,6 +317,7 @@ type ProRow = {
   store_name: string | null
   photo_url: string | null
   user_id: string | null
+  card_proof_ids: string[] | null
 }
 
 /**
@@ -363,7 +364,7 @@ export async function buildCardData(
   // 2. professionals 行
   const { data: proRaw } = await sb
     .from('professionals')
-    .select('id, name, last_name, first_name, title, store_name, photo_url, user_id')
+    .select('id, name, last_name, first_name, title, store_name, photo_url, user_id, card_proof_ids')
     .eq('id', proId)
     .is('deactivated_at', null)
     .maybeSingle()
@@ -416,6 +417,19 @@ export async function buildCardData(
       certNumber: appCertMap.get(a.proofId) ?? null,
     }
   })
+
+  // 5b. カード掲載の顧客選択（professionals.card_proof_ids）があれば、その項目を先頭へ並べ替える。
+  //     管理UIは先頭6件を既定表示にするため、これで顧客が選んだ6件がカードに載る。
+  const cardProofIds = pro?.card_proof_ids ?? null
+  if (cardProofIds && cardProofIds.length > 0) {
+    const order = new Map(cardProofIds.map((id, i) => [id, i] as const))
+    items.sort((a, b) => {
+      const ia = order.has(a.proofId) ? (order.get(a.proofId) as number) : Number.MAX_SAFE_INTEGER
+      const ib = order.has(b.proofId) ? (order.get(b.proofId) as number) : Number.MAX_SAFE_INTEGER
+      if (ia !== ib) return ia - ib
+      return b.voteCount - a.voteCount
+    })
+  }
 
   const highestTier = items.reduce<CertificationTier | null>(
     (acc, it) => higherTier(acc, it.tier),
