@@ -560,10 +560,11 @@ export type CertificateData = {
 }
 
 /**
- * proId の賞状データを【実績ベース】で組み立てる（CEO確定 2026-07-02）。
+ * proId の賞状データを【実績ベース】で組み立てる（CEO確定 2026-07-02 / 採番はB方式に更新 2026-07-13）。
  * - 表示範囲＝vote_summary の 30票(SPECIALIST)以上 全カテゴリ（申請有無を問わず・自動反映）。
- * - 認定番号＝(1)申請があればその番号 (2)certificates 採番済みならそれ (3)どちらも無ければ null＝プレビュー。
- * - 送付済み(shipped)・shipped_tier は certificates テーブル由来。levelUp＝現ティア>shipped_tier。
+ * - 認定番号＝(1)申請があればその番号 (2)certificates 採番済みならそれ (3)どちらも無ければ【この関数内で自動採番】。
+ *   ＝「発行(＝この一覧に載った)段階で番号＋発行日を確定」する（プレビュー放置はしない）。副作用としてDBへ書き込む。
+ * - 日付＝申請日 or certificates 作成日(発行日)。送付済み(shipped)・levelUp は certificates 由来。
  * 申請が1件も無いプロは対象外（null）。
  */
 export async function buildCertificates(
@@ -608,17 +609,17 @@ export async function buildCertificates(
     }
   }
 
-  // certificates 状態（送付済み・shipped_tier・採番済み番号）
+  // certificates 状態（送付済み・shipped_tier・採番済み番号・作成日＝発行日）
   const { data: certRaw } = await sb
     .from('certificates')
-    .select('proof_id, cert_number, shipped, shipped_tier')
+    .select('proof_id, cert_number, shipped, shipped_tier, created_at')
     .eq('professional_id', proId)
   const certByProof = new Map<
     string,
-    { cert_number: string | null; shipped: boolean; shipped_tier: string | null }
+    { cert_number: string | null; shipped: boolean; shipped_tier: string | null; created_at: string | null }
   >()
-  for (const c of (certRaw as { proof_id: string; cert_number: string | null; shipped: boolean | null; shipped_tier: string | null }[] | null) ?? []) {
-    certByProof.set(c.proof_id, { cert_number: c.cert_number, shipped: !!c.shipped, shipped_tier: c.shipped_tier })
+  for (const c of (certRaw as { proof_id: string; cert_number: string | null; shipped: boolean | null; shipped_tier: string | null; created_at: string | null }[] | null) ?? []) {
+    certByProof.set(c.proof_id, { cert_number: c.cert_number, shipped: !!c.shipped, shipped_tier: c.shipped_tier, created_at: c.created_at })
   }
 
   const entries: CertificateEntry[] = achieved.map((a) => {
@@ -627,8 +628,10 @@ export async function buildCertificates(
     const app = appByCat.get(a.proofId)
     const cert = certByProof.get(a.proofId)
     const fromApplication = !!app
-    // 番号解決: 申請 → certificates採番 → null(プレビュー)
+    // 番号解決: 申請 → certificates採番 → null(この後 B で自動採番)
     const certNumber = app?.certification_number ?? cert?.cert_number ?? null
+    // 日付: 申請日 → certificates 作成日(＝発行日)
+    const dateText = formatCertDate(app?.applied_at ?? cert?.created_at ?? null)
     const shipped = cert?.shipped ?? false
     const shippedTier = (cert?.shipped_tier as CertificateTier | null) ?? null
     const levelUp =
@@ -641,13 +644,36 @@ export async function buildCertificates(
       tier,
       milestone: tier ? CERTIFICATE_TIER_MILESTONE[tier] : null,
       certNumber,
-      dateText: formatCertDate(app?.applied_at ?? null),
+      dateText,
       shipped,
       shippedTier,
       levelUp,
       fromApplication,
     }
   })
+
+  // 【B・CEO確定 2026-07-13】発行＝表示された段階で、未採番の実績に認定番号＋発行日を自動付与。
+  // certificates に永続化（両テーブル横断 max+1・UNIQUE衝突リトライ）。以降は安定。
+  const nowIso = new Date().toISOString()
+  for (const e of entries) {
+    if (e.certNumber) continue
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const candidate = await getNextCertNumberAcross(sb)
+      const { error } = await sb
+        .from('certificates')
+        .upsert(
+          { professional_id: proId, proof_id: e.proofId, cert_number: candidate, updated_at: nowIso },
+          { onConflict: 'professional_id,proof_id' }
+        )
+      if (!error) {
+        e.certNumber = candidate
+        if (!e.dateText) e.dateText = formatCertDate(nowIso)
+        break
+      }
+      if (error.code === '23505') continue // 番号衝突 → 採り直し
+      break // その他エラーは番号なしのまま（表示は継続）
+    }
+  }
 
   return {
     proId,
