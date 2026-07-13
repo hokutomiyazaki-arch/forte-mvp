@@ -119,6 +119,7 @@ export default function CertificationCardsPage() {
   const [selectedProId, setSelectedProId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [copyNotice, setCopyNotice] = useState('')
 
   const [nameKanji, setNameKanji] = useState('')
   const [nameRomaji, setNameRomaji] = useState('')
@@ -275,6 +276,18 @@ export default function CertificationCardsPage() {
     a.click()
     a.remove()
     URL.revokeObjectURL(a.href)
+
+    // 表DL時は、そのプロのNFC URLも自動でクリップボードにコピー（発注/入稿の貼り付け用）
+    if (side === 'front' && cardUid) {
+      const nfcUrl = `https://realproof.jp/nfc/${cardUid}`
+      try {
+        await navigator.clipboard.writeText(nfcUrl)
+        setCopyNotice(`NFC URL をコピーしました: ${nfcUrl}`)
+      } catch {
+        setCopyNotice(`NFC URL: ${nfcUrl}（自動コピー不可・手動でコピーしてください）`)
+      }
+      setTimeout(() => setCopyNotice(''), 5000)
+    }
   }
 
   // ===== 賞状 =====
@@ -699,6 +712,9 @@ export default function CertificationCardsPage() {
                   裏PNGをダウンロード
                 </button>
               </div>
+              {copyNotice && (
+                <div style={{ fontSize: 12, color: C.green, marginBottom: 12 }}>📋 {copyNotice}</div>
+              )}
               {needsMint && (
                 <div style={{ fontSize: 12, color: C.amber, marginBottom: 12 }}>
                   ※ card_uid が未 mint のためダウンロードは無効です（プレビューは仮値 RP-XXXX）。§16 で mint 後に本番QR/番号で生成できます。
