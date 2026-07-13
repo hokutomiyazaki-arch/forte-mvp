@@ -578,7 +578,8 @@ export type CertificateData = {
  * - 表示範囲＝vote_summary の 30票(SPECIALIST)以上 全カテゴリ（申請有無を問わず・自動反映）。
  * - 認定番号＝(1)申請があればその番号 (2)certificates 採番済みならそれ (3)どちらも無ければ【この関数内で自動採番】。
  *   ＝「発行(＝この一覧に載った)段階で番号＋発行日を確定」する（プレビュー放置はしない）。副作用としてDBへ書き込む。
- * - 日付＝申請日 or certificates 作成日(発行日)。送付済み(shipped)・levelUp は certificates 由来。
+ * - 日付＝【達成日】＝そのティアの節目N票目(30/50/100/500)の proof 投票日（取れなければ申請日/発行日にフォールバック）。
+ *   送付済み(shipped)・levelUp は certificates 由来。
  * 申請が1件も無いプロは対象外（null）。
  */
 export async function buildCertificates(
@@ -636,6 +637,35 @@ export async function buildCertificates(
     certByProof.set(c.proof_id, { cert_number: c.cert_number, shipped: !!c.shipped, shipped_tier: c.shipped_tier, created_at: c.created_at })
   }
 
+  // 各カテゴリの「達成日」= そのティアの節目(N)票目の proof 投票日（例 MASTER=50票目、SPECIALIST=30票目）。
+  // proof 投票を created_at 昇順で取得し、proof_id ごとに日付列を作る（1000件超はページング）。
+  const proofIdSet = new Set(proofIds)
+  const voteDatesByProof = new Map<string, string[]>()
+  if (proofIds.length > 0) {
+    const pageSize = 1000
+    for (let from = 0; ; from += pageSize) {
+      const { data: vRaw, error } = await sb
+        .from('votes')
+        .select('created_at, selected_proof_ids')
+        .eq('professional_id', proId)
+        .eq('vote_type', 'proof')
+        .eq('status', 'confirmed')
+        .order('created_at', { ascending: true })
+        .range(from, from + pageSize - 1)
+      if (error) break
+      const rows = (vRaw as { created_at: string; selected_proof_ids: string[] | null }[] | null) ?? []
+      for (const v of rows) {
+        for (const pid of v.selected_proof_ids ?? []) {
+          if (!proofIdSet.has(pid)) continue
+          const arr = voteDatesByProof.get(pid)
+          if (arr) arr.push(v.created_at)
+          else voteDatesByProof.set(pid, [v.created_at])
+        }
+      }
+      if (rows.length < pageSize) break
+    }
+  }
+
   const entries: CertificateEntry[] = achieved.map((a) => {
     const strengthJa = piMap.get(a.proofId) ?? ''
     const tier = getCertificateTier(a.voteCount)
@@ -644,8 +674,11 @@ export async function buildCertificates(
     const fromApplication = !!app
     // 番号解決: 申請 → certificates採番 → null(この後 B で自動採番)
     const certNumber = app?.certification_number ?? cert?.cert_number ?? null
-    // 日付: 申請日 → certificates 作成日(＝発行日)
-    const dateText = formatCertDate(app?.applied_at ?? cert?.created_at ?? null)
+    // 日付＝達成日（ティアの節目N票目の投票日）。取得できなければ 申請日→発行日 にフォールバック。
+    const dates = voteDatesByProof.get(a.proofId) ?? []
+    const milestone = tier ? CERTIFICATE_TIER_MILESTONE[tier] : SPECIALIST_THRESHOLD
+    const achievedIso = dates[milestone - 1] ?? dates[dates.length - 1] ?? null
+    const dateText = formatCertDate(achievedIso ?? app?.applied_at ?? cert?.created_at ?? null)
     const shipped = cert?.shipped ?? false
     const shippedTier = (cert?.shipped_tier as CertificateTier | null) ?? null
     const levelUp =
