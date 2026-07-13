@@ -896,6 +896,50 @@ export default function AdminDashboard() {
   const [annSaving, setAnnSaving] = useState(false)
   const [annOpen, setAnnOpen] = useState(false)
 
+  // Founding Member 管理 state
+  const [fmQuery, setFmQuery] = useState('')
+  const [fmResults, setFmResults] = useState<any[]>([])
+  const [fmSearching, setFmSearching] = useState(false)
+  const [fmSavingId, setFmSavingId] = useState<string | null>(null)
+  const [fmError, setFmError] = useState('')
+
+  async function searchFoundingCandidates() {
+    const q = fmQuery.trim()
+    if (q.length < 2) { setFmError('2文字以上で検索してください'); return }
+    setFmSearching(true); setFmError('')
+    try {
+      const res = await fetch(`/api/admin/founding-member?q=${encodeURIComponent(q)}`, { cache: 'no-store' })
+      const data = await res.json()
+      if (!res.ok) { setFmError(data.error || '検索に失敗しました'); setFmResults([]) }
+      else setFmResults(data.results || [])
+    } catch {
+      setFmError('検索に失敗しました'); setFmResults([])
+    } finally {
+      setFmSearching(false)
+    }
+  }
+
+  async function setFoundingMember(id: string, value: boolean) {
+    setFmSavingId(id); setFmError('')
+    try {
+      const res = await fetch('/api/admin/founding-member', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ id, value }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setFmError(data.error || '更新に失敗しました') }
+      else {
+        setFmResults(prev => prev.map(r => r.id === id ? { ...r, is_founding_member: value } : r))
+      }
+    } catch {
+      setFmError('更新に失敗しました')
+    } finally {
+      setFmSavingId(null)
+    }
+  }
+
   async function loadAnnouncements() {
     try {
       const res = await fetch('/api/admin/announcements')
@@ -1919,6 +1963,78 @@ export default function AdminDashboard() {
       )}
 
       {/* [H] Bug Reports — 不具合報告 */}
+      <Sec>ファウンディングメンバー管理</Sec>
+      <div style={{ background: C.surface, borderRadius: 10, padding: 24 }}>
+        <div style={{ color: C.gray, fontSize: 12, marginBottom: 14 }}>
+          名前 or メールでプロを検索し、FMバッジを付与/解除します。
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+          <input
+            value={fmQuery}
+            onChange={e => setFmQuery(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') searchFoundingCandidates() }}
+            placeholder="名前 または メールアドレス"
+            style={{
+              flex: 1, minWidth: 220, padding: '9px 12px', borderRadius: 6,
+              border: `1px solid ${C.grayDark}`, background: C.bg, color: C.cream, fontSize: 13,
+            }}
+          />
+          <button
+            onClick={searchFoundingCandidates}
+            disabled={fmSearching}
+            style={{
+              padding: '9px 20px', borderRadius: 6, border: 'none', cursor: 'pointer',
+              fontSize: 13, fontWeight: 600, background: C.gold, color: '#fff',
+              opacity: fmSearching ? 0.6 : 1,
+            }}
+          >
+            {fmSearching ? '検索中…' : '検索'}
+          </button>
+        </div>
+
+        {fmError && (
+          <div style={{ color: C.red, fontSize: 12, marginBottom: 12 }}>{fmError}</div>
+        )}
+
+        {fmResults.length === 0 ? (
+          <Placeholder message="検索結果がここに表示されます" />
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {fmResults.map((r: any) => (
+              <div key={r.id} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                background: C.surfaceLight, borderRadius: 8, padding: '12px 16px',
+                borderLeft: `3px solid ${r.is_founding_member ? C.gold : C.grayDark}`,
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ color: C.cream, fontSize: 14, fontWeight: 600 }}>{r.name}</span>
+                    {r.is_founding_member && <Bdg text="FM" color={C.gold} />}
+                    {r.deactivated_at && <Bdg text="退会" color={C.red} />}
+                  </div>
+                  <div style={{ color: C.gray, fontSize: 11, marginTop: 3 }}>
+                    {r.title || '—'} ／ {r.contact_email || 'メール未登録'}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setFoundingMember(r.id, !r.is_founding_member)}
+                  disabled={fmSavingId === r.id}
+                  style={{
+                    padding: '7px 16px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                    fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
+                    background: r.is_founding_member ? C.surface : C.gold,
+                    color: r.is_founding_member ? C.gray : '#fff',
+                    opacity: fmSavingId === r.id ? 0.6 : 1,
+                  }}
+                >
+                  {fmSavingId === r.id ? '更新中…' : r.is_founding_member ? 'FMを解除' : 'FMにする'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <Sec>不具合報告</Sec>
       <div style={{ background: C.surface, borderRadius: 10, padding: 24 }}>
         {/* フィルター */}
