@@ -1167,6 +1167,10 @@ export default function AdminDashboard() {
           preview: true,
         }),
       })
+      if (res.status === 401) {
+        window.location.href = '/admin/login'
+        return
+      }
       const result = await res.json()
       if (res.ok) {
         setBcPreviewResult(result)
@@ -1202,6 +1206,10 @@ export default function AdminDashboard() {
           preview: false,
         }),
       })
+      if (res.status === 401) {
+        window.location.href = '/admin/login'
+        return
+      }
       const result = await res.json()
       if (res.ok) {
         setBcToast(`送信完了: LINE ${result.sent?.line || 0}件, メール ${result.sent?.email || 0}件, 失敗 ${result.failed || 0}件, スキップ ${result.skipped || 0}件`)
