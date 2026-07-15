@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import Stripe from 'stripe'
 import { NFC_CARD_PRICE } from '@/lib/constants'
+import { getSupabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,6 +31,22 @@ export async function POST() {
     userId = null
   }
 
+  // ログイン済みなら professionals.id も取れれば metadata に載せる（取れなくてもエラーにしない）
+  let professionalId = ''
+  if (userId) {
+    try {
+      const supabase = getSupabaseAdmin()
+      const { data: pro } = await supabase
+        .from('professionals')
+        .select('id')
+        .eq('user_id', userId)
+        .maybeSingle()
+      professionalId = pro?.id ?? ''
+    } catch {
+      professionalId = ''
+    }
+  }
+
   const stripe = new Stripe(secret)
 
   try {
@@ -50,6 +67,7 @@ export async function POST() {
       metadata: {
         order_type: 'nfc_card',
         clerk_user_id: userId ?? '',
+        professional_id: professionalId,
       },
       success_url: 'https://realproof.jp/nfc-card/thanks',
       cancel_url: 'https://realproof.jp/nfc-card',
