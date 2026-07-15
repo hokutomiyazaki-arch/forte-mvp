@@ -9,7 +9,11 @@ next-env.d.ts
 .DS_Store
 
 # Claude Code
-.claude/
+.claude/*
+!.claude/rp-reference.md
+!.claude/SETUP-README.md
+!.claude/agents/
+!.claude/agents/*.md
 
 # clerk configuration (can include secrets)
 /.clerk/
@@ -80,3 +84,5 @@ next-env.d.ts
 # 漏れ対応(2026-07-09): suffix付き(例 " (1)")・phase-cleanup系
 /*-instructions*.md
 /phase-cleanup-*.md
+.vercel
+.env*
