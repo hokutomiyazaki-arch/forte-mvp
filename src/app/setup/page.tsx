@@ -380,7 +380,21 @@ export default function SetupPage() {
       setBookingSaving(false)
       return false
     }
-    window.location.href = '/dashboard'
+
+    // NFCカード購入画面への出し分け判定(Phase 4)。
+    // fail open: 判定APIが失敗/例外でも必ず /dashboard へ抜ける。
+    let showNfc = false
+    try {
+      const gateRes = await fetch('/api/onboarding/nfc-gate', { cache: 'no-store' })
+      if (gateRes.ok) {
+        const gateData = await gateRes.json()
+        showNfc = !!gateData.showNfc
+      }
+    } catch (err) {
+      console.error('[setup] nfc-gate check failed (fail open to dashboard):', err)
+    }
+
+    window.location.href = showNfc ? '/onboarding/nfc' : '/dashboard'
     return true
   }
 
