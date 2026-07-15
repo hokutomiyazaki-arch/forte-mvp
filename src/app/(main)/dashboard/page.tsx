@@ -346,6 +346,8 @@ export default function DashboardPage() {
   const [nfcError, setNfcError] = useState('')
   const [nfcSuccess, setNfcSuccess] = useState('')
   const [nfcUnlinkedCard, setNfcUnlinkedCard] = useState<string | null>(null) // 解除したカードUID
+  const [nfcBuyLoading, setNfcBuyLoading] = useState(false)
+  const [nfcBuyError, setNfcBuyError] = useState('')
 
   // 団体招待 state
   const [pendingInvites, setPendingInvites] = useState<{id: string; organization_id: string; org_name: string; org_type: string; invited_at: string}[]>([])
@@ -1213,6 +1215,28 @@ export default function DashboardPage() {
       setNfcError('エラーが発生しました。')
     }
     setNfcLoading(false)
+  }
+
+  // NFC カード購入(常設導線・ダッシュボード)
+  async function handleBuyNfcCard() {
+    setNfcBuyError('')
+    setNfcBuyLoading(true)
+    try {
+      const res = await fetch('/api/card-order/checkout', {
+        method: 'POST',
+        cache: 'no-store',
+      })
+      const data = await res.json()
+      if (res.ok && data.url) {
+        window.location.href = data.url
+        return
+      }
+      setNfcBuyError('決済ページの作成に失敗しました。もう一度お試しください。')
+    } catch (err) {
+      console.error('[dashboard] nfc card checkout failed:', err)
+      setNfcBuyError('決済ページの作成に失敗しました。もう一度お試しください。')
+    }
+    setNfcBuyLoading(false)
   }
 
   // 登録日数を計算
@@ -2966,6 +2990,29 @@ export default function DashboardPage() {
         {nfcSuccess && (
           <p style={{ fontSize: 13, color: '#22C55E', marginTop: 12 }}>{nfcSuccess}</p>
         )}
+
+        <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid #F0EEE9' }}>
+          <p style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 10 }}>
+            対面で"声"を集める、いちばん簡単な道具。
+          </p>
+          <button
+            onClick={handleBuyNfcCard}
+            disabled={nfcBuyLoading}
+            style={{
+              fontSize: 13, fontWeight: 700,
+              color: '#1A1A2E', background: 'transparent',
+              border: '1px solid #C4A35A', borderRadius: 8,
+              padding: '10px 18px', cursor: 'pointer',
+              opacity: nfcBuyLoading ? 0.5 : 1,
+              transition: 'all 0.2s',
+            }}
+          >
+            {nfcBuyLoading ? '処理中...' : 'NFCカードを購入(¥3,000 送料込み)'}
+          </button>
+          {nfcBuyError && (
+            <p style={{ fontSize: 13, color: '#EF4444', marginTop: 8 }}>{nfcBuyError}</p>
+          )}
+        </div>
       </div>
       </>)}
 
