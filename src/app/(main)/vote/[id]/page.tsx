@@ -435,6 +435,10 @@ function VoteForm() {
   const qrToken = searchParams.get('token')
   const channel = searchParams.get('channel') || 'unknown'
   const isPreview = searchParams.get('preview') === 'true'
+  // オンライン直リンク専用の印。?pin=1 の時だけPIN欄を出す/照合する。
+  // token無しには NFCカード投票とオンライン直リンクの2種が混在するため、
+  // 「token無し全部」ではなく ?pin=1 でオンライン直リンクだけを対象にする。
+  const isOnlinePin = searchParams.get('pin') === '1'
   const supabase = createClient()
 
   // ── qrToken の sessionStorage 永続化（Clerk 認証フロー後に URL から ?token= が消える対策） ──
@@ -935,6 +939,8 @@ function VoteForm() {
   // token 無し → pinInput を vote_pins と照合。ヒットしなければ ok:false で投票を止める。
   async function verifyVotePin(): Promise<{ ok: boolean; pinId: string | null }> {
     if (getQrToken()) return { ok: true, pinId: null }
+    // token無し でも オンライン直リンク(?pin=1)以外（＝NFCカード）はPIN照合せず素通り。
+    if (!isOnlinePin) return { ok: true, pinId: null }
     const pin = pinInput.trim()
     if (!/^\d{4}$/.test(pin)) {
       setPinError('4桁の認証番号を入力してください')
@@ -2555,8 +2561,8 @@ function VoteForm() {
               確認をお願いしています。
             </div>
 
-            {/* オンライン投票PIN（token無し直リンク経由のみ必須。QR経由は表示しない） */}
-            {!getQrToken() && (
+            {/* オンライン投票PIN（?pin=1 のオンライン直リンク経由のみ必須。QR・NFCカードは表示しない） */}
+            {!getQrToken() && isOnlinePin && (
               <div style={{ marginBottom: 20 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: "#FAFAF7", marginBottom: 8 }}>
                   4桁の認証番号を入力

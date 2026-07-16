@@ -2381,13 +2381,13 @@ export default function DashboardPage() {
                   <input
                     type="text"
                     readOnly
-                    value={`https://realproof.jp/vote/${pro.id}`}
+                    value={`https://realproof.jp/vote/${pro.id}?pin=1`}
                     className="flex-1 min-w-0 text-sm bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-[#1A1A2E]"
                   />
                   <button
                     onClick={async () => {
                       try {
-                        await navigator.clipboard.writeText(`https://realproof.jp/vote/${pro.id}`)
+                        await navigator.clipboard.writeText(`https://realproof.jp/vote/${pro.id}?pin=1`)
                         setVoteUrlCopied(true)
                         setTimeout(() => setVoteUrlCopied(false), 2000)
                       } catch {
