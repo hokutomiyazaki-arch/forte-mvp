@@ -41,8 +41,10 @@ export default function AnnouncementBanner() {
   }, [latestBanner, userId])
 
   const isVotePage = pathname?.startsWith('/vote/')
+  // トップページ・プロを探すページはバナー非表示
+  const isBannerHiddenPage = pathname === '/' || pathname === '/search'
 
-  if (!banner || !visible || isVotePage) return null
+  if (!banner || !visible || isVotePage || isBannerHiddenPage) return null
 
   const borderColor =
     banner.banner_type === 'success' ? '#22C55E' :
