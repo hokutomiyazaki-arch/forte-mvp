@@ -407,13 +407,19 @@ export default function DashboardPage() {
     }
   }, [dashboardTab, memberResources])
 
-  // プロフィール編集直接オープン
+  // プロフィール編集直接オープン（マウント後1回のみ）
+  // deps にオブジェクト pro を入れると、保存時の setPro(savedData) で参照が変わり
+  // このエフェクトが再実行 → edit=true が URL に残っているため編集フォームが
+  // 即再オープンし「保存しても反映されない」ように見えるバグになる。
   const editParam = searchParams.get('edit')
+  const editAutoOpenedRef = useRef(false)
+  const proIdForEditOpen = pro?.id
   useEffect(() => {
-    if (editParam === 'true' && !loading && pro) {
-      setEditing(true)
-    }
-  }, [editParam, loading, pro])
+    if (editParam !== 'true' || loading || !proIdForEditOpen) return
+    if (editAutoOpenedRef.current) return
+    editAutoOpenedRef.current = true
+    setEditing(true)
+  }, [editParam, loading, proIdForEditOpen])
 
   // Navbar「認定申請」メニューからの導線: /dashboard?action=certification で
   // 複数カテゴリ一括申請モーダルを自動オープン（対象は描画時に算出）
