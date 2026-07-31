@@ -2462,6 +2462,9 @@ function VoteForm() {
             <div style={S.title}>
               プレゼントを選んでください 🎁
             </div>
+            <div style={{ ...S.subtitle, marginBottom: 16 }}>
+              投票された方には特典をお渡しする場合があります。内容による差はありません
+            </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
               {proRewards.map(reward => {
