@@ -7,6 +7,7 @@ import { checkVoteDuplicates } from '@/lib/vote-duplicate-check'
 import { markTokenUsed } from '@/lib/qr-token'
 import { checkProCooldown, PRO_COOLDOWN_MESSAGE } from '@/lib/vote-cooldown'
 import { matchVoteComment } from '@/lib/keyword-matcher'
+import { resolveContinuationVoteType } from '@/lib/vote-continuation'
 
 
 export const dynamic = 'force-dynamic'
@@ -115,7 +116,16 @@ export async function POST(req: NextRequest) {
     // 「INSERT 時 hash 計算」と「verify 時 SELECT 取得値」を一致させるため
     // hash chain 用の format は "+00:00" に統一する。
     const createdAt = normalizeTimestampForHash(new Date().toISOString())
-    const resolvedVoteType = vote_data.vote_type || 'proof'
+    const baseVoteType = vote_data.vote_type || 'proof'
+
+    // §2-8 継続記録: 本人選択（visit_claim）と過去票の有無を突き合わせて vote_type を再分類
+    const continuationResult = await resolveContinuationVoteType(supabase, {
+      normalizedEmail: normalizeEmail(email),
+      professionalId: professional_id,
+      visitClaim: vote_data.visit_claim,
+      baseVoteType,
+    })
+    const resolvedVoteType = continuationResult.voteType
 
     // Approach C (STOP 2a): 鎖は vote_type='proof' 限定のグローバル1本。
     // proof 票のみ chain 3カラム (proof_hash/prev_hash/proof_nonce) を付与し、
@@ -185,6 +195,8 @@ export async function POST(req: NextRequest) {
         display_mode: voterProfessionalId ? 'pro_link' : 'hidden',
         client_photo_url: null,
         voter_professional_id: voterProfessionalId,
+        self_reported_repeat: continuationResult.selfReportedRepeat,
+        continuation_theme: vote_data.continuation_theme || null,
       })
       .select()
       .maybeSingle()

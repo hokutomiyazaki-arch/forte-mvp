@@ -7,6 +7,7 @@ import { Professional, getRewardLabel } from '@/lib/types'
 import { normalizeEmail } from '@/lib/normalize-email'
 import { extractDisplayName, determineAuthMethod } from '@/lib/vote-auth-helpers'
 import { checkVoteDuplicates } from '@/lib/vote-duplicate-check'
+import { resolveContinuationVoteType } from '@/lib/vote-continuation'
 import { getVoteErrorMessage, mapAuthErrorParamToReason, isRecoverableAuthError, type VoteErrorReason } from '@/lib/vote-error-messages'
 import { markTokenUsedFromClient } from '@/lib/qr-token'
 import { checkProCooldownFromClient, PRO_COOLDOWN_MESSAGE } from '@/lib/vote-cooldown'
@@ -305,6 +306,8 @@ function SplashScreen({ onDone }: { onDone: () => void }) {
 // ── ステップ管理型 ──
 type VoteStep =
   | "intro"
+  | "visit_check"
+  | "continuation"
   | "reward"
   | "proofs"
   | "personality"
@@ -496,6 +499,11 @@ function VoteForm() {
   const [voterEmail, setVoterEmail] = useState('')
   const [comment, setComment] = useState('')
   const [selectedRewardId, setSelectedRewardId] = useState('')
+
+  // §2-8 継続記録（スタンプ）: 本人選択（初めて/2回目以降）とスタンプUIの入力
+  const [visitClaim, setVisitClaim] = useState<'first' | 'repeat' | null>(null)
+  const [continuationTheme, setContinuationTheme] = useState('')
+  const [stampConfirmed, setStampConfirmed] = useState(false)
 
   // 強みプルーフ
   const [proofItems, setProofItems] = useState<ProofItem[]>([])
@@ -834,11 +842,21 @@ function VoteForm() {
     if (data.vote_type === 'hopeful') {
       setIsHopeful(true)
     }
+    // §2-8 継続記録: 本人選択・任意テーマの復元。旧セッション（visit_claim無し）は何もしない=後方互換
+    if (data.visit_claim === 'first' || data.visit_claim === 'repeat') {
+      setVisitClaim(data.visit_claim)
+    }
+    if (typeof data.continuation_theme === 'string') {
+      setContinuationTheme(data.continuation_theme)
+    }
+    if (data.vote_type === 'continuation') {
+      setStampConfirmed(true)
+    }
 
     // 認証離脱前のウィザードステップへ復帰（intro/done/hopeful_done は対象外）。
     // goToWithHistory は現在の voteStep(=intro)を stepHistory に積んでから遷移するため、
     // auth に着地後にウィザード内「戻る」(goBack)を押すと intro に戻れる（履歴整合）。
-    const RESTORABLE_STEPS: VoteStep[] = ['proofs', 'personality', 'comment', 'reward', 'auth']
+    const RESTORABLE_STEPS: VoteStep[] = ['visit_check', 'continuation', 'proofs', 'personality', 'comment', 'reward', 'auth']
     const savedStep = parsed?.step
     if (
       typeof savedStep === 'string' &&
@@ -891,6 +909,8 @@ function VoteForm() {
     const allSelectedProofIds = Array.from(selectedProofIds)
     const hasProofs = allSelectedProofIds.length > 0
     if (isHopeful) return 'hopeful'
+    // §2-8 継続記録: 「2回目以降」を選んだ場合は強み/人柄の選択を経由しないため常に continuation
+    if (visitClaim === 'repeat') return 'continuation'
     if (hasProofs) return 'proof'
     return 'personality_only'
   }
@@ -911,6 +931,9 @@ function VoteForm() {
       vote_type: determineVoteType(),
       qr_token: getQrToken() || null,
       channel,
+      // §2-8 継続記録: 本人選択・任意テーマ。サーバー側で送信時照合に使う
+      visit_claim: visitClaim,
+      continuation_theme: continuationTheme.trim() || null,
     }
     // savedAt: TTL判定用 / step: 認証から戻った時に元のウィザードステップへ復帰するため
     sessionStorage.setItem('pending_vote', JSON.stringify({ savedAt: Date.now(), data: voteData, step: stepSnapshot }))
@@ -926,6 +949,9 @@ function VoteForm() {
       professional_id: proId,
       selected_proof_ids: proofIdsToSend,
       selected_personality_ids: selectedPersonalityIds.size > 0 ? Array.from(selectedPersonalityIds) : null,
+      // §2-8 継続記録: 本人選択・任意テーマ。サーバー側で送信時照合に使う
+      visit_claim: visitClaim,
+      continuation_theme: continuationTheme.trim() || null,
       selected_reward_id: selectedRewardId || null,
       comment: comment.trim() || null,
       vote_type: determineVoteType(),
@@ -1258,13 +1284,21 @@ function VoteForm() {
 
       await new Promise(resolve => setTimeout(resolve, 500))
 
+      // §2-8 継続記録: 本人選択と過去票の有無を突き合わせて vote_type を再分類
+      const phoneContinuation = await resolveContinuationVoteType(supabase, {
+        normalizedEmail: normalizeEmail(formattedPhone),
+        professionalId: proId,
+        visitClaim: voteDataSnapshot.visit_claim,
+        baseVoteType: voteDataSnapshot.vote_type,
+      })
+
       const { data: insertedVote, error: voteError } = await (supabase as any).from('votes').insert({
         professional_id: proId,
         voter_email: formattedPhone,
         normalized_email: normalizeEmail(formattedPhone),
         client_user_id: null,
         vote_weight: 1.0,
-        vote_type: voteDataSnapshot.vote_type,
+        vote_type: phoneContinuation.voteType,
         selected_proof_ids: voteDataSnapshot.selected_proof_ids,
         selected_personality_ids: voteDataSnapshot.selected_personality_ids,
         selected_reward_id: voteDataSnapshot.selected_reward_id,
@@ -1278,6 +1312,8 @@ function VoteForm() {
         channel: voteDataSnapshot.channel || channel,
         // SMS は公開要素ゼロ → 同意 UI スキップのため初期値 'hidden'
         display_mode: 'hidden',
+        self_reported_repeat: phoneContinuation.selfReportedRepeat,
+        continuation_theme: voteDataSnapshot.continuation_theme || null,
       }).select().maybeSingle()
 
       if (voteError) {
@@ -1405,13 +1441,21 @@ function VoteForm() {
 
     const voteData = buildVoteData()
 
+    // §2-8 継続記録: 本人選択と過去票の有無を突き合わせて vote_type を再分類
+    const fbContinuation = await resolveContinuationVoteType(supabase, {
+      normalizedEmail: normalizeEmail(formattedPhone),
+      professionalId: proId,
+      visitClaim: voteData.visit_claim,
+      baseVoteType: voteData.vote_type,
+    })
+
     const { data: insertedVote, error: voteError } = await (supabase as any).from('votes').insert({
       professional_id: proId,
       voter_email: formattedPhone, // 電話番号を識別子として使用
       normalized_email: normalizeEmail(formattedPhone),
       client_user_id: null,
       vote_weight: 1.0,
-      vote_type: voteData.vote_type,
+      vote_type: fbContinuation.voteType,
       selected_proof_ids: voteData.selected_proof_ids,
       selected_personality_ids: voteData.selected_personality_ids,
       selected_reward_id: voteData.selected_reward_id,
@@ -1423,6 +1467,8 @@ function VoteForm() {
       auth_display_name: fallbackName.trim() || null,
       auth_provider_id: formattedPhone,
       channel,
+      self_reported_repeat: fbContinuation.selfReportedRepeat,
+      continuation_theme: voteData.continuation_theme || null,
     }).select().maybeSingle()
 
     if (voteError) {
@@ -1915,6 +1961,14 @@ function VoteForm() {
       }
       const displayMode = voterProfessionalId ? 'pro_link' : 'hidden'
 
+      // §2-8 継続記録: 本人選択と過去票の有無を突き合わせて vote_type を再分類
+      const clerkContinuation = await resolveContinuationVoteType(supabase, {
+        normalizedEmail: normalizeEmail(voterIdentifier),
+        professionalId: proId,
+        visitClaim: voteDataSnapshot.visit_claim,
+        baseVoteType: voteDataSnapshot.vote_type,
+      })
+
       // 投票INSERT（Clerk認証済みなので status='confirmed'）
       const { data: insertedVote, error: voteError } = await (supabase as any)
         .from('votes')
@@ -1924,7 +1978,7 @@ function VoteForm() {
           normalized_email: normalizeEmail(voterIdentifier),
           client_user_id: null,
           vote_weight: 1.0,
-          vote_type: voteDataSnapshot.vote_type,
+          vote_type: clerkContinuation.voteType,
           selected_proof_ids: voteDataSnapshot.selected_proof_ids,
           selected_personality_ids: voteDataSnapshot.selected_personality_ids,
           selected_reward_id: voteDataSnapshot.selected_reward_id,
@@ -1936,6 +1990,8 @@ function VoteForm() {
           auth_provider_id: authProviderId,
           channel: voteDataSnapshot.channel || channel,
           display_mode: displayMode,
+          self_reported_repeat: clerkContinuation.selfReportedRepeat,
+          continuation_theme: voteDataSnapshot.continuation_theme || null,
           client_photo_url: clientPhotoUrl,
           voter_professional_id: voterProfessionalId,
         })
@@ -2065,7 +2121,11 @@ function VoteForm() {
 
   // ── ステップUI用の変数 ──
   const hasRewards = proRewards.length > 0
-  const totalSteps = hasRewards ? 5 : 4
+  // §2-8 継続記録: 「2回目以降」フローは visit_check → continuation → (reward) → auth のみ
+  //   （強み/人柄/コメントの3ステップを飛ばすため、通常フローよりステップ数が少ない）
+  const totalSteps = visitClaim === 'repeat'
+    ? (hasRewards ? 4 : 3)
+    : (hasRewards ? 6 : 5)
 
   // 強みプルーフの表示項目（プロが設定した項目）
   const allProofDisplayItems = [
@@ -2075,9 +2135,11 @@ function VoteForm() {
 
   // ステップ番号計算（intro/confirm/hopeful_doneはundefined）
   const stepNum = (s: VoteStep): number | undefined => {
-    const order = hasRewards
-      ? ['proofs', 'personality', 'comment', 'reward', 'auth']
-      : ['proofs', 'personality', 'comment', 'auth']
+    const order = visitClaim === 'repeat'
+      ? (hasRewards ? ['visit_check', 'continuation', 'reward', 'auth'] : ['visit_check', 'continuation', 'auth'])
+      : (hasRewards
+        ? ['visit_check', 'proofs', 'personality', 'comment', 'reward', 'auth']
+        : ['visit_check', 'proofs', 'personality', 'comment', 'auth'])
     const idx = order.indexOf(s)
     return idx >= 0 ? idx + 1 : undefined
   }
@@ -2233,7 +2295,7 @@ function VoteForm() {
             </div>
 
             <button
-              onClick={() => goToWithHistory("proofs")}
+              onClick={() => goToWithHistory("visit_check")}
               style={{ ...S.primaryBtn, fontSize: 16 }}
             >
               はじめる →
@@ -2250,6 +2312,106 @@ function VoteForm() {
             }}>
               ※ この仕組みを“プルーフ（信頼の証明）”と呼んでいます。
             </div>
+          </div>
+        </StepWrapper>
+      )}
+
+      {/* ── §2-8 継続記録: 本人選択（初めて／2回目以降） ── */}
+      {voteStep === "visit_check" && (
+        <StepWrapper
+          isTransitioning={isTransitioning}
+          step={stepNum("visit_check")} totalSteps={totalSteps}
+          onBack={goBack}
+        >
+          <div style={{ width: "100%" }}>
+            <div style={S.title}>
+              <span style={{ color: "#C4A35A" }}>{pro.name?.split(/[\s　]/)[0]}</span>さんの施術を受けるのは？
+            </div>
+            <div style={S.subtitle}>あてはまる方を選んでください</div>
+
+            <button
+              onClick={() => { setVisitClaim("first"); goToWithHistory("proofs") }}
+              style={S.primaryBtn}
+            >
+              初めて
+            </button>
+            <button
+              onClick={() => { setVisitClaim("repeat"); goToWithHistory("continuation") }}
+              style={S.secondaryBtn}
+            >
+              2回目以降
+            </button>
+          </div>
+        </StepWrapper>
+      )}
+
+      {/* ── §2-8 継続記録: スタンプUI（強み/人柄/コメントは省略） ── */}
+      {voteStep === "continuation" && (
+        <StepWrapper
+          isTransitioning={isTransitioning}
+          step={stepNum("continuation")} totalSteps={totalSteps}
+          onBack={goBack}
+        >
+          <div style={{ width: "100%" }}>
+            <div style={S.title}>
+              <span style={{ color: "#C4A35A" }}>{pro.name?.split(/[\s　]/)[0]}</span>さん、いつもありがとうございます
+            </div>
+            <div style={S.subtitle}>今回もサポートを受けたことだけ教えてください</div>
+
+            <button
+              onClick={() => setStampConfirmed(!stampConfirmed)}
+              style={{
+                width: "100%", padding: "20px", borderRadius: 14, marginBottom: 24,
+                border: stampConfirmed ? "2px solid #C4A35A" : "1.5px solid rgba(196,163,90,0.24)",
+                background: stampConfirmed ? "rgba(196,163,90,0.13)" : "rgba(255,255,255,0.03)",
+                color: stampConfirmed ? "#C4A35A" : "#FAFAF7",
+                fontSize: 16, fontWeight: 700, cursor: "pointer",
+              }}
+            >
+              {stampConfirmed ? "今回も受けました ✓" : "今回も受けました"}
+            </button>
+
+            <div style={{ color: "#8B8B9A", fontSize: 13, marginBottom: 8 }}>
+              前回からの変化があれば一言（任意）
+            </div>
+            <textarea
+              value={comment}
+              onChange={e => setComment(e.target.value.slice(0, 100))}
+              placeholder="例: 前回より楽になった気がします"
+              style={{
+                width: "100%", borderRadius: 12, resize: "none",
+                border: "1.5px solid rgba(196,163,90,0.27)",
+                background: "#16213E", color: "#FAFAF7",
+                fontSize: 14, padding: "14px", minHeight: 80,
+                lineHeight: 1.7, marginBottom: 16,
+                boxSizing: "border-box",
+              }}
+            />
+
+            <div style={{ color: "#8B8B9A", fontSize: 13, marginBottom: 8 }}>
+              今回のテーマ（任意）
+            </div>
+            <input
+              type="text"
+              value={continuationTheme}
+              onChange={e => setContinuationTheme(e.target.value.slice(0, 40))}
+              placeholder="例: 姿勢の相談"
+              style={{
+                width: "100%", borderRadius: 12,
+                border: "1.5px solid rgba(196,163,90,0.27)",
+                background: "#16213E", color: "#FAFAF7",
+                fontSize: 14, padding: "12px 14px", marginBottom: 24,
+                boxSizing: "border-box",
+              }}
+            />
+
+            <button
+              onClick={() => goToWithHistory(hasRewards ? "reward" : "auth")}
+              disabled={!stampConfirmed}
+              style={{ ...S.primaryBtn, opacity: stampConfirmed ? 1 : 0.4 }}
+            >
+              次へ →
+            </button>
           </div>
         </StepWrapper>
       )}
