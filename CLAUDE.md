@@ -73,7 +73,8 @@
 - [ ] timestamp カラムに文字列を入れない（`'expired'` ❌ → `new Date().toISOString()` ✅）。
 - [ ] **Supabase の暗黙キャップ `max-rows=1000`**：`.limit(10000)` を信じるな。**1000件超は必ず `.range()` + `.order('id')` でページネーション**（ORDER BY の無い LIMIT/range は非決定的で intermittent バグの元）。5/28 の検索バグの真因。
 - [ ] カテゴリ表示名は DB でなく **`src/lib/constants.ts` の `TAB_DISPLAY_NAMES`**。
-- [ ] 効果カテゴリは**9種**（治療・回復/体の機能改善/ボディメイク/パフォーマンス/マインド/発見・気づき/指導力/ビューティー/栄養・生活）・**85項目・最大9選択**。
+- [ ] 効果カテゴリは**9種**（治療・回復/体の機能改善/ボディメイク/パフォーマンス/マインド/発見・気づき/指導力/ビューティー/栄養・生活）・**85項目**。
+      **「最大9選択」はプロ側プロフィール設定（`professionals.selected_proofs`）の上限**。投票者が1回の投票で選べる強み項目は**最大3件**（`vote/[id]/page.tsx` の `MAX_PROOF=3`）。混同注意。
 - [ ] `vote_type` は `hopeful` / `proof` / `personality_only` の3種。
 
 ## D. 外部連携（LINE / Email / mailto）
