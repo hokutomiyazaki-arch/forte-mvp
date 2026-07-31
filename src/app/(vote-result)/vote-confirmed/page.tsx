@@ -674,6 +674,17 @@ function ConfirmedContent() {
           </div>
         )}
 
+        {/* プロ登録導線（§3-5） */}
+        <div className="text-center">
+          <a
+            href="/sign-up"
+            className="text-sm text-[#666666]"
+            style={{ textDecoration: 'none' }}
+          >
+            あなたも証明を持てる — <span className="text-[#C4A35A] font-bold">プロとして登録する →</span>
+          </a>
+        </div>
+
         {/* 下部余白 */}
         <div className="pb-8">
           <a

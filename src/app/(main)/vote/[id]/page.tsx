@@ -3311,16 +3311,6 @@ function VoteForm() {
                 リワードを保存する
               </button>
             )}
-
-            <button
-              onClick={() => { window.location.href = "/sign-up" }}
-              style={{
-                background: "transparent", border: "none", cursor: "pointer",
-                color: "#8B8B9A", fontSize: 13, marginTop: 14, padding: 4,
-              }}
-            >
-              あなたも証明を持てる — <span style={{ color: "#C4A35A", fontWeight: 600 }}>プロとして登録する →</span>
-            </button>
           </div>
         </StepWrapper>
       )}
