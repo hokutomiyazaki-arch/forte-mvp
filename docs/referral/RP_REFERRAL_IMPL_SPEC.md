@@ -71,7 +71,7 @@ FEATURE_PROOF_UNIQUE_COUNT  # ユニーク/累計の2本表示
 -- リスト本体
 create table referral_lists (
   id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null references profiles(id) on delete cascade,
+  owner_id uuid not null references professionals(id) on delete cascade,
   title text not null,                    -- 例: "名古屋圏・めまい/ふらつき"
   comment text,                           -- 選定基準の説明（送り手が語るのは「基準」）
   visibility text not null default 'link' -- 'link' | 'private' | 'public'
@@ -87,7 +87,7 @@ create table referral_lists (
 create table referral_list_items (
   id uuid primary key default gen_random_uuid(),
   list_id uuid not null references referral_lists(id) on delete cascade,
-  pro_id uuid not null references profiles(id) on delete cascade,
+  pro_id uuid not null references professionals(id) on delete cascade,
   note text,                              -- 一人ずつへの一言
   sort_order int default 0,
   consent_status text not null default 'pending' -- 'pending'|'approved'|'declined'
@@ -118,11 +118,11 @@ create table referral_list_items (
 ### 2-2. 受け入れステータス
 
 ```sql
-alter table profiles add column accepting_status text default 'closed'
+alter table professionals add column accepting_status text default 'closed'
   check (accepting_status in ('open','conditional','closed'));
-alter table profiles add column accepting_note text;      -- 条件付きの内容
-alter table profiles add column accepting_updated_at timestamptz;
-alter table profiles add column delegate_list_id uuid references referral_lists(id);
+alter table professionals add column accepting_note text;      -- 条件付きの内容
+alter table professionals add column accepting_updated_at timestamptz;
+alter table professionals add column delegate_list_id uuid references referral_lists(id);
 ```
 
 **表示ロジック（重要）**:
@@ -131,34 +131,33 @@ alter table profiles add column delegate_list_id uuid references referral_lists(
 - 代理リストの入れ子は**一段のみ**。再帰しない
 - 代理リストは**本人が明示的に設定した場合のみ**。自動生成は禁止
 
-### 2-3. サービスメニューと標準価格（価格つり上げ対策）
+### 2-3. サービスメニューと標準価格（価格つり上げ対策）【STOP 1決定：pro_menus拡張】
+
+新テーブルは作らない。既存 `pro_menus`（38行・price_textテキスト型）を拡張する：
 
 ```sql
-create table pro_services (
-  id uuid primary key default gen_random_uuid(),
-  pro_id uuid not null references profiles(id) on delete cascade,
-  name text not null,
-  theme_tags text[],
-  price_jpy int not null,          -- 標準価格。紹介経由はこの価格でのみ成立
-  duration_min int,
-  is_active boolean default true,
-  external_price_url text,         -- 自社HP等（価格照合バッチ用）
-  created_at timestamptz default now()
-);
+alter table pro_menus add column price_jpy int;              -- 紹介成立価格（正確な数値）
+alter table pro_menus add column duration_min int;
+alter table pro_menus add column is_referral_bookable boolean default false;
+alter table pro_menus add column external_price_url text;    -- 価格照合バッチ用
 ```
 
-**ルール**: 紹介経由の予約は **登録済み標準価格でのみ成立**。予約ごとの値付け欄は作らない。
+**ルール**:
+- 紹介経由の予約は `is_referral_bookable = true` かつ `price_jpy` 設定済みのメニューでのみ成立
+- 既存の price_text 表示は変更しない（NULL列追加のみで既存表示は無影響）
+- 表示価格と紹介成立価格を同一レコードで管理し、内部の価格乖離を構造的に防ぐ
+- 予約ごとの値付け欄は作らない
 
-### 2-4. 紹介予約と決済
+## 2-4. 紹介予約と決済
 
 ```sql
 create table referral_bookings (
   id uuid primary key default gen_random_uuid(),
   list_id uuid references referral_lists(id),
-  sender_pro_id uuid references profiles(id),      -- 送り手（処方箋を書いた人）
-  receiver_pro_id uuid not null references profiles(id),
+  sender_pro_id uuid references professionals(id),      -- 送り手（処方箋を書いた人）
+  receiver_pro_id uuid not null references professionals(id),
   client_id uuid not null references clients(id),
-  service_id uuid references pro_services(id),
+  menu_id uuid references pro_menus(id),
   theme_tags text[],
   preferred_slots jsonb,          -- 第1〜第3希望
   confirmed_at timestamptz,
@@ -184,6 +183,7 @@ create table referral_bookings (
 5. **Stripe でオーソリ（与信確保）のみ**。請求は施術完了時にキャプチャ
 6. 受け手が希望から1つ選んで確定。**48時間無反応で自動 expired** → 送り手とクライアントへ通知＋別候補提案
 7. 施術完了ボタン → キャプチャ → フィー自動分配 → プルーフ依頼をLINE送信
+8. **紹介経由で生成されるプルーフには client_id を必ず紐付ける**（votes.client_user_id 全null の轍を踏まない）
 
 **フィー（段階導入）**:
 - **Phase 1：合計33.6%（送り手30%／決済実費3.6%／リアプルの利益0%）。**
@@ -251,11 +251,13 @@ create table referral_bookings (
 
 ### 2-5. 団体リレーション（育成プルーフ）
 
+**⚠️ STOP 1判明事項：org_members は既存稼働中テーブルと衝突する。Phase 3着工前に既存スキーマ（org_members: invited_at/accepted_at/removed_at、credential_level_id連携）を調査し、本DDLを「新設」ではなく「既存拡張」として再設計すること。以下のDDLは要件定義として読む。**
+
 ```sql
 create table org_members (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references organizations(id) on delete cascade,
-  pro_id uuid not null references profiles(id) on delete cascade,
+  pro_id uuid not null references professionals(id) on delete cascade,
   role text not null check (role in ('founder','instructor','member')),
   verification_status text not null default 'self_declared'
     check (verification_status in ('self_declared','verified','declined')),
@@ -310,6 +312,36 @@ alter table voices add column sanitize_version int default 1;
 投票画面に一行追加：
 「投票された方には特典をお渡しする場合があります。内容による差はありません」
 **評価内容と特典の連動は絶対に実装しない。**
+
+### 2-8. 2回目以降の投票＝継続記録（スタンプ）【Phase 0.5・Phase 1に先行実施】
+
+**目的**: 反復投票の社会的気まずさ（同じ人に同じ賞賛を再度求める）を、設問の変更で解消する。
+
+**入力**:
+- 投票画面の最初に本人選択：「この先生の施術を受けるのは → 初めて／2回目以降」
+- **初めて** → 現行フロー（強み項目の選択あり）
+- **2回目以降** → スタンプUI：「今回も受けました ✓」ボタン1つ（必須はこれのみ）＋任意の一言（前回からの変化）＋任意のテーマ。強み項目の選択は表示しない
+- 送信時に normalized_email × professional_id で過去票を照合（既存の週次制限照合を流用）
+  - 「初めて」選択なのに過去票あり → エラーにせず受理。集計上は継続記録扱い（選択項目は行に保存、集計不算入）
+  - 「2回目以降」選択なのに過去票なし → 受理して新チェーン開始。self_reported_repeat フラグ。ヒント表示「前回と同じメールアドレスだと記録がつながります」
+- クライアント側に「あなたの記録：◯回目」を表示（ポイントカード体験）
+
+**データ**: `vote_type = 'continuation'` を追加。selected_proof_ids は空。
+
+**集計**:
+- 累計プルーフ：初回✅／継続✅（どちらも+1）
+- ユニーク人数：初回のみ
+- 常連（3票以上×初回から90日以上）：継続で積む
+- 強み項目：初回のみ。継続は不算入
+
+**強み項目の集計規準を「票数」→「人数（DISTINCT normalized_email）」に全面変更**:
+- vote_summary VIEW をDISTINCT集計に改修。表示は「◯人が選んだ」
+- 過去データ：行は一切削除・変更しない（グランドファザリング）。ただし表示は全プロ一律で人数規準になるため、反復票を持つプロの強み項目の見かけの数字は下がる。**全体の単位変更として一度だけ告知**（「票→人に表示を変更しました。積み上げた記録は全て保存されています」）
+- 累計プルーフ数（メインの数字）は変わらない
+
+**意図的な不正の扱い（設計判断として記録）**:
+- 反復客に毎回「初めて」を押させる行為 → DISTINCT集計により同一メールでは盛れない。放置で可
+- 家族・知人による別メールでの反復「新規」投票 → 対面ゲート（NFC/QR・週1制限）が物理コストを課しており、盛れる上限は数ユニーク程度でスケールしない。検知システムは作らない（過剰防衛）。将来、決済連動プルーフ（金の裏書き付き）が導入されれば自然に重みの差がつく
 
 ---
 
@@ -371,7 +403,7 @@ alter table voices add column sanitize_version int default 1;
 
 **表示を3指標に変更**:
 ```
-ユニーク ◯人 ／ 累計 ◯件 ／ 常連（3ヶ月以上継続）◯人
+ユニーク ◯人 ／ 累計 ◯件 ／ 常連（同一プロへ3票以上かつ初回から90日以上）◯人
 ```
 どちらも正当な勲章として扱う（継続の証明はリピート型のプロの武器になる）。
 副作用として、少数の反復による数値の水増しが構造的に見分けられるようになる。
