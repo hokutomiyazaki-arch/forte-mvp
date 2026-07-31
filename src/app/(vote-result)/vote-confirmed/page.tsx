@@ -36,6 +36,9 @@ function ConfirmedContent() {
   const [copyToast, setCopyToast] = useState('')
   // Phase 2: 同意 UI 用の vote レコード（consent 対象フィールドのみ）
   const [consentVote, setConsentVote] = useState<VoteConsentVote | null>(null)
+  // §2-8 継続記録: 「あなたの記録：◯回目」表示用
+  const [voteCount, setVoteCount] = useState<number | null>(null)
+  const [selfReportedRepeat, setSelfReportedRepeat] = useState(false)
   // Phase 2: リワード表示ゲート
   // - consentDone: 今回 YES/NO 押下後 true (VoteConsentSection から onComplete で通知、揮発)
   // - consentSkipped: voter_professional_id !== null は同意UI不要(pro_link)
@@ -90,6 +93,19 @@ function ConfirmedContent() {
       // sessionStorage 不可環境では無視
     }
   }, [])
+
+  // §2-8 継続記録: 「あなたの記録：◯回目」表示用のカウント取得（PIIはレスポンスに含まれない）
+  useEffect(() => {
+    if (!voteId) return
+    fetch(`/api/vote-count?vote_id=${voteId}`, { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (typeof data?.count === 'number') {
+          setVoteCount(data.count)
+        }
+      })
+      .catch((err) => console.error('[vote-confirmed] vote-count fetch failed:', err))
+  }, [voteId])
 
   useEffect(() => {
     const ua = navigator.userAgent
@@ -181,14 +197,16 @@ function ConfirmedContent() {
   useEffect(() => {
     async function load() {
       // Phase 2: 同意 UI 用の vote レコード取得（consent 分岐判定に使う）
+      // §2-8 継続記録: self_reported_repeat も同じ select で取得（PIIではないため直接取得可）
       if (voteId) {
         const { data: voteData } = await (supabase as any)
           .from('votes')
-          .select('id, professional_id, auth_method, auth_display_name, client_photo_url, voter_professional_id, display_mode, reward_optin')
+          .select('id, professional_id, auth_method, auth_display_name, client_photo_url, voter_professional_id, display_mode, reward_optin, self_reported_repeat')
           .eq('id', voteId)
           .maybeSingle()
         if (voteData) {
           setConsentVote(voteData as VoteConsentVote)
+          setSelfReportedRepeat(!!voteData.self_reported_repeat)
         }
       }
 
@@ -388,6 +406,22 @@ function ConfirmedContent() {
           <p className="text-sm text-gray-400 mt-3">
             次回のセッションでも、ぜひ声を届けてください。7日後からまた投票できます。
           </p>
+
+          {/* §2-8 継続記録: あなたの記録：◯回目（ポイントカード体験） */}
+          {typeof voteCount === 'number' && voteCount > 0 && (
+            <div className="mt-4 inline-flex flex-col items-center gap-1">
+              <div className="inline-flex items-center gap-2 bg-[#C4A35A]/10 border border-[#C4A35A]/30 rounded-full px-4 py-2">
+                <span className="text-sm font-bold text-[#C4A35A]">
+                  あなたの記録：{voteCount}回目
+                </span>
+              </div>
+              {selfReportedRepeat && (
+                <p className="text-xs text-gray-400 mt-1">
+                  前回と同じメールアドレスだと記録がつながります
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ===== セクション1.5: 同意 UI (Phase 1.5: 2 段階同意フロー) =====
