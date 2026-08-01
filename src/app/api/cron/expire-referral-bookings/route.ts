@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { notifyBookingExpiredToSender, notifyClientByEmail, emailShell } from '@/lib/referral-notify'
+import { notifyBookingExpiredToSender, notifyClientByEmail, emailShell, escapeHtml } from '@/lib/referral-notify'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,17 +65,20 @@ export async function GET(req: NextRequest) {
 
     for (const row of rows) {
       try {
-        const { error: updateError, count } = await supabase
+        // 軽微指摘: count:'exact' はSupabaseクライアント実装差でnullを返すことがあり、
+        // 通知が飛ばない事故につながる。.select('id')で返る実行行数で成否を判定する。
+        const { data: updatedRows, error: updateError } = await supabase
           .from('referral_bookings')
-          .update({ status: 'expired' }, { count: 'exact' })
+          .update({ status: 'expired' })
           .eq('id', row.id)
           .eq('status', 'requested')
+          .select('id')
 
         if (updateError) {
           console.error(`[cron/expire-referral-bookings] update error for ${row.id}:`, updateError.message)
           continue
         }
-        if (!count) {
+        if (!updatedRows || updatedRows.length === 0) {
           // 既に他経路(受け手のPATCH等)で状態が変わっていた場合はスキップ
           continue
         }
@@ -95,7 +98,7 @@ export async function GET(req: NextRequest) {
               '予約リクエストが失効しました',
               emailShell(
                 '予約リクエスト失効のお知らせ',
-                `${receiverName}さんへのご相談リクエストは、48時間以内に確定のご連絡がなかったため失効しました。<br>他の先生もご紹介できますので、よろしければご覧ください。`,
+                `${escapeHtml(receiverName)}さんへのご相談リクエストは、48時間以内に確定のご連絡がなかったため失効しました。<br>他の先生もご紹介できますので、よろしければご覧ください。`,
                 '他の先生を見る',
                 listUrl
               )

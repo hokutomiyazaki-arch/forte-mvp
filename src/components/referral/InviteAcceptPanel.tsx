@@ -32,7 +32,7 @@ export default function InviteAcceptPanel({ token, alreadyRegistered }: Props) {
   useEffect(() => {
     if (!isLoaded || !isSignedIn || alreadyRegistered) return
     setStatus('processing')
-    fetch(`/api/referral/invites/${token}/complete`, { method: 'POST' })
+    fetch(`/api/referral/invites/${token}/complete`, { method: 'POST', cache: 'no-store' })
       .then(async (res) => {
         if (res.ok) {
           try {

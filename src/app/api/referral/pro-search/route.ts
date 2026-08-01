@@ -6,6 +6,18 @@ import { isReferralEnabled } from '@/lib/feature-flags'
 export const dynamic = 'force-dynamic'
 
 /**
+ * ilikeパターンの特殊文字(% _)をエスケープし、PostgRESTのフィルタ構文で意味を持つ
+ * カンマは除去する(軽微指摘: ユーザー入力をそのままilikeへ渡さない)。
+ */
+function sanitizeIlikeQuery(input: string): string {
+  return input
+    .replace(/\\/g, '\\\\')
+    .replace(/%/g, '\\%')
+    .replace(/_/g, '\\_')
+    .replace(/,/g, '')
+}
+
+/**
  * GET /api/referral/pro-search?q=xxx
  * 処方箋リストへのピン指名対象プロを名前部分一致で検索する軽量専用API。
  * 既存 /api/search は「プルーフ0件除外」「isSearchPrivateゲート」等の検索ページ向け
@@ -29,12 +41,13 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = getSupabaseAdmin()
+    const safeQ = sanitizeIlikeQuery(q)
     const { data, error } = await supabase
       .from('professionals')
       .select('id, name, title, photo_url, prefecture, accepting_status')
       .is('deactivated_at', null)
       .neq('id', ownPro.id)
-      .ilike('name', `%${q}%`)
+      .ilike('name', `%${safeQ}%`)
       .limit(20)
 
     if (error) {

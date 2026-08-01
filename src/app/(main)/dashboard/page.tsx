@@ -465,13 +465,16 @@ export default function DashboardPage() {
       pendingToken = localStorage.getItem('rp_pending_invite_token')
     } catch {}
     if (!pendingToken) return
-    fetch(`/api/referral/invites/${pendingToken}/complete`, { method: 'POST' })
-      .catch((err) => console.error('[dashboard] pending invite complete failed:', err))
-      .finally(() => {
-        try {
-          localStorage.removeItem('rp_pending_invite_token')
-        } catch {}
+    // 中6/軽微指摘: 非2xx(失敗)時は token を消さず再試行可能にする(成功 or 冪等の already のときのみ削除)
+    fetch(`/api/referral/invites/${pendingToken}/complete`, { method: 'POST', cache: 'no-store' })
+      .then((res) => {
+        if (res.ok) {
+          try {
+            localStorage.removeItem('rp_pending_invite_token')
+          } catch {}
+        }
       })
+      .catch((err) => console.error('[dashboard] pending invite complete failed:', err))
   }, [proIdForVoteCount])
 
   useEffect(() => {
@@ -4661,6 +4664,12 @@ export default function DashboardPage() {
             setPro(prev => prev ? { ...prev, accepting_status: status, accepting_note: note } : prev)
           }
         />
+      )}
+      {/* 軽微指摘: 非対象プロが ?tab=referral で来た場合、空白ではなく案内を出す */}
+      {dashboardTab === 'referral' && !referralEnabled && (
+        <div style={{ textAlign: 'center', padding: '40px 20px', color: '#9CA3AF', fontSize: 13 }}>
+          この機能は現在先行公開中です
+        </div>
       )}
 
 

@@ -94,6 +94,7 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
       const res = await fetch('/api/referral/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
         body: JSON.stringify({
           list_id: listId,
           receiver_pro_id: receiverPro.id,

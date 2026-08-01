@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import BookingThread from '@/components/dashboard/BookingThread'
 
 interface PinPro {
@@ -142,6 +142,7 @@ export default function ReferralTab({ proId, initialAcceptingStatus, initialAcce
       const res = await fetch('/api/referral/accepting', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
         body: JSON.stringify({
           accepting_status: acceptingStatus,
           accepting_note: acceptingStatus === 'conditional' ? acceptingNote : null,
@@ -163,6 +164,7 @@ export default function ReferralTab({ proId, initialAcceptingStatus, initialAcce
       const res = await fetch('/api/referral/lists', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
         body: JSON.stringify({ title, comment: newComment.trim() || null }),
       })
       if (res.ok) {
@@ -178,21 +180,19 @@ export default function ReferralTab({ proId, initialAcceptingStatus, initialAcce
 
   async function deleteList(listId: string) {
     if (!window.confirm('このリストを削除しますか？（ピンした先生への通知は解除されます）')) return
-    const res = await fetch(`/api/referral/lists/${listId}`, { method: 'DELETE' })
+    const res = await fetch(`/api/referral/lists/${listId}`, { method: 'DELETE', cache: 'no-store' })
     if (res.ok) {
       setLists((prev) => prev.filter((l) => l.id !== listId))
     }
   }
 
-  async function searchPro(listId: string, query: string) {
-    setPinQuery((prev) => ({ ...prev, [listId]: query }))
-    if (!query.trim()) {
-      setPinResults((prev) => ({ ...prev, [listId]: [] }))
-      return
-    }
+  // 軽微指摘: 入力毎に即fetchせず300msデバウンスする(リストごとにタイマーを保持)
+  const searchTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+
+  async function runProSearch(listId: string, query: string) {
     setPinSearching((prev) => ({ ...prev, [listId]: true }))
     try {
-      const res = await fetch(`/api/referral/pro-search?q=${encodeURIComponent(query.trim())}`, { cache: 'no-store' })
+      const res = await fetch(`/api/referral/pro-search?q=${encodeURIComponent(query)}`, { cache: 'no-store' })
       if (res.ok) {
         const data = await res.json()
         setPinResults((prev) => ({ ...prev, [listId]: data.professionals || [] }))
@@ -202,12 +202,28 @@ export default function ReferralTab({ proId, initialAcceptingStatus, initialAcce
     }
   }
 
+  function searchPro(listId: string, query: string) {
+    setPinQuery((prev) => ({ ...prev, [listId]: query }))
+    if (searchTimersRef.current[listId]) {
+      clearTimeout(searchTimersRef.current[listId])
+    }
+    const trimmed = query.trim()
+    if (!trimmed) {
+      setPinResults((prev) => ({ ...prev, [listId]: [] }))
+      return
+    }
+    searchTimersRef.current[listId] = setTimeout(() => {
+      runProSearch(listId, trimmed)
+    }, 300)
+  }
+
   async function addPin(listId: string, targetProId: string) {
     setAddingPin(listId)
     try {
       const res = await fetch(`/api/referral/lists/${listId}/items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
         body: JSON.stringify({ pro_id: targetProId }),
       })
       if (res.ok) {
@@ -240,6 +256,7 @@ export default function ReferralTab({ proId, initialAcceptingStatus, initialAcce
     const res = await fetch(`/api/referral/lists/${listId}/items`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
       body: JSON.stringify({ pro_id: targetProId }),
     })
     if (res.ok) {
@@ -253,6 +270,7 @@ export default function ReferralTab({ proId, initialAcceptingStatus, initialAcce
     const res = await fetch(`/api/referral/lists/${listId}/items`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
       body: JSON.stringify({ pro_id: targetProId, note }),
     })
     if (res.ok) {
@@ -274,6 +292,7 @@ export default function ReferralTab({ proId, initialAcceptingStatus, initialAcce
       const res = await fetch('/api/referral/invites', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
         body: JSON.stringify({ list_id: listId, invitee_name: name }),
       })
       if (res.ok) {
@@ -314,6 +333,187 @@ export default function ReferralTab({ proId, initialAcceptingStatus, initialAcce
     if (status === 'approved') return { text: '承諾済み', color: '#2E7D32' }
     if (status === 'declined') return { text: '辞退されました', color: '#B00020' }
     return { text: '承諾待ち', color: '#B8860B' }
+  }
+
+  // §3-2/中1: visibility='private' は「連携候補（非公開）」= 共有URLを持たない社内向けリスト。
+  // 共有URLコピー・招待UI・承諾待ちバッジ(§3-1: 非公開リストは同意不要)を出さない。
+  const publicLists = lists.filter((l) => l.visibility !== 'private')
+  const privateLists = lists.filter((l) => l.visibility === 'private')
+
+  function renderListCard(list: ReferralList, isPrivate: boolean) {
+    return (
+      <div key={list.id} style={{ background: '#fff', borderRadius: 14, padding: '16px', border: '1px solid #E5E7EB' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E' }}>{list.title}</div>
+            {list.comment && (
+              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4, lineHeight: 1.5 }}>{list.comment}</div>
+            )}
+          </div>
+          <button
+            onClick={() => deleteList(list.id)}
+            style={{ background: 'none', border: 'none', color: '#B00020', fontSize: 12, cursor: 'pointer' }}
+          >
+            削除
+          </button>
+        </div>
+
+        {!isPrivate && (
+          <div
+            onClick={() => copyShareUrl(list.slug)}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '8px 10px', background: '#F9FAFB', borderRadius: 8,
+              fontSize: 12, color: '#6B7280', cursor: 'pointer', marginBottom: 12,
+            }}
+          >
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
+              {SHARE_ORIGIN}/r/{list.slug}
+            </span>
+            <span style={{ color: '#C4A35A', fontWeight: 600, flexShrink: 0, marginLeft: 8 }}>
+              {copiedSlug === list.slug ? 'コピーしました' : 'コピー'}
+            </span>
+          </div>
+        )}
+
+        {/* ピン一覧 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+          {list.items.map((item) => {
+            const label = consentLabel(item.consent_status)
+            return (
+              <div
+                key={item.id}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: '#F9FAFB', borderRadius: 8 }}
+              >
+                {item.professionals?.photo_url ? (
+                  <img src={item.professionals.photo_url} alt="" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                ) : (
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#E5E7EB', flexShrink: 0 }} />
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E' }}>
+                    {item.professionals?.name || '不明なプロ'}
+                  </div>
+                  {!isPrivate && <div style={{ fontSize: 11, color: label.color }}>{label.text}</div>}
+                  <input
+                    defaultValue={item.note || ''}
+                    onBlur={(e) => {
+                      if (e.target.value !== (item.note || '')) {
+                        updatePinNote(list.id, item.pro_id, e.target.value)
+                      }
+                    }}
+                    placeholder="一言（例: 産後のケアが得意です）"
+                    style={{
+                      width: '100%', padding: '4px 8px', borderRadius: 6, border: '1px solid #E5E7EB',
+                      fontSize: 12, marginTop: 4, boxSizing: 'border-box' as const,
+                    }}
+                  />
+                </div>
+                <button
+                  onClick={() => removePin(list.id, item.pro_id)}
+                  style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 11, cursor: 'pointer', flexShrink: 0 }}
+                >
+                  除去
+                </button>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* ピン追加 */}
+        {list.items.length < MAX_PINS ? (
+          <div style={{ position: 'relative' }}>
+            <input
+              value={pinQuery[list.id] || ''}
+              onChange={(e) => searchPro(list.id, e.target.value)}
+              placeholder="名前でプロを検索してピン追加（最大3名）"
+              style={{
+                width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #E5E7EB',
+                fontSize: 13, boxSizing: 'border-box' as const,
+              }}
+            />
+            {(pinResults[list.id]?.length || 0) > 0 && (
+              <div style={{
+                position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
+                background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8,
+                marginTop: 4, maxHeight: 200, overflowY: 'auto' as const,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+              }}>
+                {(pinResults[list.id] || []).map((p) => (
+                  <div
+                    key={p.id}
+                    onClick={() => addingPin ? undefined : addPin(list.id, p.id)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
+                      cursor: addingPin ? 'default' : 'pointer', borderBottom: '1px solid #F3F4F6',
+                    }}
+                  >
+                    {p.photo_url ? (
+                      <img src={p.photo_url} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
+                    ) : (
+                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#E5E7EB' }} />
+                    )}
+                    <div style={{ fontSize: 13, color: '#1A1A2E' }}>{p.name}</div>
+                    {p.title && <div style={{ fontSize: 11, color: '#9CA3AF' }}>{p.title}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: '#9CA3AF' }}>ピンは最大3名までです</div>
+        )}
+
+        {/* §2-9: RP外のプロの招待(非公開リストでは掲載通知の前提が無いため出さない) */}
+        {!isPrivate && (
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px dashed #E5E7EB' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#1A1A2E', marginBottom: 6 }}>
+              RP外のプロを追加
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                value={inviteName[list.id] || ''}
+                onChange={(e) => setInviteName((prev) => ({ ...prev, [list.id]: e.target.value.slice(0, 100) }))}
+                placeholder="先生のお名前"
+                style={{
+                  flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid #E5E7EB',
+                  fontSize: 13, boxSizing: 'border-box' as const,
+                }}
+              />
+              <button
+                onClick={() => createInvite(list.id)}
+                disabled={invitingList === list.id || !(inviteName[list.id] || '').trim()}
+                style={{
+                  padding: '8px 14px', borderRadius: 8, border: 'none',
+                  background: '#1A1A2E', color: '#fff', fontSize: 12, fontWeight: 600,
+                  cursor: invitingList === list.id ? 'default' : 'pointer',
+                  opacity: invitingList === list.id ? 0.6 : 1, flexShrink: 0,
+                }}
+              >
+                招待URLを発行
+              </button>
+            </div>
+            {issuedInviteUrl[list.id] && (
+              <div
+                onClick={() => copyInviteUrl(list.id, issuedInviteUrl[list.id])}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '8px 10px', background: '#F9FAFB', borderRadius: 8,
+                  fontSize: 12, color: '#6B7280', cursor: 'pointer', marginTop: 8,
+                }}
+              >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
+                  {issuedInviteUrl[list.id]}
+                </span>
+                <span style={{ color: '#C4A35A', fontWeight: 600, flexShrink: 0, marginLeft: 8 }}>
+                  {copiedSlug === `invite:${list.id}` ? 'コピーしました' : 'コピー'}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -409,177 +609,27 @@ export default function ReferralTab({ proId, initialAcceptingStatus, initialAcce
           まだ処方箋リストがありません
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {lists.map((list) => (
-            <div key={list.id} style={{ background: '#fff', borderRadius: 14, padding: '16px', border: '1px solid #E5E7EB' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E' }}>{list.title}</div>
-                  {list.comment && (
-                    <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4, lineHeight: 1.5 }}>{list.comment}</div>
-                  )}
-                </div>
-                <button
-                  onClick={() => deleteList(list.id)}
-                  style={{ background: 'none', border: 'none', color: '#B00020', fontSize: 12, cursor: 'pointer' }}
-                >
-                  削除
-                </button>
-              </div>
+        <>
+          {publicLists.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {publicLists.map((list) => renderListCard(list, false))}
+            </div>
+          )}
 
-              <div
-                onClick={() => copyShareUrl(list.slug)}
-                style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '8px 10px', background: '#F9FAFB', borderRadius: 8,
-                  fontSize: 12, color: '#6B7280', cursor: 'pointer', marginBottom: 12,
-                }}
-              >
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
-                  {SHARE_ORIGIN}/r/{list.slug}
-                </span>
-                <span style={{ color: '#C4A35A', fontWeight: 600, flexShrink: 0, marginLeft: 8 }}>
-                  {copiedSlug === list.slug ? 'コピーしました' : 'コピー'}
-                </span>
-              </div>
-
-              {/* ピン一覧 */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-                {list.items.map((item) => {
-                  const label = consentLabel(item.consent_status)
-                  return (
-                    <div
-                      key={item.id}
-                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: '#F9FAFB', borderRadius: 8 }}
-                    >
-                      {item.professionals?.photo_url ? (
-                        <img src={item.professionals.photo_url} alt="" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-                      ) : (
-                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#E5E7EB', flexShrink: 0 }} />
-                      )}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E' }}>
-                          {item.professionals?.name || '不明なプロ'}
-                        </div>
-                        <div style={{ fontSize: 11, color: label.color }}>{label.text}</div>
-                        <input
-                          defaultValue={item.note || ''}
-                          onBlur={(e) => {
-                            if (e.target.value !== (item.note || '')) {
-                              updatePinNote(list.id, item.pro_id, e.target.value)
-                            }
-                          }}
-                          placeholder="一言（例: 産後のケアが得意です）"
-                          style={{
-                            width: '100%', padding: '4px 8px', borderRadius: 6, border: '1px solid #E5E7EB',
-                            fontSize: 12, marginTop: 4, boxSizing: 'border-box' as const,
-                          }}
-                        />
-                      </div>
-                      <button
-                        onClick={() => removePin(list.id, item.pro_id)}
-                        style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 11, cursor: 'pointer', flexShrink: 0 }}
-                      >
-                        除去
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-
-              {/* ピン追加 */}
-              {list.items.length < MAX_PINS ? (
-                <div style={{ position: 'relative' }}>
-                  <input
-                    value={pinQuery[list.id] || ''}
-                    onChange={(e) => searchPro(list.id, e.target.value)}
-                    placeholder="名前でプロを検索してピン追加（最大3名）"
-                    style={{
-                      width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #E5E7EB',
-                      fontSize: 13, boxSizing: 'border-box' as const,
-                    }}
-                  />
-                  {(pinResults[list.id]?.length || 0) > 0 && (
-                    <div style={{
-                      position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
-                      background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8,
-                      marginTop: 4, maxHeight: 200, overflowY: 'auto' as const,
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-                    }}>
-                      {(pinResults[list.id] || []).map((p) => (
-                        <div
-                          key={p.id}
-                          onClick={() => addingPin ? undefined : addPin(list.id, p.id)}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
-                            cursor: addingPin ? 'default' : 'pointer', borderBottom: '1px solid #F3F4F6',
-                          }}
-                        >
-                          {p.photo_url ? (
-                            <img src={p.photo_url} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
-                          ) : (
-                            <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#E5E7EB' }} />
-                          )}
-                          <div style={{ fontSize: 13, color: '#1A1A2E' }}>{p.name}</div>
-                          {p.title && <div style={{ fontSize: 11, color: '#9CA3AF' }}>{p.title}</div>}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div style={{ fontSize: 11, color: '#9CA3AF' }}>ピンは最大3名までです</div>
-              )}
-
-              {/* §2-9: RP外のプロの招待 */}
-              <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px dashed #E5E7EB' }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#1A1A2E', marginBottom: 6 }}>
-                  RP外のプロを追加
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input
-                    value={inviteName[list.id] || ''}
-                    onChange={(e) => setInviteName((prev) => ({ ...prev, [list.id]: e.target.value.slice(0, 100) }))}
-                    placeholder="先生のお名前"
-                    style={{
-                      flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid #E5E7EB',
-                      fontSize: 13, boxSizing: 'border-box' as const,
-                    }}
-                  />
-                  <button
-                    onClick={() => createInvite(list.id)}
-                    disabled={invitingList === list.id || !(inviteName[list.id] || '').trim()}
-                    style={{
-                      padding: '8px 14px', borderRadius: 8, border: 'none',
-                      background: '#1A1A2E', color: '#fff', fontSize: 12, fontWeight: 600,
-                      cursor: invitingList === list.id ? 'default' : 'pointer',
-                      opacity: invitingList === list.id ? 0.6 : 1, flexShrink: 0,
-                    }}
-                  >
-                    招待URLを発行
-                  </button>
-                </div>
-                {issuedInviteUrl[list.id] && (
-                  <div
-                    onClick={() => copyInviteUrl(list.id, issuedInviteUrl[list.id])}
-                    style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '8px 10px', background: '#F9FAFB', borderRadius: 8,
-                      fontSize: 12, color: '#6B7280', cursor: 'pointer', marginTop: 8,
-                    }}
-                  >
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
-                      {issuedInviteUrl[list.id]}
-                    </span>
-                    <span style={{ color: '#C4A35A', fontWeight: 600, flexShrink: 0, marginLeft: 8 }}>
-                      {copiedSlug === `invite:${list.id}` ? 'コピーしました' : 'コピー'}
-                    </span>
-                  </div>
-                )}
+          {privateLists.length > 0 && (
+            <div style={{ marginTop: publicLists.length > 0 ? 24 : 0 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>
+                連携候補（非公開）
+              </h3>
+              <p style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 12, lineHeight: 1.5 }}>
+                共有URLを持たないリストです。招待・掲載通知は行われません。
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {privateLists.map((list) => renderListCard(list, true))}
               </div>
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
 
       {/* §2-10: 成立した紹介（送り手側の予約一覧・案件スレッド・引き継ぎメモ） */}

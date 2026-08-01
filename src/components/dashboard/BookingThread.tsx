@@ -62,6 +62,7 @@ export default function BookingThread({ bookingId, ownProId, isSender, initialHa
       const res = await fetch(`/api/referral/bookings/${bookingId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
         body: JSON.stringify({ body }),
       })
       if (res.ok) {
@@ -83,6 +84,7 @@ export default function BookingThread({ bookingId, ownProId, isSender, initialHa
       const res = await fetch(`/api/referral/bookings/${bookingId}/handover`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
         body: JSON.stringify(note),
       })
       if (res.ok) {
