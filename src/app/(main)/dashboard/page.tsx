@@ -456,6 +456,24 @@ export default function DashboardPage() {
       })
   }, [proIdForVoteCount])
 
+  // §2-9: 招待経由サインアップ→オンボーディング経由で /invite/[token]/complete に
+  // 戻れなかった場合の仕上げ処理。localStorageに残ったtokenをここで最終処理する(fail-soft)。
+  useEffect(() => {
+    if (!proIdForVoteCount) return
+    let pendingToken: string | null = null
+    try {
+      pendingToken = localStorage.getItem('rp_pending_invite_token')
+    } catch {}
+    if (!pendingToken) return
+    fetch(`/api/referral/invites/${pendingToken}/complete`, { method: 'POST' })
+      .catch((err) => console.error('[dashboard] pending invite complete failed:', err))
+      .finally(() => {
+        try {
+          localStorage.removeItem('rp_pending_invite_token')
+        } catch {}
+      })
+  }, [proIdForVoteCount])
+
   useEffect(() => {
     if (!authLoaded) return
     if (!clerkUser) { window.location.href = '/sign-in'; return }
@@ -2036,7 +2054,8 @@ export default function DashboardPage() {
       {pro && <ReferralConsentCard />}
 
       {/* §2-4: 受信した予約リクエストの確定・辞退カード。タブ・フラグに依存せず常時表示（requestedが無ければ非表示） */}
-      {pro && <ReferralBookingReceivedCard />}
+      {/* §2-10: 案件スレッド表示のため自分のprofessionals.idを渡す */}
+      {pro && <ReferralBookingReceivedCard proId={pro.id} />}
 
       {/* LINE 週次レポートバナー */}
       {!isSettingsTab && lineBannerState === 'show_banner' && process.env.NEXT_PUBLIC_LINE_FRIEND_URL && (

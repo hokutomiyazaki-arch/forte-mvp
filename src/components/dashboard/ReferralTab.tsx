@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import BookingThread from '@/components/dashboard/BookingThread'
 
 interface PinPro {
   id: string
@@ -40,6 +41,29 @@ interface SearchResultPro {
   photo_url: string | null
   prefecture: string | null
   accepting_status: 'open' | 'conditional' | 'closed' | null
+}
+
+interface SentBooking {
+  id: string
+  list_id: string
+  menu_name: string | null
+  theme_tags: string[] | null
+  status: 'requested' | 'confirmed' | 'completed' | 'cancelled' | 'expired'
+  price_jpy: number
+  handover_note: { theme?: string; history?: string; tried?: string; notes?: string } | null
+  confirmed_at: string | null
+  completed_at: string | null
+  created_at: string
+  client_nickname: string
+  receiver_pro: { id: string; name: string } | null
+}
+
+const SENT_STATUS_LABEL: Record<SentBooking['status'], string> = {
+  requested: 'リクエスト中',
+  confirmed: '確定',
+  completed: '完了',
+  cancelled: '辞退・キャンセル',
+  expired: '失効',
 }
 
 const MAX_PINS = 3
@@ -83,6 +107,15 @@ export default function ReferralTab({ proId, initialAcceptingStatus, initialAcce
 
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null)
 
+  // §2-9: RP外のプロを招待するフォーム（リストごとに名前入力・発行済みURLを保持）
+  const [inviteName, setInviteName] = useState<Record<string, string>>({})
+  const [invitingList, setInvitingList] = useState<string | null>(null)
+  const [issuedInviteUrl, setIssuedInviteUrl] = useState<Record<string, string>>({})
+
+  // §2-10: 送り手側の成立予約一覧（案件スレッド・引き継ぎメモの入口）
+  const [sentBookings, setSentBookings] = useState<SentBooking[]>([])
+  const [sentLoading, setSentLoading] = useState(true)
+
   useEffect(() => {
     fetch('/api/referral/lists', { cache: 'no-store' })
       .then((res) => (res.ok ? res.json() : null))
@@ -91,6 +124,16 @@ export default function ReferralTab({ proId, initialAcceptingStatus, initialAcce
       })
       .catch(() => {})
       .finally(() => setListsLoading(false))
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/referral/bookings/sent', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.bookings) setSentBookings(data.bookings)
+      })
+      .catch(() => {})
+      .finally(() => setSentLoading(false))
   }, [])
 
   async function saveAccepting() {
@@ -221,6 +264,42 @@ export default function ReferralTab({ proId, initialAcceptingStatus, initialAcce
         )
       )
     }
+  }
+
+  async function createInvite(listId: string) {
+    const name = (inviteName[listId] || '').trim()
+    if (!name) return
+    setInvitingList(listId)
+    try {
+      const res = await fetch('/api/referral/invites', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ list_id: listId, invitee_name: name }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data?.invite_url) {
+          setIssuedInviteUrl((prev) => ({ ...prev, [listId]: data.invite_url }))
+        }
+        setInviteName((prev) => ({ ...prev, [listId]: '' }))
+      } else {
+        const err = await res.json().catch(() => ({}))
+        if (err.error === 'too_many_pending_invites') {
+          window.alert('未登録の招待が既に10件あります。登録完了を待つか、しばらくしてから再度お試しください')
+        } else {
+          window.alert('招待の発行に失敗しました')
+        }
+      }
+    } finally {
+      setInvitingList(null)
+    }
+  }
+
+  function copyInviteUrl(listId: string, url: string) {
+    navigator.clipboard?.writeText(url).then(() => {
+      setCopiedSlug(`invite:${listId}`)
+      setTimeout(() => setCopiedSlug(null), 2000)
+    })
   }
 
   function copyShareUrl(slug: string) {
@@ -451,6 +530,76 @@ export default function ReferralTab({ proId, initialAcceptingStatus, initialAcce
               ) : (
                 <div style={{ fontSize: 11, color: '#9CA3AF' }}>ピンは最大3名までです</div>
               )}
+
+              {/* §2-9: RP外のプロの招待 */}
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px dashed #E5E7EB' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#1A1A2E', marginBottom: 6 }}>
+                  RP外のプロを追加
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    value={inviteName[list.id] || ''}
+                    onChange={(e) => setInviteName((prev) => ({ ...prev, [list.id]: e.target.value.slice(0, 100) }))}
+                    placeholder="先生のお名前"
+                    style={{
+                      flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid #E5E7EB',
+                      fontSize: 13, boxSizing: 'border-box' as const,
+                    }}
+                  />
+                  <button
+                    onClick={() => createInvite(list.id)}
+                    disabled={invitingList === list.id || !(inviteName[list.id] || '').trim()}
+                    style={{
+                      padding: '8px 14px', borderRadius: 8, border: 'none',
+                      background: '#1A1A2E', color: '#fff', fontSize: 12, fontWeight: 600,
+                      cursor: invitingList === list.id ? 'default' : 'pointer',
+                      opacity: invitingList === list.id ? 0.6 : 1, flexShrink: 0,
+                    }}
+                  >
+                    招待URLを発行
+                  </button>
+                </div>
+                {issuedInviteUrl[list.id] && (
+                  <div
+                    onClick={() => copyInviteUrl(list.id, issuedInviteUrl[list.id])}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '8px 10px', background: '#F9FAFB', borderRadius: 8,
+                      fontSize: 12, color: '#6B7280', cursor: 'pointer', marginTop: 8,
+                    }}
+                  >
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
+                      {issuedInviteUrl[list.id]}
+                    </span>
+                    <span style={{ color: '#C4A35A', fontWeight: 600, flexShrink: 0, marginLeft: 8 }}>
+                      {copiedSlug === `invite:${list.id}` ? 'コピーしました' : 'コピー'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* §2-10: 成立した紹介（送り手側の予約一覧・案件スレッド・引き継ぎメモ） */}
+      {!sentLoading && sentBookings.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E' }}>成立した紹介</h3>
+          {sentBookings.map((b) => (
+            <div key={b.id} style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', border: '1px solid #E5E7EB' }}>
+              <div style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6 }}>
+                <strong>{b.client_nickname}さん</strong>
+                {b.receiver_pro?.name && <span style={{ color: '#6B7280' }}> → {b.receiver_pro.name}さん</span>}
+                <span style={{ marginLeft: 8, fontSize: 11, color: '#9CA3AF' }}>{SENT_STATUS_LABEL[b.status]}</span>
+              </div>
+              {b.menu_name && <div style={{ fontSize: 12, color: '#555', marginTop: 4 }}>メニュー: {b.menu_name}</div>}
+              <BookingThread
+                bookingId={b.id}
+                ownProId={proId}
+                isSender={true}
+                initialHandoverNote={b.handover_note}
+              />
             </div>
           ))}
         </div>
