@@ -939,8 +939,9 @@ function VoteForm() {
       qr_token: getQrToken() || null,
       channel,
       // §2-8 継続記録: 本人選択・任意テーマ。サーバー側で送信時照合に使う
+      // テーマは継続フロー以外では強制 null（対称の二層防御）
       visit_claim: visitClaim,
-      continuation_theme: continuationTheme.trim() || null,
+      continuation_theme: visitClaim === 'repeat' ? (continuationTheme.trim() || null) : null,
     }
     // savedAt: TTL判定用 / step: 認証から戻った時に元のウィザードステップへ復帰するため
     sessionStorage.setItem('pending_vote', JSON.stringify({ savedAt: Date.now(), data: voteData, step: stepSnapshot }))
@@ -962,8 +963,9 @@ function VoteForm() {
       selected_proof_ids: proofIdsToSend,
       selected_personality_ids: personalityIdsToSend,
       // §2-8 継続記録: 本人選択・任意テーマ。サーバー側で送信時照合に使う
+      // テーマは継続フロー以外では強制 null（対称の二層防御）
       visit_claim: visitClaim,
-      continuation_theme: continuationTheme.trim() || null,
+      continuation_theme: visitClaim === 'repeat' ? (continuationTheme.trim() || null) : null,
       selected_reward_id: selectedRewardId || null,
       comment: comment.trim() || null,
       vote_type: determineVoteType(),
@@ -2342,7 +2344,14 @@ function VoteForm() {
             <div style={S.subtitle}>あてはまる方を選んでください</div>
 
             <button
-              onClick={() => { setVisitClaim("first"); goToWithHistory("proofs") }}
+              onClick={() => {
+                // stale state対策（対称クリア）: 「2回目以降」→スタンプ/テーマ入力から
+                // 「戻る」でここに来た場合の残留を、visit_claim=first確定時にクリアする
+                setContinuationTheme('')
+                setStampConfirmed(false)
+                setVisitClaim("first")
+                goToWithHistory("proofs")
+              }}
               style={S.primaryBtn}
             >
               初めて
