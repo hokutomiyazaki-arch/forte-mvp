@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic'
 async function getOwnedList(supabase: ReturnType<typeof getSupabaseAdmin>, listId: string, ownProId: string) {
   const { data } = await supabase
     .from('referral_lists')
-    .select('id, owner_id')
+    .select('id, owner_id, visibility')
     .eq('id', listId)
     .maybeSingle()
   if (!data || data.owner_id !== ownProId) return null
@@ -76,13 +76,15 @@ export async function POST(
     }
 
     // 1リスト最大3名チェック(中8レビュー指摘: declined=辞退者は枠を占有しないため除外)
+    // ※連携候補(visibility='private'・§3-1第1層)は責任を伴わないブックマークのため人数無制限
     const { count } = await supabase
       .from('referral_list_items')
       .select('id', { count: 'exact', head: true })
       .eq('list_id', params.list_id)
       .neq('consent_status', 'declined')
 
-    if ((count || 0) >= MAX_REFERRAL_PINS_PER_LIST) {
+    const isPrivateList = list.visibility === 'private'
+    if (!isPrivateList && (count || 0) >= MAX_REFERRAL_PINS_PER_LIST) {
       return NextResponse.json({ error: 'max_pins_reached' }, { status: 400 })
     }
 
@@ -104,6 +106,10 @@ export async function POST(
     }
 
     // 掲載通知（失敗してもピン追加自体は成功扱い）
+    // ※連携候補(private・§3-1第1層)は通知なし=個人的なブックマークのため（第2層へ移す時にpendingから通知）
+    if (isPrivateList) {
+      return NextResponse.json({ item })
+    }
     try {
       await notifyReferralPinAdded(
         {

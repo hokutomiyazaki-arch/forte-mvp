@@ -159,6 +159,10 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     if (error) {
+      // 部分UNIQUE(uniq_referral_bookings_requested)違反 = 同一受け手への申請が既に進行中
+      if (error.code === '23505') {
+        return NextResponse.json({ error: 'already_requested' }, { status: 409 })
+      }
       console.error('[api/referral/bookings] POST insert error:', error)
       return NextResponse.json({ error: 'failed_to_create' }, { status: 500 })
     }
