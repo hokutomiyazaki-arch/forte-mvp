@@ -69,9 +69,11 @@ export async function generateMetadata(
 function CandidateCard({
   candidate,
   aiSanitizeEnabled,
+  slug,
 }: {
   candidate: ReferralCandidate
   aiSanitizeEnabled: boolean
+  slug: string
 }) {
   const accepting = acceptingLabel(candidate.acceptingStatus)
   const recordedFrom = formatYearMonth(candidate.firstRecordedAt)
@@ -195,27 +197,30 @@ function CandidateCard({
             現在受付停止中のため、代わりにご紹介できる先生です
           </div>
           {candidate.delegate.map((d) => (
-            <CandidateCard key={d.pro.id} candidate={d} aiSanitizeEnabled={aiSanitizeEnabled} />
+            <CandidateCard key={d.pro.id} candidate={d} aiSanitizeEnabled={aiSanitizeEnabled} slug={slug} />
           ))}
         </div>
       )}
 
-      <button
-        disabled
+      <a
+        href={`/r/${slug}/request?pro=${candidate.pro.id}`}
         style={{
+          display: 'block',
           width: '100%',
           padding: '11px 0',
           borderRadius: 10,
           border: 'none',
-          background: '#E8E4DC',
-          color: T.textMuted,
+          background: T.dark,
+          color: '#fff',
           fontSize: 13,
           fontWeight: 600,
-          cursor: 'default',
+          textAlign: 'center',
+          textDecoration: 'none',
+          boxSizing: 'border-box' as const,
         }}
       >
-        この先生に相談する（準備中）
-      </button>
+        この先生に相談する
+      </a>
     </div>
   )
 }
@@ -321,7 +326,7 @@ export default async function ReferralPage({
           </div>
         ) : (
           data.candidates.map((c) => (
-            <CandidateCard key={c.pro.id} candidate={c} aiSanitizeEnabled={aiSanitizeEnabled} />
+            <CandidateCard key={c.pro.id} candidate={c} aiSanitizeEnabled={aiSanitizeEnabled} slug={slug} />
           ))
         )}
       </div>

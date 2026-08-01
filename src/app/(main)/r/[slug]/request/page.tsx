@@ -1,0 +1,90 @@
+/**
+ * §2-4 予約リクエストページ(クライアント向け・/r/[slug]/request?pro=<proId>)
+ *
+ * - 対象プロが、この処方箋リストの候補(ピン+基準行・代理一段展開込み)に
+ *   含まれることを検証してから表示する(それ以外は404)
+ * - 認証チェック・フォーム送信は client component(ReferralRequestForm)側で行う
+ */
+
+import { notFound } from 'next/navigation'
+import type { Metadata } from 'next'
+import { getSupabaseAdmin } from '@/lib/supabase'
+import { getReferralPageData, type ReferralCandidate } from '@/lib/referral-data'
+import ReferralRequestForm from '@/components/referral/ReferralRequestForm'
+
+export const dynamic = 'force-dynamic'
+
+function findCandidate(candidates: ReferralCandidate[], proId: string): ReferralCandidate | null {
+  for (const c of candidates) {
+    if (c.pro.id === proId) return c
+    if (c.delegate) {
+      const found = findCandidate(c.delegate, proId)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+interface BookableMenu {
+  id: string
+  name: string
+  price_jpy: number
+  duration_min: number | null
+}
+
+async function getBookableMenus(proId: string): Promise<BookableMenu[]> {
+  const supabase = getSupabaseAdmin()
+  const { data } = await supabase
+    .from('pro_menus')
+    .select('id, name, price_jpy, duration_min')
+    .eq('professional_id', proId)
+    .eq('is_active', true)
+    .eq('is_referral_bookable', true)
+    .not('price_jpy', 'is', null)
+    .order('display_order', { ascending: true })
+
+  return (data || []) as BookableMenu[]
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  return {
+    title: 'ご相談・ご予約 | REAL PROOF',
+    robots: { index: false, follow: false },
+  }
+}
+
+export default async function ReferralRequestPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>
+  searchParams: Promise<{ pro?: string }>
+}) {
+  const { slug } = await params
+  const { pro: proId } = await searchParams
+
+  if (!proId) notFound()
+
+  const data = await getReferralPageData(slug)
+  if (!data) notFound()
+
+  const candidate = findCandidate(data.candidates, proId)
+  if (!candidate) notFound()
+
+  const menus = await getBookableMenus(proId)
+
+  return (
+    <ReferralRequestForm
+      slug={slug}
+      listId={data.list.id}
+      receiverPro={{
+        id: candidate.pro.id,
+        name: candidate.pro.name,
+        photoUrl: candidate.pro.photoUrl,
+        title: candidate.pro.title,
+        acceptingStatus: candidate.acceptingStatus,
+      }}
+      menus={menus}
+    />
+  )
+}

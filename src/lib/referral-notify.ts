@@ -1,32 +1,66 @@
 /**
- * 処方箋リストへのピン指名通知（§3-1 第2層・掲載通知＋拒否権）
+ * リフェラル関連の通知(プロ向け・クライアント向け)
  *
- * 対象プロへ「◯◯さんがあなたを紹介リストに掲載しようとしています」を通知する。
- * LINE push（line_messaging_user_id あり）優先 → なければ contact_email へ Resend → 両方無ければスキップ。
- * 通知の成否はピン追加処理の成否に影響させない（呼び出し側で try/catch する前提）。
+ * プロ向け: LINE push(line_messaging_user_id あり)優先 → なければ contact_email へ Resend
+ *          → 両方無ければスキップ。
+ * クライアント向け: メールをDBに保存せず、Clerk Backend API(clerkClient)で user_id から
+ *          都度取得して Resend 送信する(§2-4)。
+ *
+ * 通知の成否は呼び出し元の主処理(ピン追加・予約リクエスト等)の成否に影響させない
+ * (呼び出し側で try/catch する前提)。
  *
  * PII注意: 通知文面に normalized_email 等は含めない。
  */
 
+import { clerkClient } from '@clerk/nextjs/server'
 import { sendLinePushText } from '@/lib/line-push'
 
 const APP_URL = 'https://realproof.jp'
 
-interface NotifyTarget {
+interface ProNotifyTarget {
   name: string
   contact_email: string | null
   line_messaging_user_id: string | null
 }
 
-export async function notifyReferralPinAdded(
-  target: NotifyTarget,
-  senderProName: string,
-): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
-  const text = `${senderProName}さんがあなたを紹介リストに掲載しようとしています。ダッシュボードから承諾・拒否できます。\n${dashboardUrl}`
+function emailShell(title: string, bodyHtml: string, ctaText?: string, ctaUrl?: string): string {
+  return `
+    <div style="max-width:480px;margin:0 auto;font-family:sans-serif;">
+      <div style="background:#1A1A2E;padding:24px;border-radius:12px 12px 0 0;">
+        <h1 style="color:#C4A35A;font-size:14px;margin:0;">REAL PROOF</h1>
+      </div>
+      <div style="padding:24px;background:#fff;border:1px solid #eee;">
+        <p style="color:#333;font-size:15px;font-weight:bold;">
+          ${title}
+        </p>
+        <p style="color:#333;font-size:14px;line-height:1.7;">
+          ${bodyHtml}
+        </p>
+        ${
+          ctaUrl
+            ? `<div style="text-align:center;margin:24px 0;">
+                <a href="${ctaUrl}"
+                   style="display:inline-block;background:#1A1A2E;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:14px;">
+                  ${ctaText || ''}
+                </a>
+              </div>`
+            : ''
+        }
+      </div>
+      <div style="padding:16px;text-align:center;background:#f9f9f9;border-radius:0 0 12px 12px;">
+        <p style="color:#999;font-size:11px;margin:0;">REAL PROOF — 強みで証明されたプロに出会う</p>
+      </div>
+    </div>
+  `
+}
 
+/** プロ向け通知の共通送信ロジック(LINE優先→メールフォールバック)。 */
+async function sendProNotification(
+  target: ProNotifyTarget,
+  params: { lineText: string; emailSubject: string; emailBodyHtml: string },
+): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
   if (target.line_messaging_user_id) {
-    const result = await sendLinePushText(target.line_messaging_user_id, text)
+    const result = await sendLinePushText(target.line_messaging_user_id, params.lineText)
     if (result.success) return { sent: true, via: 'line' }
     // LINE送信失敗時はメールへフォールバック
   }
@@ -45,32 +79,8 @@ export async function notifyReferralPinAdded(
         body: JSON.stringify({
           from: 'REAL PROOF <noreply@realproof.jp>',
           to: target.contact_email,
-          subject: `${senderProName}さんからの紹介リスト掲載のお知らせ`,
-          html: `
-            <div style="max-width:480px;margin:0 auto;font-family:sans-serif;">
-              <div style="background:#1A1A2E;padding:24px;border-radius:12px 12px 0 0;">
-                <h1 style="color:#C4A35A;font-size:14px;margin:0;">REAL PROOF</h1>
-              </div>
-              <div style="padding:24px;background:#fff;border:1px solid #eee;">
-                <p style="color:#333;font-size:15px;font-weight:bold;">
-                  紹介リスト掲載のお知らせ
-                </p>
-                <p style="color:#333;font-size:14px;line-height:1.7;">
-                  ${senderProName}さんが、あなたを紹介リストに掲載しようとしています。<br>
-                  ダッシュボードから承諾・拒否を選べます。
-                </p>
-                <div style="text-align:center;margin:24px 0;">
-                  <a href="${dashboardUrl}"
-                     style="display:inline-block;background:#1A1A2E;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:14px;">
-                    ダッシュボードを開く
-                  </a>
-                </div>
-              </div>
-              <div style="padding:16px;text-align:center;background:#f9f9f9;border-radius:0 0 12px 12px;">
-                <p style="color:#999;font-size:11px;margin:0;">REAL PROOF — 強みで証明されたプロに出会う</p>
-              </div>
-            </div>
-          `,
+          subject: params.emailSubject,
+          html: params.emailBodyHtml,
         }),
       })
       if (res.ok) return { sent: true, via: 'email' }
@@ -85,3 +95,129 @@ export async function notifyReferralPinAdded(
 
   return { sent: false, via: null }
 }
+
+export async function notifyReferralPinAdded(
+  target: ProNotifyTarget,
+  senderProName: string,
+): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  return sendProNotification(target, {
+    lineText: `${senderProName}さんがあなたを紹介リストに掲載しようとしています。ダッシュボードから承諾・拒否できます。\n${dashboardUrl}`,
+    emailSubject: `${senderProName}さんからの紹介リスト掲載のお知らせ`,
+    emailBodyHtml: emailShell(
+      '紹介リスト掲載のお知らせ',
+      `${senderProName}さんが、あなたを紹介リストに掲載しようとしています。<br>ダッシュボードから承諾・拒否を選べます。`,
+      'ダッシュボードを開く',
+      dashboardUrl,
+    ),
+  })
+}
+
+/**
+ * §2-4: 予約リクエストが届いたことを受け手プロへ通知する。
+ */
+export async function notifyBookingRequested(
+  target: ProNotifyTarget,
+  clientNickname: string,
+): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  return sendProNotification(target, {
+    lineText: `紹介経由の予約リクエストが届いています(${clientNickname}さん)。48時間以内にダッシュボードからご確認ください。\n${dashboardUrl}`,
+    emailSubject: '紹介経由の予約リクエストが届いています',
+    emailBodyHtml: emailShell(
+      '予約リクエストのお知らせ',
+      `${clientNickname}さんから予約リクエストが届いています。<br><strong>48時間以内</strong>にダッシュボードからご確認ください。`,
+      'ダッシュボードを開く',
+      dashboardUrl,
+    ),
+  })
+}
+
+/**
+ * §2-4/§4-8: 予約が確定した際、送り手プロへ「紹介が成立した」ことを通知する。
+ */
+export async function notifyBookingConfirmedToSender(
+  target: ProNotifyTarget,
+  clientNickname: string,
+  receiverProName: string,
+): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  return sendProNotification(target, {
+    lineText: `あなたの紹介が成立しました(クライアント: ${clientNickname}さん・${receiverProName}さんが確定)。\n${dashboardUrl}`,
+    emailSubject: 'あなたの紹介が成立しました',
+    emailBodyHtml: emailShell(
+      '紹介成立のお知らせ',
+      `${clientNickname}さんの予約が、${receiverProName}さんとの間で確定しました。<br>あなたの紹介がつながりました。`,
+      'ダッシュボードを開く',
+      dashboardUrl,
+    ),
+  })
+}
+
+/**
+ * §2-4: 48時間自動失効時、送り手プロへ通知する。
+ */
+export async function notifyBookingExpiredToSender(
+  target: ProNotifyTarget,
+  clientNickname: string,
+  receiverProName: string,
+  listUrl: string,
+): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  return sendProNotification(target, {
+    lineText: `${clientNickname}さんの${receiverProName}さんへの予約リクエストが、48時間以内に確定されなかったため失効しました。\n${listUrl}`,
+    emailSubject: '予約リクエストが失効しました',
+    emailBodyHtml: emailShell(
+      '予約リクエスト失効のお知らせ',
+      `${clientNickname}さんの${receiverProName}さんへの予約リクエストは、48時間以内に確定のご連絡がなかったため失効しました。<br>別の候補もご紹介いただけます。`,
+      'リストを見る',
+      listUrl,
+    ),
+  })
+}
+
+/**
+ * クライアント(clients.user_id)へメール通知する。メールはDBに保存せず、
+ * Clerk Backend API から都度取得する(§2-4)。
+ */
+export async function notifyClientByEmail(
+  userId: string,
+  subject: string,
+  bodyHtml: string,
+): Promise<{ sent: boolean }> {
+  if (!userId) return { sent: false }
+
+  try {
+    const clerk = await clerkClient()
+    const user = await clerk.users.getUser(userId)
+    const email = user?.primaryEmailAddress?.emailAddress || user?.emailAddresses?.[0]?.emailAddress
+    if (!email) return { sent: false }
+
+    const resendKey = process.env.RESEND_API_KEY
+    if (!resendKey) return { sent: false }
+
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${resendKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: 'REAL PROOF <noreply@realproof.jp>',
+        to: email,
+        subject,
+        html: bodyHtml,
+      }),
+    })
+    if (!res.ok) {
+      const errBody = await res.text()
+      console.error('[referral-notify] notifyClientByEmail Resend error:', res.status, errBody)
+      return { sent: false }
+    }
+    return { sent: true }
+  } catch (err) {
+    console.error('[referral-notify] notifyClientByEmail error:', err)
+    return { sent: false }
+  }
+}
+
+export { emailShell }

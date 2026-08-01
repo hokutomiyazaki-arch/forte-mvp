@@ -53,6 +53,7 @@ export interface ReferralCandidate {
 
 export interface ReferralPageData {
   list: {
+    id: string
     title: string
     /** 選定基準の説明（送り手が語るのは基準のみ） */
     comment: string | null
@@ -368,7 +369,7 @@ export async function getReferralPageData(slug: string): Promise<ReferralPageDat
   }
 
   return {
-    list: { title: list.title, comment: list.comment, slug: list.slug },
+    list: { id: list.id, title: list.title, comment: list.comment, slug: list.slug },
     sender: { id: owner.id, name: owner.name, title: owner.title, photoUrl: owner.photo_url },
     candidates,
   }
