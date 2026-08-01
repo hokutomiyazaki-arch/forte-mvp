@@ -264,34 +264,58 @@ export interface Criteria {
 }
 
 /**
- * プールに含まれるプロの「人数近似スコア」を1クエリで取得する。
- * vote_summary(proof_id別のvote_count)の合計は、1人が複数のproof_idを
- * 選択した場合に重複しうるため厳密なユニーク人数ではないが、上位30件程度の
- * プールを並べ替えるための近似指標として使う(重い getProSupportStats は
- * 最終的に選出された候補にのみ後段で実行する)。
+ * min_support_records 判定・スコアリングの基準（CEO決定・§B）:
+ * 「ユニーク人数」= DISTINCT normalized_email（vote_type='proof' AND status='confirmed'）。
+ * 強み集計のDISTINCT化（§2-8）と同じ原則に統一する。
+ *
+ * プール内の複数プロ分をまとめて1回のページネーション走査で集計する
+ * （votes は1000行サイレントキャップがあるため .range()+.order('id') 必須）。
+ * 表示側(findCriteriaMatchesの並び順)・検証側(verifyReceiverAllowedInList)の
+ * 両方から呼び、二重実装しない。
  */
-async function scoreCandidatesByApproxSupport(
+async function getDistinctSupporterCounts(
   supabase: SupabaseAdmin,
   proIds: string[]
 ): Promise<Record<string, number>> {
   if (proIds.length === 0) return {}
-  const { data } = await supabase
-    .from('vote_summary')
-    .select('professional_id, vote_count')
-    .in('professional_id', proIds)
 
-  const scores: Record<string, number> = {}
-  for (const row of (data || []) as Array<{ professional_id: string; vote_count: number }>) {
-    scores[row.professional_id] = (scores[row.professional_id] || 0) + (row.vote_count || 0)
+  const emailSetsByPro: Record<string, Set<string>> = {}
+  const PAGE = 1000
+  let from = 0
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { data, error } = await supabase
+      .from('votes')
+      .select('id, professional_id, normalized_email')
+      .in('professional_id', proIds)
+      .eq('vote_type', 'proof')
+      .eq('status', 'confirmed')
+      .order('id', { ascending: true })
+      .range(from, from + PAGE - 1)
+    if (error) break
+    const rows = (data || []) as Array<{ professional_id: string; normalized_email: string | null }>
+    for (const row of rows) {
+      if (!row.normalized_email) continue
+      if (!emailSetsByPro[row.professional_id]) emailSetsByPro[row.professional_id] = new Set()
+      emailSetsByPro[row.professional_id].add(row.normalized_email)
+    }
+    if (rows.length < PAGE) break
+    from += PAGE
   }
-  return scores
+
+  const counts: Record<string, number> = {}
+  for (const [proId, emails] of Object.entries(emailSetsByPro)) {
+    counts[proId] = emails.size
+  }
+  return counts
 }
 
 /**
  * 基準行（criteria）に合致するプロを探索する。Phase 1 最小実装:
  *   - accepting_only → accepting_status IN ('open','conditional')
  *   - area.prefecture → 完全一致（radius_kmは未対応）
- *   - min_support_records → 人数近似スコアの下限（詳細なユニーク人数は最終候補選出後に別途算出）
+ *   - min_support_records → ユニーク人数（DISTINCT normalized_email）の下限。
+ *     指定時のみ votes をページネーション走査して算出する（軽量パス維持のため未指定時はこのクエリ自体を実行しない）
  * §2-2: accepting_status='closed' のプロは常に静かに除外する（accepting_onlyの値に関わらず）。
  */
 async function findCriteriaMatches(
@@ -327,15 +351,21 @@ async function findCriteriaMatches(
   const minSupport =
     typeof criteria.min_support_records === 'number' ? criteria.min_support_records : null
 
-  const approxScores = await scoreCandidatesByApproxSupport(
+  // min_support_records未指定なら、プール取得クエリの順序(accepting_updated_at desc)のまま返す
+  // (votesの追加走査をしない軽量パス維持)
+  if (minSupport === null) {
+    return candidates.slice(0, limit).map((c) => c.id)
+  }
+
+  const supporterCounts = await getDistinctSupporterCounts(
     supabase,
     candidates.map((c) => c.id)
   )
 
   const scored = candidates
-    .map((c) => ({ id: c.id, approxScore: approxScores[c.id] || 0 }))
-    .filter((c) => minSupport === null || c.approxScore >= minSupport)
-    .sort((a, b) => b.approxScore - a.approxScore)
+    .map((c) => ({ id: c.id, supporterCount: supporterCounts[c.id] || 0 }))
+    .filter((c) => c.supporterCount >= minSupport)
+    .sort((a, b) => b.supporterCount - a.supporterCount)
 
   return scored.slice(0, limit).map((s) => s.id)
 }
@@ -516,15 +546,11 @@ export async function verifyReceiverAllowedInList(
   if (criteria.area?.prefecture && pro.prefecture !== criteria.area.prefecture) return false
 
   if (typeof criteria.min_support_records === 'number') {
-    const { data: summaryRows } = await supabase
-      .from('vote_summary')
-      .select('vote_count')
-      .eq('professional_id', receiverProId)
-    const approxScore = ((summaryRows || []) as Array<{ vote_count: number }>).reduce(
-      (sum, r) => sum + (r.vote_count || 0),
-      0
-    )
-    if (approxScore < criteria.min_support_records) return false
+    // CEO決定(§B): min_support_recordsはユニーク人数(DISTINCT normalized_email)で判定。
+    // findCriteriaMatchesの並び順と同じ getDistinctSupporterCounts を共有する(二重実装しない)。
+    const counts = await getDistinctSupporterCounts(supabase, [receiverProId])
+    const supporterCount = counts[receiverProId] || 0
+    if (supporterCount < criteria.min_support_records) return false
   }
 
   return true
