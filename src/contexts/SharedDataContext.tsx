@@ -25,6 +25,8 @@ interface SharedData {
   hasOrgMembership: boolean
   /** SPECIALIST(30+)/MASTER(50+)/LEGEND(100+) の最高未申請ティア。Navbar 認定申請メニュー表示用 */
   eligibleCertificationTier: CertifiableTier | null
+  /** FEATURE_REFERRAL_LISTS のアローリスト判定。Navbar「処方箋リスト」メニュー表示用 */
+  referralEnabled: boolean
   navContextLoaded: boolean
 }
 
@@ -36,6 +38,7 @@ const SharedDataContext = createContext<SharedData>({
   ownedOrg: null,
   hasOrgMembership: false,
   eligibleCertificationTier: null,
+  referralEnabled: false,
   navContextLoaded: false,
 })
 
@@ -50,6 +53,7 @@ export function SharedDataProvider({ children }: { children: ReactNode }) {
   const [ownedOrg, setOwnedOrg] = useState<{ id: string; name?: string; type?: string } | null>(null)
   const [hasOrgMembership, setHasOrgMembership] = useState(false)
   const [eligibleCertificationTier, setEligibleCertificationTier] = useState<CertifiableTier | null>(null)
+  const [referralEnabled, setReferralEnabled] = useState(false)
   const [navContextLoaded, setNavContextLoaded] = useState(false)
 
   // announcements: 1回だけfetch
@@ -80,6 +84,7 @@ export function SharedDataProvider({ children }: { children: ReactNode }) {
         if (data.eligibleCertificationTier) {
           setEligibleCertificationTier(data.eligibleCertificationTier)
         }
+        if (data.referralEnabled) setReferralEnabled(true)
         setNavContextLoaded(true)
       })
       .catch(() => setNavContextLoaded(true))
@@ -94,6 +99,7 @@ export function SharedDataProvider({ children }: { children: ReactNode }) {
       ownedOrg,
       hasOrgMembership,
       eligibleCertificationTier,
+      referralEnabled,
       navContextLoaded,
     }}>
       {children}

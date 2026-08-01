@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { isReferralEnabled } from '@/lib/feature-flags'
 
 export const dynamic = 'force-dynamic'
 
@@ -108,6 +109,7 @@ export async function GET() {
         myProofQrToken: myProofCardResult.data?.qr_token || null,
         clientProfile: clientResult.data || null,
         setupCompleted: true,
+        referralEnabled: false,
       })
     }
 
@@ -444,6 +446,7 @@ export async function GET() {
       firstTimerCount,
       repeaterCount,
       regularCount,
+      referralEnabled: isReferralEnabled(proId),
     })
   } catch (err: any) {
     console.error('[api/dashboard] error:', err)

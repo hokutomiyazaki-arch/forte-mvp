@@ -45,6 +45,11 @@ export interface Professional {
   deactivated_at: string | null
   created_at: string
   updated_at: string
+  // リフェラル §2-2: 受け入れステータス（Phase 1 Stage 2 で追加）
+  accepting_status?: 'open' | 'conditional' | 'closed' | null
+  accepting_note?: string | null
+  accepting_updated_at?: string | null
+  delegate_list_id?: string | null
 }
 
 export interface CustomForte {

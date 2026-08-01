@@ -25,6 +25,8 @@ import { getProVoteCount } from '@/lib/vote-count'
 import BookingUrlBanner from '@/components/BookingUrlBanner'
 import ShareButton from '@/components/ShareButton'
 import BusinessInfoTab from '@/components/dashboard/BusinessInfoTab'
+import ReferralTab from '@/components/dashboard/ReferralTab'
+import ReferralConsentCard from '@/components/dashboard/ReferralConsentCard'
 import { createClient as createSupabaseClient } from '@/lib/supabase'
 
 // バッジ階層: FNTはBDCの上位資格。同レベルのFNTを持っていたらBDCは非表示
@@ -154,7 +156,7 @@ export default function DashboardPage() {
   const [selectedProofIds, setSelectedProofIds] = useState<Set<string>>(new Set())
   const [customProofs, setCustomProofs] = useState<CustomProof[]>([])
   const [activeTab, setActiveTab] = useState('healing')
-  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'card' | 'org' | 'myorgs' | 'guide' | 'business-info' | 'badges'>('profile')
+  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'card' | 'org' | 'myorgs' | 'guide' | 'business-info' | 'badges' | 'referral'>('profile')
   const [openSections, setOpenSections] = useState<Set<string>>(new Set())
   // 獲得バッジビュー: HTMLコピーのトースト
   const [badgeToast, setBadgeToast] = useState<string | null>(null)
@@ -362,6 +364,9 @@ export default function DashboardPage() {
   // 団体オーナー state
   const [ownedOrg, setOwnedOrg] = useState<{id: string; name: string; type: string} | null>(null)
 
+  // リフェラル §0: FEATURE_REFERRAL_LISTS のアローリスト判定（/api/dashboard から受け取る）
+  const [referralEnabled, setReferralEnabled] = useState(false)
+
   // メンバー用: 所属団体のリソース state
   const [memberOrgs, setMemberOrgs] = useState<{id: string; name: string; description: string | null; logo_url: string | null}[]>([])
   const [selectedMemberOrgId, setSelectedMemberOrgId] = useState<string | null>(null)
@@ -385,7 +390,7 @@ export default function DashboardPage() {
   const tabParam = searchParams.get('tab')
   useEffect(() => {
     if (!tabParam || loading) return
-    const validTabs = ['profile', 'proofs', 'rewards', 'voices', 'card', 'myorgs', 'org', 'guide', 'business-info', 'badges']
+    const validTabs = ['profile', 'proofs', 'rewards', 'voices', 'card', 'myorgs', 'org', 'guide', 'business-info', 'badges', 'referral']
     if (validTabs.includes(tabParam)) {
       setDashboardTab(tabParam as any)
       if (tabParam === 'myorgs' && selectedMemberOrgId) {
@@ -525,6 +530,8 @@ export default function DashboardPage() {
         setProfileLineState(proData.line_messaging_user_id ? 'linked' : 'unlinked')
         // メール通知状態
         setWeeklyEmailEnabled(!proData.weekly_report_unsubscribed)
+        // リフェラル §0: アローリスト判定（先行アクセス外は false のまま = 既存UI無変更）
+        setReferralEnabled(!!data.referralEnabled)
 
         setForm({
           name: proData.name || '',
@@ -2011,7 +2018,7 @@ export default function DashboardPage() {
 
   const daysSinceRegistration = getDaysSinceRegistration()
 
-  const isSettingsTab = ['proofs', 'rewards', 'card', 'myorgs', 'org', 'guide', 'business-info', 'badges'].includes(dashboardTab)
+  const isSettingsTab = ['proofs', 'rewards', 'card', 'myorgs', 'org', 'guide', 'business-info', 'badges', 'referral'].includes(dashboardTab)
 
   function toggleSection(id: string) {
     setOpenSections(prev => {
@@ -2024,6 +2031,9 @@ export default function DashboardPage() {
 
   return (
     <div className="max-w-3xl mx-auto">
+      {/* §3-1 第2層: 掲載通知＋拒否権カード。タブ・フラグに依存せず常時表示（pendingが無ければ非表示） */}
+      {pro && <ReferralConsentCard />}
+
       {/* LINE 週次レポートバナー */}
       {!isSettingsTab && lineBannerState === 'show_banner' && process.env.NEXT_PUBLIC_LINE_FRIEND_URL && (
         <div style={{
@@ -4617,6 +4627,18 @@ export default function DashboardPage() {
           </div>
         )}
       </>)}
+
+      {/* ═══ Tab: 処方箋リスト（§0 アローリスト方式・isReferralEnabledでタブ自体をゲート） ═══ */}
+      {dashboardTab === 'referral' && referralEnabled && pro && (
+        <ReferralTab
+          proId={pro.id}
+          initialAcceptingStatus={pro.accepting_status ?? null}
+          initialAcceptingNote={pro.accepting_note ?? null}
+          onAcceptingUpdated={(status, note) =>
+            setPro(prev => prev ? { ...prev, accepting_status: status, accepting_note: note } : prev)
+          }
+        />
+      )}
 
 
       {!isSettingsTab && (

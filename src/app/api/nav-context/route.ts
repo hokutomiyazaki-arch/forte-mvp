@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { SPECIALIST_THRESHOLD, getCertifiableTier, type CertifiableTier } from '@/lib/constants'
+import { isReferralEnabled } from '@/lib/feature-flags'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,6 +22,7 @@ export async function GET() {
         ownedOrg: null,
         hasOrgMembership: false,
         eligibleCertificationTier: null,
+        referralEnabled: false,
       })
     }
 
@@ -100,12 +102,14 @@ export async function GET() {
       ownedOrg: ownedOrgResult.data || null,
       hasOrgMembership,
       eligibleCertificationTier,
+      referralEnabled: proResult.data ? isReferralEnabled(proResult.data.id) : false,
     })
   } catch {
     return NextResponse.json({
       ownedOrg: null,
       hasOrgMembership: false,
       eligibleCertificationTier: null,
+      referralEnabled: false,
     })
   }
 }
