@@ -734,7 +734,9 @@ export default function CardClient({ cardData, showUniqueCount = false }: Props)
                             <span style={{ fontSize: 15, fontWeight: 700, color: labelColor, lineHeight: 1.5, overflowWrap: 'anywhere' as const }}>
                               {v.strength_label || v.category}
                             </span>
-                            <span style={{ fontSize: certTier ? 18 : 16, fontWeight: 'bold', color: countColor, fontFamily: T.fontMono, flexShrink: 0 }}>{v.vote_count}</span>
+                            <span style={{ fontSize: certTier ? 18 : 16, fontWeight: 'bold', color: countColor, fontFamily: T.fontMono, flexShrink: 0 }}>
+                              {v.vote_count}<span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'inherit', marginLeft: 2 }}>人が証明</span>
+                            </span>
                           </div>
                           {v.strength_label && (
                             <div style={{ fontSize: 11, color: certTier ? 'rgba(255,255,255,0.55)' : T.textMuted, marginTop: 2 }}>
@@ -859,7 +861,9 @@ export default function CardClient({ cardData, showUniqueCount = false }: Props)
                               <span style={{ fontSize: 13, fontWeight: 600, color: certTier ? '#C4A35A' : isProven ? PROVEN_GOLD : T.text, lineHeight: 1.5, overflowWrap: 'anywhere' as const }}>
                                 {v.strength_label || v.category}
                               </span>
-                              <span style={{ fontSize: certTier ? 15 : 13, color: certTier ? '#C4A35A' : isProven ? PROVEN_GOLD : T.textMuted, fontFamily: T.fontMono, flexShrink: 0, fontWeight: certTier ? 'bold' : undefined }}>{v.vote_count}</span>
+                              <span style={{ fontSize: certTier ? 15 : 13, color: certTier ? '#C4A35A' : isProven ? PROVEN_GOLD : T.textMuted, fontFamily: T.fontMono, flexShrink: 0, fontWeight: certTier ? 'bold' : undefined }}>
+                                {v.vote_count}<span style={{ fontSize: 10, fontWeight: 600, marginLeft: 2 }}>人が証明</span>
+                              </span>
                             </div>
                             {v.strength_label && (
                               <div style={{ fontSize: 10, color: certTier ? 'rgba(255,255,255,0.55)' : T.textMuted, marginTop: 2 }}>
