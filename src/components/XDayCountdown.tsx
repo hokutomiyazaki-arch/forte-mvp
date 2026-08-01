@@ -131,7 +131,7 @@ export default function XDayCountdown({ proofVoteCount, topStrengthLabel, topStr
               fontSize: 18,
               fontWeight: 700,
             }}>
-              {topStrengthVotes}票
+              {topStrengthVotes}人
             </span>
           </div>
         </div>

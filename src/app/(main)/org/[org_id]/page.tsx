@@ -192,7 +192,7 @@ export default function OrgPublicPage() {
                     </div>
                   </div>
                   <span style={{ fontSize: '13px', fontWeight: 700, color: '#C4A35A', whiteSpace: 'nowrap', width: '36px', textAlign: 'right', flexShrink: 0 }}>
-                    {item.count}票
+                    {item.count}人
                   </span>
                 </div>
               ))}
@@ -278,7 +278,7 @@ export default function OrgPublicPage() {
                   </div>
                 </div>
                 <div style={{ fontSize: '12px', color: '#888', whiteSpace: 'nowrap' }}>
-                  {item.vote_count}/{item.total_voters}票
+                  {item.vote_count}/{item.total_voters}人
                 </div>
               </a>
             ))}
