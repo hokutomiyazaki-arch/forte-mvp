@@ -1,0 +1,184 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { formatSlot } from '@/lib/referral-format'
+
+interface BookingItem {
+  id: string
+  list_id: string
+  menu_id: string | null
+  menu_name: string | null
+  theme_tags: string[] | null
+  preferred_slots: { slots?: (string | null)[]; note?: string | null; confirmed_index?: number } | null
+  status: 'requested' | 'confirmed'
+  price_jpy: number
+  expires_at: string | null
+  confirmed_at: string | null
+  created_at: string
+  client_nickname: string
+  sender_pro: { id: string; name: string } | null
+}
+
+/**
+ * §2-4/§4-8: 受信した予約リクエストの確定・辞退カード。
+ * ★ isReferralEnabled ではゲートしない(受け手は先行アクセス外でもリクエストを受けられる必要がある)。
+ * ダッシュボード上部に ReferralConsentCard と同様、タブに依存せず常時表示する。
+ */
+export default function ReferralBookingReceivedCard() {
+  const [items, setItems] = useState<BookingItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [processingId, setProcessingId] = useState<string | null>(null)
+  const [selectedSlot, setSelectedSlot] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    fetch('/api/referral/bookings/received', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.bookings) setItems(data.bookings)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const requestedItems = items.filter((i) => i.status === 'requested')
+
+  async function confirm(bookingId: string) {
+    const index = selectedSlot[bookingId]
+    if (index === undefined) {
+      window.alert('確定する希望日時を選んでください')
+      return
+    }
+    setProcessingId(bookingId)
+    try {
+      const res = await fetch('/api/referral/bookings/received', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ booking_id: bookingId, action: 'confirm', confirmed_index: index }),
+      })
+      if (res.ok) {
+        setItems((prev) => prev.filter((i) => i.id !== bookingId))
+      } else {
+        window.alert('確定に失敗しました')
+      }
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
+  async function decline(bookingId: string) {
+    if (!window.confirm('この予約リクエストを辞退しますか？')) return
+    setProcessingId(bookingId)
+    try {
+      const res = await fetch('/api/referral/bookings/received', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ booking_id: bookingId, action: 'decline' }),
+      })
+      if (res.ok) {
+        setItems((prev) => prev.filter((i) => i.id !== bookingId))
+      } else {
+        window.alert('処理に失敗しました')
+      }
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
+  if (loading || requestedItems.length === 0) return null
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+      {requestedItems.map((item) => {
+        const slots = item.preferred_slots?.slots || []
+        const theme = item.theme_tags?.[0] || null
+        const note = item.preferred_slots?.note || null
+        return (
+          <div
+            key={item.id}
+            style={{
+              background: '#F0F7FF',
+              border: '1px solid #B8D4F0',
+              borderRadius: 12,
+              padding: '14px 16px',
+            }}
+          >
+            <div style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6, marginBottom: 8 }}>
+              <strong>{item.client_nickname}さん</strong>から予約リクエストが届いています
+              {item.sender_pro?.name && (
+                <span style={{ color: '#6B7280' }}>(紹介元: {item.sender_pro.name}さん)</span>
+              )}
+            </div>
+            {theme && <div style={{ fontSize: 12, color: '#555', marginBottom: 4 }}>テーマ: {theme}</div>}
+            {item.menu_name && <div style={{ fontSize: 12, color: '#555', marginBottom: 4 }}>メニュー: {item.menu_name}</div>}
+            {note && <div style={{ fontSize: 12, color: '#555', marginBottom: 8 }}>補足: {note}</div>}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+              {slots.map((slot, i) =>
+                slot ? (
+                  <label
+                    key={i}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      fontSize: 12,
+                      color: '#1A1A2E',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name={`slot-${item.id}`}
+                      checked={selectedSlot[item.id] === i}
+                      onChange={() => setSelectedSlot((prev) => ({ ...prev, [item.id]: i }))}
+                    />
+                    第{i + 1}希望: {formatSlot(slot)}
+                  </label>
+                ) : null
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => confirm(item.id)}
+                disabled={processingId === item.id}
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: '#C4A35A',
+                  color: '#fff',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: processingId === item.id ? 'default' : 'pointer',
+                  opacity: processingId === item.id ? 0.6 : 1,
+                }}
+              >
+                この日時で確定する
+              </button>
+              <button
+                onClick={() => decline(item.id)}
+                disabled={processingId === item.id}
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  border: '1px solid #D1D5DB',
+                  background: '#fff',
+                  color: '#6B7280',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: processingId === item.id ? 'default' : 'pointer',
+                  opacity: processingId === item.id ? 0.6 : 1,
+                }}
+              >
+                辞退する
+              </button>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}

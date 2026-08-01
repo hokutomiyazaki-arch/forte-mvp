@@ -27,6 +27,7 @@ import ShareButton from '@/components/ShareButton'
 import BusinessInfoTab from '@/components/dashboard/BusinessInfoTab'
 import ReferralTab from '@/components/dashboard/ReferralTab'
 import ReferralConsentCard from '@/components/dashboard/ReferralConsentCard'
+import ReferralBookingReceivedCard from '@/components/dashboard/ReferralBookingReceivedCard'
 import { createClient as createSupabaseClient } from '@/lib/supabase'
 
 // バッジ階層: FNTはBDCの上位資格。同レベルのFNTを持っていたらBDCは非表示
@@ -2033,6 +2034,9 @@ export default function DashboardPage() {
     <div className="max-w-3xl mx-auto">
       {/* §3-1 第2層: 掲載通知＋拒否権カード。タブ・フラグに依存せず常時表示（pendingが無ければ非表示） */}
       {pro && <ReferralConsentCard />}
+
+      {/* §2-4: 受信した予約リクエストの確定・辞退カード。タブ・フラグに依存せず常時表示（requestedが無ければ非表示） */}
+      {pro && <ReferralBookingReceivedCard />}
 
       {/* LINE 週次レポートバナー */}
       {!isSettingsTab && lineBannerState === 'show_banner' && process.env.NEXT_PUBLIC_LINE_FRIEND_URL && (
