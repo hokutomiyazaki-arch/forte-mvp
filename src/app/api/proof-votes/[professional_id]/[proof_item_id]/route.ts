@@ -12,11 +12,13 @@ export async function GET(
 
   try {
     // votes テーブルから該当プロ × 該当proof_item_id を含む確定投票の日付を取得
+    // vote_type='proof' 限定：再分類された continuation 行は selected_proof_ids を保持するが集計不算入（§2-8）
     const { data, error } = await supabase
       .from('votes')
       .select('created_at')
       .eq('professional_id', professional_id)
       .eq('status', 'confirmed')
+      .eq('vote_type', 'proof')
       .contains('selected_proof_ids', [proof_item_id])
       .order('created_at', { ascending: false })
 
