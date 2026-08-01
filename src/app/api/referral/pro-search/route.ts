@@ -1,0 +1,50 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getSupabaseAdmin } from '@/lib/supabase'
+import { getOwnPro } from '@/lib/referral-auth'
+import { isReferralEnabled } from '@/lib/feature-flags'
+
+export const dynamic = 'force-dynamic'
+
+/**
+ * GET /api/referral/pro-search?q=xxx
+ * 処方箋リストへのピン指名対象プロを名前部分一致で検索する軽量専用API。
+ * 既存 /api/search は「プルーフ0件除外」「isSearchPrivateゲート」等の検索ページ向け
+ * ロジックを持つため、ピン選定という別用途には流用せず専用エンドポイントとした（仮決定）。
+ * 返すのは公開プロフィール項目のみ（PIIなし）。
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const ownPro = await getOwnPro()
+    if (!ownPro) {
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+    }
+    if (!isReferralEnabled(ownPro.id)) {
+      return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const q = (searchParams.get('q') || '').trim()
+    if (!q) {
+      return NextResponse.json({ professionals: [] })
+    }
+
+    const supabase = getSupabaseAdmin()
+    const { data, error } = await supabase
+      .from('professionals')
+      .select('id, name, title, photo_url, prefecture, accepting_status')
+      .is('deactivated_at', null)
+      .neq('id', ownPro.id)
+      .ilike('name', `%${q}%`)
+      .limit(20)
+
+    if (error) {
+      console.error('[api/referral/pro-search] GET error:', error)
+      return NextResponse.json({ error: 'failed_to_fetch' }, { status: 500 })
+    }
+
+    return NextResponse.json({ professionals: data || [] })
+  } catch (err: any) {
+    console.error('[api/referral/pro-search] GET error:', err)
+    return NextResponse.json({ error: err.message || 'internal_error' }, { status: 500 })
+  }
+}
