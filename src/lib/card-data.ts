@@ -173,8 +173,9 @@ export async function getCardData(
     // 11. (旧session_count — 実レコード数に統一したため未使用、Promise.allの構造維持)
     Promise.resolve({ data: null, error: null }),
     // 12. Velocity・リピーター率・CLIENT COMPOSITION用データ（session_countフォールバック対応）
+    // vote_type は §2-8「ユニーク人数：初回のみ」向けの uniqueVoters 算出にのみ使う(既存のtotalVoters/repeaterRateの絞り込みは変更しない)
     supabase.from('votes')
-      .select('id, created_at, normalized_email, session_count')
+      .select('id, created_at, normalized_email, session_count, vote_type')
       .eq('professional_id', proId)
       .eq('status', 'confirmed')
       .order('created_at', { ascending: true }),
@@ -265,6 +266,15 @@ export async function getCardData(
   if (totalVoters >= 10) {
     const repeaterAndRegular = Object.values(voterInfoMap).filter(info => getVoterLevel(info) >= 2).length
     repeaterRate = totalVoters > 0 ? Math.round((repeaterAndRegular / totalVoters) * 100) : 0
+  }
+
+  // §2-8/中6レビュー指摘: uniqueVoters(のみ)は「vote_type='proof' の confirmed 票」に絞った
+  // distinct normalized_email に統一する(referral-data.ts の supporterCount 定義と合わせる)。
+  // totalVoters/repeaterRate/sessionCounts 等の既存値は一切変更しない。
+  const uniqueProofVoterEmails = new Set<string>()
+  for (const v of velocityResult.data || []) {
+    if (v.vote_type !== 'proof') continue
+    if (v.normalized_email) uniqueProofVoterEmails.add(v.normalized_email)
   }
 
   // === comments / supporters 用の voter_pro マップを「別々に」構築 ===
@@ -465,7 +475,7 @@ export async function getCardData(
     firstTimerCount,
     repeaterCount,
     regularCount,
-    uniqueVoters: totalVoters,
+    uniqueVoters: uniqueProofVoterEmails.size,
     regular90Count,
   }
 }

@@ -93,6 +93,27 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
     }
   }
 
+  /** §2-4-7(決済なし版)/中11: 成立・完了の記録。通知なし(Phase 2で扱う)。 */
+  async function complete(bookingId: string) {
+    if (!window.confirm('サポートを完了として記録しますか？')) return
+    setProcessingId(bookingId)
+    try {
+      const res = await fetch('/api/referral/bookings/received', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ booking_id: bookingId, action: 'complete' }),
+      })
+      if (res.ok) {
+        setItems((prev) => prev.filter((i) => i.id !== bookingId))
+      } else {
+        window.alert('処理に失敗しました')
+      }
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
   if (loading || (requestedItems.length === 0 && confirmedItems.length === 0)) return null
 
   return (
@@ -212,6 +233,25 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
               isSender={false}
               initialHandoverNote={item.handover_note}
             />
+            <button
+              onClick={() => complete(item.id)}
+              disabled={processingId === item.id}
+              style={{
+                marginTop: 10,
+                width: '100%',
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid #C4A35A',
+                background: '#fff',
+                color: '#C4A35A',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: processingId === item.id ? 'default' : 'pointer',
+                opacity: processingId === item.id ? 0.6 : 1,
+              }}
+            >
+              サポート完了として記録する
+            </button>
           </div>
         ))}
     </div>

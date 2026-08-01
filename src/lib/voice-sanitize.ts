@@ -46,9 +46,22 @@ const FORBIDDEN_LITERAL_TERMS = [
 // 「その抜粋を非表示にする」だけなので安全側に倒す（原文の外部露出は防げる）。
 const FORBIDDEN_SUFFIX_PATTERN = /[一-龠ぁ-んァ-ヶー]{1,10}(症|病|障害)/
 
-function containsForbiddenTerm(text: string): boolean {
-  if (FORBIDDEN_LITERAL_TERMS.some((term) => text.includes(term))) return true
-  return FORBIDDEN_SUFFIX_PATTERN.test(text)
+// 中9レビュー指摘: 「症状」「炎症」等の一般語は診断名ではないため、語尾パターン判定の
+// 前にマスクして誤検知を減らす(保守的すぎない形の調整・除外しすぎない)。
+// 初期2週間はログ(vote_idと検知語のみ・本文は出さない)で誤検知率を確認して調整する（§2-6）。
+const SUFFIX_FALSE_POSITIVES = ['症状', '炎症', '既往症', '対症', '病院', '病気', '発症', '重症', '軽症', '持病']
+
+/** 禁止語を検知した場合、検知語(本文は含まない)を返す。検知しなければ null。 */
+function findForbiddenTerm(text: string): string | null {
+  const literal = FORBIDDEN_LITERAL_TERMS.find((term) => text.includes(term))
+  if (literal) return literal
+
+  let masked = text
+  for (const word of SUFFIX_FALSE_POSITIVES) {
+    masked = masked.split(word).join('')
+  }
+  const suffixMatch = masked.match(FORBIDDEN_SUFFIX_PATTERN)
+  return suffixMatch ? suffixMatch[0] : null
 }
 
 async function callAnthropic(originalText: string): Promise<string | null> {
@@ -127,7 +140,12 @@ export async function sanitizeVoiceForReferral(
     .maybeSingle()
 
   if (cached?.sanitized_text) {
-    return containsForbiddenTerm(cached.sanitized_text) ? null : cached.sanitized_text
+    const cachedForbiddenTerm = findForbiddenTerm(cached.sanitized_text)
+    if (cachedForbiddenTerm) {
+      console.log('[voice-sanitize] skipped (forbidden term detected):', { voteId, term: cachedForbiddenTerm })
+      return null
+    }
+    return cached.sanitized_text
   }
 
   const converted = await callAnthropic(originalText)
@@ -149,5 +167,10 @@ export async function sanitizeVoiceForReferral(
     console.error('[voice-sanitize] cache upsert error:', upsertError)
   }
 
-  return containsForbiddenTerm(converted) ? null : converted
+  const forbiddenTerm = findForbiddenTerm(converted)
+  if (forbiddenTerm) {
+    console.log('[voice-sanitize] skipped (forbidden term detected):', { voteId, term: forbiddenTerm })
+    return null
+  }
+  return converted
 }

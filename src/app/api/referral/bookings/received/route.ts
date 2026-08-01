@@ -5,6 +5,7 @@ import {
   notifyBookingConfirmedToSender,
   notifyClientByEmail,
   emailShell,
+  escapeHtml,
 } from '@/lib/referral-notify'
 import { formatSlot } from '@/lib/referral-format'
 
@@ -127,8 +128,10 @@ export async function GET() {
 
 /**
  * PATCH /api/referral/bookings/received
- * body: { booking_id, action: 'confirm' | 'decline', confirmed_index? }
- * 受け手プロ本人のみ操作可。requested のみ操作可。expires_at超過は409。
+ * body: { booking_id, action: 'confirm' | 'decline' | 'complete', confirmed_index? }
+ * 受け手プロ本人のみ操作可。confirm/decline は requested のみ、expires_at超過は409。
+ * §2-4-7(決済なし版)/中11レビュー指摘: complete は confirmed のみ→completed。通知は不要
+ * (Phase 2のプルーフ依頼パイプラインで扱う)。
  */
 export async function PATCH(request: NextRequest) {
   try {
@@ -142,7 +145,7 @@ export async function PATCH(request: NextRequest) {
     const action = body.action
     const confirmedIndex = typeof body.confirmed_index === 'number' ? body.confirmed_index : null
 
-    if (!bookingId || (action !== 'confirm' && action !== 'decline')) {
+    if (!bookingId || (action !== 'confirm' && action !== 'decline' && action !== 'complete')) {
       return NextResponse.json({ error: 'invalid_params' }, { status: 400 })
     }
 
@@ -159,6 +162,24 @@ export async function PATCH(request: NextRequest) {
     if (!booking || booking.receiver_pro_id !== ownPro.id) {
       return NextResponse.json({ error: 'not_found' }, { status: 404 })
     }
+
+    if (action === 'complete') {
+      if (booking.status !== 'confirmed') {
+        return NextResponse.json({ error: 'not_confirmed' }, { status: 409 })
+      }
+      const { error: completeError } = await supabase
+        .from('referral_bookings')
+        .update({ status: 'completed', completed_at: new Date().toISOString() })
+        .eq('id', bookingId)
+        .eq('status', 'confirmed')
+
+      if (completeError) {
+        console.error('[api/referral/bookings/received] PATCH complete error:', completeError)
+        return NextResponse.json({ error: 'failed_to_update' }, { status: 500 })
+      }
+      return NextResponse.json({ success: true, status: 'completed' })
+    }
+
     if (booking.status !== 'requested') {
       return NextResponse.json({ error: 'not_pending' }, { status: 409 })
     }
@@ -191,7 +212,7 @@ export async function PATCH(request: NextRequest) {
             '今回はご希望に添えませんでした',
             emailShell(
               'ご相談について',
-              `${ownPro.name}さんへのご相談は、今回はご希望に添えませんでした。<br>他の先生もご紹介できますので、よろしければご覧ください。`,
+              `${escapeHtml(ownPro.name)}さんへのご相談は、今回はご希望に添えませんでした。<br>他の先生もご紹介できますので、よろしければご覧ください。`,
               '他の先生を見る',
               listUrl
             )
@@ -234,14 +255,15 @@ export async function PATCH(request: NextRequest) {
       if (clientUserId) {
         const senderComment = booking.referral_lists?.comment
         const senderQuote = senderComment
-          ? `<p style="margin-top:12px;color:#555;font-size:13px;line-height:1.7;">紹介元の先生からのメッセージ:<br>「${senderComment}」</p>`
+          ? `<p style="margin-top:12px;color:#555;font-size:13px;line-height:1.7;">紹介元の先生からのメッセージ:<br>「${escapeHtml(senderComment)}」</p>`
           : ''
+        const safeOwnProName = escapeHtml(ownPro.name)
         await notifyClientByEmail(
           clientUserId,
           `${ownPro.name}さんとのご相談が確定しました`,
           emailShell(
             'ご相談確定のお知らせ',
-            `${confirmedSlotText ? `${confirmedSlotText} に確定しました。` : 'ご相談の日時が確定しました。'}<br>担当: ${ownPro.name}さん${senderQuote}`
+            `${confirmedSlotText ? `${confirmedSlotText} に確定しました。` : 'ご相談の日時が確定しました。'}<br>担当: ${safeOwnProName}さん${senderQuote}`
           )
         )
       }

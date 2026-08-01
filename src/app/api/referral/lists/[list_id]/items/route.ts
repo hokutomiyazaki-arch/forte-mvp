@@ -75,11 +75,12 @@ export async function POST(
       return NextResponse.json({ error: 'already_pinned' }, { status: 409 })
     }
 
-    // 1リスト最大3名チェック
+    // 1リスト最大3名チェック(中8レビュー指摘: declined=辞退者は枠を占有しないため除外)
     const { count } = await supabase
       .from('referral_list_items')
       .select('id', { count: 'exact', head: true })
       .eq('list_id', params.list_id)
+      .neq('consent_status', 'declined')
 
     if ((count || 0) >= MAX_REFERRAL_PINS_PER_LIST) {
       return NextResponse.json({ error: 'max_pins_reached' }, { status: 400 })

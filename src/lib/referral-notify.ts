@@ -17,6 +17,20 @@ import { sendLinePushText } from '@/lib/line-push'
 
 const APP_URL = 'https://realproof.jp'
 
+/**
+ * メールHTML本文に埋め込むユーザー由来文字列(プロ名・クライアントニックネーム・
+ * リストのcomment等)は必ずこれを通す(中3レビュー指摘: HTMLインジェクション対策)。
+ * LINEテキストはHTML解釈されないため対象外。
+ */
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 interface ProNotifyTarget {
   name: string
   contact_email: string | null
@@ -101,12 +115,13 @@ export async function notifyReferralPinAdded(
   senderProName: string,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
   const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const safeSenderProName = escapeHtml(senderProName)
   return sendProNotification(target, {
     lineText: `${senderProName}さんがあなたを紹介リストに掲載しようとしています。ダッシュボードから承諾・拒否できます。\n${dashboardUrl}`,
     emailSubject: `${senderProName}さんからの紹介リスト掲載のお知らせ`,
     emailBodyHtml: emailShell(
       '紹介リスト掲載のお知らせ',
-      `${senderProName}さんが、あなたを紹介リストに掲載しようとしています。<br>ダッシュボードから承諾・拒否を選べます。`,
+      `${safeSenderProName}さんが、あなたを紹介リストに掲載しようとしています。<br>ダッシュボードから承諾・拒否を選べます。`,
       'ダッシュボードを開く',
       dashboardUrl,
     ),
@@ -121,12 +136,13 @@ export async function notifyBookingRequested(
   clientNickname: string,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
   const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const safeClientNickname = escapeHtml(clientNickname)
   return sendProNotification(target, {
     lineText: `紹介経由の予約リクエストが届いています(${clientNickname}さん)。48時間以内にダッシュボードからご確認ください。\n${dashboardUrl}`,
     emailSubject: '紹介経由の予約リクエストが届いています',
     emailBodyHtml: emailShell(
       '予約リクエストのお知らせ',
-      `${clientNickname}さんから予約リクエストが届いています。<br><strong>48時間以内</strong>にダッシュボードからご確認ください。`,
+      `${safeClientNickname}さんから予約リクエストが届いています。<br><strong>48時間以内</strong>にダッシュボードからご確認ください。`,
       'ダッシュボードを開く',
       dashboardUrl,
     ),
@@ -142,12 +158,14 @@ export async function notifyBookingConfirmedToSender(
   receiverProName: string,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
   const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const safeClientNickname = escapeHtml(clientNickname)
+  const safeReceiverProName = escapeHtml(receiverProName)
   return sendProNotification(target, {
     lineText: `あなたの紹介が成立しました(クライアント: ${clientNickname}さん・${receiverProName}さんが確定)。\n${dashboardUrl}`,
     emailSubject: 'あなたの紹介が成立しました',
     emailBodyHtml: emailShell(
       '紹介成立のお知らせ',
-      `${clientNickname}さんの予約が、${receiverProName}さんとの間で確定しました。<br>あなたの紹介がつながりました。`,
+      `${safeClientNickname}さんの予約が、${safeReceiverProName}さんとの間で確定しました。<br>あなたの紹介がつながりました。`,
       'ダッシュボードを開く',
       dashboardUrl,
     ),
@@ -163,12 +181,14 @@ export async function notifyBookingExpiredToSender(
   receiverProName: string,
   listUrl: string,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  const safeClientNickname = escapeHtml(clientNickname)
+  const safeReceiverProName = escapeHtml(receiverProName)
   return sendProNotification(target, {
     lineText: `${clientNickname}さんの${receiverProName}さんへの予約リクエストが、48時間以内に確定されなかったため失効しました。\n${listUrl}`,
     emailSubject: '予約リクエストが失効しました',
     emailBodyHtml: emailShell(
       '予約リクエスト失効のお知らせ',
-      `${clientNickname}さんの${receiverProName}さんへの予約リクエストは、48時間以内に確定のご連絡がなかったため失効しました。<br>別の候補もご紹介いただけます。`,
+      `${safeClientNickname}さんの${safeReceiverProName}さんへの予約リクエストは、48時間以内に確定のご連絡がなかったため失効しました。<br>別の候補もご紹介いただけます。`,
       'リストを見る',
       listUrl,
     ),
@@ -229,12 +249,13 @@ export async function notifyBookingMessage(
   senderProName: string,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
   const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const safeSenderProName = escapeHtml(senderProName)
   return sendProNotification(target, {
     lineText: `${senderProName}さんから案件スレッドに新しいコメントがあります。\n${dashboardUrl}`,
     emailSubject: '案件スレッドに新しいコメントがあります',
     emailBodyHtml: emailShell(
       '案件スレッドのお知らせ',
-      `${senderProName}さんから案件スレッドに新しいコメントが届いています。<br>ダッシュボードからご確認ください。`,
+      `${safeSenderProName}さんから案件スレッドに新しいコメントが届いています。<br>ダッシュボードからご確認ください。`,
       'ダッシュボードを開く',
       dashboardUrl,
     ),
@@ -249,12 +270,13 @@ export async function notifyInviteRegistered(
   registeredProName: string,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
   const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const safeRegisteredProName = escapeHtml(registeredProName)
   return sendProNotification(target, {
     lineText: `${registeredProName}さんが招待から登録を完了しました。\n${dashboardUrl}`,
     emailSubject: `${registeredProName}さんが登録を完了しました`,
     emailBodyHtml: emailShell(
       '招待登録完了のお知らせ',
-      `${registeredProName}さんが、あなたの招待からREAL PROOFへの登録を完了しました。<br>ダッシュボードからリストの状態をご確認いただけます。`,
+      `${safeRegisteredProName}さんが、あなたの招待からREAL PROOFへの登録を完了しました。<br>ダッシュボードからリストの状態をご確認いただけます。`,
       'ダッシュボードを開く',
       dashboardUrl,
     ),
