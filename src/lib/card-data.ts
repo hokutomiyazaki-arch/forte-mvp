@@ -32,6 +32,9 @@ interface VoterInfo {
   totalCount: number
   firstSessionCount: string | null
   firstVoteId: string
+  /** §3-4 常連(新定義)算出用: 追加のみ・既存フィールドは変更しない */
+  firstCreatedAt: string
+  lastCreatedAt: string
 }
 interface VoiceReply {
   id: string
@@ -105,6 +108,10 @@ export interface CardData {
   firstTimerCount: number
   repeaterCount: number
   regularCount: number
+  /** §3-4 プルーフ表示のユニーク/累計/常連の2本立て（FEATURE_PROOF_UNIQUE_COUNTゲート）。既存呼び出しを壊さないようオプショナル */
+  uniqueVoters?: number
+  /** 常連(新定義): 同一プロへconfirmed票3票以上 かつ 初回投票から最新投票まで90日以上（既存getVoterLevelとは別計算） */
+  regular90Count?: number
 }
 
 export async function getCardData(
@@ -206,9 +213,13 @@ export async function getCardData(
         totalCount: 1,
         firstSessionCount: v.session_count || null,
         firstVoteId: v.id,
+        firstCreatedAt: v.created_at,
+        lastCreatedAt: v.created_at,
       }
     } else {
       voterInfoMap[email].totalCount += 1
+      // velocityResult は created_at ASC 取得のため、最終行が最新票になる
+      voterInfoMap[email].lastCreatedAt = v.created_at
     }
   }
 
@@ -234,6 +245,17 @@ export async function getCardData(
     else firstTimerCount++
   }
   const sessionCounts = { first: firstTimerCount, repeat: repeaterCount, regular: regularCount }
+
+  // §3-4 常連(新定義): 同一プロへconfirmed票3票以上 かつ 初回投票〜最新投票の間隔が90日以上。
+  // 既存の getVoterLevel（回数のみ判定・session_countフォールバック込み）とは別計算とし、
+  // getVoterLevel 自体・sessionCounts の意味は一切変更しない（既存⭐常連マーク保護）。
+  const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000
+  let regular90Count = 0
+  for (const info of Object.values(voterInfoMap)) {
+    if (info.totalCount < 3) continue
+    const span = new Date(info.lastCreatedAt).getTime() - new Date(info.firstCreatedAt).getTime()
+    if (span >= NINETY_DAYS_MS) regular90Count++
+  }
 
   // リピーター率 (10人以上のとき)
   const totalVoters = Object.keys(voterInfoMap).length
@@ -440,5 +462,7 @@ export async function getCardData(
     firstTimerCount,
     repeaterCount,
     regularCount,
+    uniqueVoters: totalVoters,
+    regular90Count,
   }
 }

@@ -98,9 +98,11 @@ const TIER_CARD_STYLE: Record<'LEGEND' | 'MASTER' | 'SPECIALIST', { bg: string; 
 // SVGリングチャート（人柄プルーフ用 — 30票以上💎、50票以上★ティア）
 interface Props {
   cardData: CardData
+  /** §3-4 プルーフのユニーク/累計/常連3指標表示。サーバー側で isProofUniqueCountEnabled() を判定し渡す（クライアントにenvを読ませない）。省略時は非表示（既存動作維持） */
+  showUniqueCount?: boolean
 }
 
-export default function CardClient({ cardData }: Props) {
+export default function CardClient({ cardData, showUniqueCount = false }: Props) {
   const searchParams = useSearchParams()
   const router = useRouter()
   const id = cardData.pro?.id || ''
@@ -288,6 +290,9 @@ export default function CardClient({ cardData }: Props) {
   const [firstTimerCount] = useState(cardData.firstTimerCount)
   const [repeaterCount] = useState(cardData.repeaterCount)
   const [regularCount] = useState(cardData.regularCount)
+  // §3-4: ユニーク/常連(新定義)。既存の firstTimerCount/repeaterCount/regularCount とは別軸の追加表示
+  const [uniqueVoters] = useState(cardData.uniqueVoters ?? 0)
+  const [regular90Count] = useState(cardData.regular90Count ?? 0)
 
   // 初回マウント時のアニメーション (旧 load() 末尾の setTimeout(setAnimated, 100) 相当)
   useEffect(() => {
@@ -565,6 +570,12 @@ export default function CardClient({ cardData }: Props) {
             <span style={{ fontSize: 30, fontWeight: 'bold', color: T.gold, fontFamily: T.fontMono }}>{totalVotes}</span>
             <span style={{ fontSize: 13, color: T.textSub, marginLeft: 6 }}>proofs</span>
           </div>
+          {/* §3-4: ユニーク/累計/常連の3指標（追加表示・既存のクライアント構成バー/⭐常連マークは変更しない） */}
+          {showUniqueCount && (
+            <div style={{ marginTop: 8, fontSize: 11, color: T.textSub, fontWeight: 600 }}>
+              ユニーク {uniqueVoters}人 ／ 累計 {totalVotes}件 ／ 常連 {regular90Count}人
+            </div>
+          )}
           {/* 称号アイコン一覧（旧 specialist/proven/♡ 統計を置き換え。SPECIALIST以上のみ・上位順・称号ゼロは非表示） */}
           {(() => {
             const tierCounts = computeTierCounts(sortedVotes.map(v => v.vote_count))
