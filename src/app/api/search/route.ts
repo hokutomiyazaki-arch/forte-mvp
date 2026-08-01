@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { isSearchPrivate } from '@/lib/feature-flags'
+import { getViewerIsPro } from '@/lib/viewer-role'
 
 export const dynamic = 'force-dynamic'
 
@@ -74,6 +76,18 @@ async function fetchAllVotesPaginated(
 }
 
 export async function GET(request: Request) {
+  // §3-2 検索ページの非公開化: FEATURE_SEARCH_PRIVATE=true の時のみ、非プロのリクエストを403にする。
+  // フラグ未設定時はこのブロックは素通りし、以降の処理は完全に既存通り。
+  if (isSearchPrivate()) {
+    const isPro = await getViewerIsPro()
+    if (!isPro) {
+      return NextResponse.json({ error: 'forbidden' }, {
+        status: 403,
+        headers: { 'Cache-Control': 'no-store' },
+      })
+    }
+  }
+
   const { searchParams } = new URL(request.url)
   const category = searchParams.get('category') || 'multi'
   const subCategory = searchParams.get('sub') || 'rising'
