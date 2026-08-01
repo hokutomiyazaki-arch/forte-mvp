@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { ensureOwnClient } from '@/lib/referral-auth'
-import { getReferralPageData, type ReferralCandidate } from '@/lib/referral-data'
+import { verifyReceiverAllowedInList } from '@/lib/referral-data'
 import { notifyBookingRequested } from '@/lib/referral-notify'
 
 export const dynamic = 'force-dynamic'
@@ -12,19 +12,17 @@ const BOOKING_EXPIRES_HOURS = 48
 const MAX_THEME_LEN = 100
 const MAX_NOTE_LEN = 500
 
-/** ピン+基準行(代理一段展開込み)のcandidatesをフラットな pro_id 配列にする */
-function flattenCandidateIds(candidates: ReferralCandidate[]): string[] {
-  const ids: string[] = []
-  for (const c of candidates) {
-    ids.push(c.pro.id)
-    if (c.delegate) ids.push(...flattenCandidateIds(c.delegate))
-  }
-  return ids
-}
-
+/**
+ * datetime-local由来のオフセット無し文字列("2026-08-05T14:00")はUTC環境で
+ * パースすると9時間ズレる。オフセット/Zが既に付いている場合はそのまま、
+ * 無い場合は Asia/Tokyo(+09:00) を明示付与してからパースする。
+ */
 function parseSlot(value: unknown): string | null {
   if (typeof value !== 'string' || !value.trim()) return null
-  const d = new Date(value)
+  const raw = value.trim()
+  const hasOffset = /Z$|[+-]\d{2}:\d{2}$/.test(raw)
+  const withOffset = hasOffset ? raw : `${raw}+09:00`
+  const d = new Date(withOffset)
   if (Number.isNaN(d.getTime())) return null
   return d.toISOString()
 }
@@ -70,7 +68,7 @@ export async function POST(request: NextRequest) {
 
     const { data: list } = await supabase
       .from('referral_lists')
-      .select('id, owner_id, slug')
+      .select('id, owner_id, slug, criteria')
       .eq('id', listId)
       .maybeSingle()
 
@@ -78,13 +76,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'list_not_found' }, { status: 404 })
     }
 
-    // リストの候補(ピン+基準行・代理一段展開込み)に受け手が含まれるかを検証
-    const pageData = await getReferralPageData(list.slug)
-    if (!pageData) {
-      return NextResponse.json({ error: 'list_not_found' }, { status: 404 })
-    }
-    const candidateIds = flattenCandidateIds(pageData.candidates)
-    if (!candidateIds.includes(receiverProId)) {
+    // リストの候補(ピン+基準行・代理一段展開込み)に受け手が含まれるかを軽量検証
+    // (Voice sanitize/強み集計まで走る getReferralPageData の丸ごと呼び出しは避ける)
+    const allowed = await verifyReceiverAllowedInList(
+      supabase,
+      { id: list.id, criteria: list.criteria },
+      receiverProId
+    )
+    if (!allowed) {
       return NextResponse.json({ error: 'receiver_not_in_list' }, { status: 400 })
     }
 

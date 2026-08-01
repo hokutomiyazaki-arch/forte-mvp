@@ -7,6 +7,7 @@
  * PII注意: normalized_email / voter_email / 電話番号は一切レスポンスに含めない。
  */
 
+import { cache } from 'react'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { sanitizeVoiceForReferral } from '@/lib/voice-sanitize'
 
@@ -102,15 +103,18 @@ async function getProSupportStats(
   proId: string,
   itemLabelMap: Record<string, string>
 ): Promise<SupportStats> {
-  const [summaryResult, votesResult] = await Promise.all([
+  const [summaryResult, firstVoteResult] = await Promise.all([
     supabase.from('vote_summary').select('proof_id, vote_count').eq('professional_id', proId),
+    // firstRecordedAt は1行だけ欲しいので軽量な単独クエリに分離(全件走査には含めない)
     supabase
       .from('votes')
-      .select('normalized_email, created_at')
+      .select('created_at')
       .eq('professional_id', proId)
       .eq('vote_type', 'proof')
       .eq('status', 'confirmed')
-      .order('created_at', { ascending: true }),
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle(),
   ])
 
   const strengths = ((summaryResult.data || []) as Array<{ proof_id: string; vote_count: number }>)
@@ -119,16 +123,33 @@ async function getProSupportStats(
     .sort((a, b) => b.count - a.count)
     .slice(0, 3)
 
-  const votes = (votesResult.data || []) as Array<{ normalized_email: string | null; created_at: string }>
+  // supporterCount: Supabaseの1000行サイレントキャップ対策で .range() + .order('id') により全件走査する
   const emails = new Set<string>()
-  for (const v of votes) {
-    if (v.normalized_email) emails.add(v.normalized_email)
+  const PAGE = 1000
+  let from = 0
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { data, error } = await supabase
+      .from('votes')
+      .select('id, normalized_email')
+      .eq('professional_id', proId)
+      .eq('vote_type', 'proof')
+      .eq('status', 'confirmed')
+      .order('id', { ascending: true })
+      .range(from, from + PAGE - 1)
+    if (error) break
+    const rows = (data || []) as Array<{ normalized_email: string | null }>
+    for (const v of rows) {
+      if (v.normalized_email) emails.add(v.normalized_email)
+    }
+    if (rows.length < PAGE) break
+    from += PAGE
   }
 
   return {
     strengths,
     supporterCount: emails.size,
-    firstRecordedAt: votes.length > 0 ? votes[0].created_at : null,
+    firstRecordedAt: (firstVoteResult.data as { created_at: string } | null)?.created_at ?? null,
   }
 }
 
@@ -144,13 +165,10 @@ async function getVoiceExcerpts(supabase: SupabaseAdmin, proId: string): Promise
     .order('created_at', { ascending: false })
     .limit(VOICE_EXCERPT_LIMIT * 3) // 変換後に禁止語で弾かれる分の余裕
 
-  const excerpts: string[] = []
-  for (const v of (data || []) as Array<{ id: string; comment: string }>) {
-    if (excerpts.length >= VOICE_EXCERPT_LIMIT) break
-    const sanitized = await sanitizeVoiceForReferral(v.id, v.comment)
-    if (sanitized) excerpts.push(sanitized)
-  }
-  return excerpts
+  const rows = (data || []) as Array<{ id: string; comment: string }>
+  // 直列awaitだと候補数に比例してレイテンシが積み上がるため並列化する
+  const sanitized = await Promise.all(rows.map((v) => sanitizeVoiceForReferral(v.id, v.comment)))
+  return sanitized.filter((s): s is string => !!s).slice(0, VOICE_EXCERPT_LIMIT)
 }
 
 interface BuildCandidateOptions {
@@ -236,7 +254,7 @@ async function buildDelegateCandidates(
   return results
 }
 
-interface Criteria {
+export interface Criteria {
   org_id?: string | null
   themes?: string[]
   min_support_records?: number
@@ -246,16 +264,39 @@ interface Criteria {
 }
 
 /**
+ * プールに含まれるプロの「人数近似スコア」を1クエリで取得する。
+ * vote_summary(proof_id別のvote_count)の合計は、1人が複数のproof_idを
+ * 選択した場合に重複しうるため厳密なユニーク人数ではないが、上位30件程度の
+ * プールを並べ替えるための近似指標として使う(重い getProSupportStats は
+ * 最終的に選出された候補にのみ後段で実行する)。
+ */
+async function scoreCandidatesByApproxSupport(
+  supabase: SupabaseAdmin,
+  proIds: string[]
+): Promise<Record<string, number>> {
+  if (proIds.length === 0) return {}
+  const { data } = await supabase
+    .from('vote_summary')
+    .select('professional_id, vote_count')
+    .in('professional_id', proIds)
+
+  const scores: Record<string, number> = {}
+  for (const row of (data || []) as Array<{ professional_id: string; vote_count: number }>) {
+    scores[row.professional_id] = (scores[row.professional_id] || 0) + (row.vote_count || 0)
+  }
+  return scores
+}
+
+/**
  * 基準行（criteria）に合致するプロを探索する。Phase 1 最小実装:
  *   - accepting_only → accepting_status IN ('open','conditional')
  *   - area.prefecture → 完全一致（radius_kmは未対応）
- *   - min_support_records → 確認済みプルーフのユニーク人数の下限
+ *   - min_support_records → 人数近似スコアの下限（詳細なユニーク人数は最終候補選出後に別途算出）
  * §2-2: accepting_status='closed' のプロは常に静かに除外する（accepting_onlyの値に関わらず）。
  */
 async function findCriteriaMatches(
   supabase: SupabaseAdmin,
   criteria: Criteria,
-  itemLabelMap: Record<string, string>,
   excludeProIds: string[],
   limit: number
 ): Promise<string[]> {
@@ -286,24 +327,52 @@ async function findCriteriaMatches(
   const minSupport =
     typeof criteria.min_support_records === 'number' ? criteria.min_support_records : null
 
-  const statsList = await Promise.all(
-    candidates.map((c) => getProSupportStats(supabase, c.id, itemLabelMap))
+  const approxScores = await scoreCandidatesByApproxSupport(
+    supabase,
+    candidates.map((c) => c.id)
   )
 
   const scored = candidates
-    .map((c, i) => ({ id: c.id, supporterCount: statsList[i].supporterCount }))
-    .filter((c) => minSupport === null || c.supporterCount >= minSupport)
-    .sort((a, b) => b.supporterCount - a.supporterCount)
+    .map((c) => ({ id: c.id, approxScore: approxScores[c.id] || 0 }))
+    .filter((c) => minSupport === null || c.approxScore >= minSupport)
+    .sort((a, b) => b.approxScore - a.approxScore)
 
   return scored.slice(0, limit).map((s) => s.id)
+}
+
+/**
+ * §2-1: 代理リスト展開(delegate)を含めた最終提示数が合計 MAX_TOTAL_CANDIDATES を
+ * 超えないようキャップする(トップレベルの件数だけでなく delegate 展開後のフラット件数)。
+ */
+function capCandidatesTotal(candidates: ReferralCandidate[], max: number): ReferralCandidate[] {
+  let remaining = max
+  const result: ReferralCandidate[] = []
+  for (const c of candidates) {
+    if (remaining <= 0) break
+    if (c.delegate && c.delegate.length > 0) {
+      const delegateBudget = Math.max(0, remaining - 1)
+      const trimmedDelegate = c.delegate.slice(0, delegateBudget)
+      result.push({ ...c, delegate: trimmedDelegate.length > 0 ? trimmedDelegate : null })
+      remaining -= 1 + trimmedDelegate.length
+    } else {
+      result.push(c)
+      remaining -= 1
+    }
+  }
+  return result
 }
 
 /**
  * /r/[slug] の全データを取得する。
  * - slugが見つからない、または visibility='private' の場合は null（ページ側で404）
  * - 送り手(オーナー)が非公開化済みの場合も null
+ *
+ * React.cache() でラップし、同一リクエスト内(generateMetadata + 本体)での
+ * 二重実行(Voice sanitize/DB問い合わせの重複)を防ぐ。
  */
-export async function getReferralPageData(slug: string): Promise<ReferralPageData | null> {
+export const getReferralPageData = cache(async function getReferralPageData(
+  slug: string
+): Promise<ReferralPageData | null> {
   if (!slug) return null
 
   const supabase = getSupabaseAdmin()
@@ -354,7 +423,6 @@ export async function getReferralPageData(slug: string): Promise<ReferralPageDat
     const matchIds = await findCriteriaMatches(
       supabase,
       list.criteria as Criteria,
-      itemLabelMap,
       excludeIds,
       remainingSlots
     )
@@ -371,6 +439,93 @@ export async function getReferralPageData(slug: string): Promise<ReferralPageDat
   return {
     list: { id: list.id, title: list.title, comment: list.comment, slug: list.slug },
     sender: { id: owner.id, name: owner.name, title: owner.title, photoUrl: owner.photo_url },
-    candidates,
+    candidates: capCandidatesTotal(candidates, MAX_TOTAL_CANDIDATES),
   }
+})
+
+/**
+ * POST /api/referral/bookings 用の軽量な受け手検証。
+ * getReferralPageData() を丸ごと呼ぶと Voice sanitize / 強み集計まで全て走ってしまうため、
+ * 「このリストからこの受け手を予約してよいか」だけを確認する専用の軽量クエリ群に分離する。
+ *   ① referral_list_items に approved で存在するか(自リストのピン)
+ *   ② 無ければ criteria 判定(accepting/prefecture/min_support、いずれも軽量クエリ)
+ *   ③ 停止中ピンの代理リスト(delegate_list_id)の approved item か
+ */
+export async function verifyReceiverAllowedInList(
+  supabase: SupabaseAdmin,
+  list: { id: string; criteria: unknown },
+  receiverProId: string
+): Promise<boolean> {
+  // ① 自リストのピン(approved)
+  const { data: pinnedItem } = await supabase
+    .from('referral_list_items')
+    .select('id')
+    .eq('list_id', list.id)
+    .eq('pro_id', receiverProId)
+    .eq('consent_status', 'approved')
+    .maybeSingle()
+  if (pinnedItem) return true
+
+  // ③ 停止中ピンの代理リストの approved item か
+  const { data: pinnedRows } = await supabase
+    .from('referral_list_items')
+    .select('pro_id')
+    .eq('list_id', list.id)
+    .eq('consent_status', 'approved')
+  const pinnedProIds = ((pinnedRows || []) as Array<{ pro_id: string }>).map((p) => p.pro_id)
+
+  if (pinnedProIds.length > 0) {
+    const { data: pausedPros } = await supabase
+      .from('professionals')
+      .select('delegate_list_id')
+      .in('id', pinnedProIds)
+      .eq('accepting_status', 'closed')
+      .not('delegate_list_id', 'is', null)
+    const delegateListIds = ((pausedPros || []) as Array<{ delegate_list_id: string | null }>)
+      .map((p) => p.delegate_list_id)
+      .filter((id): id is string => !!id)
+
+    if (delegateListIds.length > 0) {
+      const { data: delegateItem } = await supabase
+        .from('referral_list_items')
+        .select('id')
+        .in('list_id', delegateListIds)
+        .eq('pro_id', receiverProId)
+        .eq('consent_status', 'approved')
+        .maybeSingle()
+      if (delegateItem) return true
+    }
+  }
+
+  // ② criteria判定(軽量)
+  const criteria = (list.criteria && typeof list.criteria === 'object' ? list.criteria : null) as Criteria | null
+  if (!criteria) return false
+
+  const { data: proData } = await supabase
+    .from('professionals')
+    .select('id, prefecture, accepting_status, deactivated_at')
+    .eq('id', receiverProId)
+    .maybeSingle()
+  const pro = proData as
+    | { id: string; prefecture: string | null; accepting_status: string | null; deactivated_at: string | null }
+    | null
+  if (!pro || pro.deactivated_at) return false
+  // §2-2: accepting_status='closed' は criteria判定でも常に除外
+  if (pro.accepting_status === 'closed') return false
+  if (criteria.accepting_only && !['open', 'conditional'].includes(pro.accepting_status || '')) return false
+  if (criteria.area?.prefecture && pro.prefecture !== criteria.area.prefecture) return false
+
+  if (typeof criteria.min_support_records === 'number') {
+    const { data: summaryRows } = await supabase
+      .from('vote_summary')
+      .select('vote_count')
+      .eq('professional_id', receiverProId)
+    const approxScore = ((summaryRows || []) as Array<{ vote_count: number }>).reduce(
+      (sum, r) => sum + (r.vote_count || 0),
+      0
+    )
+    if (approxScore < criteria.min_support_records) return false
+  }
+
+  return true
 }
