@@ -1,7 +1,8 @@
 -- §2-8 継続記録（vote_type='continuation'）のスキーマ変更
 -- 実行者: CEO（Supabase SQL Editor で手動実行）。CC は実行しない。
--- STEP 1〜3 は 2026-08-01 に本番実行済み。STEP 4 は「票→人」ラベル改修コードの
--- デプロイおよび全体告知と同時に実行する（実行前の値: pairs=1002, total=6490 / 実行後試算: total=5302）。
+-- STEP 1〜3 は 2026-08-01 に本番実行済み。
+-- STEP 4 も 2026-08-01 に本番実行済み（実行後検証: pairs=1003, total=5319, vote_count=0 の行なし）。
+-- → 本ファイルは全ステップ実行済みの記録。再実行不要。
 
 -- STEP 1【調査・実行済み】制約名の確認
 -- SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
