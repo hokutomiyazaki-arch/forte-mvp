@@ -258,7 +258,7 @@ export default function CertificationModal({
                         )}
                         <span style={{ flex: 1, fontSize: 14, color: '#1A1A2E' }}>{c.name}</span>
                         <span style={{ fontSize: 12, color: '#C4A35A', fontWeight: 700 }}>{meta.icon} {meta.label}</span>
-                        <span style={{ fontSize: 12, color: '#888' }}>{c.count}票</span>
+                        <span style={{ fontSize: 12, color: '#888' }}>{c.count}人</span>
                         {needsCardSelection && onCard && <span style={{ fontSize: 10, color: '#C4A35A', fontWeight: 700 }}>カード</span>}
                       </label>
                     )
@@ -387,7 +387,7 @@ export default function CertificationModal({
                 <ul className="mt-1 list-disc pl-5">
                   {allCats.map((c) => (
                     <li key={c.slug}>
-                      {c.name} <span className="text-gray-400">/ {TIER_DISPLAY[c.tier].label} / {c.count}票</span>
+                      {c.name} <span className="text-gray-400">/ {TIER_DISPLAY[c.tier].label} / {c.count}人</span>
                       {needsCardSelection && cardSlugs.includes(c.slug) && <span className="text-[#C4A35A] font-bold"> ・カード</span>}
                     </li>
                   ))}
