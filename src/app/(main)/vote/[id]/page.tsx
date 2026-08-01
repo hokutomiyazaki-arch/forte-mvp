@@ -908,9 +908,11 @@ function VoteForm() {
   function determineVoteType(): string {
     const allSelectedProofIds = Array.from(selectedProofIds)
     const hasProofs = allSelectedProofIds.length > 0
-    if (isHopeful) return 'hopeful'
-    // §2-8 継続記録: 「2回目以降」を選んだ場合は強み/人柄の選択を経由しないため常に continuation
+    // §2-8 継続記録: 「2回目以降」を選んだ場合は強み/人柄の選択を経由しないため常に continuation。
+    // stale state対策として isHopeful 判定より先に評価する（「初めて」で hopeful を選んだ後に
+    // 「戻る」→「2回目以降」を選び直しても isHopeful state が残っている可能性があるため）。
     if (visitClaim === 'repeat') return 'continuation'
+    if (isHopeful) return 'hopeful'
     if (hasProofs) return 'proof'
     return 'personality_only'
   }
@@ -920,12 +922,17 @@ function VoteForm() {
   function saveVoteDataToSession(stepSnapshot: VoteStep) {
     const allSelectedProofIds = Array.from(selectedProofIds)
     const hasProofs = allSelectedProofIds.length > 0
-    const proofIdsToSend = isHopeful ? null : (hasProofs ? allSelectedProofIds : null)
+    // §2-8 継続記録: visitClaim==='repeat' の場合は strong/personality の選択が
+    // stale state で残っていても強制的に null にする（二層防御の2層目）。
+    const proofIdsToSend = (isHopeful || visitClaim === 'repeat') ? null : (hasProofs ? allSelectedProofIds : null)
+    const personalityIdsToSend = visitClaim === 'repeat'
+      ? null
+      : (selectedPersonalityIds.size > 0 ? Array.from(selectedPersonalityIds) : null)
 
     const voteData = {
       professional_id: proId,
       selected_proof_ids: proofIdsToSend,
-      selected_personality_ids: selectedPersonalityIds.size > 0 ? Array.from(selectedPersonalityIds) : null,
+      selected_personality_ids: personalityIdsToSend,
       selected_reward_id: selectedRewardId || null,
       comment: comment.trim() || null,
       vote_type: determineVoteType(),
@@ -943,12 +950,17 @@ function VoteForm() {
   function buildVoteData() {
     const allSelectedProofIds = Array.from(selectedProofIds)
     const hasProofs = allSelectedProofIds.length > 0
-    const proofIdsToSend = isHopeful ? null : (hasProofs ? allSelectedProofIds : null)
+    // §2-8 継続記録: visitClaim==='repeat' の場合は strong/personality の選択が
+    // stale state で残っていても強制的に null にする（二層防御の2層目）。
+    const proofIdsToSend = (isHopeful || visitClaim === 'repeat') ? null : (hasProofs ? allSelectedProofIds : null)
+    const personalityIdsToSend = visitClaim === 'repeat'
+      ? null
+      : (selectedPersonalityIds.size > 0 ? Array.from(selectedPersonalityIds) : null)
 
     return {
       professional_id: proId,
       selected_proof_ids: proofIdsToSend,
-      selected_personality_ids: selectedPersonalityIds.size > 0 ? Array.from(selectedPersonalityIds) : null,
+      selected_personality_ids: personalityIdsToSend,
       // §2-8 継続記録: 本人選択・任意テーマ。サーバー側で送信時照合に使う
       visit_claim: visitClaim,
       continuation_theme: continuationTheme.trim() || null,
@@ -2336,7 +2348,16 @@ function VoteForm() {
               初めて
             </button>
             <button
-              onClick={() => { setVisitClaim("repeat"); goToWithHistory("continuation") }}
+              onClick={() => {
+                // stale state対策: 「初めて」→proofsで選択済みの状態から「戻る」で
+                // ここに来た場合、強み/人柄/hopefulの選択が残っているとcontinuation行に
+                // 混入するため、visit_claim=repeat確定時に必ずクリアする
+                setSelectedProofIds(new Set())
+                setSelectedPersonalityIds(new Set())
+                setIsHopeful(false)
+                setVisitClaim("repeat")
+                goToWithHistory("continuation")
+              }}
               style={S.secondaryBtn}
             >
               2回目以降
