@@ -27,12 +27,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ count: 0 }, { headers: NO_STORE_HEADERS })
     }
 
+    // 「あなたの記録」＝施術を受けた記録のみをカウント（hopeful/personality_onlyは除外）
     const { count } = await supabase
       .from('votes')
       .select('id', { count: 'exact', head: true })
       .eq('normalized_email', vote.normalized_email)
       .eq('professional_id', vote.professional_id)
       .eq('status', 'confirmed')
+      .in('vote_type', ['proof', 'continuation'])
 
     return NextResponse.json({ count: count || 0 }, { headers: NO_STORE_HEADERS })
   } catch (err) {
