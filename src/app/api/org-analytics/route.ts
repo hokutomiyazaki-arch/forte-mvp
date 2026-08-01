@@ -128,10 +128,13 @@ export async function GET(request: NextRequest) {
       monthlyResult,
     ] = await Promise.all([
       // 強み分布: selected_proof_ids + proof_items で集計
+      // §2-8: continuation行は selected_proof_ids を保持したまま保存されるため、
+      // vote_type='proof' に絞って強み項目別集計から除外する（総票数系ではないため）。
       supabase
         .from('votes')
         .select('selected_proof_ids')
         .in('professional_id', memberProIds)
+        .eq('vote_type', 'proof')
         .not('selected_proof_ids', 'is', null),
 
       // proof_items マスタ

@@ -160,10 +160,13 @@ export async function GET(
 
     if (professionalIds.length > 0) {
       // メンバーの投票でselected_proof_idsがある投票を取得（professionalIdsから直接）
+      // §2-8: continuation行は selected_proof_ids を保持したまま保存されるため、
+      // vote_type='proof' に絞って強み項目別集計（プルーフ別トップメンバー）から除外する。
       const { data: votesWithProofs } = await supabase
         .from('votes')
         .select('professional_id, selected_proof_ids')
         .in('professional_id', professionalIds)
+        .eq('vote_type', 'proof')
         .not('selected_proof_ids', 'is', null)
 
       if (votesWithProofs && votesWithProofs.length > 0) {

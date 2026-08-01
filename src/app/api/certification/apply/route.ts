@@ -267,11 +267,14 @@ export async function POST(req: NextRequest) {
 
     // ===== 認定メール用の集計（全スペシャリスト項目・達成日） =====
     const { data: allProofItems } = await supabase.from('proof_items').select('id, label, strength_label')
+    // §2-8: continuation行は selected_proof_ids を保持したまま保存されるため、
+    // vote_type='proof' に絞って強み項目別の達成日集計から除外する。
     const { data: allVotes } = await supabase
       .from('votes')
       .select('id, created_at, selected_proof_ids')
       .eq('professional_id', professionalId)
       .eq('status', 'confirmed')
+      .eq('vote_type', 'proof')
       .order('created_at', { ascending: true })
     const { data: nfcCard } = await supabase
       .from('nfc_cards')
@@ -471,7 +474,7 @@ async function sendOpsNotificationEmail(params: {
 
   const specialistRows = params.allSpecialistItems
     .map((item, i) =>
-      `<li>${i + 1}. ${esc(item.label)} / ${esc(item.labelEnglish)} / ${esc(item.achievementDate)}（${item.voteCount}票）</li>`
+      `<li>${i + 1}. ${esc(item.label)} / ${esc(item.labelEnglish)} / ${esc(item.achievementDate)}（${item.voteCount}人）</li>`
     )
     .join('')
   const specialistListHtml = specialistRows

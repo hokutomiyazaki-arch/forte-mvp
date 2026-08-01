@@ -152,11 +152,14 @@ export async function GET() {
     let topStrengthItems: { label: string; strength_label: string; count: number }[] = []
 
     if (allProIds.length > 0) {
+      // §2-8: continuation行は selected_proof_ids を保持したまま保存されるため、
+      // vote_type='proof' に絞って強み項目別集計（top_strength/強み分布/個別強みランキング）から除外する。
       const [{ data: votesRaw }, { data: proofItems }] = await Promise.all([
         supabase
           .from('votes')
           .select('professional_id, selected_proof_ids')
           .in('professional_id', allProIds)
+          .eq('vote_type', 'proof')
           .not('selected_proof_ids', 'is', null),
         supabase
           .from('proof_items')
