@@ -2339,7 +2339,7 @@ function VoteForm() {
         >
           <div style={{ width: "100%" }}>
             <div style={S.title}>
-              <span style={{ color: "#C4A35A" }}>{pro.name?.split(/[\s　]/)[0]}</span>さんの施術を受けるのは？
+              <span style={{ color: "#C4A35A" }}>{pro.name?.split(/[\s　]/)[0]}</span>さんのサポートを受けるのは？
             </div>
             <div style={S.subtitle}>あてはまる方を選んでください</div>
 
