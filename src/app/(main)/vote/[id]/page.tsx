@@ -2339,7 +2339,7 @@ function VoteForm() {
         >
           <div style={{ width: "100%" }}>
             <div style={S.title}>
-              <span style={{ color: "#C4A35A" }}>{pro.name?.split(/[\s　]/)[0]}</span>さんのサポートを受けるのは？
+              <span style={{ color: "#C4A35A" }}>{pro.name?.split(/[\s　]/)[0]}</span>さんに担当してもらうのは？
             </div>
             <div style={S.subtitle}>あてはまる方を選んでください</div>
 
@@ -2384,21 +2384,23 @@ function VoteForm() {
         >
           <div style={{ width: "100%" }}>
             <div style={S.title}>
-              <span style={{ color: "#C4A35A" }}>{pro.name?.split(/[\s　]/)[0]}</span>さん、いつもありがとうございます
+              今回の記録をスタンプしましょう
             </div>
-            <div style={S.subtitle}>今回もサポートを受けたことだけ教えてください</div>
+            <div style={S.subtitle}>押すだけで、あなたが通い続けた記録が積み上がります</div>
 
             <button
               onClick={() => setStampConfirmed(!stampConfirmed)}
               style={{
                 width: "100%", padding: "20px", borderRadius: 14, marginBottom: 24,
                 border: stampConfirmed ? "2px solid #C4A35A" : "1.5px solid rgba(196,163,90,0.24)",
-                background: stampConfirmed ? "rgba(196,163,90,0.13)" : "rgba(255,255,255,0.03)",
-                color: stampConfirmed ? "#C4A35A" : "#FAFAF7",
+                background: stampConfirmed
+                  ? "linear-gradient(135deg, #C4A35A, #D4B56A)"
+                  : "rgba(255,255,255,0.03)",
+                color: stampConfirmed ? "#1A1A2E" : "#FAFAF7",
                 fontSize: 16, fontWeight: 700, cursor: "pointer",
               }}
             >
-              {stampConfirmed ? "今回も受けました ✓" : "今回も受けました"}
+              {stampConfirmed ? "今回も受けました ✓" : "スタンプを押す"}
             </button>
 
             <div style={{ color: "#8B8B9A", fontSize: 13, marginBottom: 8 }}>
