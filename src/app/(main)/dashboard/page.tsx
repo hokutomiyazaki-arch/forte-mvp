@@ -1491,7 +1491,7 @@ export default function DashboardPage() {
 
     if (voteCount > 0) {
       const confirmed = confirm(
-        `この項目には${voteCount}票の投票があります。削除すると投票データからもこの項目が除去されます。本当に削除しますか？`
+        `この項目には${voteCount}人からの投票があります。削除すると投票データからもこの項目が除去されます。本当に削除しますか？`
       )
       if (!confirmed) return
     }
@@ -2720,7 +2720,7 @@ export default function DashboardPage() {
               <div className="text-2xl font-bold" style={{ color: '#C4A35A', fontFamily: "'Inter', sans-serif" }}>
                 {topVoteCount}
               </div>
-              <div className="text-[10px]" style={{ color: '#9CA3AF' }}>votes</div>
+              <div className="text-[10px]" style={{ color: '#9CA3AF' }}>人</div>
             </div>
           </div>
         )
@@ -3173,7 +3173,7 @@ export default function DashboardPage() {
             <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">検索カードに表示する強みを選ぶ</h2>
             <p className="text-sm text-[#9CA3AF] mb-4">
               検索結果のプロカードに表示される強みを選べます。
-              {!featuredProofId && '選択しない場合は最も票数が多い項目が自動で表示されます。'}
+              {!featuredProofId && '選択しない場合は最も人数が多い項目が自動で表示されます。'}
             </p>
             <div className="space-y-2">
               {votedItems.map(item => {
@@ -3217,7 +3217,7 @@ export default function DashboardPage() {
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-[#9CA3AF]">{item.vote_count} proofs</div>
+                        <div className="text-xs text-[#9CA3AF]">{item.vote_count}人が選択</div>
                       </div>
                     </div>
                     <span className="text-xs font-medium" style={{ color: isSelected ? '#C4A35A' : '#9CA3AF' }}>
@@ -4290,10 +4290,11 @@ export default function DashboardPage() {
                 <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
                   <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginBottom: 6 }}>プルーフ数で解除されるレベル（1つの強み項目単位）</p>
                   <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
-                    <p style={{ fontSize: 13, color: '#6B7280' }}><span style={{ color: '#C4A35A', fontWeight: 600 }}>15票 PROVEN</span> — プロフィールのバーがゴールドに輝く</p>
-                    <p style={{ fontSize: 13, color: '#6B7280' }}><span style={{ color: '#C4A35A', fontWeight: 600 }}>30票 SPECIALIST</span> — 表彰状と名前入りカードが届く</p>
-                    <p style={{ fontSize: 13, color: '#6B7280' }}><span style={{ color: '#C4A35A', fontWeight: 600 }}>50票 MASTER</span> — メタリックカードが届く</p>
+                    <p style={{ fontSize: 13, color: '#6B7280' }}><span style={{ color: '#C4A35A', fontWeight: 600 }}>15人 PROVEN</span> — プロフィールのバーがゴールドに輝く</p>
+                    <p style={{ fontSize: 13, color: '#6B7280' }}><span style={{ color: '#C4A35A', fontWeight: 600 }}>30人 SPECIALIST</span> — 表彰状と名前入りカードが届く</p>
+                    <p style={{ fontSize: 13, color: '#6B7280' }}><span style={{ color: '#C4A35A', fontWeight: 600 }}>50人 MASTER</span> — メタリックカードが届く</p>
                   </div>
+                  <p style={{ fontSize: 11, color: '#9CA3AF', marginTop: 8 }}>※バッジの基準は初回プルーフ数です（継続記録は含まれません）</p>
                 </div>
                 <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
                   <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginBottom: 4 }}>極め方でバッジが変わる</p>
@@ -4301,7 +4302,7 @@ export default function DashboardPage() {
                 </div>
                 <div style={{ background: 'white', padding: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}>
                   <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginBottom: 4 }}>申請方法</p>
-                  <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6 }}>30票または50票に到達すると、ダッシュボードに申請フォームが自動で表示されます。フォームから申請するだけ。初回申請は無料です。</p>
+                  <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6 }}>30人または50人に到達すると、ダッシュボードに申請フォームが自動で表示されます。フォームから申請するだけ。初回申請は無料です。</p>
                 </div>
               </div>
             </div>
@@ -4406,7 +4407,7 @@ export default function DashboardPage() {
           </button>
           {openSections.has('line') && (
             <div style={{ background: '#F9FAFB', padding: '16px', borderTop: '1px solid #E5E7EB' }}>
-              <p style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.7 }}>LINEを連携すると、毎週月曜朝に成長レポートが届きます: 今週の新規プルーフ数、累計と順位、PROVEN進捗（15票でゴールド認定）、届いた声のハイライト。メールでも届きますが、LINEの方が見逃しにくいです。</p>
+              <p style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.7 }}>LINEを連携すると、毎週月曜朝に成長レポートが届きます: 今週の新規プルーフ数、累計と順位、PROVEN進捗（15人でゴールド認定）、届いた声のハイライト。メールでも届きますが、LINEの方が見逃しにくいです。</p>
               <a href="/dashboard?tab=profile&edit=true" style={{ display: 'block', marginTop: 12, fontSize: 13, color: '#C4A35A', textDecoration: 'none' }}>→ メニュー ＞ 設定 ＞ LINE連携</a>
             </div>
           )}

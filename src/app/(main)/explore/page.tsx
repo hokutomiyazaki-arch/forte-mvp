@@ -268,7 +268,7 @@ export default function ExplorePage() {
                       )}
                     </div>
                   </div>
-                  <span className="text-[#C4A35A] font-bold text-sm ml-4 flex-shrink-0">{item.totalVotes}票</span>
+                  <span className="text-[#C4A35A] font-bold text-sm ml-4 flex-shrink-0">{item.totalVotes}人</span>
                 </div>
 
                 {/* レベル3: プロカード一覧 */}
@@ -302,8 +302,8 @@ export default function ExplorePage() {
                               .join(' · ')}
                           </div>
                         </div>
-                        {/* 票数 */}
-                        <span className="text-[#C4A35A] font-bold text-sm flex-shrink-0">{voteCount}票</span>
+                        {/* 人数（vote_summary由来。選んだ人数） */}
+                        <span className="text-[#C4A35A] font-bold text-sm flex-shrink-0">{voteCount}人</span>
                       </a>
                     ))}
                   </div>

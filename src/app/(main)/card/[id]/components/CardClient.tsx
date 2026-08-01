@@ -754,7 +754,7 @@ export default function CardClient({ cardData }: Props) {
                         )}
                         {!certTier && isProven && nextTier && (
                           <div style={{ fontSize: 10, color: 'rgba(196,163,90,0.5)', textAlign: 'right' as const, marginTop: 6 }}>
-                            あと{nextTier.remaining}票で{TIER_DISPLAY[nextTier.tier].label}
+                            あと{nextTier.remaining}人で{TIER_DISPLAY[nextTier.tier].label}
                           </div>
                         )}
                         {/* 日付アコーディオン */}
@@ -879,7 +879,7 @@ export default function CardClient({ cardData }: Props) {
                           )}
                           {!certTier && isProven && nextTier && (
                             <div style={{ fontSize: 10, color: 'rgba(196,163,90,0.5)', textAlign: 'right' as const, marginTop: 4 }}>
-                              あと{nextTier.remaining}票で{TIER_DISPLAY[nextTier.tier].label}
+                              あと{nextTier.remaining}人で{TIER_DISPLAY[nextTier.tier].label}
                             </div>
                           )}
                           {/* 日付アコーディオン */}

@@ -512,7 +512,7 @@ export default function SearchPage() {
                           {proof.strengthLabel}
                         </span>
                         <span style={{ fontSize: 10, color: T.gold, fontWeight: 600 }}>
-                          ({proof.votes}票)
+                          ({proof.votes}人)
                         </span>
                       </div>
                     )

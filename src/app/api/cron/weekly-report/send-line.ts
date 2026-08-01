@@ -166,10 +166,11 @@ function buildNormalFlex(data: WeeklyProData, content: WeeklyReportContent | nul
   if (data.proof_progress.length > 0) {
     bodyContents.push(separator())
     bodyContents.push({ type: 'text', text: 'PROVEN PROGRESS', size: 'xxs', color: GOLD, weight: 'bold', margin: 'lg' })
+    bodyContents.push({ type: 'text', text: '※バッジの基準は初回プルーフ数です（継続記録は含まれません）', size: 'xxs', color: GRAY, wrap: true, margin: 'sm' })
     data.proof_progress.forEach(item => {
       const label = item.is_proven
         ? `${item.strength_label} ✦ PROVEN`
-        : `${item.strength_label} — あと${item.remaining}票`
+        : `${item.strength_label} — あと${item.remaining}人`
       bodyContents.push({
         type: 'box', layout: 'vertical', margin: 'sm',
         contents: [
@@ -254,7 +255,7 @@ function buildStartingFlex(data: WeeklyProData, content: WeeklyReportContent | n
     // メリット
     { type: 'text', text: 'WHY COLLECT PROOFS?', size: 'xxs', color: GOLD, weight: 'bold', margin: 'lg' },
     benefitItem('自分の「本当の強み」がデータで見える'),
-    benefitItem('15票でPROVEN・30票でSPECIALIST・50票でMASTER・100票でLEGEND認定。'),
+    benefitItem('15人でPROVEN・30人でSPECIALIST・50人でMASTER・100人でLEGEND認定。'),
     benefitItem('一生消えない、ポータブルな実力の証明'),
     separator(),
     // はじめの一歩
@@ -330,10 +331,11 @@ function buildStalledFlex(data: WeeklyProData, content: WeeklyReportContent | nu
   if (data.proof_progress.length > 0) {
     bodyContents.push(separator())
     bodyContents.push({ type: 'text', text: 'PROVEN PROGRESS', size: 'xxs', color: GOLD, weight: 'bold', margin: 'lg' })
+    bodyContents.push({ type: 'text', text: '※バッジの基準は初回プルーフ数です（継続記録は含まれません）', size: 'xxs', color: GRAY, wrap: true, margin: 'sm' })
     data.proof_progress.forEach(item => {
       const label = item.is_proven
         ? `${item.strength_label} ✦ PROVEN`
-        : `${item.strength_label} — あと${item.remaining}票`
+        : `${item.strength_label} — あと${item.remaining}人`
       bodyContents.push({
         type: 'box', layout: 'vertical', margin: 'sm',
         contents: [

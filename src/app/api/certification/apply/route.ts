@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
       const live = vcMap.get(c.categorySlug) ?? 0
       if (live < SPECIALIST_THRESHOLD) {
         return NextResponse.json(
-          { error: `認定閾値(30票)未満のカテゴリが含まれています`, categorySlug: c.categorySlug, voteCount: live },
+          { error: `認定閾値(30人)未満のカテゴリが含まれています`, categorySlug: c.categorySlug, voteCount: live },
           { status: 400 }
         )
       }

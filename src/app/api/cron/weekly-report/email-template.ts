@@ -174,16 +174,16 @@ function generateNormalEmailHTML(data: WeeklyProData, content: WeeklyReportConte
       ? (item.current_votes >= LEGEND_THRESHOLD
         ? `LEGEND達成 ✦ 最高ティア`
         : item.current_votes >= MASTER_THRESHOLD
-        ? `MASTER達成 ✦ 次の目標: LEGEND（${LEGEND_THRESHOLD}票）`
+        ? `MASTER達成 ✦ 次の目標: LEGEND（${LEGEND_THRESHOLD}人）`
         : item.current_votes >= SPECIALIST_THRESHOLD
-        ? `SPECIALIST達成 ✦ 次の目標: MASTER（${MASTER_THRESHOLD}票）`
-        : `PROVEN達成 ✦ 次の目標: SPECIALIST（${SPECIALIST_THRESHOLD}票）`)
-      : `あと${item.remaining}票でPROVEN達成`
+        ? `SPECIALIST達成 ✦ 次の目標: MASTER（${MASTER_THRESHOLD}人）`
+        : `PROVEN達成 ✦ 次の目標: SPECIALIST（${SPECIALIST_THRESHOLD}人）`)
+      : `あと${item.remaining}人でPROVEN達成`
     progressRows += `
       <div style="margin-bottom:12px;">
         <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
           <span style="color:${CREAM};font-size:12px;font-weight:600;">${escapeHtml(item.strength_label)}</span>
-          <span style="color:${item.is_proven ? GOLD : GRAY};font-size:12px;">${item.current_votes}票</span>
+          <span style="color:${item.is_proven ? GOLD : GRAY};font-size:12px;">${item.current_votes}人</span>
         </div>
         ${progressBar(item.current_votes, item.next_milestone)}
         <div style="color:${item.is_proven ? GOLD : GRAY};font-size:10px;margin-top:3px;">${milestoneLabel}</div>
@@ -192,6 +192,7 @@ function generateNormalEmailHTML(data: WeeklyProData, content: WeeklyReportConte
   const provenProgressBlock = data.proof_progress.length > 0
     ? `<tr><td style="padding:16px 32px;">
         ${sectionHeader('PROVEN PROGRESS')}
+        <div style="color:${GRAY};font-size:10px;margin-bottom:10px;">※バッジの基準は初回プルーフ数です（継続記録は含まれません）</div>
         ${progressRows}
       </td></tr>`
     : ''
@@ -203,8 +204,8 @@ function generateNormalEmailHTML(data: WeeklyProData, content: WeeklyReportConte
     categoryBlock = `<tr><td style="padding:16px 32px;">
       ${sectionHeader('CATEGORY INSIGHT')}
       <div style="color:${CREAM};font-size:13px;line-height:1.7;background:${BAR_BG};border-radius:8px;padding:16px;">
-        「${escapeHtml(s.strength_label)}」はREALPROOF全体で<span style="color:${GOLD};font-weight:600;">${s.total_platform_votes}票</span>の記録。<br>
-        あなたはそのうち<span style="color:${GOLD};font-weight:600;">${s.pro_votes}票（${s.percent}%）</span>を獲得しています。
+        「${escapeHtml(s.strength_label)}」はREALPROOF全体で<span style="color:${GOLD};font-weight:600;">${s.total_platform_votes}人</span>の記録。<br>
+        あなたはそのうち<span style="color:${GOLD};font-weight:600;">${s.pro_votes}人（${s.percent}%）</span>を獲得しています。
       </div>
     </td></tr>`
   }
@@ -275,8 +276,8 @@ function generateStartingEmailHTML(data: WeeklyProData, content: WeeklyReportCon
       <tr><td height="8"></td></tr>
       <tr><td style="background:${BAR_BG};border-radius:8px;padding:14px 16px;">
         <div style="font-size:16px;margin-bottom:4px;">&#127942;</div>
-        <div style="color:${CREAM};font-size:13px;font-weight:600;margin-bottom:4px;">15票でPROVEN認定</div>
-        <div style="color:${GRAY};font-size:12px;line-height:1.6;">プロフィールのバーがゴールドに輝きます。30票でSPECIALIST、50票でMASTER、100票でLEGEND。</div>
+        <div style="color:${CREAM};font-size:13px;font-weight:600;margin-bottom:4px;">15人でPROVEN認定</div>
+        <div style="color:${GRAY};font-size:12px;line-height:1.6;">プロフィールのバーがゴールドに輝きます。30人でSPECIALIST、50人でMASTER、100人でLEGEND。</div>
       </td></tr>
       <tr><td height="8"></td></tr>
       <tr><td style="background:${BAR_BG};border-radius:8px;padding:14px 16px;">
@@ -357,12 +358,12 @@ function generateStalledEmailHTML(data: WeeklyProData, content: WeeklyReportCont
   data.proof_progress.forEach(item => {
     const milestoneLabel = item.is_proven
       ? `PROVEN達成 ✦`
-      : `あと${item.remaining}票でPROVEN達成`
+      : `あと${item.remaining}人でPROVEN達成`
     progressRows += `
       <div style="margin-bottom:12px;">
         <div style="margin-bottom:4px;">
           <span style="color:${CREAM};font-size:12px;font-weight:600;">${escapeHtml(item.strength_label)}</span>
-          <span style="color:${item.is_proven ? GOLD : GRAY};font-size:12px;float:right;">${item.current_votes}票</span>
+          <span style="color:${item.is_proven ? GOLD : GRAY};font-size:12px;float:right;">${item.current_votes}人</span>
         </div>
         ${progressBar(item.current_votes, item.next_milestone)}
         <div style="color:${item.is_proven ? GOLD : GRAY};font-size:10px;margin-top:3px;">${milestoneLabel}</div>
@@ -371,6 +372,7 @@ function generateStalledEmailHTML(data: WeeklyProData, content: WeeklyReportCont
   const provenProgressBlock = data.proof_progress.length > 0
     ? `<tr><td style="padding:16px 32px;">
         ${sectionHeader('PROVEN PROGRESS')}
+        <div style="color:${GRAY};font-size:10px;margin-bottom:10px;">※バッジの基準は初回プルーフ数です（継続記録は含まれません）</div>
         ${progressRows}
       </td></tr>`
     : ''

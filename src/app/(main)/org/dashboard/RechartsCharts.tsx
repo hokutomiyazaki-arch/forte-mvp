@@ -108,7 +108,7 @@ function StrengthRadar({ data }: { data: any[] }) {
                   backgroundColor: '#1A1A2E', border: 'none',
                   borderRadius: '8px', color: '#FAFAF7', fontSize: '13px',
                 }}
-                formatter={(value: number) => [`${value} 票`, '']}
+                formatter={(value: number) => [`${value} 人`, '']}
               />
               <Bar dataKey="count" fill="#C4A35A" radius={[0, 4, 4, 0]} />
             </BarChart>
@@ -136,7 +136,7 @@ function StrengthRadar({ data }: { data: any[] }) {
                 backgroundColor: '#1A1A2E', border: 'none',
                 borderRadius: '8px', color: '#FAFAF7', fontSize: '13px',
               }}
-              formatter={(value: number) => [`${value} 票`, '']}
+              formatter={(value: number) => [`${value} 人`, '']}
             />
             <Radar
               dataKey="count"
@@ -333,7 +333,7 @@ function ProofRanking({ data }: { data: any[] }) {
                 borderRadius: '8px', color: '#FAFAF7', fontSize: '13px',
               }}
               formatter={(value: any, name: any, props: any) => [
-                `${props.payload.count}票`,
+                `${props.payload.count}人`,
                 props.payload.fullLabel
               ]}
             />
