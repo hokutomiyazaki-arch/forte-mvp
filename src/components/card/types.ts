@@ -35,6 +35,8 @@ export interface VoiceComment {
   reply: VoiceReply | null
   /** Phase 3 (事実タグ): この記録で本人が選んだ強みの本文（proof_items.label＝長い方・最大3件・重複排除）。無ければ空配列。 */
   proofTags: string[]
+  /** §2-8 継続記録の任意テーマ（「今回のテーマ」）。継続票以外・未入力は null。 */
+  continuation_theme?: string | null
 }
 
 export interface Supporter {

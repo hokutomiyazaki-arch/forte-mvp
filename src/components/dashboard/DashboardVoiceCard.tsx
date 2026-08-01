@@ -44,6 +44,8 @@ export interface DashboardVoice {
   display_mode: string | null
   reply: DashboardVoiceReply | null
   client: DashboardVoiceClient
+  /** §2-8 継続記録の任意テーマ（「今回のテーマ」）。継続票以外・未入力は null。 */
+  continuation_theme?: string | null
 }
 
 interface Props {
@@ -442,6 +444,23 @@ export default function DashboardVoiceCard({
       >
         {voice.comment}
       </div>
+
+      {/* §2-8: 継続記録の「今回のテーマ」。無ければ非表示。 */}
+      {voice.continuation_theme && (
+        <div
+          style={{
+            fontSize: 12,
+            fontWeight: 500,
+            lineHeight: 1.5,
+            color: '#B08D57',
+            borderLeft: '2px solid rgba(196,163,90,0.35)',
+            paddingLeft: 8,
+            marginBottom: 10,
+          }}
+        >
+          今回のテーマ：{voice.continuation_theme}
+        </div>
+      )}
 
       {/* 日付 */}
       <div style={{ fontSize: 11, color: '#888888', fontFamily: "'Inter', monospace" }}>

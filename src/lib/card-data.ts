@@ -58,6 +58,8 @@ export interface EnrichedComment {
   reply: VoiceReply | null
   /** Phase 3: この記録で本人が選んだ強みの本文（proof_items.label＝長い方・最大3件・重複排除）。無ければ空配列。 */
   proofTags: string[]
+  /** §2-8 継続記録の任意テーマ（「今回のテーマ」）。継続票以外・未入力は null。 */
+  continuation_theme: string | null
 }
 
 export interface Supporter {
@@ -149,7 +151,7 @@ export async function getCardData(
     supabase.from('personality_items').select('id, label, personality_label, description, category, is_active, sort_order, image_url'),
     // 6. コメント付き投票
     supabase.from('votes')
-      .select('id, comment, created_at, normalized_email, display_mode, client_photo_url, auth_display_name, voter_professional_id, selected_proof_ids')
+      .select('id, comment, created_at, normalized_email, display_mode, client_photo_url, auth_display_name, voter_professional_id, selected_proof_ids, continuation_theme')
       .eq('professional_id', proId).eq('status', 'confirmed')
       .not('comment', 'is', null).neq('comment', '').neq('comment', '[deleted]')
       .order('created_at', { ascending: false }),
@@ -266,7 +268,7 @@ export async function getCardData(
   }
 
   // === comments / supporters 用の voter_pro マップを「別々に」構築 ===
-  const commentsRaw = (commentsResult.data || []) as Array<VoteWithVoterPro & { comment: string; normalized_email: string | null; selected_proof_ids: string[] | null }>
+  const commentsRaw = (commentsResult.data || []) as Array<VoteWithVoterPro & { comment: string; normalized_email: string | null; selected_proof_ids: string[] | null; continuation_theme: string | null }>
 
   // Supporters Strip 用: photo/pro_link の confirmed 票を全件ページネーション取得。
   // normalized_email は「投票者同一性」の dedup キーとしてのみ使用し、レスポンス/Supporter型には
@@ -394,6 +396,7 @@ export async function getCardData(
       voter_vote_count: voterVoteCount,
       reply: replyMap.get(c.id) ?? null,
       proofTags,
+      continuation_theme: c.continuation_theme ?? null,
     }
   })
 

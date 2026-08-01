@@ -28,6 +28,7 @@ interface VoteRow {
   auth_display_name: string | null
   client_photo_url: string | null
   display_mode: string | null
+  continuation_theme: string | null
 }
 
 type ClientDisplay =
@@ -92,7 +93,7 @@ export async function GET() {
     // display_mode は VoiceReplyModal 互換のためレスポンスに含める (ダッシュボード表示では無視)
     const { data: votesRaw, error: votesErr } = await supabase
       .from('votes')
-      .select('id, comment, created_at, auth_method, auth_display_name, client_photo_url, display_mode')
+      .select('id, comment, created_at, auth_method, auth_display_name, client_photo_url, display_mode, continuation_theme')
       .eq('professional_id', pro.id)
       .eq('status', 'confirmed')
       .not('comment', 'is', null)
@@ -145,6 +146,7 @@ export async function GET() {
       display_mode: v.display_mode,
       reply: replyMap.get(v.id) ?? null,
       client: buildClientDisplay(v),
+      continuation_theme: v.continuation_theme ?? null,
     }))
 
     return NextResponse.json(

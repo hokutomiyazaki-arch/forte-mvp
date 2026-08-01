@@ -223,6 +223,24 @@ export function VoiceCommentCard({
         {renderComment()}
       </div>
 
+      {/* §2-8: 継続記録の「今回のテーマ」。proofTags と同じサブ層スタイルで控えめに。無ければ非表示。 */}
+      {vote.continuation_theme && (
+        <div
+          style={{
+            fontSize: 12,
+            fontWeight: 500,
+            lineHeight: 1.5,
+            color: '#B08D57',
+            borderLeft: '2px solid rgba(196,163,90,0.35)',
+            paddingLeft: 8,
+            marginTop: 2,
+            marginBottom: 10,
+          }}
+        >
+          今回のテーマ：{vote.continuation_theme}
+        </div>
+      )}
+
       {/* Phase 3: 本人が選んだ強みの本文（1つ1行・縦積み・最大3件・重複排除）。
           声（メイン）に対するサブ層として、淡いゴールドで控えめに。無ければ非表示。 */}
       {vote.proofTags && vote.proofTags.length > 0 && (

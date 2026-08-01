@@ -149,7 +149,7 @@ export async function GET() {
       // v1.2 §11.4-2: display_mode/client_photo_url/auth_display_name/voter_professional_id を追加
       // normalized_email はサーバー内集計（voter_vote_count）のみで使用、レスポンスからは除外
       supabase.from('votes')
-        .select('id, comment, created_at, display_mode, client_photo_url, auth_display_name, voter_professional_id, normalized_email')
+        .select('id, comment, created_at, display_mode, client_photo_url, auth_display_name, voter_professional_id, normalized_email, continuation_theme')
         .eq('professional_id', proId)
         .eq('status', 'confirmed')
         .order('created_at', { ascending: false }),
