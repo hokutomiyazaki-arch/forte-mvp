@@ -289,7 +289,10 @@ export default async function ReferralPage({
         </div>
 
         <p style={{ fontSize: 13, color: T.text, lineHeight: 1.8, marginBottom: data.list.comment ? 10 : 0 }}>
-          ご紹介した後も、あなたの経過は私自身が伺っていきます。安心して選んでください。
+          {/* 1名時は「選ぶ」対象が無いため推薦フレームに切替（CEO決定・案A） */}
+          {data.candidates.length === 1
+            ? 'ご紹介した後も、あなたの経過は私自身が伺っていきます。安心してご相談ください。'
+            : 'ご紹介した後も、あなたの経過は私自身が伺っていきます。安心して選んでください。'}
         </p>
 
         {data.list.comment && (
@@ -325,9 +328,16 @@ export default async function ReferralPage({
             現在、ご紹介できる先生の準備中です。
           </div>
         ) : (
-          data.candidates.map((c) => (
-            <CandidateCard key={c.pro.id} candidate={c} aiSanitizeEnabled={aiSanitizeEnabled} slug={slug} />
-          ))
+          <>
+            {data.candidates.length === 1 && (
+              <div style={{ fontSize: 12, fontWeight: 600, color: T.gold, marginBottom: 8 }}>
+                {data.sender.name}さんが特に推薦する先生です
+              </div>
+            )}
+            {data.candidates.map((c) => (
+              <CandidateCard key={c.pro.id} candidate={c} aiSanitizeEnabled={aiSanitizeEnabled} slug={slug} />
+            ))}
+          </>
         )}
       </div>
 
