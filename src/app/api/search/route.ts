@@ -46,7 +46,7 @@ async function fetchAllVotesPaginated(
   supabase: any,
   proIds: string[],
   selectCols: string,
-  voteType: string | null
+  voteType: string | string[] | null
 ) {
   const all: any[] = []
   let from = 0
@@ -58,7 +58,11 @@ async function fetchAllVotesPaginated(
       .eq('status', 'confirmed')
       .order('id', { ascending: true })
       .range(from, from + pageSize - 1)
-    if (voteType) q = q.eq('vote_type', voteType)
+    if (Array.isArray(voteType)) {
+      q = q.in('vote_type', voteType)
+    } else if (voteType) {
+      q = q.eq('vote_type', voteType)
+    }
     const { data, error } = await q
     if (error) { console.error('votes pagination error:', error); break }
     if (!data || data.length === 0) break
@@ -111,11 +115,14 @@ export async function GET(request: Request) {
     // 投票データを一括取得（プルーフ投票: スコア計算用）
     // 真因対応(2026-05-28): .limit(10000) は Supabase max-rows=1000 でキャップされる。
     // ヘルパーで全件ページネーション取得する。
+    // §2-8: 累計プルーフには継続記録(vote_type='continuation')も算入する。
+    // continuation行は selected_proof_ids/selected_personality_ids が null のため、
+    // カテゴリ集計・パーソナリティ集計には影響しない（totalProofs等の件数のみ+1される）。
     const proofVotes = await fetchAllVotesPaginated(
       supabase,
       proIds,
       'id, professional_id, created_at, vote_type, comment, normalized_email, selected_proof_ids, selected_personality_ids',
-      'proof'
+      ['proof', 'continuation']
     )
 
     // リピーター率用: 全投票のnormalized_email+session_countを取得（session_countフォールバック対応）
