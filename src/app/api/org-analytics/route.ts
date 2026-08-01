@@ -130,9 +130,10 @@ export async function GET(request: NextRequest) {
       // 強み分布: selected_proof_ids + proof_items で集計
       // §2-8: continuation行は selected_proof_ids を保持したまま保存されるため、
       // vote_type='proof' に絞って強み項目別集計から除外する（総票数系ではないため）。
+      // normalized_email は DISTINCT 人数カウント専用（集計後に破棄。レスポンスには含めない）。
       supabase
         .from('votes')
-        .select('selected_proof_ids')
+        .select('id, selected_proof_ids, normalized_email')
         .in('professional_id', memberProIds)
         .eq('vote_type', 'proof')
         .not('selected_proof_ids', 'is', null),
@@ -167,20 +168,25 @@ export async function GET(request: NextRequest) {
       piMap.set(pi.id, { tab: pi.tab, strength_label: pi.strength_label })
     }
 
-    const tabCountMap: Record<string, number> = {}
+    // §2-8(中B): 票数（occurrence）ではなく人数（DISTINCT normalized_email）でカウントする。
+    // タブに複数項目を選んだ1票は、そのタブでは1人として数える（項目別カード表示との「人」基準を揃えるため）。
+    // email が無い投票は id をフォールバックキーにして個別カウントする（重複判定不能なため）。
+    const tabVoterMap: Record<string, Set<string>> = {}
     if (strengthResult.data) {
-      for (const v of strengthResult.data) {
+      for (const v of strengthResult.data as { id: string; selected_proof_ids: string[] | null; normalized_email: string | null }[]) {
         const pids: string[] = v.selected_proof_ids || []
+        const voterKey = v.normalized_email || v.id
         for (const pid of pids) {
           const piInfo = piMap.get(pid)
           if (piInfo?.tab) {
-            tabCountMap[piInfo.tab] = (tabCountMap[piInfo.tab] || 0) + 1
+            if (!tabVoterMap[piInfo.tab]) tabVoterMap[piInfo.tab] = new Set<string>()
+            tabVoterMap[piInfo.tab].add(voterKey)
           }
         }
       }
     }
-    const strengthDistribution = Object.entries(tabCountMap)
-      .map(([tab, count]) => ({ label: TAB_LABELS[tab] || tab, count }))
+    const strengthDistribution = Object.entries(tabVoterMap)
+      .map(([tab, voterSet]) => ({ label: TAB_LABELS[tab] || tab, count: voterSet.size }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 8)
 

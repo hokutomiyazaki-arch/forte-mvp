@@ -162,25 +162,39 @@ export async function GET(
       // メンバーの投票でselected_proof_idsがある投票を取得（professionalIdsから直接）
       // §2-8: continuation行は selected_proof_ids を保持したまま保存されるため、
       // vote_type='proof' に絞って強み項目別集計（プルーフ別トップメンバー）から除外する。
+      // normalized_email は DISTINCT 人数カウント専用（集計後に破棄。レスポンスには含めない）。
       const { data: votesWithProofs } = await supabase
         .from('votes')
-        .select('professional_id, selected_proof_ids')
+        .select('id, professional_id, selected_proof_ids, normalized_email')
         .in('professional_id', professionalIds)
         .eq('vote_type', 'proof')
         .not('selected_proof_ids', 'is', null)
 
       if (votesWithProofs && votesWithProofs.length > 0) {
         // proof_item_id ごと × professional_id ごとの集計
-        const proofProMap: Record<string, Record<string, number>> = {}
-        const proofTotalMap: Record<string, number> = {}
+        // §2-8(中B): 票数ではなく人数（DISTINCT normalized_email）でカウントする。
+        // vote_summary の STEP4 DISTINCT化後のカード表示（同一プロ×同一項目）と数値を一致させるため。
+        // email が無い投票は id をフォールバックキーにして個別カウントする（重複判定不能なため）。
+        const proofProMap: Record<string, Record<string, Set<string>>> = {}
 
         for (const v of votesWithProofs) {
           const proofIds: string[] = v.selected_proof_ids || []
+          const voterKey = v.normalized_email || v.id
           for (const pid of proofIds) {
             if (!proofProMap[pid]) proofProMap[pid] = {}
-            proofProMap[pid][v.professional_id] = (proofProMap[pid][v.professional_id] || 0) + 1
-            proofTotalMap[pid] = (proofTotalMap[pid] || 0) + 1
+            if (!proofProMap[pid][v.professional_id]) proofProMap[pid][v.professional_id] = new Set<string>()
+            proofProMap[pid][v.professional_id].add(voterKey)
           }
+        }
+
+        // proofTotalMap: 項目別の団体合計人数 = 各プロのDISTINCT人数の合計
+        // （同一人物が団体内の複数プロに投票した場合はプロごとに1人としてカウントされる。
+        //   vote_summary が professional_id×proof_id 単位のDISTINCTである以上、org合計もその単純合算とする）
+        const proofTotalMap: Record<string, number> = {}
+        for (const [pid, proMapForItem] of Object.entries(proofProMap)) {
+          let total = 0
+          for (const voterSet of Object.values(proMapForItem)) total += voterSet.size
+          proofTotalMap[pid] = total
         }
 
         // proof_itemsのラベルを取得
@@ -211,10 +225,10 @@ export async function GET(
               const proCounts = proofProMap[proofId]
               let topProId = ''
               let topCount = 0
-              for (const [proId, count] of Object.entries(proCounts)) {
-                if (count > topCount) {
+              for (const [proId, voterSet] of Object.entries(proCounts)) {
+                if (voterSet.size > topCount) {
                   topProId = proId
-                  topCount = count
+                  topCount = voterSet.size
                 }
               }
               const proInfo = proMap.get(topProId)

@@ -154,10 +154,11 @@ export async function GET() {
     if (allProIds.length > 0) {
       // §2-8: continuation行は selected_proof_ids を保持したまま保存されるため、
       // vote_type='proof' に絞って強み項目別集計（top_strength/強み分布/個別強みランキング）から除外する。
+      // normalized_email は DISTINCT 人数カウント専用（集計後に破棄。レスポンスには含めない）。
       const [{ data: votesRaw }, { data: proofItems }] = await Promise.all([
         supabase
           .from('votes')
-          .select('professional_id, selected_proof_ids')
+          .select('id, professional_id, selected_proof_ids, normalized_email')
           .in('professional_id', allProIds)
           .eq('vote_type', 'proof')
           .not('selected_proof_ids', 'is', null),
@@ -172,28 +173,35 @@ export async function GET() {
       }
 
       // professional_id別 × proof_item_id別の集計
-      const proStrengthMap = new Map<string, Map<string, number>>()
+      // §2-8(中B): top_strength/個別強みランキングは票数ではなく人数（DISTINCT normalized_email）でカウントする。
+      // vote_summary の STEP4 DISTINCT化後のカード表示と数値を一致させるため。
+      // email が無い投票は id をフォールバックキーにして個別カウントする（重複判定不能なため）。
+      // タブ別集計（強み分布）は現状どのUIからも参照されていないため、従来通り occurrence カウントのまま維持。
+      const proStrengthMap = new Map<string, Map<string, Set<string>>>()
       const tabTotalMap: Record<string, number> = {}
-      const proofItemCountMap: Record<string, number> = {}
+      const proofItemCountMap: Record<string, Set<string>> = {}
 
       for (const v of votesRaw || []) {
         const pids: string[] = v.selected_proof_ids || []
+        const voterKey = v.normalized_email || v.id
         for (const pid of pids) {
-          // メンバー別集計
+          // メンバー別集計（プロ×項目のDISTINCT人数）
           if (!proStrengthMap.has(v.professional_id)) {
             proStrengthMap.set(v.professional_id, new Map())
           }
           const pMap = proStrengthMap.get(v.professional_id)!
-          pMap.set(pid, (pMap.get(pid) || 0) + 1)
+          if (!pMap.has(pid)) pMap.set(pid, new Set<string>())
+          pMap.get(pid)!.add(voterKey)
 
-          // タブ別集計（強み分布チャート用）
+          // タブ別集計（強み分布チャート用・未使用のため従来通りoccurrenceカウント）
           const piInfo = piMap.get(pid)
           if (piInfo?.tab) {
             tabTotalMap[piInfo.tab] = (tabTotalMap[piInfo.tab] || 0) + 1
           }
 
-          // proof_item_id別集計（個別強みランキング用）
-          proofItemCountMap[pid] = (proofItemCountMap[pid] || 0) + 1
+          // proof_item_id別集計（個別強みランキング用・DISTINCT人数）
+          if (!proofItemCountMap[pid]) proofItemCountMap[pid] = new Set<string>()
+          proofItemCountMap[pid].add(voterKey)
         }
       }
 
@@ -203,10 +211,10 @@ export async function GET() {
         if (pMap && pMap.size > 0) {
           let topPid = ''
           let topCount = 0
-          Array.from(pMap.entries()).forEach(([pid, count]) => {
-            if (count > topCount) {
+          Array.from(pMap.entries()).forEach(([pid, voterSet]) => {
+            if (voterSet.size > topCount) {
               topPid = pid
-              topCount = count
+              topCount = voterSet.size
             }
           })
           const piInfo = piMap.get(topPid)
@@ -221,11 +229,11 @@ export async function GET() {
         .map(([tab, count]) => ({ tab, count }))
         .sort((a, b) => b.count - a.count)
 
-      // 個別強みランキング（proof_item_id別、label使用）
+      // 個別強みランキング（proof_item_id別、label使用、DISTINCT人数）
       topStrengthItems = Object.entries(proofItemCountMap)
-        .map(([proofItemId, count]) => {
+        .map(([proofItemId, voterSet]) => {
           const piInfo = piMap.get(proofItemId)
-          return { label: piInfo?.label || '', strength_label: piInfo?.strength_label || '', count }
+          return { label: piInfo?.label || '', strength_label: piInfo?.strength_label || '', count: voterSet.size }
         })
         .filter(item => item.label)
         .sort((a, b) => b.count - a.count)
