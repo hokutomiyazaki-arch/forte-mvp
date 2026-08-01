@@ -116,8 +116,10 @@ export async function GET(request: Request) {
     // 真因対応(2026-05-28): .limit(10000) は Supabase max-rows=1000 でキャップされる。
     // ヘルパーで全件ページネーション取得する。
     // §2-8: 累計プルーフには継続記録(vote_type='continuation')も算入する。
-    // continuation行は selected_proof_ids/selected_personality_ids が null のため、
-    // カテゴリ集計・パーソナリティ集計には影響しない（totalProofs等の件数のみ+1される）。
+    // 注意: continuation行は selected_proof_ids/selected_personality_ids を保持したまま保存される
+    // （「初めて」選択なのに過去票がある場合の再分類。§2-8「選択項目は行に保存、集計不算入」）。
+    // そのため null 前提の除外はできず、下流の各集計ループ側で vote_type==='continuation' を
+    // 明示的にスキップする必要がある（totalProofs/recentProofs/lastProofAt等の件数系は算入したまま）。
     const proofVotes = await fetchAllVotesPaginated(
       supabase,
       proIds,
@@ -186,8 +188,11 @@ export async function GET(request: Request) {
     }
 
     // プロごとのパーソナリティ集計
+    // §2-8: continuation行は selected_personality_ids を保持したまま保存されるため、
+    // 明示的にスキップする（集計不算入はVIEW/集計側の責務）。
     const proPersonalityCounts = new Map<string, Record<string, number>>()
     for (const vote of proofVotes || []) {
+      if (vote.vote_type === 'continuation') continue
       if (!vote.selected_personality_ids || vote.selected_personality_ids.length === 0) continue
       const pid = vote.professional_id
       if (!proPersonalityCounts.has(pid)) proPersonalityCounts.set(pid, {})
@@ -225,8 +230,9 @@ export async function GET(request: Request) {
       for (const item of proofItems || []) {
         if (item.strength_label && item.strength_label.includes(query)) {
           // この proof_item を selected_proof_ids に持つプロを特定
+          // §2-8: continuation行は selected_proof_ids を保持したまま保存されるため除外する
           for (const v of proofVotes || []) {
-            if (v.selected_proof_ids?.includes(item.id)) {
+            if (v.vote_type !== 'continuation' && v.selected_proof_ids?.includes(item.id)) {
               if (!proofMatchMap[v.professional_id]) {
                 proofMatchMap[v.professional_id] = item.strength_label
               }
@@ -263,7 +269,9 @@ export async function GET(request: Request) {
       recentCategoryCount: Record<string, number>
       voterInfoMap: Record<string, VoterInfo>
       latestVoteComment: string
-      proofItemCounts: Record<string, number>
+      // §2-8: 票数ではなく人数（DISTINCT normalized_email）でカウントする。
+      // email が無い投票は id をフォールバックキーにして個別カウントする（重複判定不能なため）。
+      proofItemCounts: Record<string, Set<string>>
     }>()
 
     const ensureStat = (pid: string) => {
@@ -318,15 +326,23 @@ export async function GET(request: Request) {
         stat.recentProofs++
       }
 
-      for (const itemId of vote.selected_proof_ids || []) {
-        const tab = itemTabMap[itemId]
-        if (tab) {
-          stat.categoryCount[tab] = (stat.categoryCount[tab] || 0) + 1
-          if (isRecent) {
-            stat.recentCategoryCount[tab] = (stat.recentCategoryCount[tab] || 0) + 1
+      // §2-8: continuation行は selected_proof_ids を保持したまま保存されるが、
+      // 強み項目別集計（カテゴリ・proofItemCounts）には不算入とする。
+      // totalProofs/recentProofs/lastProofAt/comment は上で既に算入済み（件数系はcontinuationも含む）。
+      if (vote.vote_type !== 'continuation') {
+        // §2-8: proofItemCounts は票数ではなく人数（DISTINCT normalized_email）でカウント
+        const voterKey = vote.normalized_email || vote.id
+        for (const itemId of vote.selected_proof_ids || []) {
+          const tab = itemTabMap[itemId]
+          if (tab) {
+            stat.categoryCount[tab] = (stat.categoryCount[tab] || 0) + 1
+            if (isRecent) {
+              stat.recentCategoryCount[tab] = (stat.recentCategoryCount[tab] || 0) + 1
+            }
           }
+          if (!stat.proofItemCounts[itemId]) stat.proofItemCounts[itemId] = new Set<string>()
+          stat.proofItemCounts[itemId].add(voterKey)
         }
-        stat.proofItemCounts[itemId] = (stat.proofItemCounts[itemId] || 0) + 1
       }
     }
 
@@ -406,21 +422,22 @@ export async function GET(request: Request) {
       // Featured proof: featured_proof_id があればそれ、なければ最得票のproof_item
       let featuredProof: { strengthLabel: string; label: string; votes: number } | null = null
       const fpId = pro.featured_proof_id
-      if (fpId && stat.proofItemCounts[fpId] && stat.proofItemCounts[fpId] > 0) {
+      if (fpId && stat.proofItemCounts[fpId] && stat.proofItemCounts[fpId].size > 0) {
         const item = (proofItems || []).find(i => i.id === fpId)
         if (item) {
           featuredProof = {
             strengthLabel: item.strength_label || '',
             label: item.tab || '',
-            votes: stat.proofItemCounts[fpId],
+            votes: stat.proofItemCounts[fpId].size,
           }
         }
       }
       if (!featuredProof) {
-        // 最得票のproof_item（1票以上）
+        // 最多人数のproof_item（1人以上）
         let bestId = ''
         let bestCount = 0
-        for (const [itemId, count] of Object.entries(stat.proofItemCounts)) {
+        for (const [itemId, voterSet] of Object.entries(stat.proofItemCounts)) {
+          const count = voterSet.size
           if (count > bestCount) {
             bestCount = count
             bestId = itemId
@@ -449,7 +466,8 @@ export async function GET(request: Request) {
         )
         let bestId = ''
         let bestCount = 0
-        for (const [itemId, count] of Object.entries(stat.proofItemCounts)) {
+        for (const [itemId, voterSet] of Object.entries(stat.proofItemCounts)) {
+          const count = voterSet.size
           if (categoryItemIds.has(itemId) && count > bestCount) {
             bestCount = count
             bestId = itemId
