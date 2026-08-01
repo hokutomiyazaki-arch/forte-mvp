@@ -105,6 +105,13 @@ export default function ReferralTab({ proId, initialAcceptingStatus, initialAcce
   const [pinSearching, setPinSearching] = useState<Record<string, boolean>>({})
   const [addingPin, setAddingPin] = useState<string | null>(null)
 
+  // §3-1: 連携候補(private)→処方箋リスト(link/public)への追加導線
+  // key = `${sourceListId}:${pro_id}`
+  const [addToListSelection, setAddToListSelection] = useState<Record<string, string>>({})
+  const [addToListState, setAddToListState] = useState<
+    Record<string, { status: 'loading' | 'success' | 'error'; message?: string }>
+  >({})
+
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null)
 
   // §2-9: RP外のプロを招待するフォーム（リストごとに名前入力・発行済みURLを保持）
@@ -266,6 +273,50 @@ export default function ReferralTab({ proId, initialAcceptingStatus, initialAcce
     }
   }
 
+  // §3-1: 連携候補(private)の1行から自分の処方箋リスト(link/public)へ追加する。
+  // 実処理は既存の items POST をそのまま呼ぶ(=pendingで追加され掲載通知が飛ぶ)。
+  async function addCandidateToOwnList(sourceListId: string, item: ListItem, explicitTargetListId?: string) {
+    const key = `${sourceListId}:${item.pro_id}`
+    const targetListId =
+      explicitTargetListId || (publicLists.length === 1 ? publicLists[0].id : addToListSelection[key])
+    if (!targetListId) return
+
+    setAddToListState((prev) => ({ ...prev, [key]: { status: 'loading' } }))
+    try {
+      const res = await fetch(`/api/referral/lists/${targetListId}/items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ pro_id: item.pro_id }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setLists((prev) =>
+          prev.map((l) =>
+            l.id === targetListId
+              ? { ...l, items: [...l.items, { ...data.item, professionals: item.professionals }] }
+              : l
+          )
+        )
+        setAddToListState((prev) => ({
+          ...prev,
+          [key]: { status: 'success', message: '追加しました（掲載通知を送信します）' },
+        }))
+      } else {
+        const err = await res.json().catch(() => ({}))
+        const message =
+          err.error === 'already_pinned'
+            ? 'すでにこのリストに追加されています'
+            : err.error === 'max_pins_reached'
+              ? 'このリストは最大3名までです（上限に達しています）'
+              : '追加に失敗しました'
+        setAddToListState((prev) => ({ ...prev, [key]: { status: 'error', message } }))
+      }
+    } catch {
+      setAddToListState((prev) => ({ ...prev, [key]: { status: 'error', message: '追加に失敗しました' } }))
+    }
+  }
+
   async function updatePinNote(listId: string, targetProId: string, note: string) {
     const res = await fetch(`/api/referral/lists/${listId}/items`, {
       method: 'PATCH',
@@ -380,41 +431,92 @@ export default function ReferralTab({ proId, initialAcceptingStatus, initialAcce
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
           {list.items.map((item) => {
             const label = consentLabel(item.consent_status)
+            const addKey = `${list.id}:${item.pro_id}`
+            const addState = addToListState[addKey]
             return (
               <div
                 key={item.id}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: '#F9FAFB', borderRadius: 8 }}
+                style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 10px', background: '#F9FAFB', borderRadius: 8 }}
               >
-                {item.professionals?.photo_url ? (
-                  <img src={item.professionals.photo_url} alt="" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-                ) : (
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#E5E7EB', flexShrink: 0 }} />
-                )}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E' }}>
-                    {item.professionals?.name || '不明なプロ'}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  {item.professionals?.photo_url ? (
+                    <img src={item.professionals.photo_url} alt="" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                  ) : (
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#E5E7EB', flexShrink: 0 }} />
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E' }}>
+                      {item.professionals?.name || '不明なプロ'}
+                    </div>
+                    {!isPrivate && <div style={{ fontSize: 11, color: label.color }}>{label.text}</div>}
+                    <input
+                      defaultValue={item.note || ''}
+                      onBlur={(e) => {
+                        if (e.target.value !== (item.note || '')) {
+                          updatePinNote(list.id, item.pro_id, e.target.value)
+                        }
+                      }}
+                      placeholder="一言（例: 産後のケアが得意です）"
+                      style={{
+                        width: '100%', padding: '4px 8px', borderRadius: 6, border: '1px solid #E5E7EB',
+                        fontSize: 12, marginTop: 4, boxSizing: 'border-box' as const,
+                      }}
+                    />
                   </div>
-                  {!isPrivate && <div style={{ fontSize: 11, color: label.color }}>{label.text}</div>}
-                  <input
-                    defaultValue={item.note || ''}
-                    onBlur={(e) => {
-                      if (e.target.value !== (item.note || '')) {
-                        updatePinNote(list.id, item.pro_id, e.target.value)
-                      }
-                    }}
-                    placeholder="一言（例: 産後のケアが得意です）"
-                    style={{
-                      width: '100%', padding: '4px 8px', borderRadius: 6, border: '1px solid #E5E7EB',
-                      fontSize: 12, marginTop: 4, boxSizing: 'border-box' as const,
-                    }}
-                  />
+                  <button
+                    onClick={() => removePin(list.id, item.pro_id)}
+                    style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 11, cursor: 'pointer', flexShrink: 0 }}
+                  >
+                    除去
+                  </button>
                 </div>
-                <button
-                  onClick={() => removePin(list.id, item.pro_id)}
-                  style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 11, cursor: 'pointer', flexShrink: 0 }}
-                >
-                  除去
-                </button>
+
+                {/* §3-1: 連携候補(private)行のみ「処方箋リストへ追加」導線を出す */}
+                {isPrivate && (
+                  <div style={{ paddingLeft: 42 }}>
+                    {publicLists.length === 0 ? (
+                      <div style={{ fontSize: 11, color: '#9CA3AF' }}>
+                        先に処方箋リストを作成してください
+                      </div>
+                    ) : addState?.status === 'success' ? (
+                      <div style={{ fontSize: 11, color: '#2E7D32' }}>{addState.message}</div>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const }}>
+                        {publicLists.length > 1 && (
+                          <select
+                            value={addToListSelection[addKey] || publicLists[0].id}
+                            onChange={(e) =>
+                              setAddToListSelection((prev) => ({ ...prev, [addKey]: e.target.value }))
+                            }
+                            style={{
+                              padding: '4px 6px', borderRadius: 6, border: '1px solid #E5E7EB',
+                              fontSize: 11, color: '#1A1A2E',
+                            }}
+                          >
+                            {publicLists.map((l) => (
+                              <option key={l.id} value={l.id}>{l.title}</option>
+                            ))}
+                          </select>
+                        )}
+                        <button
+                          onClick={() => addCandidateToOwnList(list.id, item)}
+                          disabled={addState?.status === 'loading'}
+                          style={{
+                            background: 'none', border: '1px solid #C4A35A', color: '#C4A35A',
+                            borderRadius: 6, fontSize: 11, fontWeight: 600, padding: '3px 8px',
+                            cursor: addState?.status === 'loading' ? 'default' : 'pointer',
+                            opacity: addState?.status === 'loading' ? 0.6 : 1,
+                          }}
+                        >
+                          {addState?.status === 'loading' ? '追加中...' : '処方箋リストへ追加'}
+                        </button>
+                        {addState?.status === 'error' && (
+                          <span style={{ fontSize: 11, color: '#B00020' }}>{addState.message}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })}
