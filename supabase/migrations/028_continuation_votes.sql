@@ -62,3 +62,6 @@ GROUP BY professional_id, proof_id;
 
 -- STEP 5【検証】
 -- SELECT COUNT(*) AS pairs, SUM(vote_count) AS total FROM vote_summary;
+-- SELECT COUNT(*) FROM vote_summary WHERE vote_count = 0;
+--   ↑ normalized_email が NULL の票のみで構成される項目は 0人 で残り得る（実データでは0件のはず）。
+--     0件でなければ該当 (professional_id, proof_id) を確認して報告。
