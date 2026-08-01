@@ -87,6 +87,10 @@ export interface Vote {
 
   // --- リワード配信オプトイン (2026-04-29) ---
   reward_optin?: boolean
+
+  // --- §2-8 継続記録（スタンプ） (2026-07-31) ---
+  self_reported_repeat?: boolean | null
+  continuation_theme?: string | null
 }
 
 // client_rewards: vote × reward の中間テーブル。
