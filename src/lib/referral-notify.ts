@@ -220,4 +220,45 @@ export async function notifyClientByEmail(
   }
 }
 
+/**
+ * §2-10: 案件スレッドに新しいコメントが届いたことを相手側プロへ通知する。
+ * PII/傷病名保護のため本文(body)はLINE/メールに一切含めない。
+ */
+export async function notifyBookingMessage(
+  target: ProNotifyTarget,
+  senderProName: string,
+): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  return sendProNotification(target, {
+    lineText: `${senderProName}さんから案件スレッドに新しいコメントがあります。\n${dashboardUrl}`,
+    emailSubject: '案件スレッドに新しいコメントがあります',
+    emailBodyHtml: emailShell(
+      '案件スレッドのお知らせ',
+      `${senderProName}さんから案件スレッドに新しいコメントが届いています。<br>ダッシュボードからご確認ください。`,
+      'ダッシュボードを開く',
+      dashboardUrl,
+    ),
+  })
+}
+
+/**
+ * §2-9: 招待経由でRP未登録のプロが登録を完了したことを、招待した側のプロへ通知する。
+ */
+export async function notifyInviteRegistered(
+  target: ProNotifyTarget,
+  registeredProName: string,
+): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  return sendProNotification(target, {
+    lineText: `${registeredProName}さんが招待から登録を完了しました。\n${dashboardUrl}`,
+    emailSubject: `${registeredProName}さんが登録を完了しました`,
+    emailBodyHtml: emailShell(
+      '招待登録完了のお知らせ',
+      `${registeredProName}さんが、あなたの招待からREAL PROOFへの登録を完了しました。<br>ダッシュボードからリストの状態をご確認いただけます。`,
+      'ダッシュボードを開く',
+      dashboardUrl,
+    ),
+  })
+}
+
 export { emailShell }

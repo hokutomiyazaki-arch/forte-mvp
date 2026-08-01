@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { formatSlot } from '@/lib/referral-format'
+import BookingThread from '@/components/dashboard/BookingThread'
 
 interface BookingItem {
   id: string
@@ -12,6 +13,7 @@ interface BookingItem {
   preferred_slots: { slots?: (string | null)[]; note?: string | null; confirmed_index?: number } | null
   status: 'requested' | 'confirmed'
   price_jpy: number
+  handover_note: { theme?: string; history?: string; tried?: string; notes?: string } | null
   expires_at: string | null
   confirmed_at: string | null
   created_at: string
@@ -19,12 +21,18 @@ interface BookingItem {
   sender_pro: { id: string; name: string } | null
 }
 
+interface Props {
+  /** §2-10: 案件スレッドの参加者判定に使う自分のprofessionals.id。未指定時はスレッドを表示しない。 */
+  proId?: string
+}
+
 /**
  * §2-4/§4-8: 受信した予約リクエストの確定・辞退カード。
+ * §2-10: 確定済み予約には案件スレッド・引き継ぎメモの開閉式ビューを表示する。
  * ★ isReferralEnabled ではゲートしない(受け手は先行アクセス外でもリクエストを受けられる必要がある)。
  * ダッシュボード上部に ReferralConsentCard と同様、タブに依存せず常時表示する。
  */
-export default function ReferralBookingReceivedCard() {
+export default function ReferralBookingReceivedCard({ proId }: Props) {
   const [items, setItems] = useState<BookingItem[]>([])
   const [loading, setLoading] = useState(true)
   const [processingId, setProcessingId] = useState<string | null>(null)
@@ -41,6 +49,7 @@ export default function ReferralBookingReceivedCard() {
   }, [])
 
   const requestedItems = items.filter((i) => i.status === 'requested')
+  const confirmedItems = items.filter((i) => i.status === 'confirmed')
 
   async function confirm(bookingId: string) {
     const index = selectedSlot[bookingId]
@@ -84,7 +93,7 @@ export default function ReferralBookingReceivedCard() {
     }
   }
 
-  if (loading || requestedItems.length === 0) return null
+  if (loading || (requestedItems.length === 0 && confirmedItems.length === 0)) return null
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
@@ -179,6 +188,32 @@ export default function ReferralBookingReceivedCard() {
           </div>
         )
       })}
+
+      {proId &&
+        confirmedItems.map((item) => (
+          <div
+            key={item.id}
+            style={{
+              background: '#F9FFF9',
+              border: '1px solid #C8E6C9',
+              borderRadius: 12,
+              padding: '14px 16px',
+            }}
+          >
+            <div style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6 }}>
+              <strong>{item.client_nickname}さん</strong>との相談が確定しています
+              {item.sender_pro?.name && (
+                <span style={{ color: '#6B7280' }}>(紹介元: {item.sender_pro.name}さん)</span>
+              )}
+            </div>
+            <BookingThread
+              bookingId={item.id}
+              ownProId={proId}
+              isSender={false}
+              initialHandoverNote={item.handover_note}
+            />
+          </div>
+        ))}
     </div>
   )
 }

@@ -79,6 +79,28 @@ export async function GET() {
       }
     }
 
+    // §2-10: 引き継ぎメモ(handover_note)を別クエリで取得する(fail-soft)。
+    // migration 031 未反映環境でも、この取得の失敗が予約一覧の表示自体を壊さないようにする。
+    let handoverMap: Record<string, unknown> = {}
+    try {
+      const bookingIds = ((bookings || []) as any[]).map((b) => b.id)
+      if (bookingIds.length > 0) {
+        const { data: handoverRows, error: handoverError } = await supabase
+          .from('referral_bookings')
+          .select('id, handover_note')
+          .in('id', bookingIds)
+        if (handoverError) {
+          console.error('[api/referral/bookings/received] handover_note fetch error (fail-soft):', handoverError)
+        } else {
+          for (const row of (handoverRows || []) as Array<{ id: string; handover_note: unknown }>) {
+            handoverMap[row.id] = row.handover_note
+          }
+        }
+      }
+    } catch (handoverErr) {
+      console.error('[api/referral/bookings/received] handover_note fetch error (fail-soft):', handoverErr)
+    }
+
     const result = ((bookings || []) as any[]).map((b) => ({
       id: b.id,
       list_id: b.list_id,
@@ -88,6 +110,7 @@ export async function GET() {
       preferred_slots: b.preferred_slots,
       status: b.status,
       price_jpy: b.price_jpy,
+      handover_note: handoverMap[b.id] || null,
       expires_at: b.expires_at,
       confirmed_at: b.confirmed_at,
       created_at: b.created_at,
