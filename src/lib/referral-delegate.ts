@@ -24,6 +24,10 @@ export async function getValidDelegateListIds(
   const ids = Array.from(new Set(listIds.filter((id): id is string => !!id)))
   if (ids.length === 0) return new Set()
 
+  // 1000行キャップについて: 呼び出し側は共有可能(link/public)リストのIDのみを渡す運用
+  // （accepting PATCH が private を代理指定不可にしており、lists API も private を除外）。
+  // 共有リストのピンは approved 込みで最大3件/リストのため、1000行に達しない前提。
+  // この前提が崩れる呼び出し方を追加する場合は .range() ページネーションを入れること。
   const { data: items, error: itemsError } = await supabase
     .from('referral_list_items')
     .select('list_id, pro_id')

@@ -69,7 +69,9 @@ export async function GET() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .map((item: any) => item.professionals?.delegate_list_id)
       .filter((id): id is string => !!id)
-    const ownListIds = (lists || []).map((l) => l.id)
+    // private(連携候補)は代理リストに設定できない(accepting PATCH が拒否)ため判定対象から除外。
+    // 029移行後のprivateリストはピン数無制限で大きくなり得るので、無意味な大量走査の回避も兼ねる
+    const ownListIds = (lists || []).filter((l) => l.visibility !== 'private').map((l) => l.id)
     const validDelegateListIds = await getValidDelegateListIds(supabase, [
       ...ownListIds,
       ...pinDelegateListIds,

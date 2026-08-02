@@ -143,8 +143,8 @@ alter table professionals add column delegate_list_id uuid references referral_l
     また「トグルで即切替」は2値でないと成立しない）。既存の conditional レコードは open に寄せる
   - **表示**：データ2値＋代理リストの有無から、**3色のインジケータを導出**する
     - 🟢 **受付中**（open）
-    - 🟡 **停止中・代理リストで案内**（closed ＋ delegate_list_id あり）
-    - 🔴 **停止中**（closed ＋ 代理なし）
+    - 🟡 **停止中・代理リストで案内**（closed ＋ 有効な代理リストあり＝下記条件を満たす）
+    - 🔴 **停止中**（closed ＋ 有効な代理なし）
   - **🟡の点灯条件は「代理リストが設定されている」だけでは不十分**。
     そのリストに **承諾済み（consent_status='approved'）かつ受付中（🟢）のメンバーが1名以上**
     存在する場合のみ🟡とする。空のリストや全員停止中のリストで
@@ -378,8 +378,8 @@ members CTE で `group by` して重複を潰してから join すること。
 - メンバー側の個人ページには「所属団体（verified）」バッジのみ表示（育成カードは出さない）
 
 #### 実装順
-1. 追加カラム3本（DDL提示 → CEO実行）
-2. 既存FNTメンバーの role 設定（宮崎＝founder、ファシリテーター＝instructor）
+1. 追加カラム3本（growth_role / aggregate_opt_in / growth_visibility。DDL提示 → CEO実行）
+2. 既存FNTメンバーの growth_role 設定（宮崎＝founder、ファシリテーター＝instructor。**既存 role（member/manager）は触らない**）
 3. VIEW 2本の作成
 4. 個人ページの育成カード表示（`FEATURE_ORG_CARD` フラグ）
 5. 既存メンバーへの集計オプトイン告知（規約 or ダッシュボード通知。既定ONだが取消可を明示）

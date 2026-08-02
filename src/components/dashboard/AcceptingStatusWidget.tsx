@@ -183,7 +183,7 @@ export default function AcceptingStatusWidget({
           本人が原因を理解できるよう説明を1行添える(空約束の防止・CEO決定)。 */}
       {status === 'closed' && listsLoaded && delegateListId && !hasValidDelegate && (
         <div style={{ fontSize: 11, color: '#9CA3AF', lineHeight: 1.6 }}>
-          代理リストに受付中のメンバーがいないため、停止中と表示されます
+          代理リストが現在有効でないため、停止中と表示されます（承諾済みで受付中のメンバーがいない、またはリストが共有可能な状態ではありません）
         </div>
       )}
 
