@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { ensureOwnClient } from '@/lib/referral-auth'
 import { verifyReceiverAllowedInList } from '@/lib/referral-data'
 import { notifyBookingRequested } from '@/lib/referral-notify'
+import { isAcceptingOpen } from '@/lib/referral-accepting'
 
 export const dynamic = 'force-dynamic'
 
@@ -96,7 +97,9 @@ export async function POST(request: NextRequest) {
     if (!receiverPro || receiverPro.deactivated_at) {
       return NextResponse.json({ error: 'receiver_not_found' }, { status: 404 })
     }
-    if (receiverPro.accepting_status === 'closed') {
+    // レビュー指摘: fail safeを徹底するため「'closed'かどうか」ではなく「'open'かどうか」で判定する
+    // (想定外の値は非受付扱いに倒す。isAcceptingOpenに統一)
+    if (!isAcceptingOpen(receiverPro.accepting_status)) {
       return NextResponse.json({ error: 'receiver_not_accepting' }, { status: 409 })
     }
 

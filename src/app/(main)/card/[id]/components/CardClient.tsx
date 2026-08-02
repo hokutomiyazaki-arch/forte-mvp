@@ -25,7 +25,7 @@ import { SupportersStrip } from '@/components/card/SupportersStrip'
 import { VoiceCommentCard } from '@/components/card/VoiceCommentCard'
 import { PersonalityPodium } from '@/components/card/PersonalityPodium'
 import type { VoiceComment, Supporter } from '@/components/card/types'
-import { computeReferralSignal } from '@/lib/referral-accepting'
+import { computeReferralSignal, REFERRAL_SIGNAL_COLOR } from '@/lib/referral-accepting'
 
 interface PersonalityItemWithVotes {
   id: string
@@ -546,7 +546,7 @@ export default function CardClient({ cardData, showUniqueCount = false }: Props)
               const signal = computeReferralSignal(pro.accepting_status, pro.delegate_list_id)
               if (signal === 'open') {
                 return (
-                  <div style={{ fontSize: 11, color: '#2E7D32', marginTop: 4, lineHeight: 1.6 }}>
+                  <div style={{ fontSize: 11, color: REFERRAL_SIGNAL_COLOR.open, marginTop: 4, lineHeight: 1.6 }}>
                     新規のご紹介を受付中
                     {pro.accepting_note && (
                       <span style={{ color: T.textMuted }}>（{pro.accepting_note}）</span>
@@ -556,7 +556,7 @@ export default function CardClient({ cardData, showUniqueCount = false }: Props)
               }
               if (signal === 'delegate') {
                 return (
-                  <div style={{ fontSize: 11, color: '#B8860B', marginTop: 4, lineHeight: 1.6 }}>
+                  <div style={{ fontSize: 11, color: REFERRAL_SIGNAL_COLOR.delegate, marginTop: 4, lineHeight: 1.6 }}>
                     現在は新規のご紹介を受け付けていませんが、信頼できる先生をご案内できます
                   </div>
                 )

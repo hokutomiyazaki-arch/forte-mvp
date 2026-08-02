@@ -506,11 +506,13 @@ export async function verifyReceiverAllowedInList(
   const pinnedProIds = ((pinnedRows || []) as Array<{ pro_id: string }>).map((p) => p.pro_id)
 
   if (pinnedProIds.length > 0) {
+    // レビュー指摘: fail safeを徹底するため「'closed'かどうか」ではなく「'open'ではないか」で判定する
+    // (想定外の値は非受付=代理対象扱いに倒す。isAcceptingOpenの否定と等価な条件に統一)
     const { data: pausedPros } = await supabase
       .from('professionals')
       .select('delegate_list_id')
       .in('id', pinnedProIds)
-      .eq('accepting_status', 'closed')
+      .neq('accepting_status', 'open')
       .not('delegate_list_id', 'is', null)
     const delegateListIds = ((pausedPros || []) as Array<{ delegate_list_id: string | null }>)
       .map((p) => p.delegate_list_id)

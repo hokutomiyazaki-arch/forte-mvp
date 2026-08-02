@@ -10,6 +10,7 @@
 
 import { useState } from 'react'
 import { useUser } from '@clerk/nextjs'
+import { isAcceptingOpen } from '@/lib/referral-accepting'
 
 interface BookableMenu {
   id: string
@@ -205,7 +206,8 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
     )
   }
 
-  if (receiverPro.acceptingStatus === 'closed') {
+  // レビュー指摘: fail safeを徹底するため「'closed'かどうか」ではなく「'open'かどうか」で判定する(isAcceptingOpenに統一)
+  if (!isAcceptingOpen(receiverPro.acceptingStatus)) {
     return (
       <div style={{ maxWidth: 480, margin: '0 auto', padding: '16px', background: T.bg, minHeight: '100vh' }}>
         <div style={{ textAlign: 'center', marginBottom: 20, marginTop: 20 }}>
