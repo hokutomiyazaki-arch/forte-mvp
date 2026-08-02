@@ -14,21 +14,39 @@
 import { auth } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 
+async function checkViewerIsPro(): Promise<boolean> {
+  const { userId } = await auth()
+  if (!userId) return false
+
+  const supabase = getSupabaseAdmin()
+  const { data: pro } = await supabase
+    .from('professionals')
+    .select('id, deactivated_at')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  return !!pro && !pro.deactivated_at
+}
+
 export async function getViewerIsPro(): Promise<boolean> {
   try {
-    const { userId } = await auth()
-    if (!userId) return false
-
-    const supabase = getSupabaseAdmin()
-    const { data: pro } = await supabase
-      .from('professionals')
-      .select('id, deactivated_at')
-      .eq('user_id', userId)
-      .maybeSingle()
-
-    return !!pro && !pro.deactivated_at
+    return await checkViewerIsPro()
   } catch {
-    // fail open: 判定エラー時はブロックしない
+    // fail open: 判定エラー時はブロックしない(アクセス制御ゲート用途)
     return true
+  }
+}
+
+/**
+ * レビュー指摘: 受付シグナル(3色ドット/フィルタ)など、プロ限定で見せるべき情報の
+ * 露出判定に使う fail-closed 版。getViewerIsPro() はアクセス制御(検索ページ非公開化の
+ * ガード)向けに fail open だが、こちらは判定失敗時に「出さない側」に倒す。
+ */
+export async function getViewerIsProStrict(): Promise<boolean> {
+  try {
+    return await checkViewerIsPro()
+  } catch {
+    // fail closed: 判定エラー時は非プロ扱い(=露出させない)
+    return false
   }
 }

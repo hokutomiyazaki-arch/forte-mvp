@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { getOwnPro } from '@/lib/referral-auth'
 import { isReferralEnabled } from '@/lib/feature-flags'
-import { computeReferralSignal } from '@/lib/referral-accepting'
+import { computeReferralSignal, isReferralReachable } from '@/lib/referral-accepting'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,13 +45,20 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseAdmin()
     const safeQ = sanitizeIlikeQuery(q)
-    const { data, error } = await supabase
+    let dbQuery = supabase
       .from('professionals')
       .select('id, name, title, photo_url, prefecture, accepting_status, delegate_list_id')
       .is('deactivated_at', null)
       .neq('id', ownPro.id)
       .ilike('name', `%${safeQ}%`)
-      .limit(20)
+
+    // レビュー指摘: 20件limitの前にDB側で絞る(isReferralReachableと同じ定義=
+    // accepting_status='open' または delegate_list_id が設定済み)
+    if (referralOnly) {
+      dbQuery = dbQuery.or('accepting_status.eq.open,delegate_list_id.not.is.null')
+    }
+
+    const { data, error } = await dbQuery.limit(20)
 
     if (error) {
       console.error('[api/referral/pro-search] GET error:', error)
@@ -73,8 +80,9 @@ export async function GET(request: NextRequest) {
       referralSignal: computeReferralSignal(p.accepting_status, p.delegate_list_id),
     }))
 
+    // DB側で既に絞り込み済みだが、述語を共通化するため念のためここでも同じ関数で絞る
     const result = referralOnly
-      ? withSignal.filter((p) => p.referralSignal !== 'closed')
+      ? withSignal.filter((p) => isReferralReachable(p.referralSignal))
       : withSignal
 
     return NextResponse.json({ professionals: result })

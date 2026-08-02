@@ -10,7 +10,7 @@
  * 元のクライアント実装は ./components/SearchPageClient.tsx に分離（/card/[id]/page.tsx と同じ分割パターン）。
  */
 import { isSearchPrivate } from '@/lib/feature-flags'
-import { getViewerIsPro } from '@/lib/viewer-role'
+import { getViewerIsPro, getViewerIsProStrict } from '@/lib/viewer-role'
 import { COLORS, FONTS } from '@/lib/design-tokens'
 import SearchPageClient from './components/SearchPageClient'
 
@@ -60,9 +60,14 @@ function SearchGuidanceScreen() {
 }
 
 export default async function SearchPage() {
-  // フラグ未設定/false時: 既存動作を完全維持（分岐せず従来通り描画）
+  // レビュー指摘: 受付シグナル(3色ドット/「紹介につながる人のみ表示」)の露出は
+  // FEATURE_SEARCH_PRIVATE の設定に関係なく、常にプロ閲覧時のみに限定する。
+  // fail safe: 判定失敗時はfalse(=出さない側)に倒す（getViewerIsProStrict内部で担保）。
+  const showReferralSignals = await getViewerIsProStrict()
+
+  // フラグ未設定/false時: 既存動作を維持（受付シグナルの表示だけは上の判定でゲート）
   if (!isSearchPrivate()) {
-    return <SearchPageClient />
+    return <SearchPageClient showReferralSignals={showReferralSignals} />
   }
 
   // fail open: 判定エラー時はブロックせず通す（getViewerIsPro内部で担保）
@@ -72,5 +77,5 @@ export default async function SearchPage() {
     return <SearchGuidanceScreen />
   }
 
-  return <SearchPageClient proNotice />
+  return <SearchPageClient proNotice showReferralSignals={showReferralSignals} />
 }

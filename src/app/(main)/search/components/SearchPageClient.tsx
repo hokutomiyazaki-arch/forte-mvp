@@ -5,7 +5,7 @@ import { PREFECTURES } from '@/lib/prefectures'
 import { COLORS, FONTS } from '@/lib/design-tokens'
 import { TierBadge, getTierFromVotes } from '@/components/TierBadge'
 import { trackPageView } from '@/lib/tracking'
-import { REFERRAL_SIGNAL_DOT } from '@/lib/referral-accepting'
+import { REFERRAL_SIGNAL_DOT, isReferralReachable } from '@/lib/referral-accepting'
 
 const T = { ...COLORS, font: FONTS.main, fontSerif: FONTS.serif }
 
@@ -99,9 +99,14 @@ interface SearchPro {
 interface Props {
   /** §3-2: FEATURE_SEARCH_PRIVATE=true 時、プロ向けに用途再定義の説明文を1行追加する */
   proNotice?: boolean
+  /**
+   * レビュー指摘: 受付シグナル(3色ドット/「紹介につながる人のみ表示」)はプロ閲覧時のみ表示する。
+   * 一般クライアント・未ログインには一切出さない（サーバー側 getViewerIsProStrict() で判定済みの値を渡す）。
+   */
+  showReferralSignals?: boolean
 }
 
-export default function SearchPageClient({ proNotice = false }: Props) {
+export default function SearchPageClient({ proNotice = false, showReferralSignals = false }: Props) {
   const [category, setCategory] = useState('multi')
   const [subCategory, setSubCategory] = useState('rising')
   const [query, setQuery] = useState('')
@@ -232,8 +237,10 @@ export default function SearchPageClient({ proNotice = false }: Props) {
   }
 
   // §2-2改訂: 「紹介につながる人のみ」フィルタ(最終段の絞りのみ・既存の並び順は変更しない)
-  const displayedPros = referralOnlyFilter
-    ? professionals.filter((p) => p.referralSignal !== 'closed')
+  // レビュー指摘: showReferralSignalsがfalse(非プロ)の場合はチェックボックス自体を出さないため
+  // referralOnlyFilterは常にfalseのままだが、念のためここでもゲートする。
+  const displayedPros = showReferralSignals && referralOnlyFilter
+    ? professionals.filter((p) => isReferralReachable(p.referralSignal))
     : professionals
 
   // 空状態メッセージ
@@ -441,15 +448,17 @@ export default function SearchPageClient({ proNotice = false }: Props) {
           </select>
         </div>
 
-        {/* §2-2改訂: 「紹介につながる人のみ表示」フィルタ(デフォルトOFF) */}
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: T.textSub, marginBottom: 12 }}>
-          <input
-            type="checkbox"
-            checked={referralOnlyFilter}
-            onChange={e => setReferralOnlyFilter(e.target.checked)}
-          />
-          紹介につながる人のみ表示
-        </label>
+        {/* §2-2改訂: 「紹介につながる人のみ表示」フィルタ(デフォルトOFF)。レビュー指摘: プロ閲覧時のみ表示 */}
+        {showReferralSignals && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: T.textSub, marginBottom: 12 }}>
+            <input
+              type="checkbox"
+              checked={referralOnlyFilter}
+              onChange={e => setReferralOnlyFilter(e.target.checked)}
+            />
+            紹介につながる人のみ表示
+          </label>
+        )}
 
         {/* 結果カウント */}
         {!loading && (
@@ -516,7 +525,7 @@ export default function SearchPageClient({ proNotice = false }: Props) {
                         {highlightQuery(p.prefecture || '')}
                         {p.area_description ? ` · ` : ''}
                         {highlightQuery(p.area_description || '')}
-                        {p.referralSignal && (
+                        {showReferralSignals && p.referralSignal && (
                           <span style={{ marginLeft: 6 }}>{REFERRAL_SIGNAL_DOT[p.referralSignal]}</span>
                         )}
                       </div>

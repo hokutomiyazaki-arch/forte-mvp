@@ -17,6 +17,15 @@ export function isAcceptingOpen(status: string | null | undefined): boolean {
 }
 
 /**
+ * レビュー指摘: 「紹介につながる人か」の判定(open/delegateはtrue・closedのみfalse)を
+ * SearchPageClient のクライアント側フィルタ・pro-search・searchの各所で直書きしていたのを
+ * ここに集約する共通述語。
+ */
+export function isReferralReachable(signal: ReferralSignal | null | undefined): boolean {
+  return signal === 'open' || signal === 'delegate'
+}
+
+/**
  * 🟢 受付中(open) / 🟡 停止中・代理リストで案内(closed+delegate_list_id) / 🔴 停止中(closed)
  */
 export function computeReferralSignal(

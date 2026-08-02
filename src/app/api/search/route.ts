@@ -94,8 +94,6 @@ export async function GET(request: Request) {
   const subCategory = searchParams.get('sub') || 'rising'
   const query = searchParams.get('q') || ''
   const prefecture = searchParams.get('prefecture') || ''
-  // §2-2改訂: 「紹介につながる人のみ表示」フィルタ(デフォルトOFF=全件)。最終段の絞りのみ・既存の集計/並び順ロジックは変更しない
-  const referralOnly = searchParams.get('referral_only') === '1'
 
   const supabase = getSupabaseAdmin()
 
@@ -703,10 +701,9 @@ export async function GET(request: Request) {
       }
     }
 
-    // §2-2改訂: 「紹介につながる人のみ」フィルタは最終段の絞りのみ(既存の集計・並び順ロジックには触れない)
-    if (referralOnly) {
-      result = result.filter(p => p.referralSignal !== 'closed')
-    }
+    // レビュー指摘: referral_onlyは呼び出し元ゼロのデッドパラメータだったため削除。
+    // 「紹介につながる人のみ表示」フィルタはクライアント側(SearchPageClient)の最終段の絞りに一本化。
+    // referralSignalの付与自体はここに残す(クライアント側フィルタ・3色ドット表示に必要)。
 
     return NextResponse.json({
       professionals: result,

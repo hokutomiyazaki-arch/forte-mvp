@@ -157,19 +157,28 @@ export default function ReferralTab({ proId }: Props) {
 
   async function deleteList(listId: string) {
     if (!window.confirm('このリストを削除しますか？（ピンした先生への通知は解除されます）')) return
-    const res = await fetch(`/api/referral/lists/${listId}`, { method: 'DELETE', cache: 'no-store' })
-    if (res.ok) {
-      setLists((prev) => prev.filter((l) => l.id !== listId))
+    try {
+      const res = await fetch(`/api/referral/lists/${listId}`, { method: 'DELETE', cache: 'no-store' })
+      if (res.ok) {
+        setLists((prev) => prev.filter((l) => l.id !== listId))
+      } else {
+        window.alert('リストの削除に失敗しました')
+      }
+    } catch {
+      window.alert('リストの削除に失敗しました')
     }
   }
 
   // 軽微指摘: 入力毎に即fetchせず300msデバウンスする(リストごとにタイマーを保持)
   const searchTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
-  async function runProSearch(listId: string, query: string) {
+  // referralOnlyOverride: チェックボックス切替直後の再検索で、setState未反映のstale値を
+  // 参照しないよう明示的に渡す（レビュー指摘: チェックボックスの切替が即座に反映されない問題の修正）
+  async function runProSearch(listId: string, query: string, referralOnlyOverride?: boolean) {
+    const effectiveReferralOnly = referralOnlyOverride !== undefined ? referralOnlyOverride : referralOnlyFilter
     setPinSearching((prev) => ({ ...prev, [listId]: true }))
     try {
-      const url = `/api/referral/pro-search?q=${encodeURIComponent(query)}${referralOnlyFilter ? '&referral_only=1' : ''}`
+      const url = `/api/referral/pro-search?q=${encodeURIComponent(query)}${effectiveReferralOnly ? '&referral_only=1' : ''}`
       const res = await fetch(url, { cache: 'no-store' })
       if (res.ok) {
         const data = await res.json()
@@ -178,6 +187,17 @@ export default function ReferralTab({ proId }: Props) {
     } finally {
       setPinSearching((prev) => ({ ...prev, [listId]: false }))
     }
+  }
+
+  // §レビュー指摘: 「紹介につながる人のみ表示」はリストカード間で共有のstateのため、
+  // 切替時は入力済み(非空)のクエリを持つ全リストを対象に再検索する(仮決定: リストごとの
+  // state分離ではなく、共有のまま全対象再検索する簡潔な方を採用)。
+  function handleReferralOnlyToggle(checked: boolean) {
+    setReferralOnlyFilter(checked)
+    Object.entries(pinQuery).forEach(([listId, q]) => {
+      const trimmed = q.trim()
+      if (trimmed) runProSearch(listId, trimmed, checked)
+    })
   }
 
   function searchPro(listId: string, query: string) {
@@ -417,6 +437,13 @@ export default function ReferralTab({ proId }: Props) {
                   )}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E' }}>
+                      {item.professionals && (
+                        <span style={{ marginRight: 4 }}>
+                          {REFERRAL_SIGNAL_DOT[
+                            computeReferralSignal(item.professionals.accepting_status, item.professionals.delegate_list_id)
+                          ]}
+                        </span>
+                      )}
                       {item.professionals?.name || '不明なプロ'}
                     </div>
                     {!isPrivate && <div style={{ fontSize: 11, color: label.color }}>{label.text}</div>}
@@ -509,7 +536,7 @@ export default function ReferralTab({ proId }: Props) {
               <input
                 type="checkbox"
                 checked={referralOnlyFilter}
-                onChange={(e) => setReferralOnlyFilter(e.target.checked)}
+                onChange={(e) => handleReferralOnlyToggle(e.target.checked)}
               />
               紹介につながる人のみ表示
             </label>
