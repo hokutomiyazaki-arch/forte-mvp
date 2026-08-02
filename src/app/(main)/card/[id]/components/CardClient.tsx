@@ -543,7 +543,7 @@ export default function CardClient({ cardData, showUniqueCount = false }: Props)
             </div>
             {/* §2-2改訂: 公開カードの3分岐（🟢受付中＋条件メモ／🟡代理案内あり／🔴は何も表示しない） */}
             {(() => {
-              const signal = computeReferralSignal(pro.accepting_status, pro.delegate_list_id)
+              const signal = computeReferralSignal(pro.accepting_status, !!cardData.delegateHasActiveMember)
               if (signal === 'open') {
                 return (
                   <div style={{ fontSize: 11, color: REFERRAL_SIGNAL_COLOR.open, marginTop: 4, lineHeight: 1.6 }}>

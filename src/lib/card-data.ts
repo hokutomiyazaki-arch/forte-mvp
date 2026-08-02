@@ -12,6 +12,7 @@
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { getValidDelegateListIds } from '@/lib/referral-delegate'
 
 // ─── 内部型 ───
 interface VoteWithVoterPro {
@@ -114,6 +115,9 @@ export interface CardData {
   uniqueVoters?: number
   /** 常連(新定義): 同一プロへconfirmed票3票以上 かつ 初回投票から最新投票まで90日以上（既存getVoterLevelとは別計算） */
   regular90Count?: number
+  /** §2-2改訂: pro.delegate_list_id が「有効な代理リスト」(承諾済み+受付中のメンバーが1名以上)かどうか。
+   * 未設定(null)の場合は常にfalse。公開カードの3分岐(computeReferralSignal)に渡す。 */
+  delegateHasActiveMember?: boolean
 }
 
 export async function getCardData(
@@ -189,6 +193,16 @@ export async function getCardData(
       .order('display_order', { ascending: true })
       .order('created_at', { ascending: true }),
   ])
+
+  // §2-2改訂: 🟡点灯条件の厳格化。pro.delegate_list_id が設定されていても、そのリストに
+  // 承諾済み+受付中のメンバーが1名以上いなければ無効（既存 Promise.all のarityは崩さず後段の
+  // 個別クエリとして追加する）。
+  let delegateHasActiveMember = false
+  const delegateListId = (proResult.data as { delegate_list_id?: string | null } | null)?.delegate_list_id
+  if (delegateListId) {
+    const validSet = await getValidDelegateListIds(supabase, [delegateListId])
+    delegateHasActiveMember = validSet.has(delegateListId)
+  }
 
   // ブックマーク状態（ログイン中のみ）
   let isBookmarked = false
@@ -477,5 +491,6 @@ export async function getCardData(
     regularCount,
     uniqueVoters: uniqueProofVoterEmails.size,
     regular90Count,
+    delegateHasActiveMember,
   }
 }

@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { getOwnPro } from '@/lib/referral-auth'
 import { isReferralEnabled } from '@/lib/feature-flags'
+import { getValidDelegateListIds } from '@/lib/referral-delegate'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,9 +58,33 @@ export async function GET() {
       }
     }
 
+    // §2-2改訂: 🟡点灯条件の厳格化。判定対象は2種類あるが同じ関数で一括判定できる:
+    //   ①自分の各リスト自体が「有効な代理リスト」か(is_valid_delegate。ダッシュボードの
+    //     受付ステータスウィジェットが、選択中のdelegateListIdの有効性判定に使う)
+    //   ②各ピン(pro)自身が設定しているdelegate_list_idが有効か(has_valid_delegate。
+    //     ReferralTabのピン行ドット表示に使う)
+    // 両方のIDをまとめて1回のヘルパー呼び出しに渡し、二重実装しない。
+    const pinDelegateListIds = Object.values(itemsByList)
+      .flat()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .map((item: any) => item.professionals?.delegate_list_id)
+      .filter((id): id is string => !!id)
+    const ownListIds = (lists || []).map((l) => l.id)
+    const validDelegateListIds = await getValidDelegateListIds(supabase, [
+      ...ownListIds,
+      ...pinDelegateListIds,
+    ])
+
     const result = (lists || []).map((l) => ({
       ...l,
-      items: itemsByList[l.id] || [],
+      is_valid_delegate: validDelegateListIds.has(l.id),
+      items: (itemsByList[l.id] || []).map((item) => ({
+        ...item,
+        has_valid_delegate: !!(
+          item.professionals?.delegate_list_id &&
+          validDelegateListIds.has(item.professionals.delegate_list_id)
+        ),
+      })),
     }))
 
     return NextResponse.json({ lists: result })

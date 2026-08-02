@@ -20,6 +20,9 @@ interface OwnList {
   id: string
   title: string
   visibility: 'link' | 'private' | 'public'
+  /** §2-2改訂: このリスト自体が「有効な代理リスト」か(承諾済み+受付中のメンバーが1名以上)。
+   * /api/referral/lists がリストごとに一括判定して返す。 */
+  is_valid_delegate?: boolean
 }
 
 interface Props {
@@ -57,9 +60,16 @@ export default function AcceptingStatusWidget({
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.lists) {
-          const shareable = (data.lists as Array<{ id: string; title: string; visibility: string }>)
+          const shareable = (
+            data.lists as Array<{ id: string; title: string; visibility: string; is_valid_delegate?: boolean }>
+          )
             .filter((l) => l.visibility !== 'private')
-            .map((l) => ({ id: l.id, title: l.title, visibility: l.visibility as OwnList['visibility'] }))
+            .map((l) => ({
+              id: l.id,
+              title: l.title,
+              visibility: l.visibility as OwnList['visibility'],
+              is_valid_delegate: !!l.is_valid_delegate,
+            }))
           setLists(shareable)
         }
       })
@@ -67,7 +77,11 @@ export default function AcceptingStatusWidget({
       .finally(() => setListsLoaded(true))
   }, [status, listsLoaded])
 
-  const signal = computeReferralSignal(status, delegateListId)
+  // §2-2改訂: 選択中のdelegateListIdが「有効な代理リスト」か(承諾済み+受付中のメンバーが1名以上)。
+  // まだlists未取得の間はfalse(保守側=🔴)に倒す。
+  const selectedDelegateList = delegateListId ? lists.find((l) => l.id === delegateListId) : undefined
+  const hasValidDelegate = !!selectedDelegateList?.is_valid_delegate
+  const signal = computeReferralSignal(status, hasValidDelegate)
 
   async function toggleStatus() {
     if (toggling) return
@@ -165,6 +179,13 @@ export default function AcceptingStatusWidget({
         </button>
       </div>
       {toggleError && <div style={{ fontSize: 11, color: '#B00020' }}>更新に失敗しました</div>}
+      {/* §2-2改訂: delegateListIdは設定済みだが有効な代理メンバーがいないため🔴になっている場合、
+          本人が原因を理解できるよう説明を1行添える(空約束の防止・CEO決定)。 */}
+      {status === 'closed' && listsLoaded && delegateListId && !hasValidDelegate && (
+        <div style={{ fontSize: 11, color: '#9CA3AF', lineHeight: 1.6 }}>
+          代理リストに受付中のメンバーがいないため、停止中と表示されます
+        </div>
+      )}
 
       {status === 'open' ? (
         <div>

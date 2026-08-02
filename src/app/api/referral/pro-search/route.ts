@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { getOwnPro } from '@/lib/referral-auth'
 import { isReferralEnabled } from '@/lib/feature-flags'
 import { computeReferralSignal, isReferralReachable } from '@/lib/referral-accepting'
+import { getValidDelegateListIds } from '@/lib/referral-delegate'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,8 +53,10 @@ export async function GET(request: NextRequest) {
       .neq('id', ownPro.id)
       .ilike('name', `%${safeQ}%`)
 
-    // レビュー指摘: 20件limitの前にDB側で絞る(isReferralReachableと同じ定義=
-    // accepting_status='open' または delegate_list_id が設定済み)
+    // レビュー指摘: 20件limitの前にDB側で「候補を広めに」絞る(delegate_list_idが設定済みという
+    // 粗い条件のまま)。§2-2改訂で🟡の実際の点灯条件は「そのリストに承諾済み+受付中のメンバーが
+    // 1名以上」に厳格化したため、ここで拾った delegate_list_id 設定済みだが無効(空/全員停止中)な
+    // 候補は下のisReferralReachableによる最終絞りで正しく除外される(有効性はwithSignalで判定)。
     if (referralOnly) {
       dbQuery = dbQuery.or('accepting_status.eq.open,delegate_list_id.not.is.null')
     }
@@ -75,9 +78,16 @@ export async function GET(request: NextRequest) {
       delegate_list_id: string | null
     }>
 
+    const validDelegateListIds = await getValidDelegateListIds(
+      supabase,
+      rows.map((p) => p.delegate_list_id)
+    )
     const withSignal = rows.map((p) => ({
       ...p,
-      referralSignal: computeReferralSignal(p.accepting_status, p.delegate_list_id),
+      referralSignal: computeReferralSignal(
+        p.accepting_status,
+        !!p.delegate_list_id && validDelegateListIds.has(p.delegate_list_id)
+      ),
     }))
 
     // DB側で既に絞り込み済みだが、述語を共通化するため念のためここでも同じ関数で絞る

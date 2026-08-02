@@ -26,14 +26,19 @@ export function isReferralReachable(signal: ReferralSignal | null | undefined): 
 }
 
 /**
- * 🟢 受付中(open) / 🟡 停止中・代理リストで案内(closed+delegate_list_id) / 🔴 停止中(closed)
+ * 🟢 受付中(open) / 🟡 停止中・代理リストで案内(closed+有効な代理メンバーあり) / 🔴 停止中(closed)
+ *
+ * §2-2改訂（CEO決定・空約束の防止）: 🟡は「delegate_list_id が設定されている」だけでは点灯しない。
+ * 第2引数 hasValidDelegate は、そのリストに consent_status='approved' かつ受付中(open)の
+ * メンバーが1名以上存在するかを呼び出し側が(サーバー専用ヘルパー `getValidDelegateListIds` で)
+ * 判定した結果を渡す。ここは純関数のまま(サーバー依存を持ち込まない)。
  */
 export function computeReferralSignal(
   status: string | null | undefined,
-  delegateListId: string | null | undefined
+  hasValidDelegate: boolean
 ): ReferralSignal {
   if (isAcceptingOpen(status)) return 'open'
-  return delegateListId ? 'delegate' : 'closed'
+  return hasValidDelegate ? 'delegate' : 'closed'
 }
 
 export const REFERRAL_SIGNAL_COLOR: Record<ReferralSignal, string> = {

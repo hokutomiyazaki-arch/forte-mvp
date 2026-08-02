@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { isSearchPrivate } from '@/lib/feature-flags'
 import { getViewerIsPro, getViewerIsProStrict } from '@/lib/viewer-role'
 import { computeReferralSignal } from '@/lib/referral-accepting'
+import { getValidDelegateListIds } from '@/lib/referral-delegate'
 
 export const dynamic = 'force-dynamic'
 
@@ -366,6 +367,13 @@ export async function GET(request: Request) {
       }
     }
 
+    // §2-2改訂: 🟡点灯条件の厳格化のため、delegate_list_id群の「有効性」(承諾済み+受付中の
+    // メンバーが1名以上いるか)を一括判定する。referralSignalはプロ閲覧時のみ使うため、
+    // 非プロ閲覧時はこのクエリ自体を実行しない(fail closed・無駄クエリ回避)。
+    const validDelegateListIds = viewerIsProStrict
+      ? await getValidDelegateListIds(supabase, professionals.map(p => p.delegate_list_id))
+      : new Set<string>()
+
     // プロデータの組み立て
     let result = professionals.map(pro => {
       const stat = proStats.get(pro.id) || {
@@ -594,7 +602,10 @@ export async function GET(request: Request) {
         topPersonalitiesByCategory,
         // §2-2改訂: 3色インジケータ(プロ向け検索・ReferralTab共通)。非プロ閲覧時は付与しない
         referralSignal: viewerIsProStrict
-          ? computeReferralSignal(pro.accepting_status, pro.delegate_list_id)
+          ? computeReferralSignal(
+              pro.accepting_status,
+              !!pro.delegate_list_id && validDelegateListIds.has(pro.delegate_list_id)
+            )
           : null,
       }
     }).filter((p): p is NonNullable<typeof p> => p !== null)

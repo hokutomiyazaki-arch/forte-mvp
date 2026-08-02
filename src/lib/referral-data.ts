@@ -251,7 +251,9 @@ async function buildDelegateCandidates(
       note: item.note,
       allowDelegateExpansion: false, // 一段のみ・再帰しない
     })
-    if (candidate) results.push(candidate)
+    // §2-2改訂(CEO決定・空約束の防止): 代理として展開するのは受付中(open)のメンバーのみ。
+    // consent_status='approved'であっても本人が停止中なら、代理として案内する意味がないため除外する。
+    if (candidate && !candidate.isPaused) results.push(candidate)
   }
   return results
 }

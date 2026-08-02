@@ -22,6 +22,9 @@ interface ListItem {
   consent_status: 'pending' | 'approved' | 'declined'
   created_at: string
   professionals: PinPro | null
+  /** §2-2改訂: このピン(professionals)自身が設定しているdelegate_list_idの有効性
+   * (承諾済み+受付中のメンバーが1名以上)。APIが一括判定して付与する。 */
+  has_valid_delegate?: boolean
 }
 
 interface ReferralList {
@@ -440,7 +443,7 @@ export default function ReferralTab({ proId }: Props) {
                       {item.professionals && (
                         <span style={{ marginRight: 4 }}>
                           {REFERRAL_SIGNAL_DOT[
-                            computeReferralSignal(item.professionals.accepting_status, item.professionals.delegate_list_id)
+                            computeReferralSignal(item.professionals.accepting_status, !!item.has_valid_delegate)
                           ]}
                         </span>
                       )}
@@ -562,7 +565,9 @@ export default function ReferralTab({ proId }: Props) {
                       <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#E5E7EB' }} />
                     )}
                     <div style={{ fontSize: 13, color: '#1A1A2E' }}>
-                      {REFERRAL_SIGNAL_DOT[p.referralSignal || computeReferralSignal(p.accepting_status, p.delegate_list_id)]} {p.name}
+                      {/* p.referralSignalはAPI側で有効性判定済みで常に返るため、フォールバックは
+                          防御的なもの(未知の応答形状時はfalse=保守側に倒す) */}
+                      {REFERRAL_SIGNAL_DOT[p.referralSignal || computeReferralSignal(p.accepting_status, false)]} {p.name}
                     </div>
                     {p.title && <div style={{ fontSize: 11, color: '#9CA3AF' }}>{p.title}</div>}
                   </div>
