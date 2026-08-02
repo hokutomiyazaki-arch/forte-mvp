@@ -10,7 +10,13 @@
 
 1. **本番稼働中のアプリである。** すべての変更は Preview branch で検証 → 動作確認後に main へ merge
 2. **機能追加は「コードを先にデプロイ → 環境変数で ON/OFF」の順序。** 問題が出たら環境変数削除で即時ロールバック
-3. **用語ルール**：「実力」は使わない → 「**強み**」。医療用語を避ける（症例→**サポート実績**／主訴→**テーマ**／治療・改善→サポート・変化）
+3. **用語ルール**：「実力」は使わない → 「**強み**」。医療用語を避ける（症例→**サポート実績**／主訴→**テーマ**／治療・改善→サポート・変化）。
+   **「処方箋」は内部用語であり、UIに出さない**（医療用語であり、ヨガ・テニスコーチ・マジシャン等に通じない）。
+   UI表示は「**紹介**」「**紹介リスト**」。クライアント向けの「あなたの先生からのご紹介」とも整合する。
+   **上下関係を含む語をUIに出さない**：門下・弟子・師匠 → **認定者／指導者**。「育成プルーフ」は内部用語で、
+   ユーザー向け表示は「**認定者が積み上げた実績**」。対象職種は整体・鍼灸・トレーナー・ヨガ・ピラティス・
+   テニスコーチ・エステティシャン・マジシャン等に及ぶため、特定業種を前提とする語（ゴッドハンド・患者・
+   施術者など）も避け、**クライアント／サポート**を基本語彙とする
 4. **保証は絶対に自動生成しない。** 人の推薦・所属・代理関係は、必ず本人または権限者の明示的アクションを経由する
 5. 既存データは削除・破棄しない。移行する
 
@@ -124,6 +130,33 @@ alter table professionals add column accepting_note text;      -- 条件付き�
 alter table professionals add column accepting_updated_at timestamptz;
 alter table professionals add column delegate_list_id uuid references referral_lists(id);
 ```
+
+**UI配置（先行テストのフィードバックにより変更）**:
+- 受付ステータスのトグルは**ダッシュボードのホーム画面 左上に常時表示**（🟢受付中／🔴受付停止中）。
+  タブの奥に隠さない。頻繁に切り替え、一目で確認する情報のため
+- **公開カードページ**：受付中のときのみ「🟢 新規のご紹介を受付中」を表示。
+  停止中は**何も表示しない**（受付ステータスは「紹介の受付可否」であって「営業しているか」では
+  ないため、赤表示はクライアントの誤解と離脱を招く）
+- **ステータスは2値、表示は3色**（先行テストのフィードバックにより確定）:
+  - **データ**：`accepting_status` は `open` / `closed` の**2値**。`conditional` は廃止
+    （openと挙動が完全に同一で、条件の中身は自由記述のため機械判別もできず、状態を増やす価値がない。
+    また「トグルで即切替」は2値でないと成立しない）。既存の conditional レコードは open に寄せる
+  - **表示**：データ2値＋代理リストの有無から、**3色のインジケータを導出**する
+    - 🟢 **受付中**（open）
+    - 🟡 **停止中・代理リストで案内**（closed ＋ delegate_list_id あり）
+    - 🔴 **停止中**（closed ＋ 代理なし）
+  - 🟡はユーザーが選ぶ状態ではなく、**代理リストを設定すると自動的に点る**。
+    トグル自体は🟢⇄🔴の2値のまま。本人のダッシュボードでも
+    「停止中（代理リストで案内中）」とラベルを添えて混乱を防ぐ
+  - **条件メモ（accepting_note）は残す**。受付中のときのみ入力欄を表示し、
+    紹介リストの候補カードと公開カードに小さく表示（例：「めまい・ふらつきのケースのみ」「土曜のみ対応可」）
+- **プロ向け一覧・検索**：「**紹介につながる人のみ表示**」のフィルタ切替を設ける（デフォルトはOFF＝全件）。
+  対象は 🟢 ＋ 🟡。送り手が知りたいのは「このピンが誰かの施術につながるか」であって
+  本人が受けるかではないため、🟡（代理あり）を含める。プロ向け画面では🔴も明示してよい
+- **公開カードページの3分岐**：
+  - 🟢 → 「新規のご紹介を受付中」＋条件メモ
+  - 🟡 → 「**現在は新規のご紹介を受け付けていませんが、信頼できる先生をご案内できます**」
+  - 🔴 → 何も表示しない
 
 **表示ロジック（重要）**:
 - **基準行（自動生成）**: `accepting_status = 'closed'` のプロは**静かに除外**する
@@ -249,41 +282,84 @@ create table referral_bookings (
   料率の利益を大きく上回る
 - 呼称は「リアプルの取り分」ではなく「**決済・システム利用料（決済会社手数料を含む）**」
 
-### 2-5. 団体リレーション（育成プルーフ）
+### 2-5. 団体リレーション＝育成プルーフ【Phase 1.5・リフェラルの60日ゲートと並行して実施】
 
-**⚠️ STOP 1判明事項：org_members は既存稼働中テーブルと衝突する。Phase 3着工前に既存スキーマ（org_members: invited_at/accepted_at/removed_at、credential_level_id連携）を調査し、本DDLを「新設」ではなく「既存拡張」として再設計すること。以下のDDLは要件定義として読む。**
+**位置づけの変更**: 当初Phase 3としていたが、以下の理由でPhase 1.5（先行テストと並行）に繰り上げる。
+- **紹介の流動性に依存しない**（団体が1つあれば今日から機能する。N=1で成立する意味の供給源）
+- **現場を退いた上位層にとって唯一の証明手段**（臨床プルーフが増えない人の「道のり」の出口）
+- **ハブ複製（ゆりかさん型）の商談材料**そのもの。これが無いと次のハブ候補に見せるものがない
+- **既存テーブルを使うため実装が軽い**（新テーブル不要）
 
-```sql
-create table org_members (
-  id uuid primary key default gen_random_uuid(),
-  org_id uuid not null references organizations(id) on delete cascade,
-  pro_id uuid not null references professionals(id) on delete cascade,
-  role text not null check (role in ('founder','instructor','member')),
-  verification_status text not null default 'self_declared'
-    check (verification_status in ('self_declared','verified','declined')),
-  visibility text not null default 'public'   -- 'public' | 'private'
-    check (visibility in ('public','private')),
-  certified_at date,                          -- 認定日。育成プルーフの起算点
-  aggregate_opt_in boolean default true,      -- 団体集計への同意（いつでも取消可）
-  created_at timestamptz default now(),
-  unique (org_id, pro_id)
-);
+#### 既存構造の活用（新テーブルは作らない）
+`org_members` は既に存在し、招待フロー（invited_at / accepted_at / removed_at）と
+バッジ連携（credential_level_id）を持つ。**相互合意による所属確定は既に実装済み**：
+
+```
+verified  ≡  accepted_at IS NOT NULL AND removed_at IS NULL
 ```
 
-**厳守事項**:
-- `self_declared`（自己申告）は **本人プロフィールに「申告」と明示して表示するのみ**。団体ページには一切出さない。団体集計にも1件も入れない
-- `verified` は**団体の権限者（founder/instructor）の承認**で初めて成立
-- 双方向フロー：本人からの申告／代表からの一括登録＋本人受諾。**どちらから始めても両者の合意で verified**
-- `visibility = 'private'` の申告は団体側の突合対象から除外する（本人が師匠に知られたくないケースを守る）
-- **申告をトリガーに団体代表へ通知する機能は実装しない**（密告構造になるため）
+つまり「自己申告 vs 承認済み」の二段階は、既存カラムでそのまま表現できる。
+自己申告のみ（invited_at のみ／accepted_at が null）は団体ページ・集計に一切出さない。
 
-**育成プルーフ集計ルール**:
-- `certified_at` **以降**のプルーフのみ計上
-- `aggregate_opt_in = true` のメンバーのみ
-- **代表自身の臨床プルーフは育成側から除外**
-- 1階（臨床プルーフ）と2階（育成プルーフ）は**別カードで表示。合算・総合スコア化は禁止**
-- 団体カードには「認定者数」「育成プルーフ総数」「直近30日」「門下の強みTOP5分布」を表示
-- **団体ページの主要指標は頭数ではなく密度**（認定者1人あたりの検証済み実績）を上位に置く
+**⚠️ 重要**: `org_members` は professional 1人につきバッジごとに複数行存在する。
+集計は必ず `COUNT(DISTINCT professional_id)` または DISTINCT サブクエリを使う。
+
+#### 追加カラム（3本のみ）
+```sql
+alter table org_members add column role text
+  check (role in ('founder','instructor','member'));   -- null は member 扱い
+alter table org_members add column aggregate_opt_in boolean default true;
+alter table org_members add column growth_visibility text default 'public'
+  check (growth_visibility in ('public','private'));
+```
+- `certified_at` は新設せず **`accepted_at` を起算点として使う**（所属確定＝認定日とみなす）
+- `aggregate_opt_in` はメンバーがいつでも取消可。取消しても本人の履歴書は本人に残る
+
+#### 集計VIEW（新設）
+```sql
+create or replace view org_growth_summary as
+with members as (
+  select distinct om.org_id, om.professional_id, min(om.accepted_at) as joined_at
+  from org_members om
+  where om.accepted_at is not null and om.removed_at is null
+    and coalesce(om.aggregate_opt_in, true) = true
+    and coalesce(om.growth_visibility,'public') = 'public'
+    and coalesce(om.role,'member') = 'member'      -- 代表・講師自身の臨床実績は育成側から除外
+  group by om.org_id, om.professional_id
+)
+select m.org_id,
+  count(distinct m.professional_id)                          as member_count,
+  count(v.id)                                                as growth_proof_count,
+  count(v.id) filter (where v.created_at > now() - interval '30 days') as last_30d,
+  count(distinct v.normalized_email)                         as unique_clients
+from members m
+left join votes v
+  on v.professional_id = m.professional_id
+  and v.created_at >= m.joined_at        -- ★所属確定後の実績のみ計上
+  and v.vote_type in ('proof','continuation')
+group by m.org_id;
+```
+別VIEWで「認定者の強みTOP5分布」も作る（votes の selected_proof_ids を unnest し、
+**DISTINCT normalized_email** で人数集計。§2-8のDISTINCT原則に揃える）。
+
+#### 表示（個人ページ）
+1階（臨床プルーフ）と2階（育成プルーフ）は**別カード。合算・総合スコア化は禁止**。
+
+```
+主宰団体：Functional Neuro Training（代表）
+認定者 161名 ／ 認定者が積み上げた実績 2,282件 ／ 直近30日 +367
+認定者の強みTOP5：説明がわかりやすい ◯人 ／ 痛みが取れた ◯人 …
+```
+- 表示対象は `role in ('founder','instructor')` の本人ページのみ
+- 団体ページの主要指標は**頭数ではなく密度**（認定者1人あたりの検証済み実績）を上位に置く
+- メンバー側の個人ページには「所属団体（verified）」バッジのみ表示（育成カードは出さない）
+
+#### 実装順
+1. 追加カラム3本（DDL提示 → CEO実行）
+2. 既存FNTメンバーの role 設定（宮崎＝founder、ファシリテーター＝instructor）
+3. VIEW 2本の作成
+4. 個人ページの育成カード表示（`FEATURE_ORG_CARD` フラグ）
+5. 既存メンバーへの集計オプトイン告知（規約 or ダッシュボード通知。既定ONだが取消可を明示）
 
 ### 2-6. Voice の表示時AI変換
 
@@ -547,9 +623,13 @@ created_at / read_at nullable）＋ `referral_bookings.handover_note`（構造�
 - [ ] フィー自動分配 → プルーフ生成のパイプライン
 - [ ] LINE通知（予約確定・リマインド・プルーフ依頼）
 
-### Phase 3（変換と団体）
+### Phase 1.5（意味の供給・60日ゲートと並行）
+リフェラルの流動性を待たずに実施できる、N=1で機能する意味の供給。
+- [ ] §2-5 育成プルーフ（org_members拡張＋集計VIEW＋個人ページの育成カード）
+- [ ] §3-1 連携候補 → 処方箋リストへの追加導線（migration 029 はこの後に実行）
+
+### Phase 3（変換）
 - [ ] §2-6 AI変換パイプライン残り（**シェア経路** — 既に毎日稼働中のため優先度高）
-- [ ] §2-5 org_members ＋ 団体カード（育成プルーフ）
 
 ### Phase 4（後回し・意図的に実装しない）
 - カレンダー連携（OAuth・同期の運用負債が重い。予約数が増えてから）
