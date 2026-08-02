@@ -18,10 +18,14 @@ export default function OnboardingPage() {
       .then(data => {
         if (data.role === 'professional') {
           window.location.href = '/dashboard'
-        } else if (data.role === 'client') {
+        } else if (data.role === 'client' && !data.proDeactivated) {
           // safety net: 既存client(52名)の /onboarding 直アクセス時の事故防止
           // STOP 4 では削除せず保持。clients テーブル廃止STOPで同時削除予定
+          // ※退会済みプロ(proDeactivated)は例外: 選択画面を出して「プロとして始める」
+          //   → /api/onboarding の再アクティベートに到達させる（復活導線の応急処置A）
           window.location.href = '/'
+        } else if (data.role === 'client' && data.proDeactivated) {
+          setChecking(false) // 退会済みプロ → 復活用に選択画面を表示
         } else {
           setChecking(false) // DBにレコードなし → 選択画面を表示
         }

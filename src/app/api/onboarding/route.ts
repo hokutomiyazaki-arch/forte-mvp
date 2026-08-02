@@ -59,9 +59,25 @@ export async function POST(request: Request) {
   if (role === 'professional') {
     const { data: existingPro } = await supabase
       .from('professionals')
-      .select('id')
+      .select('id, deactivated_at')
       .eq('user_id', userId)
       .maybeSingle()
+
+    // 退会済み(deactivated_at)の既存プロは再アクティベートする。
+    // 退会モーダルの「再度プロとして登録することで復活できます」の実装。
+    // 従来この分岐が無く、deactivated_at が残ったまま success を返して
+    // /setup → /api/dashboard の client 格下げ → / への無限リダイレクトになっていた。
+    if (existingPro && existingPro.deactivated_at) {
+      await supabase.from('professionals')
+        .update({ deactivated_at: null })
+        .eq('user_id', userId)
+
+      // 既存NFCカードにprofessional_idを再セット（professional/register/route.ts と同等）
+      await supabase.from('nfc_cards')
+        .update({ professional_id: existingPro.id, updated_at: new Date().toISOString() })
+        .eq('user_id', userId)
+        .eq('status', 'active')
+    }
 
     if (!existingPro) {
       // Clerk の揮発URLを Storage(avatars) にコピーして永続化。
