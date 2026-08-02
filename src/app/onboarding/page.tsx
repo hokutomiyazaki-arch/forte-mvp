@@ -7,6 +7,8 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false)
   const [checking, setChecking] = useState(true)
   const [formError, setFormError] = useState('')
+  // 退会済みプロ: 復活は任意のため「クライアントとして続ける」出口を表示する
+  const [isDeactivatedPro, setIsDeactivatedPro] = useState(false)
 
   // 既にDB登録済みならリダイレクト
   useEffect(() => {
@@ -25,6 +27,7 @@ export default function OnboardingPage() {
           //   → /api/onboarding の再アクティベートに到達させる（復活導線の応急処置A）
           window.location.href = '/'
         } else if (data.role === 'client' && data.proDeactivated) {
+          setIsDeactivatedPro(true)
           setChecking(false) // 退会済みプロ → 復活用に選択画面を表示
         } else {
           setChecking(false) // DBにレコードなし → 選択画面を表示
@@ -116,6 +119,20 @@ export default function OnboardingPage() {
           </div>
         </button>
       </div>
+
+      {/* 退会済みプロの出口: auth-redirect がこのページへ誘導するため、
+          復活しない選択肢（クライアントとして続ける）を必ず残す（閉じ込め防止） */}
+      {isDeactivatedPro && (
+        <button
+          onClick={() => { window.location.href = '/' }}
+          style={{
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            color: '#888', fontSize: 13, marginTop: 20, textDecoration: 'underline',
+          }}
+        >
+          プロ登録は再開せず、クライアントとして続ける
+        </button>
+      )}
 
       {formError && (
         <p style={{ fontSize: 13, color: '#e74c3c', marginTop: 16 }}>{formError}</p>

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { isSearchPrivate } from '@/lib/feature-flags'
-import { getViewerIsPro } from '@/lib/viewer-role'
+import { getViewerIsPro, getViewerIsProStrict } from '@/lib/viewer-role'
 import { computeReferralSignal } from '@/lib/referral-accepting'
 
 export const dynamic = 'force-dynamic'
@@ -88,6 +88,10 @@ export async function GET(request: Request) {
       })
     }
   }
+
+  // §2-2改訂: 受付シグナルはプロ限定情報。非プロにはレスポンスにも含めない
+  // (UIゲートだけだとDevToolsから🔴相当が読めてしまうため付与自体を絞る)。fail closed。
+  const viewerIsProStrict = await getViewerIsProStrict()
 
   const { searchParams } = new URL(request.url)
   const category = searchParams.get('category') || 'multi'
@@ -588,8 +592,10 @@ export async function GET(request: Request) {
         categoryTopProof,
         topPersonality,
         topPersonalitiesByCategory,
-        // §2-2改訂: 3色インジケータ(プロ向け検索・ReferralTab共通)
-        referralSignal: computeReferralSignal(pro.accepting_status, pro.delegate_list_id),
+        // §2-2改訂: 3色インジケータ(プロ向け検索・ReferralTab共通)。非プロ閲覧時は付与しない
+        referralSignal: viewerIsProStrict
+          ? computeReferralSignal(pro.accepting_status, pro.delegate_list_id)
+          : null,
       }
     }).filter((p): p is NonNullable<typeof p> => p !== null)
 

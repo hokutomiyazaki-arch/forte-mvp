@@ -11,10 +11,14 @@
  * 未ログイン/professionals未登録は「非プロ」として正しくブロック対象になる
  * （これは判定失敗ではなく正常な判定結果のため fail open の対象ではない）。
  */
+import { cache } from 'react'
 import { auth } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 
-async function checkViewerIsPro(): Promise<boolean> {
+// React cache でリクエスト内メモ化（/search ページはフラグON時に fail-open 版と
+// fail-closed 版の両方を呼ぶため、素のままだと同一ルックアップが2回走る）。
+// Route Handler 文脈では単なるパススルーになるだけで無害。
+const checkViewerIsPro = cache(async (): Promise<boolean> => {
   const { userId } = await auth()
   if (!userId) return false
 
@@ -26,7 +30,7 @@ async function checkViewerIsPro(): Promise<boolean> {
     .maybeSingle()
 
   return !!pro && !pro.deactivated_at
-}
+})
 
 export async function getViewerIsPro(): Promise<boolean> {
   try {

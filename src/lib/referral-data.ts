@@ -39,7 +39,7 @@ export interface ReferralCandidate {
   acceptingStatus: 'open' | 'closed' | null
   /** 'open' のときのみ値あり（§2-2改訂: 表示はopen時のみ） */
   acceptingNote: string | null
-  /** accepting_status === 'closed' */
+  /** 受付停止中（!isAcceptingOpen: open以外・null含む全てを停止扱い） */
   isPaused: boolean
   /** 一段だけの代理候補（ピンが受付停止中 かつ delegate_list_id 設定時のみ） */
   delegate: ReferralCandidate[] | null
@@ -506,13 +506,14 @@ export async function verifyReceiverAllowedInList(
   const pinnedProIds = ((pinnedRows || []) as Array<{ pro_id: string }>).map((p) => p.pro_id)
 
   if (pinnedProIds.length > 0) {
-    // レビュー指摘: fail safeを徹底するため「'closed'かどうか」ではなく「'open'ではないか」で判定する
-    // (想定外の値は非受付=代理対象扱いに倒す。isAcceptingOpenの否定と等価な条件に統一)
+    // レビュー指摘: fail safeを徹底するため「'closed'かどうか」ではなく「'open'ではないか」で判定する。
+    // SQLの三値論理では .neq だけだと accepting_status IS NULL の行が漏れるため
+    // .or で NULL も拾い、!isAcceptingOpen() と厳密に等価にする
     const { data: pausedPros } = await supabase
       .from('professionals')
       .select('delegate_list_id')
       .in('id', pinnedProIds)
-      .neq('accepting_status', 'open')
+      .or('accepting_status.neq.open,accepting_status.is.null')
       .not('delegate_list_id', 'is', null)
     const delegateListIds = ((pausedPros || []) as Array<{ delegate_list_id: string | null }>)
       .map((p) => p.delegate_list_id)
