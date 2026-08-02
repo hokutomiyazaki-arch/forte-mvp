@@ -527,7 +527,7 @@ function ConfirmedContent() {
                 <button
                   onClick={async () => {
                     try {
-                      const res = await fetch('/api/user/role')
+                      const res = await fetch('/api/user/role', { cache: 'no-store' })
                       const data = await res.json()
                       const isProResult = data.isPro || roleParam === 'pro'
                       window.location.href = isProResult ? '/dashboard' : '/'

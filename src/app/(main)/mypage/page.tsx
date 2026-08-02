@@ -14,7 +14,7 @@ export default function MyPage() {
     }
 
     // hookに頼らず直接APIを叩く
-    fetch('/api/user/role')
+    fetch('/api/user/role', { cache: 'no-store' })
       .then(res => res.json())
       .then(data => {
         if (data.isPro) {

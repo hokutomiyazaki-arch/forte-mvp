@@ -13,7 +13,7 @@ export default function OnboardingPage() {
     if (!isLoaded) return
     if (!user) { window.location.href = '/sign-in'; return }
 
-    fetch('/api/user/role')
+    fetch('/api/user/role', { cache: 'no-store' })
       .then(res => res.json())
       .then(data => {
         if (data.role === 'professional') {

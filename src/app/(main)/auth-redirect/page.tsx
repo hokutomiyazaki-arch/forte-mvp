@@ -9,11 +9,14 @@ export default function AuthRedirectPage() {
     if (!isLoaded) return
     if (!user) { window.location.href = '/sign-in'; return }
 
-    fetch('/api/user/role')
+    fetch('/api/user/role', { cache: 'no-store' })
       .then(res => res.json())
       .then(data => {
         if (data.role === 'professional') {
           window.location.href = '/dashboard'
+        } else if (data.role === 'client' && data.proDeactivated) {
+          // 退会済みプロの復活導線: onboardingの選択画面で「プロとして始める」→ 再アクティベートに到達させる
+          window.location.href = '/onboarding'
         } else if (data.role === 'client') {
           window.location.href = '/'
         } else {

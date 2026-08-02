@@ -29,7 +29,7 @@ export function useProStatus() {
     if (checkedRef.current) return
     checkedRef.current = true
 
-    fetch('/api/user/role')
+    fetch('/api/user/role', { cache: 'no-store' })
       .then(res => res.json())
       .then(data => {
         setIsPro(data.isPro === true)
