@@ -45,6 +45,10 @@ export default function AcceptingStatusWidget({
   const [savingDelegate, setSavingDelegate] = useState(false)
   const [lists, setLists] = useState<OwnList[]>([])
   const [listsLoaded, setListsLoaded] = useState(false)
+  // レビュー指摘: 保存失敗時に一言のエラーメッセージを表示する(既存のインライン表示流儀に合わせる)
+  const [toggleError, setToggleError] = useState(false)
+  const [noteError, setNoteError] = useState(false)
+  const [delegateError, setDelegateError] = useState(false)
 
   useEffect(() => {
     // 停止中になって初めて(=代理リスト選択が必要になった時に)リスト一覧を取りに行く
@@ -69,6 +73,7 @@ export default function AcceptingStatusWidget({
     if (toggling) return
     const next = status === 'open' ? 'closed' : 'open'
     setToggling(true)
+    setToggleError(false)
     try {
       const res = await fetch('/api/referral/accepting', {
         method: 'PATCH',
@@ -79,7 +84,11 @@ export default function AcceptingStatusWidget({
       if (res.ok) {
         setStatus(next)
         onUpdated(next, note || null, delegateListId)
+      } else {
+        setToggleError(true)
       }
+    } catch {
+      setToggleError(true)
     } finally {
       setToggling(false)
     }
@@ -87,6 +96,7 @@ export default function AcceptingStatusWidget({
 
   async function saveNote() {
     setSavingNote(true)
+    setNoteError(false)
     try {
       const res = await fetch('/api/referral/accepting', {
         method: 'PATCH',
@@ -96,7 +106,11 @@ export default function AcceptingStatusWidget({
       })
       if (res.ok) {
         onUpdated(status, note || null, delegateListId)
+      } else {
+        setNoteError(true)
       }
+    } catch {
+      setNoteError(true)
     } finally {
       setSavingNote(false)
     }
@@ -104,6 +118,7 @@ export default function AcceptingStatusWidget({
 
   async function saveDelegate(nextListId: string | null) {
     setSavingDelegate(true)
+    setDelegateError(false)
     try {
       const res = await fetch('/api/referral/accepting', {
         method: 'PATCH',
@@ -114,7 +129,11 @@ export default function AcceptingStatusWidget({
       if (res.ok) {
         setDelegateListId(nextListId)
         onUpdated(status, note || null, nextListId)
+      } else {
+        setDelegateError(true)
       }
+    } catch {
+      setDelegateError(true)
     } finally {
       setSavingDelegate(false)
     }
@@ -145,6 +164,7 @@ export default function AcceptingStatusWidget({
           {toggling ? '更新中...' : status === 'open' ? '受付を停止する' : '受付を再開する'}
         </button>
       </div>
+      {toggleError && <div style={{ fontSize: 11, color: '#B00020' }}>更新に失敗しました</div>}
 
       {status === 'open' ? (
         <div>
@@ -160,6 +180,7 @@ export default function AcceptingStatusWidget({
             }}
           />
           {savingNote && <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>保存中...</div>}
+          {noteError && <div style={{ fontSize: 11, color: '#B00020', marginTop: 4 }}>保存に失敗しました</div>}
         </div>
       ) : (
         <div>
@@ -186,6 +207,7 @@ export default function AcceptingStatusWidget({
                 ))}
               </select>
               {savingDelegate && <span style={{ fontSize: 11, color: '#9CA3AF' }}>保存中...</span>}
+              {delegateError && <span style={{ fontSize: 11, color: '#B00020' }}>保存に失敗しました</span>}
             </div>
           )}
         </div>

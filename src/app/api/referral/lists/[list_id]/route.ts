@@ -105,6 +105,18 @@ export async function DELETE(
       return NextResponse.json({ error: 'not_found' }, { status: 404 })
     }
 
+    // レビュー指摘: professionals.delegate_list_id がこのリストを指したまま削除すると
+    // FK制約違反(23503)で行き止まりになる。削除前に参照を先に外す。
+    const { error: unlinkError } = await supabase
+      .from('professionals')
+      .update({ delegate_list_id: null })
+      .eq('delegate_list_id', params.list_id)
+
+    if (unlinkError) {
+      console.error('[api/referral/lists/[list_id]] DELETE unlink error:', unlinkError)
+      return NextResponse.json({ error: 'failed_to_delete' }, { status: 500 })
+    }
+
     const { error } = await supabase
       .from('referral_lists')
       .delete()
