@@ -35,9 +35,8 @@ function formatYearMonth(iso: string | null): string | null {
   return `${d.getFullYear()}年${d.getMonth() + 1}月`
 }
 
-function acceptingLabel(status: 'open' | 'conditional' | 'closed' | null): { text: string; color: string } {
+function acceptingLabel(status: 'open' | 'closed' | null): { text: string; color: string } {
   if (status === 'open') return { text: '受付中', color: '#2E7D32' }
-  if (status === 'conditional') return { text: '条件付きで受付中', color: '#B8860B' }
   return { text: '現在受付停止中', color: '#9CA3AF' }
 }
 
@@ -134,6 +133,12 @@ function CandidateCard({
           {accepting.text}
         </span>
       </div>
+
+      {candidate.acceptingStatus === 'open' && candidate.acceptingNote && (
+        <div style={{ fontSize: 11, color: T.textMuted, marginBottom: 10, lineHeight: 1.6 }}>
+          {candidate.acceptingNote}
+        </div>
+      )}
 
       {candidate.note && (
         <div

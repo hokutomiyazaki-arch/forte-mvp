@@ -10,6 +10,7 @@
 import { cache } from 'react'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { sanitizeVoiceForReferral } from '@/lib/voice-sanitize'
+import { isAcceptingOpen } from '@/lib/referral-accepting'
 
 type SupabaseAdmin = ReturnType<typeof getSupabaseAdmin>
 
@@ -35,8 +36,8 @@ export interface ReferralCandidate {
   isPinned: boolean
   /** 送り手からの一言（ピンのみ・基準行はnull） */
   note: string | null
-  acceptingStatus: 'open' | 'conditional' | 'closed' | null
-  /** 'conditional' のときのみ値あり */
+  acceptingStatus: 'open' | 'closed' | null
+  /** 'open' のときのみ値あり（§2-2改訂: 表示はopen時のみ） */
   acceptingNote: string | null
   /** accepting_status === 'closed' */
   isPaused: boolean
@@ -77,7 +78,7 @@ interface ProfessionalRow {
   prefecture: string | null
   is_online_available: boolean | null
   service_formats: string[] | null
-  accepting_status: 'open' | 'conditional' | 'closed' | null
+  accepting_status: 'open' | 'closed' | null
   accepting_note: string | null
   delegate_list_id: string | null
   deactivated_at: string | null
@@ -195,7 +196,8 @@ async function buildCandidate(
   const pro = proData as ProfessionalRow | null
   if (!pro || pro.deactivated_at) return null
 
-  const isPaused = pro.accepting_status === 'closed'
+  // §2-2改訂: 2値のうちopen以外は全てclosed扱い(fail safe)
+  const isPaused = !isAcceptingOpen(pro.accepting_status)
 
   const [stats, voiceExcerpts] = await Promise.all([
     getProSupportStats(supabase, proId, itemLabelMap),
@@ -219,7 +221,7 @@ async function buildCandidate(
     isPinned: options.isPinned,
     note: options.note,
     acceptingStatus: pro.accepting_status,
-    acceptingNote: pro.accepting_status === 'conditional' ? pro.accepting_note : null,
+    acceptingNote: isAcceptingOpen(pro.accepting_status) ? pro.accepting_note : null,
     isPaused,
     delegate,
     strengths: stats.strengths,
@@ -312,11 +314,11 @@ async function getDistinctSupporterCounts(
 
 /**
  * 基準行（criteria）に合致するプロを探索する。Phase 1 最小実装:
- *   - accepting_only → accepting_status IN ('open','conditional')
+ *   - accepting_only → accepting_status = 'open'
  *   - area.prefecture → 完全一致（radius_kmは未対応）
  *   - min_support_records → ユニーク人数（DISTINCT normalized_email）の下限。
  *     指定時のみ votes をページネーション走査して算出する（軽量パス維持のため未指定時はこのクエリ自体を実行しない）
- * §2-2: accepting_status='closed' のプロは常に静かに除外する（accepting_onlyの値に関わらず）。
+ * §2-2改訂: accepting_status='closed'（open以外全て）のプロは常に静かに除外する（accepting_onlyの値に関わらず）。
  */
 async function findCriteriaMatches(
   supabase: SupabaseAdmin,
@@ -324,15 +326,14 @@ async function findCriteriaMatches(
   excludeProIds: string[],
   limit: number
 ): Promise<string[]> {
+  // §2-2改訂: 2値化により「常に除外」と「accepting_onlyのみ絞る」が同一条件になったため、
+  // ベースクエリで一度だけ open を条件にする(accepting_onlyの値に関わらず結果は変わらない)。
   let query = supabase
     .from('professionals')
     .select('id')
     .is('deactivated_at', null)
-    .neq('accepting_status', 'closed')
+    .eq('accepting_status', 'open')
 
-  if (criteria.accepting_only) {
-    query = query.in('accepting_status', ['open', 'conditional'])
-  }
   if (criteria.area?.prefecture) {
     query = query.eq('prefecture', criteria.area.prefecture)
   }
@@ -540,9 +541,8 @@ export async function verifyReceiverAllowedInList(
     | { id: string; prefecture: string | null; accepting_status: string | null; deactivated_at: string | null }
     | null
   if (!pro || pro.deactivated_at) return false
-  // §2-2: accepting_status='closed' は criteria判定でも常に除外
-  if (pro.accepting_status === 'closed') return false
-  if (criteria.accepting_only && !['open', 'conditional'].includes(pro.accepting_status || '')) return false
+  // §2-2改訂: accepting_status='open'以外(closed含む)は criteria判定でも常に除外
+  if (!isAcceptingOpen(pro.accepting_status)) return false
   if (criteria.area?.prefecture && pro.prefecture !== criteria.area.prefecture) return false
 
   if (typeof criteria.min_support_records === 'number') {

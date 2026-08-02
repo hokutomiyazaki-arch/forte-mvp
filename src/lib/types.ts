@@ -45,8 +45,9 @@ export interface Professional {
   deactivated_at: string | null
   created_at: string
   updated_at: string
-  // リフェラル §2-2: 受け入れステータス（Phase 1 Stage 2 で追加）
-  accepting_status?: 'open' | 'conditional' | 'closed' | null
+  // リフェラル §2-2: 受け入れステータス（先行テストのフィードバックにより2値+3色表示に再設計。
+  // DB CHECK制約は 'open'|'conditional'|'closed' のままだが実データ0件のためアプリは2値のみ扱う）
+  accepting_status?: 'open' | 'closed' | null
   accepting_note?: string | null
   accepting_updated_at?: string | null
   delegate_list_id?: string | null

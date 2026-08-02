@@ -5,12 +5,18 @@ import { isReferralEnabled } from '@/lib/feature-flags'
 
 export const dynamic = 'force-dynamic'
 
-const ALLOWED_STATUS = ['open', 'conditional', 'closed']
+// §2-2改訂: ステータスはopen/closedの2値のみ（'conditional'は選ばせない。DBのCHECK制約自体は
+// 実データ0件のため変更しない）
+const ALLOWED_STATUS = ['open', 'closed']
 
 /**
  * PATCH /api/referral/accepting
- * body: { accepting_status, accepting_note? }
- * §2-2 受け入れステータス。処方箋リストタブ内に置くため、他の処方箋APIと同様に
+ * body: { accepting_status, accepting_note?, delegate_list_id? }
+ *   - accepting_status: 'open' | 'closed'（必須）
+ *   - accepting_note: 常時保存可（表示はopen時のみ。フロント側の責務）
+ *   - delegate_list_id: bodyに含まれる場合のみ更新。null で解除、文字列なら
+ *     「自分がownerで、visibilityがprivateでない（共有URLを持つ）リスト」であることを検証してから設定
+ * §2-2 受け入れステータス。紹介リストタブ内に置くため、他の紹介APIと同様に
  * isReferralEnabled でゲートする（仮決定: タブ自体がフラグ配下のため整合を取った）。
  */
 export async function PATCH(request: NextRequest) {
@@ -35,15 +41,42 @@ export async function PATCH(request: NextRequest) {
     }
 
     const supabase = getSupabaseAdmin()
+
+    const update: Record<string, unknown> = {
+      accepting_status: acceptingStatus,
+      accepting_note: acceptingNote,
+      accepting_updated_at: new Date().toISOString(),
+    }
+
+    // delegate_list_id はbodyに明示的に含まれている時のみ扱う(未指定なら現状維持)
+    if ('delegate_list_id' in body) {
+      const delegateListId = body.delegate_list_id
+      if (delegateListId === null) {
+        update.delegate_list_id = null
+      } else if (typeof delegateListId === 'string' && delegateListId) {
+        const { data: targetList } = await supabase
+          .from('referral_lists')
+          .select('id, owner_id, visibility')
+          .eq('id', delegateListId)
+          .maybeSingle()
+
+        if (!targetList || targetList.owner_id !== ownPro.id) {
+          return NextResponse.json({ error: 'delegate_list_not_found' }, { status: 400 })
+        }
+        if (targetList.visibility === 'private') {
+          return NextResponse.json({ error: 'delegate_list_must_be_shareable' }, { status: 400 })
+        }
+        update.delegate_list_id = delegateListId
+      } else {
+        return NextResponse.json({ error: 'invalid_delegate_list_id' }, { status: 400 })
+      }
+    }
+
     const { data, error } = await supabase
       .from('professionals')
-      .update({
-        accepting_status: acceptingStatus,
-        accepting_note: acceptingStatus === 'conditional' ? acceptingNote : null,
-        accepting_updated_at: new Date().toISOString(),
-      })
+      .update(update)
       .eq('id', ownPro.id)
-      .select('id, accepting_status, accepting_note, accepting_updated_at')
+      .select('id, accepting_status, accepting_note, accepting_updated_at, delegate_list_id')
       .maybeSingle()
 
     if (error) {

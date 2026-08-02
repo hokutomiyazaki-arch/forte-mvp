@@ -26,7 +26,7 @@ interface Props {
     name: string
     photoUrl: string | null
     title: string | null
-    acceptingStatus: 'open' | 'conditional' | 'closed' | null
+    acceptingStatus: 'open' | 'closed' | null
   }
   menus: BookableMenu[]
 }

@@ -26,6 +26,7 @@ import BookingUrlBanner from '@/components/BookingUrlBanner'
 import ShareButton from '@/components/ShareButton'
 import BusinessInfoTab from '@/components/dashboard/BusinessInfoTab'
 import ReferralTab from '@/components/dashboard/ReferralTab'
+import AcceptingStatusWidget from '@/components/dashboard/AcceptingStatusWidget'
 import ReferralConsentCard from '@/components/dashboard/ReferralConsentCard'
 import ReferralBookingReceivedCard from '@/components/dashboard/ReferralBookingReceivedCard'
 import { createClient as createSupabaseClient } from '@/lib/supabase'
@@ -2525,6 +2526,18 @@ export default function DashboardPage() {
       {/* ═══ Tab: プロフィール ═══ */}
       {dashboardTab === 'profile' && (<>
 
+      {/* §2-2改訂: 受け入れステータスをホーム最上部に常時表示（先行テストのフィードバック） */}
+      {pro && referralEnabled && (
+        <AcceptingStatusWidget
+          initialAcceptingStatus={pro.accepting_status ?? null}
+          initialAcceptingNote={pro.accepting_note ?? null}
+          initialDelegateListId={pro.delegate_list_id ?? null}
+          onUpdated={(status, note, delegateListId) =>
+            setPro(prev => prev ? { ...prev, accepting_status: status, accepting_note: note, delegate_list_id: delegateListId } : prev)
+          }
+        />
+      )}
+
       {/* Xデーカウントダウン */}
       {(() => {
         // strength_label ごとに vote_count を合算
@@ -4654,16 +4667,9 @@ export default function DashboardPage() {
         )}
       </>)}
 
-      {/* ═══ Tab: 処方箋リスト（§0 アローリスト方式・isReferralEnabledでタブ自体をゲート） ═══ */}
+      {/* ═══ Tab: 紹介リスト（§0 アローリスト方式・isReferralEnabledでタブ自体をゲート） ═══ */}
       {dashboardTab === 'referral' && referralEnabled && pro && (
-        <ReferralTab
-          proId={pro.id}
-          initialAcceptingStatus={pro.accepting_status ?? null}
-          initialAcceptingNote={pro.accepting_note ?? null}
-          onAcceptingUpdated={(status, note) =>
-            setPro(prev => prev ? { ...prev, accepting_status: status, accepting_note: note } : prev)
-          }
-        />
+        <ReferralTab proId={pro.id} />
       )}
       {/* 軽微指摘: 非対象プロが ?tab=referral で来た場合、空白ではなく案内を出す */}
       {dashboardTab === 'referral' && !referralEnabled && (

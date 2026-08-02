@@ -25,6 +25,7 @@ import { SupportersStrip } from '@/components/card/SupportersStrip'
 import { VoiceCommentCard } from '@/components/card/VoiceCommentCard'
 import { PersonalityPodium } from '@/components/card/PersonalityPodium'
 import type { VoiceComment, Supporter } from '@/components/card/types'
+import { computeReferralSignal } from '@/lib/referral-accepting'
 
 interface PersonalityItemWithVotes {
   id: string
@@ -540,6 +541,28 @@ export default function CardClient({ cardData, showUniqueCount = false }: Props)
               {/* Phase A2: service_formats を優先しつつ、setup ウィザード経由の新規プロ(is_online_available のみ)も後方互換でカバー */}
               {(pro.service_formats?.includes('online') || pro.is_online_available) && <span style={{ marginLeft: 6, color: T.gold }}>● オンライン対応</span>}
             </div>
+            {/* §2-2改訂: 公開カードの3分岐（🟢受付中＋条件メモ／🟡代理案内あり／🔴は何も表示しない） */}
+            {(() => {
+              const signal = computeReferralSignal(pro.accepting_status, pro.delegate_list_id)
+              if (signal === 'open') {
+                return (
+                  <div style={{ fontSize: 11, color: '#2E7D32', marginTop: 4, lineHeight: 1.6 }}>
+                    新規のご紹介を受付中
+                    {pro.accepting_note && (
+                      <span style={{ color: T.textMuted }}>（{pro.accepting_note}）</span>
+                    )}
+                  </div>
+                )
+              }
+              if (signal === 'delegate') {
+                return (
+                  <div style={{ fontSize: 11, color: '#B8860B', marginTop: 4, lineHeight: 1.6 }}>
+                    現在は新規のご紹介を受け付けていませんが、信頼できる先生をご案内できます
+                  </div>
+                )
+              }
+              return null
+            })()}
             {orgs.length > 0 && (
               <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {orgs.map(o => (

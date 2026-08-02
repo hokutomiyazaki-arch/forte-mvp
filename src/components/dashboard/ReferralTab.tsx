@@ -2,13 +2,15 @@
 
 import { useEffect, useRef, useState } from 'react'
 import BookingThread from '@/components/dashboard/BookingThread'
+import { computeReferralSignal, REFERRAL_SIGNAL_DOT } from '@/lib/referral-accepting'
 
 interface PinPro {
   id: string
   name: string
   title: string | null
   photo_url: string | null
-  accepting_status: 'open' | 'conditional' | 'closed' | null
+  accepting_status: 'open' | 'closed' | null
+  delegate_list_id?: string | null
 }
 
 interface ListItem {
@@ -40,7 +42,9 @@ interface SearchResultPro {
   title: string | null
   photo_url: string | null
   prefecture: string | null
-  accepting_status: 'open' | 'conditional' | 'closed' | null
+  accepting_status: 'open' | 'closed' | null
+  delegate_list_id?: string | null
+  referralSignal?: 'open' | 'delegate' | 'closed'
 }
 
 interface SentBooking {
@@ -69,27 +73,11 @@ const SENT_STATUS_LABEL: Record<SentBooking['status'], string> = {
 const MAX_PINS = 3
 const SHARE_ORIGIN = 'https://realproof.jp'
 
-const ACCEPTING_OPTIONS: { value: 'open' | 'conditional' | 'closed'; label: string }[] = [
-  { value: 'open', label: '受付中' },
-  { value: 'conditional', label: '条件付きで受付中' },
-  { value: 'closed', label: '受付停止中' },
-]
-
 interface Props {
   proId: string
-  initialAcceptingStatus: 'open' | 'conditional' | 'closed' | null
-  initialAcceptingNote: string | null
-  onAcceptingUpdated: (status: 'open' | 'conditional' | 'closed', note: string | null) => void
 }
 
-export default function ReferralTab({ proId, initialAcceptingStatus, initialAcceptingNote, onAcceptingUpdated }: Props) {
-  // 受付ステータス
-  const [acceptingStatus, setAcceptingStatus] = useState<'open' | 'conditional' | 'closed'>(
-    initialAcceptingStatus || 'closed'
-  )
-  const [acceptingNote, setAcceptingNote] = useState(initialAcceptingNote || '')
-  const [savingAccepting, setSavingAccepting] = useState(false)
-
+export default function ReferralTab({ proId }: Props) {
   // リスト一覧
   const [lists, setLists] = useState<ReferralList[]>([])
   const [listsLoading, setListsLoading] = useState(true)
@@ -104,6 +92,8 @@ export default function ReferralTab({ proId, initialAcceptingStatus, initialAcce
   const [pinResults, setPinResults] = useState<Record<string, SearchResultPro[]>>({})
   const [pinSearching, setPinSearching] = useState<Record<string, boolean>>({})
   const [addingPin, setAddingPin] = useState<string | null>(null)
+  // §2-2改訂: 「紹介につながる人のみ表示」フィルタ(仕様通りデフォルトOFF)
+  const [referralOnlyFilter, setReferralOnlyFilter] = useState(false)
 
   // §3-1: 連携候補(private)→処方箋リスト(link/public)への追加導線
   // key = `${sourceListId}:${pro_id}`
@@ -143,26 +133,6 @@ export default function ReferralTab({ proId, initialAcceptingStatus, initialAcce
       .finally(() => setSentLoading(false))
   }, [])
 
-  async function saveAccepting() {
-    setSavingAccepting(true)
-    try {
-      const res = await fetch('/api/referral/accepting', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        cache: 'no-store',
-        body: JSON.stringify({
-          accepting_status: acceptingStatus,
-          accepting_note: acceptingStatus === 'conditional' ? acceptingNote : null,
-        }),
-      })
-      if (res.ok) {
-        onAcceptingUpdated(acceptingStatus, acceptingStatus === 'conditional' ? acceptingNote : null)
-      }
-    } finally {
-      setSavingAccepting(false)
-    }
-  }
-
   async function createList() {
     const title = newTitle.trim()
     if (!title) return
@@ -199,7 +169,8 @@ export default function ReferralTab({ proId, initialAcceptingStatus, initialAcce
   async function runProSearch(listId: string, query: string) {
     setPinSearching((prev) => ({ ...prev, [listId]: true }))
     try {
-      const res = await fetch(`/api/referral/pro-search?q=${encodeURIComponent(query)}`, { cache: 'no-store' })
+      const url = `/api/referral/pro-search?q=${encodeURIComponent(query)}${referralOnlyFilter ? '&referral_only=1' : ''}`
+      const res = await fetch(url, { cache: 'no-store' })
       if (res.ok) {
         const data = await res.json()
         setPinResults((prev) => ({ ...prev, [listId]: data.professionals || [] }))
@@ -476,7 +447,7 @@ export default function ReferralTab({ proId, initialAcceptingStatus, initialAcce
                   <div style={{ paddingLeft: 42 }}>
                     {publicLists.length === 0 ? (
                       <div style={{ fontSize: 11, color: '#9CA3AF' }}>
-                        先に処方箋リストを作成してください
+                        先に紹介リストを作成してください
                       </div>
                     ) : addState?.status === 'success' ? (
                       <div style={{ fontSize: 11, color: '#2E7D32' }}>{addState.message}</div>
@@ -508,7 +479,7 @@ export default function ReferralTab({ proId, initialAcceptingStatus, initialAcce
                             opacity: addState?.status === 'loading' ? 0.6 : 1,
                           }}
                         >
-                          {addState?.status === 'loading' ? '追加中...' : '処方箋リストへ追加'}
+                          {addState?.status === 'loading' ? '追加中...' : '紹介リストへ追加'}
                         </button>
                         {addState?.status === 'error' && (
                           <span style={{ fontSize: 11, color: '#B00020' }}>{addState.message}</span>
@@ -534,6 +505,14 @@ export default function ReferralTab({ proId, initialAcceptingStatus, initialAcce
                 fontSize: 13, boxSizing: 'border-box' as const,
               }}
             />
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#6B7280', marginTop: 6 }}>
+              <input
+                type="checkbox"
+                checked={referralOnlyFilter}
+                onChange={(e) => setReferralOnlyFilter(e.target.checked)}
+              />
+              紹介につながる人のみ表示
+            </label>
             {(pinResults[list.id]?.length || 0) > 0 && (
               <div style={{
                 position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
@@ -555,7 +534,9 @@ export default function ReferralTab({ proId, initialAcceptingStatus, initialAcce
                     ) : (
                       <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#E5E7EB' }} />
                     )}
-                    <div style={{ fontSize: 13, color: '#1A1A2E' }}>{p.name}</div>
+                    <div style={{ fontSize: 13, color: '#1A1A2E' }}>
+                      {REFERRAL_SIGNAL_DOT[p.referralSignal || computeReferralSignal(p.accepting_status, p.delegate_list_id)]} {p.name}
+                    </div>
                     {p.title && <div style={{ fontSize: 11, color: '#9CA3AF' }}>{p.title}</div>}
                   </div>
                 ))}
@@ -620,57 +601,9 @@ export default function ReferralTab({ proId, initialAcceptingStatus, initialAcce
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {/* 受け入れステータス */}
-      <div style={{ background: '#fff', borderRadius: 14, padding: '18px 16px', border: '1px solid #E5E7EB' }}>
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>受け入れステータス</h3>
-        <p style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 12, lineHeight: 1.5 }}>
-          紹介先として表示されるかどうかに関わる状態です。停止中でも、ピン指名では「現在受付停止中」として表示されます。
-        </p>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-          {ACCEPTING_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => setAcceptingStatus(opt.value)}
-              style={{
-                flex: 1, padding: '8px 6px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-                border: acceptingStatus === opt.value ? '2px solid #C4A35A' : '1px solid #E5E7EB',
-                background: acceptingStatus === opt.value ? '#FFF9EC' : '#fff',
-                color: acceptingStatus === opt.value ? '#1A1A2E' : '#6B7280',
-                cursor: 'pointer',
-              }}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-        {acceptingStatus === 'conditional' && (
-          <textarea
-            value={acceptingNote}
-            onChange={(e) => setAcceptingNote(e.target.value.slice(0, 200))}
-            placeholder="条件の内容（例: 新規は月◯名まで、など）"
-            style={{
-              width: '100%', minHeight: 60, padding: '8px 10px', borderRadius: 8,
-              border: '1px solid #E5E7EB', fontSize: 13, boxSizing: 'border-box' as const,
-              marginBottom: 10, resize: 'vertical' as const,
-            }}
-          />
-        )}
-        <button
-          onClick={saveAccepting}
-          disabled={savingAccepting}
-          style={{
-            padding: '8px 20px', borderRadius: 8, border: 'none',
-            background: '#1A1A2E', color: '#fff', fontSize: 13, fontWeight: 600,
-            cursor: savingAccepting ? 'default' : 'pointer', opacity: savingAccepting ? 0.6 : 1,
-          }}
-        >
-          {savingAccepting ? '保存中...' : '保存する'}
-        </button>
-      </div>
-
       {/* リスト作成 */}
       <div style={{ background: '#fff', borderRadius: 14, padding: '18px 16px', border: '1px solid #E5E7EB' }}>
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', marginBottom: 10 }}>新しい処方箋リストを作る</h3>
+        <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', marginBottom: 10 }}>新しい紹介リストを作る</h3>
         <input
           value={newTitle}
           onChange={(e) => setNewTitle(e.target.value.slice(0, 200))}
@@ -708,7 +641,7 @@ export default function ReferralTab({ proId, initialAcceptingStatus, initialAcce
         <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>読み込み中...</div>
       ) : lists.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>
-          まだ処方箋リストがありません
+          まだ紹介リストがありません
         </div>
       ) : (
         <>
