@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { getOwnPro } from '@/lib/referral-auth'
 import { isReferralEnabled } from '@/lib/feature-flags'
+import { computeReferralSignal } from '@/lib/referral-accepting'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,6 +37,8 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const q = (searchParams.get('q') || '').trim()
+    // §2-2改訂: 「紹介につながる人のみ表示」フィルタ(デフォルトOFF=全件)。対象は🟢+🟡。
+    const referralOnly = searchParams.get('referral_only') === '1'
     if (!q) {
       return NextResponse.json({ professionals: [] })
     }
@@ -44,7 +47,7 @@ export async function GET(request: NextRequest) {
     const safeQ = sanitizeIlikeQuery(q)
     const { data, error } = await supabase
       .from('professionals')
-      .select('id, name, title, photo_url, prefecture, accepting_status')
+      .select('id, name, title, photo_url, prefecture, accepting_status, delegate_list_id')
       .is('deactivated_at', null)
       .neq('id', ownPro.id)
       .ilike('name', `%${safeQ}%`)
@@ -55,7 +58,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'failed_to_fetch' }, { status: 500 })
     }
 
-    return NextResponse.json({ professionals: data || [] })
+    const rows = (data || []) as Array<{
+      id: string
+      name: string
+      title: string | null
+      photo_url: string | null
+      prefecture: string | null
+      accepting_status: string | null
+      delegate_list_id: string | null
+    }>
+
+    const withSignal = rows.map((p) => ({
+      ...p,
+      referralSignal: computeReferralSignal(p.accepting_status, p.delegate_list_id),
+    }))
+
+    const result = referralOnly
+      ? withSignal.filter((p) => p.referralSignal !== 'closed')
+      : withSignal
+
+    return NextResponse.json({ professionals: result })
   } catch (err: any) {
     console.error('[api/referral/pro-search] GET error:', err)
     return NextResponse.json({ error: err.message || 'internal_error' }, { status: 500 })

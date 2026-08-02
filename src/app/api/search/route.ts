@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { isSearchPrivate } from '@/lib/feature-flags'
 import { getViewerIsPro } from '@/lib/viewer-role'
+import { computeReferralSignal } from '@/lib/referral-accepting'
 
 export const dynamic = 'force-dynamic'
 
@@ -93,6 +94,8 @@ export async function GET(request: Request) {
   const subCategory = searchParams.get('sub') || 'rising'
   const query = searchParams.get('q') || ''
   const prefecture = searchParams.get('prefecture') || ''
+  // §2-2改訂: 「紹介につながる人のみ表示」フィルタ(デフォルトOFF=全件)。最終段の絞りのみ・既存の集計/並び順ロジックは変更しない
+  const referralOnly = searchParams.get('referral_only') === '1'
 
   const supabase = getSupabaseAdmin()
 
@@ -106,7 +109,8 @@ export async function GET(request: Request) {
         id, name, title, prefecture, area_description, bio,
         photo_url, selected_proofs,
         badge_rising, badge_specialist, badge_multi, badge_top,
-        featured_vote_id, featured_proof_id, created_at
+        featured_vote_id, featured_proof_id, created_at,
+        accepting_status, accepting_note, delegate_list_id
       `)
       .is('deactivated_at', null)
       .not('selected_proofs', 'is', null)
@@ -586,6 +590,8 @@ export async function GET(request: Request) {
         categoryTopProof,
         topPersonality,
         topPersonalitiesByCategory,
+        // §2-2改訂: 3色インジケータ(プロ向け検索・ReferralTab共通)
+        referralSignal: computeReferralSignal(pro.accepting_status, pro.delegate_list_id),
       }
     }).filter((p): p is NonNullable<typeof p> => p !== null)
 
@@ -695,6 +701,11 @@ export async function GET(request: Request) {
         default:
           result.sort((a, b) => b.recentProofs - a.recentProofs)
       }
+    }
+
+    // §2-2改訂: 「紹介につながる人のみ」フィルタは最終段の絞りのみ(既存の集計・並び順ロジックには触れない)
+    if (referralOnly) {
+      result = result.filter(p => p.referralSignal !== 'closed')
     }
 
     return NextResponse.json({

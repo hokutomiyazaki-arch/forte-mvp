@@ -5,6 +5,7 @@ import { PREFECTURES } from '@/lib/prefectures'
 import { COLORS, FONTS } from '@/lib/design-tokens'
 import { TierBadge, getTierFromVotes } from '@/components/TierBadge'
 import { trackPageView } from '@/lib/tracking'
+import { REFERRAL_SIGNAL_DOT } from '@/lib/referral-accepting'
 
 const T = { ...COLORS, font: FONTS.main, fontSerif: FONTS.serif }
 
@@ -91,6 +92,8 @@ interface SearchPro {
     interpersonal: { label: string; personality_label: string; votes: number } | null
     atmosphere: { label: string; personality_label: string; votes: number } | null
   } | null
+  /** §2-2改訂: 3色インジケータ(🟢受付中/🟡代理案内/🔴停止中) */
+  referralSignal?: 'open' | 'delegate' | 'closed'
 }
 
 interface Props {
@@ -112,6 +115,8 @@ export default function SearchPageClient({ proNotice = false }: Props) {
   const [chipsExpanded, setChipsExpanded] = useState(false)
   const [activeKeywordId, setActiveKeywordId] = useState<string | null>(null)
   const [matchedKeywords, setMatchedKeywords] = useState<string[]>([])
+  // §2-2改訂: 「紹介につながる人のみ表示」フィルタ(仕様通りデフォルトOFF)。クライアント側の最終段の絞りのみ。
+  const [referralOnlyFilter, setReferralOnlyFilter] = useState(false)
 
   // 着地計測: ?src= を検索ページ着地として記録（source は trackPageView 内の getSource() が拾う）
   useEffect(() => {
@@ -225,6 +230,11 @@ export default function SearchPageClient({ proNotice = false }: Props) {
       </>
     )
   }
+
+  // §2-2改訂: 「紹介につながる人のみ」フィルタ(最終段の絞りのみ・既存の並び順は変更しない)
+  const displayedPros = referralOnlyFilter
+    ? professionals.filter((p) => p.referralSignal !== 'closed')
+    : professionals
 
   // 空状態メッセージ
   const getEmptyMessage = () => {
@@ -431,10 +441,20 @@ export default function SearchPageClient({ proNotice = false }: Props) {
           </select>
         </div>
 
+        {/* §2-2改訂: 「紹介につながる人のみ表示」フィルタ(デフォルトOFF) */}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: T.textSub, marginBottom: 12 }}>
+          <input
+            type="checkbox"
+            checked={referralOnlyFilter}
+            onChange={e => setReferralOnlyFilter(e.target.checked)}
+          />
+          紹介につながる人のみ表示
+        </label>
+
         {/* 結果カウント */}
         {!loading && (
           <div style={{ fontSize: 11, color: T.textSub, marginBottom: 10, fontWeight: 500 }}>
-            {total}名のプロが見つかりました
+            {referralOnlyFilter ? displayedPros.length : total}名のプロが見つかりました
           </div>
         )}
 
@@ -443,13 +463,13 @@ export default function SearchPageClient({ proNotice = false }: Props) {
           <div style={{ textAlign: 'center', padding: '48px 0', color: T.textMuted, fontSize: 14 }}>
             読み込み中...
           </div>
-        ) : professionals.length === 0 ? (
+        ) : displayedPros.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '48px 0', color: T.textMuted, fontSize: 13 }}>
             {getEmptyMessage()}
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {professionals.map((p) => (
+            {displayedPros.map((p) => (
                 <a
                   key={p.id}
                   href={debouncedQuery && p.voiceMatchCount >= 1
@@ -496,6 +516,9 @@ export default function SearchPageClient({ proNotice = false }: Props) {
                         {highlightQuery(p.prefecture || '')}
                         {p.area_description ? ` · ` : ''}
                         {highlightQuery(p.area_description || '')}
+                        {p.referralSignal && (
+                          <span style={{ marginLeft: 6 }}>{REFERRAL_SIGNAL_DOT[p.referralSignal]}</span>
+                        )}
                       </div>
                     </div>
                   </div>

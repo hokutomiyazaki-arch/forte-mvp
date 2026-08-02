@@ -42,7 +42,7 @@ export async function GET() {
     if (listIds.length > 0) {
       const { data: items, error: itemsError } = await supabase
         .from('referral_list_items')
-        .select('id, list_id, pro_id, note, sort_order, consent_status, created_at, professionals(id, name, title, photo_url, accepting_status)')
+        .select('id, list_id, pro_id, note, sort_order, consent_status, created_at, professionals(id, name, title, photo_url, accepting_status, delegate_list_id)')
         .in('list_id', listIds)
         .order('sort_order', { ascending: true })
 
