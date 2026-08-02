@@ -145,6 +145,11 @@ alter table professionals add column delegate_list_id uuid references referral_l
     - 🟢 **受付中**（open）
     - 🟡 **停止中・代理リストで案内**（closed ＋ delegate_list_id あり）
     - 🔴 **停止中**（closed ＋ 代理なし）
+  - **🟡の点灯条件は「代理リストが設定されている」だけでは不十分**。
+    そのリストに **承諾済み（consent_status='approved'）かつ受付中（🟢）のメンバーが1名以上**
+    存在する場合のみ🟡とする。空のリストや全員停止中のリストで
+    「ご案内できます」と表示するのは**空約束**であり、保証を自動生成しない原則に反する。
+    条件を満たさない場合は🔴として扱う
   - 🟡はユーザーが選ぶ状態ではなく、**代理リストを設定すると自動的に点る**。
     トグル自体は🟢⇄🔴の2値のまま。本人のダッシュボードでも
     「停止中（代理リストで案内中）」とラベルを添えて混乱を防ぐ
@@ -304,30 +309,46 @@ verified  ≡  accepted_at IS NOT NULL AND removed_at IS NULL
 **⚠️ 重要**: `org_members` は professional 1人につきバッジごとに複数行存在する。
 集計は必ず `COUNT(DISTINCT professional_id)` または DISTINCT サブクエリを使う。
 
-#### 追加カラム（3本のみ）
+#### 追加カラム【既存スキーマとの衝突を回避した修正版】
+**⚠️ 当初案の誤り（Claude Code の調査で判明・修正済み）**:
+- `role` カラムは**既に存在**する（`011_org_members.sql`: `role TEXT NOT NULL DEFAULT 'member'
+  CHECK (role IN ('member','manager'))`）。ADD COLUMN は 42701 で失敗し、
+  CHECKを回避しても `founder`/`instructor` への UPDATE が 23514 で弾かれる
+- VIEW で使う列は `org_id` ではなく **`organization_id`**
+- 所属確定の判定は既存の `status` カラムと二重化する（既存コードは `status='active'` と
+  `accepted_at` を併用）
+
+**修正方針：既存 `role` には触らない。** 既存の role は**権限**の軸（member/manager）であり、
+今回必要なのは**育成カードを表示するか**という別の軸。同じカラムに2つの意味を載せると、
+CHECK制約の付け替えと既存データのUPDATEという不可逆な操作が必要になる。
+新カラムを1本足す方が安全かつ意味的にも正しい。
+
 ```sql
-alter table org_members add column role text
-  check (role in ('founder','instructor','member'));   -- null は member 扱い
+alter table org_members add column growth_role text
+  check (growth_role in ('founder','instructor'));   -- null = 育成カード非表示（通常メンバー）
 alter table org_members add column aggregate_opt_in boolean default true;
 alter table org_members add column growth_visibility text default 'public'
   check (growth_visibility in ('public','private'));
 ```
-- `certified_at` は新設せず **`accepted_at` を起算点として使う**（所属確定＝認定日とみなす）
-- `aggregate_opt_in` はメンバーがいつでも取消可。取消しても本人の履歴書は本人に残る
+- 既存 `role`（member/manager）は権限用として**そのまま維持**。データ移行不要
+- 育成カードを表示するのは `growth_role in ('founder','instructor')` の本人ページのみ
+- `certified_at` は新設せず **`accepted_at` を起算点**として使う
 
-#### 集計VIEW（新設）
+#### 集計VIEW（新設）【列名・条件を修正済み】
 ```sql
 create or replace view org_growth_summary as
 with members as (
-  select distinct om.org_id, om.professional_id, min(om.accepted_at) as joined_at
+  select om.organization_id, om.professional_id, min(om.accepted_at) as joined_at
   from org_members om
-  where om.accepted_at is not null and om.removed_at is null
+  where om.status = 'active'                      -- ★既存カラム。二重化を避けず両方見る
+    and om.accepted_at is not null
+    and om.removed_at is null
     and coalesce(om.aggregate_opt_in, true) = true
     and coalesce(om.growth_visibility,'public') = 'public'
-    and coalesce(om.role,'member') = 'member'      -- 代表・講師自身の臨床実績は育成側から除外
-  group by om.org_id, om.professional_id
+    and om.growth_role is null                    -- ★代表・講師自身は育成側の分子から除外
+  group by om.organization_id, om.professional_id
 )
-select m.org_id,
+select m.organization_id,
   count(distinct m.professional_id)                          as member_count,
   count(v.id)                                                as growth_proof_count,
   count(v.id) filter (where v.created_at > now() - interval '30 days') as last_30d,
@@ -337,9 +358,11 @@ left join votes v
   on v.professional_id = m.professional_id
   and v.created_at >= m.joined_at        -- ★所属確定後の実績のみ計上
   and v.vote_type in ('proof','continuation')
-group by m.org_id;
+group by m.organization_id;
 ```
-別VIEWで「認定者の強みTOP5分布」も作る（votes の selected_proof_ids を unnest し、
+※ `org_members` は professional 1人につきバッジごとに複数行あるため、
+members CTE で `group by` して重複を潰してから join すること。
+別VIEWで「認定者の強みTOP5分布」も作る（selected_proof_ids を unnest し、
 **DISTINCT normalized_email** で人数集計。§2-8のDISTINCT原則に揃える）。
 
 #### 表示（個人ページ）
