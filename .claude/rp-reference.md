@@ -286,3 +286,7 @@ async function checkAdminAuth(): Promise<boolean> {
 ## 15. アカウント調査の鉄則（2026-08-02 先行テストの教訓）
 
 - **`professionals.contact_email` はログイン識別子ではない**。表示・連絡先用のフィールドであり、ログイン主体は Clerk ユーザー（`professionals.user_id`）。アカウント調査では必ず `user_id` を辿る。contact_email だけを見て「該当プロなし」と判断すると誤る（同一メールに複数プロがぶら下がる/ログインメールと contact_email が異なるケースが実在する）。
+
+## 16. 技術TODO（テスト完走後に着手・main直接コミット）
+
+- **SearchPageClient.tsx の useEffect 依存配列に配列 `chips` が入っている**（255行付近・規約違反: 依存はプリミティブのみ）。現状は早期returnガードで無限ループには至っていないが、プリミティブ依存化（または文字列化キー）にリファクタする。検索ハイライト・リピーターマーク等の保護実装には触れない。※worktree/ブランチは作らない（このリポの絶対ルール）。リフェラル先行テスト完走後、CEOの指示で通常タスクとして実施。

@@ -20,7 +20,7 @@
  * 3色インジケータの導出は src/lib/referral-accepting.ts の computeReferralSignal に集約。
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   computeReferralSignal,
   REFERRAL_SIGNAL_DOT,
@@ -78,6 +78,17 @@ export default function AcceptingStatusWidget({
   const [noteError, setNoteError] = useState(false)
   // 🟡を選ぼうとしたが有効な代理リストが未選択/存在しない場合、確定させず選択UIを開く
   const [yellowSetupMode, setYellowSetupMode] = useState(false)
+  // §2-2: 条件メモは表示モード⇔編集モード。既定は表示モード。
+  const [noteEditing, setNoteEditing] = useState(false)
+  const [justSaved, setJustSaved] = useState(false)
+  const justSavedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // 「保存しました」フィードバックのタイマーをアンマウント時にクリーンアップ
+  useEffect(() => {
+    return () => {
+      if (justSavedTimeoutRef.current) clearTimeout(justSavedTimeoutRef.current)
+    }
+  }, [])
 
   // 先行テスト第3弾: NULL(未設定)は'open'として扱う(fail-open)。UI分岐は全てこの値を使う。
   const effectiveStatus: 'open' | 'closed' = status ?? 'open'
@@ -120,7 +131,9 @@ export default function AcceptingStatusWidget({
     setToggling(true)
     setToggleError(false)
     try {
-      const body: Record<string, unknown> = { accepting_status: next, accepting_note: note }
+      // R6レビュー指摘(重大): 編集中の下書き(note)ではなく保存済みの値(savedNote)のみ送る。
+      // 下書きを乗せると「保存する」を押していない文言がPATCHで確定し公開カード/紹介ページに出てしまう(§0-7違反)。
+      const body: Record<string, unknown> = { accepting_status: next, accepting_note: savedNote }
       if (delegateOpt !== undefined) body.delegate_list_id = delegateOpt
       const res = await fetch('/api/referral/accepting', {
         method: 'PATCH',
@@ -130,11 +143,10 @@ export default function AcceptingStatusWidget({
       })
       if (res.ok) {
         setStatus(next)
-        setSavedNote(note)
         const nextDelegateListId = delegateOpt !== undefined ? delegateOpt : delegateListId
         if (delegateOpt !== undefined) setDelegateListId(delegateOpt)
         setYellowSetupMode(false)
-        onUpdated(next, note || null, nextDelegateListId)
+        onUpdated(next, savedNote || null, nextDelegateListId)
       } else {
         setToggleError(true)
       }
@@ -148,6 +160,10 @@ export default function AcceptingStatusWidget({
   // 3段スライダーの選択ハンドラ
   async function selectSegment(target: ReferralSignal) {
     if (toggling) return
+    // R6レビュー指摘: スライダー操作時は条件メモの未保存下書きを破棄する(編集途中の文言が
+    // 後続操作で意図せず確定・公開されるのを防ぐ)
+    setNote(savedNote)
+    setNoteEditing(false)
     if (target === 'open') {
       setYellowSetupMode(false)
       await commitStatus('open')
@@ -171,10 +187,14 @@ export default function AcceptingStatusWidget({
     }
   }
 
+  // §2-2: 保存ボタン押下時のみPATCHを送る(onBlur自動保存は廃止)。
+  // NULL(未設定)ユーザーが触っただけで accepting_status が確定する事故を防ぐため、
+  // 未変更なら通信せず編集モードを閉じるだけにする(dirtyチェックは維持)。
   async function saveNote() {
-    // 🟡6レビュー指摘: 最後に保存した値から変わっていなければPATCHを送らない(dirtyチェック)。
-    // フォーカスを当てて何も編集せず外しただけで accepting_status が明示値化されるのを防ぐ。
-    if (note === savedNote) return
+    if (note === savedNote) {
+      setNoteEditing(false)
+      return
+    }
     setSavingNote(true)
     setNoteError(false)
     try {
@@ -187,6 +207,10 @@ export default function AcceptingStatusWidget({
       if (res.ok) {
         setSavedNote(note)
         onUpdated(effectiveStatus, note || null, delegateListId)
+        setNoteEditing(false)
+        setJustSaved(true)
+        if (justSavedTimeoutRef.current) clearTimeout(justSavedTimeoutRef.current)
+        justSavedTimeoutRef.current = setTimeout(() => setJustSaved(false), 2500)
       } else {
         setNoteError(true)
       }
@@ -195,6 +219,12 @@ export default function AcceptingStatusWidget({
     } finally {
       setSavingNote(false)
     }
+  }
+
+  function cancelNoteEdit() {
+    setNote(savedNote)
+    setNoteError(false)
+    setNoteEditing(false)
   }
 
   return (
@@ -305,22 +335,74 @@ export default function AcceptingStatusWidget({
         </div>
       )}
 
-      {/* 受付中のときのみ条件メモを入力できる */}
+      {/* 受付中のときのみ条件メモを表示・編集できる。§2-2: 既定は表示モード、
+          タップで編集モードに入り保存ボタンで確定して表示モードへ戻る。 */}
       {!yellowSetupMode && signal === 'open' && (
         <div>
-          <textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value.slice(0, 200))}
-            onBlur={saveNote}
-            placeholder="条件メモ（例: めまい・ふらつきのケースのみ／土曜のみ対応可）"
-            style={{
-              width: '100%', minHeight: 50, padding: '8px 10px', borderRadius: 8,
-              border: '1px solid #E5E7EB', fontSize: 12, boxSizing: 'border-box' as const,
-              resize: 'vertical' as const,
-            }}
-          />
-          {savingNote && <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>保存中...</div>}
-          {noteError && <div style={{ fontSize: 11, color: '#B00020', marginTop: 4 }}>保存に失敗しました</div>}
+          {noteEditing ? (
+            <div>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value.slice(0, 200))}
+                placeholder="条件メモ（例: めまい・ふらつきのケースのみ／土曜のみ対応可）"
+                autoFocus
+                style={{
+                  width: '100%', minHeight: 50, padding: '8px 10px', borderRadius: 8,
+                  border: '1px solid #E5E7EB', fontSize: 12, boxSizing: 'border-box' as const,
+                  resize: 'vertical' as const,
+                }}
+              />
+              <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                <button
+                  onClick={saveNote}
+                  disabled={savingNote}
+                  style={{
+                    fontSize: 12, padding: '6px 14px', borderRadius: 8, border: 'none',
+                    background: '#1A1A2E', color: '#fff', cursor: savingNote ? 'default' : 'pointer',
+                    opacity: savingNote ? 0.6 : 1,
+                  }}
+                >
+                  {savingNote ? '保存中...' : '保存する'}
+                </button>
+                <button
+                  onClick={cancelNoteEdit}
+                  disabled={savingNote}
+                  style={{
+                    fontSize: 12, padding: '6px 14px', borderRadius: 8, border: '1px solid #E5E7EB',
+                    background: '#fff', color: '#6B7280', cursor: savingNote ? 'default' : 'pointer',
+                  }}
+                >
+                  キャンセル
+                </button>
+              </div>
+              {noteError && <div style={{ fontSize: 11, color: '#B00020', marginTop: 4 }}>保存に失敗しました</div>}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const }}>
+              {savedNote ? (
+                <button
+                  onClick={() => setNoteEditing(true)}
+                  style={{
+                    fontSize: 12, color: '#1A1A2E', background: 'none', border: 'none', padding: 0,
+                    cursor: 'pointer', textAlign: 'left' as const,
+                  }}
+                >
+                  {savedNote}
+                </button>
+              ) : (
+                <button
+                  onClick={() => setNoteEditing(true)}
+                  style={{
+                    fontSize: 12, color: '#6B7280', background: 'none', border: 'none', padding: 0,
+                    cursor: 'pointer', textDecoration: 'underline',
+                  }}
+                >
+                  条件を追記する
+                </button>
+              )}
+              {justSaved && <span style={{ fontSize: 11, color: '#2E7D32' }}>保存しました</span>}
+            </div>
+          )}
         </div>
       )}
     </div>

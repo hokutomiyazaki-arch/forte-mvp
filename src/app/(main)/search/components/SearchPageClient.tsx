@@ -36,6 +36,8 @@ interface ChipItem {
 }
 
 const DEFAULT_VISIBLE_CHIPS = 6
+// §3-0-2(第3弾): 「追加」操作の中で新しいリストを作る選択を表す番兵値(実在するlist idと衝突しない固定文字列)
+const NEW_LIST_SENTINEL = '__new_list__'
 
 function shuffle<T>(arr: T[]): T[] {
   const out = arr.slice()
@@ -206,7 +208,15 @@ export default function SearchPageClient({
   // ⚪️8レビュー指摘: 取得失敗と「0件」を区別して表示するため
   const [ownListsError, setOwnListsError] = useState(false)
   const [selectedListFor, setSelectedListFor] = useState<Record<string, string>>({})
-  const [addStatus, setAddStatus] = useState<Record<string, { status: 'loading' | 'success' | 'error'; message?: string }>>({})
+  const [addStatus, setAddStatus] = useState<
+    Record<string, { status: 'loading' | 'success' | 'error'; message?: string }>
+  >({})
+  // R6レビュー指摘(重大): 二重リスト作成防止の作成済みlistIdはaddStatusから独立させて保持する。
+  // addStatusに同居させるとtoggleAddPanelのリセット(delete)で消え、パネル開き直し→再試行で
+  // 同名の共有リストが二重作成される(slug付きの実データが増える)。
+  const [createdListIdFor, setCreatedListIdFor] = useState<Record<string, string>>({})
+  // §3-0-2(第3弾): selectで「＋新しいリストを作る」を選んだ時のタイトル入力(key=professionals.id)
+  const [newListTitleFor, setNewListTitleFor] = useState<Record<string, string>>({})
 
   // 🟡3: 「♡ 気になる（連携候補）」タブ。referralWriteEnabledのプロにのみ見せる。
   // ONにすると自分のprivate(連携候補)リストにピンしているプロだけをカード表示する。
@@ -392,7 +402,7 @@ export default function SearchPageClient({
   // 🔴1レビュー指摘: 「♡ 気になる」タブON時は連携候補(private)を見ている文脈のため、
   // 追加先の選択肢からprivateリストを除外する(同じprivateリストへの再追加→409 already_pinned
   // を構造的に防ぐ)。既定選択も同じ絞り(非privateの先頭)に合わせ、非privateが無ければ
-  // undefined(=選択肢なし。パネル側は「共有リストがまだありません」表示に倒れる)。
+  // undefined(=選択肢なし。§3-0-2第3弾: その場合はdefaultSelectionが「＋新しいリストを作る」に倒す)。
   function getDefaultListId(): string | undefined {
     if (mineOnlyFilter) {
       return ownLists.find((l) => l.visibility !== 'private')?.id
@@ -400,20 +410,58 @@ export default function SearchPageClient({
     return ownLists[0]?.id
   }
 
+  // §3-0-2(第3弾): 共有リストが1件も無い(または選択可能な既存リストが無い)場合、
+  // 「＋新しいリストを作る」を既定選択にする(=空リストを先に作る手順・ダッシュボードへ戻る
+  // 手順を両方不要にする)。
+  function defaultSelection(): string {
+    return getDefaultListId() || selectableOwnLists[0]?.id || NEW_LIST_SENTINEL
+  }
+
   // R5レビュー指摘(重大①): selectの表示値とPOST先の解決を1本化する(同じ判定を2箇所に書かない)。
   // selectedListForは♡タブのON/OFFを跨いで残るため、現在の選択肢集合(selectableOwnLists)に
   // 含まれない選択は無効化してデフォルトへ倒す。表示と書き込み先が食い違うと、意図しない
-  // リストへの掲載(空約束・無断公開)につながる。
-  function effectiveListId(proId: string): string | undefined {
+  // リストへの掲載(空約束・無断公開)につながる。§3-0-2第3弾: NEW_LIST_SENTINELはPOST先の
+  // リストIDではないため、実在するlist idのみここで通す(sentinelがPOST先に渡らないガード)。
+  function effectiveSelection(proId: string): string {
     const sel = selectedListFor[proId]
+    if (sel === NEW_LIST_SENTINEL) return NEW_LIST_SENTINEL
     if (sel && selectableOwnLists.some((l) => l.id === sel)) return sel
-    return getDefaultListId() || selectableOwnLists[0]?.id
+    return defaultSelection()
   }
 
-  async function submitAddToList(proId: string) {
-    const listId = effectiveListId(proId)
-    if (!listId) return
-    setAddStatus((prev) => ({ ...prev, [proId]: { status: 'loading' } }))
+  // §3-0-2(第3弾): 新規リスト作成のみを担う(items POSTは含まない)。作成失敗時の文言は
+  // ReferralTab側のcreateListErrorMessageと同じ4系統(401/403/400/500)に揃える。
+  async function postCreateNewList(title: string): Promise<{ ok: boolean; id?: string; message?: string }> {
+    try {
+      const res = await fetch('/api/referral/lists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ title, comment: null }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        return { ok: true, id: data.list?.id }
+      }
+      const err = await res.json().catch(() => ({}))
+      const message =
+        err?.error === 'title_required'
+          ? 'タイトルを入力してください'
+          : err?.error === 'title_too_long'
+            ? 'タイトルが長すぎます（200文字まで）'
+            : res.status === 401
+              ? 'プロアカウントでログインしているか確認してください'
+              : res.status === 403
+                ? 'まだこの機能の対象アカウントではありません'
+                : 'リストの作成に失敗しました'
+      return { ok: false, message }
+    } catch {
+      return { ok: false, message: 'リストの作成に失敗しました' }
+    }
+  }
+
+  // 実際のピン追加POST。既存リストへの追加・新規作成後の追加いずれからも呼ばれる共通処理。
+  async function postAddToListItems(listId: string, proId: string) {
     try {
       const res = await fetch(`/api/referral/lists/${listId}/items`, {
         method: 'POST',
@@ -423,6 +471,12 @@ export default function SearchPageClient({
       })
       if (res.ok) {
         setAddStatus((prev) => ({ ...prev, [proId]: { status: 'success', message: '追加しました' } }))
+        // 追加まで完了したら、新規作成由来の作成済みlistIdは役目を終えるため掃除する
+        setCreatedListIdFor((prev) => {
+          const next = { ...prev }
+          delete next[proId]
+          return next
+        })
         // ⚪️4→R5重大②修正: ownListsLoadedを落とすと♡タブ表示中に再フェッチ導線が無く
         // 「読み込み中...」で固着するため、一覧表示を保ったまま直接再取得して静かに最新化する
         if (!ownListsLoading) void loadOwnLists()
@@ -446,8 +500,48 @@ export default function SearchPageClient({
         setAddStatus((prev) => ({ ...prev, [proId]: { status: 'error', message } }))
       }
     } catch {
-      setAddStatus((prev) => ({ ...prev, [proId]: { status: 'error', message: '追加に失敗しました' } }))
+      setAddStatus((prev) => ({
+        ...prev,
+        [proId]: { status: 'error', message: '追加に失敗しました' },
+      }))
     }
+  }
+
+  // §3-0-2(第3弾): 「追加」の実処理。既存の共有リストを選んでいればそのまま追加、
+  // 「＋新しいリストを作る」を選んでいればタイトル入力からリスト作成→追加まで1操作で行う。
+  async function submitAddToList(proId: string) {
+    const selection = effectiveSelection(proId)
+
+    if (selection !== NEW_LIST_SENTINEL) {
+      setAddStatus((prev) => ({ ...prev, [proId]: { status: 'loading' } }))
+      await postAddToListItems(selection, proId)
+      return
+    }
+
+    const title = (newListTitleFor[proId] || '').trim()
+    if (!title) {
+      setAddStatus((prev) => ({ ...prev, [proId]: { status: 'error', message: 'リストの名前を入力してください' } }))
+      return
+    }
+
+    // 再試行時の二重リスト作成防止: 既に作成済みのリストがあれば再利用し、items POSTのみ再実行する
+    // (createdListIdForはパネル開閉のリセットで消えない独立state。R6レビュー指摘)
+    const existingCreatedId = createdListIdFor[proId]
+    setAddStatus((prev) => ({ ...prev, [proId]: { status: 'loading' } }))
+
+    let targetListId = existingCreatedId
+    if (!targetListId) {
+      const created = await postCreateNewList(title)
+      if (!created.ok || !created.id) {
+        setAddStatus((prev) => ({ ...prev, [proId]: { status: 'error', message: created.message || 'リストの作成に失敗しました' } }))
+        return
+      }
+      targetListId = created.id
+      setCreatedListIdFor((prev) => ({ ...prev, [proId]: targetListId as string }))
+      setOwnLists((prev) => [...prev, { id: targetListId as string, title, visibility: 'link' }])
+    }
+
+    await postAddToListItems(targetListId, proId)
   }
 
   // §2-2改訂: 「紹介につながる人のみ」フィルタ(最終段の絞りのみ・既存の並び順は変更しない)
@@ -708,7 +802,7 @@ export default function SearchPageClient({
                 if (checked) ensureOwnListsLoaded()
               }}
             />
-            ♡ 気になる（連携候補のみ表示）
+            ♡ 気になる先生のみ表示
           </label>
         )}
 
@@ -937,8 +1031,11 @@ export default function SearchPageClient({
                       {addPanelFor === p.id ? '閉じる' : '＋ 紹介リストに追加'}
                     </button>
 
+                    {/* §3-0-2(第3弾): 共有リスト0件の行き止まりメッセージを廃止し、その場で
+                        「新しいリストを作る」入力を直接出す(空リストを先に作る手順・ダッシュボードへ
+                        戻る手順の両方を不要にする)。 */}
                     {addPanelFor === p.id && (
-                      <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const }}>
+                      <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
                         {addStatus[p.id]?.status === 'success' ? (
                           <span style={{ fontSize: 11, color: '#2E7D32' }}>{addStatus[p.id]?.message}</span>
                         ) : ownListsLoading || !ownListsLoaded ? (
@@ -948,49 +1045,59 @@ export default function SearchPageClient({
                           <span style={{ fontSize: 11, color: '#B00020' }}>
                             リストの取得に失敗しました
                           </span>
-                        ) : selectableOwnLists.length === 0 ? (
-                          // 🔴1レビュー指摘: ♡タブON時は共有リスト(非private)が無いと昇格導線に
-                          // 進めない行き止まりだったため、専用メッセージ+ダッシュボードへの導線を出す
-                          mineOnlyFilter ? (
-                            <span style={{ fontSize: 11, color: T.textMuted }}>
-                              共有リストがまだありません。<a href="/dashboard" style={{ color: T.gold, fontWeight: 600 }}>ダッシュボード</a>の紹介リストタブで作成してください
-                            </span>
-                          ) : (
-                            <span style={{ fontSize: 11, color: T.textMuted }}>
-                              まだ紹介リストがありません。ダッシュボードから作成してください
-                            </span>
-                          )
                         ) : (
                           <>
-                            <select
-                              value={effectiveListId(p.id) || selectableOwnLists[0].id}
-                              onChange={(e) => setSelectedListFor((prev) => ({ ...prev, [p.id]: e.target.value }))}
-                              style={{
-                                padding: '4px 6px', borderRadius: 6, border: `1px solid ${T.cardBorder}`,
-                                fontSize: 11, color: T.dark,
-                              }}
-                            >
-                              {selectableOwnLists.map((l) => (
-                                <option key={l.id} value={l.id}>
-                                  {l.visibility === 'private' ? `♡ 気になる（連携候補） - ${l.title}` : l.title}
-                                </option>
-                              ))}
-                            </select>
-                            <button
-                              onClick={() => submitAddToList(p.id)}
-                              disabled={addStatus[p.id]?.status === 'loading'}
-                              style={{
-                                background: T.gold, border: 'none', color: '#fff',
-                                borderRadius: 6, fontSize: 11, fontWeight: 600, padding: '4px 10px',
-                                cursor: addStatus[p.id]?.status === 'loading' ? 'default' : 'pointer',
-                                opacity: addStatus[p.id]?.status === 'loading' ? 0.6 : 1,
-                              }}
-                            >
-                              {addStatus[p.id]?.status === 'loading' ? '追加中...' : '追加'}
-                            </button>
-                            {addStatus[p.id]?.status === 'error' && (
-                              <span style={{ fontSize: 11, color: '#B00020' }}>{addStatus[p.id]?.message}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const }}>
+                              {selectableOwnLists.length > 0 && (
+                                <select
+                                  value={effectiveSelection(p.id)}
+                                  onChange={(e) => setSelectedListFor((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                                  style={{
+                                    padding: '4px 6px', borderRadius: 6, border: `1px solid ${T.cardBorder}`,
+                                    fontSize: 11, color: T.dark, maxWidth: '100%',
+                                  }}
+                                >
+                                  {selectableOwnLists.map((l) => (
+                                    <option key={l.id} value={l.id}>
+                                      {l.visibility === 'private' ? `気になる先生 - ${l.title}` : l.title}
+                                    </option>
+                                  ))}
+                                  <option value={NEW_LIST_SENTINEL}>＋ 新しいリストを作る</option>
+                                </select>
+                              )}
+                            </div>
+                            {effectiveSelection(p.id) === NEW_LIST_SENTINEL && (
+                              <input
+                                value={newListTitleFor[p.id] || ''}
+                                onChange={(e) => setNewListTitleFor((prev) => ({ ...prev, [p.id]: e.target.value.slice(0, 200) }))}
+                                placeholder="新しいリストの名前（例: 名古屋圏・めまい/ふらつき）"
+                                style={{
+                                  padding: '6px 8px', borderRadius: 6, border: `1px solid ${T.cardBorder}`,
+                                  fontSize: 11, width: '100%', boxSizing: 'border-box' as const,
+                                }}
+                              />
                             )}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const }}>
+                              <button
+                                onClick={() => submitAddToList(p.id)}
+                                disabled={addStatus[p.id]?.status === 'loading'}
+                                style={{
+                                  background: T.gold, border: 'none', color: '#fff',
+                                  borderRadius: 6, fontSize: 11, fontWeight: 600, padding: '4px 10px',
+                                  cursor: addStatus[p.id]?.status === 'loading' ? 'default' : 'pointer',
+                                  opacity: addStatus[p.id]?.status === 'loading' ? 0.6 : 1,
+                                }}
+                              >
+                                {addStatus[p.id]?.status === 'loading'
+                                  ? '追加中...'
+                                  : effectiveSelection(p.id) === NEW_LIST_SENTINEL
+                                    ? '作成して追加'
+                                    : '追加'}
+                              </button>
+                              {addStatus[p.id]?.status === 'error' && (
+                                <span style={{ fontSize: 11, color: '#B00020' }}>{addStatus[p.id]?.message}</span>
+                              )}
+                            </div>
                           </>
                         )}
                       </div>

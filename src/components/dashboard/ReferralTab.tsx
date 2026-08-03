@@ -75,6 +75,8 @@ const SENT_STATUS_LABEL: Record<SentBooking['status'], string> = {
 
 const MAX_PINS = 3
 const SHARE_ORIGIN = 'https://realproof.jp'
+// §3-0-2(第3弾): 「追加」操作の中で新しいリストを作る選択を表す番兵値(実在するlist idと衝突しない固定文字列)
+const NEW_LIST_SENTINEL = '__new_list__'
 
 interface Props {
   proId: string
@@ -91,10 +93,16 @@ export default function ReferralTab({ proId }: Props) {
   const [creating, setCreating] = useState(false)
   // レビュー指摘(先行テスト): 作成失敗が無言だった(else無し)ため、失敗を可視化するインラインエラー
   const [createListError, setCreateListError] = useState<string | null>(null)
+  // §3-0-2(第3弾): リスト作成フォームは主導線から降格し、一覧の下に折りたたみデフォルトで置く
+  const [showCreateForm, setShowCreateForm] = useState(false)
 
   // §3-1改訂(ゼロ状態導線): リストのタイトルをカード上でインライン編集する最小UI
   const [titleSavingId, setTitleSavingId] = useState<string | null>(null)
   const [titleError, setTitleError] = useState<Record<string, string>>({})
+  // §0-7: 保存手段のない入力欄禁止 → onBlur自動保存に「保存しました」の明示フィードバックを追加
+  const [titleSavedId, setTitleSavedId] = useState<string | null>(null)
+  const [pinNoteSaving, setPinNoteSaving] = useState<Record<string, boolean>>({})
+  const [pinNoteSavedKey, setPinNoteSavedKey] = useState<string | null>(null)
 
   // ピン追加UI（リストごとに検索クエリ・結果を保持）
   const [pinQuery, setPinQuery] = useState<Record<string, string>>({})
@@ -106,6 +114,16 @@ export default function ReferralTab({ proId }: Props) {
   const [referralOnlyFilter, setReferralOnlyFilter] = useState(false)
   // レビュー指摘(先行テスト): removePin/updatePinNoteが無言failだったため可視化(key=`${listId}:${pro_id}`)
   const [pinActionError, setPinActionError] = useState<Record<string, string>>({})
+
+  // §3-0-2(第3弾・撤回と再指示): 連携候補(private)の各行から共有リストへ追加する導線を復活。
+  // 「追加」を押すと選択UI(既存の共有リスト＋「＋新しいリストを作る」)が開く。
+  // key = `${sourceListId}:${pro_id}`
+  const [candidatePanelOpen, setCandidatePanelOpen] = useState<Record<string, boolean>>({})
+  const [addToListSelection, setAddToListSelection] = useState<Record<string, string>>({})
+  const [newListTitleFor, setNewListTitleFor] = useState<Record<string, string>>({})
+  const [addToListState, setAddToListState] = useState<
+    Record<string, { status: 'loading' | 'success' | 'error'; message?: string; createdListId?: string }>
+  >({})
 
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null)
 
@@ -122,7 +140,12 @@ export default function ReferralTab({ proId }: Props) {
     fetch('/api/referral/lists', { cache: 'no-store' })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data?.lists) setLists(data.lists)
+        if (data?.lists) {
+          setLists(data.lists)
+          // R6レビュー指摘: 折りたたみデフォルト閉により、リスト0件の初回ユーザーだけは
+          // 作成フォームを最初から開いて見せる(発見性の担保。1件でもあれば閉じたまま)
+          if (data.lists.length === 0) setShowCreateForm(true)
+        }
       })
       .catch(() => {})
       .finally(() => setListsLoading(false))
@@ -209,6 +232,17 @@ export default function ReferralTab({ proId }: Props) {
 
   // 軽微指摘: 入力毎に即fetchせず300msデバウンスする(リストごとにタイマーを保持)
   const searchTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  // §0-7: 「保存しました」フィードバックの自動消去タイマー。
+  // R6レビュー指摘: タイトル保存とピンの一言保存で1本を共有すると、2秒以内に相互の
+  // clearTimeoutを奪い合い表示が消えず居座るため、用途ごとに分ける(アンマウント時にクリーンアップ)
+  const titleSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pinNoteSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    return () => {
+      if (titleSavedTimerRef.current) clearTimeout(titleSavedTimerRef.current)
+      if (pinNoteSavedTimerRef.current) clearTimeout(pinNoteSavedTimerRef.current)
+    }
+  }, [])
 
   // referralOnlyOverride: チェックボックス切替直後の再検索で、setState未反映のstale値を
   // 参照しないよう明示的に渡す（レビュー指摘: チェックボックスの切替が即座に反映されない問題の修正）
@@ -314,12 +348,120 @@ export default function ReferralTab({ proId }: Props) {
           prev.map((l) => (l.id === listId ? { ...l, items: l.items.filter((i) => i.pro_id !== targetProId) } : l))
         )
       } else {
-        // レビュー指摘(先行テスト): 除去失敗が無言だったため可視化
-        setPinActionError((prev) => ({ ...prev, [key]: '除去に失敗しました' }))
+        // レビュー指摘(先行テスト): 外す操作の失敗が無言だったため可視化
+        setPinActionError((prev) => ({ ...prev, [key]: '外すのに失敗しました' }))
       }
     } catch {
-      setPinActionError((prev) => ({ ...prev, [key]: '除去に失敗しました' }))
+      setPinActionError((prev) => ({ ...prev, [key]: '外すのに失敗しました' }))
     }
+  }
+
+  // §3-0-2(第3弾): 連携候補の1行から共有リストへ追加する際の追加先を確定する。
+  // 選択が未設定/共有リストが0件の場合は「＋新しいリストを作る」を既定に倒す
+  // (共有リスト0件のときは選択UI自体を出さず、その場でリスト名入力へ進める)。
+  function effectiveCandidateSelection(key: string): string {
+    const sel = addToListSelection[key]
+    if (sel === NEW_LIST_SENTINEL) return NEW_LIST_SENTINEL
+    if (sel && publicLists.some((l) => l.id === sel)) return sel
+    return publicLists[0]?.id || NEW_LIST_SENTINEL
+  }
+
+  function toggleCandidatePanel(key: string) {
+    setCandidatePanelOpen((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
+
+  // 実際のピン追加POST。既存リスト・新規作成いずれの経路からも呼ばれる共通処理。
+  // createdListId: 新規作成経路の場合、失敗時にリスト自体は作成済みであることを保持し、
+  // 再試行でリストを二重作成しないようにする。
+  async function postCandidatePinToList(targetListId: string, key: string, item: ListItem, createdListId?: string) {
+    try {
+      const res = await fetch(`/api/referral/lists/${targetListId}/items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ pro_id: item.pro_id }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setLists((prev) =>
+          prev.map((l) =>
+            l.id === targetListId
+              ? { ...l, items: [...l.items, { ...data.item, professionals: item.professionals }] }
+              : l
+          )
+        )
+        setAddToListState((prev) => ({
+          ...prev,
+          [key]: { status: 'success', message: '追加しました（掲載通知を送信します）' },
+        }))
+      } else {
+        const err = await res.json().catch(() => ({}))
+        const message =
+          err.error === 'already_pinned'
+            ? 'すでにこのリストに追加されています'
+            : err.error === 'max_pins_reached'
+              ? 'このリストは最大3名までです（上限に達しています）'
+              : err.error === 'target_not_accepting'
+                ? 'この先生は紹介の受付を停止中です'
+                : err.error === 'target_not_in_program'
+                  ? 'この先生はまだ紹介機能の対象ではありません'
+                  : '追加に失敗しました'
+        setAddToListState((prev) => ({ ...prev, [key]: { status: 'error', message, createdListId } }))
+      }
+    } catch {
+      setAddToListState((prev) => ({
+        ...prev,
+        [key]: { status: 'error', message: '追加に失敗しました', createdListId },
+      }))
+    }
+  }
+
+  // §3-0-2(第3弾): 「追加する」ボタンの実処理。既存の共有リストを選んでいればそのまま追加、
+  // 「＋新しいリストを作る」を選んでいればタイトル入力からリスト作成→追加まで1操作で行う。
+  // 再試行時の二重リスト作成防止のため、作成済みlist idをaddToListStateに保持する。
+  async function submitAddCandidateToList(sourceListId: string, item: ListItem) {
+    const key = `${sourceListId}:${item.pro_id}`
+    const selection = effectiveCandidateSelection(key)
+
+    if (selection !== NEW_LIST_SENTINEL) {
+      setAddToListState((prev) => ({ ...prev, [key]: { status: 'loading' } }))
+      await postCandidatePinToList(selection, key, item)
+      return
+    }
+
+    const title = (newListTitleFor[key] || '').trim()
+    if (!title) {
+      setAddToListState((prev) => ({ ...prev, [key]: { status: 'error', message: 'リストの名前を入力してください' } }))
+      return
+    }
+
+    const existingCreatedId = addToListState[key]?.createdListId
+    setAddToListState((prev) => ({ ...prev, [key]: { status: 'loading', createdListId: existingCreatedId } }))
+
+    let targetList: ReferralList | undefined
+    if (existingCreatedId) {
+      targetList = lists.find((l) => l.id === existingCreatedId)
+      if (!targetList) {
+        setAddToListState((prev) => ({
+          ...prev,
+          [key]: { status: 'error', message: '作成済みリストが見つかりません。画面を再読み込みしてください' },
+        }))
+        return
+      }
+    } else {
+      const created = await postCreateList(title, null)
+      if (!created.ok || !created.list) {
+        setAddToListState((prev) => ({
+          ...prev,
+          [key]: { status: 'error', message: createListErrorMessage(created.status, created.errorCode) },
+        }))
+        return
+      }
+      targetList = created.list
+      setLists((prev) => [targetList as ReferralList, ...prev])
+    }
+
+    await postCandidatePinToList(targetList.id, key, item, targetList.id)
   }
 
   async function updateListTitle(listId: string, title: string) {
@@ -336,6 +478,10 @@ export default function ReferralTab({ proId }: Props) {
       })
       if (res.ok) {
         setLists((prev) => prev.map((l) => (l.id === listId ? { ...l, title: trimmed } : l)))
+        // §0-7: 保存された旨の明示的フィードバック(自動保存に一言添える)
+        setTitleSavedId(listId)
+        if (titleSavedTimerRef.current) clearTimeout(titleSavedTimerRef.current)
+        titleSavedTimerRef.current = setTimeout(() => setTitleSavedId(null), 2000)
       } else {
         setTitleError((prev) => ({ ...prev, [listId]: 'タイトルの更新に失敗しました' }))
       }
@@ -349,6 +495,7 @@ export default function ReferralTab({ proId }: Props) {
   async function updatePinNote(listId: string, targetProId: string, note: string) {
     const key = `${listId}:${targetProId}`
     setPinActionError((prev) => ({ ...prev, [key]: '' }))
+    setPinNoteSaving((prev) => ({ ...prev, [key]: true }))
     try {
       const res = await fetch(`/api/referral/lists/${listId}/items`, {
         method: 'PATCH',
@@ -364,6 +511,10 @@ export default function ReferralTab({ proId }: Props) {
               : l
           )
         )
+        // §0-7: 保存された旨の明示的フィードバック(自動保存に一言添える)
+        setPinNoteSavedKey(key)
+        if (pinNoteSavedTimerRef.current) clearTimeout(pinNoteSavedTimerRef.current)
+        pinNoteSavedTimerRef.current = setTimeout(() => setPinNoteSavedKey(null), 2000)
       } else {
         // レビュー指摘(先行テスト): 一言メモの保存失敗が無言だったため可視化
         // (入力欄は非制御コンポーネントのため、保存に失敗しても入力値は消えない=データ消失はしない)
@@ -371,6 +522,8 @@ export default function ReferralTab({ proId }: Props) {
       }
     } catch {
       setPinActionError((prev) => ({ ...prev, [key]: '一言の保存に失敗しました' }))
+    } finally {
+      setPinNoteSaving((prev) => ({ ...prev, [key]: false }))
     }
   }
 
@@ -463,6 +616,9 @@ export default function ReferralTab({ proId }: Props) {
             {titleSavingId === list.id && (
               <div style={{ fontSize: 10, color: '#9CA3AF' }}>保存中...</div>
             )}
+            {titleSavedId === list.id && (
+              <div style={{ fontSize: 10, color: '#2E7D32' }}>保存しました</div>
+            )}
             {titleError[list.id] && (
               <div style={{ fontSize: 10, color: '#B00020' }}>{titleError[list.id]}</div>
             )}
@@ -487,7 +643,7 @@ export default function ReferralTab({ proId }: Props) {
               fontSize: 12, color: '#6B7280', cursor: 'pointer', marginBottom: 12,
             }}
           >
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, minWidth: 0 }}>
               {SHARE_ORIGIN}/r/{list.slug}
             </span>
             <span style={{ color: '#C4A35A', fontWeight: 600, flexShrink: 0, marginLeft: 8 }}>
@@ -538,17 +694,104 @@ export default function ReferralTab({ proId }: Props) {
                         fontSize: 12, marginTop: 4, boxSizing: 'border-box' as const,
                       }}
                     />
+                    {/* §0-7: 保存手段のない入力欄禁止 → onBlur自動保存に明示フィードバックを添える */}
+                    {pinNoteSaving[addKey] && (
+                      <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 2 }}>保存中...</div>
+                    )}
+                    {pinNoteSavedKey === addKey && (
+                      <div style={{ fontSize: 10, color: '#2E7D32', marginTop: 2 }}>保存しました</div>
+                    )}
                   </div>
                   <button
                     onClick={() => removePin(list.id, item.pro_id)}
                     style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 11, cursor: 'pointer', flexShrink: 0 }}
                   >
-                    除去
+                    外す
                   </button>
                 </div>
-                {/* レビュー指摘(先行テスト): 除去/一言保存の失敗を可視化 */}
+                {/* レビュー指摘(先行テスト): 外す/一言保存の失敗を可視化 */}
                 {pinError && (
                   <div style={{ fontSize: 11, color: '#B00020', paddingLeft: 42 }}>{pinError}</div>
+                )}
+
+                {/* §3-0-2(第3弾・撤回と再指示): 連携候補(private)行から共有リストへ追加する導線を復活。
+                    「追加」を押すと、既存の共有リスト一覧＋「＋新しいリストを作る」の選択が開く。
+                    共有リストが0件なら選択UIを出さず最初から新規作成入力を出す。 */}
+                {isPrivate && (
+                  <div style={{ paddingLeft: 42, minWidth: 0 }}>
+                    {addToListState[addKey]?.status === 'success' ? (
+                      <div style={{ fontSize: 11, color: '#2E7D32' }}>{addToListState[addKey]?.message}</div>
+                    ) : candidatePanelOpen[addKey] ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {publicLists.length > 0 && (
+                          <select
+                            value={effectiveCandidateSelection(addKey)}
+                            onChange={(e) => setAddToListSelection((prev) => ({ ...prev, [addKey]: e.target.value }))}
+                            style={{
+                              padding: '4px 6px', borderRadius: 6, border: '1px solid #E5E7EB',
+                              fontSize: 11, color: '#1A1A2E', maxWidth: '100%',
+                            }}
+                          >
+                            {publicLists.map((l) => (
+                              <option key={l.id} value={l.id}>{l.title}</option>
+                            ))}
+                            <option value={NEW_LIST_SENTINEL}>＋ 新しいリストを作る</option>
+                          </select>
+                        )}
+                        {effectiveCandidateSelection(addKey) === NEW_LIST_SENTINEL && (
+                          <input
+                            value={newListTitleFor[addKey] || ''}
+                            onChange={(e) =>
+                              setNewListTitleFor((prev) => ({ ...prev, [addKey]: e.target.value.slice(0, 200) }))
+                            }
+                            placeholder="新しいリストの名前（例: 名古屋圏・めまい/ふらつき）"
+                            style={{
+                              padding: '6px 8px', borderRadius: 6, border: '1px solid #E5E7EB',
+                              fontSize: 11, width: '100%', boxSizing: 'border-box' as const,
+                            }}
+                          />
+                        )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const }}>
+                          <button
+                            onClick={() => submitAddCandidateToList(list.id, item)}
+                            disabled={addToListState[addKey]?.status === 'loading'}
+                            style={{
+                              background: 'none', border: '1px solid #C4A35A', color: '#C4A35A',
+                              borderRadius: 6, fontSize: 11, fontWeight: 600, padding: '3px 8px',
+                              cursor: addToListState[addKey]?.status === 'loading' ? 'default' : 'pointer',
+                              opacity: addToListState[addKey]?.status === 'loading' ? 0.6 : 1,
+                            }}
+                          >
+                            {addToListState[addKey]?.status === 'loading'
+                              ? '追加中...'
+                              : addToListState[addKey]?.status === 'error'
+                                ? '再試行する'
+                                : '追加する'}
+                          </button>
+                          <button
+                            onClick={() => toggleCandidatePanel(addKey)}
+                            style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 11, cursor: 'pointer', padding: 0 }}
+                          >
+                            キャンセル
+                          </button>
+                          {addToListState[addKey]?.status === 'error' && (
+                            <span style={{ fontSize: 11, color: '#B00020' }}>{addToListState[addKey]?.message}</span>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => toggleCandidatePanel(addKey)}
+                        style={{
+                          background: 'none', border: '1px solid #C4A35A', color: '#C4A35A',
+                          borderRadius: 6, fontSize: 11, fontWeight: 600, padding: '3px 8px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        紹介リストに追加
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             )
@@ -665,10 +908,12 @@ export default function ReferralTab({ proId }: Props) {
                 style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   padding: '8px 10px', background: '#F9FAFB', borderRadius: 8,
-                  fontSize: 12, color: '#6B7280', cursor: 'pointer', marginTop: 8,
+                  fontSize: 12, color: '#6B7280', cursor: 'pointer', marginTop: 8, minWidth: 0,
                 }}
               >
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
+                {/* 招待URLはトークン付きで長いため、minWidth:0が無いとflexアイテムが縮まず
+                    ellipsisが効かない=カード幅を超えて横スクロールが発生する(③調査で確認) */}
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, minWidth: 0 }}>
                   {issuedInviteUrl[list.id]}
                 </span>
                 <span style={{ color: '#C4A35A', fontWeight: 600, flexShrink: 0, marginLeft: 8 }}>
@@ -684,54 +929,6 @@ export default function ReferralTab({ proId }: Props) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {/* リスト作成 */}
-      <div style={{ background: '#fff', borderRadius: 14, padding: '18px 16px', border: '1px solid #E5E7EB' }}>
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', marginBottom: 10 }}>
-          {/* 先行テスト指摘C: 公開リストが0件の間は「最初の1件」であることを明示する */}
-          {publicLists.length === 0 ? '最初の紹介リストを作りましょう' : '新しい紹介リストを作る'}
-        </h3>
-        <input
-          value={newTitle}
-          onChange={(e) => setNewTitle(e.target.value.slice(0, 200))}
-          placeholder="例: 名古屋圏・めまい/ふらつき"
-          style={{
-            width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #E5E7EB',
-            fontSize: 13, boxSizing: 'border-box' as const, marginBottom: 8,
-          }}
-        />
-        <textarea
-          value={newComment}
-          onChange={(e) => setNewComment(e.target.value)}
-          placeholder="選定基準の説明（例: 私が信頼して紹介できる先生方です）"
-          style={{
-            width: '100%', minHeight: 60, padding: '10px 12px', borderRadius: 8, border: '1px solid #E5E7EB',
-            fontSize: 13, boxSizing: 'border-box' as const, marginBottom: 10, resize: 'vertical' as const,
-          }}
-        />
-        <button
-          onClick={createList}
-          disabled={creating || !newTitle.trim()}
-          style={{
-            padding: '8px 20px', borderRadius: 8, border: 'none',
-            background: '#C4A35A', color: '#fff', fontSize: 13, fontWeight: 600,
-            cursor: creating || !newTitle.trim() ? 'default' : 'pointer',
-            opacity: creating || !newTitle.trim() ? 0.6 : 1,
-          }}
-        >
-          {creating ? '作成中...' : 'リストを作成'}
-        </button>
-        {/* 先行テストB: disabledなだけだと「押したのに無反応」に見えるため、理由を明示する */}
-        {!creating && !newTitle.trim() && (
-          <span style={{ fontSize: 11, color: '#9CA3AF', marginLeft: 10 }}>
-            タイトルを入力すると作成できます
-          </span>
-        )}
-        {/* レビュー指摘(先行テスト): 作成失敗(403含む)が無言だったため可視化 */}
-        {createListError && (
-          <div style={{ fontSize: 11, color: '#B00020', marginTop: 8, lineHeight: 1.6 }}>{createListError}</div>
-        )}
-      </div>
-
       {/* リスト一覧 */}
       {listsLoading ? (
         <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>読み込み中...</div>
@@ -752,15 +949,9 @@ export default function ReferralTab({ proId }: Props) {
               <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>
                 連携候補（非公開）
               </h3>
-              <p style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 4, lineHeight: 1.5 }}>
-                共有URLを持たないリストです。招待・掲載通知は行われません。
+              <p style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 12, lineHeight: 1.5 }}>
+                共有URLを持たないリストです。招待・掲載通知は行われません。各行の「紹介リストに追加」から共有リストにも追加できます。
               </p>
-              <a
-                href="/search"
-                style={{ fontSize: 12, color: '#C4A35A', fontWeight: 600, textDecoration: 'none', display: 'inline-block', marginBottom: 12 }}
-              >
-                /searchの「♡ 気になる」から共有リストへ追加できます →
-              </a>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {privateLists.map((list) => renderListCard(list, true))}
               </div>
@@ -768,6 +959,73 @@ export default function ReferralTab({ proId }: Props) {
           )}
         </>
       )}
+
+      {/* リスト作成(§3-0-2第3弾: 主導線から降格。一覧の下・折りたたみデフォルト) */}
+      <div style={{ background: '#fff', borderRadius: 14, padding: showCreateForm ? '18px 16px' : '12px 16px', border: '1px solid #E5E7EB' }}>
+        {!showCreateForm ? (
+          <button
+            onClick={() => setShowCreateForm(true)}
+            style={{ background: 'none', border: 'none', color: '#C4A35A', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0 }}
+          >
+            ＋ リストを直接作る
+          </button>
+        ) : (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, gap: 8 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', margin: 0 }}>
+                {/* 先行テスト指摘C: 公開リストが0件の間は「最初の1件」であることを明示する */}
+                {publicLists.length === 0 ? '最初の紹介リストを作りましょう' : '新しい紹介リストを作る'}
+              </h3>
+              <button
+                onClick={() => setShowCreateForm(false)}
+                style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 12, cursor: 'pointer', flexShrink: 0 }}
+              >
+                閉じる
+              </button>
+            </div>
+            <input
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value.slice(0, 200))}
+              placeholder="例: 名古屋圏・めまい/ふらつき"
+              style={{
+                width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #E5E7EB',
+                fontSize: 13, boxSizing: 'border-box' as const, marginBottom: 8,
+              }}
+            />
+            <textarea
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              placeholder="選定基準の説明（例: 私が信頼して紹介できる先生方です）"
+              style={{
+                width: '100%', minHeight: 60, padding: '10px 12px', borderRadius: 8, border: '1px solid #E5E7EB',
+                fontSize: 13, boxSizing: 'border-box' as const, marginBottom: 10, resize: 'vertical' as const,
+              }}
+            />
+            <button
+              onClick={createList}
+              disabled={creating || !newTitle.trim()}
+              style={{
+                padding: '8px 20px', borderRadius: 8, border: 'none',
+                background: '#C4A35A', color: '#fff', fontSize: 13, fontWeight: 600,
+                cursor: creating || !newTitle.trim() ? 'default' : 'pointer',
+                opacity: creating || !newTitle.trim() ? 0.6 : 1,
+              }}
+            >
+              {creating ? '作成中...' : 'リストを作成'}
+            </button>
+            {/* 先行テストB: disabledなだけだと「押したのに無反応」に見えるため、理由を明示する */}
+            {!creating && !newTitle.trim() && (
+              <span style={{ fontSize: 11, color: '#9CA3AF', marginLeft: 10 }}>
+                タイトルを入力すると作成できます
+              </span>
+            )}
+            {/* レビュー指摘(先行テスト): 作成失敗(403含む)が無言だったため可視化 */}
+            {createListError && (
+              <div style={{ fontSize: 11, color: '#B00020', marginTop: 8, lineHeight: 1.6 }}>{createListError}</div>
+            )}
+          </>
+        )}
+      </div>
 
       {/* §2-10: 成立した紹介（送り手側の予約一覧・案件スレッド・引き継ぎメモ） */}
       {!sentLoading && sentBookings.length > 0 && (

@@ -2420,13 +2420,19 @@ export default function DashboardPage() {
 
               {/* オンラインセッション用（token無し直リンク + 4桁PIN） */}
               <div className="mt-6 pt-6 border-t border-gray-100 text-left">
-                <div
+                <button
+                  type="button"
                   onClick={() => setIsOnlineOpen(prev => !prev)}
-                  className="flex items-center justify-between cursor-pointer"
+                  className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-500 transition-colors"
                 >
-                  <h3 className="text-base font-bold text-[#1A1A2E] mb-1">🖥 オンラインの方はこちら</h3>
-                  <span className="text-gray-400 text-sm ml-2 shrink-0">{isOnlineOpen ? '▲' : '▼'}</span>
-                </div>
+                  <span
+                    className="inline-block transition-transform"
+                    style={{ transform: isOnlineOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}
+                  >
+                    ›
+                  </span>
+                  <span>オンラインの方はこちら</span>
+                </button>
 
                 {isOnlineOpen && (
                   <>
