@@ -3,10 +3,14 @@
 /**
  * §2-2改訂: 受け入れステータス（先行テストのフィードバックによりダッシュボードホーム最上部へ移動）。
  *
- * - トグル自体は🟢(open)⇄🔴(closed)の2値。表示は代理リスト有無から3色を導出する。
+ * - トグル自体は🟢(open)⇄🔴(closed)の2値。表示は代理リスト有無から4色(⚪️含む)を導出する。
  * - closed時: 自分が所有する共有リスト(visibility!=='private')から代理リストを選択/解除できる。
  * - open時: 条件メモ(accepting_note)を入力できる(表示は公開カード・候補カードで小さく行う)。
  * - 旧ReferralTab内の「受け入れステータス」ブロックを撤去し、ここへ一本化した(オーファン防止)。
+ * - §2-2改訂(4色化・null安全): accepting_status IS NULL(未設定)の実プロが大多数のため、
+ *   初期表示で⚪️「未設定」を出す。この状態では「受付を開始する」(→open)と
+ *   「受付を停止する」(→closed)の両方を選べるボタンを表示する(一度設定した後は
+ *   従来通りの2値トグル1個に戻る)。
  */
 
 import { useEffect, useState } from 'react'
@@ -38,9 +42,9 @@ export default function AcceptingStatusWidget({
   initialDelegateListId,
   onUpdated,
 }: Props) {
-  const [status, setStatus] = useState<'open' | 'closed'>(
-    initialAcceptingStatus === 'open' ? 'open' : 'closed'
-  )
+  // §2-2改訂(4色化・null安全): nullを'closed'に丸めず、そのまま保持する
+  // (丸めると⚪️「未設定」と🔴「停止中」の区別ができなくなるため)。
+  const [status, setStatus] = useState<'open' | 'closed' | null>(initialAcceptingStatus)
   const [note, setNote] = useState(initialAcceptingNote || '')
   const [delegateListId, setDelegateListId] = useState<string | null>(initialDelegateListId || null)
   const [toggling, setToggling] = useState(false)
@@ -83,9 +87,9 @@ export default function AcceptingStatusWidget({
   const hasValidDelegate = !!selectedDelegateList?.is_valid_delegate
   const signal = computeReferralSignal(status, hasValidDelegate)
 
-  async function toggleStatus() {
+  // §2-2改訂(4色化・null安全): status=null(未設定)からの遷移も含め、明示した方向へ更新する共通関数。
+  async function setAcceptingStatusTo(next: 'open' | 'closed') {
     if (toggling) return
-    const next = status === 'open' ? 'closed' : 'open'
     setToggling(true)
     setToggleError(false)
     try {
@@ -106,6 +110,12 @@ export default function AcceptingStatusWidget({
     } finally {
       setToggling(false)
     }
+  }
+
+  // 既存の2値トグル(status確定後のみ使用)。未設定(null)からはsetAcceptingStatusToを直接呼ぶ。
+  async function toggleStatus() {
+    if (!status) return
+    await setAcceptingStatusTo(status === 'open' ? 'closed' : 'open')
   }
 
   async function saveNote() {
@@ -165,18 +175,48 @@ export default function AcceptingStatusWidget({
           <span style={{ fontSize: 16 }}>{REFERRAL_SIGNAL_DOT[signal]}</span>
           <span style={{ fontSize: 13, fontWeight: 700, color: '#1A1A2E' }}>{REFERRAL_SIGNAL_LABEL[signal]}</span>
         </div>
-        <button
-          onClick={toggleStatus}
-          disabled={toggling}
-          style={{
-            padding: '6px 16px', borderRadius: 999, border: 'none',
-            background: status === 'open' ? '#1A1A2E' : '#C4A35A',
-            color: '#fff', fontSize: 12, fontWeight: 600,
-            cursor: toggling ? 'default' : 'pointer', opacity: toggling ? 0.6 : 1,
-          }}
-        >
-          {toggling ? '更新中...' : status === 'open' ? '受付を停止する' : '受付を再開する'}
-        </button>
+        {/* §2-2改訂(4色化・null安全): 未設定(null)の間は「開始する」「停止する」の
+            両方向ボタンを出す(2値トグル1個では未設定から片方にしか動かせないため)。
+            一度どちらかに設定した後は、従来通り2値トグル1個に戻る。 */}
+        {status === null ? (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => setAcceptingStatusTo('open')}
+              disabled={toggling}
+              style={{
+                padding: '6px 14px', borderRadius: 999, border: 'none',
+                background: '#1A1A2E', color: '#fff', fontSize: 12, fontWeight: 600,
+                cursor: toggling ? 'default' : 'pointer', opacity: toggling ? 0.6 : 1,
+              }}
+            >
+              受付を開始する
+            </button>
+            <button
+              onClick={() => setAcceptingStatusTo('closed')}
+              disabled={toggling}
+              style={{
+                padding: '6px 14px', borderRadius: 999, border: '1px solid #C4A35A',
+                background: '#fff', color: '#C4A35A', fontSize: 12, fontWeight: 600,
+                cursor: toggling ? 'default' : 'pointer', opacity: toggling ? 0.6 : 1,
+              }}
+            >
+              受付を停止する
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={toggleStatus}
+            disabled={toggling}
+            style={{
+              padding: '6px 16px', borderRadius: 999, border: 'none',
+              background: status === 'open' ? '#1A1A2E' : '#C4A35A',
+              color: '#fff', fontSize: 12, fontWeight: 600,
+              cursor: toggling ? 'default' : 'pointer', opacity: toggling ? 0.6 : 1,
+            }}
+          >
+            {toggling ? '更新中...' : status === 'open' ? '受付を停止する' : '受付を再開する'}
+          </button>
+        )}
       </div>
       {toggleError && <div style={{ fontSize: 11, color: '#B00020' }}>更新に失敗しました</div>}
       {/* §2-2改訂: delegateListIdは設定済みだが有効な代理メンバーがいないため🔴になっている場合、
@@ -203,7 +243,7 @@ export default function AcceptingStatusWidget({
           {savingNote && <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>保存中...</div>}
           {noteError && <div style={{ fontSize: 11, color: '#B00020', marginTop: 4 }}>保存に失敗しました</div>}
         </div>
-      ) : (
+      ) : status === 'closed' ? (
         <div>
           {!listsLoaded ? (
             <div style={{ fontSize: 11, color: '#9CA3AF' }}>読み込み中...</div>
@@ -232,7 +272,7 @@ export default function AcceptingStatusWidget({
             </div>
           )}
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

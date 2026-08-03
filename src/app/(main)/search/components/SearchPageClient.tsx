@@ -92,8 +92,8 @@ interface SearchPro {
     interpersonal: { label: string; personality_label: string; votes: number } | null
     atmosphere: { label: string; personality_label: string; votes: number } | null
   } | null
-  /** §2-2改訂: 3色インジケータ(🟢受付中/🟡代理案内/🔴停止中) */
-  referralSignal?: 'open' | 'delegate' | 'closed'
+  /** §2-2改訂: 4色インジケータ(🟢受付中/🟡代理案内/🔴停止中/⚪️未設定・プロ向け画面のみ) */
+  referralSignal?: 'open' | 'delegate' | 'closed' | 'unset'
 }
 
 interface Props {
