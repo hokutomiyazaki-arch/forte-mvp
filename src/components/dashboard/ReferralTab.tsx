@@ -875,6 +875,12 @@ export default function ReferralTab({ proId }: Props) {
         >
           {creating ? '作成中...' : 'リストを作成'}
         </button>
+        {/* 先行テストB: disabledなだけだと「押したのに無反応」に見えるため、理由を明示する */}
+        {!creating && !newTitle.trim() && (
+          <span style={{ fontSize: 11, color: '#9CA3AF', marginLeft: 10 }}>
+            タイトルを入力すると作成できます
+          </span>
+        )}
         {/* レビュー指摘(先行テスト): 作成失敗(403含む)が無言だったため可視化 */}
         {createListError && (
           <div style={{ fontSize: 11, color: '#B00020', marginTop: 8, lineHeight: 1.6 }}>{createListError}</div>

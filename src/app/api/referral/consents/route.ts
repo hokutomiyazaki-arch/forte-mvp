@@ -81,6 +81,24 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'failed_to_update' }, { status: 500 })
     }
 
+    // §2-2改訂(CEO決定): 掲載承諾は「紹介を受ける意思」の表明。accepting_status が
+    // 未設定(NULL)のままだと⚪️の候補がクライアントに選ばれて予約が409で弾かれるため、
+    // 承諾時に NULL → 'open' に引き上げる。明示的な 'closed' は本人の選択なので上書きしない。
+    if (consentStatus === 'approved') {
+      const { data: proRow } = await supabase
+        .from('professionals')
+        .select('accepting_status')
+        .eq('id', ownPro.id)
+        .maybeSingle()
+      if (proRow && proRow.accepting_status === null) {
+        await supabase
+          .from('professionals')
+          .update({ accepting_status: 'open', accepting_updated_at: new Date().toISOString() })
+          .eq('id', ownPro.id)
+          .is('accepting_status', null)
+      }
+    }
+
     return NextResponse.json({ item: data })
   } catch (err: any) {
     console.error('[api/referral/consents] PATCH error:', err)

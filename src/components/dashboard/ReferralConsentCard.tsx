@@ -83,6 +83,10 @@ export default function ReferralConsentCard() {
             <div style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6, marginBottom: 10 }}>
               <strong>{ownerName}さん</strong>が、あなたを紹介リスト「{listTitle}」に掲載しようとしています。
             </div>
+            {/* §2-2改訂(CEO決定): 承諾＝紹介を受ける意思の表明。未設定なら受付中に自動更新される旨を明示 */}
+            <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 8, lineHeight: 1.6 }}>
+              承諾すると紹介の受付が「受付中」になります（受付状況はホーム画面でいつでも変更できます）
+            </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 onClick={() => respond(item.id, 'approved')}

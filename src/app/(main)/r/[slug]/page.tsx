@@ -207,25 +207,45 @@ function CandidateCard({
         </div>
       )}
 
-      <a
-        href={`/r/${slug}/request?pro=${candidate.pro.id}`}
-        style={{
-          display: 'block',
-          width: '100%',
-          padding: '11px 0',
-          borderRadius: 10,
-          border: 'none',
-          background: T.dark,
-          color: '#fff',
-          fontSize: 13,
-          fontWeight: 600,
-          textAlign: 'center',
-          textDecoration: 'none',
-          boxSizing: 'border-box' as const,
-        }}
-      >
-        この先生に相談する
-      </a>
+      {/* §2-2改訂(CEO決定): 受付中(open)以外は予約ボタンを出さない。
+          「選べたのに送信で409」という初回体験を作らない（⚪️未設定・🔴停止中とも非表示） */}
+      {candidate.acceptingStatus === 'open' ? (
+        <a
+          href={`/r/${slug}/request?pro=${candidate.pro.id}`}
+          style={{
+            display: 'block',
+            width: '100%',
+            padding: '11px 0',
+            borderRadius: 10,
+            border: 'none',
+            background: T.dark,
+            color: '#fff',
+            fontSize: 13,
+            fontWeight: 600,
+            textAlign: 'center',
+            textDecoration: 'none',
+            boxSizing: 'border-box' as const,
+          }}
+        >
+          この先生に相談する
+        </a>
+      ) : (
+        <div
+          style={{
+            width: '100%',
+            padding: '11px 0',
+            borderRadius: 10,
+            background: '#F0EDE6',
+            color: T.textMuted,
+            fontSize: 13,
+            fontWeight: 600,
+            textAlign: 'center',
+            boxSizing: 'border-box' as const,
+          }}
+        >
+          現在受付停止中
+        </div>
+      )}
     </div>
   )
 }
