@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import BookingThread from '@/components/dashboard/BookingThread'
+import ReferralCompletedList from '@/components/dashboard/ReferralCompletedList'
 import { computeReferralSignal, REFERRAL_SIGNAL_DOT } from '@/lib/referral-accepting'
 
 interface PinPro {
@@ -90,7 +91,10 @@ export default function ReferralTab({ proId }: Props) {
 
   // 新規リスト作成フォーム
   const [newTitle, setNewTitle] = useState('')
-  const [newComment, setNewComment] = useState('')
+  // CEO指示(先行テスト第3弾): クライアントへのメッセージは従来の既定文をデフォルトで充填し、
+  // 送り手が書き換えられるようにする(/r/側の未設定フォールバックと同一文)
+  const DEFAULT_CLIENT_MESSAGE = 'ご紹介した後も、あなたの経過は私自身が伺っていきます。安心してご相談ください。'
+  const [newComment, setNewComment] = useState(DEFAULT_CLIENT_MESSAGE)
   const [creating, setCreating] = useState(false)
   // レビュー指摘(先行テスト): 作成失敗が無言だった(else無し)ため、失敗を可視化するインラインエラー
   const [createListError, setCreateListError] = useState<string | null>(null)
@@ -236,7 +240,7 @@ export default function ReferralTab({ proId }: Props) {
     if (result.ok && result.list) {
       setLists((prev) => [result.list as ReferralList, ...prev])
       setNewTitle('')
-      setNewComment('')
+      setNewComment(DEFAULT_CLIENT_MESSAGE)
     } else {
       setCreateListError(createListErrorMessage(result.status, result.errorCode))
     }
@@ -803,7 +807,7 @@ export default function ReferralTab({ proId }: Props) {
                     </div>
                   ) : (
                     <button
-                      onClick={() => { setCommentEditingId(list.id); setCommentDraft('') }}
+                      onClick={() => { setCommentEditingId(list.id); setCommentDraft(DEFAULT_CLIENT_MESSAGE) }}
                       style={{ background: 'none', border: 'none', color: '#C4A35A', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}
                     >
                       メッセージを設定する
@@ -1400,6 +1404,9 @@ export default function ReferralTab({ proId }: Props) {
           )}
         </>
       )}
+
+      {/* タスク⑥改(CEO指摘): 完了した紹介(受け手側)はダッシュボード最上部でなく紹介タブ内に表示 */}
+      <ReferralCompletedList proId={proId} />
 
       {/* §2-10: 成立した紹介（送り手側の予約一覧・案件スレッド・引き継ぎメモ） */}
       {!sentLoading && sentBookings.length > 0 && (
