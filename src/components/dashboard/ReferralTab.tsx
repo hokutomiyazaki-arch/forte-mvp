@@ -103,6 +103,9 @@ export default function ReferralTab({ proId }: Props) {
   const [titleSavedId, setTitleSavedId] = useState<string | null>(null)
   const [pinNoteSaving, setPinNoteSaving] = useState<Record<string, boolean>>({})
   const [pinNoteSavedKey, setPinNoteSavedKey] = useState<string | null>(null)
+  // CEO指摘(先行テスト第3弾): 一言メモはonBlur自動保存をやめ、明示的な保存ボタンで確定する(§0-7)。
+  // 下書きはdraftに保持し、保存成功でdraftを消してサーバー値(item.note)表示に戻る。
+  const [pinNoteDraft, setPinNoteDraft] = useState<Record<string, string>>({})
 
   // ピン追加UI（リストごとに検索クエリ・結果を保持）
   const [pinQuery, setPinQuery] = useState<Record<string, string>>({})
@@ -131,6 +134,16 @@ export default function ReferralTab({ proId }: Props) {
   const [inviteName, setInviteName] = useState<Record<string, string>>({})
   const [invitingList, setInvitingList] = useState<string | null>(null)
   const [issuedInviteUrl, setIssuedInviteUrl] = useState<Record<string, string>>({})
+  // §2-9(第3弾): ネイティブ共有UI。発行時の宛名（1人分の明示用）と編集可能な共有テキストを保持。
+  // navigator.share の有無はSSR/ハイドレーション差異を避けるためマウント後に判定する。
+  const [issuedInviteName, setIssuedInviteName] = useState<Record<string, string>>({})
+  const [inviteShareText, setInviteShareText] = useState<Record<string, string>>({})
+  const [canNativeShare, setCanNativeShare] = useState(false)
+  useEffect(() => {
+    if (typeof navigator !== 'undefined' && typeof (navigator as { share?: unknown }).share === 'function') {
+      setCanNativeShare(true)
+    }
+  }, [])
 
   // §2-10: 送り手側の成立予約一覧（案件スレッド・引き継ぎメモの入口）
   const [sentBookings, setSentBookings] = useState<SentBooking[]>([])
@@ -492,8 +505,10 @@ export default function ReferralTab({ proId }: Props) {
     }
   }
 
-  async function updatePinNote(listId: string, targetProId: string, note: string) {
+  async function updatePinNote(listId: string, targetProId: string, note: string): Promise<boolean> {
     const key = `${listId}:${targetProId}`
+    // レビュー指摘: サーバー側はtrimして保存するため、楽観更新も同じ値で揃える
+    const trimmed = note.trim()
     setPinActionError((prev) => ({ ...prev, [key]: '' }))
     setPinNoteSaving((prev) => ({ ...prev, [key]: true }))
     try {
@@ -501,27 +516,30 @@ export default function ReferralTab({ proId }: Props) {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
-        body: JSON.stringify({ pro_id: targetProId, note }),
+        body: JSON.stringify({ pro_id: targetProId, note: trimmed }),
       })
       if (res.ok) {
         setLists((prev) =>
           prev.map((l) =>
             l.id === listId
-              ? { ...l, items: l.items.map((i) => (i.pro_id === targetProId ? { ...i, note } : i)) }
+              ? { ...l, items: l.items.map((i) => (i.pro_id === targetProId ? { ...i, note: trimmed } : i)) }
               : l
           )
         )
-        // §0-7: 保存された旨の明示的フィードバック(自動保存に一言添える)
+        // §0-7: 保存された旨の明示的フィードバック
         setPinNoteSavedKey(key)
         if (pinNoteSavedTimerRef.current) clearTimeout(pinNoteSavedTimerRef.current)
         pinNoteSavedTimerRef.current = setTimeout(() => setPinNoteSavedKey(null), 2000)
+        return true
       } else {
         // レビュー指摘(先行テスト): 一言メモの保存失敗が無言だったため可視化
-        // (入力欄は非制御コンポーネントのため、保存に失敗しても入力値は消えない=データ消失はしない)
+        // (失敗時はdraftを保持するため入力値は消えない=データ消失はしない)
         setPinActionError((prev) => ({ ...prev, [key]: '一言の保存に失敗しました' }))
+        return false
       }
     } catch {
       setPinActionError((prev) => ({ ...prev, [key]: '一言の保存に失敗しました' }))
+      return false
     } finally {
       setPinNoteSaving((prev) => ({ ...prev, [key]: false }))
     }
@@ -531,6 +549,11 @@ export default function ReferralTab({ proId }: Props) {
     const name = (inviteName[listId] || '').trim()
     if (!name) return
     setInvitingList(listId)
+    // レビュー指摘: 再発行時に前回のURL・宛名・共有テキストが残ると「新しい宛名で古い1人分URLを
+    // 送る」事故の余地があるため、発行開始時に当該リスト分をクリアする
+    setIssuedInviteUrl((prev) => { const next = { ...prev }; delete next[listId]; return next })
+    setIssuedInviteName((prev) => { const next = { ...prev }; delete next[listId]; return next })
+    setInviteShareText((prev) => { const next = { ...prev }; delete next[listId]; return next })
     try {
       const res = await fetch('/api/referral/invites', {
         method: 'POST',
@@ -542,6 +565,12 @@ export default function ReferralTab({ proId }: Props) {
         const data = await res.json()
         if (data?.invite_url) {
           setIssuedInviteUrl((prev) => ({ ...prev, [listId]: data.invite_url }))
+          // §2-9(第3弾): 宛名(1人分の明示)と、編集可能な共有テキストの初期値をセットする
+          setIssuedInviteName((prev) => ({ ...prev, [listId]: name }))
+          setInviteShareText((prev) => ({
+            ...prev,
+            [listId]: `REALPROOFという、施術の実績が記録として残るサービスを使っています。\n信頼できる連携先として登録したいので、よければプロフィールを作ってもらえませんか。→ ${data.invite_url}`,
+          }))
         }
         setInviteName((prev) => ({ ...prev, [listId]: '' }))
       } else {
@@ -557,8 +586,19 @@ export default function ReferralTab({ proId }: Props) {
     }
   }
 
-  function copyInviteUrl(listId: string, url: string) {
-    navigator.clipboard?.writeText(url).then(() => {
+  // §2-9(第3弾): 共有テキスト(URL入り)ごと共有/コピーする。shareのキャンセル(AbortError)は無視。
+  async function shareInviteText(listId: string) {
+    const text = inviteShareText[listId] || issuedInviteUrl[listId]
+    if (!text) return
+    try {
+      await (navigator as { share: (data: { text: string }) => Promise<void> }).share({ text })
+    } catch {}
+  }
+
+  function copyInviteShareText(listId: string) {
+    const text = inviteShareText[listId] || issuedInviteUrl[listId]
+    if (!text) return
+    navigator.clipboard?.writeText(text).then(() => {
       setCopiedSlug(`invite:${listId}`)
       setTimeout(() => setCopiedSlug(null), 2000)
     })
@@ -681,25 +721,63 @@ export default function ReferralTab({ proId }: Props) {
                       {item.professionals?.name || '不明なプロ'}
                     </div>
                     {!isPrivate && <div style={{ fontSize: 11, color: label.color }}>{label.text}</div>}
-                    <input
-                      defaultValue={item.note || ''}
-                      onBlur={(e) => {
-                        if (e.target.value !== (item.note || '')) {
-                          updatePinNote(list.id, item.pro_id, e.target.value)
-                        }
-                      }}
-                      placeholder="一言（例: 産後のケアが得意です）"
-                      style={{
-                        width: '100%', padding: '4px 8px', borderRadius: 6, border: '1px solid #E5E7EB',
-                        fontSize: 12, marginTop: 4, boxSizing: 'border-box' as const,
-                      }}
-                    />
-                    {/* §0-7: 保存手段のない入力欄禁止 → onBlur自動保存に明示フィードバックを添える */}
-                    {pinNoteSaving[addKey] && (
-                      <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 2 }}>保存中...</div>
-                    )}
-                    {pinNoteSavedKey === addKey && (
-                      <div style={{ fontSize: 10, color: '#2E7D32', marginTop: 2 }}>保存しました</div>
+                    {/* CEO指摘(先行テスト第3弾): 一言メモは共有リストのみ(気になるプロ=privateには不要)。
+                        onBlur自動保存をやめ、変更時に出る「保存する」ボタンで確定する(§0-7) */}
+                    {!isPrivate && (
+                      <>
+                        <input
+                          value={pinNoteDraft[addKey] !== undefined ? pinNoteDraft[addKey] : (item.note || '')}
+                          onChange={(e) => setPinNoteDraft((prev) => ({ ...prev, [addKey]: e.target.value.slice(0, 200) }))}
+                          placeholder="一言（例: 産後のケアが得意です）"
+                          style={{
+                            width: '100%', padding: '4px 8px', borderRadius: 6, border: '1px solid #E5E7EB',
+                            fontSize: 12, marginTop: 4, boxSizing: 'border-box' as const,
+                          }}
+                        />
+                        {pinNoteDraft[addKey] !== undefined && pinNoteDraft[addKey] !== (item.note || '') && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                            <button
+                              onClick={async () => {
+                                const ok = await updatePinNote(list.id, item.pro_id, pinNoteDraft[addKey])
+                                if (ok) {
+                                  setPinNoteDraft((prev) => {
+                                    const next = { ...prev }
+                                    delete next[addKey]
+                                    return next
+                                  })
+                                }
+                              }}
+                              disabled={!!pinNoteSaving[addKey]}
+                              style={{
+                                padding: '4px 12px', borderRadius: 6, border: 'none',
+                                background: '#1A1A2E', color: '#fff', fontSize: 11, fontWeight: 600,
+                                cursor: pinNoteSaving[addKey] ? 'default' : 'pointer',
+                                opacity: pinNoteSaving[addKey] ? 0.6 : 1,
+                              }}
+                            >
+                              {pinNoteSaving[addKey] ? '保存中...' : '保存する'}
+                            </button>
+                            <button
+                              onClick={() =>
+                                setPinNoteDraft((prev) => {
+                                  const next = { ...prev }
+                                  delete next[addKey]
+                                  return next
+                                })
+                              }
+                              style={{
+                                background: 'none', border: 'none', color: '#9CA3AF',
+                                fontSize: 11, cursor: 'pointer', padding: 0,
+                              }}
+                            >
+                              キャンセル
+                            </button>
+                          </div>
+                        )}
+                        {pinNoteSavedKey === addKey && (
+                          <div style={{ fontSize: 10, color: '#2E7D32', marginTop: 2 }}>保存しました</div>
+                        )}
+                      </>
                     )}
                   </div>
                   <button
@@ -904,23 +982,44 @@ export default function ReferralTab({ proId }: Props) {
                 招待URLを発行
               </button>
             </div>
+            {/* §2-9(第3弾): 発行後はURL単体でなく「編集できる共有テキスト＋ネイティブ共有/コピー」を出す。
+                1人分(single-use)であることを宛名付きで明示する(§0-6: 絵文字なし・静かな表示) */}
             {issuedInviteUrl[list.id] && (
-              <div
-                onClick={() => copyInviteUrl(list.id, issuedInviteUrl[list.id])}
-                style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '8px 10px', background: '#F9FAFB', borderRadius: 8,
-                  fontSize: 12, color: '#6B7280', cursor: 'pointer', marginTop: 8, minWidth: 0,
-                }}
-              >
-                {/* 招待URLはトークン付きで長いため、minWidth:0が無いとflexアイテムが縮まず
-                    ellipsisが効かない=カード幅を超えて横スクロールが発生する(③調査で確認) */}
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, minWidth: 0 }}>
-                  {issuedInviteUrl[list.id]}
-                </span>
-                <span style={{ color: '#C4A35A', fontWeight: 600, flexShrink: 0, marginLeft: 8 }}>
-                  {copiedSlug === `invite:${list.id}` ? 'コピーしました' : 'コピー'}
-                </span>
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column' as const, gap: 6, minWidth: 0 }}>
+                <div style={{ fontSize: 11, color: '#8A6D1F', lineHeight: 1.6 }}>
+                  この招待URLは1人分です（{issuedInviteName[list.id] ? `${issuedInviteName[list.id]}先生用` : 'お相手の先生専用'}）。別の先生には新しいURLを発行してください
+                </div>
+                <textarea
+                  value={inviteShareText[list.id] || ''}
+                  onChange={(e) => setInviteShareText((prev) => ({ ...prev, [list.id]: e.target.value }))}
+                  style={{
+                    width: '100%', minHeight: 88, padding: '8px 10px', borderRadius: 8,
+                    border: '1px solid #E5E7EB', fontSize: 12, color: '#374151',
+                    boxSizing: 'border-box' as const, resize: 'vertical' as const, lineHeight: 1.6,
+                  }}
+                />
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                  {canNativeShare && (
+                    <button
+                      onClick={() => shareInviteText(list.id)}
+                      style={{
+                        padding: '8px 14px', borderRadius: 8, border: 'none',
+                        background: '#1A1A2E', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                      }}
+                    >
+                      共有する（LINE・メール等）
+                    </button>
+                  )}
+                  <button
+                    onClick={() => copyInviteShareText(list.id)}
+                    style={{
+                      padding: '8px 14px', borderRadius: 8, border: '1px solid #E5E7EB',
+                      background: '#fff', color: '#1A1A2E', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                    }}
+                  >
+                    {copiedSlug === `invite:${list.id}` ? 'コピーしました' : 'テキストをコピー'}
+                  </button>
+                </div>
               </div>
             )}
           </div>
