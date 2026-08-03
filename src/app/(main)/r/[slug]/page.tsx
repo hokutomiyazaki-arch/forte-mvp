@@ -243,7 +243,8 @@ function CandidateCard({
             boxSizing: 'border-box' as const,
           }}
         >
-          現在受付停止中
+          {/* 軽微指摘: 代理候補カードの直後に描画されるため、主語を明示して誤読を防ぐ */}
+          {candidate.pro.name}さんは現在受付停止中です
         </div>
       )}
     </div>

@@ -51,6 +51,13 @@ export default function ReferralConsentCard() {
         body: JSON.stringify({ item_id: itemId, consent_status }),
       })
       if (res.ok) {
+        // レビュー指摘(中): 承諾でaccepting_statusがNULL→openに昇格するため、同一画面の
+        // 受付ステータスウィジェット(⚪️未設定表示)と食い違わないようリロードで再同期する
+        // (既存流儀=window.location系。declineは昇格しないためリロード不要)
+        if (consent_status === 'approved') {
+          window.location.reload()
+          return
+        }
         setItems((prev) => prev.filter((i) => i.id !== itemId))
       } else {
         // レビュー指摘(先行テスト): 失敗が無言だったため可視化

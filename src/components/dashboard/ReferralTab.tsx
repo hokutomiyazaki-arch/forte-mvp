@@ -115,7 +115,7 @@ export default function ReferralTab({ proId }: Props) {
   >({})
   // §3-1改訂(ゼロ状態導線): 公開リスト0件の連携候補行から「その場で作成して追加」する状態(key同上)
   const [quickCreateState, setQuickCreateState] = useState<
-    Record<string, { status: 'loading' | 'success' | 'error'; message?: string }>
+    Record<string, { status: 'loading' | 'success' | 'error'; message?: string; createdListId?: string }>
   >({})
 
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null)
@@ -379,18 +379,37 @@ export default function ReferralTab({ proId }: Props) {
   const DEFAULT_LIST_TITLE = '紹介リスト'
   async function createListAndAddCandidate(sourceListId: string, item: ListItem) {
     const key = `${sourceListId}:${item.pro_id}`
-    setQuickCreateState((prev) => ({ ...prev, [key]: { status: 'loading' } }))
+    // レビュー指摘(軽微): 再試行で新しいリストをもう1つ作らないよう、
+    // ステップ①で作成済みのリストIDを保持し、2回目以降は②(ピン追加)のみ再実行する
+    const existingCreatedId = quickCreateState[key]?.createdListId
+    setQuickCreateState((prev) => ({
+      ...prev,
+      [key]: { status: 'loading', createdListId: existingCreatedId },
+    }))
 
-    const created = await postCreateList(DEFAULT_LIST_TITLE, null)
-    if (!created.ok || !created.list) {
-      setQuickCreateState((prev) => ({
-        ...prev,
-        [key]: { status: 'error', message: createListErrorMessage(created.status, created.errorCode) },
-      }))
-      return
+    let newList: ReferralList
+    if (existingCreatedId) {
+      const found = lists.find((l) => l.id === existingCreatedId)
+      if (!found) {
+        setQuickCreateState((prev) => ({
+          ...prev,
+          [key]: { status: 'error', message: '作成済みリストが見つかりません。画面を再読み込みしてください' },
+        }))
+        return
+      }
+      newList = found
+    } else {
+      const created = await postCreateList(DEFAULT_LIST_TITLE, null)
+      if (!created.ok || !created.list) {
+        setQuickCreateState((prev) => ({
+          ...prev,
+          [key]: { status: 'error', message: createListErrorMessage(created.status, created.errorCode) },
+        }))
+        return
+      }
+      newList = created.list
+      setLists((prev) => [newList, ...prev])
     }
-    const newList = created.list
-    setLists((prev) => [newList, ...prev])
 
     try {
       const res = await fetch(`/api/referral/lists/${newList.id}/items`, {
@@ -416,7 +435,8 @@ export default function ReferralTab({ proId }: Props) {
           },
         }))
       } else {
-        // リスト自体の作成は成功済みのため、その旨をエラー文言に明記する(段階失敗の可視化)
+        // リスト自体の作成は成功済みのため、その旨をエラー文言に明記する(段階失敗の可視化)。
+        // createdListId を保持し、「＋再試行する」がリストを二重作成せずピン追加のみ再実行できるようにする
         const err = await res.json().catch(() => ({}))
         const message =
           err.error === 'already_pinned'
@@ -424,12 +444,15 @@ export default function ReferralTab({ proId }: Props) {
             : err.error === 'max_pins_reached'
               ? 'このリストは最大3名までです（リストは作成済みです）'
               : '先生の追加に失敗しました（リストは作成済みです）'
-        setQuickCreateState((prev) => ({ ...prev, [key]: { status: 'error', message } }))
+        setQuickCreateState((prev) => ({
+          ...prev,
+          [key]: { status: 'error', message, createdListId: newList.id },
+        }))
       }
     } catch {
       setQuickCreateState((prev) => ({
         ...prev,
-        [key]: { status: 'error', message: '先生の追加に失敗しました（リストは作成済みです）' },
+        [key]: { status: 'error', message: '先生の追加に失敗しました（リストは作成済みです）', createdListId: newList.id },
       }))
     }
   }

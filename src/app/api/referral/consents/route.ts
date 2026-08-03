@@ -91,11 +91,15 @@ export async function PATCH(request: NextRequest) {
         .eq('id', ownPro.id)
         .maybeSingle()
       if (proRow && proRow.accepting_status === null) {
-        await supabase
+        const { error: promoteError } = await supabase
           .from('professionals')
           .update({ accepting_status: 'open', accepting_updated_at: new Date().toISOString() })
           .eq('id', ownPro.id)
           .is('accepting_status', null)
+        if (promoteError) {
+          // 昇格失敗でも承諾自体は成立させる(best effort)が、⚪️のままになる原因を診断可能にする
+          console.error('[api/referral/consents] accepting promotion failed:', promoteError)
+        }
       }
     }
 
