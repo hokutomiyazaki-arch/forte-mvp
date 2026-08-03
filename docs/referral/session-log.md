@@ -95,3 +95,11 @@
 - レビュー2周（重大5→重大1→クローズ）。既存STRIPE_SECRET_KEY系（NFCカード・認定申請）には差分ゼロ。
 - 【CEO確認事項】メニュー選択が任意のため「未選択=0円=無決済で即requested」が正規ルートとして残る。有料メニューを持つ受け手では選択必須にするか要判断。
 - 積み残し（§16）: 昇格時に受け手のaccepting_status/deactivated_atを再検証しない（送信〜支払いの間に受付終了したケース・記録のみ）。
+
+### 実行SQL: 036（決済カラム＋status'draft'追加）— 実行済み 2026-08-03 夜
+- CEO委任によりCCがChrome経由で実行。B-1プレビューで制約名 referral_bookings_status_check を確認→PART A（stripe_checkout_session_id/payment_status追加）＋PART B（CHECKにdraft追加）を実行、Success。RESTプローブで新カラム実在を検証済み（200）。
+- 巻き戻し: カラムはDROP COLUMN、制約は旧6値のCHECKに再作成（draft行が存在する場合は先にcancelled化が必要）。
+- Vercel: REFERRAL_STRIPE_SECRET_KEY はCEOがProduction/Previewに登録済み（Developmentは未チェック=ローカルvercel dev用のため影響なし）。
+
+### 決定: メニュー選択の必須化【指示書未反映】— 2026-08-03 夜
+- 紹介予約可能なメニューが1件以上ある受け手への相談は、メニュー選択を必須に（サーバー400 menu_required＋フォーム必須化）。未選択=0円で与信を素通りできる穴の閉塞（CEO決定）。メニューが1件も無い受け手のみ従来通りメニューなし相談を許容。

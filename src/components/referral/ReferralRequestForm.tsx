@@ -92,6 +92,7 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
     setClientName((prev) => prev || `${user.lastName || ''} ${user.firstName || ''}`.trim() || user.username || '')
   }, [isLoaded, user?.id])
 
+  // CEO決定(2026-08-03): メニューがある受け手ではメニュー選択必須(未選択=0円で決済を素通りさせない)
   const missingReason = !clientName
     ? 'お名前を入力すると送信できます'
     : !clientPhone
@@ -102,11 +103,13 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
           ? 'メールアドレスを入力すると送信できます'
           : !EMAIL_PATTERN.test(clientEmail)
             ? 'メールアドレスの形式をご確認ください'
-            : !slot1
-              ? '第1希望日時を入力すると送信できます'
-              : !consent
-                ? '情報共有への同意にチェックすると送信できます'
-                : ''
+            : menus.length > 0 && !menuId
+              ? 'メニューを選択すると送信できます'
+              : !slot1
+                ? '第1希望日時を入力すると送信できます'
+                : !consent
+                  ? '情報共有への同意にチェックすると送信できます'
+                  : ''
 
   async function handleSubmit() {
     if (submitting) return
@@ -155,6 +158,8 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
           setErrorMsg('お名前・電話番号・メールアドレスをご確認ください。')
         } else if (data.error === 'too_many_requests') {
           setErrorMsg('現在リクエストが集中しています。しばらくしてからお試しください。')
+        } else if (data.error === 'menu_required') {
+          setErrorMsg('メニューを選択してください。')
         } else if (data.error === 'invalid_menu_price') {
           setErrorMsg('このメニューは現在オンライン決済に対応していません。先生に直接お問い合わせください。')
         } else if (data.error === 'payment_setup_failed') {
@@ -300,9 +305,9 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
 
         {menus.length > 0 && (
           <div>
-            <label style={labelStyle}>メニュー</label>
+            <label style={labelStyle}>メニュー（必須）</label>
             <select value={menuId} onChange={(e) => setMenuId(e.target.value)} style={inputStyle}>
-              <option value="">相談内容に応じて決める(未選択)</option>
+              <option value="">選択してください</option>
               {menus.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name}(¥{m.price_jpy.toLocaleString()})

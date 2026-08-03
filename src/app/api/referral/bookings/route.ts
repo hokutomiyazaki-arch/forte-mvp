@@ -138,6 +138,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'receiver_not_accepting' }, { status: 409 })
     }
 
+    // CEO決定(2026-08-03): 受け手に紹介予約可能なメニューが1件以上あるならメニュー選択は必須。
+    // 未選択(=0円)を許すと決済(与信)を素通りできてしまうため(ステージ2の狙いの無効化防止)。
+    // メニューが1件も無い受け手のみ、従来通りメニューなし相談を許容する。
+    if (!menuId) {
+      const { count: bookableMenuCount, error: menuCountError } = await supabase
+        .from('pro_menus')
+        .select('id', { count: 'exact', head: true })
+        .eq('professional_id', receiverProId)
+        .eq('is_referral_bookable', true)
+        .neq('is_active', false)
+      if (!menuCountError && (bookableMenuCount || 0) > 0) {
+        return NextResponse.json({ error: 'menu_required' }, { status: 400 })
+      }
+    }
+
     let priceJpy = 0
     let menuName: string | null = null
     if (menuId) {
