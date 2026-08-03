@@ -59,3 +59,8 @@
 - SearchPageClient の useEffect 配列依存（chips）の規約違反リファクタ。
 - 追加成功後に同じ候補を別リストへ続けて追加する導線がない／新規作成失敗後のタイトル変更が無視される案内。
 - 全体公開（'all'切替）時の checklist はメモリ project_referral_launch_checklist.md 参照（告知文言・033 PART B・検索非公開化・60日ゲート起算）。
+
+### 判断: クライアント連絡先の保存先は referral_bookings（予約単位）【指示書未反映】— 2026-08-03 夜
+- 何を: migration 035 で referral_bookings に client_name / client_phone / client_email を追加（ADD COLUMNのみ・未実行・CEO実行待ち）。
+- なぜ: clients テーブルには email/phone カラムが無い。連絡先の開示制御（受け手には confirmed 以降のみ）を予約単位で行う方が安全で、アカウントレスの再相談でもその都度入力させる設計と整合するため。clients へのカラム追加案は却下（全クライアント共通のPII置き場が増え、開示制御が予約状態と分離してしまう）。
+- 実行順の制約: **035のSQL実行 → ステージ1コードのデプロイ** の順を守る（先にデプロイするとINSERTが未知カラムで失敗）。
