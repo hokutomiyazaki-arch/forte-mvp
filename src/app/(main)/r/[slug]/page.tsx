@@ -184,6 +184,10 @@ function CandidateCard({
 
       {candidate.voiceExcerpts.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+          {/* CEO指摘(先行テスト第3弾): 引用が何なのか分からなかったためラベルを明示 */}
+          <div style={{ fontSize: 10, color: T.textMuted, fontWeight: 600 }}>
+            この先生に寄せられたお客さまの声
+          </div>
           {candidate.voiceExcerpts.map((text, i) => (
             <div
               key={i}
