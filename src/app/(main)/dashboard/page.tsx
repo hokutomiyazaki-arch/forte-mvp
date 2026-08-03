@@ -90,6 +90,7 @@ export default function DashboardPage() {
   const [pinError, setPinError] = useState('')
   const [voteUrlCopied, setVoteUrlCopied] = useState(false)
   const [isOnlineOpen, setIsOnlineOpen] = useState(false) // 「オンラインの方はこちら」開閉（初期＝閉じ）
+  const [isArchiveOpen, setIsArchiveOpen] = useState(false) // アーカイブ開閉（CEO指示: 普段は畳む・初期＝閉じ）
   const [editing, setEditing] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
@@ -2919,8 +2920,31 @@ export default function DashboardPage() {
         const archMax = Math.max(...archivedPersonality.map(a => a.votes), 1)
         return (
           <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
-            <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">📂 アーカイブ</h2>
-            <p className="text-xs text-[#9CA3AF] mb-4">
+            {/* CEO指示(先行テスト第3弾): アーカイブは普段は畳んでおく(タップで開閉・初期=閉じ) */}
+            <button
+              onClick={() => setIsArchiveOpen((v) => !v)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none',
+                padding: 0, cursor: 'pointer', width: '100%', textAlign: 'left' as const,
+              }}
+            >
+              <h2 className="text-lg font-bold text-[#1A1A2E]" style={{ margin: 0 }}>📂 アーカイブ</h2>
+              <span
+                style={{
+                  color: '#9CA3AF', fontSize: 14, display: 'inline-block',
+                  transform: isArchiveOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s',
+                }}
+              >
+                ›
+              </span>
+            </button>
+            {!isArchiveOpen && (
+              <p className="text-xs text-[#9CA3AF] mt-2 mb-0">
+                フォーマット刷新前の評価記録（{archivedPersonality.length}項目）
+              </p>
+            )}
+            {isArchiveOpen && (<>
+            <p className="text-xs text-[#9CA3AF] mb-4 mt-2">
               フォーマット刷新前の評価記録です。集計には含まれませんが大切な投票として残しています。
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -2947,6 +2971,7 @@ export default function DashboardPage() {
             <p className="text-xs text-[#9CA3AF] mt-4 leading-relaxed">
               2026年4月以降、パーソナリティのフォーマットを刷新しました。過去の評価は大切な記録として残しています。
             </p>
+            </>)}
           </div>
         )
       })()}
