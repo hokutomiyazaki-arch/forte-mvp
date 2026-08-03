@@ -282,3 +282,7 @@ async function checkAdminAuth(): Promise<boolean> {
 - ローカル確認は `rm -rf .next && npm run build` をセットで(`.next` キャッシュ由来の誤動作回避)
 - **`.env.local` は絶対消さない**。`rm -rf` はカレントディレクトリを厳重確認(ホームで実行して消した事故)
 - 新ターミナルはホームで開く→コマンドは毎回 `cd ~/dev/forte-mvp` を含める。コマンドにバッククォート混入でzshが固まる点に注意
+
+## 15. アカウント調査の鉄則（2026-08-02 先行テストの教訓）
+
+- **`professionals.contact_email` はログイン識別子ではない**。表示・連絡先用のフィールドであり、ログイン主体は Clerk ユーザー（`professionals.user_id`）。アカウント調査では必ず `user_id` を辿る。contact_email だけを見て「該当プロなし」と判断すると誤る（同一メールに複数プロがぶら下がる/ログインメールと contact_email が異なるケースが実在する）。
