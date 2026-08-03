@@ -64,3 +64,10 @@
 - 何を: migration 035 で referral_bookings に client_name / client_phone / client_email を追加（ADD COLUMNのみ・未実行・CEO実行待ち）。
 - なぜ: clients テーブルには email/phone カラムが無い。連絡先の開示制御（受け手には confirmed 以降のみ）を予約単位で行う方が安全で、アカウントレスの再相談でもその都度入力させる設計と整合するため。clients へのカラム追加案は却下（全クライアント共通のPII置き場が増え、開示制御が予約状態と分離してしまう）。
 - 実行順の制約: **035のSQL実行 → ステージ1コードのデプロイ** の順を守る（先にデプロイするとINSERTが未知カラムで失敗）。
+
+### 実行SQL: 035（referral_bookingsに連絡先3カラム追加）— 実行済み 2026-08-03 夜
+- CEOの委任により、CCがCEOのChrome（ログイン済みSupabase SQL Editor）を操作して実行。`ALTER TABLE referral_bookings ADD COLUMN IF NOT EXISTS client_name/client_phone/client_email` → Success。RESTプローブでカラム実在を検証済み（200）。
+- 巻き戻し: 3カラムとも未使用のうちは `ALTER TABLE referral_bookings DROP COLUMN ...` で可（現時点で全行NULL）。
+- Vercel環境変数: STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET / STRIPE_CARD_ORDER_WEBHOOK_SECRET の3キーの存在を確認（値は非表示のまま）。
+- Stripe: ログインアカウントは Bodydiscoverystudio（他に Sports Mental JV）。**Connectは未設定（「5ステップの設定が残っています」表示）**。Connect有効化はプラットフォーム規約への同意を伴うためCC単独では進めず、CEO確認待ち（下記2点）。
+- 未確定: Vercelの STRIPE_SECRET_KEY がどのStripeアカウントのものか（Bodydiscoverystudio か別か）はCEOに確認が必要。
