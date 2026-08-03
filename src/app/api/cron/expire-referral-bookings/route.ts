@@ -1,16 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { notifyBookingExpiredToSender, notifyClientByEmail, emailShell, escapeHtml } from '@/lib/referral-notify'
+import { isReferralPaymentEnabled } from '@/lib/feature-flags'
+// 中1レビュー指摘: Stripe importはこのAPI routeに持たせない(Webpackチャンクグラフ対策)。
+// PaymentIntentキャンセルはsrc/lib/referral-payment.tsの関数呼び出しに委譲する。
+import { cancelReferralAuthorization } from '@/lib/referral-payment'
 
 export const dynamic = 'force-dynamic'
 
 const APP_URL = 'https://realproof.jp'
 const BATCH_LIMIT = 100
+/** 軽微指摘: Checkoutセッションは24hで自然失効するため、25h(バッファ込み)経過したdraftはゴミ行とみなす */
+const DRAFT_STALE_HOURS = 25
+const DRAFT_CLEANUP_LIMIT = 100
 
 /**
  * §2-4: requested のまま48時間(expires_at)を超えた予約リクエストを自動失効させる。
  * クライアントと送り手プロへ通知し、別候補提案としてリストURLを添える。
  * Vercel Cron から毎時呼び出す(vercel.json)。
+ *
+ * §2-4ステージ2(決済有効時のみ・migration 036依存): payment_status='authorized'のまま
+ * 期限切れになった予約は、失効と同時にStripeのPaymentIntentをキャンセルし与信を解放する
+ * (referral_bookings.payment_status/stripe_payment_intent_idはREFERRAL_STRIPE_SECRET_KEY
+ * 未設定の間は一切参照しない=フラグゲート)。
  */
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization')
@@ -20,13 +32,50 @@ export async function GET(req: NextRequest) {
 
   const supabase = getSupabaseAdmin()
   const nowIso = new Date().toISOString()
+  const paymentEnabled = isReferralPaymentEnabled()
+  const baseSelect =
+    'id, list_id, sender_pro_id, receiver_pro_id, client_id, client_email, status, expires_at, clients(id, user_id, nickname), referral_lists(slug)'
+  const selectFields = paymentEnabled ? `${baseSelect}, payment_status, stripe_payment_intent_id` : baseSelect
+
+  // 軽微指摘: 決済経路のdraftのまま25h(Checkoutセッションの24h自然失効+バッファ)経過した
+  // 「ゴミ行」を掃除する(通知なし・ログのみ。ユーザーには何も届いていないため通知不要)。
+  // paymentEnabled(migration 036依存カラム)の間だけ実行する(フラグゲート)。
+  // メインの失効処理より前に実行しても後でも影響しないため、失敗しても本処理を止めない。
+  if (paymentEnabled) {
+    try {
+      const staleBefore = new Date(Date.now() - DRAFT_STALE_HOURS * 60 * 60 * 1000).toISOString()
+      const { data: staleDrafts, error: staleQueryError } = await supabase
+        .from('referral_bookings')
+        .select('id')
+        .eq('status', 'draft')
+        .lt('created_at', staleBefore)
+        .limit(DRAFT_CLEANUP_LIMIT)
+
+      if (staleQueryError) {
+        console.error('[cron/expire-referral-bookings] stale draft query error:', staleQueryError.message)
+      } else if (staleDrafts && staleDrafts.length > 0) {
+        const { data: cleanedRows, error: staleUpdateError } = await supabase
+          .from('referral_bookings')
+          .update({ payment_status: 'canceled', status: 'cancelled' })
+          .in('id', staleDrafts.map((d) => d.id))
+          .eq('status', 'draft')
+          .select('id')
+
+        if (staleUpdateError) {
+          console.error('[cron/expire-referral-bookings] stale draft cleanup error:', staleUpdateError.message)
+        } else {
+          console.log(`[cron/expire-referral-bookings] cleaned up ${cleanedRows?.length || 0} stale draft booking(s)`)
+        }
+      }
+    } catch (staleErr) {
+      console.error('[cron/expire-referral-bookings] stale draft cleanup unexpected error:', staleErr)
+    }
+  }
 
   try {
     const { data: targets, error: queryError } = await supabase
       .from('referral_bookings')
-      .select(
-        'id, list_id, sender_pro_id, receiver_pro_id, client_id, client_email, status, expires_at, clients(id, user_id, nickname), referral_lists(slug)'
-      )
+      .select(selectFields)
       .eq('status', 'requested')
       .lt('expires_at', nowIso)
       .limit(BATCH_LIMIT)
@@ -83,6 +132,14 @@ export async function GET(req: NextRequest) {
           continue
         }
         expiredCount++
+
+        // §2-4ステージ2: オーソリ済み(与信確保済み)のまま失効した予約はPaymentIntentをキャンセルし
+        // 与信を解放する。キャンセル失敗はcancelReferralAuthorization内でログのみ(オーソリはStripe側で
+        // 自然失効するため致命的でない)。※draft方式のためこのcron対象(status='requested')に
+        // draftは含まれない(draft中に失効した場合の与信解放はStripe側の自動失効に委ねる)。
+        if (paymentEnabled && row.payment_status === 'authorized' && row.stripe_payment_intent_id) {
+          await cancelReferralAuthorization(row.stripe_payment_intent_id)
+        }
 
         const slug = row.referral_lists?.slug || ''
         const listUrl = slug ? `${APP_URL}/r/${slug}` : APP_URL

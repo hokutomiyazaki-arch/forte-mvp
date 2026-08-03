@@ -14,6 +14,7 @@ import type { Metadata } from 'next'
 import { getReferralPageData, type ReferralCandidate } from '@/lib/referral-data'
 import { isAiSanitizeEnabled } from '@/lib/feature-flags'
 import { isAcceptingOpen } from '@/lib/referral-accepting'
+import PaymentStatusBanner from '@/components/referral/PaymentStatusBanner'
 
 export const dynamic = 'force-dynamic'
 
@@ -255,10 +256,13 @@ function CandidateCard({
 
 export default async function ReferralPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>
+  searchParams: Promise<{ payment?: string; session_id?: string }>
 }) {
   const { slug } = await params
+  const { payment: paymentParam, session_id: sessionId } = await searchParams
   const data = await getReferralPageData(slug)
 
   if (!data) {
@@ -266,6 +270,9 @@ export default async function ReferralPage({
   }
 
   const aiSanitizeEnabled = isAiSanitizeEnabled()
+  // §2-4ステージ2: Stripe Checkoutのsuccess_url/cancel_urlから戻ってきた時のみ表示
+  const payment: 'success' | 'canceled' | null =
+    paymentParam === 'success' ? 'success' : paymentParam === 'canceled' ? 'canceled' : null
 
   return (
     <div style={{ maxWidth: 480, margin: '0 auto', padding: '16px 16px 40px', background: T.bg }}>
@@ -274,6 +281,8 @@ export default async function ReferralPage({
           REAL PROOF
         </span>
       </div>
+
+      <PaymentStatusBanner payment={payment} sessionId={sessionId || null} />
 
       <h1
         style={{

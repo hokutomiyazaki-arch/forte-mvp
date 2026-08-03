@@ -302,3 +302,4 @@ async function checkAdminAuth(): Promise<boolean> {
 - **[次回対応]** ピンの一言メモ: UI側は200字でsliceしたが、items PATCH API側に長さ検証が無い（直叩きで無制限）。API側にも上限を。
 - **[記録のみ]** 気になるプロ(private)の既存noteはUI非表示化によりDBに残ったまま不可視（/r/はpublicのみで露出リスクゼロ・実害なし）。
 - **[次回対応]** アカウントレス相談のボット対策（captcha/honeypot/同一emailの時間帯上限）と、予約INSERT失敗時のゲストclients孤児行の掃除。ステージ2（オーソリ導入）でカード決済自体が実質的なボットゲートになるため優先度は下がる。
+- **[次回対応]** §2-4: オーソリ昇格時に受け手の accepting_status/deactivated_at を再検証しない（送信〜支払い完了の間に受付終了・退会した受け手へ与信付き予約が入り得る。頻度は低い・レビュー記録）。

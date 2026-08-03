@@ -54,3 +54,14 @@ export function isProofUniqueCountEnabled(): boolean {
 export function isAiSanitizeEnabled(): boolean {
   return process.env.FEATURE_AI_TEXT_SANITIZE === 'true'
 }
+
+/**
+ * §2-4ステージ2: 相談リクエスト時のStripeオーソリ（与信確保）。
+ * REFERRAL_STRIPE_SECRET_KEY 未設定の間は、決済フロー（Checkout Session作成）も
+ * referral_bookings の新カラム（payment_status等・migration 036）参照も一切行わない
+ * （未実行の間はDDL未反映でも安全にデプロイできる）。
+ * 既存の STRIPE_SECRET_KEY（NFCカード/認定制度）とは別アカウント・別キー。
+ */
+export function isReferralPaymentEnabled(): boolean {
+  return !!process.env.REFERRAL_STRIPE_SECRET_KEY
+}

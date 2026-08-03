@@ -137,6 +137,13 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
         }),
       })
       if (res.ok) {
+        const data = await res.json().catch(() => ({}))
+        // §2-4ステージ2: 決済有効(有料メニュー選択)時はStripe Checkoutへ遷移する。
+        // window.location.href を使う(router.push禁止規約・外部URL遷移のため)。
+        if (data.checkout_url) {
+          window.location.href = data.checkout_url
+          return
+        }
         setDone(true)
       } else {
         const data = await res.json().catch(() => ({}))
@@ -148,6 +155,10 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
           setErrorMsg('お名前・電話番号・メールアドレスをご確認ください。')
         } else if (data.error === 'too_many_requests') {
           setErrorMsg('現在リクエストが集中しています。しばらくしてからお試しください。')
+        } else if (data.error === 'invalid_menu_price') {
+          setErrorMsg('このメニューは現在オンライン決済に対応していません。先生に直接お問い合わせください。')
+        } else if (data.error === 'payment_setup_failed') {
+          setErrorMsg('決済の準備に失敗しました。時間をおいて再度お試しください。')
         } else {
           setErrorMsg('送信に失敗しました。もう一度お試しください。')
         }

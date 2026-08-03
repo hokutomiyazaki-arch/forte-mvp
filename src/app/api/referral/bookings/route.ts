@@ -5,6 +5,10 @@ import { ensureOwnClient, createGuestClient } from '@/lib/referral-auth'
 import { verifyReceiverAllowedInList } from '@/lib/referral-data'
 import { notifyBookingRequested } from '@/lib/referral-notify'
 import { isAcceptingOpen } from '@/lib/referral-accepting'
+import { isReferralPaymentEnabled } from '@/lib/feature-flags'
+// 中1レビュー指摘: Stripe importはこのAPI routeに持たせない(Webpackチャンクグラフ対策)。
+// Checkout Session作成はsrc/lib/referral-payment.tsの関数呼び出しに委譲する。
+import { createReferralCheckoutSession } from '@/lib/referral-payment'
 
 export const dynamic = 'force-dynamic'
 
@@ -135,10 +139,11 @@ export async function POST(request: NextRequest) {
     }
 
     let priceJpy = 0
+    let menuName: string | null = null
     if (menuId) {
       const { data: menu } = await supabase
         .from('pro_menus')
-        .select('id, professional_id, price_jpy, is_referral_bookable, is_active')
+        .select('id, name, professional_id, price_jpy, is_referral_bookable, is_active')
         .eq('id', menuId)
         .maybeSingle()
 
@@ -152,7 +157,24 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'invalid_menu' }, { status: 400 })
       }
       priceJpy = menu.price_jpy
+      menuName = menu.name
     }
+
+    // §2-4ステージ2: REFERRAL_STRIPE_SECRET_KEY未設定の間はここがfalse固定 → 決済フロー・
+    // referral_bookings新カラム(payment_status等・migration 036)には一切触れない(従来動作を維持)。
+    const paymentEnabled = isReferralPaymentEnabled()
+
+    // レビュー指摘(軽微6): 決済有効時、Stripeの最低決済額(JPY 50円)未満のメニュー価格は
+    // Checkout Session作成時にStripe側エラーになる。事前に400で弾く。
+    if (paymentEnabled && priceJpy > 0 && priceJpy < 50) {
+      return NextResponse.json({ error: 'invalid_menu_price' }, { status: 400 })
+    }
+
+    // §2-4ステージ2(重大2/3設計変更・draft方式): 決済有効かつ有料メニューの予約は
+    // 'draft' で作成し、オーソリ完了まで受け手一覧・重複チェック・48h失効の対象外にする
+    // (いずれも既存クエリが status='requested' 基準のため draft は自然に除外される)。
+    const isDraft = paymentEnabled && priceJpy > 0
+    const initialStatus: 'draft' | 'requested' = isDraft ? 'draft' : 'requested'
 
     // §2-4ステージ1: アカウントレス化に伴うスパム対策(緩めのバックストップ)。
     // 取得に失敗した場合はfail open(この保護自体をブロッカーにしない)。
@@ -185,7 +207,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'client_setup_failed' }, { status: 500 })
     }
 
-    const expiresAt = new Date(Date.now() + BOOKING_EXPIRES_HOURS * 60 * 60 * 1000).toISOString()
+    // §2-4ステージ2(draft方式): draft作成時はexpires_atをセットしない
+    // (オーソリ完了時に昇格処理側で48hをセットする。src/lib/referral-payment.ts参照)。
+    // draft以外(決済無効 or 0円予約)は従来通り即時に48h後を設定する。
+    const expiresAt = isDraft ? null : new Date(Date.now() + BOOKING_EXPIRES_HOURS * 60 * 60 * 1000).toISOString()
 
     const { data: booking, error } = await supabase
       .from('referral_bookings')
@@ -197,13 +222,21 @@ export async function POST(request: NextRequest) {
         menu_id: menuId,
         theme_tags: theme ? [theme] : null,
         preferred_slots: { slots: [slot1, slot2, slot3], note: note || null },
-        status: 'requested',
+        status: initialStatus,
         price_jpy: priceJpy,
+        // レビュー指摘(中2): Phase 1の料率(送り手30%+決済実費3.6%・リアプル利益0)は
+        // paymentEnabledに関わらず常時上書きする(referral_bookingsのデフォルトはPhase 2値の
+        // 4000/2800/1200)。決済フローの有効/無効はStripe連携の有無のみを制御する。
+        fee_total_bps: 3360,
+        fee_sender_bps: 3000,
+        fee_platform_bps: 360,
         info_share_consent: true,
         expires_at: expiresAt,
         client_name: clientName,
         client_phone: clientPhone,
         client_email: clientEmail,
+        // payment_statusは決済有効時のみ(migration 036依存のカラム)
+        ...(paymentEnabled ? { payment_status: priceJpy > 0 ? 'unpaid' : 'not_required' } : {}),
       })
       .select('id, status, expires_at')
       .maybeSingle()
@@ -216,8 +249,48 @@ export async function POST(request: NextRequest) {
       console.error('[api/referral/bookings] POST insert error:', error)
       return NextResponse.json({ error: 'failed_to_create' }, { status: 500 })
     }
+    if (!booking) {
+      console.error('[api/referral/bookings] insert succeeded but no row returned')
+      return NextResponse.json({ error: 'failed_to_create' }, { status: 500 })
+    }
 
-    // 受け手プロへの通知(失敗しても予約リクエスト自体は成功扱い)
+    // §2-4ステージ2(draft方式): 決済有効かつ有料メニュー選択時のみStripe Checkout(オーソリのみ)を
+    // 挟む。この場合、受け手通知はINSERT直後には送らず、オーソリ完了後(webhook/フォールバック)に送る。
+    if (isDraft) {
+      if (!list.slug) {
+        // 重大4: 無決済で成立させない。Checkout URLを組めない場合は作成済みdraft行を削除して502
+        console.error('[api/referral/bookings] missing list.slug; aborting checkout session creation')
+        await supabase.from('referral_bookings').delete().eq('id', booking.id)
+        return NextResponse.json({ error: 'payment_setup_failed' }, { status: 502 })
+      }
+
+      const checkout = await createReferralCheckoutSession({
+        bookingId: booking.id,
+        priceJpy,
+        menuName,
+        clientEmail,
+        successUrl: `https://realproof.jp/r/${list.slug}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+        cancelUrl: `https://realproof.jp/r/${list.slug}?payment=canceled&session_id={CHECKOUT_SESSION_ID}`,
+      })
+
+      if (!checkout) {
+        // 重大4: Checkout Session作成失敗時は無決済のまま成立させず、draft行を削除して502を返す
+        await supabase.from('referral_bookings').delete().eq('id', booking.id)
+        return NextResponse.json({ error: 'payment_setup_failed' }, { status: 502 })
+      }
+
+      const { error: sessionUpdateError } = await supabase
+        .from('referral_bookings')
+        .update({ stripe_checkout_session_id: checkout.sessionId })
+        .eq('id', booking.id)
+      if (sessionUpdateError) {
+        console.error('[api/referral/bookings] stripe_checkout_session_id update failed:', sessionUpdateError.message)
+      }
+
+      return NextResponse.json({ booking, checkout_url: checkout.url })
+    }
+
+    // 決済無効 / 0円予約(メニュー未選択)時: 従来通り即時通知(失敗しても予約リクエスト自体は成功扱い)
     try {
       await notifyBookingRequested(
         {
@@ -231,7 +304,7 @@ export async function POST(request: NextRequest) {
       console.error('[api/referral/bookings] notify error:', notifyErr)
     }
 
-    return NextResponse.json({ booking })
+    return NextResponse.json({ booking, checkout_url: null })
   } catch (err: any) {
     console.error('[api/referral/bookings] POST error:', err)
     return NextResponse.json({ error: err.message || 'internal_error' }, { status: 500 })
