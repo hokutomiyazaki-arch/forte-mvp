@@ -571,7 +571,7 @@ export default function SearchPageClient({
       return 'リストの取得に失敗しました'
     }
     if (referralWriteEnabled && mineOnlyFilter) {
-      return 'まだ気になるプロがいません。カードの「＋ 紹介リストに追加」から連携候補に追加できます'
+      return 'まだ気になるプロがいません。カードの「＋ 紹介リストに追加」から気になるプロに追加できます'
     }
     if (subCategory === 'rising') {
       return '今月はまだ集計中です。「この分野のプロ」を見てみましょう'
@@ -802,7 +802,7 @@ export default function SearchPageClient({
                 if (checked) ensureOwnListsLoaded()
               }}
             />
-            ♡ 気になる先生のみ表示
+            ♡ 気になるプロのみ表示
           </label>
         )}
 
@@ -1059,7 +1059,7 @@ export default function SearchPageClient({
                                 >
                                   {selectableOwnLists.map((l) => (
                                     <option key={l.id} value={l.id}>
-                                      {l.visibility === 'private' ? `気になる先生 - ${l.title}` : l.title}
+                                      {l.visibility === 'private' ? `気になるプロ - ${l.title}` : l.title}
                                     </option>
                                   ))}
                                   <option value={NEW_LIST_SENTINEL}>＋ 新しいリストを作る</option>

@@ -101,6 +101,8 @@ export interface CardData {
   bookmarkCount: number
   isBookmarked: boolean
   currentUserId: string | null
+  /** CEO決定(A案+♡プロ専用化): カード♡はプロ閲覧時のみ表示。閲覧者がプロでなければ常にnull。 */
+  viewerProId: string | null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   orgMembers: any[]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -122,7 +124,11 @@ export interface CardData {
 
 export async function getCardData(
   proId: string,
-  currentUserId: string | null
+  currentUserId: string | null,
+  /** CEO決定(A案+♡プロ専用化): 閲覧者がプロの場合そのprofessionals.id、それ以外はnull。
+   * isBookmarked(♡状態)の単一情報源を bookmarks から referral_list_items(private=気になるプロ)へ
+   * 切り替えるために追加。省略時は従来通りnull扱い(♡は出ない=false)。 */
+  viewerProId: string | null = null
 ): Promise<CardData> {
   const supabase = getSupabaseAdmin()
 
@@ -204,16 +210,29 @@ export async function getCardData(
     delegateHasActiveMember = validSet.has(delegateListId)
   }
 
-  // ブックマーク状態（ログイン中のみ）
+  // ♡状態（CEO決定: A案+♡プロ専用化。単一情報源はbookmarksからprivate(気になるプロ)リストへ移行。
+  // 閲覧者がプロでない場合は♡自体を出さないため常にfalse。）
   let isBookmarked = false
-  if (currentUserId) {
-    const { data: bookmark } = await supabase
-      .from('bookmarks')
+  if (viewerProId) {
+    const { data: ownPrivateLists } = await supabase
+      .from('referral_lists')
       .select('id')
-      .eq('user_id', currentUserId)
-      .eq('professional_id', proId)
-      .maybeSingle()
-    isBookmarked = !!bookmark
+      .eq('owner_id', viewerProId)
+      .eq('visibility', 'private')
+
+    const listIds = (ownPrivateLists || []).map((l) => l.id)
+    if (listIds.length > 0) {
+      // R7レビュー指摘(重大): privateリストが複数ある場合に複数行が返ると
+      // maybeSingle()がエラーになりサイレントにfalseへ落ちるため、limit(1)で1行に絞る
+      const { data: item } = await supabase
+        .from('referral_list_items')
+        .select('id')
+        .in('list_id', listIds)
+        .eq('pro_id', proId)
+        .limit(1)
+        .maybeSingle()
+      isBookmarked = !!item
+    }
   }
 
   // Velocity・リピーター率・CLIENT COMPOSITION 集計
@@ -481,6 +500,7 @@ export async function getCardData(
     bookmarkCount: bookmarkCountResult.count || 0,
     isBookmarked,
     currentUserId,
+    viewerProId,
     orgMembers: orgMembersResult.data || [],
     badgeMembers: badgeMembersResult.data || [],
     sessionCounts,

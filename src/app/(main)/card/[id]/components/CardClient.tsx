@@ -266,6 +266,8 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
   const [isBookmarked, setIsBookmarked] = useState(cardData.isBookmarked)
   const [bookmarkLoading, setBookmarkLoading] = useState(false)
   const [currentUserId] = useState<string | null>(cardData.currentUserId)
+  // CEO決定(A案+♡プロ専用化): カード♡はプロ閲覧時のみ表示。クライアント/未ログインはnull。
+  const [viewerProId] = useState<string | null>(cardData.viewerProId)
   const [orgs] = useState<{ id: string; name: string; type: string }[]>(initialOrgs)
   const [credentialBadges] = useState<
     {
@@ -417,38 +419,20 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
     }, 100)
   }
 
+  // CEO決定(A案+♡プロ専用化): ♡はプロ専用の「気になるプロ」(private/referral_list_items)が
+  // 単一情報源。bookmarksテーブルへは書き込まない(旧クライアント向けbookmarksデータは放置)。
   const handleBookmarkToggle = async () => {
-    if (!currentUserId) {
-      window.location.href = `/sign-in?redirect_url=/card/${id}`
-      return
-    }
+    if (!viewerProId) return
     setBookmarkLoading(true)
     try {
-      if (isBookmarked) {
-        const res = await fetch('/api/db', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'delete',
-            table: 'bookmarks',
-            query: { eq: { user_id: currentUserId, professional_id: id } }
-          })
-        })
-        const result = await res.json()
-        if (!result.error) setIsBookmarked(false)
-      } else {
-        const res = await fetch('/api/db', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'insert',
-            table: 'bookmarks',
-            query: { data: { user_id: currentUserId, professional_id: id } }
-          })
-        })
-        const result = await res.json()
-        if (!result.error) setIsBookmarked(true)
-      }
+      const res = await fetch('/api/referral/interested', {
+        method: isBookmarked ? 'DELETE' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ pro_id: id }),
+      })
+      const result = await res.json().catch(() => ({}))
+      if (res.ok && !result.error) setIsBookmarked((prev) => !prev)
     } catch (e) {
       console.error('Bookmark toggle error:', e)
     } finally {
@@ -511,8 +495,9 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
             {/* タイトル + ブックマークボタン（同じ行） */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 2 }}>
               <div style={{ fontSize: 12, color: T.gold, fontWeight: 700, flex: 1, minWidth: 0 }}>{pro.title}</div>
-              {/* ブックマークボタン — プロ自身は非表示 */}
-              {currentUserId !== pro?.user_id && (
+              {/* ♡ボタン — CEO決定(A案+♡プロ専用化): 閲覧者がプロの時のみ表示(クライアント/未ログインは非表示)。
+                  自分のカードでは従来通り非表示(pro.idとの比較=professionals.id同一性)。 */}
+              {viewerProId && viewerProId !== pro?.id && (
                 <button
                   onClick={handleBookmarkToggle}
                   disabled={bookmarkLoading}

@@ -496,6 +496,20 @@ alter table voices add column sanitize_version int default 1;
 **データ**: `referral_invites`（id / list_id / inviter_pro_id / invitee_name /
 invite_token unique / registered_pro_id nullable / created_at / registered_at）
 
+**共有方法（第3弾で追加）**:
+- 招待URLは**コピーだけでなくネイティブの共有UIを開く**（Web Share API `navigator.share`）。
+  LINE・メール等にそのまま渡せるようにする。非対応環境（一部のデスクトップ）では
+  コピーにフォールバックし、両方のボタンを併置する
+- 共有テキストは事前に入っている状態にする（送り手が編集できる）。例：
+  「REALPROOFという、施術の実績が記録として残るサービスを使っています。
+  信頼できる連携先として登録したいので、よければプロフィールを作ってもらえませんか。→ {URL}」
+- **招待トークンは1人分（single-use）**。`registered_pro_id` が入った時点で消費とし、
+  以後そのURLでアクセスした人には「この招待は既に使用されています」と表示して登録させない
+  （1つのURLが拡散して多数が登録する事態を防ぐ）
+- 発行画面に明示する：「**この招待URLは1人分です（◯◯先生用）。
+  別の先生には新しいURLを発行してください**」
+- 招待時の名前入力は必須のまま（1対1の招待であることを担保）
+
 **ルール**:
 - 招待に金銭報酬は付けない（プロ招待の報酬はネットワーク価値と将来の被リスト数。
   金銭を付けると招待が営業に変わり、敬意の通知でなくなる）

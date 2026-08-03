@@ -1,8 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useProStatus } from '@/lib/useProStatus'
 
 export default function BookmarksPage() {
+  // CEO決定(A案+♡プロ専用化): プロの「気になるプロ」はダッシュボード側(referral_list_items)に
+  // 一本化された。ここは旧bookmarksの一覧のまま残す(既存データが見えるのは許容・完全付け替えは次回)。
+  // プロが開いた時だけダッシュボードへの案内を出す(既存ロジックの共通hookを再利用)。
+  const { isPro } = useProStatus()
   const [bookmarkedPros, setBookmarkedPros] = useState<any[]>([])
   const [bookmarkCount, setBookmarkCount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -34,6 +39,14 @@ export default function BookmarksPage() {
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto', padding: '20px 16px 80px' }}>
+      {isPro && (
+        <div style={{
+          background: '#FBF7ED', border: '1px solid #E8D9A8', borderRadius: 12,
+          padding: '12px 14px', marginBottom: 16, fontSize: 13, color: '#5A4A1E', lineHeight: 1.7,
+        }}>
+          紹介機能をご利用のプロの方は、「気になるプロ」を<a href="/dashboard" style={{ color: '#C4A35A', fontWeight: 700 }}>ダッシュボード</a>で管理できます →
+        </div>
+      )}
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1A1A2E', margin: 0 }}>
           ブックマーク

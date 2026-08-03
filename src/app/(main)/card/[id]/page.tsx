@@ -12,7 +12,8 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { getCardData } from '@/lib/card-data'
-import { isProofUniqueCountEnabled, isReferralFullyLaunched } from '@/lib/feature-flags'
+import { isProofUniqueCountEnabled, isReferralFullyLaunched, isReferralEnabled } from '@/lib/feature-flags'
+import { getViewerProId } from '@/lib/viewer-role'
 import CardClient from './components/CardClient'
 import type { Metadata } from 'next'
 import { createClient } from '@supabase/supabase-js'
@@ -101,7 +102,15 @@ export default async function CardPage({
     // 未ログインでもOK
   }
 
-  const cardData = await getCardData(id, currentUserId)
+  // CEO決定(A案+♡プロ専用化): カード♡はプロ閲覧時のみ表示。fail closed(判定失敗時はnull=♡非表示)。
+  // R7レビュー指摘(重大): allowlist期間中は♡の保存先(気になるプロ=privateリスト)を閲覧する
+  // 導線(紹介タブ・♡タブ)がallowlist外プロに存在しないため、♡自体もallowlist内に限定する。
+  // FEATURE_REFERRAL_LISTS='all' 切替で自動的に全プロへ解禁される。allowlist外プロは従来の
+  // /bookmarks 運用のまま(♡は非表示になるが既存データは残る)。
+  const rawViewerProId = await getViewerProId()
+  const viewerProId = rawViewerProId && isReferralEnabled(rawViewerProId) ? rawViewerProId : null
+
+  const cardData = await getCardData(id, currentUserId, viewerProId)
   const { pro, comments, voteSummary, proofItems, badgeMembers, orgMembers, menus } = cardData
 
   // SEO 用 HTML を出力する条件:

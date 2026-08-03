@@ -30,7 +30,10 @@ export default function InviteAcceptPanel({ token, alreadyRegistered }: Props) {
   const [status, setStatus] = useState<Status>('idle')
 
   useEffect(() => {
-    if (!isLoaded || !isSignedIn || alreadyRegistered) return
+    // §2-9(第3弾): alreadyRegisteredでもログイン済みなら complete API に判定させる。
+    // APIは冪等で、登録済み本人には success(already:true)・他人には 409 invite_already_used を
+    // 返すため、本人の開き直しに「使用済み」と誤表示しない。
+    if (!isLoaded || !isSignedIn) return
     setStatus('processing')
     fetch(`/api/referral/invites/${token}/complete`, { method: 'POST', cache: 'no-store' })
       .then(async (res) => {
@@ -43,6 +46,14 @@ export default function InviteAcceptPanel({ token, alreadyRegistered }: Props) {
         }
         const data = await res.json().catch(() => ({}))
         if (data.error === 'no_professional_profile') {
+          // R7レビュー指摘: 使用済み招待(alreadyRegistered)をプロフィール未作成の第三者が
+          // 開いた場合、オンボーディングへ誤誘導せず「使用済み」を出す。死にトークンを
+          // localStorageに保存しない(正規の招待相手は登録完了までregistered_pro_idが
+          // 入らない=alreadyRegistered:falseなので、needs_profile経路は従来通り動く)。
+          if (alreadyRegistered) {
+            setStatus('already_used')
+            return
+          }
           try {
             localStorage.setItem(PENDING_INVITE_KEY, token)
           } catch {}
@@ -64,7 +75,7 @@ export default function InviteAcceptPanel({ token, alreadyRegistered }: Props) {
     window.location.href = `/sign-up?redirect_url=${encodeURIComponent(returnTo)}`
   }
 
-  if (alreadyRegistered || status === 'success') {
+  if (status === 'success') {
     return (
       <div style={{ marginTop: 16, fontSize: 13, color: T.textSub, lineHeight: 1.7 }}>
         登録が完了しています。
@@ -77,6 +88,18 @@ export default function InviteAcceptPanel({ token, alreadyRegistered }: Props) {
 
   if (!isLoaded || status === 'processing') {
     return <div style={{ marginTop: 16, fontSize: 13, color: T.textSub }}>読み込み中...</div>
+  }
+
+  // §2-9(第3弾): 招待URLは1人分(single-use)。使用済みURLを開いた未ログインの人には
+  // 「既に使用されています」を出し、サインアップ導線を出さない。ログイン済みの場合は
+  // 上のeffect→APIの冪等判定に任せる(登録済み本人=success表示・他人=already_used表示)ため、
+  // ここはstatusがidleに留まる未ログイン時のみ通る。
+  if (alreadyRegistered && status === 'idle') {
+    return (
+      <div style={{ marginTop: 16, fontSize: 13, color: T.textSub, lineHeight: 1.7 }}>
+        この招待は既に使用されています。招待した先生に新しい招待URLの発行を依頼してください。
+      </div>
+    )
   }
 
   if (status === 'needs_profile') {

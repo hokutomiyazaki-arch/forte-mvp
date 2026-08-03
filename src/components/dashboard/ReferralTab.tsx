@@ -817,7 +817,7 @@ export default function ReferralTab({ proId }: Props) {
             <input
               value={pinQuery[list.id] || ''}
               onChange={(e) => searchPro(list.id, e.target.value)}
-              placeholder={isPrivate ? '名前でプロを検索して連携候補に追加' : '名前でプロを検索してピン追加（最大3名）'}
+              placeholder={isPrivate ? '名前でプロを検索して気になるプロに追加' : '名前でプロを検索してピン追加（最大3名）'}
               style={{
                 width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #E5E7EB',
                 fontSize: 13, boxSizing: 'border-box' as const,
@@ -949,7 +949,7 @@ export default function ReferralTab({ proId }: Props) {
           {privateLists.length > 0 && (
             <div style={{ marginTop: publicLists.length > 0 ? 24 : 0 }}>
               <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>
-                連携候補（非公開）
+                気になるプロ（非公開）
               </h3>
               <p style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 12, lineHeight: 1.5 }}>
                 共有URLを持たないリストです。招待・掲載通知は行われません。各行の「紹介リストに追加」から共有リストにも追加できます。
