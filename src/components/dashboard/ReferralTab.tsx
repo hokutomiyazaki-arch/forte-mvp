@@ -879,13 +879,15 @@ export default function ReferralTab({ proId }: Props) {
             <div style={{ fontSize: 12, fontWeight: 700, color: '#1A1A2E', marginBottom: 6 }}>
               RP外のプロを追加
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
+            {/* CEO指摘(先行テスト): 入力とボタンの横並びがスマホ幅(360〜390px)で横スクロールの
+                原因になっていたため縦積みにする */}
+            <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
               <input
                 value={inviteName[list.id] || ''}
                 onChange={(e) => setInviteName((prev) => ({ ...prev, [list.id]: e.target.value.slice(0, 100) }))}
                 placeholder="先生のお名前"
                 style={{
-                  flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid #E5E7EB',
+                  width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #E5E7EB',
                   fontSize: 13, boxSizing: 'border-box' as const,
                 }}
               />
@@ -893,10 +895,10 @@ export default function ReferralTab({ proId }: Props) {
                 onClick={() => createInvite(list.id)}
                 disabled={invitingList === list.id || !(inviteName[list.id] || '').trim()}
                 style={{
-                  padding: '8px 14px', borderRadius: 8, border: 'none',
+                  padding: '8px 14px', borderRadius: 8, border: 'none', alignSelf: 'flex-start' as const,
                   background: '#1A1A2E', color: '#fff', fontSize: 12, fontWeight: 600,
                   cursor: invitingList === list.id ? 'default' : 'pointer',
-                  opacity: invitingList === list.id ? 0.6 : 1, flexShrink: 0,
+                  opacity: invitingList === list.id ? 0.6 : 1,
                 }}
               >
                 招待URLを発行
