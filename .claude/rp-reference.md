@@ -301,3 +301,4 @@ async function checkAdminAuth(): Promise<boolean> {
 - **[次回対応]** 招待URLの共有UI（§2-9追記分）: Web Share API（navigator.share）＋非対応環境はコピーにフォールバック併置・編集可能な共有テキスト事前入力・発行画面に「この招待URLは1人分です（◯◯先生用）」の明示。single-use自体は実装済み。
 - **[次回対応]** ピンの一言メモ: UI側は200字でsliceしたが、items PATCH API側に長さ検証が無い（直叩きで無制限）。API側にも上限を。
 - **[記録のみ]** 気になるプロ(private)の既存noteはUI非表示化によりDBに残ったまま不可視（/r/はpublicのみで露出リスクゼロ・実害なし）。
+- **[次回対応]** アカウントレス相談のボット対策（captcha/honeypot/同一emailの時間帯上限）と、予約INSERT失敗時のゲストclients孤児行の掃除。ステージ2（オーソリ導入）でカード決済自体が実質的なボットゲートになるため優先度は下がる。

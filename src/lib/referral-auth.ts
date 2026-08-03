@@ -149,3 +149,32 @@ export async function ensureOwnClient(userId: string): Promise<OwnClient | null>
   }
   return data
 }
+
+/**
+ * §2-4ステージ1(CEO決定・アカウントレス化): 未ログインでも予約リクエストを送れるように、
+ * clients 行を user_id なしで作成する(ゲストクライアント)。永続的な同一人物識別は行わない
+ * (毎回新規clients行を作る仮決定)。
+ * レビューFAIL修正(重大1): nickname は受け手/送り手のAPI・通知・ダッシュボードに露出するため、
+ * 実名は決済確認・確定まで開示しない(CEO決定)。よって実名を入れず固定文言にする
+ * (受け手には requested 段階では「ご相談者さん」と表示される)。実名は
+ * referral_bookings.client_name のみに保存する(clientsには保存しない)。
+ */
+export async function createGuestClient(): Promise<OwnClient | null> {
+  const supabase = getSupabaseAdmin()
+  const { data, error } = await supabase
+    .from('clients')
+    .insert({
+      user_id: null,
+      nickname: 'ご相談者',
+      last_name: 'ご相談者',
+      first_name: '',
+    })
+    .select('id, nickname')
+    .maybeSingle()
+
+  if (error) {
+    console.error('[referral-auth] createGuestClient insert error:', error)
+    return null
+  }
+  return data
+}

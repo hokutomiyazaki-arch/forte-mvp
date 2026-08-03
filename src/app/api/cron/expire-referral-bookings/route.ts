@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     const { data: targets, error: queryError } = await supabase
       .from('referral_bookings')
       .select(
-        'id, list_id, sender_pro_id, receiver_pro_id, client_id, status, expires_at, clients(id, user_id, nickname), referral_lists(slug)'
+        'id, list_id, sender_pro_id, receiver_pro_id, client_id, client_email, status, expires_at, clients(id, user_id, nickname), referral_lists(slug)'
       )
       .eq('status', 'requested')
       .lt('expires_at', nowIso)
@@ -89,12 +89,13 @@ export async function GET(req: NextRequest) {
         const receiverName = proMap[row.receiver_pro_id]?.name || 'プロ'
         const clientNickname = row.clients?.nickname || 'クライアント'
         const clientUserId = row.clients?.user_id || ''
+        const clientEmail = row.client_email || null
 
         // クライアントへ通知(失敗しても失効処理自体は成功扱い)
         try {
-          if (clientUserId) {
+          if (clientUserId || clientEmail) {
             await notifyClientByEmail(
-              clientUserId,
+              { userId: clientUserId, email: clientEmail },
               '予約リクエストが失効しました',
               emailShell(
                 '予約リクエスト失効のお知らせ',

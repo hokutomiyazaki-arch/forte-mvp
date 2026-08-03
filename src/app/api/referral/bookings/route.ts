@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { ensureOwnClient } from '@/lib/referral-auth'
+import { ensureOwnClient, createGuestClient } from '@/lib/referral-auth'
 import { verifyReceiverAllowedInList } from '@/lib/referral-data'
 import { notifyBookingRequested } from '@/lib/referral-notify'
 import { isAcceptingOpen } from '@/lib/referral-accepting'
@@ -12,6 +12,20 @@ export const dynamic = 'force-dynamic'
 const BOOKING_EXPIRES_HOURS = 48
 const MAX_THEME_LEN = 100
 const MAX_NOTE_LEN = 500
+const MAX_NAME_LEN = 50
+const MAX_PHONE_LEN = 20
+const MAX_EMAIL_LEN = 254
+/**
+ * レビューFAIL修正(重大2): 受け手単位のグローバル上限だけだと「封鎖攻撃」(悪意の第三者が
+ * 特定プロ宛にrequestedを埋めて新規リクエストを止める)に使われる。同一メール×同一受け手の
+ * 409重複チェックを主防御にし、この上限は緩めのバックストップとして残す。
+ */
+const MAX_PENDING_PER_RECEIVER = 50
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+/** レビューFAIL修正(軽微5): 表記(+81/空白/括弧/ハイフン)は許容し、数字だけで10桁以上かで判定する */
+function isValidPhone(value: string): boolean {
+  return value.replace(/\D/g, '').length >= 10
+}
 
 /**
  * datetime-local由来のオフセット無し文字列("2026-08-05T14:00")はUTC環境で
@@ -30,18 +44,20 @@ function parseSlot(value: unknown): string | null {
 
 /**
  * POST /api/referral/bookings
- * body: { list_id, receiver_pro_id, menu_id?, slot1, slot2?, slot3?, theme?, note?, info_share_consent }
+ * body: { list_id, receiver_pro_id, menu_id?, slot1, slot2?, slot3?, theme?, note?,
+ *          info_share_consent, client_name, client_phone, client_email }
  *
- * §4-2「登録は予約の瞬間のみ」: clients レコードが無い認証済みユーザーは、
- * ここで ensureOwnClient() によりその場で作成する。
+ * §2-4ステージ1(CEO決定・アカウントレス化): 会員登録なしで送信できる。ログイン済みなら
+ * 従来通り ensureOwnClient() で own client に紐付け、未ログインなら createGuestClient() で
+ * その場限りの clients 行(user_id無し)を作る。
+ * 連絡先(client_name/client_phone/client_email)は referral_bookings の行に保存し、
+ * clients には保存しない。レスポンス/他APIには絶対含めない(開示は別ステージで扱う)。
  * ★ isReferralEnabled ではゲートしない(クライアント向け申込経路は非ゲートが仕様)。
  */
 export async function POST(request: NextRequest) {
   try {
+    // §2-4ステージ1: 認証はoptional。未ログインでも送信できる(fail openではなく仕様として許可)。
     const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-    }
 
     const body = await request.json().catch(() => ({}))
     const listId = typeof body.list_id === 'string' ? body.list_id : ''
@@ -50,6 +66,12 @@ export async function POST(request: NextRequest) {
     const theme = typeof body.theme === 'string' ? body.theme.trim().slice(0, MAX_THEME_LEN) : ''
     const note = typeof body.note === 'string' ? body.note.trim().slice(0, MAX_NOTE_LEN) : null
     const infoShareConsent = body.info_share_consent === true
+
+    const clientName = typeof body.client_name === 'string' ? body.client_name.trim().slice(0, MAX_NAME_LEN) : ''
+    const clientPhone = typeof body.client_phone === 'string' ? body.client_phone.trim().slice(0, MAX_PHONE_LEN) : ''
+    // レビューFAIL修正(重大2): メールは正規化(trim+lowercase)して比較・保存する(表記揺れ吸収)
+    const clientEmail =
+      typeof body.client_email === 'string' ? body.client_email.trim().slice(0, MAX_EMAIL_LEN).toLowerCase() : ''
 
     const slot1 = parseSlot(body.slot1)
     const slot2 = parseSlot(body.slot2)
@@ -63,6 +85,15 @@ export async function POST(request: NextRequest) {
     }
     if (!infoShareConsent) {
       return NextResponse.json({ error: 'consent_required' }, { status: 400 })
+    }
+    if (
+      !clientName ||
+      !clientPhone ||
+      !clientEmail ||
+      !isValidPhone(clientPhone) ||
+      !EMAIL_PATTERN.test(clientEmail)
+    ) {
+      return NextResponse.json({ error: 'contact_required' }, { status: 400 })
     }
 
     const supabase = getSupabaseAdmin()
@@ -123,22 +154,35 @@ export async function POST(request: NextRequest) {
       priceJpy = menu.price_jpy
     }
 
-    const ownClient = await ensureOwnClient(userId)
-    if (!ownClient) {
-      return NextResponse.json({ error: 'client_setup_failed' }, { status: 500 })
+    // §2-4ステージ1: アカウントレス化に伴うスパム対策(緩めのバックストップ)。
+    // 取得に失敗した場合はfail open(この保護自体をブロッカーにしない)。
+    const { count: pendingCount, error: pendingCountError } = await supabase
+      .from('referral_bookings')
+      .select('id', { count: 'exact', head: true })
+      .eq('receiver_pro_id', receiverProId)
+      .eq('status', 'requested')
+
+    if (!pendingCountError && (pendingCount || 0) >= MAX_PENDING_PER_RECEIVER) {
+      return NextResponse.json({ error: 'too_many_requests' }, { status: 429 })
     }
 
-    // 同一クライアント→同一受け手への未処理(requested)重複を防ぐ
-    const { data: existingRequest } = await supabase
+    // レビューFAIL修正(重大2): 同一メール×同一受け手への未処理(requested)重複を防ぐ
+    // (ゲスト・ログイン済み共通。ゲストはclients行を都度新規作成するためclient_idでは防げない)
+    const { data: existingEmailRequest } = await supabase
       .from('referral_bookings')
       .select('id')
-      .eq('client_id', ownClient.id)
+      .eq('client_email', clientEmail)
       .eq('receiver_pro_id', receiverProId)
       .eq('status', 'requested')
       .maybeSingle()
 
-    if (existingRequest) {
+    if (existingEmailRequest) {
       return NextResponse.json({ error: 'already_requested' }, { status: 409 })
+    }
+
+    const ownClient = userId ? await ensureOwnClient(userId) : await createGuestClient()
+    if (!ownClient) {
+      return NextResponse.json({ error: 'client_setup_failed' }, { status: 500 })
     }
 
     const expiresAt = new Date(Date.now() + BOOKING_EXPIRES_HOURS * 60 * 60 * 1000).toISOString()
@@ -157,6 +201,9 @@ export async function POST(request: NextRequest) {
         price_jpy: priceJpy,
         info_share_consent: true,
         expires_at: expiresAt,
+        client_name: clientName,
+        client_phone: clientPhone,
+        client_email: clientEmail,
       })
       .select('id, status, expires_at')
       .maybeSingle()

@@ -71,3 +71,12 @@
 - Vercel環境変数: STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET / STRIPE_CARD_ORDER_WEBHOOK_SECRET の3キーの存在を確認（値は非表示のまま）。
 - Stripe: ログインアカウントは Bodydiscoverystudio（他に Sports Mental JV）。**Connectは未設定（「5ステップの設定が残っています」表示）**。Connect有効化はプラットフォーム規約への同意を伴うためCC単独では進めず、CEO確認待ち（下記2点）。
 - 未確定: Vercelの STRIPE_SECRET_KEY がどのStripeアカウントのものか（Bodydiscoverystudio か別か）はCEOに確認が必要。
+
+### 実装: §2-4ステージ1（相談のアカウントレス化＋連絡先収集）— 2026-08-03 夜
+- 相談フォームの会員登録要求を撤廃（誰でも送信可）。名前・電話・メールを必須収集し referral_bookings に保存。3フィールドは**どのAPIレスポンスにも返さない**（受け手への開示はステージ3で confirmed 以降のみ）。
+- 【指示書未反映】ゲストの clients 行は実名を持たない（nickname='ご相談者'）。受け手には requested 段階で「ご相談者さん」と表示される（実名開示は決済確認・確定後＝CEO決定に整合）。ログイン済みクライアントの表示は従来通り。
+- 【指示書未反映】重複・スパム対策: 同一メール×同一受け手の requested 重複は409。受け手単位の requested 上限50件で429（レビュー指摘: 当初の10件は特定プロへの封鎖攻撃に使えたため設計変更）。
+- 【指示書未反映】同意文に連絡先の利用目的を明記（「日程確定のご連絡と、確定後に担当の先生への共有のために保存されます」）。文言はCEOが調整可。
+- 電話は「数字10桁以上」で検証（+81/ハイフン/空白許容）。クライアント通知は booking.client_email 優先（旧予約はClerkフォールバック）。
+- 検証: clients.user_id のNULL可はPostgRESTスキーマで実測確認。レビュー1回（FAIL→重大5件修正→検証）。
+- 積み残し（§16記録済み）: ボット対策（captcha等）・ゲスト孤児clients行の掃除（ステージ2のカードオーソリが実質ゲートになるため優先度低）。

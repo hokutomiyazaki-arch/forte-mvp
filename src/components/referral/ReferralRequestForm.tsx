@@ -3,14 +3,21 @@
 /**
  * §2-4 予約リクエストフォーム(クライアント向け・/r/[slug]/request)
  *
- * - 未ログイン: Clerkサインアップへ誘導(redirect_urlでこのページに復帰)
- * - ログイン済み: フォーム送信 → POST /api/referral/bookings
- * - clientsレコードの作成はサーバー側(ensureOwnClient)で送信時に1回だけ行う
+ * §2-4ステージ1(CEO決定・アカウントレス化): 会員登録なしで誰でも送信できる。
+ * - 未ログイン: そのままフォームを表示・送信できる(clientsレコードはサーバー側でゲスト作成)
+ * - ログイン済み: 従来通りフォーム送信 → POST /api/referral/bookings(own clientに紐付け)
+ * - お名前・電話番号・メールアドレスは必須収集(referral_bookings行に保存。開示は別ステージ)
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { isAcceptingOpen } from '@/lib/referral-accepting'
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+/** レビューFAIL修正(軽微5): 表記(+81/空白/括弧/ハイフン)は許容し、数字だけで10桁以上かで判定する */
+function isValidPhone(value: string): boolean {
+  return value.replace(/\D/g, '').length >= 10
+}
 
 interface BookableMenu {
   id: string
@@ -61,8 +68,11 @@ const labelStyle = {
 }
 
 export default function ReferralRequestForm({ slug, listId, receiverPro, menus }: Props) {
-  const { isLoaded, isSignedIn } = useUser()
+  const { isLoaded, user } = useUser()
 
+  const [clientName, setClientName] = useState('')
+  const [clientPhone, setClientPhone] = useState('')
+  const [clientEmail, setClientEmail] = useState('')
   const [menuId, setMenuId] = useState('')
   const [slot1, setSlot1] = useState('')
   const [slot2, setSlot2] = useState('')
@@ -74,20 +84,35 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
   const [errorMsg, setErrorMsg] = useState('')
   const [done, setDone] = useState(false)
 
-  function goToSignUp() {
-    const returnTo = `/r/${slug}/request?pro=${receiverPro.id}`
-    window.location.href = `/sign-up?redirect_url=${encodeURIComponent(returnTo)}`
-  }
+  // レビューFAIL修正(中4): useUser()は遅延ロードのため、初回レンダー時のuseState初期値では
+  // Clerkの氏名を拾えないことがある。isLoaded/user.idが確定した時点で1回だけ反映する
+  // (依存配列はプリミティブのみ。既に入力済みの場合は上書きしない)。
+  useEffect(() => {
+    if (!isLoaded || !user) return
+    setClientName((prev) => prev || `${user.lastName || ''} ${user.firstName || ''}`.trim() || user.username || '')
+  }, [isLoaded, user?.id])
+
+  const missingReason = !clientName
+    ? 'お名前を入力すると送信できます'
+    : !clientPhone
+      ? '電話番号を入力すると送信できます'
+      : !isValidPhone(clientPhone)
+        ? '電話番号の桁数をご確認ください(10桁以上)'
+        : !clientEmail
+          ? 'メールアドレスを入力すると送信できます'
+          : !EMAIL_PATTERN.test(clientEmail)
+            ? 'メールアドレスの形式をご確認ください'
+            : !slot1
+              ? '第1希望日時を入力すると送信できます'
+              : !consent
+                ? '情報共有への同意にチェックすると送信できます'
+                : ''
 
   async function handleSubmit() {
     if (submitting) return
     setErrorMsg('')
-    if (!slot1) {
-      setErrorMsg('第1希望日時を入力してください')
-      return
-    }
-    if (!consent) {
-      setErrorMsg('情報共有への同意が必要です')
+    if (missingReason) {
+      setErrorMsg(missingReason)
       return
     }
     setSubmitting(true)
@@ -106,6 +131,9 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
           theme,
           note,
           info_share_consent: true,
+          client_name: clientName,
+          client_phone: clientPhone,
+          client_email: clientEmail,
         }),
       })
       if (res.ok) {
@@ -113,9 +141,13 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
       } else {
         const data = await res.json().catch(() => ({}))
         if (data.error === 'already_requested') {
-          setErrorMsg('すでにリクエスト済みです。確定のご連絡をお待ちください。')
+          setErrorMsg('この先生への相談リクエストは既に送信済みです。確定のご連絡をお待ちください。')
         } else if (data.error === 'receiver_not_accepting') {
           setErrorMsg('現在この先生は新規のご相談を受け付けていません。')
+        } else if (data.error === 'contact_required') {
+          setErrorMsg('お名前・電話番号・メールアドレスをご確認ください。')
+        } else if (data.error === 'too_many_requests') {
+          setErrorMsg('現在リクエストが集中しています。しばらくしてからお試しください。')
         } else {
           setErrorMsg('送信に失敗しました。もう一度お試しください。')
         }
@@ -131,49 +163,6 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
     return (
       <div style={{ maxWidth: 480, margin: '0 auto', padding: '60px 16px', textAlign: 'center', color: T.textMuted }}>
         読み込み中...
-      </div>
-    )
-  }
-
-  if (!isSignedIn) {
-    return (
-      <div style={{ maxWidth: 480, margin: '0 auto', padding: '16px', background: T.bg, minHeight: '100vh' }}>
-        <div style={{ textAlign: 'center', marginBottom: 20, marginTop: 20 }}>
-          <span style={{ fontSize: 12, letterSpacing: 2, color: T.gold, fontWeight: 700 }}>REAL PROOF</span>
-        </div>
-        <div
-          style={{
-            background: T.cardBg,
-            border: `1px solid ${T.cardBorder}`,
-            borderRadius: 16,
-            padding: '24px 20px',
-            textAlign: 'center',
-          }}
-        >
-          <div style={{ fontSize: 15, fontWeight: 700, color: T.dark, marginBottom: 10 }}>
-            {receiverPro.name}さんへのご相談
-          </div>
-          <p style={{ fontSize: 13, color: T.textSub, lineHeight: 1.8, marginBottom: 20 }}>
-            ご相談・ご予約には会員登録が必要です。
-            ご入力いただいた内容を保存し、確定のご連絡をお届けするために使用します。
-          </p>
-          <button
-            onClick={goToSignUp}
-            style={{
-              width: '100%',
-              padding: '13px 0',
-              borderRadius: 10,
-              border: 'none',
-              background: T.dark,
-              color: '#fff',
-              fontSize: 14,
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            登録してご相談を申し込む
-          </button>
-        </div>
       </div>
     )
   }
@@ -253,6 +242,10 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
         </div>
       </div>
 
+      <p style={{ fontSize: 12, color: T.textSub, lineHeight: 1.7, marginBottom: 16 }}>
+        決済・会員登録は不要です。プロが日時を確定した後、担当の先生から直接ご連絡します。
+      </p>
+
       <div
         style={{
           background: T.cardBg,
@@ -264,6 +257,36 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
           gap: 16,
         }}
       >
+        <div>
+          <label style={labelStyle}>お名前(必須)</label>
+          <input
+            value={clientName}
+            onChange={(e) => setClientName(e.target.value.slice(0, 50))}
+            placeholder="山田 太郎"
+            style={inputStyle}
+          />
+        </div>
+        <div>
+          <label style={labelStyle}>電話番号(必須)</label>
+          <input
+            value={clientPhone}
+            onChange={(e) => setClientPhone(e.target.value.slice(0, 20))}
+            placeholder="090-1234-5678"
+            inputMode="tel"
+            style={inputStyle}
+          />
+        </div>
+        <div>
+          <label style={labelStyle}>メールアドレス(必須)</label>
+          <input
+            value={clientEmail}
+            onChange={(e) => setClientEmail(e.target.value.slice(0, 254))}
+            placeholder="example@mail.com"
+            inputMode="email"
+            style={inputStyle}
+          />
+        </div>
+
         {menus.length > 0 && (
           <div>
             <label style={labelStyle}>メニュー</label>
@@ -318,24 +341,30 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
             onChange={(e) => setConsent(e.target.checked)}
             style={{ marginTop: 2 }}
           />
-          <span>お名前・ご希望日時・ご相談のテーマが、紹介元と紹介先の先生に共有されることに同意します</span>
+          <span>
+            お名前・ご希望日時・ご相談のテーマが、紹介元と紹介先の先生に共有されることに同意します。
+            お名前・電話番号・メールアドレスは、日程確定のご連絡と、確定後に担当の先生への共有のために保存されます。
+          </span>
         </label>
 
         {errorMsg && <p style={{ fontSize: 12, color: '#B00020' }}>{errorMsg}</p>}
+        {!errorMsg && missingReason && (
+          <p style={{ fontSize: 12, color: T.textMuted }}>{missingReason}</p>
+        )}
 
         <button
           onClick={handleSubmit}
-          disabled={submitting || !slot1 || !consent}
+          disabled={submitting || !!missingReason}
           style={{
             width: '100%',
             padding: '13px 0',
             borderRadius: 10,
             border: 'none',
-            background: submitting || !slot1 || !consent ? '#E8E4DC' : T.dark,
-            color: submitting || !slot1 || !consent ? T.textMuted : '#fff',
+            background: submitting || missingReason ? '#E8E4DC' : T.dark,
+            color: submitting || missingReason ? T.textMuted : '#fff',
             fontSize: 14,
             fontWeight: 700,
-            cursor: submitting || !slot1 || !consent ? 'default' : 'pointer',
+            cursor: submitting || missingReason ? 'default' : 'pointer',
           }}
         >
           {submitting ? '送信中...' : 'この内容でリクエストする'}

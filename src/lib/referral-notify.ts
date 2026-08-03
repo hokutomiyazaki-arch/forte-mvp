@@ -98,8 +98,9 @@ async function sendProNotification(
         }),
       })
       if (res.ok) return { sent: true, via: 'email' }
-      const errBody = await res.text()
-      console.error('[referral-notify] Resend error:', res.status, errBody)
+      // レビューFAIL修正(軽微6): Resendのエラーレスポンス本文にはto(宛先メール)が
+      // 含まれうるためログに出さない。statusのみ記録する。
+      console.error('[referral-notify] Resend error:', res.status)
       return { sent: false, via: null }
     } catch (err) {
       console.error('[referral-notify] Email send error:', err)
@@ -201,22 +202,31 @@ export async function notifyBookingExpiredToSender(
 }
 
 /**
- * クライアント(clients.user_id)へメール通知する。メールはDBに保存せず、
- * Clerk Backend API から都度取得する(§2-4)。
+ * クライアントへメール通知する(§2-4/§2-4ステージ1)。
+ * 優先順位: `target.email`(referral_bookings.client_email。アカウントレス予約由来)が
+ * あればそれを使い、無ければ `target.userId` から Clerk Backend API で都度取得する
+ * (メールはDBに保存せず都度取得する旧仕様。旧予約=client_email無しのフォールバック)。
  */
 export async function notifyClientByEmail(
-  userId: string,
+  target: { userId?: string | null; email?: string | null },
   subject: string,
   bodyHtml: string,
 ): Promise<{ sent: boolean }> {
-  if (!userId) return { sent: false }
+  let email = target.email || null
+
+  if (!email && target.userId) {
+    try {
+      const clerk = await clerkClient()
+      const user = await clerk.users.getUser(target.userId)
+      email = user?.primaryEmailAddress?.emailAddress || user?.emailAddresses?.[0]?.emailAddress || null
+    } catch (err) {
+      console.error('[referral-notify] notifyClientByEmail clerk lookup error:', err)
+    }
+  }
+
+  if (!email) return { sent: false }
 
   try {
-    const clerk = await clerkClient()
-    const user = await clerk.users.getUser(userId)
-    const email = user?.primaryEmailAddress?.emailAddress || user?.emailAddresses?.[0]?.emailAddress
-    if (!email) return { sent: false }
-
     const resendKey = process.env.RESEND_API_KEY
     if (!resendKey) return { sent: false }
 
@@ -234,8 +244,9 @@ export async function notifyClientByEmail(
       }),
     })
     if (!res.ok) {
-      const errBody = await res.text()
-      console.error('[referral-notify] notifyClientByEmail Resend error:', res.status, errBody)
+      // レビューFAIL修正(軽微6): Resendのエラーレスポンス本文には
+      // クライアントのメールアドレスが含まれうるためログに出さない。statusのみ記録する。
+      console.error('[referral-notify] notifyClientByEmail Resend error:', res.status)
       return { sent: false }
     }
     return { sent: true }

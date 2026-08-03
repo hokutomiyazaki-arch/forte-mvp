@@ -19,13 +19,18 @@ interface PreferredSlots {
   confirmed_index?: number
 }
 
-/** PII注意: clients.user_id はメール送信にのみ使う。レスポンスには含めない。 */
+/**
+ * PII注意: clients.user_id / client_email はメール送信にのみ使う。レスポンスには絶対含めない。
+ * client_name/client_phone は§2-4ステージ1で開示制御対象(受け手への開示は別ステージで実装)のため、
+ * この一覧取得では select しない。
+ */
 interface BookingRow {
   id: string
   list_id: string
   sender_pro_id: string | null
   receiver_pro_id: string
   client_id: string
+  client_email: string | null
   menu_id: string | null
   theme_tags: string[] | null
   preferred_slots: PreferredSlots | null
@@ -195,7 +200,7 @@ export async function PATCH(request: NextRequest) {
     const { data: bookingData } = await supabase
       .from('referral_bookings')
       .select(
-        'id, list_id, sender_pro_id, receiver_pro_id, client_id, status, expires_at, preferred_slots, clients(id, user_id, nickname), referral_lists(id, slug, comment)'
+        'id, list_id, sender_pro_id, receiver_pro_id, client_id, client_email, status, expires_at, preferred_slots, clients(id, user_id, nickname), referral_lists(id, slug, comment)'
       )
       .eq('id', bookingId)
       .maybeSingle()
@@ -248,9 +253,9 @@ export async function PATCH(request: NextRequest) {
 
       // クライアントへ通知(失敗しても処理自体は成功扱い)
       try {
-        if (clientUserId) {
+        if (clientUserId || booking.client_email) {
           await notifyClientByEmail(
-            clientUserId,
+            { userId: clientUserId, email: booking.client_email },
             '今回はご希望に添えませんでした',
             emailShell(
               'ご相談について',
@@ -294,14 +299,14 @@ export async function PATCH(request: NextRequest) {
 
     // クライアントへ通知(§2-4-6): 確定日時 + 受け手プロ名 + 送り手のlist.comment引用(§4-8 Phase1仮実装)
     try {
-      if (clientUserId) {
+      if (clientUserId || booking.client_email) {
         const senderComment = booking.referral_lists?.comment
         const senderQuote = senderComment
           ? `<p style="margin-top:12px;color:#555;font-size:13px;line-height:1.7;">紹介元の先生からのメッセージ:<br>「${escapeHtml(senderComment)}」</p>`
           : ''
         const safeOwnProName = escapeHtml(ownPro.name)
         await notifyClientByEmail(
-          clientUserId,
+          { userId: clientUserId, email: booking.client_email },
           `${ownPro.name}さんとのご相談が確定しました`,
           emailShell(
             'ご相談確定のお知らせ',
