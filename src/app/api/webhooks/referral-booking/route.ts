@@ -1,5 +1,5 @@
 /**
- * Stripe Webhook — 紹介予約リクエストのオーソリ結果（§2-4ステージ2）
+ * Stripe Webhook — 紹介予約の予約フィー決済結果（§2-4ステージ3・予約フィー方式）
  *
  * POST /api/webhooks/referral-booking
  *
@@ -16,6 +16,8 @@
  * 署名検証には生ボディが必要なため req.text() で読む（JSON parseしない）。
  * DB反映・冪等性・通知は src/lib/referral-payment.ts の applyReferralCheckoutSession に集約
  * （戻りURL側のフォールバック検証 payment-return と同じ関数を使う）。
+ * checkout.session.expired は明示的に何もしない(payment_statusは'awaiting'のまま保持し、
+ * 24時間の支払い期限判定はcron(expire-referral-bookings)に委ねる)。
  */
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'

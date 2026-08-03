@@ -110,7 +110,10 @@ function CandidateCard({
           />
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: T.dark }}>{candidate.pro.name}</div>
+          {/* CEO指示(先行テスト第3弾): 候補カードから公開カード(プロフィール)へ飛べるようにする */}
+          <a href={`/card/${candidate.pro.id}`} style={{ textDecoration: 'none' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: T.dark }}>{candidate.pro.name}</div>
+          </a>
           {candidate.pro.title && (
             <div style={{ fontSize: 12, color: T.textSub, marginTop: 2 }}>{candidate.pro.title}</div>
           )}
@@ -120,6 +123,12 @@ function CandidateCard({
               <span style={{ color: T.gold, marginLeft: 6 }}>● オンライン対応</span>
             )}
           </div>
+          <a
+            href={`/card/${candidate.pro.id}`}
+            style={{ fontSize: 11, color: T.gold, textDecoration: 'none', fontWeight: 600, marginTop: 4, display: 'inline-block' }}
+          >
+            プロフィールを見る →
+          </a>
         </div>
         <span
           style={{

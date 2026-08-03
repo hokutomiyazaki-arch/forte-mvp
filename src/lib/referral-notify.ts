@@ -179,6 +179,47 @@ export async function notifyBookingConfirmedToSender(
 }
 
 /**
+ * §2-4ステージ3(予約フィー方式): クライアントの予約フィー支払いが完了し、予約が成立した際、
+ * 受け手プロへ通知する(送り手プロへの成立通知は既存の notifyBookingConfirmedToSender を再利用する)。
+ */
+export async function notifyBookingPaymentCompletedToReceiver(
+  target: ProNotifyTarget,
+  clientNickname: string,
+): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const safeClientNickname = escapeHtml(clientNickname)
+  return sendProNotification(target, {
+    lineText: `${clientNickname}さんのお支払いが完了し、予約が成立しました。\n${dashboardUrl}`,
+    emailSubject: 'お支払いが完了し、予約が成立しました',
+    emailBodyHtml: emailShell(
+      '予約成立のお知らせ',
+      `${safeClientNickname}さんのお支払いが完了し、予約が成立しました。<br>ダッシュボードからご確認ください。`,
+      'ダッシュボードを開く',
+      dashboardUrl,
+    ),
+  })
+}
+
+/**
+ * §2-4ステージ3(予約フィー方式): 確定後24時間以内に予約フィーの支払いが確認できず自動キャンセルに
+ * なった際、受け手・送り手の両プロへ通知する(役割で文面を分けない汎用文言)。
+ */
+export async function notifyBookingPaymentExpiredToPro(
+  target: ProNotifyTarget,
+  clientNickname: string,
+): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  const safeClientNickname = escapeHtml(clientNickname)
+  return sendProNotification(target, {
+    lineText: `${clientNickname}さんとの予約は、お支払いが確認できなかったため自動的にキャンセルされました。`,
+    emailSubject: '予約がキャンセルされました',
+    emailBodyHtml: emailShell(
+      '予約キャンセルのお知らせ',
+      `${safeClientNickname}さんとの予約は、お支払いが確認できなかったため自動的にキャンセルされました。`,
+    ),
+  })
+}
+
+/**
  * §2-4: 48時間自動失効時、送り手プロへ通知する。
  */
 export async function notifyBookingExpiredToSender(

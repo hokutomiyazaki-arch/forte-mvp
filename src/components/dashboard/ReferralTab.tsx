@@ -1252,6 +1252,19 @@ export default function ReferralTab({ proId }: Props) {
               クライアントに共有（紹介ページが開きます）
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+              {/* CEO指示(先行テスト第3弾): 送り手がクライアントと同じ見え方を確認できるプレビュー */}
+              <a
+                href={`${SHARE_ORIGIN}/r/${list.slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  padding: '8px 12px', borderRadius: 8, border: '1px solid #E5E7EB',
+                  background: '#fff', color: '#1A1A2E', fontSize: 12, fontWeight: 600,
+                  textDecoration: 'none', display: 'inline-block',
+                }}
+              >
+                プレビュー
+              </a>
               <button
                 onClick={() => setQrModalListId(list.id)}
                 style={{

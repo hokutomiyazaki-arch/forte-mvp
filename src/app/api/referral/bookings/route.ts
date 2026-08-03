@@ -5,15 +5,18 @@ import { ensureOwnClient, createGuestClient } from '@/lib/referral-auth'
 import { verifyReceiverAllowedInList } from '@/lib/referral-data'
 import { notifyBookingRequested } from '@/lib/referral-notify'
 import { isAcceptingOpen } from '@/lib/referral-accepting'
-import { isReferralPaymentEnabled } from '@/lib/feature-flags'
-// 中1レビュー指摘: Stripe importはこのAPI routeに持たせない(Webpackチャンクグラフ対策)。
-// Checkout Session作成はsrc/lib/referral-payment.tsの関数呼び出しに委譲する。
-import { createReferralCheckoutSession } from '@/lib/referral-payment'
+import { isReferralPaymentEnabled, REFERRAL_MIN_FEE_JPY } from '@/lib/feature-flags'
 
 export const dynamic = 'force-dynamic'
 
 /** §2-4: requested から48時間で自動失効 */
 const BOOKING_EXPIRES_HOURS = 48
+/**
+ * §2-4ステージ3(予約フィー方式・CEO決定): オンライン決済は予約フィーのみ
+ * (fee_amount = price_jpy * FEE_TOTAL_BPS / 10000)。残額は当日先生へ直接払い。
+ * Phase 1固定値(送り手30% + 決済実費3.6%)。
+ */
+const FEE_TOTAL_BPS = 3360
 const MAX_THEME_LEN = 100
 const MAX_NOTE_LEN = 500
 const MAX_NAME_LEN = 50
@@ -154,7 +157,6 @@ export async function POST(request: NextRequest) {
     }
 
     let priceJpy = 0
-    let menuName: string | null = null
     if (menuId) {
       const { data: menu } = await supabase
         .from('pro_menus')
@@ -172,24 +174,23 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'invalid_menu' }, { status: 400 })
       }
       priceJpy = menu.price_jpy
-      menuName = menu.name
     }
 
-    // §2-4ステージ2: REFERRAL_STRIPE_SECRET_KEY未設定の間はここがfalse固定 → 決済フロー・
-    // referral_bookings新カラム(payment_status等・migration 036)には一切触れない(従来動作を維持)。
+    // §2-4ステージ3(予約フィー方式・CEO決定): 相談送信時は決済を挟まない(従来の無決済フローに戻す)。
+    // 決済(予約フィーのみ)は受け手プロが日時を確定した後に発生する(bookings/received PATCH confirm参照)。
     const paymentEnabled = isReferralPaymentEnabled()
 
-    // レビュー指摘(軽微6): 決済有効時、Stripeの最低決済額(JPY 50円)未満のメニュー価格は
-    // Checkout Session作成時にStripe側エラーになる。事前に400で弾く。
-    if (paymentEnabled && priceJpy > 0 && priceJpy < 50) {
+    // レビュー指摘(軽微6)から継続: 極端に低いメニュー価格設定への安全策として維持する。
+    if (paymentEnabled && priceJpy > 0 && priceJpy < REFERRAL_MIN_FEE_JPY) {
       return NextResponse.json({ error: 'invalid_menu_price' }, { status: 400 })
     }
 
-    // §2-4ステージ2(重大2/3設計変更・draft方式): 決済有効かつ有料メニューの予約は
-    // 'draft' で作成し、オーソリ完了まで受け手一覧・重複チェック・48h失効の対象外にする
-    // (いずれも既存クエリが status='requested' 基準のため draft は自然に除外される)。
-    const isDraft = paymentEnabled && priceJpy > 0
-    const initialStatus: 'draft' | 'requested' = isDraft ? 'draft' : 'requested'
+    // §2-4ステージ3: 決済対象は総額(priceJpy)ではなく予約フィー(fee_amount)のみ。
+    // fee_amountがStripeの最低決済額未満になる場合は決済自体をスキップし、
+    // 従来通り無決済で成立させる(payment_status: 'not_required'。理由: 数十円の決済はStripe側で
+    // エラーになるうえ実費に対して不合理なため、この場合は現地決済のみで完了とする)。
+    const feeAmountJpy = priceJpy > 0 ? Math.floor((priceJpy * FEE_TOTAL_BPS) / 10000) : 0
+    const paymentRequired = paymentEnabled && priceJpy > 0 && feeAmountJpy >= REFERRAL_MIN_FEE_JPY
 
     // §2-4ステージ1: アカウントレス化に伴うスパム対策(緩めのバックストップ)。
     // 取得に失敗した場合はfail open(この保護自体をブロッカーにしない)。
@@ -222,10 +223,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'client_setup_failed' }, { status: 500 })
     }
 
-    // §2-4ステージ2(draft方式): draft作成時はexpires_atをセットしない
-    // (オーソリ完了時に昇格処理側で48hをセットする。src/lib/referral-payment.ts参照)。
-    // draft以外(決済無効 or 0円予約)は従来通り即時に48h後を設定する。
-    const expiresAt = isDraft ? null : new Date(Date.now() + BOOKING_EXPIRES_HOURS * 60 * 60 * 1000).toISOString()
+    // §2-4ステージ3(予約フィー方式): 相談送信時は決済を挟まないため、常に'requested'で作成し
+    // 即時に48h後の失効期限を設定する(旧draft方式の分岐を撤去)。
+    const expiresAt = new Date(Date.now() + BOOKING_EXPIRES_HOURS * 60 * 60 * 1000).toISOString()
 
     const { data: booking, error } = await supabase
       .from('referral_bookings')
@@ -237,12 +237,12 @@ export async function POST(request: NextRequest) {
         menu_id: menuId,
         theme_tags: theme ? [theme] : null,
         preferred_slots: { slots: [slot1, slot2, slot3], note: note || null },
-        status: initialStatus,
+        status: 'requested',
         price_jpy: priceJpy,
         // レビュー指摘(中2): Phase 1の料率(送り手30%+決済実費3.6%・リアプル利益0)は
         // paymentEnabledに関わらず常時上書きする(referral_bookingsのデフォルトはPhase 2値の
         // 4000/2800/1200)。決済フローの有効/無効はStripe連携の有無のみを制御する。
-        fee_total_bps: 3360,
+        fee_total_bps: FEE_TOTAL_BPS,
         fee_sender_bps: 3000,
         fee_platform_bps: 360,
         info_share_consent: true,
@@ -250,8 +250,10 @@ export async function POST(request: NextRequest) {
         client_name: clientName,
         client_phone: clientPhone,
         client_email: clientEmail,
-        // payment_statusは決済有効時のみ(migration 036依存のカラム)
-        ...(paymentEnabled ? { payment_status: priceJpy > 0 ? 'unpaid' : 'not_required' } : {}),
+        // payment_statusは決済有効時のみ(migration 036依存のカラム)。予約フィー方式では
+        // 実際の決済は確定時(bookings/received PATCH confirm)に発生するため、ここでは
+        // 「支払いが必要かどうか」だけを記録する('unpaid'|'not_required')。
+        ...(paymentEnabled ? { payment_status: paymentRequired ? 'unpaid' : 'not_required' } : {}),
       })
       .select('id, status, expires_at')
       .maybeSingle()
@@ -269,43 +271,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'failed_to_create' }, { status: 500 })
     }
 
-    // §2-4ステージ2(draft方式): 決済有効かつ有料メニュー選択時のみStripe Checkout(オーソリのみ)を
-    // 挟む。この場合、受け手通知はINSERT直後には送らず、オーソリ完了後(webhook/フォールバック)に送る。
-    if (isDraft) {
-      if (!list.slug) {
-        // 重大4: 無決済で成立させない。Checkout URLを組めない場合は作成済みdraft行を削除して502
-        console.error('[api/referral/bookings] missing list.slug; aborting checkout session creation')
-        await supabase.from('referral_bookings').delete().eq('id', booking.id)
-        return NextResponse.json({ error: 'payment_setup_failed' }, { status: 502 })
-      }
-
-      const checkout = await createReferralCheckoutSession({
-        bookingId: booking.id,
-        priceJpy,
-        menuName,
-        clientEmail,
-        successUrl: `https://realproof.jp/r/${list.slug}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-        cancelUrl: `https://realproof.jp/r/${list.slug}?payment=canceled&session_id={CHECKOUT_SESSION_ID}`,
-      })
-
-      if (!checkout) {
-        // 重大4: Checkout Session作成失敗時は無決済のまま成立させず、draft行を削除して502を返す
-        await supabase.from('referral_bookings').delete().eq('id', booking.id)
-        return NextResponse.json({ error: 'payment_setup_failed' }, { status: 502 })
-      }
-
-      const { error: sessionUpdateError } = await supabase
-        .from('referral_bookings')
-        .update({ stripe_checkout_session_id: checkout.sessionId })
-        .eq('id', booking.id)
-      if (sessionUpdateError) {
-        console.error('[api/referral/bookings] stripe_checkout_session_id update failed:', sessionUpdateError.message)
-      }
-
-      return NextResponse.json({ booking, checkout_url: checkout.url })
-    }
-
-    // 決済無効 / 0円予約(メニュー未選択)時: 従来通り即時通知(失敗しても予約リクエスト自体は成功扱い)
+    // §2-4ステージ3: 相談送信時は常に無決済で成立し、受け手へ即時通知する
+    // (失敗しても予約リクエスト自体は成功扱い)。
     try {
       await notifyBookingRequested(
         {
@@ -319,7 +286,7 @@ export async function POST(request: NextRequest) {
       console.error('[api/referral/bookings] notify error:', notifyErr)
     }
 
-    return NextResponse.json({ booking, checkout_url: null })
+    return NextResponse.json({ booking })
   } catch (err: any) {
     console.error('[api/referral/bookings] POST error:', err)
     return NextResponse.json({ error: err.message || 'internal_error' }, { status: 500 })

@@ -98,7 +98,11 @@ export default function ForteChart({ votes, personalityVotes = [], professional,
                           }}
                         >
                           {tier && <TierBadge tier={tier} size="sm" showLabel={false} />}
-                          <span>{v.vote_count}</span>
+                          {/* CEO指示(先行テスト第3弾): 公開カードと同じ「◯人が証明」表記に統一 */}
+                          <span>
+                            {v.vote_count}
+                            <span style={{ fontSize: 11, fontWeight: 600, marginLeft: 2 }}>人が証明</span>
+                          </span>
                         </span>
                       )}
                     </div>

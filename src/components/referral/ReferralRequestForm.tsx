@@ -140,13 +140,8 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
         }),
       })
       if (res.ok) {
-        const data = await res.json().catch(() => ({}))
-        // §2-4ステージ2: 決済有効(有料メニュー選択)時はStripe Checkoutへ遷移する。
-        // window.location.href を使う(router.push禁止規約・外部URL遷移のため)。
-        if (data.checkout_url) {
-          window.location.href = data.checkout_url
-          return
-        }
+        // §2-4ステージ3(予約フィー方式・設計変更): 相談送信時はStripe Checkoutへ遷移しない
+        // (無決済フローに戻す。決済はプロが日時を確定した後、メールの決済リンク経由で発生する)。
         setDone(true)
       } else {
         const data = await res.json().catch(() => ({}))
@@ -162,8 +157,6 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
           setErrorMsg('メニューを選択してください。')
         } else if (data.error === 'invalid_menu_price') {
           setErrorMsg('このメニューは現在オンライン決済に対応していません。先生に直接お問い合わせください。')
-        } else if (data.error === 'payment_setup_failed') {
-          setErrorMsg('決済の準備に失敗しました。時間をおいて再度お試しください。')
         } else {
           setErrorMsg('送信に失敗しました。もう一度お試しください。')
         }
@@ -260,6 +253,8 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
 
       <p style={{ fontSize: 12, color: T.textSub, lineHeight: 1.7, marginBottom: 16 }}>
         決済・会員登録は不要です。プロが日時を確定した後、担当の先生から直接ご連絡します。
+        <br />
+        プロが日時を確定すると、予約フィーのお支払いご案内がメールで届きます(お支払いで予約成立・総額は変わりません)。
       </p>
 
       <div
@@ -314,6 +309,10 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
                 </option>
               ))}
             </select>
+            {/* §2-4ステージ3(§0-6静かに・CEO決定): 予約フィー方式の総額不変を軽く明示 */}
+            <p style={{ fontSize: 11, color: T.textMuted, marginTop: 6, lineHeight: 1.6 }}>
+              オンラインでのお支払いは予約フィーのみ。総額は変わりません。
+            </p>
           </div>
         )}
 

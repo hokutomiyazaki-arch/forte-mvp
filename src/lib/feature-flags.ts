@@ -65,3 +65,14 @@ export function isAiSanitizeEnabled(): boolean {
 export function isReferralPaymentEnabled(): boolean {
   return !!process.env.REFERRAL_STRIPE_SECRET_KEY
 }
+
+/**
+ * §2-4ステージ3(予約フィー方式): Stripeの最低決済額(JPY)。50円未満の予約フィーは
+ * Checkout Session作成時にStripe側でエラーになるため、bookings(POST)・received(PATCH confirm)・
+ * cron(expire-referral-bookings)の複数ファイルでこの閾値を共有する(リテラル二重管理の解消)。
+ * ★ referral-payment.ts(Stripe importあり)ではなくこのファイルに置く理由:
+ * bookings/route.tsは相談送信時に決済を挟まない設計(§2-4ステージ3)のため意図的にStripe importを
+ * 持たない。referral-payment.tsから何か1つでもimportするとWebpackが同ファイルの全依存(stripeパッケージ
+ * 含む)をbookings/route.tsのバンドルに含めてしまう(教訓G・Clerk middleware破壊事例)。
+ */
+export const REFERRAL_MIN_FEE_JPY = 50

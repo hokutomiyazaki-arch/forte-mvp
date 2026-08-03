@@ -1,28 +1,37 @@
 /**
- * §2-4ステージ2: 相談リクエストのStripeオーソリ(与信確保)関連の共通処理(draft方式)。
+ * §2-4ステージ3: 「予約フィー方式×確定時決済」の共通処理(CEO決定・設計変更)。
  *
- * 設計(レビュー指摘・重大2/3/4により決定):
- * - 決済経路の予約は referral_bookings.status='draft' で作成する(オーソリ完了まで
- *   受け手一覧・重複チェック・48h失効・通知の対象外。すべて status='requested' 基準の
- *   既存クエリなので draft は自然に除外される)。
- * - オーソリ完了で 'draft' → 'requested' へ昇格し、そのタイミングで expires_at
- *   (48h)をセットする(与信確保からの48時間にする。draft作成時は未設定)。
- * - Stripe importはAPI route(bookings/cron)に持たせない(中1レビュー指摘・
- *   Webpackチャンクグラフ対策)。route側はこのファイルの関数を呼ぶだけにする。
+ * 設計(旧ステージ2のオーソリ・draft方式から刷新):
+ * - 相談送信(bookings POST)時は決済を挟まない(従来の無決済フローに戻す)。
+ * - 受け手プロが日時を確定(received PATCH confirm)した時点で、予約フィー
+ *   (fee_amount = price_jpy * fee_total_bps / 10000)のみのStripe Checkoutを作成する。
+ *   capture_methodは指定しない(=即時キャプチャ。オーソリの7日失効を避けるため持ち越さない)。
+ * - 支払い完了(checkout.session.completed かつ session.payment_status==='paid')で
+ *   referral_bookings.payment_status を 'unpaid'|'awaiting' → 'paid' に更新し、
+ *   その時点で「予約成立」として受け手・送り手・クライアントの3者へ通知する。
+ * - draft方式・与信キャンセルの昇格ロジックは撤去(draftはもう作られない。既存draft行は
+ *   cron側の掃除ブロックがそのまま回収する)。
  *
  * applyReferralCheckoutSession はWebhook(checkout.session.completed/expired)と、
  * 戻りURL側のフォールバック検証(payment-return)の両方から同じ関数を呼ぶ
  * (同じ判定ロジックを2箇所に書かない)。
  *
- * 冪等性(重大1): referral_bookings.status が 'draft' 以外(=既にrequested/cancelled等へ
- * 遷移済み)なら再処理・再通知しない。draft以外の行は絶対に更新しない。
+ * issueFeePaymentLinkAndNotify は「決済リンク発行+メール送付」の共通処理(レビュー指摘・中1)。
+ * 確定時(bookings/received PATCH confirm)と、confirmed×unpaidの取り残し再試行
+ * (cron/expire-referral-bookings)の両方から同じ関数を呼ぶ(同じ処理を2箇所に書かない)。
+ *
+ * 冪等性: referral_bookings.payment_status が 'awaiting' 以外(=既にpaid/その他)なら
+ * 再処理・再通知しない。
  */
 import Stripe from 'stripe'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { notifyBookingRequested } from '@/lib/referral-notify'
-
-/** draftからrequestedへ昇格した予約の新しい失効期限(オーソリ完了からの時間) */
-const BOOKING_EXPIRES_HOURS = 48
+import {
+  notifyBookingConfirmedToSender,
+  notifyBookingPaymentCompletedToReceiver,
+  notifyClientByEmail,
+  emailShell,
+  escapeHtml,
+} from '@/lib/referral-notify'
 
 function getReferralStripe(): Stripe {
   return new Stripe(process.env.REFERRAL_STRIPE_SECRET_KEY!)
@@ -33,21 +42,17 @@ function extractPaymentIntentId(pi: Stripe.Checkout.Session['payment_intent']): 
   return typeof pi === 'string' ? pi : pi.id
 }
 
-function mapPaymentStatusToOutcome(paymentStatus: string | null | undefined): 'authorized' | 'pending' | 'canceled' {
-  if (paymentStatus === 'authorized') return 'authorized'
-  if (paymentStatus === 'canceled') return 'canceled'
-  return 'pending'
-}
-
 /**
- * Stripe Checkout Session(オーソリのみ・manual capture)を作成する。
- * 例外・session.url無しはthrowせずnullを返す(呼び出し側でハンドリングしやすい形にする・中1指摘)。
+ * Stripe Checkout Session(即時キャプチャ・予約フィー額のみ)を作成する。
+ * 例外・session.url無しはthrowせずnullを返す(呼び出し側でハンドリングしやすい形にする)。
+ * レビュー指摘(軽微1): clientEmailが空文字だとStripeがinvalid emailで弾くためoptionalにし、
+ * 値がある場合のみcustomer_emailを付与する。
  */
 export async function createReferralCheckoutSession(params: {
   bookingId: string
-  priceJpy: number
-  menuName: string | null
-  clientEmail: string
+  amountJpy: number
+  itemName: string
+  clientEmail?: string
   successUrl: string
   cancelUrl: string
 }): Promise<{ url: string; sessionId: string } | null> {
@@ -55,18 +60,17 @@ export async function createReferralCheckoutSession(params: {
     const stripe = getReferralStripe()
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      payment_intent_data: { capture_method: 'manual' },
       line_items: [
         {
           price_data: {
             currency: 'jpy',
-            product_data: { name: params.menuName || 'ご相談' },
-            unit_amount: params.priceJpy,
+            product_data: { name: params.itemName },
+            unit_amount: params.amountJpy,
           },
           quantity: 1,
         },
       ],
-      customer_email: params.clientEmail,
+      ...(params.clientEmail ? { customer_email: params.clientEmail } : {}),
       // PII注意: metadataにはbooking_idのみ(氏名・電話・メールは入れない)
       metadata: { booking_id: params.bookingId },
       success_url: params.successUrl,
@@ -81,8 +85,23 @@ export async function createReferralCheckoutSession(params: {
 }
 
 /**
- * オーソリ済み(与信確保済み)のPaymentIntentをキャンセルし与信を解放する。
- * 失敗はログのみ(呼び出し元は続行してよい。オーソリはStripe側で自然失効するため致命的でない)。
+ * 死んだ(誰も支払えない)Checkout Sessionを明示的に失効させる。失敗はログのみ
+ * (Stripe側で自然失効するため致命的でない)。呼び出し元: issueFeePaymentLinkAndNotifyの
+ * 失敗フォールバック、cronの24h支払い期限切れキャンセル(レビュー指摘・軽微5)。
+ */
+export async function expireReferralCheckoutSession(sessionId: string): Promise<void> {
+  try {
+    const stripe = getReferralStripe()
+    await stripe.checkout.sessions.expire(sessionId)
+  } catch (err) {
+    console.error('[referral-payment] expireReferralCheckoutSession error:', err)
+  }
+}
+
+/**
+ * オーソリ(与信確保)済みのPaymentIntentをキャンセルする関数。
+ * §2-4ステージ3(予約フィー方式への刷新)でオーソリ運用自体は廃止したため、現在このリポジトリ内に
+ * 呼び出し元は無いが、将来与信キャンセルが必要になった場合のために関数のみ残す。
  */
 export async function cancelReferralAuthorization(paymentIntentId: string): Promise<void> {
   try {
@@ -94,186 +113,221 @@ export async function cancelReferralAuthorization(paymentIntentId: string): Prom
 }
 
 /**
- * オーソリ成功の判定を厳格化する(重大5レビュー指摘)。
- * - session.status === 'expired' → canceled
- * - session.status !== 'complete' → pending(未完了。判定しない)
- * - complete の場合のみ PaymentIntent を実際にretrieveし、
- *   status が 'requires_capture' | 'succeeded' の場合だけ authorized
+ * 予約フィーの決済リンクを発行し、payment_status='unpaid'→'awaiting'へ昇格、
+ * クライアントへ決済リンク付きメールを送る共通処理(レビュー指摘・中1で共通化)。
+ *
+ * 呼び出し元: bookings/received PATCH confirm(確定と同時)、
+ * cron/expire-referral-bookings(confirmed×unpaidの取り残し再試行)。
+ *
+ * 冪等性(レビュー指摘・重大1): payment_status='unpaid'をUPDATE条件に必ず入れる。
+ * UPDATEが0行(二重confirm等の競合で既に他経路がawaiting/paid等へ進めていた)の場合、
+ * 誰も支払えない決済リンクを残さないよう、作成済みのCheckout Sessionを即座に失効させる。
+ *
+ * 戻り値: true=決済リンクを発行しメール送信を試みた(呼び出し元は「成立」扱いの通知を送らない)。
+ *        false=決済リンクを発行できなかった(呼び出し元はfail openで従来の無決済フローへ)。
  */
-async function resolvePaymentOutcome(session: Stripe.Checkout.Session): Promise<'authorized' | 'pending' | 'canceled'> {
-  if (session.status === 'expired') return 'canceled'
-  if (session.status !== 'complete') return 'pending'
+export async function issueFeePaymentLinkAndNotify(params: {
+  bookingId: string
+  priceJpy: number
+  feeAmountJpy: number
+  menuName: string | null
+  clientEmail: string | null
+  clientUserId: string | null
+  receiverProName: string
+  confirmedSlotText: string | null
+  successUrl: string
+  cancelUrl: string
+}): Promise<boolean> {
+  const supabase = getSupabaseAdmin()
 
-  const paymentIntentId = extractPaymentIntentId(session.payment_intent)
-  if (!paymentIntentId) return 'pending'
+  const checkout = await createReferralCheckoutSession({
+    bookingId: params.bookingId,
+    amountJpy: params.feeAmountJpy,
+    itemName: `予約フィー（${params.menuName || 'ご相談'}）`,
+    clientEmail: params.clientEmail || undefined,
+    successUrl: params.successUrl,
+    cancelUrl: params.cancelUrl,
+  })
 
-  try {
-    const stripe = getReferralStripe()
-    const pi = await stripe.paymentIntents.retrieve(paymentIntentId)
-    if (pi.status === 'requires_capture' || pi.status === 'succeeded') return 'authorized'
-    return 'pending'
-  } catch (err) {
-    console.error('[referral-payment] paymentIntents.retrieve error:', err)
-    return 'pending'
+  if (!checkout) {
+    console.error(`[referral-payment] createReferralCheckoutSession failed for booking ${params.bookingId}`)
+    return false
   }
+
+  const { data: updatedRows, error: paymentUpdateError } = await supabase
+    .from('referral_bookings')
+    .update({ payment_status: 'awaiting', stripe_checkout_session_id: checkout.sessionId })
+    .eq('id', params.bookingId)
+    .eq('payment_status', 'unpaid')
+    .select('id')
+
+  if (paymentUpdateError || !updatedRows || updatedRows.length === 0) {
+    if (paymentUpdateError) {
+      console.error(
+        '[referral-payment] payment_status awaiting update failed:',
+        paymentUpdateError.message
+      )
+    } else {
+      console.error(
+        `[referral-payment] payment_status awaiting update matched 0 rows for booking ${params.bookingId} (競合の可能性)`
+      )
+    }
+    // レビュー指摘(重大1): 払える死んだリンクを残さない。失敗はログのみ。
+    await expireReferralCheckoutSession(checkout.sessionId)
+    return false
+  }
+
+  const residualJpy = params.priceJpy - params.feeAmountJpy
+  const safeReceiverProName = escapeHtml(params.receiverProName)
+  try {
+    if (params.clientUserId || params.clientEmail) {
+      await notifyClientByEmail(
+        { userId: params.clientUserId, email: params.clientEmail },
+        `${params.receiverProName}さんとのご相談確定・お支払いのご案内`,
+        emailShell(
+          'ご相談確定・お支払いのご案内',
+          `${params.confirmedSlotText ? `${params.confirmedSlotText} に確定しました。` : 'ご相談の日時が確定しました。'}<br>担当: ${safeReceiverProName}さん<br><br>` +
+            `予約フィー ¥${params.feeAmountJpy.toLocaleString()} のお支払いで予約が成立します(24時間以内)。<br>` +
+            `当日は残額 ¥${residualJpy.toLocaleString()} を${safeReceiverProName}さんに直接お支払いください(合計 ¥${params.priceJpy.toLocaleString()} は変わりません)。`,
+          'お支払いを行う',
+          checkout.url
+        )
+      )
+    }
+  } catch (notifyErr) {
+    console.error('[referral-payment] payment-link notify error:', notifyErr)
+  }
+
+  return true
 }
 
-/** 競合(webhookとフォールバックの同時実行等)で更新0行だった場合、DBの実状態を再取得して返す(軽微2)。 */
-async function currentOutcome(
+/** 競合(webhookとフォールバックの同時実行等)で更新0行だった場合、DBの実状態を再取得して返す。 */
+async function currentPaymentOutcome(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   bookingId: string
-): Promise<'authorized' | 'pending' | 'canceled'> {
+): Promise<'paid' | 'pending'> {
   const { data: latest } = await supabase
     .from('referral_bookings')
     .select('payment_status')
     .eq('id', bookingId)
     .maybeSingle()
-  return mapPaymentStatusToOutcome(latest?.payment_status)
+  return latest?.payment_status === 'paid' ? 'paid' : 'pending'
 }
 
 /**
- * 重大指摘(二重与信の閉塞): 昇格を諦めてdraft行を閉じ、Stripe側の与信も解放する。
- * ①同一client_email×receiver_pro_idの既存requested/confirmedが見つかった場合(昇格直前の
- * 重複再検証)②昇格UPDATE自体がエラーになった場合(23505等) の両方から呼ぶ共通後始末。
- * 「エラーでpendingを返して与信を放置する」パスを残さないための唯一の出口にする。
- */
-async function releaseAndCancelDraft(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  bookingId: string,
-  session: Stripe.Checkout.Session
-): Promise<void> {
-  const paymentIntentId = extractPaymentIntentId(session.payment_intent)
-  if (paymentIntentId) {
-    await cancelReferralAuthorization(paymentIntentId)
-  }
-  const { error } = await supabase
-    .from('referral_bookings')
-    .update({ payment_status: 'canceled', status: 'cancelled' })
-    .eq('id', bookingId)
-    .eq('status', 'draft')
-    .eq('payment_status', 'unpaid')
-  if (error) {
-    console.error('[referral-payment] releaseAndCancelDraft update failed:', error.message)
-  }
-}
-
-/**
- * Stripe Checkout Session の状態を referral_bookings に反映する(draft方式)。
+ * Stripe Checkout Session の状態を referral_bookings に反映する(予約フィー方式)。
+ * 支払い完了(session.payment_status==='paid')のみ処理する。それ以外(未完了・失効)は
+ * 何もせず'pending'を返す(24時間の支払い期限判定はcron側で行う。ここでは書き換えない)。
  */
 export async function applyReferralCheckoutSession(
   session: Stripe.Checkout.Session
-): Promise<'authorized' | 'pending' | 'canceled' | 'not_found'> {
+): Promise<'paid' | 'pending' | 'not_found'> {
   const bookingId = session.metadata?.booking_id
   if (!bookingId) return 'not_found'
 
   const supabase = getSupabaseAdmin()
   const { data: booking } = await supabase
     .from('referral_bookings')
-    .select('id, payment_status, status, receiver_pro_id, client_id, client_email')
+    .select('id, payment_status, status, sender_pro_id, receiver_pro_id, client_id, client_email')
     .eq('id', bookingId)
     .maybeSingle()
 
   if (!booking) return 'not_found'
 
-  // 冪等(重大1・軽微2): draft以外(=既に昇格/失効済み)なら再処理・再通知せず、実状態を返す
-  if (booking.status !== 'draft') {
-    return mapPaymentStatusToOutcome(booking.payment_status)
-  }
-
-  const outcome = await resolvePaymentOutcome(session)
-  if (outcome === 'pending') return 'pending'
-
-  if (outcome === 'canceled') {
-    const { data: updatedRows, error } = await supabase
-      .from('referral_bookings')
-      .update({ payment_status: 'canceled', status: 'cancelled' })
-      .eq('id', bookingId)
-      .eq('payment_status', 'unpaid')
-      .eq('status', 'draft')
-      .select('id')
-
-    if (error) {
-      console.error('[referral-payment] update to canceled failed:', error.message)
-      return 'pending'
+  // 冪等: awaiting以外(既にpaid、または他経路で状態が変わった)なら再処理・再通知しない
+  if (booking.payment_status !== 'awaiting') {
+    // レビュー指摘(重大1・保険): Stripe側は支払い完了しているのにDBがawaitingでない場合、
+    // 返金確認が必要な異常系として必ずログに残す(気づけない状態を許容しない)。
+    if (session.payment_status === 'paid') {
+      console.error('[referral-payment] PAID BUT NOT AWAITING - 要返金確認', bookingId, session.id)
     }
-    if (!updatedRows || updatedRows.length === 0) {
-      return currentOutcome(supabase, bookingId)
-    }
-    return 'canceled'
+    return booking.payment_status === 'paid' ? 'paid' : 'pending'
   }
 
-  // 重大指摘(二重与信の閉塞): 昇格直前に同一client_email×receiver_pro_idの
-  // requested/confirmedが既に存在するかを再検証する(二重送信・複数タブでの多重チェックアウト等で
-  // 2つのdraftが両方オーソリ完了するケース)。見つかった場合はこのsessionの与信を解放しdraftを閉じる。
-  const { data: duplicateActiveRows } = await supabase
-    .from('referral_bookings')
-    .select('id')
-    .eq('client_email', booking.client_email)
-    .eq('receiver_pro_id', booking.receiver_pro_id)
-    .in('status', ['requested', 'confirmed'])
-    .neq('id', bookingId)
-    .limit(1)
-
-  if (duplicateActiveRows && duplicateActiveRows.length > 0) {
-    await releaseAndCancelDraft(supabase, bookingId, session)
-    return 'canceled'
+  if (session.payment_status !== 'paid') {
+    // 未完了・キャンセル・失効(session.status==='expired'を含む)はここでは何もしない。
+    // payment_statusは'awaiting'のまま保持し、24時間の期限判定はcron(expire-referral-bookings)に委ねる。
+    return 'pending'
   }
 
-  // outcome === 'authorized' → draftからrequestedへ昇格。expires_atはここで初めてセットする
-  // (オーソリ完了からの48時間。draft作成時は未設定)
+  // レビュー指摘(軽微4): 返金照合用にPaymentIntent IDを保存する
   const paymentIntentId = extractPaymentIntentId(session.payment_intent)
-  const expiresAt = new Date(Date.now() + BOOKING_EXPIRES_HOURS * 60 * 60 * 1000).toISOString()
 
   const { data: updatedRows, error } = await supabase
     .from('referral_bookings')
-    .update({
-      payment_status: 'authorized',
-      stripe_payment_intent_id: paymentIntentId,
-      status: 'requested',
-      expires_at: expiresAt,
-    })
+    .update({ payment_status: 'paid', stripe_payment_intent_id: paymentIntentId })
     .eq('id', bookingId)
-    .eq('payment_status', 'unpaid')
-    .eq('status', 'draft')
+    .eq('payment_status', 'awaiting')
     .select('id')
 
   if (error) {
-    // 重大指摘: エラー(特に23505=UNIQUE違反。昇格の瞬間に別経路でrequestedが先に出来た等)で
-    // 'pending'を返して与信を放置しない。PI解放+draft cancelled化まで必ず通す。
-    console.error('[referral-payment] update to authorized failed:', error.message)
-    await releaseAndCancelDraft(supabase, bookingId, session)
-    return 'canceled'
+    console.error('[referral-payment] update to paid failed:', error.message)
+    return 'pending'
   }
   if (!updatedRows || updatedRows.length === 0) {
-    // 競合で既に他経路が処理済み(軽微2: 再SELECTして実状態を返す・通知は送らない)
-    return currentOutcome(supabase, bookingId)
+    // 競合で既に他経路(webhookとフォールバックの同時実行等)が処理済み。再SELECTして実状態を返す(再通知しない)
+    return currentPaymentOutcome(supabase, bookingId)
   }
 
-  // オーソリ完了後に初めて受け手プロへ通知する(失敗しても決済処理自体は成功扱い)
+  // 支払い完了 = 予約成立。受け手・送り手・クライアントの3者へ通知する
+  // (失敗しても決済処理自体は成功扱い。PIIは通知文面に含めない)
   try {
+    const { data: client } = await supabase
+      .from('clients')
+      .select('user_id, nickname')
+      .eq('id', booking.client_id)
+      .maybeSingle()
+    const clientNickname = client?.nickname || 'クライアント'
+
     const { data: receiverPro } = await supabase
       .from('professionals')
       .select('name, contact_email, line_messaging_user_id')
       .eq('id', booking.receiver_pro_id)
       .maybeSingle()
-    const { data: client } = await supabase
-      .from('clients')
-      .select('nickname')
-      .eq('id', booking.client_id)
-      .maybeSingle()
+
     if (receiverPro) {
-      await notifyBookingRequested(
+      await notifyBookingPaymentCompletedToReceiver(
         {
           name: receiverPro.name,
           contact_email: receiverPro.contact_email,
           line_messaging_user_id: receiverPro.line_messaging_user_id,
         },
-        client?.nickname || 'クライアント'
+        clientNickname
+      )
+    }
+
+    if (booking.sender_pro_id && receiverPro) {
+      const { data: senderPro } = await supabase
+        .from('professionals')
+        .select('name, contact_email, line_messaging_user_id')
+        .eq('id', booking.sender_pro_id)
+        .maybeSingle()
+      if (senderPro) {
+        await notifyBookingConfirmedToSender(
+          {
+            name: senderPro.name,
+            contact_email: senderPro.contact_email,
+            line_messaging_user_id: senderPro.line_messaging_user_id,
+          },
+          clientNickname,
+          receiverPro.name
+        )
+      }
+    }
+
+    if (client?.user_id || booking.client_email) {
+      await notifyClientByEmail(
+        { userId: client?.user_id, email: booking.client_email },
+        'お支払いが完了し、予約が成立しました',
+        emailShell(
+          '予約成立のお知らせ',
+          'お支払いが完了し、予約が成立しました。当日はよろしくお願いいたします。'
+        )
       )
     }
   } catch (notifyErr) {
     console.error('[referral-payment] notify error:', notifyErr)
   }
 
-  return 'authorized'
+  return 'paid'
 }

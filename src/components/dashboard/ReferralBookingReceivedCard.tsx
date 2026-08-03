@@ -13,6 +13,8 @@ interface BookingItem {
   preferred_slots: { slots?: (string | null)[]; note?: string | null; confirmed_index?: number } | null
   status: 'requested' | 'confirmed'
   price_jpy: number
+  /** §2-4ステージ3(予約フィー方式): 決済有効時のみ入る。金額・連絡先は含まれない(status相当のみ)。 */
+  payment_status?: string | null
   handover_note: { theme?: string; history?: string; tried?: string; notes?: string } | null
   expires_at: string | null
   confirmed_at: string | null
@@ -108,7 +110,14 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
         // タスク⑥改: 完了一覧は紹介タブ内のReferralCompletedListが表示する(タブを開いた時に取得)
         setItems((prev) => prev.filter((i) => i.id !== bookingId))
       } else {
-        window.alert('処理に失敗しました')
+        // レビュー指摘(重大2): ボタンをdisabledにしていても、支払い完了直前などの
+        // 競合でここに来ることがあるため専用文言を出す。
+        const data = await res.json().catch(() => ({}))
+        if (data.error === 'payment_pending') {
+          window.alert('クライアントのお支払いが完了していないため、完了できません')
+        } else {
+          window.alert('処理に失敗しました')
+        }
       }
     } finally {
       setProcessingId(null)
@@ -228,6 +237,25 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                 <span style={{ color: '#6B7280' }}>(紹介元: {item.sender_pro.name}さん)</span>
               )}
             </div>
+            {/* §2-4ステージ3(予約フィー方式): 決済リンク送付済み・未払いの間はバッジを表示し、
+                完了ボタンをdisabledにする(レビュー指摘・重大2: フィー未収のまま完了させない)。
+                金額・連絡先は出さない。 */}
+            {item.payment_status === 'awaiting' && (
+              <div
+                style={{
+                  display: 'inline-block',
+                  marginTop: 6,
+                  padding: '3px 10px',
+                  borderRadius: 999,
+                  background: '#FFF3E0',
+                  color: '#B26A00',
+                  fontSize: 11,
+                  fontWeight: 600,
+                }}
+              >
+                クライアントのお支払い待ち
+              </div>
+            )}
             <BookingThread
               bookingId={item.id}
               ownProId={proId}
@@ -236,7 +264,7 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
             />
             <button
               onClick={() => complete(item.id)}
-              disabled={processingId === item.id}
+              disabled={processingId === item.id || item.payment_status === 'awaiting'}
               style={{
                 marginTop: 10,
                 width: '100%',
@@ -247,12 +275,17 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                 color: '#C4A35A',
                 fontSize: 13,
                 fontWeight: 600,
-                cursor: processingId === item.id ? 'default' : 'pointer',
-                opacity: processingId === item.id ? 0.6 : 1,
+                cursor: processingId === item.id || item.payment_status === 'awaiting' ? 'default' : 'pointer',
+                opacity: processingId === item.id || item.payment_status === 'awaiting' ? 0.6 : 1,
               }}
             >
               紹介セッションを完了する
             </button>
+            {item.payment_status === 'awaiting' && (
+              <p style={{ marginTop: 4, fontSize: 11, color: '#B26A00' }}>
+                クライアントのお支払い完了後に完了できます
+              </p>
+            )}
           </div>
         ))}
 

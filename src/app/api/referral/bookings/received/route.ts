@@ -8,10 +8,16 @@ import {
   escapeHtml,
 } from '@/lib/referral-notify'
 import { formatSlot } from '@/lib/referral-format'
+import { isReferralPaymentEnabled, REFERRAL_MIN_FEE_JPY } from '@/lib/feature-flags'
+// 中1レビュー指摘から継続: Stripe importはこのAPI routeに持たせない(Webpackチャンクグラフ対策)。
+// Checkout Session作成+メール送付(共通処理)はsrc/lib/referral-payment.tsの関数呼び出しに委譲する。
+import { issueFeePaymentLinkAndNotify } from '@/lib/referral-payment'
 
 export const dynamic = 'force-dynamic'
 
 const APP_URL = 'https://realproof.jp'
+/** §2-4ステージ3(予約フィー方式)のフォールバック用。通常は保存済みの fee_total_bps を使う。 */
+const DEFAULT_FEE_TOTAL_BPS = 3360
 
 interface PreferredSlots {
   slots?: (string | null)[]
@@ -36,6 +42,8 @@ interface BookingRow {
   preferred_slots: PreferredSlots | null
   status: string
   price_jpy: number
+  payment_status: string | null
+  fee_total_bps: number | null
   expires_at: string | null
   confirmed_at: string | null
   completed_at: string | null
@@ -59,11 +67,16 @@ export async function GET() {
     }
 
     const supabase = getSupabaseAdmin()
+    // §2-4ステージ3(予約フィー方式): payment_statusはmigration 036依存のカラムのため、
+    // 既存の他ファイル(cron/expire-referral-bookings等)と同様にフラグゲート付きで選択する。
+    // 受け手APIへの追加はstatusのみ(金額・連絡先はここでは選択しない)。
+    const paymentEnabled = isReferralPaymentEnabled()
+    const baseBookingSelect =
+      'id, list_id, sender_pro_id, receiver_pro_id, client_id, menu_id, theme_tags, preferred_slots, status, price_jpy, expires_at, confirmed_at, completed_at, created_at, clients(id, nickname), referral_lists(id, slug, comment), pro_menus(name)'
+    const bookingSelect = paymentEnabled ? `${baseBookingSelect}, payment_status` : baseBookingSelect
     const { data: bookings, error } = await supabase
       .from('referral_bookings')
-      .select(
-        'id, list_id, sender_pro_id, receiver_pro_id, client_id, menu_id, theme_tags, preferred_slots, status, price_jpy, expires_at, confirmed_at, completed_at, created_at, clients(id, nickname), referral_lists(id, slug, comment), pro_menus(name)'
-      )
+      .select(bookingSelect)
       .eq('receiver_pro_id', ownPro.id)
       .in('status', ['requested', 'confirmed'])
       .order('created_at', { ascending: false })
@@ -142,6 +155,8 @@ export async function GET() {
       preferred_slots: b.preferred_slots,
       status: b.status,
       price_jpy: b.price_jpy,
+      // §2-4ステージ3: 決済有効時のみpayment_status(状態のみ)を返す。金額・連絡先は含めない。
+      payment_status: paymentEnabled ? b.payment_status || null : null,
       handover_note: handoverMap[b.id] || null,
       expires_at: b.expires_at,
       confirmed_at: b.confirmed_at,
@@ -197,11 +212,16 @@ export async function PATCH(request: NextRequest) {
     }
 
     const supabase = getSupabaseAdmin()
+    const paymentEnabled = isReferralPaymentEnabled()
+    // §2-4ステージ3(予約フィー方式): confirm時に予約フィー決済リンクを発行するため、
+    // price_jpy/payment_status/fee_total_bps/メニュー名も取得する。
+    // payment_status/fee_total_bpsはmigration 036依存のためフラグゲート付きで選択する。
+    const baseConfirmSelect =
+      'id, list_id, sender_pro_id, receiver_pro_id, client_id, client_email, status, price_jpy, expires_at, preferred_slots, clients(id, user_id, nickname), referral_lists(id, slug, comment), pro_menus(name)'
+    const confirmSelect = paymentEnabled ? `${baseConfirmSelect}, payment_status, fee_total_bps` : baseConfirmSelect
     const { data: bookingData } = await supabase
       .from('referral_bookings')
-      .select(
-        'id, list_id, sender_pro_id, receiver_pro_id, client_id, client_email, status, expires_at, preferred_slots, clients(id, user_id, nickname), referral_lists(id, slug, comment)'
-      )
+      .select(confirmSelect)
       .eq('id', bookingId)
       .maybeSingle()
 
@@ -213,6 +233,11 @@ export async function PATCH(request: NextRequest) {
     if (action === 'complete') {
       if (booking.status !== 'confirmed') {
         return NextResponse.json({ error: 'not_confirmed' }, { status: 409 })
+      }
+      // レビュー指摘(重大2): 予約フィーが未払い(決済リンク送付済みでまだawaiting)の間は
+      // 「紹介セッションを完了する」を通せない(フィー未収のまま完了されるのを防ぐ)。
+      if (paymentEnabled && booking.payment_status === 'awaiting') {
+        return NextResponse.json({ error: 'payment_pending' }, { status: 409 })
       }
       const { error: completeError } = await supabase
         .from('referral_bookings')
@@ -284,63 +309,106 @@ export async function PATCH(request: NextRequest) {
       confirmed_index: confirmedIndex,
     }
 
-    const { error: updateError } = await supabase
+    // レビュー指摘(重大1): 二重confirm(同一予約への同時PATCH等)で、既に他経路がstatusを
+    // requestedから進めていた場合は0行で返る。この場合は決済リンクもメールも一切出さずに409で止める。
+    const { data: updatedConfirmRows, error: updateError } = await supabase
       .from('referral_bookings')
       .update({ status: 'confirmed', confirmed_at: nowIso, preferred_slots: updatedSlots })
       .eq('id', bookingId)
       .eq('status', 'requested')
+      .select('id')
 
     if (updateError) {
       console.error('[api/referral/bookings/received] PATCH confirm error:', updateError)
       return NextResponse.json({ error: 'failed_to_update' }, { status: 500 })
     }
+    if (!updatedConfirmRows || updatedConfirmRows.length === 0) {
+      return NextResponse.json({ error: 'not_pending' }, { status: 409 })
+    }
 
     const confirmedSlotText = formatSlot(slots[confirmedIndex])
 
-    // クライアントへ通知(§2-4-6): 確定日時 + 受け手プロ名 + 送り手のlist.comment引用(§4-8 Phase1仮実装)
-    try {
-      if (clientUserId || booking.client_email) {
-        const senderComment = booking.referral_lists?.comment
-        const senderQuote = senderComment
-          ? `<p style="margin-top:12px;color:#555;font-size:13px;line-height:1.7;">紹介元の先生からのメッセージ:<br>「${escapeHtml(senderComment)}」</p>`
-          : ''
-        const safeOwnProName = escapeHtml(ownPro.name)
-        await notifyClientByEmail(
-          { userId: clientUserId, email: booking.client_email },
-          `${ownPro.name}さんとのご相談が確定しました`,
-          emailShell(
-            'ご相談確定のお知らせ',
-            `${confirmedSlotText ? `${confirmedSlotText} に確定しました。` : 'ご相談の日時が確定しました。'}<br>担当: ${safeOwnProName}さん${senderQuote}`
-          )
-        )
-      }
-    } catch (notifyErr) {
-      console.error('[api/referral/bookings/received] confirm client notify error:', notifyErr)
+    // §2-4ステージ3(予約フィー方式・CEO決定): 決済有効かつ未払い(payment_status==='unpaid')かつ
+    // 予約フィーがStripeの最低決済額以上の場合のみ、確定と同時に予約フィー決済リンクを発行する。
+    // この場合は「成立」ではなく「支払いのご案内」を送る(成立通知は支払い完了時にapplyReferralCheckoutSession
+    // から送る。src/lib/referral-payment.ts参照)。
+    const feeTotalBps = booking.fee_total_bps ?? DEFAULT_FEE_TOTAL_BPS
+    const feeAmountJpy = booking.price_jpy > 0 ? Math.floor((booking.price_jpy * feeTotalBps) / 10000) : 0
+    const shouldCollectFeePayment =
+      paymentEnabled &&
+      booking.payment_status === 'unpaid' &&
+      booking.price_jpy > 0 &&
+      feeAmountJpy >= REFERRAL_MIN_FEE_JPY
+
+    let checkoutCreated = false
+    if (shouldCollectFeePayment) {
+      const slugForCheckout = booking.referral_lists?.slug || ''
+      const listUrlForCheckout = slugForCheckout ? `${APP_URL}/r/${slugForCheckout}` : APP_URL
+
+      // レビュー指摘(中1): 「決済リンク発行+メール送付」はconfirm時とcron再試行の両方から
+      // 同じ関数を呼ぶ(src/lib/referral-payment.ts参照)。UPDATE 0行時はリンクを自動失効させる。
+      checkoutCreated = await issueFeePaymentLinkAndNotify({
+        bookingId: booking.id,
+        priceJpy: booking.price_jpy,
+        feeAmountJpy,
+        menuName: booking.pro_menus?.name || null,
+        clientEmail: booking.client_email || null,
+        clientUserId: clientUserId || null,
+        receiverProName: ownPro.name,
+        confirmedSlotText,
+        successUrl: `${listUrlForCheckout}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+        cancelUrl: `${listUrlForCheckout}?payment=canceled&session_id={CHECKOUT_SESSION_ID}`,
+      })
     }
 
-    // 送り手プロへ通知(§4-8: 紹介成立の通知)
-    try {
-      if (booking.sender_pro_id) {
-        const { data: senderPro } = await supabase
-          .from('professionals')
-          .select('name, contact_email, line_messaging_user_id')
-          .eq('id', booking.sender_pro_id)
-          .maybeSingle()
-
-        if (senderPro) {
-          await notifyBookingConfirmedToSender(
-            {
-              name: senderPro.name,
-              contact_email: senderPro.contact_email,
-              line_messaging_user_id: senderPro.line_messaging_user_id,
-            },
-            clientNickname,
-            ownPro.name
+    // 決済無効/対象外、または決済リンク発行に失敗した場合(fail open): 従来通り即時に
+    // 「確定」を成立扱いで通知する(クライアント+送り手)。
+    if (!checkoutCreated) {
+      // クライアントへ通知(§2-4-6): 確定日時 + 受け手プロ名 + 送り手のlist.comment引用(§4-8 Phase1仮実装)
+      try {
+        if (clientUserId || booking.client_email) {
+          const senderComment = booking.referral_lists?.comment
+          const senderQuote = senderComment
+            ? `<p style="margin-top:12px;color:#555;font-size:13px;line-height:1.7;">紹介元の先生からのメッセージ:<br>「${escapeHtml(senderComment)}」</p>`
+            : ''
+          const safeOwnProName = escapeHtml(ownPro.name)
+          await notifyClientByEmail(
+            { userId: clientUserId, email: booking.client_email },
+            `${ownPro.name}さんとのご相談が確定しました`,
+            emailShell(
+              'ご相談確定のお知らせ',
+              `${confirmedSlotText ? `${confirmedSlotText} に確定しました。` : 'ご相談の日時が確定しました。'}<br>担当: ${safeOwnProName}さん${senderQuote}`
+            )
           )
         }
+      } catch (notifyErr) {
+        console.error('[api/referral/bookings/received] confirm client notify error:', notifyErr)
       }
-    } catch (notifyErr) {
-      console.error('[api/referral/bookings/received] confirm sender notify error:', notifyErr)
+
+      // 送り手プロへ通知(§4-8: 紹介成立の通知)
+      try {
+        if (booking.sender_pro_id) {
+          const { data: senderPro } = await supabase
+            .from('professionals')
+            .select('name, contact_email, line_messaging_user_id')
+            .eq('id', booking.sender_pro_id)
+            .maybeSingle()
+
+          if (senderPro) {
+            await notifyBookingConfirmedToSender(
+              {
+                name: senderPro.name,
+                contact_email: senderPro.contact_email,
+                line_messaging_user_id: senderPro.line_messaging_user_id,
+              },
+              clientNickname,
+              ownPro.name
+            )
+          }
+        }
+      } catch (notifyErr) {
+        console.error('[api/referral/bookings/received] confirm sender notify error:', notifyErr)
+      }
     }
 
     return NextResponse.json({ success: true, status: 'confirmed' })
