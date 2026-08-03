@@ -44,6 +44,7 @@ interface BookingRow {
  * GET /api/referral/bookings/received
  * 受け手プロ本人の requested/confirmed 一覧。クライアントは nickname のみ(PII含めない)。
  * ★ isReferralEnabled ではゲートしない(受け手は先行アクセス外でもリクエストを受けられる必要がある)。
+ * タスク⑥: レスポンスに `completed`(completed_at desc・limit 200)を追加。既存の `bookings` の形は変更しない。
  */
 export async function GET() {
   try {
@@ -67,10 +68,35 @@ export async function GET() {
       return NextResponse.json({ error: 'failed_to_fetch' }, { status: 500 })
     }
 
+    // タスク⑥: 完了済み(completed)は別クエリで取得(fail-soft)。requested/confirmedの取得を壊さない。
+    let completedBookings: any[] = []
+    try {
+      const { data: completedRows, error: completedError } = await supabase
+        .from('referral_bookings')
+        .select(
+          'id, list_id, sender_pro_id, receiver_pro_id, client_id, menu_id, theme_tags, status, price_jpy, handover_note, confirmed_at, completed_at, created_at, clients(id, nickname), pro_menus(name)'
+        )
+        .eq('receiver_pro_id', ownPro.id)
+        .eq('status', 'completed')
+        .order('completed_at', { ascending: false })
+        .limit(200)
+      if (completedError) {
+        console.error('[api/referral/bookings/received] completed fetch error (fail-soft):', completedError)
+      } else {
+        completedBookings = completedRows || []
+      }
+    } catch (completedErr) {
+      console.error('[api/referral/bookings/received] completed fetch error (fail-soft):', completedErr)
+    }
+
     // referral_bookings は professionals への FK が2本(sender/receiver)あり embed が曖昧になるため、
     // sender_pro_id は別クエリで取得する(reward-reminder cron と同じ回避方針)。
     const senderIds = Array.from(
-      new Set(((bookings || []) as any[]).map((b) => b.sender_pro_id).filter(Boolean))
+      new Set(
+        [...(bookings || []), ...completedBookings]
+          .map((b: any) => b.sender_pro_id)
+          .filter(Boolean)
+      )
     )
     let sendersMap: Record<string, { id: string; name: string }> = {}
     if (senderIds.length > 0) {
@@ -119,7 +145,23 @@ export async function GET() {
       sender_pro: b.sender_pro_id ? sendersMap[b.sender_pro_id] || null : null,
     }))
 
-    return NextResponse.json({ bookings: result })
+    const completedResult = completedBookings.map((b: any) => ({
+      id: b.id,
+      list_id: b.list_id,
+      menu_id: b.menu_id,
+      menu_name: b.pro_menus?.name || null,
+      theme_tags: b.theme_tags,
+      status: b.status,
+      price_jpy: b.price_jpy,
+      handover_note: b.handover_note || null,
+      confirmed_at: b.confirmed_at,
+      completed_at: b.completed_at,
+      created_at: b.created_at,
+      client_nickname: b.clients?.nickname || 'クライアント',
+      sender_pro: b.sender_pro_id ? sendersMap[b.sender_pro_id] || null : null,
+    }))
+
+    return NextResponse.json({ bookings: result, completed: completedResult })
   } catch (err: any) {
     console.error('[api/referral/bookings/received] GET error:', err)
     return NextResponse.json({ error: err.message || 'internal_error' }, { status: 500 })
