@@ -316,27 +316,16 @@ export default async function ReferralPage({
           </div>
         </div>
 
-        <p style={{ fontSize: 13, color: T.text, lineHeight: 1.8, marginBottom: data.list.comment ? 10 : 0 }}>
-          {/* 1名時は「選ぶ」対象が無いため推薦フレームに切替（CEO決定・案A） */}
-          {data.candidates.length === 1
-            ? 'ご紹介した後も、あなたの経過は私自身が伺っていきます。安心してご相談ください。'
-            : 'ご紹介した後も、あなたの経過は私自身が伺っていきます。安心して選んでください。'}
+        {/* CEO指摘(先行テスト第3弾): 「先生からのメッセージ」は送り手が設定・変更できる
+            list.comment(=クライアントへのメッセージ)を本体として表示する。未設定時のみ既定文。
+            内部用リスト名(title)はクライアントには表示しない。 */}
+        <p style={{ fontSize: 13, color: T.text, lineHeight: 1.8, marginBottom: 0, whiteSpace: 'pre-wrap' as const }}>
+          {data.list.comment ||
+            // 1名時は「選ぶ」対象が無いため推薦フレームに切替（CEO決定・案A）
+            (data.candidates.length === 1
+              ? 'ご紹介した後も、あなたの経過は私自身が伺っていきます。安心してご相談ください。'
+              : 'ご紹介した後も、あなたの経過は私自身が伺っていきます。安心して選んでください。')}
         </p>
-
-        {data.list.comment && (
-          <div
-            style={{
-              fontSize: 13,
-              color: T.textSub,
-              background: T.goldLight,
-              borderRadius: 8,
-              padding: '10px 12px',
-              lineHeight: 1.7,
-            }}
-          >
-            {data.list.comment}
-          </div>
-        )}
       </div>
 
       {/* 候補カード（2〜4名） */}

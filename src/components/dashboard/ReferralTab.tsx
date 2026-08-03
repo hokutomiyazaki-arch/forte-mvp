@@ -101,6 +101,12 @@ export default function ReferralTab({ proId }: Props) {
   const [titleError, setTitleError] = useState<Record<string, string>>({})
   // §0-7: 保存手段のない入力欄禁止 → onBlur自動保存に「保存しました」の明示フィードバックを追加
   const [titleSavedId, setTitleSavedId] = useState<string | null>(null)
+  // CEO指摘(先行テスト第3弾): クライアントへのメッセージ(comment)の後から編集UI
+  const [commentEditingId, setCommentEditingId] = useState<string | null>(null)
+  const [commentDraft, setCommentDraft] = useState('')
+  const [commentSavingId, setCommentSavingId] = useState<string | null>(null)
+  const [commentSavedId, setCommentSavedId] = useState<string | null>(null)
+  const [commentError, setCommentError] = useState<Record<string, string>>({})
   const [pinNoteSaving, setPinNoteSaving] = useState<Record<string, boolean>>({})
   const [pinNoteSavedKey, setPinNoteSavedKey] = useState<string | null>(null)
   // CEO指摘(先行テスト第3弾): 一言メモはonBlur自動保存をやめ、明示的な保存ボタンで確定する(§0-7)。
@@ -252,10 +258,12 @@ export default function ReferralTab({ proId }: Props) {
   // clearTimeoutを奪い合い表示が消えず居座るため、用途ごとに分ける(アンマウント時にクリーンアップ)
   const titleSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pinNoteSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const commentSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     return () => {
       if (titleSavedTimerRef.current) clearTimeout(titleSavedTimerRef.current)
       if (pinNoteSavedTimerRef.current) clearTimeout(pinNoteSavedTimerRef.current)
+      if (commentSavedTimerRef.current) clearTimeout(commentSavedTimerRef.current)
     }
   }, [])
 
@@ -516,6 +524,36 @@ export default function ReferralTab({ proId }: Props) {
     }
   }
 
+  // CEO指摘(先行テスト第3弾): comment=「クライアントへのメッセージ」(紹介ページの
+  // 「先生からのメッセージ」本文)。作成後もここから変更できる(§0-7: 保存ボタンで確定)。
+  async function updateListComment(listId: string, comment: string): Promise<boolean> {
+    const trimmed = comment.trim()
+    setCommentSavingId(listId)
+    setCommentError((prev) => ({ ...prev, [listId]: '' }))
+    try {
+      const res = await fetch(`/api/referral/lists/${listId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ comment: trimmed || null }),
+      })
+      if (res.ok) {
+        setLists((prev) => prev.map((l) => (l.id === listId ? { ...l, comment: trimmed || null } : l)))
+        setCommentSavedId(listId)
+        if (commentSavedTimerRef.current) clearTimeout(commentSavedTimerRef.current)
+        commentSavedTimerRef.current = setTimeout(() => setCommentSavedId(null), 2000)
+        return true
+      }
+      setCommentError((prev) => ({ ...prev, [listId]: 'メッセージの更新に失敗しました' }))
+      return false
+    } catch {
+      setCommentError((prev) => ({ ...prev, [listId]: 'メッセージの更新に失敗しました' }))
+      return false
+    } finally {
+      setCommentSavingId(null)
+    }
+  }
+
   async function updatePinNote(listId: string, targetProId: string, note: string): Promise<boolean> {
     const key = `${listId}:${targetProId}`
     // レビュー指摘: サーバー側はtrimして保存するため、楽観更新も同じ値で揃える
@@ -674,8 +712,71 @@ export default function ReferralTab({ proId }: Props) {
             {titleError[list.id] && (
               <div style={{ fontSize: 10, color: '#B00020' }}>{titleError[list.id]}</div>
             )}
-            {list.comment && (
-              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4, lineHeight: 1.5 }}>{list.comment}</div>
+            {/* CEO指摘(先行テスト第3弾): comment=クライアントへのメッセージ(紹介ページの
+                「先生からのメッセージ」)。表示⇔編集モードで後から変更できる(§0-7) */}
+            {!isPrivate && (
+              commentEditingId === list.id ? (
+                <div style={{ marginTop: 6 }}>
+                  <textarea
+                    value={commentDraft}
+                    onChange={(e) => setCommentDraft(e.target.value.slice(0, 500))}
+                    placeholder="例: ご紹介した後も、経過は私が伺っていきます。安心してご相談ください。"
+                    style={{
+                      width: '100%', minHeight: 64, padding: '8px 10px', borderRadius: 8,
+                      border: '1px solid #E5E7EB', fontSize: 12, boxSizing: 'border-box' as const,
+                      resize: 'vertical' as const, lineHeight: 1.6,
+                    }}
+                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                    <button
+                      onClick={async () => {
+                        const ok = await updateListComment(list.id, commentDraft)
+                        if (ok) setCommentEditingId(null)
+                      }}
+                      disabled={commentSavingId === list.id}
+                      style={{
+                        padding: '4px 12px', borderRadius: 6, border: 'none',
+                        background: '#1A1A2E', color: '#fff', fontSize: 11, fontWeight: 600,
+                        cursor: commentSavingId === list.id ? 'default' : 'pointer',
+                        opacity: commentSavingId === list.id ? 0.6 : 1,
+                      }}
+                    >
+                      {commentSavingId === list.id ? '保存中...' : '保存する'}
+                    </button>
+                    <button
+                      onClick={() => setCommentEditingId(null)}
+                      style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 11, cursor: 'pointer', padding: 0 }}
+                    >
+                      キャンセル
+                    </button>
+                  </div>
+                  {commentError[list.id] && (
+                    <div style={{ fontSize: 10, color: '#B00020', marginTop: 2 }}>{commentError[list.id]}</div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ marginTop: 4 }}>
+                  <div style={{ fontSize: 10, color: '#9CA3AF' }}>クライアントへのメッセージ（紹介ページに表示）</div>
+                  {list.comment ? (
+                    <div
+                      onClick={() => { setCommentEditingId(list.id); setCommentDraft(list.comment || '') }}
+                      style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.5, cursor: 'pointer', whiteSpace: 'pre-wrap' as const }}
+                    >
+                      {list.comment}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => { setCommentEditingId(list.id); setCommentDraft('') }}
+                      style={{ background: 'none', border: 'none', color: '#C4A35A', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}
+                    >
+                      メッセージを設定する
+                    </button>
+                  )}
+                  {commentSavedId === list.id && (
+                    <div style={{ fontSize: 10, color: '#2E7D32', marginTop: 2 }}>保存しました</div>
+                  )}
+                </div>
+              )
             )}
           </div>
           <button
@@ -687,6 +788,11 @@ export default function ReferralTab({ proId }: Props) {
         </div>
 
         {!isPrivate && (
+          <>
+          {/* CEO指摘(先行テスト第3弾): このURLが何かを明記する */}
+          <div style={{ fontSize: 10, color: '#9CA3AF', marginBottom: 4 }}>
+            クライアントに共有するURL（紹介ページが開きます）
+          </div>
           <div
             onClick={() => copyShareUrl(list.slug)}
             style={{
@@ -702,6 +808,7 @@ export default function ReferralTab({ proId }: Props) {
               {copiedSlug === list.slug ? 'コピーしました' : 'コピー'}
             </span>
           </div>
+          </>
         )}
 
         {/* ピン一覧 */}
@@ -1097,6 +1204,11 @@ export default function ReferralTab({ proId }: Props) {
               閉じる
             </button>
           </div>
+          {/* CEO指摘(先行テスト第3弾): フィールドの意味を再定義。title=内部用リスト名(管理用・
+              クライアント非表示)、comment=クライアントへのメッセージ(紹介ページに表示・後から変更可) */}
+          <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 4 }}>
+            内部用リスト名（管理用。クライアントには表示されません）
+          </div>
           <input
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value.slice(0, 200))}
@@ -1106,10 +1218,13 @@ export default function ReferralTab({ proId }: Props) {
               fontSize: 13, boxSizing: 'border-box' as const, marginBottom: 8,
             }}
           />
+          <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 4 }}>
+            クライアントへのメッセージ（紹介ページに「先生からのメッセージ」として表示。後から変更できます）
+          </div>
           <textarea
             value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-            placeholder="選定基準の説明（例: 私が信頼して紹介できる先生方です）"
+            onChange={(e) => setNewComment(e.target.value.slice(0, 500))}
+            placeholder="例: ご紹介した後も、経過は私が伺っていきます。安心してご相談ください。"
             style={{
               width: '100%', minHeight: 60, padding: '10px 12px', borderRadius: 8, border: '1px solid #E5E7EB',
               fontSize: 13, boxSizing: 'border-box' as const, marginBottom: 10, resize: 'vertical' as const,
