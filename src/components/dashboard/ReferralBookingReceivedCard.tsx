@@ -30,7 +30,7 @@ interface Props {
  * §2-4/§4-8: 受信した予約リクエストの確定・辞退カード。
  * §2-10: 確定済み予約には案件スレッド・引き継ぎメモの開閉式ビューを表示する。
  * ★ isReferralEnabled ではゲートしない(受け手は先行アクセス外でもリクエストを受けられる必要がある)。
- * ダッシュボード上部に ReferralConsentCard と同様、タブに依存せず常時表示する。
+ * ダッシュボード上部に、タブに依存せず常時表示する。
  */
 export default function ReferralBookingReceivedCard({ proId }: Props) {
   const [items, setItems] = useState<BookingItem[]>([])

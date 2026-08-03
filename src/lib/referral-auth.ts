@@ -42,6 +42,49 @@ export async function getOwnPro(): Promise<OwnPro | null> {
   }
 }
 
+/**
+ * 🔴1(再レビュー): 招待経由で登録したプロ(allowlist外)のオプトアウト手段確保。
+ * allowlist外でも、共有リスト(visibility != 'private')に consent_status='approved' で
+ * 1件以上掲載されていれば true を返す。受付状態(accepting_status)は本人だけが決める
+ * 唯一のオプトアウト手段のため、この判定を accepting PATCH / ダッシュボードのウィジェット
+ * 表示条件に使う（allowlist外でも自分の掲載状況だけは操作できるようにする）。
+ * private(連携候補)リストへの掲載は含めない(POST /items が非privateのみを対象にする既存仕様と揃える)。
+ */
+export async function isPinnedOnSharedList(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  proId: string,
+  opts?: { failOpenOnError?: boolean }
+): Promise<boolean> {
+  if (!proId) return false
+
+  const { data: items, error: itemsError } = await supabase
+    .from('referral_list_items')
+    .select('list_id')
+    .eq('pro_id', proId)
+    .eq('consent_status', 'approved')
+
+  if (itemsError) {
+    console.error('[isPinnedOnSharedList] query error:', itemsError)
+    return !!opts?.failOpenOnError
+  }
+  if (!items || items.length === 0) return false
+
+  const listIds = Array.from(new Set((items as Array<{ list_id: string }>).map((i) => i.list_id)))
+  if (listIds.length === 0) return false
+
+  const { count, error: listsError } = await supabase
+    .from('referral_lists')
+    .select('id', { count: 'exact', head: true })
+    .in('id', listIds)
+    .neq('visibility', 'private')
+
+  if (listsError) {
+    console.error('[isPinnedOnSharedList] query error:', listsError)
+    return !!opts?.failOpenOnError
+  }
+  return (count || 0) > 0
+}
+
 export interface OwnClient {
   id: string
   nickname: string

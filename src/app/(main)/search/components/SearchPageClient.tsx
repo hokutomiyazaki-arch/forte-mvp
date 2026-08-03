@@ -5,7 +5,7 @@ import { PREFECTURES } from '@/lib/prefectures'
 import { COLORS, FONTS } from '@/lib/design-tokens'
 import { TierBadge, getTierFromVotes } from '@/components/TierBadge'
 import { trackPageView } from '@/lib/tracking'
-import { REFERRAL_SIGNAL_DOT, isReferralReachable } from '@/lib/referral-accepting'
+import { REFERRAL_SIGNAL_DOT, isReferralReachable, computeReferralSignal } from '@/lib/referral-accepting'
 
 const T = { ...COLORS, font: FONTS.main, fontSerif: FONTS.serif }
 
@@ -93,7 +93,72 @@ interface SearchPro {
     atmosphere: { label: string; personality_label: string; votes: number } | null
   } | null
   /** §2-2改訂: 4色インジケータ(🟢受付中/🟡代理案内/🔴停止中/⚪️未設定・プロ向け画面のみ) */
-  referralSignal?: 'open' | 'delegate' | 'closed' | 'unset'
+  referralSignal?: 'open' | 'delegate' | 'closed'
+}
+
+interface OwnReferralList {
+  id: string
+  title: string
+  visibility: 'link' | 'private' | 'public'
+}
+
+/** §3-0-2/🟡3: GET /api/referral/lists の生レスポンス(items含む)をパースするための型 */
+interface OwnReferralListItemRaw {
+  pro_id: string
+  note: string | null
+  consent_status: string
+  has_valid_delegate?: boolean
+  professionals: {
+    id: string
+    name: string
+    title: string | null
+    photo_url: string | null
+    accepting_status: 'open' | 'closed' | null
+    delegate_list_id: string | null
+  } | null
+}
+
+interface OwnReferralListRaw {
+  id: string
+  title: string
+  visibility: 'link' | 'private' | 'public'
+  items: OwnReferralListItemRaw[]
+}
+
+/** 🟡3: private(連携候補)リストのピンを、既存の検索カードUIで表示できる形に変換する。
+ * 統計系フィールド(totalProofs等)は取得していないため0/nullで埋める(カード側は既に
+ * 条件付きレンダーのため、これらが0/nullでも崩れない)。 */
+function buildPrivateCandidate(item: OwnReferralListItemRaw): SearchPro | null {
+  const pro = item.professionals
+  if (!pro) return null
+  return {
+    id: pro.id,
+    name: pro.name,
+    title: pro.title || '',
+    prefecture: null,
+    area_description: null,
+    photo_url: pro.photo_url,
+    totalProofs: 0,
+    recentProofs: 0,
+    categoryScore: 0,
+    categoryCount: {},
+    badges: { rising: false, specialist: false, multi: false, top: false },
+    repeaterRate: null,
+    regularCount: 0,
+    firstCount: 0,
+    repeaterCount: 0,
+    voiceSnippet: null,
+    matchedVoice: null,
+    matchedProofLabel: null,
+    matchSource: null,
+    voiceMatchCount: 0,
+    profileMatchField: null,
+    featuredProof: null,
+    categoryTopProof: null,
+    topPersonality: null,
+    topPersonalitiesByCategory: null,
+    referralSignal: computeReferralSignal(pro.accepting_status, !!item.has_valid_delegate),
+  }
 }
 
 interface Props {
@@ -104,9 +169,18 @@ interface Props {
    * 一般クライアント・未ログインには一切出さない（サーバー側 getViewerIsProStrict() で判定済みの値を渡す）。
    */
   showReferralSignals?: boolean
+  /** §3-0-2: 「紹介リストに追加」ボタンを自分自身のカードに出さないための自分のprofessionals.id */
+  viewerProId?: string | null
+  /** 🟡4レビュー指摘: allowlist(FEATURE_REFERRAL_LISTS)期間中、対象プロのみ「紹介リストに追加」を表示する */
+  referralWriteEnabled?: boolean
 }
 
-export default function SearchPageClient({ proNotice = false, showReferralSignals = false }: Props) {
+export default function SearchPageClient({
+  proNotice = false,
+  showReferralSignals = false,
+  viewerProId = null,
+  referralWriteEnabled = false,
+}: Props) {
   const [category, setCategory] = useState('multi')
   const [subCategory, setSubCategory] = useState('rising')
   const [query, setQuery] = useState('')
@@ -122,6 +196,22 @@ export default function SearchPageClient({ proNotice = false, showReferralSignal
   const [matchedKeywords, setMatchedKeywords] = useState<string[]>([])
   // §2-2改訂: 「紹介につながる人のみ表示」フィルタ(仕様通りデフォルトOFF)。クライアント側の最終段の絞りのみ。
   const [referralOnlyFilter, setReferralOnlyFilter] = useState(false)
+
+  // §3-0-2: /search転用（「紹介リストに追加」導線。プロがプロを探す面としての機能）
+  // key = professionals.id（addPanelForに一致するカードのみ選択UIを開く）
+  const [addPanelFor, setAddPanelFor] = useState<string | null>(null)
+  const [ownLists, setOwnLists] = useState<OwnReferralList[]>([])
+  const [ownListsLoaded, setOwnListsLoaded] = useState(false)
+  const [ownListsLoading, setOwnListsLoading] = useState(false)
+  // ⚪️8レビュー指摘: 取得失敗と「0件」を区別して表示するため
+  const [ownListsError, setOwnListsError] = useState(false)
+  const [selectedListFor, setSelectedListFor] = useState<Record<string, string>>({})
+  const [addStatus, setAddStatus] = useState<Record<string, { status: 'loading' | 'success' | 'error'; message?: string }>>({})
+
+  // 🟡3: 「♡ 気になる（連携候補）」タブ。referralWriteEnabledのプロにのみ見せる。
+  // ONにすると自分のprivate(連携候補)リストにピンしているプロだけをカード表示する。
+  const [mineOnlyFilter, setMineOnlyFilter] = useState(false)
+  const [privateCandidates, setPrivateCandidates] = useState<SearchPro[]>([])
 
   // 着地計測: ?src= を検索ページ着地として記録（source は trackPageView 内の getSource() が拾う）
   useEffect(() => {
@@ -236,15 +326,159 @@ export default function SearchPageClient({ proNotice = false, showReferralSignal
     )
   }
 
+  // §3-0-2: 自分の紹介リスト一覧を一度だけ取得する(パネルを初めて開いた時、または
+  // 「♡ 気になる」タブをONにした時)。連携候補(private)は「♡ 気になる（連携候補）」として
+  // 先頭に出す(親切設計)。🟡3: 同じレスポンスからprivateリストのピンをカード表示用に変換する。
+  async function ensureOwnListsLoaded() {
+    if (ownListsLoaded || ownListsLoading) return
+    await loadOwnLists()
+  }
+
+  // R5レビュー指摘(重大②): フェッチ本体を分離。追加成功後の再取得は ownListsLoaded を
+  // 落とさずにこれを直接呼ぶ(♡タブ表示中に「読み込み中...」へ置き換わって固着するのを防ぐ)。
+  async function loadOwnLists() {
+    setOwnListsLoading(true)
+    setOwnListsError(false)
+    try {
+      const res = await fetch('/api/referral/lists', { cache: 'no-store' })
+      if (res.ok) {
+        const data = await res.json()
+        const rawLists = (data.lists || []) as OwnReferralListRaw[]
+        const sorted = [
+          ...rawLists.filter((l) => l.visibility === 'private'),
+          ...rawLists.filter((l) => l.visibility !== 'private'),
+        ]
+        setOwnLists(sorted.map((l) => ({ id: l.id, title: l.title, visibility: l.visibility })))
+
+        const candidates: SearchPro[] = []
+        for (const l of rawLists) {
+          if (l.visibility !== 'private') continue
+          for (const item of l.items || []) {
+            const candidate = buildPrivateCandidate(item)
+            if (candidate) candidates.push(candidate)
+          }
+        }
+        // 軽微指摘: 複数privateリストに同じプロがピンされている場合に備え、pro.idでdedupeする
+        // (downlevelIteration無効のため[...new Set()]でなくArray.from(new Map())方式)
+        const dedupedCandidates = Array.from(new Map(candidates.map((c) => [c.id, c])).values())
+        setPrivateCandidates(dedupedCandidates)
+      } else {
+        // ⚪️8レビュー指摘: 取得失敗を明示する(0件と区別)
+        setOwnListsError(true)
+      }
+    } catch {
+      setOwnListsError(true)
+    } finally {
+      setOwnListsLoaded(true)
+      setOwnListsLoading(false)
+    }
+  }
+
+  function toggleAddPanel(proId: string) {
+    if (addPanelFor === proId) {
+      setAddPanelFor(null)
+      return
+    }
+    setAddPanelFor(proId)
+    // ⚪️10レビュー指摘: undefinedの値を持つキーを残さず、キー自体を削除してリセットする
+    setAddStatus((prev) => {
+      const next = { ...prev }
+      delete next[proId]
+      return next
+    })
+    ensureOwnListsLoaded()
+  }
+
+  // 🔴1レビュー指摘: 「♡ 気になる」タブON時は連携候補(private)を見ている文脈のため、
+  // 追加先の選択肢からprivateリストを除外する(同じprivateリストへの再追加→409 already_pinned
+  // を構造的に防ぐ)。既定選択も同じ絞り(非privateの先頭)に合わせ、非privateが無ければ
+  // undefined(=選択肢なし。パネル側は「共有リストがまだありません」表示に倒れる)。
+  function getDefaultListId(): string | undefined {
+    if (mineOnlyFilter) {
+      return ownLists.find((l) => l.visibility !== 'private')?.id
+    }
+    return ownLists[0]?.id
+  }
+
+  // R5レビュー指摘(重大①): selectの表示値とPOST先の解決を1本化する(同じ判定を2箇所に書かない)。
+  // selectedListForは♡タブのON/OFFを跨いで残るため、現在の選択肢集合(selectableOwnLists)に
+  // 含まれない選択は無効化してデフォルトへ倒す。表示と書き込み先が食い違うと、意図しない
+  // リストへの掲載(空約束・無断公開)につながる。
+  function effectiveListId(proId: string): string | undefined {
+    const sel = selectedListFor[proId]
+    if (sel && selectableOwnLists.some((l) => l.id === sel)) return sel
+    return getDefaultListId() || selectableOwnLists[0]?.id
+  }
+
+  async function submitAddToList(proId: string) {
+    const listId = effectiveListId(proId)
+    if (!listId) return
+    setAddStatus((prev) => ({ ...prev, [proId]: { status: 'loading' } }))
+    try {
+      const res = await fetch(`/api/referral/lists/${listId}/items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ pro_id: proId }),
+      })
+      if (res.ok) {
+        setAddStatus((prev) => ({ ...prev, [proId]: { status: 'success', message: '追加しました' } }))
+        // ⚪️4→R5重大②修正: ownListsLoadedを落とすと♡タブ表示中に再フェッチ導線が無く
+        // 「読み込み中...」で固着するため、一覧表示を保ったまま直接再取得して静かに最新化する
+        if (!ownListsLoading) void loadOwnLists()
+      } else {
+        const err = await res.json().catch(() => ({}))
+        // ⚪️10レビュー指摘: self_pin_not_allowed / forbidden、🔴2レビュー指摘: target_not_in_program を追加
+        const message =
+          err.error === 'already_pinned'
+            ? '既に追加済みです'
+            : err.error === 'target_not_accepting'
+              ? 'この先生は紹介の受付を停止中です'
+              : err.error === 'target_not_in_program'
+                ? 'この先生はまだ紹介機能の対象ではありません'
+                : err.error === 'max_pins_reached'
+                  ? 'このリストは3名まで（上限）です'
+                  : err.error === 'self_pin_not_allowed'
+                    ? '自分自身は追加できません'
+                    : err.error === 'forbidden'
+                      ? 'まだこの機能の対象アカウントではありません'
+                      : '追加に失敗しました'
+        setAddStatus((prev) => ({ ...prev, [proId]: { status: 'error', message } }))
+      }
+    } catch {
+      setAddStatus((prev) => ({ ...prev, [proId]: { status: 'error', message: '追加に失敗しました' } }))
+    }
+  }
+
   // §2-2改訂: 「紹介につながる人のみ」フィルタ(最終段の絞りのみ・既存の並び順は変更しない)
   // レビュー指摘: showReferralSignalsがfalse(非プロ)の場合はチェックボックス自体を出さないため
   // referralOnlyFilterは常にfalseのままだが、念のためここでもゲートする。
-  const displayedPros = showReferralSignals && referralOnlyFilter
-    ? professionals.filter((p) => isReferralReachable(p.referralSignal))
-    : professionals
+  // 🟡3: 「♡ 気になる」ON時は通常検索結果を差し替え、自分のprivateリストのピンのみ表示する
+  // (referralWriteEnabledが前提のため、mineOnlyFilter自体は常にfalse固定でも安全に倒れる)。
+  const displayedPros = referralWriteEnabled && mineOnlyFilter
+    ? privateCandidates
+    : showReferralSignals && referralOnlyFilter
+      ? professionals.filter((p) => isReferralReachable(p.referralSignal))
+      : professionals
+
+  // 🔴1レビュー指摘: 「♡ 気になる」タブON時は連携候補(private)を見ている文脈のため、
+  // 追加先の選択肢からprivateリストを除外する(同じprivateリストへの再追加を構造的に防ぐ)。
+  // ♡タブOFF時は従来通りprivateも選択肢に出す(「♡気になる」への保存導線)。
+  const selectableOwnLists = mineOnlyFilter ? ownLists.filter((l) => l.visibility !== 'private') : ownLists
+
+  // 🟡3: 「♡ 気になる」ON時は通常検索fetchのloadingでなく、自分のリスト取得の初回完了を見る。
+  // R5重大②修正: ownListsLoadingを見ない(追加成功後のバックグラウンド再取得中も一覧を保つ。
+  // 初回はownListsLoaded=falseなので従来通り「読み込み中」になる)。
+  const isLoading = referralWriteEnabled && mineOnlyFilter ? !ownListsLoaded : loading
 
   // 空状態メッセージ
   const getEmptyMessage = () => {
+    if (referralWriteEnabled && mineOnlyFilter && ownListsError) {
+      return 'リストの取得に失敗しました'
+    }
+    if (referralWriteEnabled && mineOnlyFilter) {
+      return 'まだ気になるプロがいません。カードの「＋ 紹介リストに追加」から連携候補に追加できます'
+    }
     if (subCategory === 'rising') {
       return '今月はまだ集計中です。「この分野のプロ」を見てみましょう'
     }
@@ -448,8 +682,9 @@ export default function SearchPageClient({ proNotice = false, showReferralSignal
           </select>
         </div>
 
-        {/* §2-2改訂: 「紹介につながる人のみ表示」フィルタ(デフォルトOFF)。レビュー指摘: プロ閲覧時のみ表示 */}
-        {showReferralSignals && (
+        {/* §2-2改訂: 「紹介につながる人のみ表示」フィルタ(デフォルトOFF)。レビュー指摘: プロ閲覧時のみ表示
+            🔴3レビュー指摘: ♡タブON時はprivateCandidatesに適用されず無言で無効化されるため非表示にする */}
+        {showReferralSignals && !mineOnlyFilter && (
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: T.textSub, marginBottom: 12 }}>
             <input
               type="checkbox"
@@ -460,15 +695,34 @@ export default function SearchPageClient({ proNotice = false, showReferralSignal
           </label>
         )}
 
+        {/* 🟡3: 「♡ 気になる（連携候補）」タブ。referralWriteEnabledのプロにのみ表示。
+            ONにすると自分のprivateリストのピンだけを表示し、共有リストへの追加(昇格)導線を出す */}
+        {referralWriteEnabled && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: T.textSub, marginBottom: 12 }}>
+            <input
+              type="checkbox"
+              checked={mineOnlyFilter}
+              onChange={e => {
+                const checked = e.target.checked
+                setMineOnlyFilter(checked)
+                if (checked) ensureOwnListsLoaded()
+              }}
+            />
+            ♡ 気になる（連携候補のみ表示）
+          </label>
+        )}
+
         {/* 結果カウント */}
-        {!loading && (
+        {!isLoading && (
           <div style={{ fontSize: 11, color: T.textSub, marginBottom: 10, fontWeight: 500 }}>
-            {referralOnlyFilter ? displayedPros.length : total}名のプロが見つかりました
+            {(mineOnlyFilter && referralWriteEnabled) || referralOnlyFilter
+              ? displayedPros.length
+              : total}名のプロが見つかりました
           </div>
         )}
 
         {/* プロ一覧 */}
-        {loading ? (
+        {isLoading ? (
           <div style={{ textAlign: 'center', padding: '48px 0', color: T.textMuted, fontSize: 14 }}>
             読み込み中...
           </div>
@@ -479,19 +733,25 @@ export default function SearchPageClient({ proNotice = false, showReferralSignal
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {displayedPros.map((p) => (
-                <a
+                // 🟡5レビュー指摘: <a>内にbutton/selectをネストするのは不正HTML(iOS Safariで誤発火リスク)。
+                // カード全体を<div>でラップし、<a>はカード本体(従来のクリック領域)まで、
+                // 「紹介リストに追加」ボタン/選択パネルは<a>の外側の兄弟要素として配置する。
+                <div
                   key={p.id}
+                  style={{
+                    background: T.cardBg,
+                    border: `1px solid ${T.cardBorder}`, borderRadius: 14,
+                    padding: 14, transition: 'border-color 0.2s',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = T.gold)}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = T.cardBorder)}
+                >
+                <a
                   href={debouncedQuery && p.voiceMatchCount >= 1
                     ? `/card/${p.id}?tab=voices&highlight=${encodeURIComponent(debouncedQuery)}`
                     : `/card/${p.id}`
                   }
-                  style={{
-                    display: 'block', background: T.cardBg,
-                    border: `1px solid ${T.cardBorder}`, borderRadius: 14,
-                    padding: 14, textDecoration: 'none', transition: 'border-color 0.2s',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.borderColor = T.gold)}
-                  onMouseLeave={e => (e.currentTarget.style.borderColor = T.cardBorder)}
+                  style={{ display: 'block', textDecoration: 'none' }}
                 >
                   {/* アイコン + 名前 + 職種 + エリア */}
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
@@ -660,6 +920,84 @@ export default function SearchPageClient({ proNotice = false, showReferralSignal
                     </div>
                   )}
                 </a>
+
+                {/* §3-0-2: 「紹介リストに追加」（プロが閲覧している時のみ・自分自身のカードには出さない）
+                    🟡4レビュー指摘: allowlist期間中は referralWriteEnabled のプロにのみ表示。
+                    🟡5レビュー指摘: <a>の外側の兄弟要素として配置する */}
+                {showReferralSignals && referralWriteEnabled && p.id !== viewerProId && (
+                  <div style={{ marginTop: 10 }}>
+                    <button
+                      onClick={() => toggleAddPanel(p.id)}
+                      style={{
+                        background: 'none', border: `1px solid ${T.gold}`, color: T.gold,
+                        borderRadius: 8, fontSize: 11, fontWeight: 600, padding: '4px 10px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {addPanelFor === p.id ? '閉じる' : '＋ 紹介リストに追加'}
+                    </button>
+
+                    {addPanelFor === p.id && (
+                      <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const }}>
+                        {addStatus[p.id]?.status === 'success' ? (
+                          <span style={{ fontSize: 11, color: '#2E7D32' }}>{addStatus[p.id]?.message}</span>
+                        ) : ownListsLoading || !ownListsLoaded ? (
+                          <span style={{ fontSize: 11, color: T.textMuted }}>読み込み中...</span>
+                        ) : ownListsError ? (
+                          // ⚪️8レビュー指摘: 取得失敗と0件を区別する
+                          <span style={{ fontSize: 11, color: '#B00020' }}>
+                            リストの取得に失敗しました
+                          </span>
+                        ) : selectableOwnLists.length === 0 ? (
+                          // 🔴1レビュー指摘: ♡タブON時は共有リスト(非private)が無いと昇格導線に
+                          // 進めない行き止まりだったため、専用メッセージ+ダッシュボードへの導線を出す
+                          mineOnlyFilter ? (
+                            <span style={{ fontSize: 11, color: T.textMuted }}>
+                              共有リストがまだありません。<a href="/dashboard" style={{ color: T.gold, fontWeight: 600 }}>ダッシュボード</a>の紹介リストタブで作成してください
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: 11, color: T.textMuted }}>
+                              まだ紹介リストがありません。ダッシュボードから作成してください
+                            </span>
+                          )
+                        ) : (
+                          <>
+                            <select
+                              value={effectiveListId(p.id) || selectableOwnLists[0].id}
+                              onChange={(e) => setSelectedListFor((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                              style={{
+                                padding: '4px 6px', borderRadius: 6, border: `1px solid ${T.cardBorder}`,
+                                fontSize: 11, color: T.dark,
+                              }}
+                            >
+                              {selectableOwnLists.map((l) => (
+                                <option key={l.id} value={l.id}>
+                                  {l.visibility === 'private' ? `♡ 気になる（連携候補） - ${l.title}` : l.title}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => submitAddToList(p.id)}
+                              disabled={addStatus[p.id]?.status === 'loading'}
+                              style={{
+                                background: T.gold, border: 'none', color: '#fff',
+                                borderRadius: 6, fontSize: 11, fontWeight: 600, padding: '4px 10px',
+                                cursor: addStatus[p.id]?.status === 'loading' ? 'default' : 'pointer',
+                                opacity: addStatus[p.id]?.status === 'loading' ? 0.6 : 1,
+                              }}
+                            >
+                              {addStatus[p.id]?.status === 'loading' ? '追加中...' : '追加'}
+                            </button>
+                            {addStatus[p.id]?.status === 'error' && (
+                              <span style={{ fontSize: 11, color: '#B00020' }}>{addStatus[p.id]?.message}</span>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                </div>
             ))}
           </div>
         )}

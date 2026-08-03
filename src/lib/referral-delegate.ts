@@ -2,8 +2,9 @@
  * §2-2改訂（CEO決定・空約束の防止）: 🟡点灯条件の厳格化。
  *
  * 「delegate_list_id が設定されている」だけでは🟡の根拠にならない。
- * そのリストに consent_status='approved' かつ受付中(accepting_status='open' かつ
- * deactivated_at IS NULL)のメンバーが1名以上いる場合のみ、そのリストIDを「有効な代理リスト」とみなす。
+ * そのリストに consent_status='approved' かつ受付中(accepting_status IS NULL または
+ * 'closed'以外 かつ deactivated_at IS NULL・fail-open)のメンバーが1名以上いる場合のみ、
+ * そのリストIDを「有効な代理リスト」とみなす。
  *
  * サーバー専用(service_role)ヘルパー。src/lib/referral-accepting.ts の純関数
  * (computeReferralSignal 等)はクライアントからも import されるため、
@@ -42,11 +43,12 @@ export async function getValidDelegateListIds(
   if (rows.length === 0) return new Set()
 
   const proIds = Array.from(new Set(rows.map((r) => r.pro_id)))
+  // §2-2改訂(先行テスト第3弾・fail-open): NULL(未設定)も受付中として扱う。closedのみ除外。
   const { data: openPros, error: prosError } = await supabase
     .from('professionals')
     .select('id')
     .in('id', proIds)
-    .eq('accepting_status', 'open')
+    .or('accepting_status.is.null,accepting_status.neq.closed')
     .is('deactivated_at', null)
 
   if (prosError) {

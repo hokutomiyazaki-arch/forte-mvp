@@ -3,6 +3,8 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { getOwnPro, MAX_REFERRAL_PINS_PER_LIST } from '@/lib/referral-auth'
 import { isReferralEnabled } from '@/lib/feature-flags'
 import { notifyReferralPinAdded } from '@/lib/referral-notify'
+import { computeReferralSignal } from '@/lib/referral-accepting'
+import { getValidDelegateListIds } from '@/lib/referral-delegate'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,8 +21,10 @@ async function getOwnedList(supabase: ReturnType<typeof getSupabaseAdmin>, listI
 /**
  * POST /api/referral/lists/[list_id]/items
  * body: { pro_id, note? }
- * ピン指名を追加する。1リスト最大3名。consent_status='pending'で作成し、
- * 対象プロへ掲載通知を送る（通知失敗はピン追加の成否に影響しない）。
+ * ピン指名を追加する。1リスト最大3名。§3-0改訂(先行テスト第3弾): 承諾ゲートは無く、
+ * consent_status='approved'で即時掲載(private=連携候補は'pending'固定・🟡7参照)。
+ * 対象が🔴(closed・有効な代理なし)、またはallowlist期間中に対象外のプロの場合は400でブロックする
+ * (連携候補=privateリストは両方とも対象外)。掲載後、対象プロへ通知を送る（通知失敗はピン追加の成否に影響しない）。
  */
 export async function POST(
   request: NextRequest,
@@ -55,7 +59,7 @@ export async function POST(
     // 対象プロの存在確認（deactivatedは対象外）+ 通知先情報の取得
     const { data: targetPro } = await supabase
       .from('professionals')
-      .select('id, name, contact_email, line_messaging_user_id, deactivated_at')
+      .select('id, name, contact_email, line_messaging_user_id, deactivated_at, accepting_status, delegate_list_id')
       .eq('id', proId)
       .maybeSingle()
 
@@ -63,7 +67,10 @@ export async function POST(
       return NextResponse.json({ error: 'target_pro_not_found' }, { status: 404 })
     }
 
-    // 既存ピンの重複チェック
+    const isPrivateList = list.visibility === 'private'
+
+    // ⚪️9レビュー指摘: 既存ピンの重複チェックは🔴/allowlist判定より先に行う。
+    // ピン済み相手が後から停止中になったケースで409(already_pinned)を優先し、400を返さないため。
     const { data: existing } = await supabase
       .from('referral_list_items')
       .select('id')
@@ -75,6 +82,29 @@ export async function POST(
       return NextResponse.json({ error: 'already_pinned' }, { status: 409 })
     }
 
+    // 🔴2レビュー指摘: allowlist(FEATURE_REFERRAL_LISTS)期間中、対象外のプロは受付トグルも
+    // accepting APIも使えず辞退手段が無い。掲載対象もallowlist内のプロに限定する(b案)。
+    // 'all'切替で自動的に全プロが対象になるため、その時点でこの制限は無効化される。
+    // 連携候補(private・§3-1第1層)は通知なし・非公開のブックマークのため制限しない。
+    if (!isPrivateList && !isReferralEnabled(targetPro.id)) {
+      return NextResponse.json({ error: 'target_not_in_program' }, { status: 400 })
+    }
+
+    // §3-0改訂(先行テスト第3弾): 掲載は即時（承諾ゲート撤廃）だが、相手が🔴(closed かつ
+    // 有効な代理なし)の場合はピン追加自体をブロックする。既に停止中の人に「いやならオフに」の
+    // 通知を送っても意味を持たないため。連携候補(private・§3-1第1層)は責任を伴わないブックマーク
+    // のため対象外(従来通り通知もなし)。
+    if (!isPrivateList) {
+      const validDelegateListIds = await getValidDelegateListIds(supabase, [targetPro.delegate_list_id])
+      const targetSignal = computeReferralSignal(
+        targetPro.accepting_status,
+        !!targetPro.delegate_list_id && validDelegateListIds.has(targetPro.delegate_list_id)
+      )
+      if (targetSignal === 'closed') {
+        return NextResponse.json({ error: 'target_not_accepting' }, { status: 400 })
+      }
+    }
+
     // 1リスト最大3名チェック(中8レビュー指摘: declined=辞退者は枠を占有しないため除外)
     // ※連携候補(visibility='private'・§3-1第1層)は責任を伴わないブックマークのため人数無制限
     const { count } = await supabase
@@ -83,11 +113,15 @@ export async function POST(
       .eq('list_id', params.list_id)
       .neq('consent_status', 'declined')
 
-    const isPrivateList = list.visibility === 'private'
     if (!isPrivateList && (count || 0) >= MAX_REFERRAL_PINS_PER_LIST) {
       return NextResponse.json({ error: 'max_pins_reached' }, { status: 400 })
     }
 
+    // §3-0改訂(先行テスト第3弾・CEO決定): 承諾ゲート撤廃。ピン追加した時点で即時掲載
+    // (consent_status='approved')。辞退は本人の受付トグルオフのみ（リスト単位の辞退機能は作らない）。
+    // 🟡7レビュー指摘: private(連携候補)は無制限・無通知のため approved で入れると、後から
+    // visibility を link に変えた瞬間に無承諾のまま一斉公開される穴になる。private は
+    // pending 固定とする(表示系は consent_status='approved' 絞りのため公開されない)。
     const { data: item, error } = await supabase
       .from('referral_list_items')
       .insert({
@@ -95,7 +129,7 @@ export async function POST(
         pro_id: proId,
         note,
         sort_order: count || 0,
-        consent_status: 'pending',
+        consent_status: isPrivateList ? 'pending' : 'approved',
       })
       .select('id, list_id, pro_id, note, sort_order, consent_status, created_at')
       .maybeSingle()
@@ -106,7 +140,7 @@ export async function POST(
     }
 
     // 掲載通知（失敗してもピン追加自体は成功扱い）
-    // ※連携候補(private・§3-1第1層)は通知なし=個人的なブックマークのため（第2層へ移す時にpendingから通知）
+    // ※連携候補(private・§3-1第1層)は通知なし=個人的なブックマークのため
     if (isPrivateList) {
       return NextResponse.json({ item })
     }

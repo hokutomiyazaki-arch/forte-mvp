@@ -37,9 +37,9 @@ export interface ReferralCandidate {
   /** 送り手からの一言（ピンのみ・基準行はnull） */
   note: string | null
   acceptingStatus: 'open' | 'closed' | null
-  /** 'open' のときのみ値あり（§2-2改訂: 表示はopen時のみ） */
+  /** isAcceptingOpen()がtrueの間だけ値あり（fail-open現仕様: NULL/未設定も含めstatus!=='closed'なら表示） */
   acceptingNote: string | null
-  /** 受付停止中（!isAcceptingOpen: open以外・null含む全てを停止扱い） */
+  /** 受付停止中（!isAcceptingOpen: fail-open現仕様につき status==='closed' の時のみtrue。NULL/想定外の値は受付中扱い） */
   isPaused: boolean
   /** 一段だけの代理候補（ピンが受付停止中 かつ delegate_list_id 設定時のみ） */
   delegate: ReferralCandidate[] | null
@@ -316,11 +316,12 @@ async function getDistinctSupporterCounts(
 
 /**
  * 基準行（criteria）に合致するプロを探索する。Phase 1 最小実装:
- *   - accepting_only → accepting_status = 'open'
+ *   - accepting_only → accepting_status が 'closed' でない(NULL含む・fail-open)
  *   - area.prefecture → 完全一致（radius_kmは未対応）
  *   - min_support_records → ユニーク人数（DISTINCT normalized_email）の下限。
  *     指定時のみ votes をページネーション走査して算出する（軽量パス維持のため未指定時はこのクエリ自体を実行しない）
- * §2-2改訂: accepting_status='closed'（open以外全て）のプロは常に静かに除外する（accepting_onlyの値に関わらず）。
+ * §2-2改訂(先行テスト第3弾・fail-open): accepting_status='closed' のプロのみ常に静かに除外する
+ * (NULLはopenとして含める。accepting_onlyの値に関わらず)。
  */
 async function findCriteriaMatches(
   supabase: SupabaseAdmin,
@@ -329,12 +330,12 @@ async function findCriteriaMatches(
   limit: number
 ): Promise<string[]> {
   // §2-2改訂: 2値化により「常に除外」と「accepting_onlyのみ絞る」が同一条件になったため、
-  // ベースクエリで一度だけ open を条件にする(accepting_onlyの値に関わらず結果は変わらない)。
+  // ベースクエリで一度だけ「closedでない」を条件にする(accepting_onlyの値に関わらず結果は変わらない)。
   let query = supabase
     .from('professionals')
     .select('id')
     .is('deactivated_at', null)
-    .eq('accepting_status', 'open')
+    .or('accepting_status.is.null,accepting_status.neq.closed')
 
   if (criteria.area?.prefecture) {
     query = query.eq('prefecture', criteria.area.prefecture)
@@ -508,14 +509,13 @@ export async function verifyReceiverAllowedInList(
   const pinnedProIds = ((pinnedRows || []) as Array<{ pro_id: string }>).map((p) => p.pro_id)
 
   if (pinnedProIds.length > 0) {
-    // レビュー指摘: fail safeを徹底するため「'closed'かどうか」ではなく「'open'ではないか」で判定する。
-    // SQLの三値論理では .neq だけだと accepting_status IS NULL の行が漏れるため
-    // .or で NULL も拾い、!isAcceptingOpen() と厳密に等価にする
+    // §2-2改訂(先行テスト第3弾・fail-open): 「停止中」= accepting_status='closed' のみ
+    // (NULLはopen扱いのため、代理展開の対象から除く。isAcceptingOpen()と厳密に等価)
     const { data: pausedPros } = await supabase
       .from('professionals')
       .select('delegate_list_id')
       .in('id', pinnedProIds)
-      .or('accepting_status.neq.open,accepting_status.is.null')
+      .eq('accepting_status', 'closed')
       .not('delegate_list_id', 'is', null)
     const delegateListIds = ((pausedPros || []) as Array<{ delegate_list_id: string | null }>)
       .map((p) => p.delegate_list_id)
@@ -546,7 +546,7 @@ export async function verifyReceiverAllowedInList(
     | { id: string; prefecture: string | null; accepting_status: string | null; deactivated_at: string | null }
     | null
   if (!pro || pro.deactivated_at) return false
-  // §2-2改訂: accepting_status='open'以外(closed含む)は criteria判定でも常に除外
+  // §2-2改訂(先行テスト第3弾・fail-open): accepting_status='closed' は criteria判定でも常に除外(NULLはopen扱い)
   if (!isAcceptingOpen(pro.accepting_status)) return false
   if (criteria.area?.prefecture && pro.prefecture !== criteria.area.prefecture) return false
 

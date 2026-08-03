@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { isReferralEnabled } from '@/lib/feature-flags'
+import { isPinnedOnSharedList } from '@/lib/referral-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -110,6 +111,7 @@ export async function GET() {
         clientProfile: clientResult.data || null,
         setupCompleted: true,
         referralEnabled: false,
+        acceptingEditable: false,
       })
     }
 
@@ -139,6 +141,8 @@ export async function GET() {
       clientCompositionResult,
       // 総プルーフ数（vote_type='proof' のみ）
       proofVoteCountResult,
+      // 🔴1(再レビュー): allowlist外でも共有リストに承諾済みで掲載されているか(受付ウィジェット表示ゲート用)
+      pinnedOnSharedList,
     ] = await Promise.all([
       // リワード
       supabase.from('rewards').select('*').eq('professional_id', proId).order('sort_order'),
@@ -210,6 +214,8 @@ export async function GET() {
         .eq('professional_id', proId)
         .eq('status', 'confirmed')
         .eq('vote_type', 'proof'),
+      // 🔴1(再レビュー): allowlist内なら判定不要(無駄なクエリを避けるためfalse固定で返す)
+      isReferralEnabled(proId) ? Promise.resolve(false) : isPinnedOnSharedList(supabase, proId),
     ])
 
     if (isDev) console.log('[Dashboard API] Phase 2 done:', Date.now() - startTime, 'ms')
@@ -447,6 +453,8 @@ export async function GET() {
       repeaterCount,
       regularCount,
       referralEnabled: isReferralEnabled(proId),
+      // 🔴1(再レビュー): 受付ステータス操作は allowlist外でも共有リストに掲載中の本人には開放する
+      acceptingEditable: isReferralEnabled(proId) || pinnedOnSharedList,
     })
   } catch (err: any) {
     console.error('[api/dashboard] error:', err)

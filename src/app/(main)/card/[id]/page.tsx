@@ -12,7 +12,7 @@
 
 import { auth } from '@clerk/nextjs/server'
 import { getCardData } from '@/lib/card-data'
-import { isProofUniqueCountEnabled } from '@/lib/feature-flags'
+import { isProofUniqueCountEnabled, isReferralFullyLaunched } from '@/lib/feature-flags'
 import CardClient from './components/CardClient'
 import type { Metadata } from 'next'
 import { createClient } from '@supabase/supabase-js'
@@ -224,7 +224,11 @@ export default async function CardPage({
         </article>
       )}
 
-      <CardClient cardData={cardData} showUniqueCount={isProofUniqueCountEnabled()} />
+      <CardClient
+        cardData={cardData}
+        showUniqueCount={isProofUniqueCountEnabled()}
+        referralFullyLaunched={isReferralFullyLaunched()}
+      />
     </>
   )
 }

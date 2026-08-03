@@ -27,7 +27,6 @@ import ShareButton from '@/components/ShareButton'
 import BusinessInfoTab from '@/components/dashboard/BusinessInfoTab'
 import ReferralTab from '@/components/dashboard/ReferralTab'
 import AcceptingStatusWidget from '@/components/dashboard/AcceptingStatusWidget'
-import ReferralConsentCard from '@/components/dashboard/ReferralConsentCard'
 import ReferralBookingReceivedCard from '@/components/dashboard/ReferralBookingReceivedCard'
 import { createClient as createSupabaseClient } from '@/lib/supabase'
 
@@ -368,6 +367,8 @@ export default function DashboardPage() {
 
   // リフェラル §0: FEATURE_REFERRAL_LISTS のアローリスト判定（/api/dashboard から受け取る）
   const [referralEnabled, setReferralEnabled] = useState(false)
+  // 🔴1(再レビュー): 受付ステータスウィジェットの表示可否。allowlist内 or 共有リストに掲載中の本人
+  const [acceptingEditable, setAcceptingEditable] = useState(false)
 
   // メンバー用: 所属団体のリソース state
   const [memberOrgs, setMemberOrgs] = useState<{id: string; name: string; description: string | null; logo_url: string | null}[]>([])
@@ -555,6 +556,8 @@ export default function DashboardPage() {
         setWeeklyEmailEnabled(!proData.weekly_report_unsubscribed)
         // リフェラル §0: アローリスト判定（先行アクセス外は false のまま = 既存UI無変更）
         setReferralEnabled(!!data.referralEnabled)
+        // 🔴1(再レビュー): 受付ステータスの操作可否（allowlist内 or 共有リストに掲載中の本人）
+        setAcceptingEditable(!!data.acceptingEditable)
 
         setForm({
           name: proData.name || '',
@@ -2054,9 +2057,6 @@ export default function DashboardPage() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      {/* §3-1 第2層: 掲載通知＋拒否権カード。タブ・フラグに依存せず常時表示（pendingが無ければ非表示） */}
-      {pro && <ReferralConsentCard />}
-
       {/* §2-4: 受信した予約リクエストの確定・辞退カード。タブ・フラグに依存せず常時表示（requestedが無ければ非表示） */}
       {/* §2-10: 案件スレッド表示のため自分のprofessionals.idを渡す */}
       {pro && <ReferralBookingReceivedCard proId={pro.id} />}
@@ -2304,6 +2304,20 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* §2-2改訂: 受け入れステータスをダッシュボード見出しの直上に常時表示（先行テスト第3弾・背景なしの3段スライダー） */}
+      {/* 🔴1(再レビュー): allowlist内に加え、共有リストに掲載中の本人にも表示する(唯一のオプトアウト手段のため) */}
+      {pro && acceptingEditable && (
+        <AcceptingStatusWidget
+          initialAcceptingStatus={pro.accepting_status ?? null}
+          initialAcceptingNote={pro.accepting_note ?? null}
+          initialDelegateListId={pro.delegate_list_id ?? null}
+          canManageLists={referralEnabled}
+          onUpdated={(status, note, delegateListId) =>
+            setPro(prev => prev ? { ...prev, accepting_status: status, accepting_note: note, delegate_list_id: delegateListId } : prev)
+          }
+        />
+      )}
+
       <div className="flex items-center justify-between mb-4">
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -2525,18 +2539,6 @@ export default function DashboardPage() {
 
       {/* ═══ Tab: プロフィール ═══ */}
       {dashboardTab === 'profile' && (<>
-
-      {/* §2-2改訂: 受け入れステータスをホーム最上部に常時表示（先行テストのフィードバック） */}
-      {pro && referralEnabled && (
-        <AcceptingStatusWidget
-          initialAcceptingStatus={pro.accepting_status ?? null}
-          initialAcceptingNote={pro.accepting_note ?? null}
-          initialDelegateListId={pro.delegate_list_id ?? null}
-          onUpdated={(status, note, delegateListId) =>
-            setPro(prev => prev ? { ...prev, accepting_status: status, accepting_note: note, delegate_list_id: delegateListId } : prev)
-          }
-        />
-      )}
 
       {/* Xデーカウントダウン */}
       {(() => {

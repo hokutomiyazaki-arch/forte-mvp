@@ -13,6 +13,7 @@ import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { getReferralPageData, type ReferralCandidate } from '@/lib/referral-data'
 import { isAiSanitizeEnabled } from '@/lib/feature-flags'
+import { isAcceptingOpen } from '@/lib/referral-accepting'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,7 +37,8 @@ function formatYearMonth(iso: string | null): string | null {
 }
 
 function acceptingLabel(status: 'open' | 'closed' | null): { text: string; color: string } {
-  if (status === 'open') return { text: '受付中', color: '#2E7D32' }
+  // 🔴1修正: NULL(未設定)はfail-openでopen扱い。isAcceptingOpen()に統一(直接の文字列比較禁止)
+  if (isAcceptingOpen(status)) return { text: '受付中', color: '#2E7D32' }
   return { text: '現在受付停止中', color: '#9CA3AF' }
 }
 
@@ -134,7 +136,7 @@ function CandidateCard({
         </span>
       </div>
 
-      {candidate.acceptingStatus === 'open' && candidate.acceptingNote && (
+      {isAcceptingOpen(candidate.acceptingStatus) && candidate.acceptingNote && (
         <div style={{ fontSize: 11, color: T.textMuted, marginBottom: 10, lineHeight: 1.6 }}>
           {candidate.acceptingNote}
         </div>
@@ -207,9 +209,9 @@ function CandidateCard({
         </div>
       )}
 
-      {/* §2-2改訂(CEO決定): 受付中(open)以外は予約ボタンを出さない。
-          「選べたのに送信で409」という初回体験を作らない（⚪️未設定・🔴停止中とも非表示） */}
-      {candidate.acceptingStatus === 'open' ? (
+      {/* §2-2改訂(CEO決定): 受付中(open。NULL含む・fail-open)以外は予約ボタンを出さない。
+          「選べたのに送信で409」という初回体験を作らない（🔴停止中は非表示・🟡は代理展開でカバー） */}
+      {isAcceptingOpen(candidate.acceptingStatus) ? (
         <a
           href={`/r/${slug}/request?pro=${candidate.pro.id}`}
           style={{

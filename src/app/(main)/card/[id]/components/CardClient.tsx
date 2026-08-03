@@ -101,9 +101,13 @@ interface Props {
   cardData: CardData
   /** §3-4 プルーフのユニーク/累計/常連3指標表示。サーバー側で isProofUniqueCountEnabled() を判定し渡す（クライアントにenvを読ませない）。省略時は非表示（既存動作維持） */
   showUniqueCount?: boolean
+  /** §2-2改訂(先行テスト第3弾): リフェラル全体公開(FEATURE_REFERRAL_LISTS==='all')後のみ、
+   * 公開カードの🟢🟡表示を出す。NULL=open のfail-open化により、告知前に本人未操作のまま
+   * 表示が変わるのを防ぐため。サーバー側で isReferralFullyLaunched() を判定し渡す。省略時は非表示 */
+  referralFullyLaunched?: boolean
 }
 
-export default function CardClient({ cardData, showUniqueCount = false }: Props) {
+export default function CardClient({ cardData, showUniqueCount = false, referralFullyLaunched = false }: Props) {
   const searchParams = useSearchParams()
   const router = useRouter()
   const id = cardData.pro?.id || ''
@@ -541,8 +545,10 @@ export default function CardClient({ cardData, showUniqueCount = false }: Props)
               {/* Phase A2: service_formats を優先しつつ、setup ウィザード経由の新規プロ(is_online_available のみ)も後方互換でカバー */}
               {(pro.service_formats?.includes('online') || pro.is_online_available) && <span style={{ marginLeft: 6, color: T.gold }}>● オンライン対応</span>}
             </div>
-            {/* §2-2改訂: 公開カードの3分岐（🟢受付中＋条件メモ／🟡代理案内あり／🔴は何も表示しない） */}
-            {(() => {
+            {/* §2-2改訂: 公開カードの3分岐（🟢受付中＋条件メモ／🟡代理案内あり／🔴は何も表示しない）。
+                先行テスト第3弾: NULL=openのfail-open化により、全体公開(all)前は本人未操作でも
+                🟢🟡が出てしまうため、referralFullyLaunchedでゲートする(🔴は元々何も出さない) */}
+            {referralFullyLaunched && (() => {
               const signal = computeReferralSignal(pro.accepting_status, !!cardData.delegateHasActiveMember)
               if (signal === 'open') {
                 return (

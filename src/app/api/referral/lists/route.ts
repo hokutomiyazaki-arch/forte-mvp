@@ -41,18 +41,35 @@ export async function GET() {
     let itemsByList: Record<string, any[]> = {}
 
     if (listIds.length > 0) {
-      const { data: items, error: itemsError } = await supabase
-        .from('referral_list_items')
-        .select('id, list_id, pro_id, note, sort_order, consent_status, created_at, professionals(id, name, title, photo_url, accepting_status, delegate_list_id)')
-        .in('list_id', listIds)
-        .order('sort_order', { ascending: true })
+      // ⚪️5: Supabaseの1000行サイレントキャップ対策。private(連携候補)は人数無制限のため、
+      // 所有リスト合計で1000行を超える可能性がある。.order('id')+.range()で全件ページネーション取得し、
+      // 表示順(sort_order)はJS側で並べ直す(既存 fetchAllVotesPaginated と同じ流儀)。
+      const allItems: any[] = []
+      const PAGE = 1000
+      let from = 0
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { data, error: itemsError } = await supabase
+          .from('referral_list_items')
+          .select('id, list_id, pro_id, note, sort_order, consent_status, created_at, professionals(id, name, title, photo_url, accepting_status, delegate_list_id)')
+          .in('list_id', listIds)
+          .order('id', { ascending: true })
+          .range(from, from + PAGE - 1)
 
-      if (itemsError) {
-        console.error('[api/referral/lists] GET items error:', itemsError)
-        return NextResponse.json({ error: 'failed_to_fetch' }, { status: 500 })
+        if (itemsError) {
+          console.error('[api/referral/lists] GET items error:', itemsError)
+          return NextResponse.json({ error: 'failed_to_fetch' }, { status: 500 })
+        }
+
+        const rows = data || []
+        allItems.push(...rows)
+        if (rows.length < PAGE) break
+        from += PAGE
       }
 
-      for (const item of items || []) {
+      allItems.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+
+      for (const item of allItems) {
         if (!itemsByList[item.list_id]) itemsByList[item.list_id] = []
         itemsByList[item.list_id].push(item)
       }

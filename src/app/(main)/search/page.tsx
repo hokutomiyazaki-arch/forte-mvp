@@ -9,8 +9,8 @@
  *
  * 元のクライアント実装は ./components/SearchPageClient.tsx に分離（/card/[id]/page.tsx と同じ分割パターン）。
  */
-import { isSearchPrivate } from '@/lib/feature-flags'
-import { getViewerIsPro, getViewerIsProStrict } from '@/lib/viewer-role'
+import { isSearchPrivate, isReferralEnabled } from '@/lib/feature-flags'
+import { getViewerIsPro, getViewerIsProStrict, getViewerProId } from '@/lib/viewer-role'
 import { COLORS, FONTS } from '@/lib/design-tokens'
 import SearchPageClient from './components/SearchPageClient'
 
@@ -64,10 +64,22 @@ export default async function SearchPage() {
   // FEATURE_SEARCH_PRIVATE の設定に関係なく、常にプロ閲覧時のみに限定する。
   // fail safe: 判定失敗時はfalse(=出さない側)に倒す（getViewerIsProStrict内部で担保）。
   const showReferralSignals = await getViewerIsProStrict()
+  // §3-0-2: 「紹介リストに追加」を出す時のみ必要(自分自身のカードを除外するため)。
+  // fail closed(null)でも露出制御には影響しない(単に自分のカードの除外判定が効かないだけ)。
+  const viewerProId = showReferralSignals ? await getViewerProId() : null
+  // 🟡4レビュー指摘: 「紹介リストに追加」ボタンはallowlist期間中、対象プロのみに限定する
+  // (isReferralEnabled。fail-open/closedの意味は持たせず、単純にフラグ判定のみ)。
+  const referralWriteEnabled = viewerProId ? isReferralEnabled(viewerProId) : false
 
   // フラグ未設定/false時: 既存動作を維持（受付シグナルの表示だけは上の判定でゲート）
   if (!isSearchPrivate()) {
-    return <SearchPageClient showReferralSignals={showReferralSignals} />
+    return (
+      <SearchPageClient
+        showReferralSignals={showReferralSignals}
+        viewerProId={viewerProId}
+        referralWriteEnabled={referralWriteEnabled}
+      />
+    )
   }
 
   // fail open: 判定エラー時はブロックせず通す（getViewerIsPro内部で担保）
@@ -77,5 +89,12 @@ export default async function SearchPage() {
     return <SearchGuidanceScreen />
   }
 
-  return <SearchPageClient proNotice showReferralSignals={showReferralSignals} />
+  return (
+    <SearchPageClient
+      proNotice
+      showReferralSignals={showReferralSignals}
+      viewerProId={viewerProId}
+      referralWriteEnabled={referralWriteEnabled}
+    />
+  )
 }

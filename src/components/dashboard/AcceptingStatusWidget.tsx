@@ -1,23 +1,30 @@
 'use client'
 
 /**
- * §2-2改訂: 受け入れステータス（先行テストのフィードバックによりダッシュボードホーム最上部へ移動）。
+ * §2-2改訂（先行テスト第3弾・CEO最終確認）: 受け入れステータスは
+ * ダッシュボード見出しの直上に、背景なしの「3段スライダー」として置く。
+ * 🔴停止中 ⇔ 🟡代理リストで案内 ⇔ 🟢受付中 の3ポジションから直接選べるが、
+ * DBは open/closed の2値のまま変えない：
+ *   - 🟢選択 → PATCH accepting_status='open'
+ *   - 🔴選択 → PATCH accepting_status='closed' + delegate_list_id=null
+ *     （代理が有効だとシグナルが🟡になってしまうため、🔴を直接選ぶ場合は
+ *     delegate_list_idを明示的にnullへ落として確実に🔴にする）
+ *   - 🟡選択 → 複合操作。既に「有効な代理リスト」(is_valid_delegate)が選択済みなら
+ *     accepting_status='closed'のみPATCH（delegate_list_id維持）。
+ *     有効な代理リストが無い/未選択の場合は🟡を確定させず、代理リスト選択UIを開いて誘導する
+ *     （空約束の防止・CEO決定）
  *
- * - トグル自体は🟢(open)⇄🔴(closed)の2値。表示は代理リスト有無から4色(⚪️含む)を導出する。
- * - closed時: 自分が所有する共有リスト(visibility!=='private')から代理リストを選択/解除できる。
- * - open時: 条件メモ(accepting_note)を入力できる(表示は公開カード・候補カードで小さく行う)。
- * - 旧ReferralTab内の「受け入れステータス」ブロックを撤去し、ここへ一本化した(オーファン防止)。
- * - §2-2改訂(4色化・null安全): accepting_status IS NULL(未設定)の実プロが大多数のため、
- *   初期表示で⚪️「未設定」を出す。この状態では「受付を開始する」(→open)と
- *   「受付を停止する」(→closed)の両方を選べるボタンを表示する(一度設定した後は
- *   従来通りの2値トグル1個に戻る)。
+ * NULL（未設定）はノブ🟢位置として表示するが、PATCHは送らない
+ * （fail-open。ユーザーが操作して初めて明示値を送る）。
+ *
+ * 3色インジケータの導出は src/lib/referral-accepting.ts の computeReferralSignal に集約。
  */
 
 import { useEffect, useState } from 'react'
 import {
   computeReferralSignal,
   REFERRAL_SIGNAL_DOT,
-  REFERRAL_SIGNAL_LABEL,
+  type ReferralSignal,
 } from '@/lib/referral-accepting'
 
 interface OwnList {
@@ -34,6 +41,17 @@ interface Props {
   initialAcceptingNote: string | null
   initialDelegateListId: string | null
   onUpdated: (status: 'open' | 'closed', note: string | null, delegateListId: string | null) => void
+  /** 軽微指摘: allowlist外プロ(referralEnabled=false)では代理リスト機能(🟡)がまだ実行不能なため、
+   * 🟡セグメントをdisabledにし誘導文を差し替える。既存呼び出しを壊さないようオプショナル+デフォルトtrue。 */
+  canManageLists?: boolean
+}
+
+const SEGMENTS: ReferralSignal[] = ['closed', 'delegate', 'open']
+const SEGMENT_INDEX: Record<ReferralSignal, number> = { closed: 0, delegate: 1, open: 2 }
+const SEGMENT_LABEL: Record<ReferralSignal, string> = {
+  closed: '停止中',
+  delegate: '代理案内',
+  open: '受付中',
 }
 
 export default function AcceptingStatusWidget({
@@ -41,25 +59,32 @@ export default function AcceptingStatusWidget({
   initialAcceptingNote,
   initialDelegateListId,
   onUpdated,
+  canManageLists = true,
 }: Props) {
-  // §2-2改訂(4色化・null安全): nullを'closed'に丸めず、そのまま保持する
-  // (丸めると⚪️「未設定」と🔴「停止中」の区別ができなくなるため)。
+  // 先行テスト第3弾: DB上のNULLはそのまま保持するが、表示・分岐は effectiveStatus (下記) で
+  // 'open' に丸める(PATCH送信時のみ明示値を送るため、stateそのものはnull保持で問題ない)。
   const [status, setStatus] = useState<'open' | 'closed' | null>(initialAcceptingStatus)
   const [note, setNote] = useState(initialAcceptingNote || '')
+  // 🟡6レビュー指摘: 最後に保存された値を保持し、onBlurで未変更ならPATCHを送らない
+  // (NULLユーザーがtextareaにフォーカスしただけで accepting_status='open' が明示値として書かれる事故防止)
+  const [savedNote, setSavedNote] = useState(initialAcceptingNote || '')
   const [delegateListId, setDelegateListId] = useState<string | null>(initialDelegateListId || null)
   const [toggling, setToggling] = useState(false)
   const [savingNote, setSavingNote] = useState(false)
-  const [savingDelegate, setSavingDelegate] = useState(false)
   const [lists, setLists] = useState<OwnList[]>([])
   const [listsLoaded, setListsLoaded] = useState(false)
   // レビュー指摘: 保存失敗時に一言のエラーメッセージを表示する(既存のインライン表示流儀に合わせる)
   const [toggleError, setToggleError] = useState(false)
   const [noteError, setNoteError] = useState(false)
-  const [delegateError, setDelegateError] = useState(false)
+  // 🟡を選ぼうとしたが有効な代理リストが未選択/存在しない場合、確定させず選択UIを開く
+  const [yellowSetupMode, setYellowSetupMode] = useState(false)
 
+  // 先行テスト第3弾: NULL(未設定)は'open'として扱う(fail-open)。UI分岐は全てこの値を使う。
+  const effectiveStatus: 'open' | 'closed' = status ?? 'open'
+
+  // 自分の共有可能なリスト(private以外)を一覧取得しておく。🟡選択時の有効判定に必要なため
+  // 現在のステータスに関わらず一度だけ読み込む。
   useEffect(() => {
-    // 停止中になって初めて(=代理リスト選択が必要になった時に)リスト一覧を取りに行く
-    if (status !== 'closed' || listsLoaded) return
     fetch('/api/referral/lists', { cache: 'no-store' })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -79,7 +104,9 @@ export default function AcceptingStatusWidget({
       })
       .catch(() => {})
       .finally(() => setListsLoaded(true))
-  }, [status, listsLoaded])
+  }, [])
+
+  const validLists = lists.filter((l) => l.is_valid_delegate)
 
   // §2-2改訂: 選択中のdelegateListIdが「有効な代理リスト」か(承諾済み+受付中のメンバーが1名以上)。
   // まだlists未取得の間はfalse(保守側=🔴)に倒す。
@@ -87,21 +114,27 @@ export default function AcceptingStatusWidget({
   const hasValidDelegate = !!selectedDelegateList?.is_valid_delegate
   const signal = computeReferralSignal(status, hasValidDelegate)
 
-  // §2-2改訂(4色化・null安全): status=null(未設定)からの遷移も含め、明示した方向へ更新する共通関数。
-  async function setAcceptingStatusTo(next: 'open' | 'closed') {
+  // 明示的なPATCH。delegateListId を渡した時のみ delegate_list_id を更新する(未指定なら現状維持)。
+  async function commitStatus(next: 'open' | 'closed', delegateOpt?: string | null) {
     if (toggling) return
     setToggling(true)
     setToggleError(false)
     try {
+      const body: Record<string, unknown> = { accepting_status: next, accepting_note: note }
+      if (delegateOpt !== undefined) body.delegate_list_id = delegateOpt
       const res = await fetch('/api/referral/accepting', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
-        body: JSON.stringify({ accepting_status: next, accepting_note: note }),
+        body: JSON.stringify(body),
       })
       if (res.ok) {
         setStatus(next)
-        onUpdated(next, note || null, delegateListId)
+        setSavedNote(note)
+        const nextDelegateListId = delegateOpt !== undefined ? delegateOpt : delegateListId
+        if (delegateOpt !== undefined) setDelegateListId(delegateOpt)
+        setYellowSetupMode(false)
+        onUpdated(next, note || null, nextDelegateListId)
       } else {
         setToggleError(true)
       }
@@ -112,15 +145,36 @@ export default function AcceptingStatusWidget({
     }
   }
 
-  // 既存の2値トグル(status確定後のみ使用)。未設定(null)からはsetAcceptingStatusToを直接呼ぶ。
-  async function toggleStatus() {
-    if (!status) return
-    await setAcceptingStatusTo(status === 'open' ? 'closed' : 'open')
+  // 3段スライダーの選択ハンドラ
+  async function selectSegment(target: ReferralSignal) {
+    if (toggling) return
+    if (target === 'open') {
+      setYellowSetupMode(false)
+      await commitStatus('open')
+      return
+    }
+    if (target === 'closed') {
+      // 🔴を直接選ぶ場合、代理が有効だと🟡表示になってしまうため delegate_list_id を明示的に外す
+      setYellowSetupMode(false)
+      await commitStatus('closed', null)
+      return
+    }
+    // target === 'delegate'（🟡）
+    // 軽微指摘: allowlist外(canManageLists=false)では代理リスト機能はまだ実行不能なため確定させない
+    if (!canManageLists) return
+    if (delegateListId && validLists.some((l) => l.id === delegateListId)) {
+      // 既に有効な代理リストが選択済み → そのままclosedにする
+      await commitStatus('closed', delegateListId)
+    } else {
+      // 有効な代理リストが無い/未選択 → 確定させず選択UIへ誘導する
+      setYellowSetupMode(true)
+    }
   }
 
   async function saveNote() {
-    // 軽微指摘: onUpdatedの型契約('open'|'closed')をUI分岐に暗黙依存させない
-    if (!status) return
+    // 🟡6レビュー指摘: 最後に保存した値から変わっていなければPATCHを送らない(dirtyチェック)。
+    // フォーカスを当てて何も編集せず外しただけで accepting_status が明示値化されるのを防ぐ。
+    if (note === savedNote) return
     setSavingNote(true)
     setNoteError(false)
     try {
@@ -128,10 +182,11 @@ export default function AcceptingStatusWidget({
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
-        body: JSON.stringify({ accepting_status: status, accepting_note: note }),
+        body: JSON.stringify({ accepting_status: effectiveStatus, accepting_note: note }),
       })
       if (res.ok) {
-        onUpdated(status, note || null, delegateListId)
+        setSavedNote(note)
+        onUpdated(effectiveStatus, note || null, delegateListId)
       } else {
         setNoteError(true)
       }
@@ -142,99 +197,116 @@ export default function AcceptingStatusWidget({
     }
   }
 
-  async function saveDelegate(nextListId: string | null) {
-    if (!status) return
-    setSavingDelegate(true)
-    setDelegateError(false)
-    try {
-      const res = await fetch('/api/referral/accepting', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        cache: 'no-store',
-        body: JSON.stringify({ accepting_status: status, accepting_note: note, delegate_list_id: nextListId }),
-      })
-      if (res.ok) {
-        setDelegateListId(nextListId)
-        onUpdated(status, note || null, nextListId)
-      } else {
-        setDelegateError(true)
-      }
-    } catch {
-      setDelegateError(true)
-    } finally {
-      setSavingDelegate(false)
-    }
-  }
-
   return (
-    <div
-      style={{
-        background: '#fff', borderRadius: 14, padding: '14px 16px', border: '1px solid #E5E7EB',
-        marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 10,
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 16 }}>{REFERRAL_SIGNAL_DOT[signal]}</span>
-          <span style={{ fontSize: 13, fontWeight: 700, color: '#1A1A2E' }}>{REFERRAL_SIGNAL_LABEL[signal]}</span>
-        </div>
-        {/* §2-2改訂(4色化・null安全): 未設定(null)の間は「開始する」「停止する」の
-            両方向ボタンを出す(2値トグル1個では未設定から片方にしか動かせないため)。
-            一度どちらかに設定した後は、従来通り2値トグル1個に戻る。 */}
-        {status === null ? (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' as const }}>
-            {/* 軽微指摘: 設定画面には1行のWhy説明(何が未設定なのかを明示) */}
-            <span style={{ fontSize: 11, color: '#9CA3AF', width: '100%' }}>
-              他の先生からの紹介を受け付けるかを設定します
-            </span>
-            <button
-              onClick={() => setAcceptingStatusTo('open')}
-              disabled={toggling}
-              style={{
-                padding: '6px 14px', borderRadius: 999, border: 'none',
-                background: '#1A1A2E', color: '#fff', fontSize: 12, fontWeight: 600,
-                cursor: toggling ? 'default' : 'pointer', opacity: toggling ? 0.6 : 1,
-              }}
-            >
-              受付を開始する
-            </button>
-            <button
-              onClick={() => setAcceptingStatusTo('closed')}
-              disabled={toggling}
-              style={{
-                padding: '6px 14px', borderRadius: 999, border: '1px solid #C4A35A',
-                background: '#fff', color: '#C4A35A', fontSize: 12, fontWeight: 600,
-                cursor: toggling ? 'default' : 'pointer', opacity: toggling ? 0.6 : 1,
-              }}
-            >
-              受付を停止する
-            </button>
-          </div>
-        ) : (
+    <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {/* 3段スライダー本体（セグメント型トグル。ノブ位置=現在のシグナル） */}
+      <div
+        style={{
+          position: 'relative', display: 'flex', background: '#F3F4F6', borderRadius: 999,
+          padding: 3,
+        }}
+      >
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute', top: 3, bottom: 3, left: `calc(${SEGMENT_INDEX[signal] * (100 / 3)}% + 2px)`,
+            width: 'calc(33.333% - 4px)', background: '#fff', borderRadius: 999,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.15)', transition: 'left 0.2s ease', zIndex: 0,
+          }}
+        />
+        {SEGMENTS.map((seg) => (
           <button
-            onClick={toggleStatus}
-            disabled={toggling}
+            key={seg}
+            onClick={() => selectSegment(seg)}
+            disabled={toggling || (seg === 'delegate' && !canManageLists)}
             style={{
-              padding: '6px 16px', borderRadius: 999, border: 'none',
-              background: status === 'open' ? '#1A1A2E' : '#C4A35A',
-              color: '#fff', fontSize: 12, fontWeight: 600,
-              cursor: toggling ? 'default' : 'pointer', opacity: toggling ? 0.6 : 1,
+              position: 'relative', zIndex: 1, flex: 1, padding: '8px 4px', border: 'none',
+              background: 'transparent', fontSize: 12, fontWeight: signal === seg ? 700 : 500,
+              color: signal === seg ? '#1A1A2E' : '#9CA3AF',
+              cursor: (toggling || (seg === 'delegate' && !canManageLists)) ? 'default' : 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+              opacity: (toggling || (seg === 'delegate' && !canManageLists)) ? 0.6 : 1,
             }}
           >
-            {toggling ? '更新中...' : status === 'open' ? '受付を停止する' : '受付を再開する'}
+            <span style={{ fontSize: 13 }}>{REFERRAL_SIGNAL_DOT[seg]}</span>
+            <span>{SEGMENT_LABEL[seg]}</span>
           </button>
-        )}
+        ))}
       </div>
       {toggleError && <div style={{ fontSize: 11, color: '#B00020' }}>更新に失敗しました</div>}
+
+      {/* 軽微指摘: allowlist外プロは🟡(代理リスト)が実行不能なため、誘導文の代わりにこちらを表示 */}
+      {!canManageLists && signal !== 'delegate' && (
+        <div style={{ fontSize: 11, color: '#9CA3AF' }}>代理リスト機能は順次開放中です</div>
+      )}
+
+      {/* §2-2改訂: 🟡を選ぼうとしたが有効な代理リストが無い/未選択の場合の誘導UI */}
+      {canManageLists && yellowSetupMode && (
+        <div style={{ fontSize: 11, color: '#6B7280', lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {!listsLoaded ? (
+            <span>読み込み中...</span>
+          ) : validLists.length === 0 ? (
+            <span>
+              代理リストを選ぶと🟡になります。紹介リストを作成し、掲載する先生に承諾（受付中）してもらうと選べるようになります。
+            </span>
+          ) : (
+            <>
+              <span>代理リストを選ぶと🟡になります</span>
+              <select
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) commitStatus('closed', e.target.value)
+                }}
+                disabled={toggling}
+                style={{ padding: '6px 8px', borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 12, color: '#1A1A2E' }}
+              >
+                <option value="">代理リストを選択</option>
+                {validLists.map((l) => (
+                  <option key={l.id} value={l.id}>{l.title}</option>
+                ))}
+              </select>
+            </>
+          )}
+          <button
+            onClick={() => setYellowSetupMode(false)}
+            style={{ alignSelf: 'flex-start', fontSize: 11, color: '#9CA3AF', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+          >
+            キャンセル
+          </button>
+        </div>
+      )}
+
       {/* §2-2改訂: delegateListIdは設定済みだが有効な代理メンバーがいないため🔴になっている場合、
-          本人が原因を理解できるよう説明を1行添える(空約束の防止・CEO決定)。 */}
-      {status === 'closed' && listsLoaded && delegateListId && !hasValidDelegate && (
+          本人が原因を理解できるよう説明を1行添える(空約束の防止・CEO決定) */}
+      {!yellowSetupMode && signal === 'closed' && listsLoaded && delegateListId && !hasValidDelegate && (
         <div style={{ fontSize: 11, color: '#9CA3AF', lineHeight: 1.6 }}>
           代理リストが現在有効でないため、停止中と表示されます（承諾済みで受付中のメンバーがいない、またはリストが共有可能な状態ではありません）
         </div>
       )}
 
-      {status === 'open' ? (
+      {/* 🟡確定済み: 現在の代理リストの変更UI */}
+      {!yellowSetupMode && signal === 'delegate' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const }}>
+          <span style={{ fontSize: 11, color: '#9CA3AF' }}>案内先: {selectedDelegateList?.title}</span>
+          {validLists.length > 1 && (
+            <select
+              value={delegateListId || ''}
+              onChange={(e) => {
+                if (e.target.value) commitStatus('closed', e.target.value)
+              }}
+              disabled={toggling}
+              style={{ padding: '6px 8px', borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 12, color: '#1A1A2E' }}
+            >
+              {validLists.map((l) => (
+                <option key={l.id} value={l.id}>{l.title}</option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
+
+      {/* 受付中のときのみ条件メモを入力できる */}
+      {!yellowSetupMode && signal === 'open' && (
         <div>
           <textarea
             value={note}
@@ -250,36 +322,7 @@ export default function AcceptingStatusWidget({
           {savingNote && <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>保存中...</div>}
           {noteError && <div style={{ fontSize: 11, color: '#B00020', marginTop: 4 }}>保存に失敗しました</div>}
         </div>
-      ) : status === 'closed' ? (
-        <div>
-          {!listsLoaded ? (
-            <div style={{ fontSize: 11, color: '#9CA3AF' }}>読み込み中...</div>
-          ) : lists.length === 0 ? (
-            <div style={{ fontSize: 11, color: '#9CA3AF', lineHeight: 1.6 }}>
-              紹介リストを作成すると、停止中も代理案内ができます
-            </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const }}>
-              <select
-                value={delegateListId || ''}
-                onChange={(e) => saveDelegate(e.target.value || null)}
-                disabled={savingDelegate}
-                style={{
-                  padding: '6px 8px', borderRadius: 8, border: '1px solid #E5E7EB',
-                  fontSize: 12, color: '#1A1A2E',
-                }}
-              >
-                <option value="">代理リストを選択しない</option>
-                {lists.map((l) => (
-                  <option key={l.id} value={l.id}>{l.title}</option>
-                ))}
-              </select>
-              {savingDelegate && <span style={{ fontSize: 11, color: '#9CA3AF' }}>保存中...</span>}
-              {delegateError && <span style={{ fontSize: 11, color: '#B00020' }}>保存に失敗しました</span>}
-            </div>
-          )}
-        </div>
-      ) : null}
+      )}
     </div>
   )
 }

@@ -110,6 +110,11 @@ async function sendProNotification(
   return { sent: false, via: null }
 }
 
+/**
+ * §3-0改訂(先行テスト第3弾・CEO決定): 承諾ゲート撤廃により、これは「即時掲載済み」の
+ * 事後通知になる（承諾・拒否の依頼ではない）。辞退したい場合はホーム画面の受付トグルをオフに
+ * する旨を明示する。
+ */
 export async function notifyReferralPinAdded(
   target: ProNotifyTarget,
   senderProName: string,
@@ -117,11 +122,11 @@ export async function notifyReferralPinAdded(
   const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
   const safeSenderProName = escapeHtml(senderProName)
   return sendProNotification(target, {
-    lineText: `${senderProName}さんがあなたを紹介リストに掲載しようとしています。ダッシュボードから承諾・拒否できます。\n${dashboardUrl}`,
-    emailSubject: `${senderProName}さんからの紹介リスト掲載のお知らせ`,
+    lineText: `${senderProName}さんがあなたを紹介リストに追加しました。紹介されたくない場合は、ホーム画面の受付トグルをオフにしてください。\n${dashboardUrl}`,
+    emailSubject: `${senderProName}さんが紹介リストに追加しました`,
     emailBodyHtml: emailShell(
       '紹介リスト掲載のお知らせ',
-      `${safeSenderProName}さんが、あなたを紹介リストに掲載しようとしています。<br>ダッシュボードから承諾・拒否を選べます。`,
+      `${safeSenderProName}さんが、あなたを紹介リストに追加しました。<br>紹介されたくない場合は、ホーム画面の受付トグルをオフにしてください。`,
       'ダッシュボードを開く',
       dashboardUrl,
     ),

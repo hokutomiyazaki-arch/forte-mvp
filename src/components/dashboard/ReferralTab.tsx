@@ -47,7 +47,7 @@ interface SearchResultPro {
   prefecture: string | null
   accepting_status: 'open' | 'closed' | null
   delegate_list_id?: string | null
-  referralSignal?: 'open' | 'delegate' | 'closed' | 'unset'
+  referralSignal?: 'open' | 'delegate' | 'closed'
 }
 
 interface SentBooking {
@@ -107,17 +107,6 @@ export default function ReferralTab({ proId }: Props) {
   // レビュー指摘(先行テスト): removePin/updatePinNoteが無言failだったため可視化(key=`${listId}:${pro_id}`)
   const [pinActionError, setPinActionError] = useState<Record<string, string>>({})
 
-  // §3-1: 連携候補(private)→処方箋リスト(link/public)への追加導線
-  // key = `${sourceListId}:${pro_id}`
-  const [addToListSelection, setAddToListSelection] = useState<Record<string, string>>({})
-  const [addToListState, setAddToListState] = useState<
-    Record<string, { status: 'loading' | 'success' | 'error'; message?: string }>
-  >({})
-  // §3-1改訂(ゼロ状態導線): 公開リスト0件の連携候補行から「その場で作成して追加」する状態(key同上)
-  const [quickCreateState, setQuickCreateState] = useState<
-    Record<string, { status: 'loading' | 'success' | 'error'; message?: string; createdListId?: string }>
-  >({})
-
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null)
 
   // §2-9: RP外のプロを招待するフォーム（リストごとに名前入力・発行済みURLを保持）
@@ -151,8 +140,7 @@ export default function ReferralTab({ proId }: Props) {
 
   // CEO調査更新(先行テスト): POST /api/referral/lists の失敗経路は
   // 401(unauthorized)/403(forbidden)/400(title_required|title_too_long)/500(failed_to_create)の4系統。
-  // errorコード別に人間向け文言を出し分ける。§3-1のゼロ状態導線(createListAndAddCandidate)からも
-  // 共有するため関数化した。
+  // errorコード別に人間向け文言を出し分ける。
   function createListErrorMessage(status: number, errorCode?: string): string {
     if (status === 401) return 'プロアカウントでログインしているか確認してください'
     // 軽微指摘: env名等の内部実装は画面に出さない(診断情報は console.error 側にある)
@@ -297,6 +285,11 @@ export default function ReferralTab({ proId }: Props) {
           window.alert('1つのリストにピンできるのは最大3名までです')
         } else if (err.error === 'already_pinned') {
           window.alert('すでにこのリストに追加されています')
+        } else if (err.error === 'target_not_accepting') {
+          window.alert('この先生は紹介の受付を停止中です')
+        } else if (err.error === 'target_not_in_program') {
+          // 🔴2レビュー指摘: allowlist期間中、対象外のプロへのピン追加をブロックした場合の文言
+          window.alert('この先生はまだ紹介機能の対象ではありません')
         } else {
           window.alert('追加に失敗しました')
         }
@@ -326,134 +319,6 @@ export default function ReferralTab({ proId }: Props) {
       }
     } catch {
       setPinActionError((prev) => ({ ...prev, [key]: '除去に失敗しました' }))
-    }
-  }
-
-  // §3-1: 連携候補(private)の1行から自分の処方箋リスト(link/public)へ追加する。
-  // 実処理は既存の items POST をそのまま呼ぶ(=pendingで追加され掲載通知が飛ぶ)。
-  async function addCandidateToOwnList(sourceListId: string, item: ListItem, explicitTargetListId?: string) {
-    const key = `${sourceListId}:${item.pro_id}`
-    const targetListId =
-      explicitTargetListId || (publicLists.length === 1 ? publicLists[0].id : addToListSelection[key])
-    if (!targetListId) return
-
-    setAddToListState((prev) => ({ ...prev, [key]: { status: 'loading' } }))
-    try {
-      const res = await fetch(`/api/referral/lists/${targetListId}/items`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        cache: 'no-store',
-        body: JSON.stringify({ pro_id: item.pro_id }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setLists((prev) =>
-          prev.map((l) =>
-            l.id === targetListId
-              ? { ...l, items: [...l.items, { ...data.item, professionals: item.professionals }] }
-              : l
-          )
-        )
-        setAddToListState((prev) => ({
-          ...prev,
-          [key]: { status: 'success', message: '追加しました（掲載通知を送信します）' },
-        }))
-      } else {
-        const err = await res.json().catch(() => ({}))
-        const message =
-          err.error === 'already_pinned'
-            ? 'すでにこのリストに追加されています'
-            : err.error === 'max_pins_reached'
-              ? 'このリストは最大3名までです（上限に達しています）'
-              : '追加に失敗しました'
-        setAddToListState((prev) => ({ ...prev, [key]: { status: 'error', message } }))
-      }
-    } catch {
-      setAddToListState((prev) => ({ ...prev, [key]: { status: 'error', message: '追加に失敗しました' } }))
-    }
-  }
-
-  // §3-1改訂(先行テスト指摘C・ゼロ状態導線): 公開リストが0件のとき、連携候補の1行から
-  // 「①デフォルトタイトルでリスト作成 → ②その先生をピン追加」を1アクションで行う。
-  // タイトルは後から renderListCard のインライン編集で変更できる。
-  const DEFAULT_LIST_TITLE = '紹介リスト'
-  async function createListAndAddCandidate(sourceListId: string, item: ListItem) {
-    const key = `${sourceListId}:${item.pro_id}`
-    // レビュー指摘(軽微): 再試行で新しいリストをもう1つ作らないよう、
-    // ステップ①で作成済みのリストIDを保持し、2回目以降は②(ピン追加)のみ再実行する
-    const existingCreatedId = quickCreateState[key]?.createdListId
-    setQuickCreateState((prev) => ({
-      ...prev,
-      [key]: { status: 'loading', createdListId: existingCreatedId },
-    }))
-
-    let newList: ReferralList
-    if (existingCreatedId) {
-      const found = lists.find((l) => l.id === existingCreatedId)
-      if (!found) {
-        setQuickCreateState((prev) => ({
-          ...prev,
-          [key]: { status: 'error', message: '作成済みリストが見つかりません。画面を再読み込みしてください' },
-        }))
-        return
-      }
-      newList = found
-    } else {
-      const created = await postCreateList(DEFAULT_LIST_TITLE, null)
-      if (!created.ok || !created.list) {
-        setQuickCreateState((prev) => ({
-          ...prev,
-          [key]: { status: 'error', message: createListErrorMessage(created.status, created.errorCode) },
-        }))
-        return
-      }
-      newList = created.list
-      setLists((prev) => [newList, ...prev])
-    }
-
-    try {
-      const res = await fetch(`/api/referral/lists/${newList.id}/items`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        cache: 'no-store',
-        body: JSON.stringify({ pro_id: item.pro_id }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setLists((prev) =>
-          prev.map((l) =>
-            l.id === newList.id
-              ? { ...l, items: [...l.items, { ...data.item, professionals: item.professionals }] }
-              : l
-          )
-        )
-        setQuickCreateState((prev) => ({
-          ...prev,
-          [key]: {
-            status: 'success',
-            message: 'リストを作成し、掲載の承諾依頼を送りました。タイトルは後から編集できます',
-          },
-        }))
-      } else {
-        // リスト自体の作成は成功済みのため、その旨をエラー文言に明記する(段階失敗の可視化)。
-        // createdListId を保持し、「＋再試行する」がリストを二重作成せずピン追加のみ再実行できるようにする
-        const err = await res.json().catch(() => ({}))
-        const message =
-          err.error === 'already_pinned'
-            ? 'すでにこのリストに追加されています（リストは作成済みです）'
-            : err.error === 'max_pins_reached'
-              ? 'このリストは最大3名までです（リストは作成済みです）'
-              : '先生の追加に失敗しました（リストは作成済みです）'
-        setQuickCreateState((prev) => ({
-          ...prev,
-          [key]: { status: 'error', message, createdListId: newList.id },
-        }))
-      }
-    } catch {
-      setQuickCreateState((prev) => ({
-        ...prev,
-        [key]: { status: 'error', message: '先生の追加に失敗しました（リストは作成済みです）', createdListId: newList.id },
-      }))
     }
   }
 
@@ -636,8 +501,6 @@ export default function ReferralTab({ proId }: Props) {
           {list.items.map((item) => {
             const label = consentLabel(item.consent_status)
             const addKey = `${list.id}:${item.pro_id}`
-            const addState = addToListState[addKey]
-            const quickCreate = quickCreateState[addKey]
             const pinError = pinActionError[addKey]
             return (
               <div
@@ -687,105 +550,31 @@ export default function ReferralTab({ proId }: Props) {
                 {pinError && (
                   <div style={{ fontSize: 11, color: '#B00020', paddingLeft: 42 }}>{pinError}</div>
                 )}
-
-                {/* §3-1: 連携候補(private)行のみ「処方箋リストへ追加」導線を出す */}
-                {isPrivate && (
-                  <div style={{ paddingLeft: 42 }}>
-                    {/* 先行テスト指摘C: 公開リスト0件だと導線が行き止まりだったため、
-                        「その場で作成して追加」の1アクションに変更(見出し文言も§3-1改訂で追加)。 */}
-                    {/* レビュー指摘(中2): クイック作成は setLists 直後に publicLists が1件になるため、
-                        publicLists.length ではなく quickCreate の有無を先に見る(成功/段階失敗の
-                        メッセージが到達不能になる・連打防止が外れる問題の修正)。 */}
-                    {quickCreate ? (
-                      quickCreate.status === 'success' ? (
-                        <div style={{ fontSize: 11, color: '#2E7D32' }}>{quickCreate.message}</div>
-                      ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const }}>
-                          <button
-                            onClick={() => createListAndAddCandidate(list.id, item)}
-                            disabled={quickCreate.status === 'loading'}
-                            style={{
-                              background: 'none', border: '1px solid #C4A35A', color: '#C4A35A',
-                              borderRadius: 6, fontSize: 11, fontWeight: 600, padding: '3px 8px',
-                              cursor: quickCreate.status === 'loading' ? 'default' : 'pointer',
-                              opacity: quickCreate.status === 'loading' ? 0.6 : 1,
-                            }}
-                          >
-                            {quickCreate.status === 'loading'
-                              ? '作成中...'
-                              : quickCreate.status === 'error'
-                                ? '＋再試行する'
-                                : '＋紹介リストを作成してこの先生を追加'}
-                          </button>
-                          {quickCreate.status === 'error' && (
-                            <span style={{ fontSize: 11, color: '#B00020' }}>{quickCreate.message}</span>
-                          )}
-                        </div>
-                      )
-                    ) : publicLists.length === 0 ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const }}>
-                        <button
-                          onClick={() => createListAndAddCandidate(list.id, item)}
-                          style={{
-                            background: 'none', border: '1px solid #C4A35A', color: '#C4A35A',
-                            borderRadius: 6, fontSize: 11, fontWeight: 600, padding: '3px 8px',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          ＋紹介リストを作成してこの先生を追加
-                        </button>
-                      </div>
-                    ) : addState?.status === 'success' ? (
-                      <div style={{ fontSize: 11, color: '#2E7D32' }}>{addState.message}</div>
-                    ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const }}>
-                        {publicLists.length > 1 && (
-                          <select
-                            value={addToListSelection[addKey] || publicLists[0].id}
-                            onChange={(e) =>
-                              setAddToListSelection((prev) => ({ ...prev, [addKey]: e.target.value }))
-                            }
-                            style={{
-                              padding: '4px 6px', borderRadius: 6, border: '1px solid #E5E7EB',
-                              fontSize: 11, color: '#1A1A2E',
-                            }}
-                          >
-                            {publicLists.map((l) => (
-                              <option key={l.id} value={l.id}>{l.title}</option>
-                            ))}
-                          </select>
-                        )}
-                        <button
-                          onClick={() => addCandidateToOwnList(list.id, item)}
-                          disabled={addState?.status === 'loading'}
-                          style={{
-                            background: 'none', border: '1px solid #C4A35A', color: '#C4A35A',
-                            borderRadius: 6, fontSize: 11, fontWeight: 600, padding: '3px 8px',
-                            cursor: addState?.status === 'loading' ? 'default' : 'pointer',
-                            opacity: addState?.status === 'loading' ? 0.6 : 1,
-                          }}
-                        >
-                          {addState?.status === 'loading' ? '追加中...' : '紹介リストへ追加'}
-                        </button>
-                        {addState?.status === 'error' && (
-                          <span style={{ fontSize: 11, color: '#B00020' }}>{addState.message}</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             )
           })}
         </div>
 
         {/* ピン追加 */}
-        {list.items.length < MAX_PINS ? (
+        {/* 🟡5レビュー指摘: declined(辞退)はサーバー側(items/route.ts)同様に枠を占有しないため
+            カウントから除外する(consent_status!=='declined') */}
+        {(isPrivate || list.items.filter((i) => i.consent_status !== 'declined').length < MAX_PINS) ? (
           <div style={{ position: 'relative' }}>
+            {/* §3-0-2: プロを探す導線は/searchを転用する。リストカード内の独自ピッカーは作らず、
+                /searchの結果カードから直接このリストへ追加できる(SearchPageClient側の実装)。 */}
+            <a
+              href="/search"
+              style={{
+                fontSize: 12, color: '#C4A35A', fontWeight: 600, textDecoration: 'none',
+                display: 'inline-block', marginBottom: 8,
+              }}
+            >
+              プロを探して追加 →
+            </a>
             <input
               value={pinQuery[list.id] || ''}
               onChange={(e) => searchPro(list.id, e.target.value)}
-              placeholder="名前でプロを検索してピン追加（最大3名）"
+              placeholder={isPrivate ? '名前でプロを検索して連携候補に追加' : '名前でプロを検索してピン追加（最大3名）'}
               style={{
                 width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #E5E7EB',
                 fontSize: 13, boxSizing: 'border-box' as const,
@@ -836,7 +625,9 @@ export default function ReferralTab({ proId }: Props) {
             )}
           </div>
         ) : (
-          <div style={{ fontSize: 11, color: '#9CA3AF' }}>ピンは最大3名までです</div>
+          !isPrivate && (
+            <div style={{ fontSize: 11, color: '#9CA3AF' }}>ピンは最大3名までです</div>
+          )
         )}
 
         {/* §2-9: RP外のプロの招待(非公開リストでは掲載通知の前提が無いため出さない) */}
@@ -961,9 +752,15 @@ export default function ReferralTab({ proId }: Props) {
               <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>
                 連携候補（非公開）
               </h3>
-              <p style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 12, lineHeight: 1.5 }}>
+              <p style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 4, lineHeight: 1.5 }}>
                 共有URLを持たないリストです。招待・掲載通知は行われません。
               </p>
+              <a
+                href="/search"
+                style={{ fontSize: 12, color: '#C4A35A', fontWeight: 600, textDecoration: 'none', display: 'inline-block', marginBottom: 12 }}
+              >
+                /searchの「♡ 気になる」から共有リストへ追加できます →
+              </a>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {privateLists.map((list) => renderListCard(list, true))}
               </div>

@@ -57,8 +57,11 @@ export async function GET(request: NextRequest) {
     // 粗い条件のまま)。§2-2改訂で🟡の実際の点灯条件は「そのリストに承諾済み+受付中のメンバーが
     // 1名以上」に厳格化したため、ここで拾った delegate_list_id 設定済みだが無効(空/全員停止中)な
     // 候補は下のisReferralReachableによる最終絞りで正しく除外される(有効性はwithSignalで判定)。
+    // 先行テスト第3弾(fail-open): accepting_status IS NULL も受付中として含める。
     if (referralOnly) {
-      dbQuery = dbQuery.or('accepting_status.eq.open,delegate_list_id.not.is.null')
+      dbQuery = dbQuery.or(
+        'accepting_status.is.null,accepting_status.neq.closed,delegate_list_id.not.is.null'
+      )
     }
 
     const { data, error } = await dbQuery.limit(20)

@@ -15,12 +15,16 @@ import { cache } from 'react'
 import { auth } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 
-// React cache でリクエスト内メモ化（/search ページはフラグON時に fail-open 版と
+// ⚪️6レビュー指摘(事実誤り修正): 以前は checkViewerIsPro という1関数のみが存在し、
+// boolean(`!!pro && !pro.deactivated_at`)だけを返していた（getViewerProId用の
+// 「idそのもの」を返す別関数は無かった）。ここで id | null を返す checkViewerProId に
+// 拡張し、boolean側(getViewerIsPro/getViewerIsProStrict)は `!== null` で導出する
+// 唯一のソースに統合した。React cache でリクエスト内メモ化（/search ページはフラグON時に fail-open 版と
 // fail-closed 版の両方を呼ぶため、素のままだと同一ルックアップが2回走る）。
 // Route Handler 文脈では単なるパススルーになるだけで無害。
-const checkViewerIsPro = cache(async (): Promise<boolean> => {
+const checkViewerProId = cache(async (): Promise<string | null> => {
   const { userId } = await auth()
-  if (!userId) return false
+  if (!userId) return null
 
   const supabase = getSupabaseAdmin()
   const { data: pro } = await supabase
@@ -29,12 +33,12 @@ const checkViewerIsPro = cache(async (): Promise<boolean> => {
     .eq('user_id', userId)
     .maybeSingle()
 
-  return !!pro && !pro.deactivated_at
+  return pro && !pro.deactivated_at ? pro.id : null
 })
 
 export async function getViewerIsPro(): Promise<boolean> {
   try {
-    return await checkViewerIsPro()
+    return (await checkViewerProId()) !== null
   } catch {
     // fail open: 判定エラー時はブロックしない(アクセス制御ゲート用途)
     return true
@@ -48,9 +52,20 @@ export async function getViewerIsPro(): Promise<boolean> {
  */
 export async function getViewerIsProStrict(): Promise<boolean> {
   try {
-    return await checkViewerIsPro()
+    return (await checkViewerProId()) !== null
   } catch {
     // fail closed: 判定エラー時は非プロ扱い(=露出させない)
     return false
+  }
+}
+
+/**
+ * fail closed: 判定エラー時はnull(=自分のカード除外を諦めるだけで、露出制御には影響しない)。
+ */
+export async function getViewerProId(): Promise<string | null> {
+  try {
+    return await checkViewerProId()
+  } catch {
+    return null
   }
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { getOwnPro } from '@/lib/referral-auth'
+import { getOwnPro, isPinnedOnSharedList } from '@/lib/referral-auth'
 import { isReferralEnabled } from '@/lib/feature-flags'
 
 export const dynamic = 'force-dynamic'
@@ -18,6 +18,10 @@ const ALLOWED_STATUS = ['open', 'closed']
  *     「自分がownerで、visibilityがprivateでない（共有URLを持つ）リスト」であることを検証してから設定
  * §2-2 受け入れステータス。紹介リストタブ内に置くため、他の紹介APIと同様に
  * isReferralEnabled でゲートする（仮決定: タブ自体がフラグ配下のため整合を取った）。
+ *
+ * 🔴1(再レビュー): ただし allowlist外でも、共有リストに承諾済みで掲載されている本人は
+ * 通す。受付状態は本人だけが決める唯一のオプトアウト手段のため、allowlist外でも共有リストに
+ * 掲載されている本人には開放する（旧consents APIが意図的にフラグを外していた設計意図の継承）。
  */
 export async function PATCH(request: NextRequest) {
   try {
@@ -25,7 +29,10 @@ export async function PATCH(request: NextRequest) {
     if (!ownPro) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
     }
-    if (!isReferralEnabled(ownPro.id)) {
+    const supabase = getSupabaseAdmin()
+    // 軽微指摘: 本人の唯一のオプトアウト手段がDB一時障害で403にならないようfail-open
+    // (自分の受付状態の更新のため fail-open でも危険なし)
+    if (!isReferralEnabled(ownPro.id) && !(await isPinnedOnSharedList(supabase, ownPro.id, { failOpenOnError: true }))) {
       return NextResponse.json({ error: 'forbidden' }, { status: 403 })
     }
 
@@ -39,8 +46,6 @@ export async function PATCH(request: NextRequest) {
     if (acceptingNote && acceptingNote.length > 200) {
       return NextResponse.json({ error: 'note_too_long' }, { status: 400 })
     }
-
-    const supabase = getSupabaseAdmin()
 
     const update: Record<string, unknown> = {
       accepting_status: acceptingStatus,

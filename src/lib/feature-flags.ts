@@ -28,6 +28,18 @@ export function isReferralEnabled(proId: string): boolean {
   return allowList.includes(proId)
 }
 
+/**
+ * リフェラル全体公開の判定（§2-2 先行テスト第3弾）。FEATURE_REFERRAL_LISTSが'all'の時のみtrue。
+ *
+ * 公開カードの🟢バッジ/🟡案内文は、この関数がtrueになるまで非表示にする。理由:
+ * accepting_status のNULLをopenとして扱うfail-open化により、全体公開の告知前に
+ * 既存プロの公開カードが「本人が何もしていないのに」勝手に受付中表示へ変わるのを防ぐため
+ * （告知と同じタイミングで表示を切り替える）。プロ向け画面の3色ドット表示はゲート対象外。
+ */
+export function isReferralFullyLaunched(): boolean {
+  return process.env.FEATURE_REFERRAL_LISTS === 'all'
+}
+
 /** 検索ページの非公開化（§3-2）。'true' の時のみ非公開化を有効にする。 */
 export function isSearchPrivate(): boolean {
   return process.env.FEATURE_SEARCH_PRIVATE === 'true'

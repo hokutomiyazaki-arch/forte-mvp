@@ -70,7 +70,8 @@ export async function POST(_request: Request, { params }: { params: { token: str
       return NextResponse.json({ error: 'invite_already_used' }, { status: 409 })
     }
 
-    // リストへ consent_status='pending' で追加(ピン上限3を超える場合はスキップ)。
+    // 🔴3レビュー指摘: §3-0承諾ゲート撤廃に合わせ、招待経由の登録も他のピン追加経路と同様
+    // consent_status='approved'で即時掲載する(ピン上限3を超える場合はスキップ)。
     let listAdded = false
     try {
       const { count } = await supabase
@@ -92,7 +93,7 @@ export async function POST(_request: Request, { params }: { params: { token: str
             pro_id: ownPro.id,
             note: null,
             sort_order: count || 0,
-            consent_status: 'pending',
+            consent_status: 'approved',
           })
           if (itemError) {
             console.error('[api/referral/invites/[token]/complete] list item insert error:', itemError)
