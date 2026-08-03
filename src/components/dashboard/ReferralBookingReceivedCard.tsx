@@ -115,11 +115,7 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
     }
   }
 
-  if (
-    loading ||
-    (requestedItems.length === 0 && confirmedItems.length === 0 && completedItems.length === 0)
-  )
-    return null
+  if (loading || (requestedItems.length === 0 && confirmedItems.length === 0)) return null
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
