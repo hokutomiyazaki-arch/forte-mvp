@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { QRCodeSVG } from 'qrcode.react'
 import BookingThread from '@/components/dashboard/BookingThread'
 import { computeReferralSignal, REFERRAL_SIGNAL_DOT } from '@/lib/referral-accepting'
 
@@ -121,6 +122,9 @@ export default function ReferralTab({ proId }: Props) {
   const [addingPin, setAddingPin] = useState<string | null>(null)
   // §2-2改訂: 「紹介につながる人のみ表示」フィルタ(仕様通りデフォルトOFF)
   const [referralOnlyFilter, setReferralOnlyFilter] = useState(false)
+  // CEO指摘(先行テスト・UI修正③): プロ追加の3導線(探して追加/名前で追加/REALPROOF外を招待)を
+  // 「＋ プロを追加」ボタン1つに集約し、押した時だけ展開する(listIdごとの排他state)。
+  const [addProPanel, setAddProPanel] = useState<Record<string, 'closed' | 'menu' | 'name_search' | 'invite'>>({})
   // レビュー指摘(先行テスト): removePin/updatePinNoteが無言failだったため可視化(key=`${listId}:${pro_id}`)
   const [pinActionError, setPinActionError] = useState<Record<string, string>>({})
   // CEO指示(先行テスト第3弾): ハートのタップ即時フィードバック(色抜き)用(key同上)
@@ -137,6 +141,8 @@ export default function ReferralTab({ proId }: Props) {
   >({})
 
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null)
+  // CEO指摘(先行テスト・UI修正②): クライアントに共有するURLをQRコード表示するモーダル(listId単位)
+  const [qrModalListId, setQrModalListId] = useState<string | null>(null)
 
   // §2-9: RP外のプロを招待するフォーム（リストごとに名前入力・発行済みURLを保持）
   const [inviteName, setInviteName] = useState<Record<string, string>>({})
@@ -662,6 +668,23 @@ export default function ReferralTab({ proId }: Props) {
     })
   }
 
+  // CEO指摘(先行テスト・UI修正②): navigator.shareでクライアントに共有するURLを共有する。
+  // キャンセル(AbortError)は既存のshareInviteTextと同様に握り潰す。
+  async function shareListUrl(slug: string) {
+    const url = `${SHARE_ORIGIN}/r/${slug}`
+    try {
+      await (navigator as { share: (data: { url: string }) => Promise<void> }).share({ url })
+    } catch {}
+  }
+
+  // CEO指摘(先行テスト・UI修正③): 「＋ プロを追加」の展開/折りたたみ(排他: 押すと閉じる)
+  function toggleAddProPanel(listId: string) {
+    setAddProPanel((prev) => ({
+      ...prev,
+      [listId]: prev[listId] && prev[listId] !== 'closed' ? 'closed' : 'menu',
+    }))
+  }
+
   const consentLabel = (status: 'pending' | 'approved' | 'declined') => {
     if (status === 'approved') return { text: '承諾済み', color: '#2E7D32' }
     if (status === 'declined') return { text: '辞退されました', color: '#B00020' }
@@ -678,31 +701,45 @@ export default function ReferralTab({ proId }: Props) {
       <div key={list.id} style={{ background: '#fff', borderRadius: 14, padding: '16px', border: '1px solid #E5E7EB' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
+            {/* CEO指摘(先行テスト・UI修正①): タイトルが「クライアントに表示される名前」と
+                誤解されないよう、内部用であることを明示するラベルを常に出す */}
+            <div style={{ fontSize: 10, color: '#9CA3AF', marginBottom: 2 }}>リスト名（内部用）</div>
             {/* §3-1改訂: タイトルのインライン編集(既存PATCH /api/referral/lists/[list_id] を利用)。
                 連携候補(private)はタイトルが移行SQLの冪等ガードにも使われるため表示のみ(軽微指摘)。 */}
-            {isPrivate ? (
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E' }}>{list.title}</div>
-            ) : (
-              <input
-                defaultValue={list.title}
-                onBlur={(e) => {
-                  const trimmed = e.target.value.trim()
-                  if (!trimmed) {
-                    // 軽微指摘: 空欄blurを無言にしない。旧タイトルへ戻して1行知らせる
-                    e.target.value = list.title
-                    setTitleError((prev) => ({ ...prev, [list.id]: 'タイトルは空にできません' }))
-                    return
-                  }
-                  if (trimmed !== list.title) {
-                    updateListTitle(list.id, trimmed)
-                  }
-                }}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+              {isPrivate ? (
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E', minWidth: 0 }}>{list.title}</div>
+              ) : (
+                <input
+                  defaultValue={list.title}
+                  onBlur={(e) => {
+                    const trimmed = e.target.value.trim()
+                    if (!trimmed) {
+                      // 軽微指摘: 空欄blurを無言にしない。旧タイトルへ戻して1行知らせる
+                      e.target.value = list.title
+                      setTitleError((prev) => ({ ...prev, [list.id]: 'タイトルは空にできません' }))
+                      return
+                    }
+                    if (trimmed !== list.title) {
+                      updateListTitle(list.id, trimmed)
+                    }
+                  }}
+                  style={{
+                    fontSize: 15, fontWeight: 700, color: '#1A1A2E', border: 'none', background: 'transparent',
+                    padding: 0, flex: 1, minWidth: 0, fontFamily: 'inherit', outline: 'none',
+                  }}
+                />
+              )}
+              {/* CEO指摘(先行テスト・UI修正①): 公開状態を静かなチップで明示(§0-6準拠) */}
+              <span
                 style={{
-                  fontSize: 15, fontWeight: 700, color: '#1A1A2E', border: 'none', background: 'transparent',
-                  padding: 0, width: '100%', fontFamily: 'inherit', outline: 'none',
+                  fontSize: 10, color: '#6B7280', background: '#F3F4F6', border: '1px solid #E5E7EB',
+                  borderRadius: 999, padding: '2px 8px', flexShrink: 0, whiteSpace: 'nowrap' as const,
                 }}
-              />
-            )}
+              >
+                {isPrivate ? '非公開' : 'リンク共有'}
+              </span>
+            </div>
             {titleSavingId === list.id && (
               <div style={{ fontSize: 10, color: '#9CA3AF' }}>保存中...</div>
             )}
@@ -786,30 +823,6 @@ export default function ReferralTab({ proId }: Props) {
             削除
           </button>
         </div>
-
-        {!isPrivate && (
-          <>
-          {/* CEO指摘(先行テスト第3弾): このURLが何かを明記する */}
-          <div style={{ fontSize: 10, color: '#9CA3AF', marginBottom: 4 }}>
-            クライアントに共有するURL（紹介ページが開きます）
-          </div>
-          <div
-            onClick={() => copyShareUrl(list.slug)}
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '8px 10px', background: '#F9FAFB', borderRadius: 8,
-              fontSize: 12, color: '#6B7280', cursor: 'pointer', marginBottom: 12,
-            }}
-          >
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, minWidth: 0 }}>
-              {SHARE_ORIGIN}/r/{list.slug}
-            </span>
-            <span style={{ color: '#C4A35A', fontWeight: 600, flexShrink: 0, marginLeft: 8 }}>
-              {copiedSlug === list.slug ? 'コピーしました' : 'コピー'}
-            </span>
-          </div>
-          </>
-        )}
 
         {/* ピン一覧 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
@@ -1026,152 +1039,245 @@ export default function ReferralTab({ proId }: Props) {
           })}
         </div>
 
-        {/* ピン追加 */}
-        {/* 🟡5レビュー指摘: declined(辞退)はサーバー側(items/route.ts)同様に枠を占有しないため
+        {/* CEO指摘(先行テスト・UI修正③): プロを追加する3導線(探して追加/名前で追加/
+            REALPROOF外を招待)を「＋ プロを追加」ボタン1つに集約し、押した時だけ展開する。
+            🟡5レビュー指摘: declined(辞退)はサーバー側(items/route.ts)同様に枠を占有しないため
             カウントから除外する(consent_status!=='declined') */}
         {(isPrivate || list.items.filter((i) => i.consent_status !== 'declined').length < MAX_PINS) ? (
-          <div style={{ position: 'relative' }}>
-            {/* §3-0-2: プロを探す導線は/searchを転用する。リストカード内の独自ピッカーは作らず、
-                /searchの結果カードから直接このリストへ追加できる(SearchPageClient側の実装)。 */}
-            <a
-              href="/search"
+          (addProPanel[list.id] || 'closed') === 'closed' ? (
+            <button
+              onClick={() => toggleAddProPanel(list.id)}
               style={{
-                fontSize: 12, color: '#C4A35A', fontWeight: 600, textDecoration: 'none',
-                display: 'inline-block', marginBottom: 8,
+                background: 'none', border: '1px solid #C4A35A', color: '#C4A35A',
+                borderRadius: 8, fontSize: 12, fontWeight: 600, padding: '6px 12px', cursor: 'pointer',
               }}
             >
-              プロを探して追加 →
-            </a>
-            <input
-              value={pinQuery[list.id] || ''}
-              onChange={(e) => searchPro(list.id, e.target.value)}
-              placeholder={isPrivate ? '名前でプロを検索して気になるプロに追加' : '名前でプロを検索してピン追加（最大3名）'}
-              style={{
-                width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #E5E7EB',
-                fontSize: 13, boxSizing: 'border-box' as const,
-              }}
-            />
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#6B7280', marginTop: 6 }}>
-              <input
-                type="checkbox"
-                checked={referralOnlyFilter}
-                onChange={(e) => handleReferralOnlyToggle(e.target.checked)}
-              />
-              紹介につながる人のみ表示
-            </label>
-            {/* レビュー指摘(先行テスト): 検索失敗が「結果0件」と見分けがつかず無言だったため可視化 */}
-            {pinSearchError[list.id] && (
-              <div style={{ fontSize: 11, color: '#B00020', marginTop: 4 }}>検索に失敗しました</div>
-            )}
-            {(pinResults[list.id]?.length || 0) > 0 && (
-              <div style={{
-                position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
-                background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8,
-                marginTop: 4, maxHeight: 200, overflowY: 'auto' as const,
-                boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-              }}>
-                {(pinResults[list.id] || []).map((p) => (
-                  <div
-                    key={p.id}
-                    onClick={() => addingPin ? undefined : addPin(list.id, p.id)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
-                      cursor: addingPin ? 'default' : 'pointer', borderBottom: '1px solid #F3F4F6',
-                    }}
-                  >
-                    {p.photo_url ? (
-                      <img src={p.photo_url} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
-                    ) : (
-                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#E5E7EB' }} />
-                    )}
-                    <div style={{ fontSize: 13, color: '#1A1A2E' }}>
-                      {/* p.referralSignalはAPI側で有効性判定済みで常に返るため、フォールバックは
-                          防御的なもの(未知の応答形状時はfalse=保守側に倒す) */}
-                      {REFERRAL_SIGNAL_DOT[p.referralSignal || computeReferralSignal(p.accepting_status, false)]} {p.name}
-                    </div>
-                    {p.title && <div style={{ fontSize: 11, color: '#9CA3AF' }}>{p.title}</div>}
-                  </div>
-                ))}
+              ＋ プロを追加
+            </button>
+          ) : (
+            <div style={{ border: '1px solid #E5E7EB', borderRadius: 8, padding: '10px 12px', minWidth: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#1A1A2E' }}>プロを追加</span>
+                <button
+                  onClick={() => toggleAddProPanel(list.id)}
+                  style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 11, cursor: 'pointer', padding: 0 }}
+                >
+                  閉じる
+                </button>
               </div>
-            )}
-          </div>
+
+              {addProPanel[list.id] === 'menu' && (
+                <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
+                  {/* §3-0-2: プロを探す導線は/searchを転用する。リストカード内の独自ピッカーは作らず、
+                      /searchの結果カードから直接このリストへ追加できる(SearchPageClient側の実装)。 */}
+                  <a
+                    href="/search"
+                    style={{ fontSize: 12, color: '#C4A35A', fontWeight: 600, textDecoration: 'none' }}
+                  >
+                    {isPrivate ? '気になるプロを探して追加 →' : 'プロを探して追加 →'}
+                  </a>
+                  <button
+                    onClick={() => setAddProPanel((prev) => ({ ...prev, [list.id]: 'name_search' }))}
+                    style={{ background: 'none', border: 'none', color: '#1A1A2E', fontSize: 12, fontWeight: 600, textAlign: 'left' as const, cursor: 'pointer', padding: 0 }}
+                  >
+                    名前で追加
+                  </button>
+                  {!isPrivate && (
+                    <button
+                      onClick={() => setAddProPanel((prev) => ({ ...prev, [list.id]: 'invite' }))}
+                      style={{ background: 'none', border: 'none', color: '#1A1A2E', fontSize: 12, fontWeight: 600, textAlign: 'left' as const, cursor: 'pointer', padding: 0 }}
+                    >
+                      REALPROOF外のプロを招待
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {addProPanel[list.id] === 'name_search' && (
+                <div style={{ position: 'relative' }}>
+                  <button
+                    onClick={() => setAddProPanel((prev) => ({ ...prev, [list.id]: 'menu' }))}
+                    style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 11, cursor: 'pointer', padding: 0, marginBottom: 8, display: 'block' }}
+                  >
+                    ← 他の追加方法を選ぶ
+                  </button>
+                  <input
+                    value={pinQuery[list.id] || ''}
+                    onChange={(e) => searchPro(list.id, e.target.value)}
+                    placeholder={isPrivate ? '名前でプロを検索して気になるプロに追加' : '名前でプロを検索してピン追加（最大3名）'}
+                    style={{
+                      width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #E5E7EB',
+                      fontSize: 13, boxSizing: 'border-box' as const,
+                    }}
+                  />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#6B7280', marginTop: 6 }}>
+                    <input
+                      type="checkbox"
+                      checked={referralOnlyFilter}
+                      onChange={(e) => handleReferralOnlyToggle(e.target.checked)}
+                    />
+                    紹介につながる人のみ表示
+                  </label>
+                  {/* レビュー指摘(先行テスト): 検索失敗が「結果0件」と見分けがつかず無言だったため可視化 */}
+                  {pinSearchError[list.id] && (
+                    <div style={{ fontSize: 11, color: '#B00020', marginTop: 4 }}>検索に失敗しました</div>
+                  )}
+                  {(pinResults[list.id]?.length || 0) > 0 && (
+                    <div style={{
+                      position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
+                      background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8,
+                      marginTop: 4, maxHeight: 200, overflowY: 'auto' as const,
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                    }}>
+                      {(pinResults[list.id] || []).map((p) => (
+                        <div
+                          key={p.id}
+                          onClick={() => addingPin ? undefined : addPin(list.id, p.id)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
+                            cursor: addingPin ? 'default' : 'pointer', borderBottom: '1px solid #F3F4F6',
+                          }}
+                        >
+                          {p.photo_url ? (
+                            <img src={p.photo_url} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
+                          ) : (
+                            <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#E5E7EB' }} />
+                          )}
+                          <div style={{ fontSize: 13, color: '#1A1A2E' }}>
+                            {/* p.referralSignalはAPI側で有効性判定済みで常に返るため、フォールバックは
+                                防御的なもの(未知の応答形状時はfalse=保守側に倒す) */}
+                            {REFERRAL_SIGNAL_DOT[p.referralSignal || computeReferralSignal(p.accepting_status, false)]} {p.name}
+                          </div>
+                          {p.title && <div style={{ fontSize: 11, color: '#9CA3AF' }}>{p.title}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* §2-9: REALPROOF外のプロの招待(非公開リストでは掲載通知の前提が無いためaddProPanelには出てこない) */}
+              {!isPrivate && addProPanel[list.id] === 'invite' && (
+                <div style={{ minWidth: 0 }}>
+                  <button
+                    onClick={() => setAddProPanel((prev) => ({ ...prev, [list.id]: 'menu' }))}
+                    style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 11, cursor: 'pointer', padding: 0, marginBottom: 8, display: 'block' }}
+                  >
+                    ← 他の追加方法を選ぶ
+                  </button>
+                  {/* CEO指摘(先行テスト): 入力とボタンの横並びがスマホ幅(360〜390px)で横スクロールの
+                      原因になっていたため縦積みにする */}
+                  <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
+                    <input
+                      value={inviteName[list.id] || ''}
+                      onChange={(e) => setInviteName((prev) => ({ ...prev, [list.id]: e.target.value.slice(0, 100) }))}
+                      placeholder="先生のお名前"
+                      style={{
+                        width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #E5E7EB',
+                        fontSize: 13, boxSizing: 'border-box' as const,
+                      }}
+                    />
+                    <button
+                      onClick={() => createInvite(list.id)}
+                      disabled={invitingList === list.id || !(inviteName[list.id] || '').trim()}
+                      style={{
+                        padding: '8px 14px', borderRadius: 8, border: 'none', alignSelf: 'flex-start' as const,
+                        background: '#1A1A2E', color: '#fff', fontSize: 12, fontWeight: 600,
+                        cursor: invitingList === list.id ? 'default' : 'pointer',
+                        opacity: invitingList === list.id ? 0.6 : 1,
+                      }}
+                    >
+                      招待URLを発行
+                    </button>
+                  </div>
+                  {/* §2-9(第3弾): 発行後はURL単体でなく「編集できる共有テキスト＋ネイティブ共有/コピー」を出す。
+                      1人分(single-use)であることを宛名付きで明示する(§0-6: 絵文字なし・静かな表示) */}
+                  {issuedInviteUrl[list.id] && (
+                    <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column' as const, gap: 6, minWidth: 0 }}>
+                      <div style={{ fontSize: 11, color: '#8A6D1F', lineHeight: 1.6 }}>
+                        この招待URLは1人分です（{issuedInviteName[list.id] ? `${issuedInviteName[list.id]}先生用` : 'お相手の先生専用'}）。別の先生には新しいURLを発行してください
+                      </div>
+                      <textarea
+                        value={inviteShareText[list.id] || ''}
+                        onChange={(e) => setInviteShareText((prev) => ({ ...prev, [list.id]: e.target.value }))}
+                        style={{
+                          width: '100%', minHeight: 88, padding: '8px 10px', borderRadius: 8,
+                          border: '1px solid #E5E7EB', fontSize: 12, color: '#374151',
+                          boxSizing: 'border-box' as const, resize: 'vertical' as const, lineHeight: 1.6,
+                        }}
+                      />
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                        {canNativeShare && (
+                          <button
+                            onClick={() => shareInviteText(list.id)}
+                            style={{
+                              padding: '8px 14px', borderRadius: 8, border: 'none',
+                              background: '#1A1A2E', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                            }}
+                          >
+                            共有する（LINE・メール等）
+                          </button>
+                        )}
+                        <button
+                          onClick={() => copyInviteShareText(list.id)}
+                          style={{
+                            padding: '8px 14px', borderRadius: 8, border: '1px solid #E5E7EB',
+                            background: '#fff', color: '#1A1A2E', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                          }}
+                        >
+                          {copiedSlug === `invite:${list.id}` ? 'コピーしました' : 'テキストをコピー'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )
         ) : (
           !isPrivate && (
             <div style={{ fontSize: 11, color: '#9CA3AF' }}>ピンは最大3名までです</div>
           )
         )}
 
-        {/* §2-9: RP外のプロの招待(非公開リストでは掲載通知の前提が無いため出さない) */}
+        {/* CEO指摘(先行テスト・UI修正②): 共有URLの常時表示をやめ、カード最下部にQR/共有/コピーの
+            静かなボタン群として集約する。QRは既存BadgeQRModalと同じqrcode.react(既存依存)を利用。 */}
         {!isPrivate && (
           <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px dashed #E5E7EB' }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#1A1A2E', marginBottom: 6 }}>
-              RP外のプロを追加
+            <div style={{ fontSize: 10, color: '#9CA3AF', marginBottom: 6 }}>
+              クライアントに共有（紹介ページが開きます）
             </div>
-            {/* CEO指摘(先行テスト): 入力とボタンの横並びがスマホ幅(360〜390px)で横スクロールの
-                原因になっていたため縦積みにする */}
-            <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
-              <input
-                value={inviteName[list.id] || ''}
-                onChange={(e) => setInviteName((prev) => ({ ...prev, [list.id]: e.target.value.slice(0, 100) }))}
-                placeholder="先生のお名前"
-                style={{
-                  width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #E5E7EB',
-                  fontSize: 13, boxSizing: 'border-box' as const,
-                }}
-              />
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
               <button
-                onClick={() => createInvite(list.id)}
-                disabled={invitingList === list.id || !(inviteName[list.id] || '').trim()}
+                onClick={() => setQrModalListId(list.id)}
                 style={{
-                  padding: '8px 14px', borderRadius: 8, border: 'none', alignSelf: 'flex-start' as const,
-                  background: '#1A1A2E', color: '#fff', fontSize: 12, fontWeight: 600,
-                  cursor: invitingList === list.id ? 'default' : 'pointer',
-                  opacity: invitingList === list.id ? 0.6 : 1,
+                  padding: '8px 12px', borderRadius: 8, border: '1px solid #E5E7EB',
+                  background: '#fff', color: '#1A1A2E', fontSize: 12, fontWeight: 600, cursor: 'pointer',
                 }}
               >
-                招待URLを発行
+                QRコードを表示
+              </button>
+              {canNativeShare && (
+                <button
+                  onClick={() => shareListUrl(list.slug)}
+                  style={{
+                    padding: '8px 12px', borderRadius: 8, border: '1px solid #E5E7EB',
+                    background: '#fff', color: '#1A1A2E', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  }}
+                >
+                  共有する
+                </button>
+              )}
+              <button
+                onClick={() => copyShareUrl(list.slug)}
+                style={{
+                  padding: '8px 12px', borderRadius: 8, border: '1px solid #E5E7EB',
+                  background: '#fff', color: '#1A1A2E', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                {copiedSlug === list.slug ? 'コピーしました' : 'URLをコピー'}
               </button>
             </div>
-            {/* §2-9(第3弾): 発行後はURL単体でなく「編集できる共有テキスト＋ネイティブ共有/コピー」を出す。
-                1人分(single-use)であることを宛名付きで明示する(§0-6: 絵文字なし・静かな表示) */}
-            {issuedInviteUrl[list.id] && (
-              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column' as const, gap: 6, minWidth: 0 }}>
-                <div style={{ fontSize: 11, color: '#8A6D1F', lineHeight: 1.6 }}>
-                  この招待URLは1人分です（{issuedInviteName[list.id] ? `${issuedInviteName[list.id]}先生用` : 'お相手の先生専用'}）。別の先生には新しいURLを発行してください
-                </div>
-                <textarea
-                  value={inviteShareText[list.id] || ''}
-                  onChange={(e) => setInviteShareText((prev) => ({ ...prev, [list.id]: e.target.value }))}
-                  style={{
-                    width: '100%', minHeight: 88, padding: '8px 10px', borderRadius: 8,
-                    border: '1px solid #E5E7EB', fontSize: 12, color: '#374151',
-                    boxSizing: 'border-box' as const, resize: 'vertical' as const, lineHeight: 1.6,
-                  }}
-                />
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
-                  {canNativeShare && (
-                    <button
-                      onClick={() => shareInviteText(list.id)}
-                      style={{
-                        padding: '8px 14px', borderRadius: 8, border: 'none',
-                        background: '#1A1A2E', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                      }}
-                    >
-                      共有する（LINE・メール等）
-                    </button>
-                  )}
-                  <button
-                    onClick={() => copyInviteShareText(list.id)}
-                    style={{
-                      padding: '8px 14px', borderRadius: 8, border: '1px solid #E5E7EB',
-                      background: '#fff', color: '#1A1A2E', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                    }}
-                  >
-                    {copiedSlug === `invite:${list.id}` ? 'コピーしました' : 'テキストをコピー'}
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -1317,6 +1423,47 @@ export default function ReferralTab({ proId }: Props) {
           ))}
         </div>
       )}
+
+      {/* CEO指摘(先行テスト・UI修正②): クライアントに共有するURLのQRコードモーダル(タップで閉じる) */}
+      {qrModalListId && (() => {
+        const qrList = lists.find((l) => l.id === qrModalListId)
+        if (!qrList) return null
+        const qrUrl = `${SHARE_ORIGIN}/r/${qrList.slug}`
+        return (
+          <div
+            onClick={() => setQrModalListId(null)}
+            style={{
+              position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 16,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: '#fff', borderRadius: 16, padding: 24, maxWidth: 320, width: '100%',
+                textAlign: 'center' as const, boxSizing: 'border-box' as const,
+              }}
+            >
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1A2E', marginBottom: 12 }}>{qrList.title}</div>
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+                <QRCodeSVG value={qrUrl} size={200} />
+              </div>
+              <div style={{ fontSize: 11, color: '#9CA3AF', wordBreak: 'break-all' as const, marginBottom: 16 }}>
+                {qrUrl}
+              </div>
+              <button
+                onClick={() => setQrModalListId(null)}
+                style={{
+                  width: '100%', padding: '10px', borderRadius: 8, border: 'none',
+                  background: '#1A1A2E', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                閉じる
+              </button>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
