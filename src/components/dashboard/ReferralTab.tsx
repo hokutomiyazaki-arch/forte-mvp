@@ -567,9 +567,10 @@ export default function ReferralTab({ proId }: Props) {
           setIssuedInviteUrl((prev) => ({ ...prev, [listId]: data.invite_url }))
           // §2-9(第3弾): 宛名(1人分の明示)と、編集可能な共有テキストの初期値をセットする
           setIssuedInviteName((prev) => ({ ...prev, [listId]: name }))
+          // CEO決定(先行テスト第3弾・案B): 業種を限定しない語彙(§0-3)＋紹介目的の明言＋宛名入り
           setInviteShareText((prev) => ({
             ...prev,
-            [listId]: `REALPROOFという、施術の実績が記録として残るサービスを使っています。\n信頼できる連携先として登録したいので、よければプロフィールを作ってもらえませんか。→ ${data.invite_url}`,
+            [listId]: `${name}先生をぜひ私の「紹介リスト」に載せたく、ご連絡しました。\nREALPROOFという、クライアントからの評価が実績として記録に残るサービスです。\nよければプロフィールを作ってもらえませんか → ${data.invite_url}`,
           }))
         }
         setInviteName((prev) => ({ ...prev, [listId]: '' }))
@@ -782,9 +783,16 @@ export default function ReferralTab({ proId }: Props) {
                   </div>
                   <button
                     onClick={() => removePin(list.id, item.pro_id)}
-                    style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 11, cursor: 'pointer', flexShrink: 0 }}
+                    title={isPrivate ? '気になるプロから外す' : undefined}
+                    style={
+                      isPrivate
+                        ? // CEO指示(先行テスト第3弾): 気になるプロは「外す」でなくカード♡と同じ
+                          // 色付きハートで統一。タップで外れる(§0-6の機能的記号)
+                          { background: 'none', border: 'none', color: '#C4A35A', fontSize: 18, lineHeight: 1, cursor: 'pointer', flexShrink: 0, padding: '2px 4px' }
+                        : { background: 'none', border: 'none', color: '#9CA3AF', fontSize: 11, cursor: 'pointer', flexShrink: 0 }
+                    }
                   >
-                    外す
+                    {isPrivate ? '♥' : '外す'}
                   </button>
                 </div>
                 {/* レビュー指摘(先行テスト): 外す/一言保存の失敗を可視化 */}
