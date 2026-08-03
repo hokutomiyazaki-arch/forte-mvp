@@ -1071,15 +1071,89 @@ export default function ReferralTab({ proId }: Props) {
     )
   }
 
+  // リスト作成カード(§3-0-2第3弾: 主導線から降格・折りたたみデフォルト)。
+  // CEO指摘(先行テスト第3弾): 最下部だと気になるプロの長い一覧に埋もれて見つからないため、
+  // 共有リスト一覧の直後=「気になるプロ」セクションの上に配置する。
+  const createListCard = (
+    <div style={{ background: '#fff', borderRadius: 14, padding: showCreateForm ? '18px 16px' : '12px 16px', border: '1px solid #E5E7EB' }}>
+      {!showCreateForm ? (
+        <button
+          onClick={() => setShowCreateForm(true)}
+          style={{ background: 'none', border: 'none', color: '#C4A35A', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0 }}
+        >
+          ＋ リストを直接作る
+        </button>
+      ) : (
+        <>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, gap: 8 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', margin: 0 }}>
+              {/* 先行テスト指摘C: 公開リストが0件の間は「最初の1件」であることを明示する */}
+              {publicLists.length === 0 ? '最初の紹介リストを作りましょう' : '新しい紹介リストを作る'}
+            </h3>
+            <button
+              onClick={() => setShowCreateForm(false)}
+              style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 12, cursor: 'pointer', flexShrink: 0 }}
+            >
+              閉じる
+            </button>
+          </div>
+          <input
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value.slice(0, 200))}
+            placeholder="例: 名古屋圏・めまい/ふらつき"
+            style={{
+              width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #E5E7EB',
+              fontSize: 13, boxSizing: 'border-box' as const, marginBottom: 8,
+            }}
+          />
+          <textarea
+            value={newComment}
+            onChange={(e) => setNewComment(e.target.value)}
+            placeholder="選定基準の説明（例: 私が信頼して紹介できる先生方です）"
+            style={{
+              width: '100%', minHeight: 60, padding: '10px 12px', borderRadius: 8, border: '1px solid #E5E7EB',
+              fontSize: 13, boxSizing: 'border-box' as const, marginBottom: 10, resize: 'vertical' as const,
+            }}
+          />
+          <button
+            onClick={createList}
+            disabled={creating || !newTitle.trim()}
+            style={{
+              padding: '8px 20px', borderRadius: 8, border: 'none',
+              background: '#C4A35A', color: '#fff', fontSize: 13, fontWeight: 600,
+              cursor: creating || !newTitle.trim() ? 'default' : 'pointer',
+              opacity: creating || !newTitle.trim() ? 0.6 : 1,
+            }}
+          >
+            {creating ? '作成中...' : 'リストを作成'}
+          </button>
+          {/* 先行テストB: disabledなだけだと「押したのに無反応」に見えるため、理由を明示する */}
+          {!creating && !newTitle.trim() && (
+            <span style={{ fontSize: 11, color: '#9CA3AF', marginLeft: 10 }}>
+              タイトルを入力すると作成できます
+            </span>
+          )}
+          {/* レビュー指摘(先行テスト): 作成失敗(403含む)が無言だったため可視化 */}
+          {createListError && (
+            <div style={{ fontSize: 11, color: '#B00020', marginTop: 8, lineHeight: 1.6 }}>{createListError}</div>
+          )}
+        </>
+      )}
+    </div>
+  )
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {/* リスト一覧 */}
       {listsLoading ? (
         <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>読み込み中...</div>
       ) : lists.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>
-          まだ紹介リストがありません
-        </div>
+        <>
+          <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>
+            まだ紹介リストがありません
+          </div>
+          {createListCard}
+        </>
       ) : (
         <>
           {publicLists.length > 0 && (
@@ -1087,6 +1161,8 @@ export default function ReferralTab({ proId }: Props) {
               {publicLists.map((list) => renderListCard(list, false))}
             </div>
           )}
+
+          {createListCard}
 
           {privateLists.length > 0 && (
             <div style={{ marginTop: publicLists.length > 0 ? 24 : 0 }}>
@@ -1103,73 +1179,6 @@ export default function ReferralTab({ proId }: Props) {
           )}
         </>
       )}
-
-      {/* リスト作成(§3-0-2第3弾: 主導線から降格。一覧の下・折りたたみデフォルト) */}
-      <div style={{ background: '#fff', borderRadius: 14, padding: showCreateForm ? '18px 16px' : '12px 16px', border: '1px solid #E5E7EB' }}>
-        {!showCreateForm ? (
-          <button
-            onClick={() => setShowCreateForm(true)}
-            style={{ background: 'none', border: 'none', color: '#C4A35A', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0 }}
-          >
-            ＋ リストを直接作る
-          </button>
-        ) : (
-          <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, gap: 8 }}>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', margin: 0 }}>
-                {/* 先行テスト指摘C: 公開リストが0件の間は「最初の1件」であることを明示する */}
-                {publicLists.length === 0 ? '最初の紹介リストを作りましょう' : '新しい紹介リストを作る'}
-              </h3>
-              <button
-                onClick={() => setShowCreateForm(false)}
-                style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 12, cursor: 'pointer', flexShrink: 0 }}
-              >
-                閉じる
-              </button>
-            </div>
-            <input
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value.slice(0, 200))}
-              placeholder="例: 名古屋圏・めまい/ふらつき"
-              style={{
-                width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #E5E7EB',
-                fontSize: 13, boxSizing: 'border-box' as const, marginBottom: 8,
-              }}
-            />
-            <textarea
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              placeholder="選定基準の説明（例: 私が信頼して紹介できる先生方です）"
-              style={{
-                width: '100%', minHeight: 60, padding: '10px 12px', borderRadius: 8, border: '1px solid #E5E7EB',
-                fontSize: 13, boxSizing: 'border-box' as const, marginBottom: 10, resize: 'vertical' as const,
-              }}
-            />
-            <button
-              onClick={createList}
-              disabled={creating || !newTitle.trim()}
-              style={{
-                padding: '8px 20px', borderRadius: 8, border: 'none',
-                background: '#C4A35A', color: '#fff', fontSize: 13, fontWeight: 600,
-                cursor: creating || !newTitle.trim() ? 'default' : 'pointer',
-                opacity: creating || !newTitle.trim() ? 0.6 : 1,
-              }}
-            >
-              {creating ? '作成中...' : 'リストを作成'}
-            </button>
-            {/* 先行テストB: disabledなだけだと「押したのに無反応」に見えるため、理由を明示する */}
-            {!creating && !newTitle.trim() && (
-              <span style={{ fontSize: 11, color: '#9CA3AF', marginLeft: 10 }}>
-                タイトルを入力すると作成できます
-              </span>
-            )}
-            {/* レビュー指摘(先行テスト): 作成失敗(403含む)が無言だったため可視化 */}
-            {createListError && (
-              <div style={{ fontSize: 11, color: '#B00020', marginTop: 8, lineHeight: 1.6 }}>{createListError}</div>
-            )}
-          </>
-        )}
-      </div>
 
       {/* §2-10: 成立した紹介（送り手側の予約一覧・案件スレッド・引き継ぎメモ） */}
       {!sentLoading && sentBookings.length > 0 && (
