@@ -155,7 +155,8 @@ export default function ReferralTab({ proId }: Props) {
   // 共有するため関数化した。
   function createListErrorMessage(status: number, errorCode?: string): string {
     if (status === 401) return 'プロアカウントでログインしているか確認してください'
-    if (status === 403) return '先行公開の対象アカウントではありません（FEATURE_REFERRAL_LISTS の設定と再デプロイを確認）'
+    // 軽微指摘: env名等の内部実装は画面に出さない(診断情報は console.error 側にある)
+    if (status === 403) return 'まだこの機能の対象アカウントではありません'
     if (status === 400 && errorCode === 'title_required') return 'タイトルを入力してください'
     if (status === 400 && errorCode === 'title_too_long') return 'タイトルが長すぎます（200文字まで）'
     return `作成に失敗しました（コード: ${status || '不明'}）`
@@ -546,19 +547,31 @@ export default function ReferralTab({ proId }: Props) {
       <div key={list.id} style={{ background: '#fff', borderRadius: 14, padding: '16px', border: '1px solid #E5E7EB' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            {/* §3-1改訂: タイトルのインライン編集(既存PATCH /api/referral/lists/[list_id] を利用) */}
-            <input
-              defaultValue={list.title}
-              onBlur={(e) => {
-                if (e.target.value.trim() && e.target.value.trim() !== list.title) {
-                  updateListTitle(list.id, e.target.value)
-                }
-              }}
-              style={{
-                fontSize: 15, fontWeight: 700, color: '#1A1A2E', border: 'none', background: 'transparent',
-                padding: 0, width: '100%', fontFamily: 'inherit', outline: 'none',
-              }}
-            />
+            {/* §3-1改訂: タイトルのインライン編集(既存PATCH /api/referral/lists/[list_id] を利用)。
+                連携候補(private)はタイトルが移行SQLの冪等ガードにも使われるため表示のみ(軽微指摘)。 */}
+            {isPrivate ? (
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E' }}>{list.title}</div>
+            ) : (
+              <input
+                defaultValue={list.title}
+                onBlur={(e) => {
+                  const trimmed = e.target.value.trim()
+                  if (!trimmed) {
+                    // 軽微指摘: 空欄blurを無言にしない。旧タイトルへ戻して1行知らせる
+                    e.target.value = list.title
+                    setTitleError((prev) => ({ ...prev, [list.id]: 'タイトルは空にできません' }))
+                    return
+                  }
+                  if (trimmed !== list.title) {
+                    updateListTitle(list.id, trimmed)
+                  }
+                }}
+                style={{
+                  fontSize: 15, fontWeight: 700, color: '#1A1A2E', border: 'none', background: 'transparent',
+                  padding: 0, width: '100%', fontFamily: 'inherit', outline: 'none',
+                }}
+              />
+            )}
             {titleSavingId === list.id && (
               <div style={{ fontSize: 10, color: '#9CA3AF' }}>保存中...</div>
             )}
@@ -657,30 +670,48 @@ export default function ReferralTab({ proId }: Props) {
                   <div style={{ paddingLeft: 42 }}>
                     {/* 先行テスト指摘C: 公開リスト0件だと導線が行き止まりだったため、
                         「その場で作成して追加」の1アクションに変更(見出し文言も§3-1改訂で追加)。 */}
-                    {publicLists.length === 0 ? (
-                      quickCreate?.status === 'success' ? (
+                    {/* レビュー指摘(中2): クイック作成は setLists 直後に publicLists が1件になるため、
+                        publicLists.length ではなく quickCreate の有無を先に見る(成功/段階失敗の
+                        メッセージが到達不能になる・連打防止が外れる問題の修正)。 */}
+                    {quickCreate ? (
+                      quickCreate.status === 'success' ? (
                         <div style={{ fontSize: 11, color: '#2E7D32' }}>{quickCreate.message}</div>
                       ) : (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const }}>
                           <button
                             onClick={() => createListAndAddCandidate(list.id, item)}
-                            disabled={quickCreate?.status === 'loading'}
+                            disabled={quickCreate.status === 'loading'}
                             style={{
                               background: 'none', border: '1px solid #C4A35A', color: '#C4A35A',
                               borderRadius: 6, fontSize: 11, fontWeight: 600, padding: '3px 8px',
-                              cursor: quickCreate?.status === 'loading' ? 'default' : 'pointer',
-                              opacity: quickCreate?.status === 'loading' ? 0.6 : 1,
+                              cursor: quickCreate.status === 'loading' ? 'default' : 'pointer',
+                              opacity: quickCreate.status === 'loading' ? 0.6 : 1,
                             }}
                           >
-                            {quickCreate?.status === 'loading'
+                            {quickCreate.status === 'loading'
                               ? '作成中...'
-                              : '＋紹介リストを作成してこの先生を追加'}
+                              : quickCreate.status === 'error'
+                                ? '＋再試行する'
+                                : '＋紹介リストを作成してこの先生を追加'}
                           </button>
-                          {quickCreate?.status === 'error' && (
+                          {quickCreate.status === 'error' && (
                             <span style={{ fontSize: 11, color: '#B00020' }}>{quickCreate.message}</span>
                           )}
                         </div>
                       )
+                    ) : publicLists.length === 0 ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const }}>
+                        <button
+                          onClick={() => createListAndAddCandidate(list.id, item)}
+                          style={{
+                            background: 'none', border: '1px solid #C4A35A', color: '#C4A35A',
+                            borderRadius: 6, fontSize: 11, fontWeight: 600, padding: '3px 8px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          ＋紹介リストを作成してこの先生を追加
+                        </button>
+                      </div>
                     ) : addState?.status === 'success' ? (
                       <div style={{ fontSize: 11, color: '#2E7D32' }}>{addState.message}</div>
                     ) : (

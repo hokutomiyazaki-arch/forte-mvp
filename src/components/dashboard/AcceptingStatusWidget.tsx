@@ -119,6 +119,8 @@ export default function AcceptingStatusWidget({
   }
 
   async function saveNote() {
+    // 軽微指摘: onUpdatedの型契約('open'|'closed')をUI分岐に暗黙依存させない
+    if (!status) return
     setSavingNote(true)
     setNoteError(false)
     try {
@@ -141,6 +143,7 @@ export default function AcceptingStatusWidget({
   }
 
   async function saveDelegate(nextListId: string | null) {
+    if (!status) return
     setSavingDelegate(true)
     setDelegateError(false)
     try {
@@ -179,7 +182,11 @@ export default function AcceptingStatusWidget({
             両方向ボタンを出す(2値トグル1個では未設定から片方にしか動かせないため)。
             一度どちらかに設定した後は、従来通り2値トグル1個に戻る。 */}
         {status === null ? (
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' as const }}>
+            {/* 軽微指摘: 設定画面には1行のWhy説明(何が未設定なのかを明示) */}
+            <span style={{ fontSize: 11, color: '#9CA3AF', width: '100%' }}>
+              他の先生からの紹介を受け付けるかを設定します
+            </span>
             <button
               onClick={() => setAcceptingStatusTo('open')}
               disabled={toggling}
