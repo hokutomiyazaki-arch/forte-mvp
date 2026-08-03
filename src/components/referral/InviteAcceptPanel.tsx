@@ -16,7 +16,7 @@ interface Props {
   alreadyRegistered: boolean
 }
 
-type Status = 'idle' | 'processing' | 'success' | 'needs_profile' | 'already_used' | 'error'
+type Status = 'idle' | 'processing' | 'success' | 'needs_profile' | 'already_used' | 'self_invite' | 'error'
 
 /**
  * §2-9: 招待ランディングの受諾パネル。
@@ -60,6 +60,9 @@ export default function InviteAcceptPanel({ token, alreadyRegistered }: Props) {
           setStatus('needs_profile')
         } else if (data.error === 'invite_already_used') {
           setStatus('already_used')
+        } else if (data.error === 'self_invite_not_allowed') {
+          // CEO指摘(先行テスト第3弾): 招待者本人が自分の招待URLを開いたケース
+          setStatus('self_invite')
         } else {
           setStatus('error')
         }
@@ -124,6 +127,14 @@ export default function InviteAcceptPanel({ token, alreadyRegistered }: Props) {
     return (
       <div style={{ marginTop: 16, fontSize: 13, color: T.textSub, lineHeight: 1.7 }}>
         この招待はすでに別の方によって利用されています。
+      </div>
+    )
+  }
+
+  if (status === 'self_invite') {
+    return (
+      <div style={{ marginTop: 16, fontSize: 13, color: T.textSub, lineHeight: 1.7 }}>
+        ご自身が発行した招待URLです。招待したい先生にこのURLを送ってください（このURLはまだ使われていません）。
       </div>
     )
   }

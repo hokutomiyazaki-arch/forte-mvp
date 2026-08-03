@@ -35,6 +35,13 @@ export async function POST(_request: Request, { params }: { params: { token: str
       return NextResponse.json({ error: 'not_found' }, { status: 404 })
     }
 
+    // CEO指摘(先行テスト第3弾): 招待者本人が自分の招待URLを開いた場合は登録させない
+    // (自分を自分のリストに登録できてしまう穴の閉塞)。トークンは消費しない(400なので
+    // registered_pro_id は空のまま=正規の招待相手が後から使える)。
+    if (invite.inviter_pro_id === ownPro.id) {
+      return NextResponse.json({ error: 'self_invite_not_allowed' }, { status: 400 })
+    }
+
     // 冪等: 既に自分自身が登録済みなら成功として返す(LINEブラウザの2回発火・リロード対策)。
     if (invite.registered_pro_id === ownPro.id) {
       return NextResponse.json({ success: true, already: true })
