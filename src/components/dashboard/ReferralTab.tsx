@@ -117,6 +117,8 @@ export default function ReferralTab({ proId }: Props) {
   const [referralOnlyFilter, setReferralOnlyFilter] = useState(false)
   // レビュー指摘(先行テスト): removePin/updatePinNoteが無言failだったため可視化(key=`${listId}:${pro_id}`)
   const [pinActionError, setPinActionError] = useState<Record<string, string>>({})
+  // CEO指示(先行テスト第3弾): ハートのタップ即時フィードバック(色抜き)用(key同上)
+  const [pinRemoving, setPinRemoving] = useState<Record<string, boolean>>({})
 
   // §3-0-2(第3弾・撤回と再指示): 連携候補(private)の各行から共有リストへ追加する導線を復活。
   // 「追加」を押すと選択UI(既存の共有リスト＋「＋新しいリストを作る」)が開く。
@@ -349,6 +351,9 @@ export default function ReferralTab({ proId }: Props) {
   async function removePin(listId: string, targetProId: string) {
     const key = `${listId}:${targetProId}`
     setPinActionError((prev) => ({ ...prev, [key]: '' }))
+    // CEO指示(先行テスト第3弾): タップ即時にハートの色を抜く(視覚フィードバック)。
+    // 失敗時は色を戻してエラー表示する。
+    setPinRemoving((prev) => ({ ...prev, [key]: true }))
     try {
       const res = await fetch(`/api/referral/lists/${listId}/items`, {
         method: 'DELETE',
@@ -366,6 +371,12 @@ export default function ReferralTab({ proId }: Props) {
       }
     } catch {
       setPinActionError((prev) => ({ ...prev, [key]: '外すのに失敗しました' }))
+    } finally {
+      setPinRemoving((prev) => {
+        const next = { ...prev }
+        delete next[key]
+        return next
+      })
     }
   }
 
@@ -719,7 +730,17 @@ export default function ReferralTab({ proId }: Props) {
                           ]}
                         </span>
                       )}
-                      {item.professionals?.name || '不明なプロ'}
+                      {/* CEO指示(先行テスト第3弾): 名前タップでその人の個人カードへ */}
+                      {item.professionals ? (
+                        <a
+                          href={`/card/${item.pro_id}`}
+                          style={{ color: '#1A1A2E', textDecoration: 'none' }}
+                        >
+                          {item.professionals.name}
+                        </a>
+                      ) : (
+                        '不明なプロ'
+                      )}
                     </div>
                     {!isPrivate && <div style={{ fontSize: 11, color: label.color }}>{label.text}</div>}
                     {/* CEO指摘(先行テスト第3弾): 一言メモは共有リストのみ(気になるプロ=privateには不要)。
@@ -783,16 +804,30 @@ export default function ReferralTab({ proId }: Props) {
                   </div>
                   <button
                     onClick={() => removePin(list.id, item.pro_id)}
+                    disabled={!!pinRemoving[addKey]}
                     title={isPrivate ? '気になるプロから外す' : undefined}
                     style={
                       isPrivate
                         ? // CEO指示(先行テスト第3弾): 気になるプロは「外す」でなくカード♡と同じ
-                          // 色付きハートで統一。タップで外れる(§0-6の機能的記号)
-                          { background: 'none', border: 'none', color: '#C4A35A', fontSize: 18, lineHeight: 1, cursor: 'pointer', flexShrink: 0, padding: '2px 4px' }
+                          // 色付きハートで統一。テキスト字形は端末で形が揃わないためSVGで描画し、
+                          // タップ即時に色が抜ける(塗り→枠線のみ)フィードバックを出す
+                          { background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, padding: '2px 4px', lineHeight: 0 }
                         : { background: 'none', border: 'none', color: '#9CA3AF', fontSize: 11, cursor: 'pointer', flexShrink: 0 }
                     }
                   >
-                    {isPrivate ? '♥' : '外す'}
+                    {isPrivate ? (
+                      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          d="M12 21s-6.7-4.4-9.3-8.1C.8 10.2 1.5 6.6 4.3 5.2c2.1-1 4.6-.4 6 1.4l1.7 2.1 1.7-2.1c1.4-1.8 3.9-2.4 6-1.4 2.8 1.4 3.5 5 1.6 7.7C18.7 16.6 12 21 12 21z"
+                          fill={pinRemoving[addKey] ? 'none' : '#C4A35A'}
+                          stroke={pinRemoving[addKey] ? '#C9C4BA' : '#C4A35A'}
+                          strokeWidth="1.6"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    ) : (
+                      '外す'
+                    )}
                   </button>
                 </div>
                 {/* レビュー指摘(先行テスト): 外す/一言保存の失敗を可視化 */}
