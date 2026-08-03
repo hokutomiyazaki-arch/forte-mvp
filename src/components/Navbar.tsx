@@ -47,6 +47,7 @@ export default function Navbar() {
   const { signOut } = useClerk()
   const [menuOpen, setMenuOpen] = useState(false)
   const [openMenuGroups, setOpenMenuGroups] = useState<Record<string, boolean>>({
+    certificates: false,
     settings: false,
     discover: false,
     support: false,
@@ -59,7 +60,7 @@ export default function Navbar() {
 
   const closeMenu = () => {
     setMenuOpen(false)
-    setOpenMenuGroups({ settings: false, discover: false, support: false })
+    setOpenMenuGroups({ certificates: false, settings: false, discover: false, support: false })
   }
 
   function renderMenuItems() {
@@ -73,8 +74,32 @@ export default function Navbar() {
           {isPro && (
             <a href="/dashboard" onClick={closeMenu} style={{ ...menuLinkStyle, color: '#C4A35A', fontWeight: 700 }}>ダッシュボード</a>
           )}
+          {/* CEO指示(2026-08-03): 紹介はコアメニューのためトップレベルへ昇格(設定グループから移動) */}
+          {isPro && referralEnabled && (
+            <a href="/dashboard?tab=referral" onClick={closeMenu} style={menuLinkStyle}>紹介</a>
+          )}
+          {/* CEO指示(2026-08-03): 「獲得バッジ」→「証明書発行」に改名し、認定申請も中に入れるグループに */}
           {isPro && (
-            <a href="/dashboard?tab=badges" onClick={closeMenu} style={menuLinkStyle}>獲得バッジ</a>
+            <>
+              <button onClick={() => toggleMenuGroup('certificates')} style={{ ...menuGroupLabel, display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', background: 'none', border: 'none', cursor: 'pointer' }}>
+                <span>証明書発行</span>
+                <ChevronIcon isOpen={!!openMenuGroups.certificates} />
+              </button>
+              <div style={{ maxHeight: openMenuGroups.certificates ? '500px' : '0px', overflow: 'hidden', transition: 'max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1)' }}>
+                <a href="/dashboard?tab=badges" onClick={closeMenu} style={menuLinkStyle}>獲得バッジ</a>
+                {eligibleCertificationTier && (
+                  <a
+                    href="/dashboard?action=certification"
+                    onClick={closeMenu}
+                    style={{ ...menuLinkStyle, color: '#C4A35A', fontWeight: 700 }}
+                  >
+                    {eligibleCertificationTier === 'LEGEND' ? '💎 LEGEND認定申請'
+                      : eligibleCertificationTier === 'MASTER' ? '👑 MASTER認定申請'
+                      : '🏆 SPECIALIST認定申請'}
+                  </a>
+                )}
+              </div>
+            </>
           )}
           {/* 設定（プロのみ） */}
           {isPro && (
@@ -88,21 +113,7 @@ export default function Navbar() {
                 <a href="/dashboard?tab=business-info" onClick={closeMenu} style={menuLinkStyle}>サービス・案内</a>
                 <a href="/dashboard?tab=proofs" onClick={closeMenu} style={menuLinkStyle}>強み設定</a>
                 <a href="/dashboard?tab=rewards" onClick={closeMenu} style={menuLinkStyle}>リワード設定</a>
-                {referralEnabled && (
-                  <a href="/dashboard?tab=referral" onClick={closeMenu} style={menuLinkStyle}>紹介</a>
-                )}
                 <a href="/dashboard?tab=card" onClick={closeMenu} style={menuLinkStyle}>NFCカード</a>
-                {eligibleCertificationTier && (
-                  <a
-                    href="/dashboard?action=certification"
-                    onClick={closeMenu}
-                    style={{ ...menuLinkStyle, color: '#C4A35A', fontWeight: 700 }}
-                  >
-                    {eligibleCertificationTier === 'LEGEND' ? '💎 LEGEND認定申請'
-                      : eligibleCertificationTier === 'MASTER' ? '👑 MASTER認定申請'
-                      : '🏆 SPECIALIST認定申請'}
-                  </a>
-                )}
               </div>
             </>
           )}
