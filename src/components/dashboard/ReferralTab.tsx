@@ -47,7 +47,7 @@ interface SearchResultPro {
   prefecture: string | null
   accepting_status: 'open' | 'closed' | null
   delegate_list_id?: string | null
-  referralSignal?: 'open' | 'delegate' | 'closed'
+  referralSignal?: 'open' | 'delegate' | 'closed' | 'unset'
 }
 
 interface SentBooking {
@@ -89,19 +89,32 @@ export default function ReferralTab({ proId }: Props) {
   const [newTitle, setNewTitle] = useState('')
   const [newComment, setNewComment] = useState('')
   const [creating, setCreating] = useState(false)
+  // レビュー指摘(先行テスト): 作成失敗が無言だった(else無し)ため、失敗を可視化するインラインエラー
+  const [createListError, setCreateListError] = useState<string | null>(null)
+
+  // §3-1改訂(ゼロ状態導線): リストのタイトルをカード上でインライン編集する最小UI
+  const [titleSavingId, setTitleSavingId] = useState<string | null>(null)
+  const [titleError, setTitleError] = useState<Record<string, string>>({})
 
   // ピン追加UI（リストごとに検索クエリ・結果を保持）
   const [pinQuery, setPinQuery] = useState<Record<string, string>>({})
   const [pinResults, setPinResults] = useState<Record<string, SearchResultPro[]>>({})
   const [pinSearching, setPinSearching] = useState<Record<string, boolean>>({})
+  const [pinSearchError, setPinSearchError] = useState<Record<string, boolean>>({})
   const [addingPin, setAddingPin] = useState<string | null>(null)
   // §2-2改訂: 「紹介につながる人のみ表示」フィルタ(仕様通りデフォルトOFF)
   const [referralOnlyFilter, setReferralOnlyFilter] = useState(false)
+  // レビュー指摘(先行テスト): removePin/updatePinNoteが無言failだったため可視化(key=`${listId}:${pro_id}`)
+  const [pinActionError, setPinActionError] = useState<Record<string, string>>({})
 
   // §3-1: 連携候補(private)→処方箋リスト(link/public)への追加導線
   // key = `${sourceListId}:${pro_id}`
   const [addToListSelection, setAddToListSelection] = useState<Record<string, string>>({})
   const [addToListState, setAddToListState] = useState<
+    Record<string, { status: 'loading' | 'success' | 'error'; message?: string }>
+  >({})
+  // §3-1改訂(ゼロ状態導線): 公開リスト0件の連携候補行から「その場で作成して追加」する状態(key同上)
+  const [quickCreateState, setQuickCreateState] = useState<
     Record<string, { status: 'loading' | 'success' | 'error'; message?: string }>
   >({})
 
@@ -136,26 +149,59 @@ export default function ReferralTab({ proId }: Props) {
       .finally(() => setSentLoading(false))
   }, [])
 
-  async function createList() {
-    const title = newTitle.trim()
-    if (!title) return
-    setCreating(true)
+  // CEO調査更新(先行テスト): POST /api/referral/lists の失敗経路は
+  // 401(unauthorized)/403(forbidden)/400(title_required|title_too_long)/500(failed_to_create)の4系統。
+  // errorコード別に人間向け文言を出し分ける。§3-1のゼロ状態導線(createListAndAddCandidate)からも
+  // 共有するため関数化した。
+  function createListErrorMessage(status: number, errorCode?: string): string {
+    if (status === 401) return 'プロアカウントでログインしているか確認してください'
+    if (status === 403) return '先行公開の対象アカウントではありません（FEATURE_REFERRAL_LISTS の設定と再デプロイを確認）'
+    if (status === 400 && errorCode === 'title_required') return 'タイトルを入力してください'
+    if (status === 400 && errorCode === 'title_too_long') return 'タイトルが長すぎます（200文字まで）'
+    return `作成に失敗しました（コード: ${status || '不明'}）`
+  }
+
+  // 追加教訓(2026-04): 判別共用体は環境次第で絞り込みに失敗することがあるため、
+  // flat型(okはbooleanのみ・list/errorCodeは常にoptional)で返す。
+  async function postCreateList(
+    title: string,
+    comment: string | null
+  ): Promise<{ ok: boolean; list?: ReferralList; status: number; errorCode?: string }> {
     try {
       const res = await fetch('/api/referral/lists', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
-        body: JSON.stringify({ title, comment: newComment.trim() || null }),
+        body: JSON.stringify({ title, comment }),
       })
       if (res.ok) {
         const data = await res.json()
-        setLists((prev) => [data.list, ...prev])
-        setNewTitle('')
-        setNewComment('')
+        return { ok: true, list: data.list, status: res.status }
       }
-    } finally {
-      setCreating(false)
+      // CEO調査更新: 本番でDevToolsから真因(401/403/400のどれか)を特定できるよう診断ログを残す
+      const body = await res.json().catch(() => ({}))
+      console.error('[ReferralTab] POST /api/referral/lists failed', res.status, body)
+      return { ok: false, status: res.status, errorCode: body?.error }
+    } catch (err) {
+      console.error('[ReferralTab] POST /api/referral/lists network error', err)
+      return { ok: false, status: 0 }
     }
+  }
+
+  async function createList() {
+    const title = newTitle.trim()
+    if (!title) return
+    setCreating(true)
+    setCreateListError(null)
+    const result = await postCreateList(title, newComment.trim() || null)
+    if (result.ok && result.list) {
+      setLists((prev) => [result.list as ReferralList, ...prev])
+      setNewTitle('')
+      setNewComment('')
+    } else {
+      setCreateListError(createListErrorMessage(result.status, result.errorCode))
+    }
+    setCreating(false)
   }
 
   async function deleteList(listId: string) {
@@ -180,13 +226,19 @@ export default function ReferralTab({ proId }: Props) {
   async function runProSearch(listId: string, query: string, referralOnlyOverride?: boolean) {
     const effectiveReferralOnly = referralOnlyOverride !== undefined ? referralOnlyOverride : referralOnlyFilter
     setPinSearching((prev) => ({ ...prev, [listId]: true }))
+    setPinSearchError((prev) => ({ ...prev, [listId]: false }))
     try {
       const url = `/api/referral/pro-search?q=${encodeURIComponent(query)}${effectiveReferralOnly ? '&referral_only=1' : ''}`
       const res = await fetch(url, { cache: 'no-store' })
       if (res.ok) {
         const data = await res.json()
         setPinResults((prev) => ({ ...prev, [listId]: data.professionals || [] }))
+      } else {
+        // レビュー指摘(先行テスト): 検索失敗が無言(結果0件と見分けがつかない)だったため可視化
+        setPinSearchError((prev) => ({ ...prev, [listId]: true }))
       }
+    } catch {
+      setPinSearchError((prev) => ({ ...prev, [listId]: true }))
     } finally {
       setPinSearching((prev) => ({ ...prev, [listId]: false }))
     }
@@ -254,16 +306,25 @@ export default function ReferralTab({ proId }: Props) {
   }
 
   async function removePin(listId: string, targetProId: string) {
-    const res = await fetch(`/api/referral/lists/${listId}/items`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      cache: 'no-store',
-      body: JSON.stringify({ pro_id: targetProId }),
-    })
-    if (res.ok) {
-      setLists((prev) =>
-        prev.map((l) => (l.id === listId ? { ...l, items: l.items.filter((i) => i.pro_id !== targetProId) } : l))
-      )
+    const key = `${listId}:${targetProId}`
+    setPinActionError((prev) => ({ ...prev, [key]: '' }))
+    try {
+      const res = await fetch(`/api/referral/lists/${listId}/items`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ pro_id: targetProId }),
+      })
+      if (res.ok) {
+        setLists((prev) =>
+          prev.map((l) => (l.id === listId ? { ...l, items: l.items.filter((i) => i.pro_id !== targetProId) } : l))
+        )
+      } else {
+        // レビュー指摘(先行テスト): 除去失敗が無言だったため可視化
+        setPinActionError((prev) => ({ ...prev, [key]: '除去に失敗しました' }))
+      }
+    } catch {
+      setPinActionError((prev) => ({ ...prev, [key]: '除去に失敗しました' }))
     }
   }
 
@@ -311,21 +372,116 @@ export default function ReferralTab({ proId }: Props) {
     }
   }
 
-  async function updatePinNote(listId: string, targetProId: string, note: string) {
-    const res = await fetch(`/api/referral/lists/${listId}/items`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      cache: 'no-store',
-      body: JSON.stringify({ pro_id: targetProId, note }),
-    })
-    if (res.ok) {
-      setLists((prev) =>
-        prev.map((l) =>
-          l.id === listId
-            ? { ...l, items: l.items.map((i) => (i.pro_id === targetProId ? { ...i, note } : i)) }
-            : l
+  // §3-1改訂(先行テスト指摘C・ゼロ状態導線): 公開リストが0件のとき、連携候補の1行から
+  // 「①デフォルトタイトルでリスト作成 → ②その先生をピン追加」を1アクションで行う。
+  // タイトルは後から renderListCard のインライン編集で変更できる。
+  const DEFAULT_LIST_TITLE = '紹介リスト'
+  async function createListAndAddCandidate(sourceListId: string, item: ListItem) {
+    const key = `${sourceListId}:${item.pro_id}`
+    setQuickCreateState((prev) => ({ ...prev, [key]: { status: 'loading' } }))
+
+    const created = await postCreateList(DEFAULT_LIST_TITLE, null)
+    if (!created.ok || !created.list) {
+      setQuickCreateState((prev) => ({
+        ...prev,
+        [key]: { status: 'error', message: createListErrorMessage(created.status, created.errorCode) },
+      }))
+      return
+    }
+    const newList = created.list
+    setLists((prev) => [newList, ...prev])
+
+    try {
+      const res = await fetch(`/api/referral/lists/${newList.id}/items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ pro_id: item.pro_id }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setLists((prev) =>
+          prev.map((l) =>
+            l.id === newList.id
+              ? { ...l, items: [...l.items, { ...data.item, professionals: item.professionals }] }
+              : l
+          )
         )
-      )
+        setQuickCreateState((prev) => ({
+          ...prev,
+          [key]: {
+            status: 'success',
+            message: 'リストを作成し、掲載の承諾依頼を送りました。タイトルは後から編集できます',
+          },
+        }))
+      } else {
+        // リスト自体の作成は成功済みのため、その旨をエラー文言に明記する(段階失敗の可視化)
+        const err = await res.json().catch(() => ({}))
+        const message =
+          err.error === 'already_pinned'
+            ? 'すでにこのリストに追加されています（リストは作成済みです）'
+            : err.error === 'max_pins_reached'
+              ? 'このリストは最大3名までです（リストは作成済みです）'
+              : '先生の追加に失敗しました（リストは作成済みです）'
+        setQuickCreateState((prev) => ({ ...prev, [key]: { status: 'error', message } }))
+      }
+    } catch {
+      setQuickCreateState((prev) => ({
+        ...prev,
+        [key]: { status: 'error', message: '先生の追加に失敗しました（リストは作成済みです）' },
+      }))
+    }
+  }
+
+  async function updateListTitle(listId: string, title: string) {
+    const trimmed = title.trim()
+    if (!trimmed) return
+    setTitleSavingId(listId)
+    setTitleError((prev) => ({ ...prev, [listId]: '' }))
+    try {
+      const res = await fetch(`/api/referral/lists/${listId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ title: trimmed }),
+      })
+      if (res.ok) {
+        setLists((prev) => prev.map((l) => (l.id === listId ? { ...l, title: trimmed } : l)))
+      } else {
+        setTitleError((prev) => ({ ...prev, [listId]: 'タイトルの更新に失敗しました' }))
+      }
+    } catch {
+      setTitleError((prev) => ({ ...prev, [listId]: 'タイトルの更新に失敗しました' }))
+    } finally {
+      setTitleSavingId(null)
+    }
+  }
+
+  async function updatePinNote(listId: string, targetProId: string, note: string) {
+    const key = `${listId}:${targetProId}`
+    setPinActionError((prev) => ({ ...prev, [key]: '' }))
+    try {
+      const res = await fetch(`/api/referral/lists/${listId}/items`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ pro_id: targetProId, note }),
+      })
+      if (res.ok) {
+        setLists((prev) =>
+          prev.map((l) =>
+            l.id === listId
+              ? { ...l, items: l.items.map((i) => (i.pro_id === targetProId ? { ...i, note } : i)) }
+              : l
+          )
+        )
+      } else {
+        // レビュー指摘(先行テスト): 一言メモの保存失敗が無言だったため可視化
+        // (入力欄は非制御コンポーネントのため、保存に失敗しても入力値は消えない=データ消失はしない)
+        setPinActionError((prev) => ({ ...prev, [key]: '一言の保存に失敗しました' }))
+      }
+    } catch {
+      setPinActionError((prev) => ({ ...prev, [key]: '一言の保存に失敗しました' }))
     }
   }
 
@@ -388,16 +544,34 @@ export default function ReferralTab({ proId }: Props) {
   function renderListCard(list: ReferralList, isPrivate: boolean) {
     return (
       <div key={list.id} style={{ background: '#fff', borderRadius: 14, padding: '16px', border: '1px solid #E5E7EB' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E' }}>{list.title}</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {/* §3-1改訂: タイトルのインライン編集(既存PATCH /api/referral/lists/[list_id] を利用) */}
+            <input
+              defaultValue={list.title}
+              onBlur={(e) => {
+                if (e.target.value.trim() && e.target.value.trim() !== list.title) {
+                  updateListTitle(list.id, e.target.value)
+                }
+              }}
+              style={{
+                fontSize: 15, fontWeight: 700, color: '#1A1A2E', border: 'none', background: 'transparent',
+                padding: 0, width: '100%', fontFamily: 'inherit', outline: 'none',
+              }}
+            />
+            {titleSavingId === list.id && (
+              <div style={{ fontSize: 10, color: '#9CA3AF' }}>保存中...</div>
+            )}
+            {titleError[list.id] && (
+              <div style={{ fontSize: 10, color: '#B00020' }}>{titleError[list.id]}</div>
+            )}
             {list.comment && (
               <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4, lineHeight: 1.5 }}>{list.comment}</div>
             )}
           </div>
           <button
             onClick={() => deleteList(list.id)}
-            style={{ background: 'none', border: 'none', color: '#B00020', fontSize: 12, cursor: 'pointer' }}
+            style={{ background: 'none', border: 'none', color: '#B00020', fontSize: 12, cursor: 'pointer', flexShrink: 0 }}
           >
             削除
           </button>
@@ -427,6 +601,8 @@ export default function ReferralTab({ proId }: Props) {
             const label = consentLabel(item.consent_status)
             const addKey = `${list.id}:${item.pro_id}`
             const addState = addToListState[addKey]
+            const quickCreate = quickCreateState[addKey]
+            const pinError = pinActionError[addKey]
             return (
               <div
                 key={item.id}
@@ -471,14 +647,40 @@ export default function ReferralTab({ proId }: Props) {
                     除去
                   </button>
                 </div>
+                {/* レビュー指摘(先行テスト): 除去/一言保存の失敗を可視化 */}
+                {pinError && (
+                  <div style={{ fontSize: 11, color: '#B00020', paddingLeft: 42 }}>{pinError}</div>
+                )}
 
                 {/* §3-1: 連携候補(private)行のみ「処方箋リストへ追加」導線を出す */}
                 {isPrivate && (
                   <div style={{ paddingLeft: 42 }}>
+                    {/* 先行テスト指摘C: 公開リスト0件だと導線が行き止まりだったため、
+                        「その場で作成して追加」の1アクションに変更(見出し文言も§3-1改訂で追加)。 */}
                     {publicLists.length === 0 ? (
-                      <div style={{ fontSize: 11, color: '#9CA3AF' }}>
-                        先に紹介リストを作成してください
-                      </div>
+                      quickCreate?.status === 'success' ? (
+                        <div style={{ fontSize: 11, color: '#2E7D32' }}>{quickCreate.message}</div>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const }}>
+                          <button
+                            onClick={() => createListAndAddCandidate(list.id, item)}
+                            disabled={quickCreate?.status === 'loading'}
+                            style={{
+                              background: 'none', border: '1px solid #C4A35A', color: '#C4A35A',
+                              borderRadius: 6, fontSize: 11, fontWeight: 600, padding: '3px 8px',
+                              cursor: quickCreate?.status === 'loading' ? 'default' : 'pointer',
+                              opacity: quickCreate?.status === 'loading' ? 0.6 : 1,
+                            }}
+                          >
+                            {quickCreate?.status === 'loading'
+                              ? '作成中...'
+                              : '＋紹介リストを作成してこの先生を追加'}
+                          </button>
+                          {quickCreate?.status === 'error' && (
+                            <span style={{ fontSize: 11, color: '#B00020' }}>{quickCreate.message}</span>
+                          )}
+                        </div>
+                      )
                     ) : addState?.status === 'success' ? (
                       <div style={{ fontSize: 11, color: '#2E7D32' }}>{addState.message}</div>
                     ) : (
@@ -543,6 +745,10 @@ export default function ReferralTab({ proId }: Props) {
               />
               紹介につながる人のみ表示
             </label>
+            {/* レビュー指摘(先行テスト): 検索失敗が「結果0件」と見分けがつかず無言だったため可視化 */}
+            {pinSearchError[list.id] && (
+              <div style={{ fontSize: 11, color: '#B00020', marginTop: 4 }}>検索に失敗しました</div>
+            )}
             {(pinResults[list.id]?.length || 0) > 0 && (
               <div style={{
                 position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
@@ -635,7 +841,10 @@ export default function ReferralTab({ proId }: Props) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {/* リスト作成 */}
       <div style={{ background: '#fff', borderRadius: 14, padding: '18px 16px', border: '1px solid #E5E7EB' }}>
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', marginBottom: 10 }}>新しい紹介リストを作る</h3>
+        <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', marginBottom: 10 }}>
+          {/* 先行テスト指摘C: 公開リストが0件の間は「最初の1件」であることを明示する */}
+          {publicLists.length === 0 ? '最初の紹介リストを作りましょう' : '新しい紹介リストを作る'}
+        </h3>
         <input
           value={newTitle}
           onChange={(e) => setNewTitle(e.target.value.slice(0, 200))}
@@ -666,6 +875,10 @@ export default function ReferralTab({ proId }: Props) {
         >
           {creating ? '作成中...' : 'リストを作成'}
         </button>
+        {/* レビュー指摘(先行テスト): 作成失敗(403含む)が無言だったため可視化 */}
+        {createListError && (
+          <div style={{ fontSize: 11, color: '#B00020', marginTop: 8, lineHeight: 1.6 }}>{createListError}</div>
+        )}
       </div>
 
       {/* リスト一覧 */}

@@ -26,6 +26,8 @@ export default function ReferralConsentCard() {
   const [items, setItems] = useState<ConsentItem[]>([])
   const [loading, setLoading] = useState(true)
   const [processingId, setProcessingId] = useState<string | null>(null)
+  // レビュー指摘(先行テスト): 承諾/辞退の失敗が無言だったため可視化(itemId単位で保持)
+  const [errorId, setErrorId] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/referral/consents', { cache: 'no-store' })
@@ -41,6 +43,7 @@ export default function ReferralConsentCard() {
 
   async function respond(itemId: string, consent_status: 'approved' | 'declined') {
     setProcessingId(itemId)
+    setErrorId(null)
     try {
       const res = await fetch('/api/referral/consents', {
         method: 'PATCH',
@@ -49,7 +52,12 @@ export default function ReferralConsentCard() {
       })
       if (res.ok) {
         setItems((prev) => prev.filter((i) => i.id !== itemId))
+      } else {
+        // レビュー指摘(先行テスト): 失敗が無言だったため可視化
+        setErrorId(itemId)
       }
+    } catch {
+      setErrorId(itemId)
     } finally {
       setProcessingId(null)
     }
@@ -102,6 +110,9 @@ export default function ReferralConsentCard() {
                 辞退する
               </button>
             </div>
+            {errorId === item.id && (
+              <div style={{ fontSize: 11, color: '#B00020', marginTop: 8 }}>更新に失敗しました</div>
+            )}
           </div>
         )
       })}
