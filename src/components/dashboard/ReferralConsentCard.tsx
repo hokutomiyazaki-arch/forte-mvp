@@ -92,7 +92,7 @@ export default function ReferralConsentCard() {
             </div>
             {/* §2-2改訂(CEO決定): 承諾＝紹介を受ける意思の表明。未設定なら受付中に自動更新される旨を明示 */}
             <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 8, lineHeight: 1.6 }}>
-              承諾すると紹介の受付が「受付中」になります（受付状況はホーム画面でいつでも変更できます）
+              承諾すると紹介の受付が「受付中」になります。この先生以外からの紹介も届くようになります。ホーム画面でいつでも停止できます
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button
