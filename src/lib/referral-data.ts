@@ -12,7 +12,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { sanitizeVoiceForReferral } from '@/lib/voice-sanitize'
 import { isAcceptingOpen } from '@/lib/referral-accepting'
 import { isReferralPaymentEnabled } from '@/lib/feature-flags'
-import { formatSlotWithWeekday } from '@/lib/referral-format'
+import { formatSlotWithWeekday, resolveConfirmedSlotIso } from '@/lib/referral-format'
 
 type SupabaseAdmin = ReturnType<typeof getSupabaseAdmin>
 
@@ -571,8 +571,19 @@ export interface BookingCapabilityData {
   expiresAt: string | null
   paymentStatus: string | null
   listSlug: string | null
-  /** バグ報告(2026-08-04)対応: 確定日時の表示用(confirmed_counter_index優先・無ければconfirmed_index)。 */
+  /**
+   * バグ報告(2026-08-04)対応・タスクB拡張: 確定日時の表示用。confirmed_slot_iso(日時変更承諾)を
+   * 最優先し、無ければconfirmed_counter_index→confirmed_indexの順で解決する(共通ロジック)。
+   */
   confirmedSlotText: string | null
+  /** ライフサイクル改善(タスクC・2026-08-04・CEO指示): Googleカレンダー追加リンク生成用の生ISO。 */
+  confirmedSlotIso: string | null
+  /** タスクC: カレンダーイベントの場所欄に使う(受け手の業務上の住所。PIIではない)。 */
+  receiverAddress: string | null
+  /** ライフサイクル改善(タスクB・2026-08-04・CEO指示): 確定後にプロが提案した日時変更候補。 */
+  rescheduleSlots: string[]
+  /** trueの間だけ /booking/[booking_id] に日時変更の選択UIを表示する(未回答の提案がある間だけ)。 */
+  showRescheduleChoice: boolean
 }
 
 /**
@@ -595,7 +606,7 @@ export async function getBookingCapabilityData(bookingId: string): Promise<Booki
 
   const { data: receiverPro } = await supabase
     .from('professionals')
-    .select('name')
+    .select('name, address')
     .eq('id', row.receiver_pro_id)
     .maybeSingle()
 
@@ -604,17 +615,19 @@ export async function getBookingCapabilityData(bookingId: string): Promise<Booki
     ? rawCounterSlots.filter((s: unknown): s is string => typeof s === 'string')
     : []
 
-  // 確定日時の解決: counter提案を承諾した場合はconfirmed_counter_index(counter_slots内)、
-  // 通常確定はconfirmed_index(slots内)。どちらも無ければnull。
-  const confirmedCounterIndex = row.preferred_slots?.confirmed_counter_index
-  const confirmedIndex = row.preferred_slots?.confirmed_index
-  const slots = Array.isArray(row.preferred_slots?.slots) ? row.preferred_slots.slots : []
-  let confirmedSlotText: string | null = null
-  if (typeof confirmedCounterIndex === 'number' && counterSlots[confirmedCounterIndex]) {
-    confirmedSlotText = formatSlotWithWeekday(counterSlots[confirmedCounterIndex])
-  } else if (typeof confirmedIndex === 'number' && slots[confirmedIndex]) {
-    confirmedSlotText = formatSlotWithWeekday(slots[confirmedIndex])
-  }
+  // 確定日時の解決: confirmed_slot_iso(日時変更承諾・推奨方式)を最優先し、無ければ
+  // confirmed_counter_index(逆指定承諾)→confirmed_index(通常確定)の順(共通ロジック)。
+  const confirmedSlotIso = resolveConfirmedSlotIso(row.preferred_slots)
+  const confirmedSlotText = formatSlotWithWeekday(confirmedSlotIso)
+
+  // ライフサイクル改善(タスクB): 確定後にプロが提案した日時変更候補。未回答(reschedule_resolved_at無し)
+  // の間だけ選択UIを表示する対象として返す。
+  const rawRescheduleSlots = row.preferred_slots?.reschedule_slots
+  const rescheduleSlots = Array.isArray(rawRescheduleSlots)
+    ? rawRescheduleSlots.filter((s: unknown): s is string => typeof s === 'string')
+    : []
+  const showRescheduleChoice =
+    row.status === 'confirmed' && rescheduleSlots.length > 0 && !row.preferred_slots?.reschedule_resolved_at
 
   return {
     id: row.id,
@@ -625,5 +638,9 @@ export async function getBookingCapabilityData(bookingId: string): Promise<Booki
     paymentStatus: paymentEnabled ? row.payment_status || null : null,
     listSlug: row.referral_lists?.slug || null,
     confirmedSlotText,
+    confirmedSlotIso,
+    receiverAddress: receiverPro?.address || null,
+    rescheduleSlots,
+    showRescheduleChoice,
   }
 }

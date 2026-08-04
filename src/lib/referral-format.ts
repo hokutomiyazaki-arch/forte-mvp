@@ -62,3 +62,73 @@ export function parseSlot(value: unknown): string | null {
   if (Number.isNaN(d.getTime())) return null
   return d.toISOString()
 }
+
+/**
+ * ライフサイクル改善(タスクC): Googleカレンダー追加URL生成。所要時間は仮で60分固定。
+ * `dates=` はAsia/Tokyoのローカル表記(オフセット無し)+ `ctz=Asia/Tokyo` の組み合わせで
+ * 常にJSTとして解釈させる(サーバー実行環境のTZに依存しない)。
+ */
+export function buildGoogleCalendarUrl(params: {
+  startIso: string
+  title: string
+  details?: string
+  location?: string
+  durationMinutes?: number
+}): string | null {
+  const start = new Date(params.startIso)
+  if (Number.isNaN(start.getTime())) return null
+  const durationMinutes = params.durationMinutes ?? 60
+  const end = new Date(start.getTime() + durationMinutes * 60 * 1000)
+
+  const toGoogleLocal = (d: Date): string => {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Tokyo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(d)
+    const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '00'
+    return `${get('year')}${get('month')}${get('day')}T${get('hour')}${get('minute')}${get('second')}`
+  }
+
+  const qs = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: params.title,
+    dates: `${toGoogleLocal(start)}/${toGoogleLocal(end)}`,
+    ctz: 'Asia/Tokyo',
+  })
+  if (params.details) qs.set('details', params.details)
+  if (params.location) qs.set('location', params.location)
+
+  return `https://calendar.google.com/calendar/render?${qs.toString()}`
+}
+
+/**
+ * ライフサイクル改善(タスクB・2026-08-04・CEO指示): preferred_slotsから確定日時のISO文字列を
+ * 解決する共通ロジック(受け手カード/クライアントページ/cron/決済Webhookで共有・二重実装しない)。
+ * confirmed_slot_iso(日時変更承諾時に直接保存する推奨方式)を最優先し、無ければ既存の
+ * confirmed_counter_index(逆指定承諾)→confirmed_index(通常確定)の順にフォールバックする。
+ */
+export interface PreferredSlotsShape {
+  slots?: (string | null)[] | null
+  confirmed_index?: number | null
+  counter_slots?: (string | null)[] | null
+  confirmed_counter_index?: number | null
+  confirmed_slot_iso?: string | null
+}
+
+export function resolveConfirmedSlotIso(preferredSlots: PreferredSlotsShape | null | undefined): string | null {
+  if (!preferredSlots) return null
+  if (preferredSlots.confirmed_slot_iso) return preferredSlots.confirmed_slot_iso
+  if (typeof preferredSlots.confirmed_counter_index === 'number') {
+    return preferredSlots.counter_slots?.[preferredSlots.confirmed_counter_index] || null
+  }
+  if (typeof preferredSlots.confirmed_index === 'number') {
+    return preferredSlots.slots?.[preferredSlots.confirmed_index] || null
+  }
+  return null
+}

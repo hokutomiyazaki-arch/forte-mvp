@@ -3,11 +3,12 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import {
   notifyBookingExpiredToSender,
   notifyBookingPaymentExpiredToPro,
+  notifyBookingCompletedToSender,
   notifyClientByEmail,
   emailShell,
   escapeHtml,
 } from '@/lib/referral-notify'
-import { formatSlot } from '@/lib/referral-format'
+import { formatSlot, resolveConfirmedSlotIso } from '@/lib/referral-format'
 import {
   isReferralPaymentEnabled,
   REFERRAL_MIN_FEE_JPY,
@@ -36,6 +37,26 @@ const CONFIRM_PAYMENT_CLEANUP_LIMIT = 100
  */
 const PAYMENT_LINK_RETRY_DEADLINE_MIN = 10
 const PAYMENT_LINK_RETRY_LIMIT = 20
+/**
+ * タスクD(2026-08-04・CEO指示): 確定済み予約は、確定日時から24時間経過したら自動完了させる。
+ * 対象は「決済不要(not_required/null)または支払い済み(paid)」の確定予約のみ
+ * (awaiting/unpaidは既存の24hキャンセルcronの管轄・対象外)。
+ */
+const AUTO_COMPLETE_DEADLINE_HOURS = 24
+const AUTO_COMPLETE_LIMIT = 500
+/**
+ * レビュー指摘(軽微5): 未回答の日時変更提案が残っていると自動完了が永久停止してしまう問題への
+ * 対策。提案から7日経過した未回答提案は失効扱いとし、自動完了の判定からは除外する
+ * (元の確定日時 = resolveConfirmedSlotIsoのフォールバック基準で完了させる)。
+ */
+const RESCHEDULE_PROPOSAL_STALE_DAYS = 7
+
+function isRescheduleProposalStale(proposedAt: unknown): boolean {
+  if (typeof proposedAt !== 'string' || !proposedAt) return false
+  const proposedTime = new Date(proposedAt).getTime()
+  if (Number.isNaN(proposedTime)) return false
+  return Date.now() - proposedTime > RESCHEDULE_PROPOSAL_STALE_DAYS * 24 * 60 * 60 * 1000
+}
 
 /**
  * §2-4: requested のまま48時間(expires_at)を超えた予約リクエストを自動失効させる。
@@ -55,6 +76,8 @@ export async function GET(req: NextRequest) {
   const supabase = getSupabaseAdmin()
   const nowIso = new Date().toISOString()
   const paymentEnabled = isReferralPaymentEnabled()
+  // レビュー指摘(軽微4): 自動完了件数を最終レスポンスに含める
+  let autoCompletedCount = 0
   // レビューFAIL修正(中2): counter_slots(逆指定)の有無で48h失効メールの文言を分岐するため、
   // preferred_slotsも取得する。
   const selectFields =
@@ -266,11 +289,9 @@ export async function GET(req: NextRequest) {
 
             const slug = row.referral_lists?.slug || ''
             const listUrl = slug ? `${APP_URL}/r/${slug}` : APP_URL
-            const slots = Array.isArray(row.preferred_slots?.slots) ? row.preferred_slots.slots : []
-            const confirmedIdx =
-              typeof row.preferred_slots?.confirmed_index === 'number' ? row.preferred_slots.confirmed_index : null
-            const confirmedSlotText =
-              confirmedIdx !== null && slots[confirmedIdx] ? formatSlot(slots[confirmedIdx]) : null
+            // レビュー指摘(中2): confirmed_index直参照の旧ロジックが残存していた
+            // (counter/reschedule経由の確定日時を取り逃す)。共通関数へ置換する。
+            const confirmedSlotText = formatSlot(resolveConfirmedSlotIso(row.preferred_slots))
             const receiverName = receiverMap3[row.receiver_pro_id]?.name || 'プロ'
 
             await issueFeePaymentLinkAndNotify({
@@ -298,6 +319,113 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // タスクD(2026-08-04・CEO指示): 確定日時+24hを過ぎた確定予約を自動完了させる。
+  // 決済カラム自体はmigration 036依存(paymentEnabled)のため、フラグOFFの間は全確定予約が対象
+  // (フラグOFF=決済フロー未導入で成立時点がconfirmedのため)。
+  try {
+    const completeBaseSelect = 'id, sender_pro_id, receiver_pro_id, preferred_slots, confirmed_at, clients(nickname)'
+    let completeQuery = supabase.from('referral_bookings').select(
+      paymentEnabled ? `${completeBaseSelect}, payment_status` : completeBaseSelect
+    )
+    completeQuery = completeQuery.eq('status', 'confirmed')
+    if (paymentEnabled) {
+      // §2-4ステージ3の開示条件(canDiscloseContact)と同じ判定: paid/not_required/nullのみ対象。
+      completeQuery = completeQuery.or('payment_status.in.(paid,not_required),payment_status.is.null')
+    }
+
+    const { data: confirmedRows, error: confirmedQueryError } = await completeQuery
+      .order('confirmed_at', { ascending: true })
+      .limit(AUTO_COMPLETE_LIMIT)
+
+    if (confirmedQueryError) {
+      console.error('[cron/expire-referral-bookings] auto-complete query error:', confirmedQueryError.message)
+    } else {
+      const now = Date.now()
+      const deadlineMs = AUTO_COMPLETE_DEADLINE_HOURS * 60 * 60 * 1000
+
+      const targetsToComplete = ((confirmedRows || []) as any[]).filter((row) => {
+        // 日時変更の提案が未回答の間は自動完了しない(クライアントの選択を待つ)。
+        // レビュー指摘(軽微5): 提案から7日経過した未回答提案は失効扱いとし、対象から外さない
+        // (元の確定日時を基準に完了させる。resolveConfirmedSlotIsoが自動でフォールバックする)。
+        const hasUnresolvedReschedule =
+          Array.isArray(row.preferred_slots?.reschedule_slots) &&
+          row.preferred_slots.reschedule_slots.length > 0 &&
+          !row.preferred_slots?.reschedule_resolved_at &&
+          !isRescheduleProposalStale(row.preferred_slots?.reschedule_proposed_at)
+        if (hasUnresolvedReschedule) return false
+
+        const iso = resolveConfirmedSlotIso(row.preferred_slots)
+        if (!iso) {
+          console.log(`[cron/expire-referral-bookings] auto-complete skip (unresolved slot) for ${row.id}`)
+          return false
+        }
+        const slotTime = new Date(iso).getTime()
+        if (Number.isNaN(slotTime)) return false
+        return slotTime + deadlineMs < now
+      })
+
+      if (targetsToComplete.length > 0) {
+        const proIds4 = Array.from(
+          new Set(targetsToComplete.flatMap((r) => [r.sender_pro_id, r.receiver_pro_id]).filter((id): id is string => !!id))
+        )
+        let proMap4: Record<string, { id: string; name: string; contact_email: string | null; line_messaging_user_id: string | null }> = {}
+        if (proIds4.length > 0) {
+          const { data: pros4 } = await supabase
+            .from('professionals')
+            .select('id, name, contact_email, line_messaging_user_id')
+            .in('id', proIds4)
+          for (const p of (pros4 || []) as any[]) {
+            proMap4[p.id] = p
+          }
+        }
+
+        for (const row of targetsToComplete) {
+          try {
+            const { data: completedRows, error: completeError } = await supabase
+              .from('referral_bookings')
+              .update({ status: 'completed', completed_at: new Date().toISOString() })
+              .eq('id', row.id)
+              .eq('status', 'confirmed')
+              .select('id')
+
+            if (completeError) {
+              console.error(`[cron/expire-referral-bookings] auto-complete update error for ${row.id}:`, completeError.message)
+              continue
+            }
+            if (!completedRows || completedRows.length === 0) {
+              // 既に他経路(受け手の手動complete等)で状態が変わっていた場合はスキップ
+              continue
+            }
+            autoCompletedCount++
+
+            const receiverName = row.receiver_pro_id ? proMap4[row.receiver_pro_id]?.name || 'プロ' : 'プロ'
+            const clientNickname = row.clients?.nickname || 'クライアント'
+            const senderInfo = row.sender_pro_id ? proMap4[row.sender_pro_id] : null
+            if (senderInfo) {
+              try {
+                await notifyBookingCompletedToSender(
+                  {
+                    name: senderInfo.name,
+                    contact_email: senderInfo.contact_email,
+                    line_messaging_user_id: senderInfo.line_messaging_user_id,
+                  },
+                  clientNickname,
+                  receiverName
+                )
+              } catch (notifyErr) {
+                console.error(`[cron/expire-referral-bookings] auto-complete sender notify error for ${row.id}:`, notifyErr)
+              }
+            }
+          } catch (rowErr) {
+            console.error(`[cron/expire-referral-bookings] auto-complete row error for ${row.id}:`, rowErr)
+          }
+        }
+      }
+    }
+  } catch (autoCompleteErr) {
+    console.error('[cron/expire-referral-bookings] auto-complete unexpected error:', autoCompleteErr)
+  }
+
   try {
     const { data: targets, error: queryError } = await supabase
       .from('referral_bookings')
@@ -315,7 +443,7 @@ export async function GET(req: NextRequest) {
     console.log(`[cron/expire-referral-bookings] found ${rows.length} target(s) to expire`)
 
     if (rows.length === 0) {
-      return NextResponse.json({ expired: 0, checked: 0 })
+      return NextResponse.json({ expired: 0, checked: 0, auto_completed: autoCompletedCount })
     }
 
     // referral_bookings は professionals への FK が2本(sender/receiver)あり embed が曖昧になるため、
@@ -414,7 +542,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ expired: expiredCount, checked: rows.length })
+    return NextResponse.json({ expired: expiredCount, checked: rows.length, auto_completed: autoCompletedCount })
   } catch (err) {
     console.error('[cron/expire-referral-bookings] Unexpected error:', err)
     return NextResponse.json({ error: 'Internal error' }, { status: 500 })

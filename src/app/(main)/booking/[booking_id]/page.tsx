@@ -10,8 +10,10 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { getBookingCapabilityData } from '@/lib/referral-data'
+import { buildGoogleCalendarUrl } from '@/lib/referral-format'
 import BookingAcceptForm from '@/components/referral/BookingAcceptForm'
 import PaymentLinkButton from '@/components/referral/PaymentLinkButton'
+import BookingRescheduleForm from '@/components/referral/BookingRescheduleForm'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,6 +54,14 @@ export default async function BookingCapabilityPage({
   // レビュー指摘(軽微6): paid済み/決済フラグOFF時にキャンセル文言が出ないようにする
   const showCanceledNotice = paymentParam === 'canceled' && data.paymentStatus === 'awaiting'
   const listUrl = data.listSlug ? `${APP_URL}/r/${data.listSlug}` : null
+  // ライフサイクル改善(タスクC・2026-08-04・CEO指示): 成立済み表示にGoogleカレンダー追加リンクを添える。
+  const calendarUrl = data.confirmedSlotIso
+    ? buildGoogleCalendarUrl({
+        startIso: data.confirmedSlotIso,
+        title: `${data.receiverProName}さんとのご相談(REAL PROOF)`,
+        location: data.receiverAddress || undefined,
+      })
+    : null
   const isExpired =
     data.status === 'expired' ||
     data.status === 'cancelled' ||
@@ -125,6 +135,11 @@ export default async function BookingCapabilityPage({
           }}
         >
           <p style={{ fontSize: 13, color: T.textSub, lineHeight: 1.8 }}>お支払いは完了しています。予約成立済みです。</p>
+          {calendarUrl && (
+            <a href={calendarUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: T.dark, textDecoration: 'underline', display: 'inline-block', marginTop: 10 }}>
+              Googleカレンダーに追加
+            </a>
+          )}
         </div>
       )}
 
@@ -142,11 +157,29 @@ export default async function BookingCapabilityPage({
             }}
           >
             <p style={{ fontSize: 13, color: T.textSub, lineHeight: 1.8 }}>紹介予約は確定済みです。</p>
+            {calendarUrl && (
+              <a href={calendarUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: T.dark, textDecoration: 'underline', display: 'inline-block', marginTop: 10 }}>
+                Googleカレンダーに追加
+              </a>
+            )}
           </div>
         )}
 
       {!isExpired && data.status === 'requested' && data.counterSlots.length > 0 && (
         <BookingAcceptForm bookingId={data.id} receiverProName={data.receiverProName} counterSlots={data.counterSlots} />
+      )}
+
+      {/* ライフサイクル改善(タスクB・2026-08-04・CEO指示): 確定後にプロが日時変更を提案した場合の選択UI。
+          支払い状況の表示ブロックとは独立に、追加で表示する(決済有無に関わらず日時変更提案自体は成立する)。 */}
+      {!isExpired && data.showRescheduleChoice && (
+        <div style={{ marginTop: 16 }}>
+          <BookingRescheduleForm
+            bookingId={data.id}
+            receiverProName={data.receiverProName}
+            rescheduleSlots={data.rescheduleSlots}
+            currentSlotText={data.confirmedSlotText}
+          />
+        </div>
       )}
 
       {!isExpired && data.status === 'requested' && data.counterSlots.length === 0 && (

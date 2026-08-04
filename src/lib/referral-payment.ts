@@ -34,7 +34,10 @@ import {
   escapeHtml,
   buildBookingLocationContactHtml,
   hasProLocationInfo,
+  buildCalendarLinkHtml,
+  buildRescheduleContactNoteHtml,
 } from '@/lib/referral-notify'
+import { buildGoogleCalendarUrl, resolveConfirmedSlotIso } from '@/lib/referral-format'
 import { REFERRAL_FEE_TOTAL_BPS, REFERRAL_MIN_FEE_JPY, CONFIRM_PAYMENT_DEADLINE_HOURS } from '@/lib/feature-flags'
 
 const APP_URL = 'https://realproof.jp'
@@ -397,7 +400,7 @@ export async function applyReferralCheckoutSession(
   const { data: booking } = await supabase
     .from('referral_bookings')
     .select(
-      'id, payment_status, status, sender_pro_id, receiver_pro_id, client_id, client_email, referral_lists(slug)'
+      'id, payment_status, status, sender_pro_id, receiver_pro_id, client_id, client_email, preferred_slots, referral_lists(slug)'
     )
     .eq('id', bookingId)
     .maybeSingle()
@@ -501,12 +504,24 @@ export async function applyReferralCheckoutSession(
           google_maps_url: null, booking_url: null, website_url: null, phone_number: null, contact_email: null,
         }
       )
+      // ライフサイクル改善(タスクC・2026-08-04・CEO指示): 成立メールにGoogleカレンダー追加リンクと
+      // 「変更は連絡先へ直接」の一文を添える。
+      const confirmedSlotIso = resolveConfirmedSlotIso((booking as any).preferred_slots)
+      const calendarUrl = confirmedSlotIso
+        ? buildGoogleCalendarUrl({
+            startIso: confirmedSlotIso,
+            title: `${receiverPro?.name || 'プロ'}さんとのご相談(REAL PROOF)`,
+            location: receiverPro?.address || undefined,
+          })
+        : null
       await notifyClientByEmail(
         { userId: client?.user_id, email: booking.client_email },
         'お支払いが完了し、紹介予約が成立しました',
         emailShell(
           '紹介予約成立のお知らせ',
-          `お支払いが完了し、紹介予約が成立しました。当日はよろしくお願いいたします。${accessHtml}${referralListFooterHtml(listUrl)}`
+          `お支払いが完了し、紹介予約が成立しました。当日はよろしくお願いいたします。${accessHtml}${buildCalendarLinkHtml(calendarUrl)}${buildRescheduleContactNoteHtml(
+            receiverPro || { booking_url: null, website_url: null, phone_number: null, contact_email: null }
+          )}${referralListFooterHtml(listUrl)}`
         )
       )
     }

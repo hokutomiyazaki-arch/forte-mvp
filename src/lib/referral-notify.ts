@@ -586,6 +586,179 @@ export async function notifyBookingReceivedToClient(
 }
 
 /**
+ * ライフサイクル改善(タスクC・2026-08-04・CEO指示): 成立メールの末尾に添えるGoogleカレンダー
+ * 追加リンクHTML。calendarUrlがnull(確定日時が解決できない等)の場合は空文字を返す。
+ */
+export function buildCalendarLinkHtml(calendarUrl: string | null): string {
+  if (!calendarUrl) return ''
+  // レビュー指摘(軽微3): hrefに生のcalendarUrlを渡すと`&`が未エスケープのまま出力される(Google
+  // カレンダーURLはクエリを複数`&`連結するため実害あり)。escapeHtml()を通す。
+  return `<br><br><a href="${escapeHtml(calendarUrl)}" style="color:#1A1A2E;">Googleカレンダーに追加</a>`
+}
+
+/**
+ * 連絡先(booking_url/website_url/phone_number/contact_email)が1件でも設定済みか。
+ * レビュー指摘(軽微8): 「上記のご連絡先へ直接ご連絡ください」は、連絡先が実際に本文へ
+ * 載っている場合のみ意味を持つ文言のため、1件も無い場合は付与しない。
+ */
+export function hasProContactInfo(pro: {
+  booking_url: string | null
+  website_url: string | null
+  phone_number: string | null
+  contact_email: string | null
+}): boolean {
+  return !!(pro.booking_url || pro.website_url || pro.phone_number || pro.contact_email)
+}
+
+/**
+ * ライフサイクル改善(タスクC・2026-08-04・CEO指示): 成立メールに追加する一文
+ * (クライアント側の日時変更希望は、プロへ直接連絡してもらう運用のため)。
+ * レビュー指摘(軽微8): プロの連絡先が1件も無い場合は「上記のご連絡先へ」という文言自体が
+ * 成立しないため付与しない。
+ */
+export function buildRescheduleContactNoteHtml(pro: {
+  booking_url: string | null
+  website_url: string | null
+  phone_number: string | null
+  contact_email: string | null
+}): string {
+  if (!hasProContactInfo(pro)) return ''
+  return '<br><br>日時のご変更をご希望の場合は、上記のご連絡先へ直接ご連絡ください。'
+}
+
+/**
+ * ライフサイクル改善(タスクB・2026-08-04・CEO指示): 受け手が確定後に別日時を提案した際、
+ * クライアントへ通知する(既存日時のまま実施されることも明示する)。
+ */
+export async function notifyRescheduleProposedToClient(
+  target: { userId?: string | null; email?: string | null },
+  receiverProName: string,
+  slotTexts: string[],
+  currentSlotText: string | null,
+  bookingUrl: string,
+  listUrl: string,
+): Promise<{ sent: boolean }> {
+  const safeReceiverProName = escapeHtml(receiverProName)
+  const slotListHtml = slotTexts.map((t) => `<li>${escapeHtml(t)}</li>`).join('')
+  const currentLine = currentSlotText
+    ? `現在確定している日時は ${escapeHtml(currentSlotText)} です。ご都合が合わない場合はそのまま現在の日時で実施されます。`
+    : 'ご都合が合わない場合はそのまま現在の日時で実施されます。'
+  return notifyClientByEmail(
+    target,
+    `${receiverProName}さんから日時変更のご提案があります`,
+    emailShell(
+      '日時変更のご提案',
+      `${safeReceiverProName}さんから、日時変更のご提案があります。` +
+        `<ul style="padding-left:18px;margin:12px 0;">${slotListHtml}</ul>` +
+        `${currentLine}` +
+        referralListFooterHtml(listUrl),
+      'ご希望の日時を選ぶ',
+      bookingUrl,
+    ),
+  )
+}
+
+/** タスクB: クライアントが日時変更の提案から1つを選んだ際、受け手プロへ通知する。 */
+export async function notifyRescheduleConfirmedToReceiver(
+  target: ProNotifyTarget,
+  clientNickname: string,
+  newSlotText: string | null,
+): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const safeClientNickname = escapeHtml(clientNickname)
+  const slotPart = newSlotText ? `${newSlotText} に変更` : '新しい日時に変更'
+  return sendProNotification(target, {
+    lineText: `${clientNickname}さんが日時変更のご提案から新しい日時を選びました(${slotPart})。\n${dashboardUrl}`,
+    emailSubject: '日時変更が確定しました',
+    emailBodyHtml: emailShell(
+      '日時変更確定のお知らせ',
+      `${safeClientNickname}さんが新しい日時を選びました(${slotPart})。`,
+      'ダッシュボードを開く',
+      dashboardUrl,
+    ),
+  })
+}
+
+/**
+ * タスクB: 受け手が提案した日時変更をクライアントが承諾した際、送り手プロへ通知する。
+ * CEO決定(2026-08-04): 送り手宛の進捗通知にはリンクを付けない・「あなたが紹介した◯◯さん」と主語を明示。
+ */
+export async function notifyRescheduleConfirmedToSender(
+  target: ProNotifyTarget,
+  clientNickname: string,
+  newSlotText: string | null,
+): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  const safeClientNickname = escapeHtml(clientNickname)
+  const slotPart = newSlotText ? `(新日時: ${newSlotText})` : ''
+  return sendProNotification(target, {
+    lineText: `あなたが紹介した${clientNickname}さんの紹介予約の日時が変更になりました${slotPart}`,
+    emailSubject: 'あなたの紹介予約の日時が変更になりました',
+    emailBodyHtml: emailShell(
+      '日時変更のお知らせ',
+      `あなたが紹介した${safeClientNickname}さんの紹介予約の日時が変更になりました。${newSlotText ? `<br>新日時: ${escapeHtml(newSlotText)}` : ''}`,
+    ),
+  })
+}
+
+/** タスクB: クライアントが「現在の日時のまま」を選んだ際、受け手プロへ通知する。 */
+export async function notifyRescheduleKeptCurrentToReceiver(
+  target: ProNotifyTarget,
+  clientNickname: string,
+): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  const safeClientNickname = escapeHtml(clientNickname)
+  return sendProNotification(target, {
+    lineText: `${clientNickname}さんは現在の日時を希望しました(日時変更の提案は不採用)。`,
+    emailSubject: 'クライアントは現在の日時を希望しました',
+    emailBodyHtml: emailShell(
+      '日時変更のお知らせ',
+      `${safeClientNickname}さんは現在の日時を希望しました。日時変更のご提案は不採用となりました。`,
+    ),
+  })
+}
+
+/** タスクB/C: 日時変更の提案からクライアントが新しい日時を選んだ際、クライアント自身への確認メール。 */
+export async function notifyRescheduleConfirmedToClient(
+  target: { userId?: string | null; email?: string | null },
+  receiverProName: string,
+  newSlotText: string | null,
+  listUrl: string,
+  calendarUrl: string | null,
+): Promise<{ sent: boolean }> {
+  const safeReceiverProName = escapeHtml(receiverProName)
+  return notifyClientByEmail(
+    target,
+    '日時変更が確定しました',
+    emailShell(
+      '日時変更確定のお知らせ',
+      `${safeReceiverProName}さんとのご相談日時が変更になりました。${newSlotText ? `<br>新日時: ${escapeHtml(newSlotText)}` : ''}` +
+        buildCalendarLinkHtml(calendarUrl) +
+        referralListFooterHtml(listUrl),
+    ),
+  )
+}
+
+/**
+ * ライフサイクル改善(タスクA・2026-08-04・CEO指示): 受け手が当日の場所を送信した際、
+ * クライアントへ通知する(担当プロ名+場所テキストのみ。改行は<br>に変換)。
+ */
+export async function notifyLocationToClient(
+  target: { userId?: string | null; email?: string | null },
+  receiverProName: string,
+  locationText: string,
+): Promise<{ sent: boolean }> {
+  const safeReceiverProName = escapeHtml(receiverProName)
+  const safeLocationText = escapeHtml(locationText).replace(/\n/g, '<br>')
+  return notifyClientByEmail(
+    target,
+    '当日の場所のご案内',
+    emailShell(
+      '当日の場所のご案内',
+      `${safeReceiverProName}さんから、当日の場所のご案内です。<br><br>${safeLocationText}`,
+    ),
+  )
+}
+
+/**
  * §2-9: 招待経由でRP未登録のプロが登録を完了したことを、招待した側のプロへ通知する。
  */
 export async function notifyInviteRegistered(

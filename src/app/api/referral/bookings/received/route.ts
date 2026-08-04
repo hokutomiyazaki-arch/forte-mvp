@@ -12,8 +12,18 @@ import {
   emailShell,
   escapeHtml,
   buildBookingLocationContactHtml,
+  buildCalendarLinkHtml,
+  buildRescheduleContactNoteHtml,
+  notifyRescheduleProposedToClient,
+  notifyLocationToClient,
 } from '@/lib/referral-notify'
-import { formatSlot, formatSlotWithWeekday, parseSlot } from '@/lib/referral-format'
+import {
+  formatSlot,
+  formatSlotWithWeekday,
+  parseSlot,
+  buildGoogleCalendarUrl,
+  resolveConfirmedSlotIso,
+} from '@/lib/referral-format'
 import { isReferralPaymentEnabled, REFERRAL_MIN_FEE_JPY, REFERRAL_FEE_TOTAL_BPS } from '@/lib/feature-flags'
 // 中1レビュー指摘から継続: Stripe importはこのAPI routeに持たせない(Webpackチャンクグラフ対策)。
 // Checkout Session作成+メール送付(共通処理)はsrc/lib/referral-payment.tsの関数呼び出しに委譲する。
@@ -34,6 +44,19 @@ interface PreferredSlots {
   counter_proposed_at?: string
   /** ライフサイクル改善(タスクB): クライアントが承諾したcounter_slotsのindex */
   confirmed_counter_index?: number
+  /**
+   * ライフサイクル改善(2026-08-04・タスクB・CEO指示): 確定後にプロが提案する日時変更(最大3枠)。
+   * counter_slots(requested時点の逆指定)とは別キー。再提案は上書き可。
+   */
+  reschedule_slots?: string[] | null
+  reschedule_proposed_at?: string
+  /** クライアントが日時変更提案に応答した時刻(選択/現在のまま、いずれも記録)。未回答はundefined/null。 */
+  reschedule_resolved_at?: string | null
+  /**
+   * クライアントが日時変更提案から選んだ確定ISO文字列(推奨方式)。既存のconfirmed_index/
+   * confirmed_counter_index による解決より優先する(既存箇所が多いためフォールバックとして両方維持)。
+   */
+  confirmed_slot_iso?: string | null
 }
 
 /**
@@ -98,6 +121,21 @@ export async function GET() {
     }
 
     const supabase = getSupabaseAdmin()
+
+    // タスクA(2026-08-04・CEO指示): 「デフォルトの場所として保存する」チェックボックスは
+    // professionals.address が未設定の場合のみ表示する(受け手自身の設定なので全カード共通の1値)。
+    let receiverAddressSet = false
+    try {
+      const { data: addressRow } = await supabase
+        .from('professionals')
+        .select('address')
+        .eq('id', ownPro.id)
+        .maybeSingle()
+      receiverAddressSet = !!(addressRow as { address: string | null } | null)?.address
+    } catch (addressErr) {
+      console.error('[api/referral/bookings/received] address fetch error (fail-soft):', addressErr)
+    }
+
     // §2-4ステージ3(予約フィー方式): payment_statusはmigration 036依存のカラムのため、
     // 既存の他ファイル(cron/expire-referral-bookings等)と同様にフラグゲート付きで選択する。
     // paymentEnabledがfalseの間はカラム自体を選択しない(=canDiscloseContactにはundefinedが渡り、
@@ -263,7 +301,12 @@ export async function GET() {
       client_nickname: b.clients?.nickname || 'クライアント',
     }))
 
-    return NextResponse.json({ bookings: result, completed: completedResult, cancelled_unpaid: cancelledUnpaidResult })
+    return NextResponse.json({
+      bookings: result,
+      completed: completedResult,
+      cancelled_unpaid: cancelledUnpaidResult,
+      receiver_address_set: receiverAddressSet,
+    })
   } catch (err: any) {
     console.error('[api/referral/bookings/received] GET error:', err)
     return NextResponse.json({ error: err.message || 'internal_error' }, { status: 500 })
@@ -298,7 +341,9 @@ export async function PATCH(request: NextRequest) {
         action !== 'decline' &&
         action !== 'complete' &&
         action !== 'counter' &&
-        action !== 'dismiss_cancelled')
+        action !== 'dismiss_cancelled' &&
+        action !== 'send_location' &&
+        action !== 'reschedule')
     ) {
       return NextResponse.json({ error: 'invalid_params' }, { status: 400 })
     }
@@ -367,6 +412,130 @@ export async function PATCH(request: NextRequest) {
       }
 
       return NextResponse.json({ success: true, status: 'completed' })
+    }
+
+    // タスクA(2026-08-04・CEO指示): 当日の場所をクライアントへ送信する。確定済み(支払い待ちでない)
+    // カードから使う。入力値はDBに保存しない(メール送信という保存手段があるため)。
+    if (action === 'send_location') {
+      if (booking.status !== 'confirmed') {
+        return NextResponse.json({ error: 'not_confirmed' }, { status: 409 })
+      }
+      if (paymentEnabled && booking.payment_status === 'awaiting') {
+        return NextResponse.json({ error: 'payment_pending' }, { status: 409 })
+      }
+      const locationText = typeof body.location_text === 'string' ? body.location_text.trim().slice(0, 300) : ''
+      if (!locationText) {
+        return NextResponse.json({ error: 'location_required' }, { status: 400 })
+      }
+
+      const clientUserIdForLocation = booking.clients?.user_id || ''
+      try {
+        if (clientUserIdForLocation || booking.client_email) {
+          await notifyLocationToClient(
+            { userId: clientUserIdForLocation, email: booking.client_email },
+            ownPro.name,
+            locationText
+          )
+        }
+      } catch (notifyErr) {
+        console.error('[api/referral/bookings/received] send_location client notify error:', notifyErr)
+      }
+
+      // タスクA: チェックON時、professionals.addressが現に空の場合のみデフォルト保存する(上書き禁止)。
+      if (body.save_as_default === true) {
+        try {
+          await supabase
+            .from('professionals')
+            .update({ address: locationText })
+            .eq('id', ownPro.id)
+            .is('address', null)
+        } catch (addressErr) {
+          console.error('[api/referral/bookings/received] send_location address save error:', addressErr)
+        }
+      }
+
+      return NextResponse.json({ success: true })
+    }
+
+    // タスクB(2026-08-04・CEO指示): 確定後にプロ都合の日時変更を先に提案する(キャンセル前段)。
+    // status='confirmed'のみ許可。counter_slots(requested時点の逆指定)とは別キー・再提案は上書き可。
+    if (action === 'reschedule') {
+      if (booking.status !== 'confirmed') {
+        return NextResponse.json({ error: 'not_confirmed' }, { status: 409 })
+      }
+      // レビュー指摘(中1・send_locationと対称): フィー未払いの間は日時変更提案も出せない。
+      if (paymentEnabled && booking.payment_status === 'awaiting') {
+        return NextResponse.json({ error: 'payment_pending' }, { status: 409 })
+      }
+      // レビュー指摘(重大2a・counter_already_proposedと同種の事前チェック): 未回答の提案が
+      // 残っている間(reschedule_slotsが1件以上 かつ reschedule_resolved_at無し)は再提案させない。
+      const existingRescheduleSlots = booking.preferred_slots?.reschedule_slots
+      if ((existingRescheduleSlots?.length || 0) > 0 && !booking.preferred_slots?.reschedule_resolved_at) {
+        return NextResponse.json({ error: 'reschedule_already_proposed' }, { status: 409 })
+      }
+
+      const rawRescheduleSlots = Array.isArray(body.reschedule_slots) ? body.reschedule_slots : []
+      // レビュー指摘(軽微2): 過去日時の提案を防ぐ。未来日時のみ採用する。
+      const parsedRescheduleSlots = rawRescheduleSlots
+        .map((s: unknown) => parseSlot(s))
+        .filter((s: string | null): s is string => !!s)
+        .filter((iso: string) => new Date(iso).getTime() > Date.now())
+        .slice(0, 3)
+
+      if (parsedRescheduleSlots.length === 0) {
+        return NextResponse.json({ error: 'invalid_slots' }, { status: 400 })
+      }
+
+      const updatedSlotsForReschedule: PreferredSlots = {
+        ...(booking.preferred_slots || {}),
+        reschedule_slots: parsedRescheduleSlots,
+        reschedule_proposed_at: new Date().toISOString(),
+        reschedule_resolved_at: null,
+      }
+
+      const { data: updatedRescheduleRows, error: rescheduleError } = await supabase
+        .from('referral_bookings')
+        .update({ preferred_slots: updatedSlotsForReschedule })
+        .eq('id', bookingId)
+        .eq('status', 'confirmed')
+        .select('id')
+
+      if (rescheduleError) {
+        console.error('[api/referral/bookings/received] PATCH reschedule error:', rescheduleError)
+        return NextResponse.json({ error: 'failed_to_update' }, { status: 500 })
+      }
+      if (!updatedRescheduleRows || updatedRescheduleRows.length === 0) {
+        return NextResponse.json({ error: 'not_confirmed' }, { status: 409 })
+      }
+
+      const clientUserIdForReschedule = booking.clients?.user_id || ''
+      const currentConfirmedSlotIso = resolveConfirmedSlotIso(booking.preferred_slots)
+      const currentSlotText = formatSlotWithWeekday(currentConfirmedSlotIso)
+      const slugForReschedule = booking.referral_lists?.slug || ''
+      const listUrlForReschedule = slugForReschedule ? `${APP_URL}/r/${slugForReschedule}` : APP_URL
+      const bookingUrlForReschedule = `${APP_URL}/booking/${bookingId}`
+      const slotTextsForReschedule = parsedRescheduleSlots
+        .map((iso) => formatSlotWithWeekday(iso))
+        .filter((t): t is string => !!t)
+
+      // クライアントへ通知(失敗しても提案の保存自体は成功扱い)。送り手には通知しない
+      // (進捗ノイズ・確定した時だけ通知する、というCEO決定)。
+      try {
+        if (clientUserIdForReschedule || booking.client_email) {
+          await notifyRescheduleProposedToClient(
+            { userId: clientUserIdForReschedule, email: booking.client_email },
+            ownPro.name,
+            slotTextsForReschedule,
+            currentSlotText,
+            bookingUrlForReschedule,
+            listUrlForReschedule
+          )
+        }
+      } catch (notifyErr) {
+        console.error('[api/referral/bookings/received] reschedule client notify error:', notifyErr)
+      }
+
+      return NextResponse.json({ success: true, status: 'confirmed', reschedule_proposed: true })
     }
 
     // タスク①(2026-08-04・CEO指示): 支払い期限切れキャンセルカードの「閉じる」ボタン。
@@ -638,6 +807,8 @@ export async function PATCH(request: NextRequest) {
           // レビュー重大2: 載せるのは「本当に決済対象外(not_required)」の成立時のみ。
           // 決済リンク発行失敗のfail open(後からcronが支払い案内を再送する)では開示しない。
           let accessHtml = ''
+          let calendarHtml = ''
+          let changeNoteHtml = ''
           if (!shouldCollectFeePayment) {
             const { data: receiverAccessInfo } = await supabase
               .from('professionals')
@@ -659,13 +830,32 @@ export async function PATCH(request: NextRequest) {
                 contact_email: null,
               }
             )
+            // ライフサイクル改善(タスクC・2026-08-04・CEO指示): 成立メールにGoogleカレンダー
+            // 追加リンクと「変更は連絡先へ直接」の一文を添える。
+            const slotIsoForCalendar = slots[confirmedIndex]
+            const calendarUrl = slotIsoForCalendar
+              ? buildGoogleCalendarUrl({
+                  startIso: slotIsoForCalendar,
+                  title: `${ownPro.name}さんとのご相談(REAL PROOF)`,
+                  location: receiverAccessInfo?.address || undefined,
+                })
+              : null
+            calendarHtml = buildCalendarLinkHtml(calendarUrl)
+            changeNoteHtml = buildRescheduleContactNoteHtml(
+              receiverAccessInfo || {
+                booking_url: null,
+                website_url: null,
+                phone_number: null,
+                contact_email: null,
+              }
+            )
           }
           await notifyClientByEmail(
             { userId: clientUserId, email: booking.client_email },
             `${ownPro.name}さんとのご紹介予約が確定しました`,
             emailShell(
               'ご相談確定のお知らせ',
-              `${confirmedSlotText ? `${confirmedSlotText} に確定しました。` : 'ご相談の日時が確定しました。'}<br>担当: ${safeOwnProName}さん${senderQuote}${accessHtml}${referralListFooterHtml(listUrl)}`
+              `${confirmedSlotText ? `${confirmedSlotText} に確定しました。` : 'ご相談の日時が確定しました。'}<br>担当: ${safeOwnProName}さん${senderQuote}${accessHtml}${calendarHtml}${changeNoteHtml}${referralListFooterHtml(listUrl)}`
             )
           )
         }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { formatSlot, formatSlotWithWeekday } from '@/lib/referral-format'
+import { formatSlot, formatSlotWithWeekday, resolveConfirmedSlotIso } from '@/lib/referral-format'
 import BookingThread from '@/components/dashboard/BookingThread'
 
 interface BookingItem {
@@ -18,6 +18,12 @@ interface BookingItem {
     counter_slots?: string[]
     /** ライフサイクル改善(タスクB): クライアントが承諾したcounter_slotsのindex */
     confirmed_counter_index?: number
+    /** ライフサイクル改善(2026-08-04・タスクB): 確定後にプロが提案した日時変更(最大3枠)。 */
+    reschedule_slots?: string[] | null
+    /** クライアントが日時変更提案に応答済みか(未回答の間だけ「提案済み」表示にする)。 */
+    reschedule_resolved_at?: string | null
+    /** クライアントが日時変更提案から選んだ確定ISO(既存のconfirmed_index等より優先)。 */
+    confirmed_slot_iso?: string | null
   } | null
   status: 'requested' | 'confirmed'
   price_jpy: number
@@ -70,6 +76,15 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
   // ライフサイクル改善(タスクA・逆指定): 「別の日時を提案する」の開閉と入力値(bookingIdごと)
   const [counterOpenId, setCounterOpenId] = useState<string | null>(null)
   const [counterInputs, setCounterInputs] = useState<Record<string, [string, string, string]>>({})
+  // タスクA(2026-08-04・CEO指示): 「当日の場所を送る」の開閉・入力値・保存チェック・送信済み(セッション内のみ)
+  const [locationOpenId, setLocationOpenId] = useState<string | null>(null)
+  const [locationInputs, setLocationInputs] = useState<Record<string, string>>({})
+  const [locationSaveDefault, setLocationSaveDefault] = useState<Record<string, boolean>>({})
+  const [locationSentIds, setLocationSentIds] = useState<Set<string>>(new Set())
+  const [receiverAddressSet, setReceiverAddressSet] = useState(false)
+  // タスクB(2026-08-04・CEO指示): 「日時変更を提案する」の開閉と入力値(bookingIdごと)
+  const [rescheduleOpenId, setRescheduleOpenId] = useState<string | null>(null)
+  const [rescheduleInputs, setRescheduleInputs] = useState<Record<string, [string, string, string]>>({})
 
   useEffect(() => {
     fetch('/api/referral/bookings/received', { cache: 'no-store' })
@@ -77,21 +92,11 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
       .then((data) => {
         if (data?.bookings) setItems(data.bookings)
         if (data?.cancelled_unpaid) setCancelledUnpaidItems(data.cancelled_unpaid)
+        if (typeof data?.receiver_address_set === 'boolean') setReceiverAddressSet(data.receiver_address_set)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
-
-  /** タスク①: preferred_slotsから確定日時のisoを解決する(counter経由/通常3枠経由の両方に対応)。 */
-  function resolveConfirmedSlotIso(preferredSlots: CancelledUnpaidItem['preferred_slots']): string | null {
-    if (typeof preferredSlots?.confirmed_counter_index === 'number') {
-      return preferredSlots.counter_slots?.[preferredSlots.confirmed_counter_index] || null
-    }
-    if (typeof preferredSlots?.confirmed_index === 'number') {
-      return preferredSlots.slots?.[preferredSlots.confirmed_index] || null
-    }
-    return null
-  }
 
   const requestedItems = items.filter((i) => i.status === 'requested')
   const confirmedItems = items.filter((i) => i.status === 'confirmed')
@@ -206,6 +211,89 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
           window.alert('クライアントのお支払いが完了していないため、完了できません')
         } else {
           window.alert('処理に失敗しました')
+        }
+      }
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
+  /** タスクA(2026-08-04・CEO指示): 当日の場所をクライアントへ送信する。 */
+  async function sendLocation(bookingId: string) {
+    const text = (locationInputs[bookingId] || '').trim()
+    if (!text) {
+      window.alert('場所を入力してください')
+      return
+    }
+    // レビュー指摘(重大1): 「プロフィールの住所として保存する」チェックON時は、公開カードの
+    // アクセス欄に表示される旨を送信直前にも確認する。
+    if (
+      locationSaveDefault[bookingId] &&
+      !window.confirm('入力した場所が公開プロフィールに表示されます。よろしいですか？')
+    ) {
+      return
+    }
+    setProcessingId(bookingId)
+    try {
+      const res = await fetch('/api/referral/bookings/received', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({
+          booking_id: bookingId,
+          action: 'send_location',
+          location_text: text,
+          save_as_default: !!locationSaveDefault[bookingId],
+        }),
+      })
+      if (res.ok) {
+        setLocationSentIds((prev) => new Set(prev).add(bookingId))
+        setLocationOpenId(null)
+        if (locationSaveDefault[bookingId]) setReceiverAddressSet(true)
+      } else {
+        window.alert('送信に失敗しました')
+      }
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
+  /** タスクB(2026-08-04・CEO指示): 確定後にプロ都合の日時変更を提案する(第1希望のみ必須)。 */
+  async function submitReschedule(bookingId: string) {
+    const inputs = rescheduleInputs[bookingId] || ['', '', '']
+    const [slot1, slot2, slot3] = inputs
+    if (!slot1) {
+      window.alert('第1希望の日時を入力してください')
+      return
+    }
+    setProcessingId(bookingId)
+    try {
+      const res = await fetch('/api/referral/bookings/received', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({
+          booking_id: bookingId,
+          action: 'reschedule',
+          reschedule_slots: [slot1, slot2 || null, slot3 || null].filter(Boolean),
+        }),
+      })
+      if (res.ok) {
+        setRescheduleOpenId(null)
+        const refreshed = await fetch('/api/referral/bookings/received', { cache: 'no-store' })
+        const data = await refreshed.json().catch(() => null)
+        if (data?.bookings) setItems(data.bookings)
+      } else {
+        // レビュー指摘(重大2・中1): 409の理由を専用文言で伝える
+        const data = await res.json().catch(() => ({}))
+        if (data.error === 'reschedule_already_proposed') {
+          window.alert('既に日時変更を提案済みです。クライアントの返答をお待ちください')
+        } else if (data.error === 'payment_pending') {
+          window.alert('クライアントのお支払いが完了していないため、日時変更を提案できません')
+        } else if (data.error === 'invalid_slots') {
+          window.alert('未来の日時を入力してください')
+        } else {
+          window.alert('提案の送信に失敗しました')
         }
       }
     } finally {
@@ -458,15 +546,15 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
 
       {proId &&
         confirmedItems.map((item) => {
-          // レビューFAIL修正(重大1): counter経由(逆指定)/通常3枠経由の両方に対応し、null安全に
-          // 確定日時を表示する。counter_slots優先(存在する場合はそちらが実際に確定した日時)。
-          const confirmedSlotIso =
-            typeof item.preferred_slots?.confirmed_counter_index === 'number'
-              ? item.preferred_slots?.counter_slots?.[item.preferred_slots.confirmed_counter_index] || null
-              : typeof item.preferred_slots?.confirmed_index === 'number'
-                ? item.preferred_slots?.slots?.[item.preferred_slots.confirmed_index] || null
-                : null
+          // レビューFAIL修正(重大1)踏襲・タスクB拡張: confirmed_slot_iso(日時変更承諾)を最優先し、
+          // counter経由(逆指定)/通常3枠経由の順にフォールバックする(共通ロジックはreferral-format.ts)。
+          const confirmedSlotIso = resolveConfirmedSlotIso(item.preferred_slots)
           const confirmedSlotText = formatSlot(confirmedSlotIso)
+          const rescheduleProposed =
+            (item.preferred_slots?.reschedule_slots?.length || 0) > 0 && !item.preferred_slots?.reschedule_resolved_at
+          const isLocationOpen = locationOpenId === item.id
+          const isRescheduleOpen = rescheduleOpenId === item.id
+          const rescheduleInput = rescheduleInputs[item.id] || ['', '', '']
           return (
           <div
             key={item.id}
@@ -558,6 +646,177 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                 </div>
               </div>
             )}
+            {rescheduleProposed && (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: '#B26A00',
+                  background: '#FFF3E0',
+                  borderRadius: 8,
+                  padding: '8px 10px',
+                  marginTop: 8,
+                }}
+              >
+                日時変更を提案済み・クライアントの返答待ちです
+              </div>
+            )}
+
+            {/* タスクA(2026-08-04・CEO指示): 当日の場所を送る(確定済み・支払い待ちでないカードのみ)。 */}
+            {item.payment_status !== 'awaiting' && (
+              <div style={{ marginTop: 10 }}>
+                {locationSentIds.has(item.id) ? (
+                  <div style={{ fontSize: 12, color: '#2E7D32', background: '#F0FFF4', borderRadius: 8, padding: '8px 10px' }}>
+                    場所を送信しました
+                  </div>
+                ) : !isLocationOpen ? (
+                  <button
+                    onClick={() => setLocationOpenId(item.id)}
+                    style={{
+                      width: '100%',
+                      padding: '6px 12px',
+                      borderRadius: 8,
+                      border: '1px solid #D1D5DB',
+                      background: '#fff',
+                      color: '#1A1A2E',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    当日の場所を送る
+                  </button>
+                ) : (
+                  <div style={{ padding: '10px 12px', background: '#fff', borderRadius: 8, border: '1px solid #D1D5DB' }}>
+                    <label style={{ fontSize: 11, color: '#6B7280', display: 'block', marginBottom: 4 }}>
+                      当日の場所(1〜2行程度)
+                    </label>
+                    <textarea
+                      value={locationInputs[item.id] || ''}
+                      onChange={(e) => setLocationInputs((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                      rows={2}
+                      style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #D1D5DB', fontSize: 12, boxSizing: 'border-box', resize: 'vertical' }}
+                    />
+                    {!receiverAddressSet && (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#6B7280', marginTop: 6, cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={!!locationSaveDefault[item.id]}
+                          onChange={(e) => setLocationSaveDefault((prev) => ({ ...prev, [item.id]: e.target.checked }))}
+                        />
+                        プロフィールの住所として保存する（公開カードのアクセス欄に表示されます）
+                      </label>
+                    )}
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      <button
+                        onClick={() => sendLocation(item.id)}
+                        disabled={processingId === item.id}
+                        style={{
+                          flex: 1,
+                          padding: '8px 12px',
+                          borderRadius: 8,
+                          border: 'none',
+                          background: '#1A1A2E',
+                          color: '#fff',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: processingId === item.id ? 'default' : 'pointer',
+                          opacity: processingId === item.id ? 0.6 : 1,
+                        }}
+                      >
+                        送信する
+                      </button>
+                      <button
+                        onClick={() => setLocationOpenId(null)}
+                        style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #D1D5DB', background: '#fff', color: '#6B7280', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        キャンセル
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* タスクB(2026-08-04・CEO指示): 確定後にプロ都合の日時変更を提案する(キャンセル前段)。
+                レビュー指摘(中1): フィー未払い(awaiting)の間は提案ボタンごと非表示にする。 */}
+            {!rescheduleProposed && item.payment_status !== 'awaiting' && (
+              <div style={{ marginTop: 8 }}>
+                {!isRescheduleOpen ? (
+                  <button
+                    onClick={() => setRescheduleOpenId(item.id)}
+                    style={{
+                      width: '100%',
+                      padding: '6px 12px',
+                      borderRadius: 8,
+                      border: 'none',
+                      background: 'transparent',
+                      color: '#6B7280',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      textDecoration: 'underline',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    日時変更を提案する
+                  </button>
+                ) : (
+                  <div style={{ padding: '10px 12px', background: '#fff', borderRadius: 8, border: '1px solid #D1D5DB' }}>
+                    <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 8 }}>
+                      クライアントに日時変更を提案します(第1希望は必須。ご都合が合わない場合は現在の日時のまま実施されます)
+                    </div>
+                    {[0, 1, 2].map((i) => (
+                      <div key={i} style={{ marginBottom: 8 }}>
+                        <label style={{ fontSize: 11, color: '#6B7280', display: 'block', marginBottom: 4 }}>
+                          第{i + 1}希望{i > 0 ? '(任意)' : '(必須)'}
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={rescheduleInput[i]}
+                          onChange={(e) => {
+                            const next: [string, string, string] = [...rescheduleInput] as [string, string, string]
+                            next[i] = e.target.value
+                            setRescheduleInputs((prev) => ({ ...prev, [item.id]: next }))
+                          }}
+                          style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #D1D5DB', fontSize: 12, boxSizing: 'border-box' }}
+                        />
+                        {formatSlotWithWeekday(rescheduleInput[i]) && (
+                          <div style={{ fontSize: 11, color: '#C4A35A', fontWeight: 600, marginTop: 2 }}>
+                            {formatSlotWithWeekday(rescheduleInput[i])}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        onClick={() => submitReschedule(item.id)}
+                        disabled={processingId === item.id}
+                        style={{
+                          flex: 1,
+                          padding: '8px 12px',
+                          borderRadius: 8,
+                          border: 'none',
+                          background: '#1A1A2E',
+                          color: '#fff',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: processingId === item.id ? 'default' : 'pointer',
+                          opacity: processingId === item.id ? 0.6 : 1,
+                        }}
+                      >
+                        この日時変更を提案する
+                      </button>
+                      <button
+                        onClick={() => setRescheduleOpenId(null)}
+                        style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #D1D5DB', background: '#fff', color: '#6B7280', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        キャンセル
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <BookingThread
               bookingId={item.id}
               ownProId={proId}

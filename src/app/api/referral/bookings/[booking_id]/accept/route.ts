@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { formatSlot } from '@/lib/referral-format'
+import { formatSlot, buildGoogleCalendarUrl } from '@/lib/referral-format'
 import {
   notifyClientByEmail,
   notifyBookingConfirmedToSender,
@@ -9,6 +9,8 @@ import {
   emailShell,
   escapeHtml,
   buildBookingLocationContactHtml,
+  buildCalendarLinkHtml,
+  buildRescheduleContactNoteHtml,
 } from '@/lib/referral-notify'
 import { isReferralPaymentEnabled, REFERRAL_MIN_FEE_JPY, REFERRAL_FEE_TOTAL_BPS } from '@/lib/feature-flags'
 // 中1レビュー指摘から継続: Stripe importはこのAPI routeに持たせない(Webpackチャンクグラフ対策)。
@@ -178,12 +180,34 @@ export async function POST(request: NextRequest, { params }: { params: { booking
                 }
               )
             : ''
+          // ライフサイクル改善(タスクC・2026-08-04・CEO指示): 成立メールにGoogleカレンダー
+          // 追加リンクと「変更は連絡先へ直接」の一文を添える(場所・連絡先を載せる成立時のみ)。
+          let calendarHtml = ''
+          let changeNoteHtml = ''
+          if (!shouldCollectFeePayment) {
+            const calendarUrl = counterSlots[slotIndex]
+              ? buildGoogleCalendarUrl({
+                  startIso: counterSlots[slotIndex],
+                  title: `${receiverProName}さんとのご相談(REAL PROOF)`,
+                  location: receiverPro?.address || undefined,
+                })
+              : null
+            calendarHtml = buildCalendarLinkHtml(calendarUrl)
+            changeNoteHtml = buildRescheduleContactNoteHtml(
+              receiverPro || {
+                booking_url: null,
+                website_url: null,
+                phone_number: null,
+                contact_email: null,
+              }
+            )
+          }
           await notifyClientByEmail(
             { userId: clientUserId, email: booking.client_email },
             `${receiverProName}さんとのご予約が確定しました`,
             emailShell(
               'ご相談確定のお知らせ',
-              `${confirmedSlotText ? `${confirmedSlotText} に確定しました。` : 'ご相談の日時が確定しました。'}<br>担当: ${safeReceiverProName}さん${accessHtml}${referralListFooterHtml(listUrl)}`
+              `${confirmedSlotText ? `${confirmedSlotText} に確定しました。` : 'ご相談の日時が確定しました。'}<br>担当: ${safeReceiverProName}さん${accessHtml}${calendarHtml}${changeNoteHtml}${referralListFooterHtml(listUrl)}`
             )
           )
         }
