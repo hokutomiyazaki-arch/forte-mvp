@@ -28,6 +28,7 @@ import BusinessInfoTab from '@/components/dashboard/BusinessInfoTab'
 import ReferralTab from '@/components/dashboard/ReferralTab'
 import AcceptingStatusWidget from '@/components/dashboard/AcceptingStatusWidget'
 import ReferralBookingReceivedCard from '@/components/dashboard/ReferralBookingReceivedCard'
+import ReferralActionBanner from '@/components/dashboard/ReferralActionBanner'
 import { createClient as createSupabaseClient } from '@/lib/supabase'
 
 // バッジ階層: FNTはBDCの上位資格。同レベルのFNTを持っていたらBDCは非表示
@@ -2060,7 +2061,9 @@ export default function DashboardPage() {
     <div className="max-w-3xl mx-auto">
       {/* §2-4: 受信した予約リクエストの確定・辞退カード。タブ・フラグに依存せず常時表示（requestedが無ければ非表示） */}
       {/* §2-10: 案件スレッド表示のため自分のprofessionals.idを渡す */}
-      {pro && <ReferralBookingReceivedCard proId={pro.id} />}
+      {/* CEO指示(2026-08-04): やりとりカードの全文をトップに常駐させない。件数付きの
+          1行リンクのみ表示し、操作は紹介タブ内(ReferralBookingReceivedCard)で行う */}
+      {pro && <ReferralActionBanner />}
 
       {/* LINE 週次レポートバナー */}
       {!isSettingsTab && lineBannerState === 'show_banner' && process.env.NEXT_PUBLIC_LINE_FRIEND_URL && (
@@ -4700,14 +4703,21 @@ export default function DashboardPage() {
         )}
       </>)}
 
-      {/* ═══ Tab: 紹介リスト（§0 アローリスト方式・isReferralEnabledでタブ自体をゲート） ═══ */}
+      {/* ═══ Tab: 紹介リスト（§0 アローリスト方式・リスト管理はisReferralEnabledでゲート） ═══ */}
+      {/* CEO指示(2026-08-04): 受信予約のやりとりカードは紹介タブ内へ移設。受け手機能は
+          allowlist外プロにも必要(受け手は非ゲートが仕様)なため、カードはゲートの外に置く */}
+      {dashboardTab === 'referral' && pro && (
+        <div style={{ marginBottom: 16 }}>
+          <ReferralBookingReceivedCard proId={pro.id} />
+        </div>
+      )}
       {dashboardTab === 'referral' && referralEnabled && pro && (
         <ReferralTab proId={pro.id} />
       )}
       {/* 軽微指摘: 非対象プロが ?tab=referral で来た場合、空白ではなく案内を出す */}
       {dashboardTab === 'referral' && !referralEnabled && (
         <div style={{ textAlign: 'center', padding: '40px 20px', color: '#9CA3AF', fontSize: 13 }}>
-          この機能は現在先行公開中です
+          リスト作成などの紹介機能は現在先行公開中です
         </div>
       )}
 
