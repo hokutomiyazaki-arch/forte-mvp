@@ -566,7 +566,7 @@ export async function notifyBookingReceivedToClient(
     ? '②確定すると、メールでお知らせします(予約フィーのお支払いご案内も届きます)'
     : '②確定次第、メールでお知らせします'
   const step3 = opts.paymentFlowActive
-    ? '③お支払いが完了すると紹介予約が成立します(総額は変わりません。当日は残額のみ)'
+    ? '③お支払いが完了すると紹介予約が成立します(総額は変わりません。当日は残額のみ。プロの都合でキャンセルとなった場合は予約フィーが全額返金されます)'
     : '③確定のご連絡をお待ちください'
   return notifyClientByEmail(
     target,

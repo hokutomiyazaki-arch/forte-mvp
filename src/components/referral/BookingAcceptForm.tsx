@@ -23,9 +23,14 @@ interface Props {
   bookingId: string
   receiverProName: string
   counterSlots: string[]
+  /**
+   * 予約フィー説明不足対応(CEO指示・2026-08-04): 決済対象の予約のみ金額が入る
+   * (getBookingCapabilityDataの算出条件に合致しない場合はnull=説明ボックス非表示)。
+   */
+  feeAmountJpy: number | null
 }
 
-export default function BookingAcceptForm({ bookingId, receiverProName, counterSlots }: Props) {
+export default function BookingAcceptForm({ bookingId, receiverProName, counterSlots, feeAmountJpy }: Props) {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
@@ -122,6 +127,28 @@ export default function BookingAcceptForm({ bookingId, receiverProName, counterS
           )
         })}
       </div>
+
+      {feeAmountJpy !== null && (
+        <div
+          style={{
+            background: '#FAF8F4',
+            border: `1px solid ${T.cardBorder}`,
+            borderRadius: 10,
+            padding: '12px 14px',
+            marginBottom: 14,
+          }}
+        >
+          <p style={{ fontSize: 12, color: T.textSub, lineHeight: 1.8, margin: 0 }}>
+            日時を選択するとお支払いのご案内に進みます。
+            <br />
+            予約の成立には予約フィー(セッション料金の一部・¥{feeAmountJpy.toLocaleString('ja-JP')})のお支払いが必要です。
+            <br />
+            総額は変わりません(当日は残額のみのお支払いです)。
+            <br />
+            {receiverProName}さんの都合でキャンセルとなった場合、予約フィーは全額返金されます。
+          </p>
+        </div>
+      )}
 
       {errorMsg && <p style={{ fontSize: 12, color: '#B00020', marginBottom: 10 }}>{errorMsg}</p>}
 

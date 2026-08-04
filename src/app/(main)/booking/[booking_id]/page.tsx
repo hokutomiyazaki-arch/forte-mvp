@@ -120,6 +120,26 @@ export default async function BookingCapabilityPage({
           {data.confirmedSlotText && (
             <p style={{ fontSize: 13, color: T.textSub, marginTop: 10, lineHeight: 1.7 }}>{data.confirmedSlotText}</p>
           )}
+          {data.feeAmountJpy !== null && (
+            <div
+              style={{
+                background: T.bg,
+                border: `1px solid ${T.cardBorder}`,
+                borderRadius: 10,
+                padding: '12px 14px',
+                marginTop: 14,
+                textAlign: 'left',
+              }}
+            >
+              <p style={{ fontSize: 12, color: T.textSub, lineHeight: 1.8, margin: 0 }}>
+                予約の成立には予約フィー(セッション料金の一部・¥{data.feeAmountJpy.toLocaleString('ja-JP')})のお支払いが必要です。
+                <br />
+                総額は変わりません(当日は残額のみのお支払いです)。
+                <br />
+                {data.receiverProName}さんの都合でキャンセルとなった場合、予約フィーは全額返金されます。
+              </p>
+            </div>
+          )}
           <PaymentLinkButton bookingId={data.id} />
         </div>
       )}
@@ -166,7 +186,12 @@ export default async function BookingCapabilityPage({
         )}
 
       {!isExpired && data.status === 'requested' && data.counterSlots.length > 0 && (
-        <BookingAcceptForm bookingId={data.id} receiverProName={data.receiverProName} counterSlots={data.counterSlots} />
+        <BookingAcceptForm
+          bookingId={data.id}
+          receiverProName={data.receiverProName}
+          counterSlots={data.counterSlots}
+          feeAmountJpy={data.feeAmountJpy}
+        />
       )}
 
       {/* ライフサイクル改善(タスクB・2026-08-04・CEO指示): 確定後にプロが日時変更を提案した場合の選択UI。

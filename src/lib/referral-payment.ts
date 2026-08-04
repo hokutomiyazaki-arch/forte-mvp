@@ -356,7 +356,9 @@ export async function issueFeePaymentLinkAndNotify(params: {
           'ご相談確定・お支払いのご案内',
           `${params.confirmedSlotText ? `${params.confirmedSlotText} に確定しました。` : 'ご相談の日時が確定しました。'}<br>担当: ${safeReceiverProName}さん<br><br>` +
             `予約フィー ¥${params.feeAmountJpy.toLocaleString()} のお支払いで紹介予約が成立します(24時間以内)。<br>` +
-            `当日は残額 ¥${residualJpy.toLocaleString()} を${safeReceiverProName}さんに直接お支払いください(合計 ¥${params.priceJpy.toLocaleString()} は変わりません)。` +
+            `当日は残額 ¥${residualJpy.toLocaleString()} を${safeReceiverProName}さんに直接お支払いください(合計 ¥${params.priceJpy.toLocaleString()} は変わりません)。<br>` +
+            // 予約フィー説明不足対応(CEO指示・2026-08-04): 3点セットの③(返金条件)を明記する。
+            `${safeReceiverProName}さんの都合でキャンセルとなった場合、予約フィーは全額返金されます。` +
             // バグ報告(2026-08-04)対応: 決済リンク切れ・中断時の自己救済導線(予約ページから再開できる)
             `<br><br>お支払い状況の確認・再開はこちら: <a href="${APP_URL}/booking/${params.bookingId}" style="color:#888888;text-decoration:underline;">${APP_URL}/booking/${params.bookingId}</a>` +
             referralListFooterHtml(listUrl),

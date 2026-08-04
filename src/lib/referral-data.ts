@@ -11,7 +11,7 @@ import { cache } from 'react'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { sanitizeVoiceForReferral } from '@/lib/voice-sanitize'
 import { isAcceptingOpen } from '@/lib/referral-accepting'
-import { isReferralPaymentEnabled } from '@/lib/feature-flags'
+import { isReferralPaymentEnabled, REFERRAL_FEE_TOTAL_BPS, REFERRAL_MIN_FEE_JPY } from '@/lib/feature-flags'
 import { formatSlotWithWeekday, resolveConfirmedSlotIso } from '@/lib/referral-format'
 
 type SupabaseAdmin = ReturnType<typeof getSupabaseAdmin>
@@ -584,6 +584,12 @@ export interface BookingCapabilityData {
   rescheduleSlots: string[]
   /** trueの間だけ /booking/[booking_id] に日時変更の選択UIを表示する(未回答の提案がある間だけ)。 */
   showRescheduleChoice: boolean
+  /**
+   * 予約フィー説明不足対応(CEO指示・2026-08-04): 日時選択画面・支払い待ち画面で金額入りの
+   * 説明(3点セット)を出すための予約フィー額。決済フラグOFF・price_jpy未設定・最低決済額未満の
+   * 場合はnull(=非表示。既存のshouldCollectFeePayment判定と同条件)。
+   */
+  feeAmountJpy: number | null
 }
 
 /**
@@ -597,8 +603,8 @@ export async function getBookingCapabilityData(bookingId: string): Promise<Booki
 
   const supabase = getSupabaseAdmin()
   const paymentEnabled = isReferralPaymentEnabled()
-  const baseSelect = 'id, status, receiver_pro_id, preferred_slots, expires_at, referral_lists(slug)'
-  const select = paymentEnabled ? `${baseSelect}, payment_status` : baseSelect
+  const baseSelect = 'id, status, receiver_pro_id, preferred_slots, expires_at, price_jpy, referral_lists(slug)'
+  const select = paymentEnabled ? `${baseSelect}, payment_status, fee_total_bps` : baseSelect
 
   const { data } = await supabase.from('referral_bookings').select(select).eq('id', bookingId).maybeSingle()
   if (!data) return null
@@ -629,6 +635,13 @@ export async function getBookingCapabilityData(bookingId: string): Promise<Booki
   const showRescheduleChoice =
     row.status === 'confirmed' && rescheduleSlots.length > 0 && !row.preferred_slots?.reschedule_resolved_at
 
+  // 予約フィー説明不足対応(CEO指示・2026-08-04): 日時選択画面・支払い待ち画面の金額入り説明用。
+  // 決済フラグOFF/price_jpy未設定/最低決済額未満はnull(既存shouldCollectFeePayment判定の金額算出部分と同条件)。
+  const feeTotalBps = paymentEnabled ? row.fee_total_bps ?? REFERRAL_FEE_TOTAL_BPS : REFERRAL_FEE_TOTAL_BPS
+  const rawFeeAmountJpy =
+    paymentEnabled && row.price_jpy > 0 ? Math.floor((row.price_jpy * feeTotalBps) / 10000) : 0
+  const feeAmountJpy = rawFeeAmountJpy >= REFERRAL_MIN_FEE_JPY ? rawFeeAmountJpy : null
+
   return {
     id: row.id,
     status: row.status,
@@ -642,5 +655,6 @@ export async function getBookingCapabilityData(bookingId: string): Promise<Booki
     receiverAddress: receiverPro?.address || null,
     rescheduleSlots,
     showRescheduleChoice,
+    feeAmountJpy,
   }
 }
