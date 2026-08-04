@@ -126,8 +126,12 @@ export default function Navbar() {
         </button>
         <div style={{ maxHeight: openMenuGroups.discover ? '500px' : '0px', overflow: 'hidden', transition: 'max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1)' }}>
           <a href="/search" onClick={closeMenu} style={menuLinkStyle}>プロを探す</a>
-          {/* CEO指示(2026-08-03): ブックマークはプロ専用「気になるプロ」に一本化したためメニューから撤去
-              (/bookmarks ページ自体は旧データ閲覧用にURL直打ちで残る) */}
+          {/* レビュー指摘(重大3・CC決定=CEOの「前のブックマークメニューに戻す」の字義どおり):
+              2026-08-03に撤去した導線を復活。「気になるプロ」(旧ダッシュボードから移設した
+              非公開リスト)は/bookmarksページに統合済みのため、そこへのリンクを戻す。 */}
+          {isPro && (
+            <a href="/bookmarks" onClick={closeMenu} style={menuLinkStyle}>気になるプロ</a>
+          )}
         </div>
 
         {/* サポート（全員） */}

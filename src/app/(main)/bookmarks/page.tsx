@@ -2,11 +2,16 @@
 
 import { useEffect, useState } from 'react'
 import { useProStatus } from '@/lib/useProStatus'
+import BookmarkedProsSection from '@/components/referral/BookmarkedProsSection'
 
 export default function BookmarksPage() {
-  // CEO決定(A案+♡プロ専用化): プロの「気になるプロ」はダッシュボード側(referral_list_items)に
-  // 一本化された。ここは旧bookmarksの一覧のまま残す(既存データが見えるのは許容・完全付け替えは次回)。
-  // プロが開いた時だけダッシュボードへの案内を出す(既存ロジックの共通hookを再利用)。
+  // CEO追加指示(2026-08-04・タスク1): プロの「気になるプロ」(非公開referral_list、
+  // /api/referral/lists由来)をダッシュボードの紹介するタブから撤去し、ここ(ホームの
+  // ブックマーク)に統合した(§16次回対応の実施)。
+  // レビュー指摘(軽微4): このページ下部の「以前のブックマーク」(旧bookmarksテーブル由来、
+  // /api/bookmarks経由)は完全に別のデータソース・別のテーブルのため、上の「気になるプロ」
+  // と項目が重複することは無い(同じプロが両方に載ることはあっても、それは正常=同一データの
+  // 二重表示ではない)。見出しを分けて両方残す。
   const { isPro } = useProStatus()
   const [bookmarkedPros, setBookmarkedPros] = useState<any[]>([])
   const [bookmarkCount, setBookmarkCount] = useState(0)
@@ -39,18 +44,16 @@ export default function BookmarksPage() {
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto', padding: '20px 16px 80px' }}>
-      {isPro && (
-        <div style={{
-          background: '#FBF7ED', border: '1px solid #E8D9A8', borderRadius: 12,
-          padding: '12px 14px', marginBottom: 16, fontSize: 13, color: '#5A4A1E', lineHeight: 1.7,
-        }}>
-          紹介機能をご利用のプロの方は、「気になるプロ」を<a href="/dashboard" style={{ color: '#C4A35A', fontWeight: 700 }}>ダッシュボード</a>で管理できます →
-        </div>
-      )}
+      {/* レビュー指摘(重大2): 見出し「気になるプロ」はBookmarkedProsSection内へ移した。
+          ページ側はisProゲートのみ(403・401・ロード中はコンポーネントがreturn nullするため、
+          allowlist外プロには従来と完全に同一の画面になる)。 */}
+      {isPro && <BookmarkedProsSection />}
       <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1A1A2E', margin: 0 }}>
-          ブックマーク
-        </h1>
+        {/* レビュー指摘(軽微4): 「気になるプロ」と同じ「ブックマーク」見出しが並ぶと紛らわしい
+            ため、isPro時はこちらを「以前のブックマーク」に変える(h1の重複も解消・h2に統一)。 */}
+        <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1A1A2E', margin: 0 }}>
+          {isPro ? '以前のブックマーク' : 'ブックマーク'}
+        </h2>
         {bookmarkCount > 0 && (
           <div style={{ fontSize: 13, color: '#888', marginTop: 4 }}>
             {bookmarkCount}件
@@ -66,12 +69,16 @@ export default function BookmarksPage() {
         <div style={{ textAlign: 'center', padding: '60px 20px', color: '#999' }}>
           <div style={{ fontSize: 40, marginBottom: 16 }}>♡</div>
           <div style={{ fontSize: 15, fontWeight: 600, color: '#666', marginBottom: 8 }}>
-            まだブックマークしたプロがいません
+            {isPro ? '以前のブックマークはありません' : 'まだブックマークしたプロがいません'}
           </div>
-          <div style={{ fontSize: 13, color: '#999', lineHeight: 1.8 }}>
-            プロのページで「♡ 気になる」を押すと<br />
-            ここに追加されます
-          </div>
+          {/* レビュー指摘(軽微4): プロは今後♡を押しても「気になるプロ」(referral_list)に
+              積まれる(旧bookmarksテーブルには増えない)ため、この案内はプロには出さない。 */}
+          {!isPro && (
+            <div style={{ fontSize: 13, color: '#999', lineHeight: 1.8 }}>
+              プロのページで「♡ 気になる」を押すと<br />
+              ここに追加されます
+            </div>
+          )}
           <a href="/search" style={{
             display: 'inline-block',
             marginTop: 24,

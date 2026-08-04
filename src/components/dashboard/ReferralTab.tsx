@@ -106,7 +106,22 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
   // レビュー指摘(先行テスト): 作成失敗が無言だった(else無し)ため、失敗を可視化するインラインエラー
   const [createListError, setCreateListError] = useState<string | null>(null)
   // §3-0-2(第3弾): リスト作成フォームは主導線から降格し、一覧の下に折りたたみデフォルトで置く
-  const [showCreateForm, setShowCreateForm] = useState(false)
+  // CEO追加指示(2026-08-04・タスク4): 入口を「プロを追加して作る」「タイトルから作る」の2択に
+  // メニュー化。'closed'=トリガーのみ / 'menu'=2択 / 'title_form'=既存フォーム(旧showCreateForm) /
+  // 'pick_pro'=最初のプロを選ぶとリストを自動作成するUI。
+  const [createEntryMode, setCreateEntryMode] = useState<'closed' | 'menu' | 'title_form' | 'pick_pro'>('closed')
+  // 「プロを追加して作る」中の検索state用の番兵キー(pinQuery/pinResults等は既存の
+  // Record<listId,...>をそのまま再利用する。実在するlist idと衝突しない固定文字列)。
+  const NEW_LIST_PICK_KEY = '__new_list_pick__'
+  const [creatingFromPro, setCreatingFromPro] = useState(false)
+  // レビュー指摘(軽微2): stateの反映を待たない同期ロック(連打二重作成防止)。
+  const creatingFromProRef = useRef(false)
+  // 作成直後のリストへスクロール/「リスト名を変更できます」ヒント表示用
+  const [justCreatedListId, setJustCreatedListId] = useState<string | null>(null)
+  // レビュー指摘(軽微1): 成功/失敗でヒント文言を変える(alertとの矛盾解消)
+  const [justCreatedHintMessage, setJustCreatedHintMessage] = useState('')
+  const justCreatedHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const listCardRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   // §3-1改訂(ゼロ状態導線): リストのタイトルをカード上でインライン編集する最小UI
   const [titleSavingId, setTitleSavingId] = useState<string | null>(null)
@@ -181,8 +196,13 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
         if (data?.lists) {
           setLists(data.lists)
           // R6レビュー指摘: 折りたたみデフォルト閉により、リスト0件の初回ユーザーだけは
-          // 作成フォームを最初から開いて見せる(発見性の担保。1件でもあれば閉じたまま)
-          if (data.lists.length === 0) setShowCreateForm(true)
+          // 作成メニューを最初から開いて見せる(発見性の担保。1件でもあれば閉じたまま)。
+          // レビュー指摘(重大1): 気になるプロ(private)は/bookmarksへ移設済みでこのタブには
+          // 表示しないため、判定はpublic(共有)リストの件数だけで行う。
+          const publicCount = (data.lists as Array<{ visibility: string }>).filter(
+            (l) => l.visibility !== 'private'
+          ).length
+          if (publicCount === 0) setCreateEntryMode('menu')
         }
       })
       .catch(() => {})
@@ -198,6 +218,13 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
       .catch(() => {})
       .finally(() => setSentLoading(false))
   }, [])
+
+  // CEO追加指示(タスク4): 作成直後のリストへスクロールする(依存はプリミティブのみ)。
+  useEffect(() => {
+    if (!justCreatedListId) return
+    const el = listCardRefs.current[justCreatedListId]
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [justCreatedListId])
 
   // CEO調査更新(先行テスト): POST /api/referral/lists の失敗経路は
   // 401(unauthorized)/403(forbidden)/400(title_required|title_too_long)/500(failed_to_create)の4系統。
@@ -238,9 +265,11 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
     }
   }
 
-  async function createList() {
+  // CEO追加指示(タスク4): 呼び出し元(title_form)が成功時だけメニューを閉じられるよう、
+  // 成否をboolean戻り値で返す(既存の内部ロジックは変更しない)。
+  async function createList(): Promise<boolean> {
     const title = newTitle.trim()
-    if (!title) return
+    if (!title) return false
     setCreating(true)
     setCreateListError(null)
     const result = await postCreateList(title, newComment.trim() || null)
@@ -248,10 +277,73 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
       setLists((prev) => [result.list as ReferralList, ...prev])
       setNewTitle('')
       setNewComment(DEFAULT_CLIENT_MESSAGE)
-    } else {
-      setCreateListError(createListErrorMessage(result.status, result.errorCode))
+      setCreating(false)
+      return true
     }
+    setCreateListError(createListErrorMessage(result.status, result.errorCode))
     setCreating(false)
+    return false
+  }
+
+  // CEO追加指示(2026-08-04・タスク4): 「プロを追加して作る」経路。最初のプロを選んだ時点で
+  // リストを自動作成(内部用タイトルは「新しいリスト」+日付・クライアントメッセージは既存の
+  // デフォルト文・作成APIは既存のpostCreateListを使用)→選んだプロを追加、の2ステップを
+  // 1操作で行う。DB INSERTはリスト作成1回・アイテム追加1回(pending→後更新パターンではない)。
+  async function createListFromPro(pro: SearchResultPro) {
+    // レビュー指摘(軽微2): stateの再レンダー反映を待たずに連打されると二重作成しうるため、
+    // 同期的なrefロックを先頭で確認する(finallyで必ず解除)。
+    if (creatingFromProRef.current) return
+    creatingFromProRef.current = true
+    setCreatingFromPro(true)
+    const todayLabel = new Date().toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })
+    const defaultTitle = `新しいリスト(${todayLabel})`
+    const created = await postCreateList(defaultTitle, DEFAULT_CLIENT_MESSAGE)
+    if (!created.ok || !created.list) {
+      window.alert(createListErrorMessage(created.status, created.errorCode))
+      setCreatingFromPro(false)
+      creatingFromProRef.current = false
+      return
+    }
+    const newList = created.list
+    setLists((prev) => [newList, ...prev])
+    // レビュー指摘(軽微1): items POSTの成否を保持し、alertの文言と矛盾しないヒントを出す。
+    let itemAdded = false
+    try {
+      const res = await fetch(`/api/referral/lists/${newList.id}/items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ pro_id: pro.id }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setLists((prev) =>
+          prev.map((l) => (l.id === newList.id ? { ...l, items: [...l.items, { ...data.item, professionals: pro }] } : l))
+        )
+        itemAdded = true
+      } else {
+        const err = await res.json().catch(() => ({}))
+        window.alert(
+          err.error === 'target_not_accepting'
+            ? 'この先生は紹介の受付を停止中です（リストは作成されています）'
+            : 'プロの追加に失敗しました（リストは作成されています。あとから追加できます）'
+        )
+      }
+    } catch {
+      window.alert('プロの追加に失敗しました（リストは作成されています。あとから追加できます）')
+    } finally {
+      setCreatingFromPro(false)
+      creatingFromProRef.current = false
+      setCreateEntryMode('closed')
+      setPinQuery((prev) => ({ ...prev, [NEW_LIST_PICK_KEY]: '' }))
+      setPinResults((prev) => ({ ...prev, [NEW_LIST_PICK_KEY]: [] }))
+      setJustCreatedListId(newList.id)
+      setJustCreatedHintMessage(
+        itemAdded ? 'プロを追加しました。リスト名を変更できます' : 'リストを作成しました。リスト名を変更できます'
+      )
+      if (justCreatedHintTimerRef.current) clearTimeout(justCreatedHintTimerRef.current)
+      justCreatedHintTimerRef.current = setTimeout(() => setJustCreatedListId(null), 8000)
+    }
   }
 
   async function deleteList(listId: string) {
@@ -281,6 +373,7 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
       if (titleSavedTimerRef.current) clearTimeout(titleSavedTimerRef.current)
       if (pinNoteSavedTimerRef.current) clearTimeout(pinNoteSavedTimerRef.current)
       if (commentSavedTimerRef.current) clearTimeout(commentSavedTimerRef.current)
+      if (justCreatedHintTimerRef.current) clearTimeout(justCreatedHintTimerRef.current)
     }
   }, [])
 
@@ -704,22 +797,34 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
 
   // §3-2/中1: visibility='private' は「連携候補（非公開）」= 共有URLを持たない社内向けリスト。
   // 共有URLコピー・招待UI・承諾待ちバッジ(§3-1: 非公開リストは同意不要)を出さない。
+  // CEO追加指示(2026-08-04・タスク1): 非公開リスト(気になるプロ)は/bookmarksへ移設したため、
+  // このファイルではpublicLists(送り手向け「＋新しいリストを作る」選択肢等)のみ使用する。
   const publicLists = lists.filter((l) => l.visibility !== 'private')
-  const privateLists = lists.filter((l) => l.visibility === 'private')
 
   function renderListCard(list: ReferralList, isPrivate: boolean) {
     return (
-      <div key={list.id} style={{ background: '#fff', borderRadius: 14, padding: '16px', border: '1px solid #E5E7EB' }}>
+      <div
+        key={list.id}
+        ref={(el) => { listCardRefs.current[list.id] = el }}
+        style={{
+          background: '#fff', borderRadius: 14, padding: '16px',
+          // CEO追加指示(2026-08-04・タスク3): 確定カードと同系の枠強化
+          border: '1.5px solid #E5E7EB',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+        }}
+      >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             {/* CEO指摘(先行テスト・UI修正①): タイトルが「クライアントに表示される名前」と
-                誤解されないよう、内部用であることを明示するラベルを常に出す */}
-            <div style={{ fontSize: 10, color: '#9CA3AF', marginBottom: 2 }}>リスト名（内部用）</div>
+                誤解されないよう、内部用であることを明示するラベルを常に出す。
+                CEO追加指示(タスク3): ラベルは13px。 */}
+            <div style={{ fontSize: 13, color: '#9CA3AF', marginBottom: 2 }}>リスト名（内部用）</div>
             {/* §3-1改訂: タイトルのインライン編集(既存PATCH /api/referral/lists/[list_id] を利用)。
-                連携候補(private)はタイトルが移行SQLの冪等ガードにも使われるため表示のみ(軽微指摘)。 */}
+                連携候補(private)はタイトルが移行SQLの冪等ガードにも使われるため表示のみ(軽微指摘)。
+                CEO追加指示(タスク3): クライアント名と同じ17px/fontWeight800に統一。 */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
               {isPrivate ? (
-                <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E', minWidth: 0 }}>{list.title}</div>
+                <div style={{ fontSize: 17, fontWeight: 800, color: '#1A1A2E', minWidth: 0 }}>{list.title}</div>
               ) : (
                 <input
                   defaultValue={list.title}
@@ -734,9 +839,10 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
                     if (trimmed !== list.title) {
                       updateListTitle(list.id, trimmed)
                     }
+                    setJustCreatedListId((prev) => (prev === list.id ? null : prev))
                   }}
                   style={{
-                    fontSize: 15, fontWeight: 700, color: '#1A1A2E', border: 'none', background: 'transparent',
+                    fontSize: 17, fontWeight: 800, color: '#1A1A2E', border: 'none', background: 'transparent',
                     padding: 0, flex: 1, minWidth: 0, fontFamily: 'inherit', outline: 'none',
                   }}
                 />
@@ -744,21 +850,28 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
               {/* CEO指摘(先行テスト・UI修正①): 公開状態を静かなチップで明示(§0-6準拠) */}
               <span
                 style={{
-                  fontSize: 10, color: '#6B7280', background: '#F3F4F6', border: '1px solid #E5E7EB',
+                  fontSize: 13, color: '#6B7280', background: '#F3F4F6', border: '1px solid #E5E7EB',
                   borderRadius: 999, padding: '2px 8px', flexShrink: 0, whiteSpace: 'nowrap' as const,
                 }}
               >
                 {isPrivate ? '非公開' : 'リンク共有'}
               </span>
             </div>
+            {/* CEO追加指示(2026-08-04・タスク4): 「プロを追加して作る」で作成された直後だけ、
+                タイトルを変更できることを案内する(justCreatedListIdは編集操作or8秒後にクリア)。 */}
+            {justCreatedListId === list.id && (
+              <div style={{ fontSize: 13, color: '#C4A35A', marginTop: 4 }}>
+                {justCreatedHintMessage}
+              </div>
+            )}
             {titleSavingId === list.id && (
-              <div style={{ fontSize: 10, color: '#9CA3AF' }}>保存中...</div>
+              <div style={{ fontSize: 13, color: '#9CA3AF' }}>保存中...</div>
             )}
             {titleSavedId === list.id && (
-              <div style={{ fontSize: 10, color: '#2E7D32' }}>保存しました</div>
+              <div style={{ fontSize: 13, color: '#2E7D32' }}>保存しました</div>
             )}
             {titleError[list.id] && (
-              <div style={{ fontSize: 10, color: '#B00020' }}>{titleError[list.id]}</div>
+              <div style={{ fontSize: 13, color: '#B00020' }}>{titleError[list.id]}</div>
             )}
             {/* CEO指摘(先行テスト第3弾): comment=クライアントへのメッセージ(紹介ページの
                 「先生からのメッセージ」)。表示⇔編集モードで後から変更できる(§0-7) */}
@@ -784,7 +897,7 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
                       disabled={commentSavingId === list.id}
                       style={{
                         padding: '4px 12px', borderRadius: 6, border: 'none',
-                        background: '#1A1A2E', color: '#fff', fontSize: 11, fontWeight: 600,
+                        background: '#1A1A2E', color: '#fff', fontSize: 13, fontWeight: 600,
                         cursor: commentSavingId === list.id ? 'default' : 'pointer',
                         opacity: commentSavingId === list.id ? 0.6 : 1,
                       }}
@@ -793,18 +906,18 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
                     </button>
                     <button
                       onClick={() => setCommentEditingId(null)}
-                      style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 11, cursor: 'pointer', padding: 0 }}
+                      style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 13, cursor: 'pointer', padding: 0 }}
                     >
                       キャンセル
                     </button>
                   </div>
                   {commentError[list.id] && (
-                    <div style={{ fontSize: 10, color: '#B00020', marginTop: 2 }}>{commentError[list.id]}</div>
+                    <div style={{ fontSize: 13, color: '#B00020', marginTop: 2 }}>{commentError[list.id]}</div>
                   )}
                 </div>
               ) : (
                 <div style={{ marginTop: 4 }}>
-                  <div style={{ fontSize: 10, color: '#9CA3AF' }}>クライアントへのメッセージ（紹介ページに表示）</div>
+                  <div style={{ fontSize: 13, color: '#9CA3AF' }}>クライアントへのメッセージ（紹介ページに表示）</div>
                   {list.comment ? (
                     <div
                       onClick={() => { setCommentEditingId(list.id); setCommentDraft(list.comment || '') }}
@@ -821,7 +934,7 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
                     </button>
                   )}
                   {commentSavedId === list.id && (
-                    <div style={{ fontSize: 10, color: '#2E7D32', marginTop: 2 }}>保存しました</div>
+                    <div style={{ fontSize: 13, color: '#2E7D32', marginTop: 2 }}>保存しました</div>
                   )}
                 </div>
               )
@@ -873,7 +986,7 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
                         '不明なプロ'
                       )}
                     </div>
-                    {!isPrivate && <div style={{ fontSize: 11, color: label.color }}>{label.text}</div>}
+                    {!isPrivate && <div style={{ fontSize: 13, color: label.color }}>{label.text}</div>}
                     {/* CEO指摘(先行テスト第3弾): 一言メモは共有リストのみ(気になるプロ=privateには不要)。
                         onBlur自動保存をやめ、変更時に出る「保存する」ボタンで確定する(§0-7) */}
                     {!isPrivate && (
@@ -903,7 +1016,7 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
                               disabled={!!pinNoteSaving[addKey]}
                               style={{
                                 padding: '4px 12px', borderRadius: 6, border: 'none',
-                                background: '#1A1A2E', color: '#fff', fontSize: 11, fontWeight: 600,
+                                background: '#1A1A2E', color: '#fff', fontSize: 13, fontWeight: 600,
                                 cursor: pinNoteSaving[addKey] ? 'default' : 'pointer',
                                 opacity: pinNoteSaving[addKey] ? 0.6 : 1,
                               }}
@@ -920,7 +1033,7 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
                               }
                               style={{
                                 background: 'none', border: 'none', color: '#9CA3AF',
-                                fontSize: 11, cursor: 'pointer', padding: 0,
+                                fontSize: 13, cursor: 'pointer', padding: 0,
                               }}
                             >
                               キャンセル
@@ -928,7 +1041,7 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
                           </div>
                         )}
                         {pinNoteSavedKey === addKey && (
-                          <div style={{ fontSize: 10, color: '#2E7D32', marginTop: 2 }}>保存しました</div>
+                          <div style={{ fontSize: 13, color: '#2E7D32', marginTop: 2 }}>保存しました</div>
                         )}
                       </>
                     )}
@@ -943,7 +1056,7 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
                           // 色付きハートで統一。テキスト字形は端末で形が揃わないためSVGで描画し、
                           // タップ即時に色が抜ける(塗り→枠線のみ)フィードバックを出す
                           { background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, padding: '2px 4px', lineHeight: 0 }
-                        : { background: 'none', border: 'none', color: '#9CA3AF', fontSize: 11, cursor: 'pointer', flexShrink: 0 }
+                        : { background: 'none', border: 'none', color: '#9CA3AF', fontSize: 13, cursor: 'pointer', flexShrink: 0 }
                     }
                   >
                     {isPrivate ? (
@@ -963,7 +1076,7 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
                 </div>
                 {/* レビュー指摘(先行テスト): 外す/一言保存の失敗を可視化 */}
                 {pinError && (
-                  <div style={{ fontSize: 11, color: '#B00020', paddingLeft: 42 }}>{pinError}</div>
+                  <div style={{ fontSize: 13, color: '#B00020', paddingLeft: 42 }}>{pinError}</div>
                 )}
 
                 {/* §3-0-2(第3弾・撤回と再指示): 連携候補(private)行から共有リストへ追加する導線を復活。
@@ -1071,7 +1184,7 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
                 <span style={{ fontSize: 12, fontWeight: 700, color: '#1A1A2E' }}>プロを追加</span>
                 <button
                   onClick={() => toggleAddProPanel(list.id)}
-                  style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 11, cursor: 'pointer', padding: 0 }}
+                  style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 13, cursor: 'pointer', padding: 0 }}
                 >
                   閉じる
                 </button>
@@ -1108,7 +1221,7 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
                 <div style={{ position: 'relative' }}>
                   <button
                     onClick={() => setAddProPanel((prev) => ({ ...prev, [list.id]: 'menu' }))}
-                    style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 11, cursor: 'pointer', padding: 0, marginBottom: 8, display: 'block' }}
+                    style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 13, cursor: 'pointer', padding: 0, marginBottom: 8, display: 'block' }}
                   >
                     ← 他の追加方法を選ぶ
                   </button>
@@ -1121,7 +1234,7 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
                       fontSize: 13, boxSizing: 'border-box' as const,
                     }}
                   />
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#6B7280', marginTop: 6 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#6B7280', marginTop: 6 }}>
                     <input
                       type="checkbox"
                       checked={referralOnlyFilter}
@@ -1131,7 +1244,7 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
                   </label>
                   {/* レビュー指摘(先行テスト): 検索失敗が「結果0件」と見分けがつかず無言だったため可視化 */}
                   {pinSearchError[list.id] && (
-                    <div style={{ fontSize: 11, color: '#B00020', marginTop: 4 }}>検索に失敗しました</div>
+                    <div style={{ fontSize: 13, color: '#B00020', marginTop: 4 }}>検索に失敗しました</div>
                   )}
                   {(pinResults[list.id]?.length || 0) > 0 && (
                     <div style={{
@@ -1159,7 +1272,7 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
                                 防御的なもの(未知の応答形状時はfalse=保守側に倒す) */}
                             {REFERRAL_SIGNAL_DOT[p.referralSignal || computeReferralSignal(p.accepting_status, false)]} {p.name}
                           </div>
-                          {p.title && <div style={{ fontSize: 11, color: '#9CA3AF' }}>{p.title}</div>}
+                          {p.title && <div style={{ fontSize: 13, color: '#9CA3AF' }}>{p.title}</div>}
                         </div>
                       ))}
                     </div>
@@ -1172,7 +1285,7 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
                 <div style={{ minWidth: 0 }}>
                   <button
                     onClick={() => setAddProPanel((prev) => ({ ...prev, [list.id]: 'menu' }))}
-                    style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 11, cursor: 'pointer', padding: 0, marginBottom: 8, display: 'block' }}
+                    style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 13, cursor: 'pointer', padding: 0, marginBottom: 8, display: 'block' }}
                   >
                     ← 他の追加方法を選ぶ
                   </button>
@@ -1205,7 +1318,7 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
                       1人分(single-use)であることを宛名付きで明示する(§0-6: 絵文字なし・静かな表示) */}
                   {issuedInviteUrl[list.id] && (
                     <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column' as const, gap: 6, minWidth: 0 }}>
-                      <div style={{ fontSize: 11, color: '#8A6D1F', lineHeight: 1.6 }}>
+                      <div style={{ fontSize: 13, color: '#8A6D1F', lineHeight: 1.6 }}>
                         この招待URLは1人分です（{issuedInviteName[list.id] ? `${issuedInviteName[list.id]}先生用` : 'お相手の先生専用'}）。別の先生には新しいURLを発行してください
                       </div>
                       <textarea
@@ -1247,7 +1360,7 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
           )
         ) : (
           !isPrivate && (
-            <div style={{ fontSize: 11, color: '#9CA3AF' }}>ピンは最大3名までです</div>
+            <div style={{ fontSize: 13, color: '#9CA3AF' }}>ピンは最大3名までです</div>
           )
         )}
 
@@ -1255,7 +1368,7 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
             静かなボタン群として集約する。QRは既存BadgeQRModalと同じqrcode.react(既存依存)を利用。 */}
         {!isPrivate && (
           <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px dashed #E5E7EB' }}>
-            <div style={{ fontSize: 10, color: '#9CA3AF', marginBottom: 6 }}>
+            <div style={{ fontSize: 13, color: '#9CA3AF', marginBottom: 6 }}>
               クライアントに共有（紹介ページが開きます）
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
@@ -1309,18 +1422,27 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
   }
 
   // リスト作成カード(§3-0-2第3弾: 主導線から降格・折りたたみデフォルト)。
-  // CEO指摘(先行テスト第3弾): 最下部だと気になるプロの長い一覧に埋もれて見つからないため、
-  // 共有リスト一覧の直後=「気になるプロ」セクションの上に配置する。
+  // CEO追加指示(2026-08-04・タスク1): 「紹介する」タブの並びを①成立した紹介②紹介リスト群
+  // ③新規作成に変更したため、このカードは最後尾に配置する。
+  // CEO追加指示(タスク4): 入口を「プロを追加して作る」/「タイトルから作る」の2択メニューにする。
   const createListCard = (
-    <div style={{ background: '#fff', borderRadius: 14, padding: showCreateForm ? '18px 16px' : '12px 16px', border: '1px solid #E5E7EB' }}>
-      {!showCreateForm ? (
+    <div
+      style={{
+        background: '#fff', borderRadius: 14,
+        padding: createEntryMode === 'closed' ? '12px 16px' : '18px 16px',
+        border: '1.5px solid #E5E7EB', boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+      }}
+    >
+      {createEntryMode === 'closed' && (
         <button
-          onClick={() => setShowCreateForm(true)}
+          onClick={() => setCreateEntryMode('menu')}
           style={{ background: 'none', border: 'none', color: '#C4A35A', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0 }}
         >
-          ＋ リストを直接作る
+          ＋ 新しいリストを作る
         </button>
-      ) : (
+      )}
+
+      {createEntryMode === 'menu' && (
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, gap: 8 }}>
             <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', margin: 0 }}>
@@ -1328,15 +1450,122 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
               {publicLists.length === 0 ? '最初の紹介リストを作りましょう' : '新しい紹介リストを作る'}
             </h3>
             <button
-              onClick={() => setShowCreateForm(false)}
-              style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 12, cursor: 'pointer', flexShrink: 0 }}
+              onClick={() => setCreateEntryMode('closed')}
+              style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 13, cursor: 'pointer', flexShrink: 0 }}
+            >
+              閉じる
+            </button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
+            <button
+              onClick={() => setCreateEntryMode('pick_pro')}
+              style={{
+                padding: '10px 14px', borderRadius: 8, border: 'none', textAlign: 'left' as const,
+                background: '#C4A35A', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+              }}
+            >
+              プロを追加して作る
+            </button>
+            <button
+              onClick={() => setCreateEntryMode('title_form')}
+              style={{
+                padding: '10px 14px', borderRadius: 8, border: '1px solid #E5E7EB', textAlign: 'left' as const,
+                background: '#fff', color: '#1A1A2E', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+              }}
+            >
+              タイトルから作る
+            </button>
+          </div>
+        </>
+      )}
+
+      {createEntryMode === 'pick_pro' && (
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={() => setCreateEntryMode('menu')}
+            style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 13, cursor: 'pointer', padding: 0, marginBottom: 8, display: 'block' }}
+          >
+            ← 他の作り方を選ぶ
+          </button>
+          <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 8, lineHeight: 1.6 }}>
+            最初に追加するプロを選んでください。選ぶとリストが作成されます
+            <br />
+            {/* レビュー指摘(軽微5) */}
+            選んだ先生には掲載通知が届きます
+          </div>
+          <input
+            value={pinQuery[NEW_LIST_PICK_KEY] || ''}
+            onChange={(e) => searchPro(NEW_LIST_PICK_KEY, e.target.value)}
+            placeholder="名前でプロを検索"
+            disabled={creatingFromPro}
+            style={{
+              width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #E5E7EB',
+              fontSize: 13, boxSizing: 'border-box' as const,
+            }}
+          />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#6B7280', marginTop: 6 }}>
+            <input
+              type="checkbox"
+              checked={referralOnlyFilter}
+              onChange={(e) => handleReferralOnlyToggle(e.target.checked)}
+            />
+            紹介につながる人のみ表示
+          </label>
+          {creatingFromPro && (
+            <div style={{ fontSize: 13, color: '#9CA3AF', marginTop: 8 }}>リストを作成中...</div>
+          )}
+          {pinSearchError[NEW_LIST_PICK_KEY] && (
+            <div style={{ fontSize: 13, color: '#B00020', marginTop: 4 }}>検索に失敗しました</div>
+          )}
+          {!creatingFromPro && (pinResults[NEW_LIST_PICK_KEY]?.length || 0) > 0 && (
+            <div style={{
+              position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
+              background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8,
+              marginTop: 4, maxHeight: 240, overflowY: 'auto' as const,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+            }}>
+              {(pinResults[NEW_LIST_PICK_KEY] || []).map((p) => (
+                <div
+                  key={p.id}
+                  onClick={() => (creatingFromPro ? undefined : createListFromPro(p))}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
+                    cursor: 'pointer', borderBottom: '1px solid #F3F4F6',
+                  }}
+                >
+                  {p.photo_url ? (
+                    <img src={p.photo_url} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
+                  ) : (
+                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#E5E7EB' }} />
+                  )}
+                  <div style={{ fontSize: 13, color: '#1A1A2E' }}>
+                    {REFERRAL_SIGNAL_DOT[p.referralSignal || computeReferralSignal(p.accepting_status, false)]} {p.name}
+                  </div>
+                  {p.title && <div style={{ fontSize: 13, color: '#9CA3AF' }}>{p.title}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {createEntryMode === 'title_form' && (
+        <>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, gap: 8 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', margin: 0 }}>
+              {/* 先行テスト指摘C: 公開リストが0件の間は「最初の1件」であることを明示する */}
+              {publicLists.length === 0 ? '最初の紹介リストを作りましょう' : '新しい紹介リストを作る'}
+            </h3>
+            <button
+              onClick={() => setCreateEntryMode('closed')}
+              style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 13, cursor: 'pointer', flexShrink: 0 }}
             >
               閉じる
             </button>
           </div>
           {/* CEO指摘(先行テスト第3弾): フィールドの意味を再定義。title=内部用リスト名(管理用・
               クライアント非表示)、comment=クライアントへのメッセージ(紹介ページに表示・後から変更可) */}
-          <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 4 }}>
+          <div style={{ fontSize: 13, color: '#9CA3AF', marginBottom: 4 }}>
             内部用リスト名（管理用。クライアントには表示されません）
           </div>
           <input
@@ -1348,7 +1577,7 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
               fontSize: 13, boxSizing: 'border-box' as const, marginBottom: 8,
             }}
           />
-          <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 4 }}>
+          <div style={{ fontSize: 13, color: '#9CA3AF', marginBottom: 4 }}>
             クライアントへのメッセージ（紹介ページに「先生からのメッセージ」として表示。後から変更できます）
           </div>
           <textarea
@@ -1361,7 +1590,10 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
             }}
           />
           <button
-            onClick={createList}
+            onClick={async () => {
+              const ok = await createList()
+              if (ok) setCreateEntryMode('closed')
+            }}
             disabled={creating || !newTitle.trim()}
             style={{
               padding: '8px 20px', borderRadius: 8, border: 'none',
@@ -1374,13 +1606,13 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
           </button>
           {/* 先行テストB: disabledなだけだと「押したのに無反応」に見えるため、理由を明示する */}
           {!creating && !newTitle.trim() && (
-            <span style={{ fontSize: 11, color: '#9CA3AF', marginLeft: 10 }}>
+            <span style={{ fontSize: 13, color: '#9CA3AF', marginLeft: 10 }}>
               タイトルを入力すると作成できます
             </span>
           )}
           {/* レビュー指摘(先行テスト): 作成失敗(403含む)が無言だったため可視化 */}
           {createListError && (
-            <div style={{ fontSize: 11, color: '#B00020', marginTop: 8, lineHeight: 1.6 }}>{createListError}</div>
+            <div style={{ fontSize: 13, color: '#B00020', marginTop: 8, lineHeight: 1.6 }}>{createListError}</div>
           )}
         </>
       )}
@@ -1395,56 +1627,22 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
         <ReferralCompletedList proId={proId} onCountChange={onCompletedCountChange} />
       </div>
 
-      {/* 「紹介する」サブタブ側 = 紹介リスト(作成・共有)・気になるリスト・成立した紹介(送り手側) */}
+      {/* 「紹介する」サブタブ側 = ①成立した紹介(送り手側)②紹介リスト群③新規作成
+          CEO追加指示(2026-08-04・タスク1): 進行中案件を最上部へ・気になるプロはこのタブから撤去し
+          /bookmarksへ移設(下部の案内リンク参照)。 */}
       <div style={{ display: subtab === 'send' ? 'flex' : 'none', flexDirection: 'column', gap: 24 }}>
-      {/* リスト一覧 */}
-      {listsLoading ? (
-        <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>読み込み中...</div>
-      ) : lists.length === 0 ? (
-        <>
-          <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>
-            まだ紹介リストがありません
-          </div>
-          {createListCard}
-        </>
-      ) : (
-        <>
-          {publicLists.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {publicLists.map((list) => renderListCard(list, false))}
-            </div>
-          )}
-
-          {createListCard}
-
-          {privateLists.length > 0 && (
-            <div style={{ marginTop: publicLists.length > 0 ? 24 : 0 }}>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>
-                気になるプロ（非公開）
-              </h3>
-              <p style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 12, lineHeight: 1.5 }}>
-                共有URLを持たないリストです。招待・掲載通知は行われません。各行の「紹介リストに追加」から共有リストにも追加できます。
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {privateLists.map((list) => renderListCard(list, true))}
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      {/* §2-10: 成立した紹介（送り手側の予約一覧・案件スレッド・引き継ぎメモ） */}
+      {/* ① §2-10: 成立した紹介（送り手側の予約一覧・案件スレッド・引き継ぎメモ） */}
       {!sentLoading && sentBookings.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E' }}>成立した紹介</h3>
           {sentBookings.map((b) => (
-            <div key={b.id} style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', border: '1px solid #E5E7EB' }}>
+            <div key={b.id} style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', border: '1.5px solid #E5E7EB', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
               <div style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6 }}>
                 <strong>{b.client_nickname}さん</strong>
                 {b.receiver_pro?.name && <span style={{ color: '#6B7280' }}> → {b.receiver_pro.name}さん</span>}
-                <span style={{ marginLeft: 8, fontSize: 11, color: '#9CA3AF' }}>{SENT_STATUS_LABEL[b.status]}</span>
+                <span style={{ marginLeft: 8, fontSize: 13, color: '#9CA3AF' }}>{SENT_STATUS_LABEL[b.status]}</span>
               </div>
-              {b.menu_name && <div style={{ fontSize: 12, color: '#555', marginTop: 4 }}>メニュー: {b.menu_name}</div>}
+              {b.menu_name && <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>メニュー: {b.menu_name}</div>}
               <BookingThread
                 bookingId={b.id}
                 ownProId={proId}
@@ -1457,6 +1655,28 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
           ))}
         </div>
       )}
+
+      {/* ② リスト一覧(公開/リンク共有のみ。気になるプロ=非公開リストは/bookmarksへ移設済み) */}
+      {listsLoading ? (
+        <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>読み込み中...</div>
+      ) : publicLists.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>
+          まだ紹介リストがありません
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {publicLists.map((list) => renderListCard(list, false))}
+        </div>
+      )}
+
+      {/* レビュー指摘(重大3・CC決定=CEOの「前のブックマークメニューに戻す」の字義どおり):
+          気になるプロの移設案内。恒久表示(このタブに気になるプロが無い理由を示す固定の案内文)。 */}
+      <div style={{ fontSize: 13, color: '#9CA3AF' }}>
+        気になるプロは<a href="/bookmarks" style={{ color: '#C4A35A', fontWeight: 600 }}>ホームのブックマーク</a>へ移動しました
+      </div>
+
+      {/* ③ 新規作成 */}
+      {createListCard}
 
       {/* CEO指摘(先行テスト・UI修正②): クライアントに共有するURLのQRコードモーダル(タップで閉じる) */}
       {qrModalListId && (() => {
@@ -1482,7 +1702,7 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
                 <QRCodeSVG value={qrUrl} size={200} />
               </div>
-              <div style={{ fontSize: 11, color: '#9CA3AF', wordBreak: 'break-all' as const, marginBottom: 16 }}>
+              <div style={{ fontSize: 13, color: '#9CA3AF', wordBreak: 'break-all' as const, marginBottom: 16 }}>
                 {qrUrl}
               </div>
               <button

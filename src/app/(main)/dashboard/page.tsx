@@ -468,6 +468,16 @@ export default function DashboardPage() {
     }
   }, [tabParam, loading])
 
+  // レビュー指摘(軽微7): ?tab=referral&sub=send|receive のクエリで初期サブタブを固定する
+  // (localStorage・requested件数による自動判定より優先)。依存はプリミティブのみ。
+  const referralSubParam = searchParams.get('sub')
+  useEffect(() => {
+    if (referralSubParam === 'send' || referralSubParam === 'receive') {
+      referralSubtabInitRef.current = true
+      setReferralSubtab(referralSubParam)
+    }
+  }, [referralSubParam])
+
   // ハッシュスクロール（バッジクリックからの遷移用）
   useEffect(() => {
     const hash = window.location.hash.slice(1)
