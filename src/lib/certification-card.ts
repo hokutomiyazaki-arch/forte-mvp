@@ -301,12 +301,13 @@ function isMissingColumnError(err: { code?: string; message?: string } | null): 
  * このプロの「認定基準となる票数」を proof_id ごとに取得する。
  *
  * ⚠️ 物理成果物のグランドファザリング原則（指示書§2-8・CEO決定2026-08-04）。
- * 「一度到達した水準は下げない」＝ 各申請(certification_applications)の
- * stats_snapshot.proofs（申請時点の票数・複数申請があれば全て）と、現在の
- * vote_summary（ライブ）を proof_id ごとに比較し、**大きい方**を採用する
- * (Math.max)。スナップショットは下限（フロア）として機能し、集計方式変更
- * (票数→人数化等)で下がっても凍結水準を守る。一方、票が本当に伸びた場合は
- * ライブ値が上回るため levelUp 判定は生きたまま機能する。
+ * 「フロア（下限）は**その申請に対してのみ**効く」＝ 各申請行は、
+ * **自分の category_slug に限り**申請時点の値（stats_snapshot.proofs[category_slug]、
+ * 無ければ proof_count_at_apply）を下限として保持する。他カテゴリ・将来の
+ * 新規申請には持ち越さない（旧方式の票数が恒久的に残り、後から入った人より
+ * ティア到達が容易になる不公平を固定化しないため・CEO決定）。
+ * その上で現在の vote_summary（ライブ）と proof_id ごとに比較し大きい方を採用
+ * （票が本当に伸びた場合は levelUp 判定が生きる）。
  * カードと賞状は必ずこの関数を経由し、同一の取得結果を使うこと。
  * 集計方式の変更時もここは触らないこと。変更時は必ずレビュー。
  */
@@ -316,7 +317,7 @@ export async function getCertStatsForPro(
 ): Promise<{ source: 'max' | 'live'; counts: Map<string, number> }> {
   const { data: appsRaw, error: appsError } = await sb
     .from('certification_applications')
-    .select('applied_at, stats_snapshot')
+    .select('applied_at, category_slug, proof_count_at_apply, stats_snapshot')
     .eq('professional_id', proId)
     .order('applied_at', { ascending: false, nullsFirst: false })
 
@@ -336,17 +337,24 @@ export async function getCertStatsForPro(
       appsError.message
     )
   } else {
-    type SnapRow = { applied_at: string | null; stats_snapshot: { proofs?: Record<string, number> } | null }
+    type SnapRow = {
+      applied_at: string | null
+      category_slug: string | null
+      proof_count_at_apply: number | null
+      stats_snapshot: { proofs?: Record<string, number> } | null
+    }
     const apps = (appsRaw as SnapRow[] | null) ?? []
     for (const a of apps) {
-      const proofs = a.stats_snapshot?.proofs
-      if (!proofs) continue
+      // CEO決定(2026-08-04・§2-8): フロアは「その申請のカテゴリ」に対してのみ適用。
+      // stats_snapshot の他カテゴリ値は参照しない（将来の新規申請への持ち越し禁止）。
+      if (!a.category_slug) continue
+      const snapValue = a.stats_snapshot?.proofs?.[a.category_slug]
+      const floorRaw = snapValue !== undefined ? snapValue : a.proof_count_at_apply
+      const n = typeof floorRaw === 'number' ? floorRaw : Number(floorRaw) || 0
+      if (n <= 0) continue
       hasSnapshot = true
-      for (const [proofId, count] of Object.entries(proofs)) {
-        const n = typeof count === 'number' ? count : Number(count) || 0
-        const cur = counts.get(proofId) ?? 0
-        if (n > cur) counts.set(proofId, n)
-      }
+      const cur = counts.get(a.category_slug) ?? 0
+      if (n > cur) counts.set(a.category_slug, n)
     }
   }
 
