@@ -358,6 +358,7 @@ export async function PATCH(request: NextRequest) {
                 line_messaging_user_id: senderPro.line_messaging_user_id,
               },
               booking.clients?.nickname || 'クライアント',
+              ownPro.name,
             )
           }
         }
@@ -451,6 +452,7 @@ export async function PATCH(request: NextRequest) {
                 line_messaging_user_id: senderPro.line_messaging_user_id,
               },
               ownPro.name,
+              clientNickname,
             )
           }
         }
@@ -538,6 +540,7 @@ export async function PATCH(request: NextRequest) {
                 line_messaging_user_id: senderPro.line_messaging_user_id,
               },
               ownPro.name,
+              clientNickname,
             )
           }
         }

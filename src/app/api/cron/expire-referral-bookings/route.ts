@@ -203,7 +203,8 @@ export async function GET(req: NextRequest) {
                     contact_email: senderInfo.contact_email,
                     line_messaging_user_id: senderInfo.line_messaging_user_id,
                   },
-                  clientNickname
+                  clientNickname,
+                  { forSender: true }
                 )
               }
             } catch (notifyErr) {

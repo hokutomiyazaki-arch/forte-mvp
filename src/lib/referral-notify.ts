@@ -241,12 +241,13 @@ export async function notifyBookingConfirmedToSender(
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
   const safeClientNickname = escapeHtml(clientNickname)
   const safeReceiverProName = escapeHtml(receiverProName)
+  // CEO指摘(2026-08-04): 送り手宛は「あなたが紹介した◯◯さん」と主語を明示しないと何の通知か分からない
   return sendProNotification(target, {
-    lineText: `あなたの紹介が成立しました(クライアント: ${clientNickname}さん・${receiverProName}さんが確定)。`,
+    lineText: `あなたが紹介した${clientNickname}さんの紹介予約が、${receiverProName}さんとの間で成立しました。`,
     emailSubject: 'あなたの紹介が成立しました',
     emailBodyHtml: emailShell(
       '紹介成立のお知らせ',
-      `${safeClientNickname}さんの紹介予約が、${safeReceiverProName}さんとの間で確定しました。<br>あなたの紹介がつながりました。`,
+      `あなたが紹介した${safeClientNickname}さんの紹介予約が、${safeReceiverProName}さんとの間で確定しました。<br>あなたの紹介がつながりました。`,
     ),
   })
 }
@@ -292,14 +293,22 @@ export async function notifyBookingPaymentCompletedToReceiver(
 export async function notifyBookingPaymentExpiredToPro(
   target: ProNotifyTarget,
   clientNickname: string,
+  /** CEO指摘(2026-08-04): 送り手宛は「あなたが紹介した◯◯さん」と主語を明示する(受け手と文面を分ける)。 */
+  opts?: { forSender?: boolean },
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
   const safeClientNickname = escapeHtml(clientNickname)
+  const subjectText = opts?.forSender
+    ? `あなたが紹介した${clientNickname}さんの紹介予約は`
+    : `${clientNickname}さんとの紹介予約は`
+  const safeSubjectText = opts?.forSender
+    ? `あなたが紹介した${safeClientNickname}さんの紹介予約は`
+    : `${safeClientNickname}さんとの紹介予約は`
   return sendProNotification(target, {
-    lineText: `${clientNickname}さんとの紹介予約は、お支払いが確認できなかったため自動的にキャンセルされました。`,
+    lineText: `${subjectText}、お支払いが確認できなかったため自動的にキャンセルされました。`,
     emailSubject: '紹介予約がキャンセルされました',
     emailBodyHtml: emailShell(
       '紹介予約キャンセルのお知らせ',
-      `${safeClientNickname}さんとの紹介予約は、お支払いが確認できなかったため自動的にキャンセルされました。`,
+      `${safeSubjectText}、お支払いが確認できなかったため自動的にキャンセルされました。`,
     ),
   })
 }
@@ -323,11 +332,11 @@ export async function notifyBookingExpiredToSender(
   // CEO決定(2026-08-04): 送り手宛の進捗通知にはリンクを付けない(listUrl引数は互換のため残置)
   void listUrl
   const bodyHtml = opts?.hadCounterProposal
-    ? `${safeClientNickname}さんへ提案した日時への返答が48時間以内に確認できず、${safeReceiverProName}さんの紹介予約のリクエストは失効しました。<br>別の候補もご紹介いただけます。`
-    : `${safeClientNickname}さんの${safeReceiverProName}さんへの紹介予約のリクエストは、48時間以内に確定のご連絡がなかったため失効しました。<br>別の候補もご紹介いただけます。`
+    ? `あなたが紹介した${safeClientNickname}さんから提案日時への返答が48時間以内になく、${safeReceiverProName}さんへの紹介予約のリクエストは失効しました。<br>別の候補もご紹介いただけます。`
+    : `あなたが紹介した${safeClientNickname}さんの${safeReceiverProName}さんへの紹介予約のリクエストは、48時間以内に確定のご連絡がなかったため失効しました。<br>別の候補もご紹介いただけます。`
   const lineText = opts?.hadCounterProposal
-    ? `${clientNickname}さんからの返答がなく、提案した日時が48時間以内に確認されなかったため失効しました。`
-    : `${clientNickname}さんの${receiverProName}さんへの紹介予約のリクエストが、48時間以内に確定されなかったため失効しました。`
+    ? `あなたが紹介した${clientNickname}さんから提案日時への返答がなく、${receiverProName}さんへの紹介予約のリクエストは48時間で失効しました。`
+    : `あなたが紹介した${clientNickname}さんの${receiverProName}さんへの紹介予約のリクエストが、48時間以内に確定されなかったため失効しました。`
   return sendProNotification(target, {
     lineText,
     emailSubject: '紹介予約のリクエストが失効しました',
@@ -426,15 +435,17 @@ export function referralListFooterHtml(listUrl: string, label = '紹介リスト
 export async function notifyBookingDeclinedToSender(
   target: ProNotifyTarget,
   receiverProName: string,
+  clientNickname: string,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  // CEO決定(2026-08-04): 送り手宛の進捗通知にはリンクを付けない
+  // CEO決定(2026-08-04): 送り手宛の進捗通知にはリンクを付けない・「あなたが紹介した◯◯さん」と主語を明示
   const safeReceiverProName = escapeHtml(receiverProName)
+  const safeClientNickname = escapeHtml(clientNickname)
   return sendProNotification(target, {
-    lineText: `${receiverProName}さんが辞退しました。`,
-    emailSubject: `${receiverProName}さんが辞退しました`,
+    lineText: `あなたが紹介した${clientNickname}さんのご相談を、${receiverProName}さんが辞退しました。`,
+    emailSubject: `ご紹介先の${receiverProName}さんが辞退しました`,
     emailBodyHtml: emailShell(
       '辞退のお知らせ',
-      `${safeReceiverProName}さんは、今回のご紹介を辞退しました。`,
+      `あなたが紹介した${safeClientNickname}さんのご相談を、${safeReceiverProName}さんが辞退しました。`,
     ),
   })
 }
@@ -445,15 +456,17 @@ export async function notifyBookingDeclinedToSender(
 export async function notifyBookingCounterProposedToSender(
   target: ProNotifyTarget,
   receiverProName: string,
+  clientNickname: string,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  // CEO決定(2026-08-04): 送り手宛の進捗通知にはリンクを付けない
+  // CEO決定(2026-08-04): 送り手宛の進捗通知にはリンクを付けない・「あなたが紹介した◯◯さん」と主語を明示
   const safeReceiverProName = escapeHtml(receiverProName)
+  const safeClientNickname = escapeHtml(clientNickname)
   return sendProNotification(target, {
-    lineText: `${receiverProName}さんが別日時を提案しました(クライアントの返答待ち)。`,
-    emailSubject: `${receiverProName}さんが別日時を提案しました`,
+    lineText: `あなたが紹介した${clientNickname}さんへ、${receiverProName}さんが別の日時を提案しました(${clientNickname}さんの返答待ち)。`,
+    emailSubject: `ご紹介先の${receiverProName}さんが別日時を提案しました`,
     emailBodyHtml: emailShell(
       '別日時提案のお知らせ',
-      `${safeReceiverProName}さんが、クライアントへ別の日時を提案しました。<br>クライアントの返答待ちです。`,
+      `あなたが紹介した${safeClientNickname}さんへ、${safeReceiverProName}さんが別の日時を提案しました。<br>${safeClientNickname}さんの返答待ちです。`,
     ),
   })
 }
@@ -464,15 +477,18 @@ export async function notifyBookingCounterProposedToSender(
 export async function notifyBookingCompletedToSender(
   target: ProNotifyTarget,
   clientNickname: string,
+  receiverProName: string,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  // CEO決定(2026-08-04): 送り手宛の進捗通知にはリンクを付けない
+  // CEO決定(2026-08-04): 送り手宛の進捗通知にはリンクを付けない・「あなたが紹介した◯◯さん」と主語を明示
+  // (旧文言「◯◯さんとのセッションが完了しました」は送り手自身のセッションに読めた)
   const safeClientNickname = escapeHtml(clientNickname)
+  const safeReceiverProName = escapeHtml(receiverProName)
   return sendProNotification(target, {
-    lineText: `${clientNickname}さんとのセッションが完了しました。`,
-    emailSubject: `${clientNickname}さんとのセッションが完了しました`,
+    lineText: `あなたが紹介した${clientNickname}さんと${receiverProName}さんのセッションが完了しました。`,
+    emailSubject: `あなたが紹介した${clientNickname}さんのセッションが完了しました`,
     emailBodyHtml: emailShell(
       'セッション完了のお知らせ',
-      `${safeClientNickname}さんとのセッションが完了しました。`,
+      `あなたが紹介した${safeClientNickname}さんと${safeReceiverProName}さんのセッションが完了しました。`,
     ),
   })
 }
