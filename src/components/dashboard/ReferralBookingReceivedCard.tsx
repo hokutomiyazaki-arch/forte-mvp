@@ -6,6 +6,7 @@ import {
   formatSlotWithWeekday,
   resolveConfirmedSlotIso,
   isWithinClientRefundDeadline,
+  buildGoogleCalendarUrl,
 } from '@/lib/referral-format'
 import BookingThread from '@/components/dashboard/BookingThread'
 
@@ -692,6 +693,17 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
           // 判別に使えない(偽陰性の原因)。reschedule_kept_current_at専用マーカーで判別する
           // (reschedule-respond側で解決の都度セット/nullで明示的に上書きされる)。
           const clientKeptCurrentSlot = !!item.preferred_slots?.reschedule_kept_current_at
+          // CEO追加指示(2026-08-04): プロ側にもGoogleカレンダー追加リンクを出す。支払い待ち(awaiting)
+          // 中はまだ成立していないため非表示、確定日時が解決できない場合も非表示(buildGoogleCalendarUrl
+          // 自体もinvalid ISOでnullを返す・env非依存でclientからimport可能)。
+          const calendarUrl =
+            item.payment_status !== 'awaiting' && confirmedSlotIso
+              ? buildGoogleCalendarUrl({
+                  startIso: confirmedSlotIso,
+                  title: `${item.client_nickname}さんとの紹介予約(REAL PROOF)`,
+                  location: receiverAddress || undefined,
+                })
+              : null
           const isLocationOpen = locationOpenId === item.id
           const isRescheduleOpen = rescheduleOpenId === item.id
           const rescheduleInput = rescheduleInputs[item.id] || ['', '', '']
@@ -766,6 +778,17 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                 {confirmedSlotText}
               </div>
             )}
+            {/* CEO追加指示(2026-08-04): プロ側のGoogleカレンダー追加リンク(控えめなテキストリンク)。 */}
+            {calendarUrl && (
+              <a
+                href={calendarUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontSize: 13, color: '#1A6B3C', textDecoration: 'underline', display: 'inline-block', marginTop: 4 }}
+              >
+                Googleカレンダーに追加
+              </a>
+            )}
 
             {/* 3. 状態バッジ(あるときだけ) */}
             {/* §2-4ステージ3(予約フィー方式): 決済リンク送付済み・未払いの間は完了ボタンをdisabled
@@ -811,7 +834,7 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                   marginTop: 8,
                 }}
               >
-                クライアントは現在の日時を希望しています
+                日時変更は受け入れられませんでした（現在の日時のまま実施します）
               </div>
             )}
             {locationSentIds.has(item.id) && (
