@@ -372,6 +372,70 @@ export default function DashboardPage() {
   // 🔴1(再レビュー): 受付ステータスウィジェットの表示可否。allowlist内 or 共有リストに掲載中の本人
   const [acceptingEditable, setAcceptingEditable] = useState(false)
 
+  // UI再構成(2026-08-04・CEO承認済み): 紹介タブのサブタブ「受ける/する」。
+  // requestedが1件以上あれば「受ける」、なければlocalStorageの前回選択、初回は「する」がデフォルト。
+  const [referralSubtab, setReferralSubtab] = useState<'receive' | 'send'>('send')
+  const [referralRequestedCount, setReferralRequestedCount] = useState(0)
+  // 空状態判定用(受け手側の総件数・完了件数・読み込み完了フラグ)。データ取得ロジック自体は
+  // ReferralBookingReceivedCard/ReferralCompletedList側の既存fetchを変更せず、結果件数のみ受け取る。
+  const [referralTotalReceivedCount, setReferralTotalReceivedCount] = useState(0)
+  const [referralReceivedLoaded, setReferralReceivedLoaded] = useState(false)
+  const [referralCompletedCount, setReferralCompletedCount] = useState(0)
+  // レビュー指摘(軽微7): received/completedの到着順に依存した空状態フラッシュを防ぐため、
+  // completed側も読み込み完了フラグを持ち、両方loadedになってから空状態を判定する。
+  const [referralCompletedLoaded, setReferralCompletedLoaded] = useState(false)
+  const referralSubtabInitRef = useRef(false)
+
+  function handleReferralReceivedStatus(info: { requestedCount: number; totalCount: number; loaded: boolean }) {
+    // レビュー指摘(中3): loadedをtrue固定にせずinfo.loadedをそのまま反映する。タブ再入場時の
+    // remount直後(loaded:false・件数リセット直後)にpre-loaded状態を上書きしないよう、
+    // 未読み込みの間は件数の更新もスキップする(直前の確定値を保持=空状態フラッシュ防止)。
+    if (!info.loaded) {
+      setReferralReceivedLoaded(false)
+      return
+    }
+    setReferralRequestedCount(info.requestedCount)
+    setReferralTotalReceivedCount(info.totalCount)
+    setReferralReceivedLoaded(true)
+    if (referralSubtabInitRef.current) return
+    referralSubtabInitRef.current = true
+    // レビュー指摘(重大1・案①): requestedだけで判定すると、requested=0でもconfirmed等が
+    // ある場合や、そもそも非allowlistプロ(「する」タブが先行公開中の案内のみ)の場合に
+    // 'send'着地してしまい、確定済み予約カードが1タップ隠れてしまう。
+    // referralEnabledがfalse(するタブに実質コンテンツが無い)、またはtotalCount(requested+
+    // confirmed+支払い期限切れキャンセル)が1件以上あるときは常に「受ける」を初期表示にする。
+    if (!referralEnabled || info.totalCount >= 1) {
+      setReferralSubtab('receive')
+      return
+    }
+    let stored: string | null = null
+    try {
+      stored = window.localStorage.getItem('rp_referral_subtab')
+    } catch {}
+    setReferralSubtab(stored === 'receive' || stored === 'send' ? stored : 'send')
+  }
+
+  function handleReferralSubtabClick(tab: 'receive' | 'send') {
+    // レビュー指摘(中2): fetch完了前にユーザーが手動でサブタブを選んだ場合、後から届く
+    // 自動判定(handleReferralReceivedStatus)がその選択を引き戻さないよう、ここで初期化済み
+    // フラグを立てる。
+    referralSubtabInitRef.current = true
+    setReferralSubtab(tab)
+    try {
+      window.localStorage.setItem('rp_referral_subtab', tab)
+    } catch {}
+  }
+
+  // レビュー指摘(軽微7): ReferralCompletedList側のloadedを反映する(件数はloaded時のみ確定させる)。
+  function handleReferralCompletedStatus(count: number, loaded: boolean) {
+    if (!loaded) {
+      setReferralCompletedLoaded(false)
+      return
+    }
+    setReferralCompletedCount(count)
+    setReferralCompletedLoaded(true)
+  }
+
   // メンバー用: 所属団体のリソース state
   const [memberOrgs, setMemberOrgs] = useState<{id: string; name: string; description: string | null; logo_url: string | null}[]>([])
   const [selectedMemberOrgId, setSelectedMemberOrgId] = useState<string | null>(null)
@@ -4715,21 +4779,66 @@ export default function DashboardPage() {
         )}
       </>)}
 
-      {/* ═══ Tab: 紹介リスト（§0 アローリスト方式・リスト管理はisReferralEnabledでゲート） ═══ */}
-      {/* CEO指示(2026-08-04): 受信予約のやりとりカードは紹介タブ内へ移設。受け手機能は
-          allowlist外プロにも必要(受け手は非ゲートが仕様)なため、カードはゲートの外に置く */}
+      {/* ═══ Tab: 紹介（§0 アローリスト方式・リスト管理はreferralEnabledでゲート） ═══ */}
+      {/* UI再構成(2026-08-04・CEO承認済み): 役割別サブタブ「紹介を受ける／紹介する」。
+          受け手機能はallowlist外プロにも必要(受け手は非ゲートが仕様)なため、
+          ReferralBookingReceivedCardはreferralEnabledでゲートしない(既存仕様のまま)。 */}
       {dashboardTab === 'referral' && pro && (
         <div style={{ marginBottom: 16 }}>
-          <ReferralBookingReceivedCard proId={pro.id} />
-        </div>
-      )}
-      {dashboardTab === 'referral' && referralEnabled && pro && (
-        <ReferralTab proId={pro.id} />
-      )}
-      {/* 軽微指摘: 非対象プロが ?tab=referral で来た場合、空白ではなく案内を出す */}
-      {dashboardTab === 'referral' && !referralEnabled && (
-        <div style={{ textAlign: 'center', padding: '40px 20px', color: '#9CA3AF', fontSize: 13 }}>
-          リスト作成などの紹介機能は現在先行公開中です
+          <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid #E5E7EB' }}>
+            <button
+              onClick={() => handleReferralSubtabClick('receive')}
+              style={{
+                padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                fontSize: 14, fontWeight: 700,
+                color: referralSubtab === 'receive' ? '#1A1A2E' : '#9CA3AF',
+                borderBottom: referralSubtab === 'receive' ? '2px solid #C4A35A' : '2px solid transparent',
+              }}
+            >
+              紹介を受ける{referralRequestedCount > 0 ? ` (${referralRequestedCount})` : ''}
+            </button>
+            <button
+              onClick={() => handleReferralSubtabClick('send')}
+              style={{
+                padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                fontSize: 14, fontWeight: 700,
+                color: referralSubtab === 'send' ? '#1A1A2E' : '#9CA3AF',
+                borderBottom: referralSubtab === 'send' ? '2px solid #C4A35A' : '2px solid transparent',
+              }}
+            >
+              紹介する
+            </button>
+          </div>
+
+          {/* 紹介を受ける: 新しいリクエスト・確定している紹介予約・支払い期限切れキャンセルカード
+              (常時マウント・非表示時はCSSで隠す=サブタブ切替での再フェッチを避ける) */}
+          <div style={{ display: referralSubtab === 'receive' ? 'block' : 'none' }}>
+            <ReferralBookingReceivedCard proId={pro.id} onStatusChange={handleReferralReceivedStatus} />
+            {/* 「完了した紹介」はreferralEnabled時のみ(単一マウントのReferralTab内部で表示・件数管理)。
+                レビュー指摘(軽微7): received/completedの到着順によるフラッシュ防止のため、
+                referralEnabled時はcompleted側もloadedになってから空状態を判定する。 */}
+            {referralReceivedLoaded &&
+              referralTotalReceivedCount === 0 &&
+              (!referralEnabled || (referralCompletedLoaded && referralCompletedCount === 0)) && (
+                <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>
+                  <div>まだ紹介リクエストはありません</div>
+                  <div style={{ fontSize: 13, marginTop: 4 }}>
+                    あなたが紹介リストに掲載されると、クライアントからの予約リクエストがここに届きます
+                  </div>
+                </div>
+            )}
+          </div>
+
+          {/* 紹介する: 紹介リスト(作成・追加・QR/共有・削除)・気になるリスト・成立した紹介(送り手側)
+              単一マウントのReferralTab(referralEnabled時のみ)。表示はsubtabに応じて内部でCSS切替。 */}
+          {referralEnabled && pro && (
+            <ReferralTab proId={pro.id} subtab={referralSubtab} onCompletedCountChange={handleReferralCompletedStatus} />
+          )}
+          {!referralEnabled && referralSubtab === 'send' && (
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: '#9CA3AF', fontSize: 13 }}>
+              リスト作成などの紹介機能は現在先行公開中です
+            </div>
+          )}
         </div>
       )}
 

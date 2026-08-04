@@ -82,9 +82,16 @@ const NEW_LIST_SENTINEL = '__new_list__'
 
 interface Props {
   proId: string
+  /** UI再構成(2026-08-04・CEO承認済み): サブタブ「受ける/する」のどちらを表示するか。
+   * lists/sentBookingsのfetchは1回だけ(既存のまま)行い、表示はCSSで切り替える
+   * (subtab切替時の再フェッチ・二重マウントを避ける)。 */
+  subtab: 'receive' | 'send'
+  /** 「紹介を受ける」タブの空状態判定用に、完了した紹介(受け手側)の件数と読み込み完了フラグを
+   * 親へ通知する(レビュー指摘・軽微7: loadedを渡し到着順による空状態フラッシュを防ぐ)。 */
+  onCompletedCountChange?: (count: number, loaded: boolean) => void
 }
 
-export default function ReferralTab({ proId }: Props) {
+export default function ReferralTab({ proId, subtab, onCompletedCountChange }: Props) {
   // リスト一覧
   const [lists, setLists] = useState<ReferralList[]>([])
   const [listsLoading, setListsLoading] = useState(true)
@@ -1381,7 +1388,15 @@ export default function ReferralTab({ proId }: Props) {
   )
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <div>
+      {/* UI再構成(2026-08-04・CEO承認済み): 「紹介を受ける」サブタブ側 = 完了した紹介(受け手側)。
+          単一マウントのまま表示のみCSSで切り替える(subtab切替での再フェッチを避ける)。 */}
+      <div style={{ display: subtab === 'receive' ? 'block' : 'none' }}>
+        <ReferralCompletedList proId={proId} onCountChange={onCompletedCountChange} />
+      </div>
+
+      {/* 「紹介する」サブタブ側 = 紹介リスト(作成・共有)・気になるリスト・成立した紹介(送り手側) */}
+      <div style={{ display: subtab === 'send' ? 'flex' : 'none', flexDirection: 'column', gap: 24 }}>
       {/* リスト一覧 */}
       {listsLoading ? (
         <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>読み込み中...</div>
@@ -1417,9 +1432,6 @@ export default function ReferralTab({ proId }: Props) {
           )}
         </>
       )}
-
-      {/* タスク⑥改(CEO指摘): 完了した紹介(受け手側)はダッシュボード最上部でなく紹介タブ内に表示 */}
-      <ReferralCompletedList proId={proId} />
 
       {/* §2-10: 成立した紹介（送り手側の予約一覧・案件スレッド・引き継ぎメモ） */}
       {!sentLoading && sentBookings.length > 0 && (
@@ -1484,6 +1496,7 @@ export default function ReferralTab({ proId }: Props) {
           </div>
         )
       })()}
+      </div>
     </div>
   )
 }

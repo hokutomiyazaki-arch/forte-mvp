@@ -68,6 +68,10 @@ interface CancelledUnpaidItem {
 interface Props {
   /** §2-10: 案件スレッドの参加者判定に使う自分のprofessionals.id。未指定時はスレッドを表示しない。 */
   proId?: string
+  /** UI再構成(2026-08-04・CEO承認済み): サブタブの件数バッジ・空状態判定用に、要対応(requested)件数と
+   * 総件数(requested+confirmed+支払い期限切れキャンセル)・読み込み完了フラグを親へ通知する。
+   * データ取得ロジック自体は変更しない(既存fetchの結果を集計して通知するだけ)。 */
+  onStatusChange?: (info: { requestedCount: number; totalCount: number; loaded: boolean }) => void
 }
 
 /**
@@ -76,7 +80,7 @@ interface Props {
  * ★ isReferralEnabled ではゲートしない(受け手は先行アクセス外でもリクエストを受けられる必要がある)。
  * ダッシュボード上部に、タブに依存せず常時表示する。
  */
-export default function ReferralBookingReceivedCard({ proId }: Props) {
+export default function ReferralBookingReceivedCard({ proId, onStatusChange }: Props) {
   const [items, setItems] = useState<BookingItem[]>([])
   const [cancelledUnpaidItems, setCancelledUnpaidItems] = useState<CancelledUnpaidItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -104,6 +108,11 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
   const [clientRequestedAtInputs, setClientRequestedAtInputs] = useState<Record<string, string>>({})
   // レビュー指摘(軽微8): キャンセル成功時、カードが消える前に一時フィードバックを表示するID集合
   const [cancelledFeedbackIds, setCancelledFeedbackIds] = useState<Set<string>>(new Set())
+  // UI再構成(2026-08-04・CEO承認済み): 確定済みカードの「変更・キャンセルなどの操作」は
+  // 折りたたみメニュー(1件だけ画面に出す原則)。bookingId単位でどの表示状態かを保持する。
+  // 'closed'=非表示(トリガーのみ) / 'menu'=3項目の選択メニュー / フォーム自体は既存の
+  // locationOpenId/rescheduleOpenId/cancelOpenId(既存state・ロジック不変)で判定する。
+  const [opsMenuOpenId, setOpsMenuOpenId] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/referral/bookings/received', { cache: 'no-store' })
@@ -120,6 +129,16 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
 
   const requestedItems = items.filter((i) => i.status === 'requested')
   const confirmedItems = items.filter((i) => i.status === 'confirmed')
+
+  // UI再構成(2026-08-04): サブタブの件数バッジ・空状態判定のため、親へ集計結果を通知する。
+  // 依存はプリミティブのみ(件数・boolean)。onStatusChange自体はdepsに含めない(既存コードの
+  // eslint-disable-next-lineパターンに合わせる)。
+  const requestedCount = requestedItems.length
+  const totalReceivedCount = items.length + cancelledUnpaidItems.length
+  useEffect(() => {
+    onStatusChange?.({ requestedCount, totalCount: totalReceivedCount, loaded: !loading })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedCount, totalReceivedCount, loading])
 
   async function confirm(bookingId: string) {
     const index = selectedSlot[bookingId]
@@ -426,15 +445,15 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                 <span style={{ color: '#6B7280' }}>(紹介元: {item.sender_pro.name}さん)</span>
               )}
             </div>
-            {theme && <div style={{ fontSize: 12, color: '#555', marginBottom: 4 }}>テーマ: {theme}</div>}
-            {item.menu_name && <div style={{ fontSize: 12, color: '#555', marginBottom: 4 }}>メニュー: {item.menu_name}</div>}
-            {note && <div style={{ fontSize: 12, color: '#555', marginBottom: 8 }}>補足: {note}</div>}
+            {theme && <div style={{ fontSize: 13, color: '#555', marginBottom: 4 }}>テーマ: {theme}</div>}
+            {item.menu_name && <div style={{ fontSize: 13, color: '#555', marginBottom: 4 }}>メニュー: {item.menu_name}</div>}
+            {note && <div style={{ fontSize: 13, color: '#555', marginBottom: 8 }}>補足: {note}</div>}
 
             {counterProposed ? (
               <>
                 <div
                   style={{
-                    fontSize: 12,
+                    fontSize: 13,
                     color: '#B26A00',
                     background: '#FFF3E0',
                     borderRadius: 8,
@@ -474,7 +493,7 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                           display: 'flex',
                           alignItems: 'center',
                           gap: 8,
-                          fontSize: 12,
+                          fontSize: 13,
                           color: '#1A1A2E',
                           cursor: 'pointer',
                         }}
@@ -540,7 +559,7 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                       border: 'none',
                       background: 'transparent',
                       color: '#6B7280',
-                      fontSize: 12,
+                      fontSize: 13,
                       fontWeight: 600,
                       textDecoration: 'underline',
                       cursor: 'pointer',
@@ -550,12 +569,12 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                   </button>
                 ) : (
                   <div style={{ marginTop: 6, padding: '10px 12px', background: '#fff', borderRadius: 8, border: '1px solid #D1D5DB' }}>
-                    <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 8 }}>
+                    <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 8 }}>
                       クライアントに別日時を提案します(第1希望は必須)
                     </div>
                     {[0, 1, 2].map((i) => (
                       <div key={i} style={{ marginBottom: 8 }}>
-                        <label style={{ fontSize: 11, color: '#6B7280', display: 'block', marginBottom: 4 }}>
+                        <label style={{ fontSize: 13, color: '#6B7280', display: 'block', marginBottom: 4 }}>
                           第{i + 1}希望{i > 0 ? '(任意)' : '(必須)'}
                         </label>
                         <input
@@ -566,10 +585,10 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                             next[i] = e.target.value
                             setCounterInputs((prev) => ({ ...prev, [item.id]: next }))
                           }}
-                          style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #D1D5DB', fontSize: 12, boxSizing: 'border-box' }}
+                          style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #D1D5DB', fontSize: 13, boxSizing: 'border-box' }}
                         />
                         {formatSlotWithWeekday(counterInput[i]) && (
-                          <div style={{ fontSize: 11, color: '#C4A35A', fontWeight: 600, marginTop: 2 }}>
+                          <div style={{ fontSize: 13, color: '#C4A35A', fontWeight: 600, marginTop: 2 }}>
                             {formatSlotWithWeekday(counterInput[i])}
                           </div>
                         )}
@@ -586,7 +605,7 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                           border: 'none',
                           background: '#1A1A2E',
                           color: '#fff',
-                          fontSize: 12,
+                          fontSize: 13,
                           fontWeight: 600,
                           cursor: processingId === item.id ? 'default' : 'pointer',
                           opacity: processingId === item.id ? 0.6 : 1,
@@ -602,7 +621,7 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                           border: '1px solid #D1D5DB',
                           background: '#fff',
                           color: '#6B7280',
-                          fontSize: 12,
+                          fontSize: 13,
                           fontWeight: 600,
                           cursor: 'pointer',
                         }}
@@ -665,6 +684,8 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
             )
           }
 
+          const isMenuOpen = opsMenuOpenId === item.id
+          const isFormOpen = isLocationOpen || isRescheduleOpen || cancelOpenId === item.id
           return (
           <div
             key={item.id}
@@ -675,17 +696,22 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
               padding: '14px 16px',
             }}
           >
+            {/* 1. クライアント名(+紹介元) */}
             <div style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6 }}>
               <strong>{item.client_nickname}さん</strong>との紹介予約が確定しています
               {item.sender_pro?.name && (
                 <span style={{ color: '#6B7280' }}>(紹介元: {item.sender_pro.name}さん)</span>
               )}
             </div>
+
+            {/* 2. 確定日時(CEO承認済みモック: 一番大きく・太字) */}
             {confirmedSlotText && (
-              <div style={{ fontSize: 12, color: '#2E7D32', fontWeight: 600, marginTop: 4 }}>
-                確定日時: {confirmedSlotText}
+              <div style={{ fontSize: 20, fontWeight: 800, color: '#1A6B3C', marginTop: 6, lineHeight: 1.4 }}>
+                {confirmedSlotText}
               </div>
             )}
+
+            {/* 3. 状態バッジ(あるときだけ) */}
             {/* §2-4ステージ3(予約フィー方式): 決済リンク送付済み・未払いの間はバッジを表示し、
                 完了ボタンをdisabledにする(レビュー指摘・重大2: フィー未収のまま完了させない)。
                 金額・連絡先は出さない。 */}
@@ -693,12 +719,12 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
               <div
                 style={{
                   display: 'inline-block',
-                  marginTop: 6,
+                  marginTop: 8,
                   padding: '3px 10px',
                   borderRadius: 999,
                   background: '#FFF3E0',
                   color: '#B26A00',
-                  fontSize: 11,
+                  fontSize: 13,
                   fontWeight: 600,
                 }}
               >
@@ -706,60 +732,23 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
               </div>
             )}
             {/* レビュー指摘(R3): confirm時のCheckout作成失敗フォールバック(unpaid)は自動再試行で
-                回復するが、その間の無説明を避ける(連絡先が出ない理由を正直に示す) */}
+                回復するが、その間の無説明を避ける(連絡先が出ない理由を正直に示す)。
+                レビュー指摘(軽微6): 13px化でpill(borderRadius:999)が2行折返しで崩れるため、
+                rescheduleProposedバナーと同じ箱形式に変更。 */}
             {item.payment_status === 'unpaid' && (
               <div
                 style={{
-                  display: 'inline-block', marginTop: 6, padding: '3px 10px', borderRadius: 999,
-                  background: '#F3F4F6', color: '#6B7280', fontSize: 11, fontWeight: 600,
+                  display: 'block', marginTop: 8, padding: '8px 10px', borderRadius: 8,
+                  background: '#F3F4F6', color: '#6B7280', fontSize: 13, fontWeight: 600,
                 }}
               >
                 お支払いのご案内を準備中です（連絡先はお支払い完了後に表示されます）
               </div>
             )}
-            {/* §2-4ステージ3(決済確認後の連絡先開示・CEO決定): 開示条件を満たす場合のみ表示する。
-                日程調整・当日連絡はここから直接どうぞ、の案内。 */}
-            {item.client_contact && (
-              <div
-                style={{
-                  marginTop: 8,
-                  padding: '10px 12px',
-                  background: '#fff',
-                  border: '1px solid #C8E6C9',
-                  borderRadius: 8,
-                }}
-              >
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>
-                  クライアント連絡先
-                </div>
-                {item.client_contact.name && (
-                  <div style={{ fontSize: 12, color: '#1A1A2E' }}>{item.client_contact.name}さん</div>
-                )}
-                {item.client_contact.phone && (
-                  <div style={{ fontSize: 12, color: '#1A1A2E' }}>
-                    電話:{' '}
-                    <a href={`tel:${encodeURIComponent(item.client_contact.phone)}`} style={{ color: '#1A6B3C' }}>
-                      {item.client_contact.phone}
-                    </a>
-                  </div>
-                )}
-                {item.client_contact.email && (
-                  <div style={{ fontSize: 12, color: '#1A1A2E' }}>
-                    メール:{' '}
-                    <a href={`mailto:${encodeURIComponent(item.client_contact.email)}`} style={{ color: '#1A6B3C' }}>
-                      {item.client_contact.email}
-                    </a>
-                  </div>
-                )}
-                <div style={{ fontSize: 11, color: '#6B7280', marginTop: 4 }}>
-                  日程の調整・当日のご連絡はこちらへ直接どうぞ
-                </div>
-              </div>
-            )}
             {rescheduleProposed && (
               <div
                 style={{
-                  fontSize: 12,
+                  fontSize: 13,
                   color: '#B26A00',
                   background: '#FFF3E0',
                   borderRadius: 8,
@@ -773,7 +762,7 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
             {clientKeptCurrentSlot && (
               <div
                 style={{
-                  fontSize: 12,
+                  fontSize: 13,
                   color: '#1A6B3C',
                   background: '#F0FFF4',
                   borderRadius: 8,
@@ -784,202 +773,292 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                 クライアントは現在の日時を希望しています
               </div>
             )}
-
-            {/* タスクA(2026-08-04・CEO指示): 当日の場所を送る(確定済み・支払い待ちでないカードのみ)。 */}
-            {item.payment_status !== 'awaiting' && (
-              <div style={{ marginTop: 10 }}>
-                {locationSentIds.has(item.id) ? (
-                  <div style={{ fontSize: 12, color: '#2E7D32', background: '#F0FFF4', borderRadius: 8, padding: '8px 10px' }}>
-                    場所を送信しました
-                  </div>
-                ) : !isLocationOpen ? (
-                  // CEO指摘(2026-08-04): 住所設定済みのプロは成立メールで場所を自動送付済みのため、
-                  // 「当日の場所を送る」ボタンではなく送付済みの案内を表示する(別の場所を送る導線は小さく残す)
-                  receiverAddressSet ? (
-                    <div style={{ fontSize: 12, color: '#6B7280', background: '#F9FAFB', borderRadius: 8, padding: '8px 10px' }}>
-                      設定済みの場所（{receiverAddress}）は予約成立時のメールでクライアントへお送りしています。
-                      <button
-                        onClick={() => setLocationOpenId(item.id)}
-                        style={{
-                          display: 'block',
-                          marginTop: 4,
-                          padding: 0,
-                          border: 'none',
-                          background: 'transparent',
-                          color: '#6B7280',
-                          fontSize: 11,
-                          textDecoration: 'underline',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        別の場所を送る
-                      </button>
-                    </div>
-                  ) : (
-                  <button
-                    onClick={() => setLocationOpenId(item.id)}
-                    style={{
-                      width: '100%',
-                      padding: '6px 12px',
-                      borderRadius: 8,
-                      border: '1px solid #D1D5DB',
-                      background: '#fff',
-                      color: '#1A1A2E',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    当日の場所を送る
-                  </button>
-                  )
-                ) : (
-                  <div style={{ padding: '10px 12px', background: '#fff', borderRadius: 8, border: '1px solid #D1D5DB' }}>
-                    <label style={{ fontSize: 11, color: '#6B7280', display: 'block', marginBottom: 4 }}>
-                      当日の場所(1〜2行程度)
-                    </label>
-                    <textarea
-                      value={locationInputs[item.id] || ''}
-                      onChange={(e) => setLocationInputs((prev) => ({ ...prev, [item.id]: e.target.value }))}
-                      rows={2}
-                      style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #D1D5DB', fontSize: 12, boxSizing: 'border-box', resize: 'vertical' }}
-                    />
-                    {!receiverAddressSet && (
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#6B7280', marginTop: 6, cursor: 'pointer' }}>
-                        <input
-                          type="checkbox"
-                          checked={!!locationSaveDefault[item.id]}
-                          onChange={(e) => setLocationSaveDefault((prev) => ({ ...prev, [item.id]: e.target.checked }))}
-                        />
-                        プロフィールの住所として保存する（公開カードのアクセス欄に表示されます）
-                      </label>
-                    )}
-                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                      <button
-                        onClick={() => sendLocation(item.id)}
-                        disabled={processingId === item.id}
-                        style={{
-                          flex: 1,
-                          padding: '8px 12px',
-                          borderRadius: 8,
-                          border: 'none',
-                          background: '#1A1A2E',
-                          color: '#fff',
-                          fontSize: 12,
-                          fontWeight: 600,
-                          cursor: processingId === item.id ? 'default' : 'pointer',
-                          opacity: processingId === item.id ? 0.6 : 1,
-                        }}
-                      >
-                        送信する
-                      </button>
-                      <button
-                        onClick={() => setLocationOpenId(null)}
-                        style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #D1D5DB', background: '#fff', color: '#6B7280', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-                      >
-                        キャンセル
-                      </button>
-                    </div>
-                  </div>
-                )}
+            {locationSentIds.has(item.id) && (
+              <div style={{ fontSize: 13, color: '#2E7D32', background: '#F0FFF4', borderRadius: 8, padding: '8px 10px', marginTop: 8 }}>
+                場所を送信しました
               </div>
             )}
 
-            {/* タスクB(2026-08-04・CEO指示): 確定後にプロ都合の日時変更を提案する(キャンセル前段)。
-                レビュー指摘(中1): フィー未払い(awaiting)の間は提案ボタンごと非表示にする。 */}
-            {!rescheduleProposed && item.payment_status !== 'awaiting' && (
-              <div style={{ marginTop: 8 }}>
-                {!isRescheduleOpen ? (
+            {/* 4. クライアント連絡先(開示条件を満たす場合・既存のまま) + 完了ボタン */}
+            {/* §2-4ステージ3(決済確認後の連絡先開示・CEO決定): 開示条件を満たす場合のみ表示する。
+                日程調整・当日連絡はここから直接どうぞ、の案内。 */}
+            {item.client_contact && (
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: '10px 12px',
+                  background: '#fff',
+                  border: '1px solid #C8E6C9',
+                  borderRadius: 8,
+                }}
+              >
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>
+                  クライアント連絡先
+                </div>
+                {item.client_contact.name && (
+                  <div style={{ fontSize: 13, color: '#1A1A2E' }}>{item.client_contact.name}さん</div>
+                )}
+                {item.client_contact.phone && (
+                  <div style={{ fontSize: 13, color: '#1A1A2E' }}>
+                    電話:{' '}
+                    <a href={`tel:${encodeURIComponent(item.client_contact.phone)}`} style={{ color: '#1A6B3C' }}>
+                      {item.client_contact.phone}
+                    </a>
+                  </div>
+                )}
+                {item.client_contact.email && (
+                  <div style={{ fontSize: 13, color: '#1A1A2E' }}>
+                    メール:{' '}
+                    <a href={`mailto:${encodeURIComponent(item.client_contact.email)}`} style={{ color: '#1A6B3C' }}>
+                      {item.client_contact.email}
+                    </a>
+                  </div>
+                )}
+                <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>
+                  日程の調整・当日のご連絡はこちらへ直接どうぞ
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={() => complete(item.id)}
+              disabled={processingId === item.id || item.payment_status === 'awaiting'}
+              style={{
+                marginTop: 10,
+                width: '100%',
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid #C4A35A',
+                background: '#fff',
+                color: '#C4A35A',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: processingId === item.id || item.payment_status === 'awaiting' ? 'default' : 'pointer',
+                opacity: processingId === item.id || item.payment_status === 'awaiting' ? 0.6 : 1,
+              }}
+            >
+              紹介セッションを完了する
+            </button>
+            {/* レビュー指摘(軽微5): cronの実条件(確定日時+24h・awaiting除外・reschedule未回答の間は
+                対象外)と一致させる。文言も「確定日時から24時間」に修正。 */}
+            {item.payment_status !== 'awaiting' && !rescheduleProposed && (
+              <p style={{ marginTop: 4, fontSize: 13, color: '#9CA3AF' }}>
+                確定日時から24時間を過ぎると自動で完了されます
+              </p>
+            )}
+            {item.payment_status === 'awaiting' && (
+              <p style={{ marginTop: 4, fontSize: 13, color: '#B26A00' }}>
+                クライアントのお支払い完了後に完了できます
+              </p>
+            )}
+
+            {/* 案件スレッド・引き継ぎメモ(開閉は既存のまま) */}
+            <BookingThread
+              bookingId={item.id}
+              ownProId={proId}
+              isSender={false}
+              initialHandoverNote={item.handover_note}
+            />
+
+            {/* 例外操作: 「変更・キャンセルなどの操作 ▼」に集約。一度に1つのことだけ画面に出す原則
+                (フォームを開いたらそのフォームだけ表示・戻るで一覧に戻れる)。
+                機能・API呼び出し・ガード条件は既存のまま(locationOpenId/rescheduleOpenId/cancelOpenId
+                及び各handlerを変更していない)。 */}
+            <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px dashed #E5E7EB' }}>
+              {!isMenuOpen && !isFormOpen && (
+                <button
+                  onClick={() => setOpsMenuOpenId(item.id)}
+                  style={{
+                    background: 'transparent', border: 'none', color: '#6B7280',
+                    fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0,
+                  }}
+                >
+                  変更・キャンセルなどの操作 ▼
+                </button>
+              )}
+
+              {isMenuOpen && !isFormOpen && (
+                <div>
                   <button
-                    onClick={() => setRescheduleOpenId(item.id)}
+                    onClick={() => setOpsMenuOpenId(null)}
                     style={{
-                      width: '100%',
-                      padding: '6px 12px',
-                      borderRadius: 8,
-                      border: 'none',
-                      background: 'transparent',
-                      color: '#6B7280',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      textDecoration: 'underline',
-                      cursor: 'pointer',
+                      background: 'transparent', border: 'none', color: '#6B7280',
+                      fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0, marginBottom: 10,
                     }}
                   >
-                    日時の変更をお願いする
+                    変更・キャンセルなどの操作 ▲
                   </button>
-                ) : (
-                  <div style={{ padding: '10px 12px', background: '#fff', borderRadius: 8, border: '1px solid #D1D5DB' }}>
-                    <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 8 }}>
-                      確定した日時にどうしても都合がつかなくなった場合に、クライアントへ新しい日時をお願いします(第1希望は必須)。クライアントには「あなたの都合による変更のお願い」として届きます。
-                    </div>
-                    {[0, 1, 2].map((i) => (
-                      <div key={i} style={{ marginBottom: 8 }}>
-                        <label style={{ fontSize: 11, color: '#6B7280', display: 'block', marginBottom: 4 }}>
-                          第{i + 1}希望{i > 0 ? '(任意)' : '(必須)'}
-                        </label>
-                        <input
-                          type="datetime-local"
-                          value={rescheduleInput[i]}
-                          onChange={(e) => {
-                            const next: [string, string, string] = [...rescheduleInput] as [string, string, string]
-                            next[i] = e.target.value
-                            setRescheduleInputs((prev) => ({ ...prev, [item.id]: next }))
+                  <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 10 }}>
+                    {/* タスクA(2026-08-04・CEO指示): 当日の場所を送る(住所設定済み案内含む)。
+                        確定済み・支払い待ちでないカードのみ。
+                        レビュー指摘(中4): 再配置で送信済みガードが外れ何度でも再送できる状態に
+                        なっていたため復元する(送信済みは上部バッジ表示のみでよい)。 */}
+                    {item.payment_status !== 'awaiting' && !locationSentIds.has(item.id) && (
+                      receiverAddressSet ? (
+                        // CEO指摘(2026-08-04): 住所設定済みのプロは成立メールで場所を自動送付済みのため、
+                        // 「当日の場所を送る」ボタンではなく送付済みの案内を表示する(別の場所を送る導線は小さく残す)
+                        <div style={{ fontSize: 13, color: '#6B7280', background: '#F9FAFB', borderRadius: 8, padding: '8px 10px' }}>
+                          設定済みの場所（{receiverAddress}）は予約成立時のメールでクライアントへお送りしています。
+                          <button
+                            onClick={() => setLocationOpenId(item.id)}
+                            style={{
+                              display: 'block', marginTop: 4, padding: 0, border: 'none',
+                              background: 'transparent', color: '#6B7280', fontSize: 13,
+                              textDecoration: 'underline', cursor: 'pointer',
+                            }}
+                          >
+                            別の場所を送る
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setLocationOpenId(item.id)}
+                          style={{
+                            width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #D1D5DB',
+                            background: '#fff', color: '#1A1A2E', fontSize: 13, fontWeight: 600,
+                            textAlign: 'left' as const, cursor: 'pointer',
                           }}
-                          style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #D1D5DB', fontSize: 12, boxSizing: 'border-box' }}
-                        />
-                        {formatSlotWithWeekday(rescheduleInput[i]) && (
-                          <div style={{ fontSize: 11, color: '#C4A35A', fontWeight: 600, marginTop: 2 }}>
-                            {formatSlotWithWeekday(rescheduleInput[i])}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                    <div style={{ display: 'flex', gap: 8 }}>
+                        >
+                          当日の場所を送る
+                        </button>
+                      )
+                    )}
+
+                    {/* タスクB(2026-08-04・CEO指示): 確定後にプロ都合の日時変更を提案する(キャンセル前段)。
+                        レビュー指摘(中1): フィー未払い(awaiting)の間は提案ボタンごと非表示にする。 */}
+                    {!rescheduleProposed && item.payment_status !== 'awaiting' && (
                       <button
-                        onClick={() => submitReschedule(item.id)}
-                        disabled={processingId === item.id}
+                        onClick={() => setRescheduleOpenId(item.id)}
                         style={{
-                          flex: 1,
-                          padding: '8px 12px',
-                          borderRadius: 8,
-                          border: 'none',
-                          background: '#1A1A2E',
-                          color: '#fff',
-                          fontSize: 12,
-                          fontWeight: 600,
-                          cursor: processingId === item.id ? 'default' : 'pointer',
-                          opacity: processingId === item.id ? 0.6 : 1,
+                          width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #D1D5DB',
+                          background: '#fff', color: '#1A1A2E', fontSize: 13, fontWeight: 600,
+                          textAlign: 'left' as const, cursor: 'pointer',
                         }}
                       >
-                        この日時変更を提案する
+                        日時の変更をお願いする
                       </button>
-                      <button
-                        onClick={() => setRescheduleOpenId(null)}
-                        style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #D1D5DB', background: '#fff', color: '#6B7280', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-                      >
-                        キャンセル
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+                    )}
 
-            {/* タスク②(2026-08-04・CEO指示): プロ都合キャンセル＋自動返金。控えめなテキストリンクで、
-                誤操作を避ける(理由入力は不要。二段確認=注意文パネル+window.confirm)。 */}
-            <div style={{ marginTop: 8, textAlign: 'right' }}>
-              {cancelOpenId === item.id ? (
+                    {/* タスク②(2026-08-04・CEO指示): プロ都合キャンセル＋自動返金。控えめなテキストリンクで、
+                        誤操作を避ける(理由入力は不要。二段確認=注意文パネル+window.confirm)。 */}
+                    <button
+                      onClick={() => setCancelOpenId(item.id)}
+                      style={{
+                        background: 'transparent', border: 'none', color: '#9CA3AF',
+                        fontSize: 13, textDecoration: 'underline', cursor: 'pointer', padding: 0,
+                        textAlign: 'left' as const,
+                      }}
+                    >
+                      どうしてもキャンセルが必要な場合はこちら
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {isLocationOpen && (
+                <div style={{ padding: '10px 12px', background: '#fff', borderRadius: 8, border: '1px solid #D1D5DB' }}>
+                  <label style={{ fontSize: 13, color: '#6B7280', display: 'block', marginBottom: 4 }}>
+                    当日の場所(1〜2行程度)
+                  </label>
+                  <textarea
+                    value={locationInputs[item.id] || ''}
+                    onChange={(e) => setLocationInputs((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                    rows={2}
+                    style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #D1D5DB', fontSize: 13, boxSizing: 'border-box', resize: 'vertical' }}
+                  />
+                  {!receiverAddressSet && (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#6B7280', marginTop: 6, cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={!!locationSaveDefault[item.id]}
+                        onChange={(e) => setLocationSaveDefault((prev) => ({ ...prev, [item.id]: e.target.checked }))}
+                      />
+                      プロフィールの住所として保存する（公開カードのアクセス欄に表示されます）
+                    </label>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <button
+                      onClick={() => sendLocation(item.id)}
+                      disabled={processingId === item.id}
+                      style={{
+                        flex: 1, padding: '8px 12px', borderRadius: 8, border: 'none',
+                        background: '#1A1A2E', color: '#fff', fontSize: 13, fontWeight: 600,
+                        cursor: processingId === item.id ? 'default' : 'pointer',
+                        opacity: processingId === item.id ? 0.6 : 1,
+                      }}
+                    >
+                      送信する
+                    </button>
+                    <button
+                      onClick={() => setLocationOpenId(null)}
+                      style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #D1D5DB', background: '#fff', color: '#6B7280', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      ← 一覧に戻る
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {isRescheduleOpen && (
+                <div style={{ padding: '10px 12px', background: '#fff', borderRadius: 8, border: '1px solid #D1D5DB' }}>
+                  <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 8 }}>
+                    確定した日時にどうしても都合がつかなくなった場合に、クライアントへ新しい日時をお願いします(第1希望は必須)。クライアントには「あなたの都合による変更のお願い」として届きます。
+                  </div>
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} style={{ marginBottom: 8 }}>
+                      <label style={{ fontSize: 13, color: '#6B7280', display: 'block', marginBottom: 4 }}>
+                        第{i + 1}希望{i > 0 ? '(任意)' : '(必須)'}
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={rescheduleInput[i]}
+                        onChange={(e) => {
+                          const next: [string, string, string] = [...rescheduleInput] as [string, string, string]
+                          next[i] = e.target.value
+                          setRescheduleInputs((prev) => ({ ...prev, [item.id]: next }))
+                        }}
+                        style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #D1D5DB', fontSize: 13, boxSizing: 'border-box' }}
+                      />
+                      {formatSlotWithWeekday(rescheduleInput[i]) && (
+                        <div style={{ fontSize: 13, color: '#C4A35A', fontWeight: 600, marginTop: 2 }}>
+                          {formatSlotWithWeekday(rescheduleInput[i])}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={() => submitReschedule(item.id)}
+                      disabled={processingId === item.id}
+                      style={{
+                        flex: 1, padding: '8px 12px', borderRadius: 8, border: 'none',
+                        background: '#1A1A2E', color: '#fff', fontSize: 13, fontWeight: 600,
+                        cursor: processingId === item.id ? 'default' : 'pointer',
+                        opacity: processingId === item.id ? 0.6 : 1,
+                      }}
+                    >
+                      この日時変更を提案する
+                    </button>
+                    <button
+                      onClick={() => setRescheduleOpenId(null)}
+                      style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #D1D5DB', background: '#fff', color: '#6B7280', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      ← 一覧に戻る
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {cancelOpenId === item.id && (
                 <div
                   style={{
-                    marginTop: 4,
                     padding: '10px 12px',
                     background: '#FFF5F5',
                     borderRadius: 8,
                     border: '1px solid #F5C6CB',
-                    textAlign: 'left',
                   }}
                 >
-                  <p style={{ fontSize: 11, color: '#B00020', lineHeight: 1.6, margin: '0 0 8px 0' }}>
+                  <p style={{ fontSize: 13, color: '#B00020', lineHeight: 1.6, margin: '0 0 8px 0' }}>
                     クライアントへキャンセルの通知が送られます。この操作は取り消せません。
                   </p>
 
@@ -990,7 +1069,7 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                         display: 'flex',
                         alignItems: 'center',
                         gap: 6,
-                        fontSize: 12,
+                        fontSize: 13,
                         color: '#333',
                         marginBottom: 4,
                         cursor: 'pointer',
@@ -1006,7 +1085,7 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                       自分(プロ)の都合でキャンセル{feePaid ? '(全額返金)' : ''}
                     </label>
                     <label
-                      style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#333', cursor: 'pointer' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#333', cursor: 'pointer' }}
                     >
                       <input
                         type="radio"
@@ -1023,7 +1102,7 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                       {/* レビュー指摘(重大3): クライアントから連絡を受けた日時(任意)。72時間前ルールの
                           基準時刻として、現在時刻より前ならこちらを優先する(サーバー側もMath.minで同じ)。 */}
                       <div style={{ marginBottom: 8 }}>
-                        <label style={{ fontSize: 11, color: '#6B7280', display: 'block', marginBottom: 4 }}>
+                        <label style={{ fontSize: 13, color: '#6B7280', display: 'block', marginBottom: 4 }}>
                           クライアントから連絡を受けた日時(任意)
                         </label>
                         <input
@@ -1037,11 +1116,11 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                             padding: '6px 8px',
                             borderRadius: 6,
                             border: '1px solid #D1D5DB',
-                            fontSize: 12,
+                            fontSize: 13,
                             boxSizing: 'border-box' as const,
                           }}
                         />
-                        <p style={{ fontSize: 10, color: '#6B7280', marginTop: 4, lineHeight: 1.5 }}>
+                        <p style={{ fontSize: 13, color: '#6B7280', marginTop: 4, lineHeight: 1.5 }}>
                           セッション開始の72時間前までにご連絡を受けていた場合は、受けた日時を入力すると
                           全額返金の対象になります。
                         </p>
@@ -1050,7 +1129,7 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                       {feePaid ? (
                         <p
                           style={{
-                            fontSize: 11,
+                            fontSize: 13,
                             color: clientCancelWithinDeadline ? '#1A6B3C' : '#B00020',
                             background: '#fff',
                             borderRadius: 6,
@@ -1066,7 +1145,7 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                       ) : (
                         <p
                           style={{
-                            fontSize: 11,
+                            fontSize: 13,
                             color: '#6B7280',
                             background: '#fff',
                             borderRadius: 6,
@@ -1091,7 +1170,7 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                         border: 'none',
                         background: '#B00020',
                         color: '#fff',
-                        fontSize: 12,
+                        fontSize: 13,
                         fontWeight: 600,
                         cursor: processingId === item.id ? 'default' : 'pointer',
                         opacity: processingId === item.id ? 0.6 : 1,
@@ -1107,63 +1186,17 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                         border: '1px solid #D1D5DB',
                         background: '#fff',
                         color: '#6B7280',
-                        fontSize: 12,
+                        fontSize: 13,
                         fontWeight: 600,
                         cursor: 'pointer',
                       }}
                     >
-                      やめる
+                      ← 一覧に戻る
                     </button>
                   </div>
                 </div>
-              ) : (
-                <button
-                  onClick={() => setCancelOpenId(item.id)}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: '#9CA3AF',
-                    fontSize: 11,
-                    textDecoration: 'underline',
-                    cursor: 'pointer',
-                    padding: 0,
-                  }}
-                >
-                  どうしてもキャンセルが必要な場合はこちら
-                </button>
               )}
             </div>
-
-            <BookingThread
-              bookingId={item.id}
-              ownProId={proId}
-              isSender={false}
-              initialHandoverNote={item.handover_note}
-            />
-            <button
-              onClick={() => complete(item.id)}
-              disabled={processingId === item.id || item.payment_status === 'awaiting'}
-              style={{
-                marginTop: 10,
-                width: '100%',
-                padding: '8px 12px',
-                borderRadius: 8,
-                border: '1px solid #C4A35A',
-                background: '#fff',
-                color: '#C4A35A',
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: processingId === item.id || item.payment_status === 'awaiting' ? 'default' : 'pointer',
-                opacity: processingId === item.id || item.payment_status === 'awaiting' ? 0.6 : 1,
-              }}
-            >
-              紹介セッションを完了する
-            </button>
-            {item.payment_status === 'awaiting' && (
-              <p style={{ marginTop: 4, fontSize: 11, color: '#B26A00' }}>
-                クライアントのお支払い完了後に完了できます
-              </p>
-            )}
           </div>
           )
         })}
@@ -1186,12 +1219,12 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
               <strong>{item.client_nickname}さん</strong>の紹介予約は、期限内にお支払いが確認できなかったためキャンセルされました
             </div>
             {confirmedSlotText && (
-              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>
+              <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>
                 確定日時: {confirmedSlotText}
               </div>
             )}
             {item.menu_name && (
-              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>メニュー: {item.menu_name}</div>
+              <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>メニュー: {item.menu_name}</div>
             )}
             <button
               onClick={() => dismissCancelled(item.id)}

@@ -24,11 +24,17 @@ interface CompletedBookingItem {
 
 interface Props {
   proId: string
+  /** UI再構成(2026-08-04・CEO承認済み): 「紹介を受ける」サブタブの空状態判定用に、
+   * 完了件数と読み込み完了フラグを親へ通知する(データ取得ロジックは変更しない・
+   * 既存fetch結果の件数を渡すだけ)。レビュー指摘(軽微7): loadedを渡し、
+   * received/completedの到着順による空状態フラッシュを防ぐ。 */
+  onCountChange?: (count: number, loaded: boolean) => void
 }
 
-export default function ReferralCompletedList({ proId }: Props) {
+export default function ReferralCompletedList({ proId, onCountChange }: Props) {
   const [completedItems, setCompletedItems] = useState<CompletedBookingItem[]>([])
   const [completedOpen, setCompletedOpen] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     fetch('/api/referral/bookings/received', { cache: 'no-store' })
@@ -37,7 +43,14 @@ export default function ReferralCompletedList({ proId }: Props) {
         if (data?.completed) setCompletedItems(data.completed)
       })
       .catch(() => {})
+      .finally(() => setLoading(false))
   }, [])
+
+  const completedCount = completedItems.length
+  useEffect(() => {
+    onCountChange?.(completedCount, !loading)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [completedCount, loading])
 
   if (completedItems.length === 0) return null
 
