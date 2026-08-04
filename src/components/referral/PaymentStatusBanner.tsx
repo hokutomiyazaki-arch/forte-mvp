@@ -4,14 +4,16 @@
  * §2-4ステージ3(予約フィー方式)決済結果バナー(/r/[slug])
  *
  * 決済(予約フィー)は受け手プロが日時を確定した後、メールの決済リンク(Stripe Checkout)経由で
- * 発生する。success_url / cancel_url は「実装が軽い方」として/r/[slug]ページを再利用しており
+ * 発生する。success_url は「実装が軽い方」として/r/[slug]ページを再利用しており
  * (専用ランディングページは新設していない)、クライアントが支払い完了後にここへ戻ってくる。
  * ?payment=success&session_id=... で戻ってきた場合のみフォールバック検証API
  * (GET /api/referral/bookings/payment-return)を1回呼び、webhookが未処理でも冪等に
  * 予約成立を反映する。
  *
- * canceled(キャンセルURL経由)の場合は検証APIを呼ばない固定文言のみ表示する(予約フィー方式では
- * 閉じるべきdraft行が存在しないため、支払いを再開したい場合は同じメールのリンクからやり直せる)。
+ * cancel_urlはバグ報告(2026-08-04・CEO)対応で /booking/{booking_id}?payment=canceled へ
+ * 変更済み(お支払い再開の「お支払いに進む」ボタンがある側に戻す)。この/r側のcanceled分岐は
+ * 変更前に発行済みの旧メールリンク(cancel_urlが/r/[slug]のまま)との互換のためだけに残す
+ * (新規発行分はここに来ない)。検証APIは呼ばない固定文言のみ表示する。
  */
 
 import { useEffect, useState } from 'react'

@@ -76,3 +76,20 @@ export function isReferralPaymentEnabled(): boolean {
  * 含む)をbookings/route.tsのバンドルに含めてしまう(教訓G・Clerk middleware破壊事例)。
  */
 export const REFERRAL_MIN_FEE_JPY = 50
+
+/**
+ * §2-4ステージ3(予約フィー方式): 予約フィー合計bps(basis points)のフォールバック値。
+ * referral_bookings.fee_total_bpsが未設定の行向けのフォールバックとして、bookings作成時・
+ * received/accept確定時・cron再試行・決済リンク再取得(getOrCreateFeePaymentLink)の
+ * 複数ファイルでこの値を共有する(リテラル二重管理の解消・レビュー指摘・軽微8)。
+ * ★ REFERRAL_MIN_FEE_JPYと同じ理由でこのファイルに置く(Stripe importを持たない)。
+ */
+export const REFERRAL_FEE_TOTAL_BPS = 3360
+
+/**
+ * §2-4ステージ3: 確定後、予約フィー決済が無ければ自動キャンセルするまでの猶予時間(時間)。
+ * cron(expire-referral-bookings)の自動キャンセル判定と、決済リンク再取得
+ * (getOrCreateFeePaymentLink)の「期限切れなら新規発行しない」判定の両方でこの値を共有する
+ * (レビュー指摘・中5・cron交差の1時間窓の穴閉塞)。
+ */
+export const CONFIRM_PAYMENT_DEADLINE_HOURS = 24

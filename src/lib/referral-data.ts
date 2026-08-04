@@ -12,6 +12,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { sanitizeVoiceForReferral } from '@/lib/voice-sanitize'
 import { isAcceptingOpen } from '@/lib/referral-accepting'
 import { isReferralPaymentEnabled } from '@/lib/feature-flags'
+import { formatSlotWithWeekday } from '@/lib/referral-format'
 
 type SupabaseAdmin = ReturnType<typeof getSupabaseAdmin>
 
@@ -570,6 +571,8 @@ export interface BookingCapabilityData {
   expiresAt: string | null
   paymentStatus: string | null
   listSlug: string | null
+  /** バグ報告(2026-08-04)対応: 確定日時の表示用(confirmed_counter_index優先・無ければconfirmed_index)。 */
+  confirmedSlotText: string | null
 }
 
 /**
@@ -601,6 +604,18 @@ export async function getBookingCapabilityData(bookingId: string): Promise<Booki
     ? rawCounterSlots.filter((s: unknown): s is string => typeof s === 'string')
     : []
 
+  // 確定日時の解決: counter提案を承諾した場合はconfirmed_counter_index(counter_slots内)、
+  // 通常確定はconfirmed_index(slots内)。どちらも無ければnull。
+  const confirmedCounterIndex = row.preferred_slots?.confirmed_counter_index
+  const confirmedIndex = row.preferred_slots?.confirmed_index
+  const slots = Array.isArray(row.preferred_slots?.slots) ? row.preferred_slots.slots : []
+  let confirmedSlotText: string | null = null
+  if (typeof confirmedCounterIndex === 'number' && counterSlots[confirmedCounterIndex]) {
+    confirmedSlotText = formatSlotWithWeekday(counterSlots[confirmedCounterIndex])
+  } else if (typeof confirmedIndex === 'number' && slots[confirmedIndex]) {
+    confirmedSlotText = formatSlotWithWeekday(slots[confirmedIndex])
+  }
+
   return {
     id: row.id,
     status: row.status,
@@ -609,5 +624,6 @@ export async function getBookingCapabilityData(bookingId: string): Promise<Booki
     expiresAt: row.expires_at,
     paymentStatus: paymentEnabled ? row.payment_status || null : null,
     listSlug: row.referral_lists?.slug || null,
+    confirmedSlotText,
   }
 }

@@ -8,7 +8,12 @@ import {
   escapeHtml,
 } from '@/lib/referral-notify'
 import { formatSlot } from '@/lib/referral-format'
-import { isReferralPaymentEnabled, REFERRAL_MIN_FEE_JPY } from '@/lib/feature-flags'
+import {
+  isReferralPaymentEnabled,
+  REFERRAL_MIN_FEE_JPY,
+  REFERRAL_FEE_TOTAL_BPS,
+  CONFIRM_PAYMENT_DEADLINE_HOURS,
+} from '@/lib/feature-flags'
 // 中1レビュー指摘: 「決済リンク発行+メール送付」はconfirm時(received PATCH)とこのcronの
 // 再試行ブロックの両方から同じ関数を呼ぶ(同じ処理を2箇所に書かない)。
 // 軽微5レビュー指摘: 24hキャンセル時にセッションを明示失効させる関数も同様に委譲する。
@@ -21,11 +26,9 @@ const BATCH_LIMIT = 100
 /** 軽微指摘: Checkoutセッションは24hで自然失効するため、25h(バッファ込み)経過したdraftはゴミ行とみなす */
 const DRAFT_STALE_HOURS = 25
 const DRAFT_CLEANUP_LIMIT = 100
-/** §2-4ステージ3(予約フィー方式・CEO決定): 確定後24時間以内に予約フィー決済が無ければ自動キャンセル */
-const CONFIRM_PAYMENT_DEADLINE_HOURS = 24
+// CONFIRM_PAYMENT_DEADLINE_HOURS(確定後の予約フィー決済猶予・24h)は
+// src/lib/feature-flags.ts に集約(getOrCreateFeePaymentLinkの期限判定と共有・レビュー指摘・中5)。
 const CONFIRM_PAYMENT_CLEANUP_LIMIT = 100
-/** §2-4ステージ3(予約フィー方式)のフォールバック用。通常は保存済みの fee_total_bps を使う。 */
-const DEFAULT_FEE_TOTAL_BPS = 3360
 /**
  * レビュー指摘(中1): confirm時のCheckout作成失敗等でconfirmed×unpaidのまま取り残された予約を
  * 再試行する(confirm時と同じ関数で決済リンクを再発行)。10分の猶予はconfirm直後の正常系
@@ -253,7 +256,7 @@ export async function GET(req: NextRequest) {
 
         for (const row of rows3) {
           try {
-            const feeTotalBps = row.fee_total_bps ?? DEFAULT_FEE_TOTAL_BPS
+            const feeTotalBps = row.fee_total_bps ?? REFERRAL_FEE_TOTAL_BPS
             const feeAmountJpy = row.price_jpy > 0 ? Math.floor((row.price_jpy * feeTotalBps) / 10000) : 0
             if (feeAmountJpy < REFERRAL_MIN_FEE_JPY) {
               // フィーがStripe最低決済額未満(想定外・データ不整合)。決済対象外のため再試行しない。
@@ -279,7 +282,8 @@ export async function GET(req: NextRequest) {
               receiverProName: receiverName,
               confirmedSlotText,
               successUrl: `${listUrl}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-              cancelUrl: `${listUrl}?payment=canceled&session_id={CHECKOUT_SESSION_ID}`,
+              // バグ報告(2026-08-04)対応: キャンセル後の戻り先を予約ページに変更(再開の「お支払いに進む」ボタンがある)
+              cancelUrl: `${APP_URL}/booking/${row.id}?payment=canceled`,
               listUrl,
             })
             // 成否はissueFeePaymentLinkAndNotify内でログ済み。失敗時もここでは握って次回cronに委ねる。

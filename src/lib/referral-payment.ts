@@ -32,7 +32,10 @@ import {
   referralListFooterHtml,
   emailShell,
   escapeHtml,
+  buildBookingLocationContactHtml,
+  hasProLocationInfo,
 } from '@/lib/referral-notify'
+import { REFERRAL_FEE_TOTAL_BPS, REFERRAL_MIN_FEE_JPY, CONFIRM_PAYMENT_DEADLINE_HOURS } from '@/lib/feature-flags'
 
 const APP_URL = 'https://realproof.jp'
 
@@ -88,16 +91,21 @@ export async function createReferralCheckoutSession(params: {
 }
 
 /**
- * 死んだ(誰も支払えない)Checkout Sessionを明示的に失効させる。失敗はログのみ
- * (Stripe側で自然失効するため致命的でない)。呼び出し元: issueFeePaymentLinkAndNotifyの
- * 失敗フォールバック、cronの24h支払い期限切れキャンセル(レビュー指摘・軽微5)。
+ * 死んだ(誰も支払えない)Checkout Sessionを明示的に失効させる。失敗はログのみ残し、
+ * 呼び出し元には成功可否を boolean で返す(レビュー指摘・重大2: 呼び出し元が
+ * 「失効を確認できた場合のみ次の処理へ進む」判断をできるようにする)。
+ * 既存呼び出し元(issueFeePaymentLinkAndNotifyの失敗フォールバック、cronの24h支払い期限切れ
+ * キャンセル)は戻り値を見ていないため、この変更で壊れない(Promise<void>→Promise<boolean>は
+ * awaitのみの既存呼び出しと後方互換)。
  */
-export async function expireReferralCheckoutSession(sessionId: string): Promise<void> {
+export async function expireReferralCheckoutSession(sessionId: string): Promise<boolean> {
   try {
     const stripe = getReferralStripe()
     await stripe.checkout.sessions.expire(sessionId)
+    return true
   } catch (err) {
     console.error('[referral-payment] expireReferralCheckoutSession error:', err)
+    return false
   }
 }
 
@@ -113,6 +121,155 @@ export async function cancelReferralAuthorization(paymentIntentId: string): Prom
   } catch (err) {
     console.error('[referral-payment] cancelReferralAuthorization error:', err)
   }
+}
+
+/**
+ * バグ報告(2026-08-04・CEO): 決済を中断すると再開導線が無い問題への対応。
+ * /booking/[booking_id] の「お支払いに進む」ボタンから叩かれる決済リンク再取得の中核処理。
+ * Stripeロジックはこの関数に集約し、呼び出し元のAPI routeにはStripeのimportを持たせない
+ * (Webpackチャンクグラフ対策・既存の中1レビュー指摘を踏襲)。
+ *
+ * - status='confirmed' かつ payment_status='awaiting' 以外は 'not_awaiting' を返す
+ *   (呼び出し元がpaymentStatusを見てpaid/その他を判定・409にマッピングする)。
+ * - confirmed_atから24h(CONFIRM_PAYMENT_DEADLINE_HOURS)を超えている場合は、cronの自動
+ *   キャンセルがまだ走っていなくても新規発行しない(レビュー指摘・中5: cron交差の1時間窓の穴閉塞)。
+ * - 既存の stripe_checkout_session_id があれば取得する。status==='complete' または
+ *   payment_status==='paid' の場合は、webhook反映が未着(遅延)の可能性があるため
+ *   session_idを一切書き換えず 'not_awaiting'(paid扱い)を返す(レビュー指摘・重大1: 二重決済防止)。
+ *   retrieve自体が失敗(Stripe一時エラー)した場合は実状態が分からないため新規発行に進まず
+ *   'error'を返す(客はメールの既存リンクで支払えるフェイルセーフ・レビュー指摘・重大2)。
+ * - status==='open' かつ url有りならそのURLをそのまま返す(既存セッション再利用)。
+ * - status==='expired'は既に誰も支払えない状態(Stripe上の3値はopen/complete/expiredのみ)なので
+ *   失効の再実行は不要。open なのにurlが欠落する異常系のみ明示的にexpireし、
+ *   失効成功を確認できた場合のみ新規セッション作成に進む(レビュー指摘・重大2)。
+ * - 新規セッション作成後は既存session_idをCASキーにしたUPDATEで保存する(レビュー指摘・中3)。
+ *   0行(競合)なら作成したセッションを失効させ、再SELECTした現在のセッションが開いていれば
+ *   そのURLを返し、そうでなければ 'not_awaiting' を返す。
+ */
+export async function getOrCreateFeePaymentLink(
+  bookingId: string
+): Promise<
+  | { outcome: 'ok'; checkoutUrl: string }
+  | { outcome: 'not_awaiting'; paymentStatus: string | null }
+  | { outcome: 'not_found' }
+  | { outcome: 'error' }
+> {
+  const supabase = getSupabaseAdmin()
+
+  const { data } = await supabase
+    .from('referral_bookings')
+    .select(
+      'id, status, payment_status, price_jpy, fee_total_bps, stripe_checkout_session_id, client_email, confirmed_at, referral_lists(slug), pro_menus(name)'
+    )
+    .eq('id', bookingId)
+    .maybeSingle()
+
+  if (!data) return { outcome: 'not_found' }
+  const booking = data as any
+
+  if (booking.status !== 'confirmed' || booking.payment_status !== 'awaiting') {
+    return { outcome: 'not_awaiting', paymentStatus: booking.payment_status || null }
+  }
+
+  // レビュー指摘(中5): cronの自動キャンセル(24h)が未実行の間(cron交差の1時間窓)でも、
+  // 期限を過ぎた予約に新しい決済リンクを発行しない。
+  if (booking.confirmed_at) {
+    const deadline = new Date(booking.confirmed_at).getTime() + CONFIRM_PAYMENT_DEADLINE_HOURS * 60 * 60 * 1000
+    if (deadline < Date.now()) {
+      return { outcome: 'not_awaiting', paymentStatus: booking.payment_status }
+    }
+  }
+
+  const stripe = getReferralStripe()
+  const existingSessionId: string | null = booking.stripe_checkout_session_id || null
+
+  if (existingSessionId) {
+    let existing: Stripe.Checkout.Session
+    try {
+      existing = await stripe.checkout.sessions.retrieve(existingSessionId)
+    } catch (err) {
+      // レビュー指摘(重大2): retrieve自体が失敗した場合は実状態不明のため新規発行に進まない
+      console.error('[referral-payment] getOrCreateFeePaymentLink retrieve error:', err)
+      return { outcome: 'error' }
+    }
+
+    if (existing.status === 'complete' || existing.payment_status === 'paid') {
+      // レビュー指摘(重大1): webhook反映が未着の可能性があるためsession_idを書き換えない
+      return { outcome: 'not_awaiting', paymentStatus: 'paid' }
+    }
+    if (existing.status === 'open' && existing.url) {
+      return { outcome: 'ok', checkoutUrl: existing.url }
+    }
+    if (existing.status === 'open') {
+      // open なのにurlが欠落する異常系のみ失効させ、成功を確認できた場合のみ新規発行に進む
+      const expired = await expireReferralCheckoutSession(existingSessionId)
+      if (!expired) return { outcome: 'error' }
+    }
+    // status==='expired'はここに到達する。既に誰も支払えないため失効の再実行は不要。
+  }
+
+  const feeTotalBps = booking.fee_total_bps ?? REFERRAL_FEE_TOTAL_BPS
+  const feeAmountJpy = booking.price_jpy > 0 ? Math.floor((booking.price_jpy * feeTotalBps) / 10000) : 0
+  if (feeAmountJpy < REFERRAL_MIN_FEE_JPY) {
+    // レビュー指摘(軽微8): 他3経路(bookings/received/cron)と同じ最低決済額ガード
+    console.error(`[referral-payment] getOrCreateFeePaymentLink feeAmountJpy below minimum for booking ${bookingId}`)
+    return { outcome: 'not_awaiting', paymentStatus: booking.payment_status }
+  }
+
+  const slug = booking.referral_lists?.slug || ''
+  const listUrl = slug ? `${APP_URL}/r/${slug}` : APP_URL
+  const menuName = booking.pro_menus?.name || null
+
+  const created = await createReferralCheckoutSession({
+    bookingId,
+    amountJpy: feeAmountJpy,
+    itemName: `予約フィー（${menuName || 'ご相談'}）`,
+    clientEmail: booking.client_email || undefined,
+    successUrl: `${listUrl}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+    cancelUrl: `${APP_URL}/booking/${bookingId}?payment=canceled`,
+  })
+
+  if (!created) return { outcome: 'error' }
+
+  // レビュー指摘(中3): 保存先のCAS(compare-and-swap)キーをsession_idにし、その間に他経路が
+  // 別のセッションIDへ書き換えていた場合は自分の更新を通さない(旧session_id or null限定)。
+  let updateQuery = supabase
+    .from('referral_bookings')
+    .update({ stripe_checkout_session_id: created.sessionId })
+    .eq('id', bookingId)
+    .eq('payment_status', 'awaiting')
+  updateQuery = existingSessionId
+    ? updateQuery.eq('stripe_checkout_session_id', existingSessionId)
+    : updateQuery.is('stripe_checkout_session_id', null)
+  const { data: updatedRows, error } = await updateQuery.select('id')
+
+  if (error) {
+    console.error('[referral-payment] getOrCreateFeePaymentLink update error:', error.message)
+    await expireReferralCheckoutSession(created.sessionId)
+    return { outcome: 'error' }
+  }
+  if (!updatedRows || updatedRows.length === 0) {
+    // 競合(その間に他経路がsession_id/payment_statusを進めた): 誰も支払えないリンクを残さない
+    await expireReferralCheckoutSession(created.sessionId)
+    const { data: latest } = await supabase
+      .from('referral_bookings')
+      .select('payment_status, stripe_checkout_session_id')
+      .eq('id', bookingId)
+      .maybeSingle()
+    if (latest?.payment_status === 'awaiting' && latest.stripe_checkout_session_id) {
+      try {
+        const current = await stripe.checkout.sessions.retrieve(latest.stripe_checkout_session_id)
+        if (current.status === 'open' && current.url) {
+          return { outcome: 'ok', checkoutUrl: current.url }
+        }
+      } catch (err) {
+        console.error('[referral-payment] getOrCreateFeePaymentLink re-check error:', err)
+      }
+    }
+    return { outcome: 'not_awaiting', paymentStatus: latest?.payment_status || null }
+  }
+
+  return { outcome: 'ok', checkoutUrl: created.url }
 }
 
 /**
@@ -197,6 +354,8 @@ export async function issueFeePaymentLinkAndNotify(params: {
           `${params.confirmedSlotText ? `${params.confirmedSlotText} に確定しました。` : 'ご相談の日時が確定しました。'}<br>担当: ${safeReceiverProName}さん<br><br>` +
             `予約フィー ¥${params.feeAmountJpy.toLocaleString()} のお支払いで紹介予約が成立します(24時間以内)。<br>` +
             `当日は残額 ¥${residualJpy.toLocaleString()} を${safeReceiverProName}さんに直接お支払いください(合計 ¥${params.priceJpy.toLocaleString()} は変わりません)。` +
+            // バグ報告(2026-08-04)対応: 決済リンク切れ・中断時の自己救済導線(予約ページから再開できる)
+            `<br><br>お支払い状況の確認・再開はこちら: <a href="${APP_URL}/booking/${params.bookingId}" style="color:#888888;text-decoration:underline;">${APP_URL}/booking/${params.bookingId}</a>` +
             referralListFooterHtml(listUrl),
           'お支払いを行う',
           checkout.url
@@ -290,9 +449,13 @@ export async function applyReferralCheckoutSession(
       .maybeSingle()
     const clientNickname = client?.nickname || 'クライアント'
 
+    // CEO決定(2026-08-04): 成立時のクライアント宛メールに場所・連絡先を自動掲載するため、
+    // アクセス情報カラムも合わせて取得する。
     const { data: receiverPro } = await supabase
       .from('professionals')
-      .select('name, contact_email, line_messaging_user_id')
+      .select(
+        'name, contact_email, line_messaging_user_id, address, nearest_station, walk_minutes, access_note, google_maps_url, booking_url, website_url, phone_number'
+      )
       .eq('id', booking.receiver_pro_id)
       .maybeSingle()
 
@@ -303,7 +466,8 @@ export async function applyReferralCheckoutSession(
           contact_email: receiverPro.contact_email,
           line_messaging_user_id: receiverPro.line_messaging_user_id,
         },
-        clientNickname
+        clientNickname,
+        { remindMissingLocationInfo: !hasProLocationInfo(receiverPro) }
       )
     }
 
@@ -329,12 +493,20 @@ export async function applyReferralCheckoutSession(
     if (client?.user_id || booking.client_email) {
       const slug = (booking as any).referral_lists?.slug || ''
       const listUrl = slug ? `${APP_URL}/r/${slug}` : APP_URL
+      // レビュー軽微3: receiverPro取得失敗時も「先生からご連絡があります」のフォールバック文を出す
+      // (他経路の全nullオブジェクト渡しと挙動を統一)
+      const accessHtml = buildBookingLocationContactHtml(
+        receiverPro || {
+          address: null, nearest_station: null, walk_minutes: null, access_note: null,
+          google_maps_url: null, booking_url: null, website_url: null, phone_number: null, contact_email: null,
+        }
+      )
       await notifyClientByEmail(
         { userId: client?.user_id, email: booking.client_email },
         'お支払いが完了し、紹介予約が成立しました',
         emailShell(
           '紹介予約成立のお知らせ',
-          `お支払いが完了し、紹介予約が成立しました。当日はよろしくお願いいたします。${referralListFooterHtml(listUrl)}`
+          `お支払いが完了し、紹介予約が成立しました。当日はよろしくお願いいたします。${accessHtml}${referralListFooterHtml(listUrl)}`
         )
       )
     }

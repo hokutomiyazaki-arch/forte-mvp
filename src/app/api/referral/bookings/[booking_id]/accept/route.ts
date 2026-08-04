@@ -8,16 +8,15 @@ import {
   referralListFooterHtml,
   emailShell,
   escapeHtml,
+  buildBookingLocationContactHtml,
 } from '@/lib/referral-notify'
-import { isReferralPaymentEnabled, REFERRAL_MIN_FEE_JPY } from '@/lib/feature-flags'
+import { isReferralPaymentEnabled, REFERRAL_MIN_FEE_JPY, REFERRAL_FEE_TOTAL_BPS } from '@/lib/feature-flags'
 // 中1レビュー指摘から継続: Stripe importはこのAPI routeに持たせない(Webpackチャンクグラフ対策)。
 import { issueFeePaymentLinkAndNotify } from '@/lib/referral-payment'
 
 export const dynamic = 'force-dynamic'
 
 const APP_URL = 'https://realproof.jp'
-/** §2-4ステージ3(予約フィー方式)のフォールバック用。通常は保存済みの fee_total_bps を使う。 */
-const DEFAULT_FEE_TOTAL_BPS = 3360
 
 /**
  * POST /api/referral/bookings/[booking_id]/accept
@@ -93,14 +92,18 @@ export async function POST(request: NextRequest, { params }: { params: { booking
     const clientUserId = booking.clients?.user_id || ''
     const clientNickname = booking.clients?.nickname || 'クライアント'
 
+    // CEO決定(2026-08-04): 成立時のクライアント宛メールに、受け手プロの場所・連絡先を自動掲載するため
+    // アクセス情報カラムも合わせて取得する。
     const { data: receiverPro } = await supabase
       .from('professionals')
-      .select('name, contact_email, line_messaging_user_id')
+      .select(
+        'name, contact_email, line_messaging_user_id, address, nearest_station, walk_minutes, access_note, google_maps_url, booking_url, website_url, phone_number'
+      )
       .eq('id', booking.receiver_pro_id)
       .maybeSingle()
     const receiverProName = receiverPro?.name || 'プロ'
 
-    const feeTotalBps = booking.fee_total_bps ?? DEFAULT_FEE_TOTAL_BPS
+    const feeTotalBps = booking.fee_total_bps ?? REFERRAL_FEE_TOTAL_BPS
     const feeAmountJpy = booking.price_jpy > 0 ? Math.floor((booking.price_jpy * feeTotalBps) / 10000) : 0
     const shouldCollectFeePayment =
       paymentEnabled &&
@@ -122,7 +125,8 @@ export async function POST(request: NextRequest, { params }: { params: { booking
         receiverProName,
         confirmedSlotText,
         successUrl: `${listUrl}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-        cancelUrl: `${listUrl}?payment=canceled&session_id={CHECKOUT_SESSION_ID}`,
+        // バグ報告(2026-08-04)対応: キャンセル後の戻り先を予約ページに変更(再開の「お支払いに進む」ボタンがある)
+        cancelUrl: `${APP_URL}/booking/${booking.id}?payment=canceled`,
         listUrl,
       })
       if (paymentResult.success) {
@@ -157,12 +161,29 @@ export async function POST(request: NextRequest, { params }: { params: { booking
       try {
         if (clientUserId || booking.client_email) {
           const safeReceiverProName = escapeHtml(receiverProName)
+          // レビュー重大2: 場所・連絡先を載せるのは「本当に決済対象外(not_required)」の成立時のみ。
+          // 決済リンク発行失敗のfail open(後からcronが支払い案内を再送する)では開示しない。
+          const accessHtml = !shouldCollectFeePayment
+            ? buildBookingLocationContactHtml(
+                receiverPro || {
+                  address: null,
+                  nearest_station: null,
+                  walk_minutes: null,
+                  access_note: null,
+                  google_maps_url: null,
+                  booking_url: null,
+                  website_url: null,
+                  phone_number: null,
+                  contact_email: null,
+                }
+              )
+            : ''
           await notifyClientByEmail(
             { userId: clientUserId, email: booking.client_email },
             `${receiverProName}さんとのご予約が確定しました`,
             emailShell(
               'ご相談確定のお知らせ',
-              `${confirmedSlotText ? `${confirmedSlotText} に確定しました。` : 'ご相談の日時が確定しました。'}<br>担当: ${safeReceiverProName}さん${referralListFooterHtml(listUrl)}`
+              `${confirmedSlotText ? `${confirmedSlotText} に確定しました。` : 'ご相談の日時が確定しました。'}<br>担当: ${safeReceiverProName}さん${accessHtml}${referralListFooterHtml(listUrl)}`
             )
           )
         }

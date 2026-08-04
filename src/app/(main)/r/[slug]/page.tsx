@@ -340,66 +340,97 @@ export default async function ReferralPage({
 
         {/* CEO指摘(先行テスト第3弾): 「先生からのメッセージ」は送り手が設定・変更できる
             list.comment(=クライアントへのメッセージ)を本体として表示する。未設定時のみ既定文。
-            内部用リスト名(title)はクライアントには表示しない。 */}
-        <p style={{ fontSize: 13, color: T.text, lineHeight: 1.8, marginBottom: 0, whiteSpace: 'pre-wrap' as const }}>
-          {data.list.comment ||
-            // 1名時は「選ぶ」対象が無いため推薦フレームに切替（CEO決定・案A）
-            (data.candidates.length === 1
-              ? 'ご紹介した後も、あなたの経過は私自身が伺っていきます。安心してご相談ください。'
-              : 'ご紹介した後も、あなたの経過は私自身が伺っていきます。安心して選んでください。')}
-        </p>
-      </div>
-
-      {/* 候補カード（2〜4名） */}
-      <div style={{ marginBottom: 20 }}>
-        {data.candidates.length === 0 ? (
-          <div
-            style={{
-              textAlign: 'center',
-              padding: '30px 16px',
-              color: T.textMuted,
-              fontSize: 13,
-              background: T.cardBg,
-              border: `1px solid ${T.cardBorder}`,
-              borderRadius: 16,
-            }}
-          >
-            現在、ご紹介できる先生の準備中です。
-          </div>
-        ) : (
-          <>
-            {data.candidates.length === 1 && (
-              <div style={{ fontSize: 12, fontWeight: 600, color: T.gold, marginBottom: 8 }}>
-                {data.sender.name}さんが特に推薦する先生です
-              </div>
-            )}
-            {data.candidates.map((c) => (
-              <CandidateCard key={c.pro.id} candidate={c} aiSanitizeEnabled={aiSanitizeEnabled} slug={slug} />
-            ))}
-          </>
+            内部用リスト名(title)はクライアントには表示しない。
+            CEO指示(2026-08-04): 成立後の戻り画面(payment=success)では通常のリスト表示を出さないため
+            この送り手メッセージも省略する(保護リストのコード自体は変更せず分岐で迂回するだけ)。 */}
+        {payment !== 'success' && (
+          <p style={{ fontSize: 13, color: T.text, lineHeight: 1.8, marginBottom: 0, whiteSpace: 'pre-wrap' as const }}>
+            {data.list.comment ||
+              // 1名時は「選ぶ」対象が無いため推薦フレームに切替（CEO決定・案A）
+              (data.candidates.length === 1
+                ? 'ご紹介した後も、あなたの経過は私自身が伺っていきます。安心してご相談ください。'
+                : 'ご紹介した後も、あなたの経過は私自身が伺っていきます。安心して選んでください。')}
+          </p>
         )}
       </div>
 
-      {/* フィー開示 + 共有情報の範囲 */}
-      <div
-        style={{
-          background: T.cardBg,
-          border: `1px solid ${T.cardBorder}`,
-          borderRadius: 16,
-          padding: '16px',
-          fontSize: 12,
-          color: T.textSub,
-          lineHeight: 1.8,
-        }}
-      >
-        <p style={{ marginBottom: 10 }}>
-          紹介による手数料が発生する場合がありますが、<strong style={{ color: T.dark }}>あなたの料金は変わりません</strong>。
-        </p>
-        <p>
-          ご相談・ご予約の際は、お名前・ご希望日時・ご相談のテーマが担当の先生に共有されます。
-          共有する内容は予約手続きの中でご確認いただけます。
-        </p>
-      </div>
+      {payment === 'success' ? (
+        /* CEO指示(2026-08-04): 成立後の戻り画面は候補カード一覧を出さず、成立情報だけの簡素な画面にする。
+           検証がpaidにならなかった場合の逃げ道として、クエリ無しの同じ/r/[slug]へのリンクを置く。 */
+        <div
+          style={{
+            background: T.cardBg,
+            border: `1px solid ${T.cardBorder}`,
+            borderRadius: 16,
+            padding: '24px 16px',
+            marginBottom: 20,
+            textAlign: 'center',
+          }}
+        >
+          <p style={{ fontSize: 13, color: T.text, lineHeight: 1.8, marginBottom: 16 }}>
+            お支払いが確認でき次第、ご予約の詳細と当日のご案内をメールでお送りします。すでに完了している場合はメールをご確認ください。
+          </p>
+          <a
+            href={`/r/${slug}`}
+            style={{ fontSize: 12, color: T.gold, textDecoration: 'none', fontWeight: 600 }}
+          >
+            紹介リストを見る →
+          </a>
+        </div>
+      ) : (
+        <>
+          {/* 候補カード（2〜4名） */}
+          <div style={{ marginBottom: 20 }}>
+            {data.candidates.length === 0 ? (
+              <div
+                style={{
+                  textAlign: 'center',
+                  padding: '30px 16px',
+                  color: T.textMuted,
+                  fontSize: 13,
+                  background: T.cardBg,
+                  border: `1px solid ${T.cardBorder}`,
+                  borderRadius: 16,
+                }}
+              >
+                現在、ご紹介できる先生の準備中です。
+              </div>
+            ) : (
+              <>
+                {data.candidates.length === 1 && (
+                  <div style={{ fontSize: 12, fontWeight: 600, color: T.gold, marginBottom: 8 }}>
+                    {data.sender.name}さんが特に推薦する先生です
+                  </div>
+                )}
+                {data.candidates.map((c) => (
+                  <CandidateCard key={c.pro.id} candidate={c} aiSanitizeEnabled={aiSanitizeEnabled} slug={slug} />
+                ))}
+              </>
+            )}
+          </div>
+
+          {/* フィー開示 + 共有情報の範囲 */}
+          <div
+            style={{
+              background: T.cardBg,
+              border: `1px solid ${T.cardBorder}`,
+              borderRadius: 16,
+              padding: '16px',
+              fontSize: 12,
+              color: T.textSub,
+              lineHeight: 1.8,
+            }}
+          >
+            <p style={{ marginBottom: 10 }}>
+              紹介による手数料が発生する場合がありますが、<strong style={{ color: T.dark }}>あなたの料金は変わりません</strong>。
+            </p>
+            <p>
+              ご相談・ご予約の際は、お名前・ご希望日時・ご相談のテーマが担当の先生に共有されます。
+              共有する内容は予約手続きの中でご確認いただけます。
+            </p>
+          </div>
+        </>
+      )}
     </div>
   )
 }

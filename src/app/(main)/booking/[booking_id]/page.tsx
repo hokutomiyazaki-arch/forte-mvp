@@ -11,6 +11,7 @@ import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { getBookingCapabilityData } from '@/lib/referral-data'
 import BookingAcceptForm from '@/components/referral/BookingAcceptForm'
+import PaymentLinkButton from '@/components/referral/PaymentLinkButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,16 +36,21 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function BookingCapabilityPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ booking_id: string }>
+  searchParams: Promise<{ payment?: string }>
 }) {
   const { booking_id: bookingId } = await params
+  const { payment: paymentParam } = await searchParams
   const data = await getBookingCapabilityData(bookingId)
 
   if (!data) {
     notFound()
   }
 
+  // レビュー指摘(軽微6): paid済み/決済フラグOFF時にキャンセル文言が出ないようにする
+  const showCanceledNotice = paymentParam === 'canceled' && data.paymentStatus === 'awaiting'
   const listUrl = data.listSlug ? `${APP_URL}/r/${data.listSlug}` : null
   const isExpired =
     data.status === 'expired' ||
@@ -56,6 +62,23 @@ export default async function BookingCapabilityPage({
       <div style={{ textAlign: 'center', marginBottom: 20 }}>
         <span style={{ fontSize: 12, letterSpacing: 2, color: T.gold, fontWeight: 700 }}>REAL PROOF</span>
       </div>
+
+      {!isExpired && showCanceledNotice && (
+        <div
+          style={{
+            background: T.cardBg,
+            border: `1px solid ${T.cardBorder}`,
+            borderRadius: 16,
+            padding: '14px 16px',
+            marginBottom: 16,
+            textAlign: 'center',
+          }}
+        >
+          <p style={{ fontSize: 12, color: T.textSub, lineHeight: 1.7 }}>
+            お支払いはキャンセルされました。下のボタンからやり直せます。
+          </p>
+        </div>
+      )}
 
       {isExpired && (
         <div
@@ -71,7 +94,7 @@ export default async function BookingCapabilityPage({
         </div>
       )}
 
-      {!isExpired && (data.status === 'confirmed' || data.status === 'completed') && (
+      {!isExpired && (data.status === 'confirmed' || data.status === 'completed') && data.paymentStatus === 'awaiting' && (
         <div
           style={{
             background: T.cardBg,
@@ -81,14 +104,46 @@ export default async function BookingCapabilityPage({
             textAlign: 'center',
           }}
         >
-          <p style={{ fontSize: 13, color: T.textSub, lineHeight: 1.8 }}>紹介予約は確定済みです。</p>
-          {data.paymentStatus === 'awaiting' && (
-            <p style={{ fontSize: 12, color: T.textMuted, marginTop: 8, lineHeight: 1.7 }}>
-              お支払いのご案内メールをご確認ください。
-            </p>
+          <p style={{ fontSize: 13, color: T.dark, fontWeight: 700, lineHeight: 1.8 }}>
+            日時は確定しています。予約の成立には予約フィーのお支払いが必要です。
+          </p>
+          {data.confirmedSlotText && (
+            <p style={{ fontSize: 13, color: T.textSub, marginTop: 10, lineHeight: 1.7 }}>{data.confirmedSlotText}</p>
           )}
+          <PaymentLinkButton bookingId={data.id} />
         </div>
       )}
+
+      {!isExpired && (data.status === 'confirmed' || data.status === 'completed') && data.paymentStatus === 'paid' && (
+        <div
+          style={{
+            background: T.cardBg,
+            border: `1px solid ${T.cardBorder}`,
+            borderRadius: 16,
+            padding: '24px 20px',
+            textAlign: 'center',
+          }}
+        >
+          <p style={{ fontSize: 13, color: T.textSub, lineHeight: 1.8 }}>お支払いは完了しています。予約成立済みです。</p>
+        </div>
+      )}
+
+      {!isExpired &&
+        (data.status === 'confirmed' || data.status === 'completed') &&
+        data.paymentStatus !== 'awaiting' &&
+        data.paymentStatus !== 'paid' && (
+          <div
+            style={{
+              background: T.cardBg,
+              border: `1px solid ${T.cardBorder}`,
+              borderRadius: 16,
+              padding: '24px 20px',
+              textAlign: 'center',
+            }}
+          >
+            <p style={{ fontSize: 13, color: T.textSub, lineHeight: 1.8 }}>紹介予約は確定済みです。</p>
+          </div>
+        )}
 
       {!isExpired && data.status === 'requested' && data.counterSlots.length > 0 && (
         <BookingAcceptForm bookingId={data.id} receiverProName={data.receiverProName} counterSlots={data.counterSlots} />

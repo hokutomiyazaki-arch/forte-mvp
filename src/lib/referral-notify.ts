@@ -37,6 +37,81 @@ interface ProNotifyTarget {
   line_messaging_user_id: string | null
 }
 
+/**
+ * CEO決定(2026-08-04): 成立時のクライアント宛メールに、受け手プロの場所・連絡先を自動掲載する。
+ * 開示タイミング厳守: 呼ぶのは成立時(paid または not_required 確定)のメールのみ
+ * (決済リンク案内メール・リクエスト受付メールでは呼ばない)。
+ */
+export interface ProAccessInfo {
+  address: string | null
+  nearest_station: string | null
+  walk_minutes: number | null
+  access_note: string | null
+  google_maps_url: string | null
+  booking_url: string | null
+  website_url: string | null
+  phone_number: string | null
+  contact_email: string | null
+}
+
+/**
+ * 場所情報が1件でも設定済みか(レビュー重大1: contact_emailはほぼ全プロ非nullのため、
+ * 連絡先込みの「全未設定」判定ではフォールバック文が実質発火しない。場所と連絡先を分離)。
+ */
+export function hasProLocationInfo(pro: ProAccessInfo): boolean {
+  return !!(pro.address || pro.nearest_station || pro.access_note || pro.google_maps_url)
+}
+
+/** メールhref用: http/https以外のスキームは掲載しない(escapeHtmlはスキーム検証をしないため)。 */
+function safeHttpUrl(url: string | null): string | null {
+  return url && /^https?:\/\//i.test(url) ? url : null
+}
+
+/**
+ * クライアント宛成立メールに埋め込む「当日のご案内 + ご連絡先」HTML。
+ * 未設定の項目は行を出さない。場所が全て未設定なら「担当の先生からご連絡があります」を必ず出す
+ * (連絡先はあれば併記)。emailShellのbodyHtmlは<p>内に入るため、ブロック要素を使わず<br>連結で組む。
+ */
+export function buildBookingLocationContactHtml(pro: ProAccessInfo): string {
+  const locationLines: string[] = []
+  if (pro.address) locationLines.push(escapeHtml(pro.address))
+  if (pro.nearest_station) {
+    const walk = typeof pro.walk_minutes === 'number' && pro.walk_minutes > 0 ? ` (徒歩${pro.walk_minutes}分)` : ''
+    locationLines.push(`${escapeHtml(pro.nearest_station)}${walk}`)
+  }
+  if (pro.access_note) locationLines.push(escapeHtml(pro.access_note))
+  const mapsUrl = safeHttpUrl(pro.google_maps_url)
+  if (mapsUrl) {
+    locationLines.push(`<a href="${escapeHtml(mapsUrl)}" style="color:#1A1A2E;">Googleマップで見る</a>`)
+  }
+
+  const contactLines: string[] = []
+  const bookingUrl = safeHttpUrl(pro.booking_url)
+  if (bookingUrl) {
+    contactLines.push(`予約HP: <a href="${escapeHtml(bookingUrl)}" style="color:#1A1A2E;">${escapeHtml(bookingUrl)}</a>`)
+  }
+  const websiteUrl = safeHttpUrl(pro.website_url)
+  if (websiteUrl) {
+    contactLines.push(`Webサイト: <a href="${escapeHtml(websiteUrl)}" style="color:#1A1A2E;">${escapeHtml(websiteUrl)}</a>`)
+  }
+  if (pro.phone_number) contactLines.push(`電話番号: ${escapeHtml(pro.phone_number)}`)
+  if (pro.contact_email) contactLines.push(`メール: ${escapeHtml(pro.contact_email)}`)
+
+  let html = ''
+  if (locationLines.length > 0) {
+    html += `<br><br><strong style="color:#333;">当日のご案内</strong><br>${locationLines.join('<br>')}`
+  } else {
+    // レビュー重大1: 連絡先だけあるプロ(オンライン/訪問系)でも場所の案内が欠けることを明示する
+    html += `<br><br>当日の場所は担当の先生からご連絡があります。`
+  }
+  if (contactLines.length > 0) {
+    html += `<br><br><strong style="color:#333;">ご連絡先</strong><br>${contactLines.join('<br>')}`
+  } else if (locationLines.length === 0) {
+    html = `<br><br>当日の場所・ご連絡方法は担当の先生からご連絡があります。`
+  }
+  return html
+}
+
 function emailShell(title: string, bodyHtml: string, ctaText?: string, ctaUrl?: string): string {
   return `
     <div style="max-width:480px;margin:0 auto;font-family:sans-serif;">
@@ -157,23 +232,21 @@ export async function notifyBookingRequested(
 
 /**
  * §2-4/§4-8: 予約が確定した際、送り手プロへ「紹介が成立した」ことを通知する。
+ * CEO決定(2026-08-04): 送り手宛の進捗通知にはリンクを付けない(操作不要な事後報告のため)。
  */
 export async function notifyBookingConfirmedToSender(
   target: ProNotifyTarget,
   clientNickname: string,
   receiverProName: string,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
   const safeClientNickname = escapeHtml(clientNickname)
   const safeReceiverProName = escapeHtml(receiverProName)
   return sendProNotification(target, {
-    lineText: `あなたの紹介が成立しました(クライアント: ${clientNickname}さん・${receiverProName}さんが確定)。\n${dashboardUrl}`,
+    lineText: `あなたの紹介が成立しました(クライアント: ${clientNickname}さん・${receiverProName}さんが確定)。`,
     emailSubject: 'あなたの紹介が成立しました',
     emailBodyHtml: emailShell(
       '紹介成立のお知らせ',
       `${safeClientNickname}さんの紹介予約が、${safeReceiverProName}さんとの間で確定しました。<br>あなたの紹介がつながりました。`,
-      'ダッシュボードを開く',
-      dashboardUrl,
     ),
   })
 }
@@ -185,19 +258,27 @@ export async function notifyBookingConfirmedToSender(
 export async function notifyBookingPaymentCompletedToReceiver(
   target: ProNotifyTarget,
   clientNickname: string,
+  /**
+   * CEO決定(2026-08-04): 場所情報(住所/最寄駅/アクセスメモ/地図)が未設定のプロの場合のみ、
+   * クライアントへの当日案内を別途連絡するよう促す(クライアント宛メールに場所が載らないため)。
+   */
+  opts?: { remindMissingLocationInfo?: boolean },
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
   const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
   const safeClientNickname = escapeHtml(clientNickname)
+  const reminder = opts?.remindMissingLocationInfo
+    ? 'プロフィールに場所情報が未設定のため、クライアントへ当日の場所をお伝えください。'
+    : ''
   // §2-4ステージ3(決済確認後の連絡先開示・CEO決定): 決済確認がとれたこの時点から
   // クライアントの連絡先(氏名・電話番号・メール)がダッシュボードで開示される。
   // ただしメール本文には電話番号等のPIIを直接書かない(メールは転送・誤送信リスクがあるため
   // 参照導線のみとする。実際の値はダッシュボードのAPI経由でのみ表示する)。
   return sendProNotification(target, {
-    lineText: `${clientNickname}さんのお支払いが完了し、紹介予約が成立しました。クライアントの連絡先はダッシュボードでご確認ください。\n${dashboardUrl}`,
+    lineText: `${clientNickname}さんのお支払いが完了し、紹介予約が成立しました。クライアントの連絡先はダッシュボードでご確認ください。${reminder ? ' ' + reminder : ''}\n${dashboardUrl}`,
     emailSubject: 'お支払いが完了し、紹介予約が成立しました',
     emailBodyHtml: emailShell(
       '紹介予約成立のお知らせ',
-      `${safeClientNickname}さんのお支払いが完了し、紹介予約が成立しました。<br>クライアントの連絡先はダッシュボードでご確認ください。`,
+      `${safeClientNickname}さんのお支払いが完了し、紹介予約が成立しました。<br>クライアントの連絡先はダッシュボードでご確認ください。${reminder ? `<br>${reminder}` : ''}`,
       'ダッシュボードを開く',
       dashboardUrl,
     ),
@@ -239,16 +320,18 @@ export async function notifyBookingExpiredToSender(
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
   const safeClientNickname = escapeHtml(clientNickname)
   const safeReceiverProName = escapeHtml(receiverProName)
+  // CEO決定(2026-08-04): 送り手宛の進捗通知にはリンクを付けない(listUrl引数は互換のため残置)
+  void listUrl
   const bodyHtml = opts?.hadCounterProposal
     ? `${safeClientNickname}さんへ提案した日時への返答が48時間以内に確認できず、${safeReceiverProName}さんの紹介予約のリクエストは失効しました。<br>別の候補もご紹介いただけます。`
     : `${safeClientNickname}さんの${safeReceiverProName}さんへの紹介予約のリクエストは、48時間以内に確定のご連絡がなかったため失効しました。<br>別の候補もご紹介いただけます。`
   const lineText = opts?.hadCounterProposal
-    ? `${clientNickname}さんからの返答がなく、提案した日時が48時間以内に確認されなかったため失効しました。\n${listUrl}`
-    : `${clientNickname}さんの${receiverProName}さんへの紹介予約のリクエストが、48時間以内に確定されなかったため失効しました。\n${listUrl}`
+    ? `${clientNickname}さんからの返答がなく、提案した日時が48時間以内に確認されなかったため失効しました。`
+    : `${clientNickname}さんの${receiverProName}さんへの紹介予約のリクエストが、48時間以内に確定されなかったため失効しました。`
   return sendProNotification(target, {
     lineText,
     emailSubject: '紹介予約のリクエストが失効しました',
-    emailBodyHtml: emailShell('紹介予約リクエスト失効のお知らせ', bodyHtml, 'リストを見る', listUrl),
+    emailBodyHtml: emailShell('紹介予約リクエスト失効のお知らせ', bodyHtml),
   })
 }
 
@@ -315,16 +398,14 @@ export async function notifyBookingMessage(
   target: ProNotifyTarget,
   senderProName: string,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  // CEO決定(2026-08-04): リンクは付けない(ダッシュボードの紹介タブに行くだけのため文言で案内)
   const safeSenderProName = escapeHtml(senderProName)
   return sendProNotification(target, {
-    lineText: `${senderProName}さんから案件スレッドに新しいコメントがあります。\n${dashboardUrl}`,
+    lineText: `${senderProName}さんから案件スレッドに新しいコメントがあります。ダッシュボードの紹介タブからご確認ください。`,
     emailSubject: '案件スレッドに新しいコメントがあります',
     emailBodyHtml: emailShell(
       '案件スレッドのお知らせ',
-      `${safeSenderProName}さんから案件スレッドに新しいコメントが届いています。<br>ダッシュボードからご確認ください。`,
-      'ダッシュボードを開く',
-      dashboardUrl,
+      `${safeSenderProName}さんから案件スレッドに新しいコメントが届いています。<br>ダッシュボードの紹介タブからご確認ください。`,
     ),
   })
 }
@@ -346,16 +427,14 @@ export async function notifyBookingDeclinedToSender(
   target: ProNotifyTarget,
   receiverProName: string,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  // CEO決定(2026-08-04): 送り手宛の進捗通知にはリンクを付けない
   const safeReceiverProName = escapeHtml(receiverProName)
   return sendProNotification(target, {
-    lineText: `${receiverProName}さんが辞退しました。\n${dashboardUrl}`,
+    lineText: `${receiverProName}さんが辞退しました。`,
     emailSubject: `${receiverProName}さんが辞退しました`,
     emailBodyHtml: emailShell(
       '辞退のお知らせ',
       `${safeReceiverProName}さんは、今回のご紹介を辞退しました。`,
-      'ダッシュボードを開く',
-      dashboardUrl,
     ),
   })
 }
@@ -367,16 +446,14 @@ export async function notifyBookingCounterProposedToSender(
   target: ProNotifyTarget,
   receiverProName: string,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  // CEO決定(2026-08-04): 送り手宛の進捗通知にはリンクを付けない
   const safeReceiverProName = escapeHtml(receiverProName)
   return sendProNotification(target, {
-    lineText: `${receiverProName}さんが別日時を提案しました(クライアントの返答待ち)。\n${dashboardUrl}`,
+    lineText: `${receiverProName}さんが別日時を提案しました(クライアントの返答待ち)。`,
     emailSubject: `${receiverProName}さんが別日時を提案しました`,
     emailBodyHtml: emailShell(
       '別日時提案のお知らせ',
       `${safeReceiverProName}さんが、クライアントへ別の日時を提案しました。<br>クライアントの返答待ちです。`,
-      'ダッシュボードを開く',
-      dashboardUrl,
     ),
   })
 }
@@ -388,16 +465,14 @@ export async function notifyBookingCompletedToSender(
   target: ProNotifyTarget,
   clientNickname: string,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  // CEO決定(2026-08-04): 送り手宛の進捗通知にはリンクを付けない
   const safeClientNickname = escapeHtml(clientNickname)
   return sendProNotification(target, {
-    lineText: `${clientNickname}さんとのセッションが完了しました。\n${dashboardUrl}`,
+    lineText: `${clientNickname}さんとのセッションが完了しました。`,
     emailSubject: `${clientNickname}さんとのセッションが完了しました`,
     emailBodyHtml: emailShell(
       'セッション完了のお知らせ',
       `${safeClientNickname}さんとのセッションが完了しました。`,
-      'ダッシュボードを開く',
-      dashboardUrl,
     ),
   })
 }
@@ -501,16 +576,14 @@ export async function notifyInviteRegistered(
   target: ProNotifyTarget,
   registeredProName: string,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  // CEO決定(2026-08-04): 送り手宛の進捗通知にはリンクを付けない
   const safeRegisteredProName = escapeHtml(registeredProName)
   return sendProNotification(target, {
-    lineText: `${registeredProName}さんが招待から登録を完了しました。\n${dashboardUrl}`,
+    lineText: `${registeredProName}さんが招待から登録を完了しました。`,
     emailSubject: `${registeredProName}さんが登録を完了しました`,
     emailBodyHtml: emailShell(
       '招待登録完了のお知らせ',
-      `${safeRegisteredProName}さんが、あなたの招待からREAL PROOFへの登録を完了しました。<br>ダッシュボードからリストの状態をご確認いただけます。`,
-      'ダッシュボードを開く',
-      dashboardUrl,
+      `${safeRegisteredProName}さんが、あなたの招待からREAL PROOFへの登録を完了しました。`,
     ),
   })
 }

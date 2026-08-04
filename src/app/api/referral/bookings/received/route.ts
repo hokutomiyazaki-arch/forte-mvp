@@ -11,9 +11,10 @@ import {
   referralListFooterHtml,
   emailShell,
   escapeHtml,
+  buildBookingLocationContactHtml,
 } from '@/lib/referral-notify'
 import { formatSlot, formatSlotWithWeekday, parseSlot } from '@/lib/referral-format'
-import { isReferralPaymentEnabled, REFERRAL_MIN_FEE_JPY } from '@/lib/feature-flags'
+import { isReferralPaymentEnabled, REFERRAL_MIN_FEE_JPY, REFERRAL_FEE_TOTAL_BPS } from '@/lib/feature-flags'
 // 中1レビュー指摘から継続: Stripe importはこのAPI routeに持たせない(Webpackチャンクグラフ対策)。
 // Checkout Session作成+メール送付(共通処理)はsrc/lib/referral-payment.tsの関数呼び出しに委譲する。
 import { issueFeePaymentLinkAndNotify } from '@/lib/referral-payment'
@@ -21,8 +22,6 @@ import { issueFeePaymentLinkAndNotify } from '@/lib/referral-payment'
 export const dynamic = 'force-dynamic'
 
 const APP_URL = 'https://realproof.jp'
-/** §2-4ステージ3(予約フィー方式)のフォールバック用。通常は保存済みの fee_total_bps を使う。 */
-const DEFAULT_FEE_TOTAL_BPS = 3360
 /** ライフサイクル改善(タスクA・逆指定): counter提案でexpires_atを48hリセットする際に使う */
 const COUNTER_EXPIRES_HOURS = 48
 
@@ -589,7 +588,7 @@ export async function PATCH(request: NextRequest) {
     // 予約フィーがStripeの最低決済額以上の場合のみ、確定と同時に予約フィー決済リンクを発行する。
     // この場合は「成立」ではなく「支払いのご案内」を送る(成立通知は支払い完了時にapplyReferralCheckoutSession
     // から送る。src/lib/referral-payment.ts参照)。
-    const feeTotalBps = booking.fee_total_bps ?? DEFAULT_FEE_TOTAL_BPS
+    const feeTotalBps = booking.fee_total_bps ?? REFERRAL_FEE_TOTAL_BPS
     const feeAmountJpy = booking.price_jpy > 0 ? Math.floor((booking.price_jpy * feeTotalBps) / 10000) : 0
     const shouldCollectFeePayment =
       paymentEnabled &&
@@ -614,7 +613,8 @@ export async function PATCH(request: NextRequest) {
         receiverProName: ownPro.name,
         confirmedSlotText,
         successUrl: `${listUrlForCheckout}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-        cancelUrl: `${listUrlForCheckout}?payment=canceled&session_id={CHECKOUT_SESSION_ID}`,
+        // バグ報告(2026-08-04)対応: キャンセル後の戻り先を予約ページに変更(再開の「お支払いに進む」ボタンがある)
+        cancelUrl: `${APP_URL}/booking/${booking.id}?payment=canceled`,
         listUrl: listUrlForCheckout,
       })
       checkoutCreated = paymentResult.success
@@ -631,12 +631,38 @@ export async function PATCH(request: NextRequest) {
             ? `<p style="margin-top:12px;color:#555;font-size:13px;line-height:1.7;">紹介元の先生からのメッセージ:<br>「${escapeHtml(senderComment)}」</p>`
             : ''
           const safeOwnProName = escapeHtml(ownPro.name)
+          // CEO決定(2026-08-04): 成立時のクライアント宛メールに、受け手プロの場所・連絡先を自動掲載する。
+          // レビュー重大2: 載せるのは「本当に決済対象外(not_required)」の成立時のみ。
+          // 決済リンク発行失敗のfail open(後からcronが支払い案内を再送する)では開示しない。
+          let accessHtml = ''
+          if (!shouldCollectFeePayment) {
+            const { data: receiverAccessInfo } = await supabase
+              .from('professionals')
+              .select(
+                'address, nearest_station, walk_minutes, access_note, google_maps_url, booking_url, website_url, phone_number, contact_email'
+              )
+              .eq('id', ownPro.id)
+              .maybeSingle()
+            accessHtml = buildBookingLocationContactHtml(
+              receiverAccessInfo || {
+                address: null,
+                nearest_station: null,
+                walk_minutes: null,
+                access_note: null,
+                google_maps_url: null,
+                booking_url: null,
+                website_url: null,
+                phone_number: null,
+                contact_email: null,
+              }
+            )
+          }
           await notifyClientByEmail(
             { userId: clientUserId, email: booking.client_email },
             `${ownPro.name}さんとのご紹介予約が確定しました`,
             emailShell(
               'ご相談確定のお知らせ',
-              `${confirmedSlotText ? `${confirmedSlotText} に確定しました。` : 'ご相談の日時が確定しました。'}<br>担当: ${safeOwnProName}さん${senderQuote}${referralListFooterHtml(listUrl)}`
+              `${confirmedSlotText ? `${confirmedSlotText} に確定しました。` : 'ご相談の日時が確定しました。'}<br>担当: ${safeOwnProName}さん${senderQuote}${accessHtml}${referralListFooterHtml(listUrl)}`
             )
           )
         }
