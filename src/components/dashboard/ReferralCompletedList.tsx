@@ -81,7 +81,7 @@ export default function ReferralCompletedList({ proId }: Props) {
               }}
             >
               <div style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6 }}>
-                <strong>{item.client_nickname}さん</strong>との相談は完了しています
+                <strong>{item.client_nickname}さん</strong>とのセッションは完了しています
                 {item.sender_pro?.name && (
                   <span style={{ color: '#6B7280' }}>(紹介元: {item.sender_pro.name}さん)</span>
                 )}

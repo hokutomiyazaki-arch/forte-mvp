@@ -11,6 +11,7 @@ import { cache } from 'react'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { sanitizeVoiceForReferral } from '@/lib/voice-sanitize'
 import { isAcceptingOpen } from '@/lib/referral-accepting'
+import { isReferralPaymentEnabled } from '@/lib/feature-flags'
 
 type SupabaseAdmin = ReturnType<typeof getSupabaseAdmin>
 
@@ -559,4 +560,54 @@ export async function verifyReceiverAllowedInList(
   }
 
   return true
+}
+
+export interface BookingCapabilityData {
+  id: string
+  status: string
+  receiverProName: string
+  counterSlots: string[]
+  expiresAt: string | null
+  paymentStatus: string | null
+  listSlug: string | null
+}
+
+/**
+ * ライフサイクル改善(タスクB): クライアントの日時選択ページ(/booking/[booking_id])用の
+ * 軽量データ取得。/r/[slug] page.tsx と同じ「Server Componentから直接呼ぶ集約関数」の流儀を踏襲する
+ * (このページも認証不要・秘匿URLで閲覧される公開ページのため)。
+ * クライアントの氏名・電話番号・メールアドレスは絶対に含めない(第三者閲覧に備える)。
+ */
+export async function getBookingCapabilityData(bookingId: string): Promise<BookingCapabilityData | null> {
+  if (!bookingId) return null
+
+  const supabase = getSupabaseAdmin()
+  const paymentEnabled = isReferralPaymentEnabled()
+  const baseSelect = 'id, status, receiver_pro_id, preferred_slots, expires_at, referral_lists(slug)'
+  const select = paymentEnabled ? `${baseSelect}, payment_status` : baseSelect
+
+  const { data } = await supabase.from('referral_bookings').select(select).eq('id', bookingId).maybeSingle()
+  if (!data) return null
+  const row = data as any
+
+  const { data: receiverPro } = await supabase
+    .from('professionals')
+    .select('name')
+    .eq('id', row.receiver_pro_id)
+    .maybeSingle()
+
+  const rawCounterSlots = row.preferred_slots?.counter_slots
+  const counterSlots = Array.isArray(rawCounterSlots)
+    ? rawCounterSlots.filter((s: unknown): s is string => typeof s === 'string')
+    : []
+
+  return {
+    id: row.id,
+    status: row.status,
+    receiverProName: receiverPro?.name || 'プロ',
+    counterSlots,
+    expiresAt: row.expires_at,
+    paymentStatus: paymentEnabled ? row.payment_status || null : null,
+    listSlug: row.referral_lists?.slug || null,
+  }
 }

@@ -3,11 +3,16 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { getOwnPro } from '@/lib/referral-auth'
 import {
   notifyBookingConfirmedToSender,
+  notifyBookingDeclinedToSender,
+  notifyBookingCounterProposedToSender,
+  notifyBookingCompletedToSender,
+  notifyCounterProposedToClient,
   notifyClientByEmail,
+  referralListFooterHtml,
   emailShell,
   escapeHtml,
 } from '@/lib/referral-notify'
-import { formatSlot } from '@/lib/referral-format'
+import { formatSlot, formatSlotWithWeekday, parseSlot } from '@/lib/referral-format'
 import { isReferralPaymentEnabled, REFERRAL_MIN_FEE_JPY } from '@/lib/feature-flags'
 // 中1レビュー指摘から継続: Stripe importはこのAPI routeに持たせない(Webpackチャンクグラフ対策)。
 // Checkout Session作成+メール送付(共通処理)はsrc/lib/referral-payment.tsの関数呼び出しに委譲する。
@@ -18,11 +23,18 @@ export const dynamic = 'force-dynamic'
 const APP_URL = 'https://realproof.jp'
 /** §2-4ステージ3(予約フィー方式)のフォールバック用。通常は保存済みの fee_total_bps を使う。 */
 const DEFAULT_FEE_TOTAL_BPS = 3360
+/** ライフサイクル改善(タスクA・逆指定): counter提案でexpires_atを48hリセットする際に使う */
+const COUNTER_EXPIRES_HOURS = 48
 
 interface PreferredSlots {
   slots?: (string | null)[]
   note?: string | null
   confirmed_index?: number
+  /** ライフサイクル改善(タスクA): 受け手が提案した別日時(逆指定)。requestedのまま保持する。 */
+  counter_slots?: string[]
+  counter_proposed_at?: string
+  /** ライフサイクル改善(タスクB): クライアントが承諾したcounter_slotsのindex */
+  confirmed_counter_index?: number
 }
 
 /**
@@ -190,10 +202,11 @@ export async function GET() {
 
 /**
  * PATCH /api/referral/bookings/received
- * body: { booking_id, action: 'confirm' | 'decline' | 'complete', confirmed_index? }
- * 受け手プロ本人のみ操作可。confirm/decline は requested のみ、expires_at超過は409。
- * §2-4-7(決済なし版)/中11レビュー指摘: complete は confirmed のみ→completed。通知は不要
- * (Phase 2のプルーフ依頼パイプラインで扱う)。
+ * body: { booking_id, action: 'confirm' | 'decline' | 'complete' | 'counter', confirmed_index?, counter_slots? }
+ * 受け手プロ本人のみ操作可。confirm/decline/counter は requested のみ、expires_at超過は409。
+ * §2-4-7(決済なし版)/中11レビュー指摘: complete は confirmed のみ→completed。
+ * ライフサイクル改善(タスクA・逆指定): counter は、受け手が別日時を提案する。requestedのまま
+ * preferred_slots.counter_slots に保存し、expires_atを48hリセットする(クライアントの返答待ち)。
  */
 export async function PATCH(request: NextRequest) {
   try {
@@ -207,7 +220,10 @@ export async function PATCH(request: NextRequest) {
     const action = body.action
     const confirmedIndex = typeof body.confirmed_index === 'number' ? body.confirmed_index : null
 
-    if (!bookingId || (action !== 'confirm' && action !== 'decline' && action !== 'complete')) {
+    if (
+      !bookingId ||
+      (action !== 'confirm' && action !== 'decline' && action !== 'complete' && action !== 'counter')
+    ) {
       return NextResponse.json({ error: 'invalid_params' }, { status: 400 })
     }
 
@@ -249,6 +265,30 @@ export async function PATCH(request: NextRequest) {
         console.error('[api/referral/bookings/received] PATCH complete error:', completeError)
         return NextResponse.json({ error: 'failed_to_update' }, { status: 500 })
       }
+
+      // ライフサイクル改善(タスクD): 完了時、送り手プロへ通知する(失敗しても完了処理自体は成功扱い)。
+      try {
+        if (booking.sender_pro_id) {
+          const { data: senderPro } = await supabase
+            .from('professionals')
+            .select('name, contact_email, line_messaging_user_id')
+            .eq('id', booking.sender_pro_id)
+            .maybeSingle()
+          if (senderPro) {
+            await notifyBookingCompletedToSender(
+              {
+                name: senderPro.name,
+                contact_email: senderPro.contact_email,
+                line_messaging_user_id: senderPro.line_messaging_user_id,
+              },
+              booking.clients?.nickname || 'クライアント',
+            )
+          }
+        }
+      } catch (notifyErr) {
+        console.error('[api/referral/bookings/received] complete sender notify error:', notifyErr)
+      }
+
       return NextResponse.json({ success: true, status: 'completed' })
     }
 
@@ -285,7 +325,7 @@ export async function PATCH(request: NextRequest) {
             emailShell(
               'ご相談について',
               `${escapeHtml(ownPro.name)}さんへのご相談は、今回はご希望に添えませんでした。<br>他の先生もご紹介できますので、よろしければご覧ください。`,
-              '他の先生を見る',
+              '他の先生への相談はこちら',
               listUrl
             )
           )
@@ -294,10 +334,125 @@ export async function PATCH(request: NextRequest) {
         console.error('[api/referral/bookings/received] decline notify error:', notifyErr)
       }
 
+      // 送り手プロへ通知(タスクD・失敗しても処理自体は成功扱い)
+      try {
+        if (booking.sender_pro_id) {
+          const { data: senderPro } = await supabase
+            .from('professionals')
+            .select('name, contact_email, line_messaging_user_id')
+            .eq('id', booking.sender_pro_id)
+            .maybeSingle()
+          if (senderPro) {
+            await notifyBookingDeclinedToSender(
+              {
+                name: senderPro.name,
+                contact_email: senderPro.contact_email,
+                line_messaging_user_id: senderPro.line_messaging_user_id,
+              },
+              ownPro.name,
+            )
+          }
+        }
+      } catch (notifyErr) {
+        console.error('[api/referral/bookings/received] decline sender notify error:', notifyErr)
+      }
+
       return NextResponse.json({ success: true, status: 'cancelled' })
     }
 
+    if (action === 'counter') {
+      // レビューFAIL修正(軽微1): 再提案は1回まで(expires_atの無期限延長防止)。
+      // UIは提案済み表示に切り替わるため隠れるが、直叩き対策として409で明示的に止める。
+      if ((booking.preferred_slots?.counter_slots?.length || 0) > 0) {
+        return NextResponse.json({ error: 'counter_already_proposed' }, { status: 409 })
+      }
+
+      // §2-4 bookings POSTのparseSlotと同等の+09:00補正を適用(datetime-local由来の文字列)
+      const rawCounterSlots = Array.isArray(body.counter_slots) ? body.counter_slots : []
+      const parsedCounterSlots = rawCounterSlots
+        .map((s: unknown) => parseSlot(s))
+        .filter((s: string | null): s is string => !!s)
+        .slice(0, 3)
+
+      if (parsedCounterSlots.length === 0) {
+        return NextResponse.json({ error: 'counter_slot_required' }, { status: 400 })
+      }
+
+      const counterExpiresAt = new Date(Date.now() + COUNTER_EXPIRES_HOURS * 60 * 60 * 1000).toISOString()
+      const updatedSlotsForCounter: PreferredSlots = {
+        ...(booking.preferred_slots || {}),
+        counter_slots: parsedCounterSlots,
+        counter_proposed_at: new Date().toISOString(),
+      }
+
+      // レビュー指摘踏襲(重大1と同種): 0行(既に他経路がstatusを進めていた)は409で止める。
+      const { data: updatedCounterRows, error: counterError } = await supabase
+        .from('referral_bookings')
+        .update({ preferred_slots: updatedSlotsForCounter, expires_at: counterExpiresAt })
+        .eq('id', bookingId)
+        .eq('status', 'requested')
+        .select('id')
+
+      if (counterError) {
+        console.error('[api/referral/bookings/received] PATCH counter error:', counterError)
+        return NextResponse.json({ error: 'failed_to_update' }, { status: 500 })
+      }
+      if (!updatedCounterRows || updatedCounterRows.length === 0) {
+        return NextResponse.json({ error: 'not_pending' }, { status: 409 })
+      }
+
+      const bookingUrl = `${APP_URL}/booking/${bookingId}`
+      const slotTexts = parsedCounterSlots
+        .map((iso) => formatSlotWithWeekday(iso))
+        .filter((t): t is string => !!t)
+
+      // クライアントへ通知(失敗しても処理自体は成功扱い)
+      try {
+        if (clientUserId || booking.client_email) {
+          await notifyCounterProposedToClient(
+            { userId: clientUserId, email: booking.client_email },
+            ownPro.name,
+            slotTexts,
+            bookingUrl,
+            listUrl,
+          )
+        }
+      } catch (notifyErr) {
+        console.error('[api/referral/bookings/received] counter client notify error:', notifyErr)
+      }
+
+      // 送り手プロへ通知(クライアントの返答待ちであることを明示)
+      try {
+        if (booking.sender_pro_id) {
+          const { data: senderPro } = await supabase
+            .from('professionals')
+            .select('name, contact_email, line_messaging_user_id')
+            .eq('id', booking.sender_pro_id)
+            .maybeSingle()
+          if (senderPro) {
+            await notifyBookingCounterProposedToSender(
+              {
+                name: senderPro.name,
+                contact_email: senderPro.contact_email,
+                line_messaging_user_id: senderPro.line_messaging_user_id,
+              },
+              ownPro.name,
+            )
+          }
+        }
+      } catch (notifyErr) {
+        console.error('[api/referral/bookings/received] counter sender notify error:', notifyErr)
+      }
+
+      return NextResponse.json({ success: true, status: 'requested', counter_proposed: true })
+    }
+
     // action === 'confirm'
+    // レビューFAIL修正(中1): 既に別日時を提案済み(counter_slots実在)の間は、通常の3枠confirmを
+    // 通さない(クライアントの返答を待たずに受け手が別の枠を確定できてしまう穴を閉塞)。
+    if ((booking.preferred_slots?.counter_slots?.length || 0) > 0) {
+      return NextResponse.json({ error: 'counter_pending' }, { status: 409 })
+    }
     const slots = Array.isArray(booking.preferred_slots?.slots) ? booking.preferred_slots!.slots! : []
     if (confirmedIndex === null || confirmedIndex < 0 || confirmedIndex > 2 || !slots[confirmedIndex]) {
       return NextResponse.json({ error: 'invalid_slot_index' }, { status: 400 })
@@ -347,7 +502,7 @@ export async function PATCH(request: NextRequest) {
 
       // レビュー指摘(中1): 「決済リンク発行+メール送付」はconfirm時とcron再試行の両方から
       // 同じ関数を呼ぶ(src/lib/referral-payment.ts参照)。UPDATE 0行時はリンクを自動失効させる。
-      checkoutCreated = await issueFeePaymentLinkAndNotify({
+      const paymentResult = await issueFeePaymentLinkAndNotify({
         bookingId: booking.id,
         priceJpy: booking.price_jpy,
         feeAmountJpy,
@@ -358,7 +513,9 @@ export async function PATCH(request: NextRequest) {
         confirmedSlotText,
         successUrl: `${listUrlForCheckout}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
         cancelUrl: `${listUrlForCheckout}?payment=canceled&session_id={CHECKOUT_SESSION_ID}`,
+        listUrl: listUrlForCheckout,
       })
+      checkoutCreated = paymentResult.success
     }
 
     // 決済無効/対象外、または決済リンク発行に失敗した場合(fail open): 従来通り即時に
@@ -374,10 +531,10 @@ export async function PATCH(request: NextRequest) {
           const safeOwnProName = escapeHtml(ownPro.name)
           await notifyClientByEmail(
             { userId: clientUserId, email: booking.client_email },
-            `${ownPro.name}さんとのご相談が確定しました`,
+            `${ownPro.name}さんとのご予約が確定しました`,
             emailShell(
               'ご相談確定のお知らせ',
-              `${confirmedSlotText ? `${confirmedSlotText} に確定しました。` : 'ご相談の日時が確定しました。'}<br>担当: ${safeOwnProName}さん${senderQuote}`
+              `${confirmedSlotText ? `${confirmedSlotText} に確定しました。` : 'ご相談の日時が確定しました。'}<br>担当: ${safeOwnProName}さん${senderQuote}${referralListFooterHtml(listUrl)}`
             )
           )
         }

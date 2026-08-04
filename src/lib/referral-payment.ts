@@ -29,9 +29,12 @@ import {
   notifyBookingConfirmedToSender,
   notifyBookingPaymentCompletedToReceiver,
   notifyClientByEmail,
+  referralListFooterHtml,
   emailShell,
   escapeHtml,
 } from '@/lib/referral-notify'
+
+const APP_URL = 'https://realproof.jp'
 
 function getReferralStripe(): Stripe {
   return new Stripe(process.env.REFERRAL_STRIPE_SECRET_KEY!)
@@ -123,8 +126,10 @@ export async function cancelReferralAuthorization(paymentIntentId: string): Prom
  * UPDATEが0行(二重confirm等の競合で既に他経路がawaiting/paid等へ進めていた)の場合、
  * 誰も支払えない決済リンクを残さないよう、作成済みのCheckout Sessionを即座に失効させる。
  *
- * 戻り値: true=決済リンクを発行しメール送信を試みた(呼び出し元は「成立」扱いの通知を送らない)。
- *        false=決済リンクを発行できなかった(呼び出し元はfail openで従来の無決済フローへ)。
+ * 戻り値: success=true=決済リンクを発行しメール送信を試みた(呼び出し元は「成立」扱いの通知を送らない)。
+ *        checkoutUrl=発行したCheckout SessionのURL(呼び出し元がクライアントを直接遷移させたい場合に使う。
+ *        例: クライアントの日時選択ページ(/booking/[booking_id])からのaccept)。
+ *        success=false=決済リンクを発行できなかった(呼び出し元はfail openで従来の無決済フローへ)。
  */
 export async function issueFeePaymentLinkAndNotify(params: {
   bookingId: string
@@ -137,7 +142,9 @@ export async function issueFeePaymentLinkAndNotify(params: {
   confirmedSlotText: string | null
   successUrl: string
   cancelUrl: string
-}): Promise<boolean> {
+  /** ライフサイクル改善(タスクC): メール末尾に紹介リストリンクを添える。未指定時はAPP_URL。 */
+  listUrl?: string
+}): Promise<{ success: boolean; checkoutUrl: string | null }> {
   const supabase = getSupabaseAdmin()
 
   const checkout = await createReferralCheckoutSession({
@@ -151,7 +158,7 @@ export async function issueFeePaymentLinkAndNotify(params: {
 
   if (!checkout) {
     console.error(`[referral-payment] createReferralCheckoutSession failed for booking ${params.bookingId}`)
-    return false
+    return { success: false, checkoutUrl: null }
   }
 
   const { data: updatedRows, error: paymentUpdateError } = await supabase
@@ -174,11 +181,12 @@ export async function issueFeePaymentLinkAndNotify(params: {
     }
     // レビュー指摘(重大1): 払える死んだリンクを残さない。失敗はログのみ。
     await expireReferralCheckoutSession(checkout.sessionId)
-    return false
+    return { success: false, checkoutUrl: null }
   }
 
   const residualJpy = params.priceJpy - params.feeAmountJpy
   const safeReceiverProName = escapeHtml(params.receiverProName)
+  const listUrl = params.listUrl || APP_URL
   try {
     if (params.clientUserId || params.clientEmail) {
       await notifyClientByEmail(
@@ -188,7 +196,8 @@ export async function issueFeePaymentLinkAndNotify(params: {
           'ご相談確定・お支払いのご案内',
           `${params.confirmedSlotText ? `${params.confirmedSlotText} に確定しました。` : 'ご相談の日時が確定しました。'}<br>担当: ${safeReceiverProName}さん<br><br>` +
             `予約フィー ¥${params.feeAmountJpy.toLocaleString()} のお支払いで予約が成立します(24時間以内)。<br>` +
-            `当日は残額 ¥${residualJpy.toLocaleString()} を${safeReceiverProName}さんに直接お支払いください(合計 ¥${params.priceJpy.toLocaleString()} は変わりません)。`,
+            `当日は残額 ¥${residualJpy.toLocaleString()} を${safeReceiverProName}さんに直接お支払いください(合計 ¥${params.priceJpy.toLocaleString()} は変わりません)。` +
+            referralListFooterHtml(listUrl),
           'お支払いを行う',
           checkout.url
         )
@@ -198,7 +207,7 @@ export async function issueFeePaymentLinkAndNotify(params: {
     console.error('[referral-payment] payment-link notify error:', notifyErr)
   }
 
-  return true
+  return { success: true, checkoutUrl: checkout.url }
 }
 
 /** 競合(webhookとフォールバックの同時実行等)で更新0行だった場合、DBの実状態を再取得して返す。 */
@@ -228,7 +237,9 @@ export async function applyReferralCheckoutSession(
   const supabase = getSupabaseAdmin()
   const { data: booking } = await supabase
     .from('referral_bookings')
-    .select('id, payment_status, status, sender_pro_id, receiver_pro_id, client_id, client_email')
+    .select(
+      'id, payment_status, status, sender_pro_id, receiver_pro_id, client_id, client_email, referral_lists(slug)'
+    )
     .eq('id', bookingId)
     .maybeSingle()
 
@@ -316,12 +327,14 @@ export async function applyReferralCheckoutSession(
     }
 
     if (client?.user_id || booking.client_email) {
+      const slug = (booking as any).referral_lists?.slug || ''
+      const listUrl = slug ? `${APP_URL}/r/${slug}` : APP_URL
       await notifyClientByEmail(
         { userId: client?.user_id, email: booking.client_email },
         'お支払いが完了し、予約が成立しました',
         emailShell(
           '予約成立のお知らせ',
-          'お支払いが完了し、予約が成立しました。当日はよろしくお願いいたします。'
+          `お支払いが完了し、予約が成立しました。当日はよろしくお願いいたします。${referralListFooterHtml(listUrl)}`
         )
       )
     }

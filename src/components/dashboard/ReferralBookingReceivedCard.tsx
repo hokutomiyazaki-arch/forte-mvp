@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { formatSlot } from '@/lib/referral-format'
+import { formatSlot, formatSlotWithWeekday } from '@/lib/referral-format'
 import BookingThread from '@/components/dashboard/BookingThread'
 
 interface BookingItem {
@@ -10,7 +10,15 @@ interface BookingItem {
   menu_id: string | null
   menu_name: string | null
   theme_tags: string[] | null
-  preferred_slots: { slots?: (string | null)[]; note?: string | null; confirmed_index?: number } | null
+  preferred_slots: {
+    slots?: (string | null)[]
+    note?: string | null
+    confirmed_index?: number
+    /** ライフサイクル改善(タスクA・逆指定): 受け手が提案した別日時。クライアントの返答待ちの目印。 */
+    counter_slots?: string[]
+    /** ライフサイクル改善(タスクB): クライアントが承諾したcounter_slotsのindex */
+    confirmed_counter_index?: number
+  } | null
   status: 'requested' | 'confirmed'
   price_jpy: number
   /** §2-4ステージ3(予約フィー方式): 決済有効時のみ入る。金額・連絡先は含まれない(status相当のみ)。 */
@@ -39,6 +47,9 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
   const [loading, setLoading] = useState(true)
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [selectedSlot, setSelectedSlot] = useState<Record<string, number>>({})
+  // ライフサイクル改善(タスクA・逆指定): 「別の日時を提案する」の開閉と入力値(bookingIdごと)
+  const [counterOpenId, setCounterOpenId] = useState<string | null>(null)
+  const [counterInputs, setCounterInputs] = useState<Record<string, [string, string, string]>>({})
 
   useEffect(() => {
     fetch('/api/referral/bookings/received', { cache: 'no-store' })
@@ -69,7 +80,13 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
       if (res.ok) {
         setItems((prev) => prev.filter((i) => i.id !== bookingId))
       } else {
-        window.alert('確定に失敗しました')
+        // レビューFAIL修正(中1): 別日時を提案済みの間は通常confirmが409で拒否される
+        const data = await res.json().catch(() => ({}))
+        if (data.error === 'counter_pending') {
+          window.alert('別日時を提案済みです。クライアントの返答をお待ちください')
+        } else {
+          window.alert('確定に失敗しました')
+        }
       }
     } finally {
       setProcessingId(null)
@@ -89,6 +106,46 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
         setItems((prev) => prev.filter((i) => i.id !== bookingId))
       } else {
         window.alert('処理に失敗しました')
+      }
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
+  /** ライフサイクル改善(タスクA・逆指定): 別日時(最大3件・第1のみ必須)を提案する */
+  async function submitCounter(bookingId: string) {
+    const inputs = counterInputs[bookingId] || ['', '', '']
+    const [slot1, slot2, slot3] = inputs
+    if (!slot1) {
+      window.alert('第1希望の日時を入力してください')
+      return
+    }
+    setProcessingId(bookingId)
+    try {
+      const res = await fetch('/api/referral/bookings/received', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({
+          booking_id: bookingId,
+          action: 'counter',
+          counter_slots: [slot1, slot2 || null, slot3 || null].filter(Boolean),
+        }),
+      })
+      if (res.ok) {
+        setCounterOpenId(null)
+        // 一覧の再取得(counter_slotsを反映した「提案済み」表示に切り替えるため)
+        const refreshed = await fetch('/api/referral/bookings/received', { cache: 'no-store' })
+        const data = await refreshed.json().catch(() => null)
+        if (data?.bookings) setItems(data.bookings)
+      } else {
+        // レビューFAIL修正(軽微1): 再提案は1回まで(UIは提案済み表示で隠れるが直叩き対策の文言)
+        const data = await res.json().catch(() => ({}))
+        if (data.error === 'counter_already_proposed') {
+          window.alert('既に別日時を提案済みです')
+        } else {
+          window.alert('提案の送信に失敗しました')
+        }
       }
     } finally {
       setProcessingId(null)
@@ -132,6 +189,9 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
         const slots = item.preferred_slots?.slots || []
         const theme = item.theme_tags?.[0] || null
         const note = item.preferred_slots?.note || null
+        const counterProposed = (item.preferred_slots?.counter_slots?.length || 0) > 0
+        const isCounterOpen = counterOpenId === item.id
+        const counterInput = counterInputs[item.id] || ['', '', '']
         return (
           <div
             key={item.id}
@@ -152,76 +212,206 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
             {item.menu_name && <div style={{ fontSize: 12, color: '#555', marginBottom: 4 }}>メニュー: {item.menu_name}</div>}
             {note && <div style={{ fontSize: 12, color: '#555', marginBottom: 8 }}>補足: {note}</div>}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
-              {slots.map((slot, i) =>
-                slot ? (
-                  <label
-                    key={i}
+            {counterProposed ? (
+              <>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: '#B26A00',
+                    background: '#FFF3E0',
+                    borderRadius: 8,
+                    padding: '8px 10px',
+                    marginBottom: 10,
+                  }}
+                >
+                  別日時を提案済み・クライアントの返答待ちです
+                </div>
+                <button
+                  onClick={() => decline(item.id)}
+                  disabled={processingId === item.id}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    border: '1px solid #D1D5DB',
+                    background: '#fff',
+                    color: '#6B7280',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: processingId === item.id ? 'default' : 'pointer',
+                    opacity: processingId === item.id ? 0.6 : 1,
+                  }}
+                >
+                  辞退する
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                  {slots.map((slot, i) =>
+                    slot ? (
+                      <label
+                        key={i}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          fontSize: 12,
+                          color: '#1A1A2E',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <input
+                          type="radio"
+                          name={`slot-${item.id}`}
+                          checked={selectedSlot[item.id] === i}
+                          onChange={() => setSelectedSlot((prev) => ({ ...prev, [item.id]: i }))}
+                        />
+                        第{i + 1}希望: {formatSlot(slot)}
+                      </label>
+                    ) : null
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                  <button
+                    onClick={() => confirm(item.id)}
+                    disabled={processingId === item.id}
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
+                      flex: 1,
+                      padding: '8px 12px',
+                      borderRadius: 8,
+                      border: 'none',
+                      background: '#C4A35A',
+                      color: '#fff',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: processingId === item.id ? 'default' : 'pointer',
+                      opacity: processingId === item.id ? 0.6 : 1,
+                    }}
+                  >
+                    この日時で確定する
+                  </button>
+                  <button
+                    onClick={() => decline(item.id)}
+                    disabled={processingId === item.id}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      borderRadius: 8,
+                      border: '1px solid #D1D5DB',
+                      background: '#fff',
+                      color: '#6B7280',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: processingId === item.id ? 'default' : 'pointer',
+                      opacity: processingId === item.id ? 0.6 : 1,
+                    }}
+                  >
+                    辞退する
+                  </button>
+                </div>
+
+                {!isCounterOpen ? (
+                  <button
+                    onClick={() => setCounterOpenId(item.id)}
+                    style={{
+                      width: '100%',
+                      padding: '6px 12px',
+                      borderRadius: 8,
+                      border: 'none',
+                      background: 'transparent',
+                      color: '#6B7280',
                       fontSize: 12,
-                      color: '#1A1A2E',
+                      fontWeight: 600,
+                      textDecoration: 'underline',
                       cursor: 'pointer',
                     }}
                   >
-                    <input
-                      type="radio"
-                      name={`slot-${item.id}`}
-                      checked={selectedSlot[item.id] === i}
-                      onChange={() => setSelectedSlot((prev) => ({ ...prev, [item.id]: i }))}
-                    />
-                    第{i + 1}希望: {formatSlot(slot)}
-                  </label>
-                ) : null
-              )}
-            </div>
-
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                onClick={() => confirm(item.id)}
-                disabled={processingId === item.id}
-                style={{
-                  flex: 1,
-                  padding: '8px 12px',
-                  borderRadius: 8,
-                  border: 'none',
-                  background: '#C4A35A',
-                  color: '#fff',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: processingId === item.id ? 'default' : 'pointer',
-                  opacity: processingId === item.id ? 0.6 : 1,
-                }}
-              >
-                この日時で確定する
-              </button>
-              <button
-                onClick={() => decline(item.id)}
-                disabled={processingId === item.id}
-                style={{
-                  flex: 1,
-                  padding: '8px 12px',
-                  borderRadius: 8,
-                  border: '1px solid #D1D5DB',
-                  background: '#fff',
-                  color: '#6B7280',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: processingId === item.id ? 'default' : 'pointer',
-                  opacity: processingId === item.id ? 0.6 : 1,
-                }}
-              >
-                辞退する
-              </button>
-            </div>
+                    別の日時を提案する
+                  </button>
+                ) : (
+                  <div style={{ marginTop: 6, padding: '10px 12px', background: '#fff', borderRadius: 8, border: '1px solid #D1D5DB' }}>
+                    <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 8 }}>
+                      クライアントに別日時を提案します(第1希望は必須)
+                    </div>
+                    {[0, 1, 2].map((i) => (
+                      <div key={i} style={{ marginBottom: 8 }}>
+                        <label style={{ fontSize: 11, color: '#6B7280', display: 'block', marginBottom: 4 }}>
+                          第{i + 1}希望{i > 0 ? '(任意)' : '(必須)'}
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={counterInput[i]}
+                          onChange={(e) => {
+                            const next: [string, string, string] = [...counterInput] as [string, string, string]
+                            next[i] = e.target.value
+                            setCounterInputs((prev) => ({ ...prev, [item.id]: next }))
+                          }}
+                          style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #D1D5DB', fontSize: 12, boxSizing: 'border-box' }}
+                        />
+                        {formatSlotWithWeekday(counterInput[i]) && (
+                          <div style={{ fontSize: 11, color: '#C4A35A', fontWeight: 600, marginTop: 2 }}>
+                            {formatSlotWithWeekday(counterInput[i])}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        onClick={() => submitCounter(item.id)}
+                        disabled={processingId === item.id}
+                        style={{
+                          flex: 1,
+                          padding: '8px 12px',
+                          borderRadius: 8,
+                          border: 'none',
+                          background: '#1A1A2E',
+                          color: '#fff',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: processingId === item.id ? 'default' : 'pointer',
+                          opacity: processingId === item.id ? 0.6 : 1,
+                        }}
+                      >
+                        この日時を提案する
+                      </button>
+                      <button
+                        onClick={() => setCounterOpenId(null)}
+                        style={{
+                          padding: '8px 12px',
+                          borderRadius: 8,
+                          border: '1px solid #D1D5DB',
+                          background: '#fff',
+                          color: '#6B7280',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        キャンセル
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )
       })}
 
       {proId &&
-        confirmedItems.map((item) => (
+        confirmedItems.map((item) => {
+          // レビューFAIL修正(重大1): counter経由(逆指定)/通常3枠経由の両方に対応し、null安全に
+          // 確定日時を表示する。counter_slots優先(存在する場合はそちらが実際に確定した日時)。
+          const confirmedSlotIso =
+            typeof item.preferred_slots?.confirmed_counter_index === 'number'
+              ? item.preferred_slots?.counter_slots?.[item.preferred_slots.confirmed_counter_index] || null
+              : typeof item.preferred_slots?.confirmed_index === 'number'
+                ? item.preferred_slots?.slots?.[item.preferred_slots.confirmed_index] || null
+                : null
+          const confirmedSlotText = formatSlot(confirmedSlotIso)
+          return (
           <div
             key={item.id}
             style={{
@@ -232,11 +422,16 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
             }}
           >
             <div style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6 }}>
-              <strong>{item.client_nickname}さん</strong>との相談が確定しています
+              <strong>{item.client_nickname}さん</strong>との予約が確定しています
               {item.sender_pro?.name && (
                 <span style={{ color: '#6B7280' }}>(紹介元: {item.sender_pro.name}さん)</span>
               )}
             </div>
+            {confirmedSlotText && (
+              <div style={{ fontSize: 12, color: '#2E7D32', fontWeight: 600, marginTop: 4 }}>
+                確定日時: {confirmedSlotText}
+              </div>
+            )}
             {/* §2-4ステージ3(予約フィー方式): 決済リンク送付済み・未払いの間はバッジを表示し、
                 完了ボタンをdisabledにする(レビュー指摘・重大2: フィー未収のまま完了させない)。
                 金額・連絡先は出さない。 */}
@@ -287,7 +482,8 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
               </p>
             )}
           </div>
-        ))}
+          )
+        })}
 
     </div>
   )

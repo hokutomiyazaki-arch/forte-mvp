@@ -227,18 +227,24 @@ export async function notifyBookingExpiredToSender(
   clientNickname: string,
   receiverProName: string,
   listUrl: string,
+  /**
+   * レビューFAIL修正(中2): counter_slots(逆指定の提案)が有る状態で失効した場合、
+   * 「受け手が確定しなかった」ではなく「クライアントが返答しなかった」が真因のため文言を分岐する。
+   */
+  opts?: { hadCounterProposal?: boolean },
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
   const safeClientNickname = escapeHtml(clientNickname)
   const safeReceiverProName = escapeHtml(receiverProName)
+  const bodyHtml = opts?.hadCounterProposal
+    ? `${safeClientNickname}さんへ提案した日時への返答が48時間以内に確認できず、${safeReceiverProName}さんの予約リクエストは失効しました。<br>別の候補もご紹介いただけます。`
+    : `${safeClientNickname}さんの${safeReceiverProName}さんへの予約リクエストは、48時間以内に確定のご連絡がなかったため失効しました。<br>別の候補もご紹介いただけます。`
+  const lineText = opts?.hadCounterProposal
+    ? `${clientNickname}さんからの返答がなく、提案した日時が48時間以内に確認されなかったため失効しました。\n${listUrl}`
+    : `${clientNickname}さんの${receiverProName}さんへの予約リクエストが、48時間以内に確定されなかったため失効しました。\n${listUrl}`
   return sendProNotification(target, {
-    lineText: `${clientNickname}さんの${receiverProName}さんへの予約リクエストが、48時間以内に確定されなかったため失効しました。\n${listUrl}`,
+    lineText,
     emailSubject: '予約リクエストが失効しました',
-    emailBodyHtml: emailShell(
-      '予約リクエスト失効のお知らせ',
-      `${safeClientNickname}さんの${safeReceiverProName}さんへの予約リクエストは、48時間以内に確定のご連絡がなかったため失効しました。<br>別の候補もご紹介いただけます。`,
-      'リストを見る',
-      listUrl,
-    ),
+    emailBodyHtml: emailShell('予約リクエスト失効のお知らせ', bodyHtml, 'リストを見る', listUrl),
   })
 }
 
@@ -317,6 +323,171 @@ export async function notifyBookingMessage(
       dashboardUrl,
     ),
   })
+}
+
+/**
+ * 全クライアント向けメールの末尾に紹介リストへの導線を追加する共通スニペット
+ * (ライフサイクル改善・CEO決定2026-08-04: 確定/決済案内・辞退・counter・失効・未払いキャンセルの
+ * 各メールに紹介リストリンクを常設する)。CTAボタン枠が別用途で埋まっているメールでは
+ * bodyHtmlの末尾に追記して使う。
+ */
+export function referralListFooterHtml(listUrl: string, label = '紹介リストに戻る'): string {
+  return `<br><br><a href="${listUrl}" style="color:#888888;font-size:12px;text-decoration:underline;">${label} →</a>`
+}
+
+/**
+ * ライフサイクル改善(タスクD): 受け手が辞退した際、送り手プロへ通知する。
+ */
+export async function notifyBookingDeclinedToSender(
+  target: ProNotifyTarget,
+  receiverProName: string,
+): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const safeReceiverProName = escapeHtml(receiverProName)
+  return sendProNotification(target, {
+    lineText: `${receiverProName}さんが辞退しました。\n${dashboardUrl}`,
+    emailSubject: `${receiverProName}さんが辞退しました`,
+    emailBodyHtml: emailShell(
+      '辞退のお知らせ',
+      `${safeReceiverProName}さんは、今回のご紹介を辞退しました。`,
+      'ダッシュボードを開く',
+      dashboardUrl,
+    ),
+  })
+}
+
+/**
+ * ライフサイクル改善(タスクA/D・逆指定): 受け手が別日時を提案した際、送り手プロへ通知する。
+ */
+export async function notifyBookingCounterProposedToSender(
+  target: ProNotifyTarget,
+  receiverProName: string,
+): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const safeReceiverProName = escapeHtml(receiverProName)
+  return sendProNotification(target, {
+    lineText: `${receiverProName}さんが別日時を提案しました(クライアントの返答待ち)。\n${dashboardUrl}`,
+    emailSubject: `${receiverProName}さんが別日時を提案しました`,
+    emailBodyHtml: emailShell(
+      '別日時提案のお知らせ',
+      `${safeReceiverProName}さんが、クライアントへ別の日時を提案しました。<br>クライアントの返答待ちです。`,
+      'ダッシュボードを開く',
+      dashboardUrl,
+    ),
+  })
+}
+
+/**
+ * ライフサイクル改善(タスクD): 紹介セッション完了時、送り手プロへ通知する。
+ */
+export async function notifyBookingCompletedToSender(
+  target: ProNotifyTarget,
+  clientNickname: string,
+): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const safeClientNickname = escapeHtml(clientNickname)
+  return sendProNotification(target, {
+    lineText: `${clientNickname}さんとのセッションが完了しました。\n${dashboardUrl}`,
+    emailSubject: `${clientNickname}さんとのセッションが完了しました`,
+    emailBodyHtml: emailShell(
+      'セッション完了のお知らせ',
+      `${safeClientNickname}さんとのセッションが完了しました。`,
+      'ダッシュボードを開く',
+      dashboardUrl,
+    ),
+  })
+}
+
+/**
+ * ライフサイクル改善(タスクB・レビューFAIL修正・重大1): クライアントが逆指定の提案日時の中から
+ * 1つを選択した際、受け手プロへ必ず通知する(決済対象/対象外に関わらず。確定した日時が
+ * 受け手に届かないと現場で確認しようがないため)。決済対象で支払い待ちの場合は
+ * awaitingPaymentで文言を分岐する(まだ「成立」ではなく「日時が選ばれた」段階であることを明示)。
+ */
+export async function notifyCounterAcceptedToReceiver(
+  target: ProNotifyTarget,
+  clientNickname: string,
+  confirmedSlotText: string | null,
+  opts?: { awaitingPayment?: boolean },
+): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const safeClientNickname = escapeHtml(clientNickname)
+  const slotPart = confirmedSlotText ? `${confirmedSlotText} で確定` : '日時を選択'
+  const paymentNote = opts?.awaitingPayment
+    ? 'クライアントのお支払い完了で予約成立となります。'
+    : ''
+  return sendProNotification(target, {
+    lineText: `${clientNickname}さんが日時を選択しました(${slotPart})。${paymentNote}\n${dashboardUrl}`,
+    emailSubject: 'クライアントが日時を選択しました',
+    emailBodyHtml: emailShell(
+      '日程確定のお知らせ',
+      `${safeClientNickname}さんが日時を選択しました(${slotPart})。${paymentNote ? `<br>${paymentNote}` : ''}`,
+      'ダッシュボードを開く',
+      dashboardUrl,
+    ),
+  })
+}
+
+/**
+ * ライフサイクル改善(タスクA): 受け手が別日時を提案した際、クライアントへ通知する。
+ * 提案日時は曜日付き整形済みテキストの配列で受け取る(サーバー側でformatSlotWithWeekdayを適用)。
+ */
+export async function notifyCounterProposedToClient(
+  target: { userId?: string | null; email?: string | null },
+  receiverProName: string,
+  slotTexts: string[],
+  bookingUrl: string,
+  listUrl: string,
+): Promise<{ sent: boolean }> {
+  const safeReceiverProName = escapeHtml(receiverProName)
+  const slotListHtml = slotTexts.map((t) => `<li>${escapeHtml(t)}</li>`).join('')
+  return notifyClientByEmail(
+    target,
+    `${receiverProName}さんから別日時のご提案があります`,
+    emailShell(
+      '別日時のご提案',
+      `ご希望の日時では難しいため、${safeReceiverProName}さんから別の日時のご提案があります。` +
+        `<ul style="padding-left:18px;margin:12px 0;">${slotListHtml}</ul>` +
+        `<strong>48時間以内</strong>にご返答がない場合は無効になります。` +
+        referralListFooterHtml(listUrl),
+      'ご希望の日時を選ぶ',
+      bookingUrl,
+    ),
+  )
+}
+
+/**
+ * ライフサイクル改善(タスクC): 相談リクエスト送信直後、クライアントへ受付メールを送る。
+ * 決済フロー対象かどうかで②③のステップ文言を分岐する(paymentFlowActive)。
+ */
+export async function notifyBookingReceivedToClient(
+  target: { userId?: string | null; email?: string | null },
+  receiverProName: string,
+  listUrl: string,
+  opts: { paymentFlowActive: boolean },
+): Promise<{ sent: boolean }> {
+  const safeReceiverProName = escapeHtml(receiverProName)
+  const step2 = opts.paymentFlowActive
+    ? '②確定すると、メールでお知らせします(予約フィーのお支払いご案内も届きます)'
+    : '②確定次第、メールでお知らせします'
+  const step3 = opts.paymentFlowActive
+    ? '③お支払いが完了すると予約が成立します(総額は変わりません。当日は残額のみ)'
+    : '③確定のご連絡をお待ちください'
+  return notifyClientByEmail(
+    target,
+    `${receiverProName}さんへのリクエストを受け付けました`,
+    emailShell(
+      'リクエスト受付のお知らせ',
+      `${safeReceiverProName}さんへのご相談リクエストを受け付けました。<br><br>` +
+        `<strong>今後の流れ</strong><br>` +
+        `①48時間以内に${safeReceiverProName}さんが日時を確定します(別日時のご提案の場合もあります)<br>` +
+        `${step2}<br>` +
+        `${step3}<br>` +
+        `④当日セッション<br>` +
+        `⑤完了` +
+        referralListFooterHtml(listUrl),
+    ),
+  )
 }
 
 /**

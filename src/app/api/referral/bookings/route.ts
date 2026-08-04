@@ -3,9 +3,12 @@ import { auth } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { ensureOwnClient, createGuestClient } from '@/lib/referral-auth'
 import { verifyReceiverAllowedInList } from '@/lib/referral-data'
-import { notifyBookingRequested } from '@/lib/referral-notify'
+import { notifyBookingRequested, notifyBookingReceivedToClient } from '@/lib/referral-notify'
 import { isAcceptingOpen } from '@/lib/referral-accepting'
 import { isReferralPaymentEnabled, REFERRAL_MIN_FEE_JPY } from '@/lib/feature-flags'
+import { parseSlot } from '@/lib/referral-format'
+
+const APP_URL = 'https://realproof.jp'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,21 +35,6 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 /** レビューFAIL修正(軽微5): 表記(+81/空白/括弧/ハイフン)は許容し、数字だけで10桁以上かで判定する */
 function isValidPhone(value: string): boolean {
   return value.replace(/\D/g, '').length >= 10
-}
-
-/**
- * datetime-local由来のオフセット無し文字列("2026-08-05T14:00")はUTC環境で
- * パースすると9時間ズレる。オフセット/Zが既に付いている場合はそのまま、
- * 無い場合は Asia/Tokyo(+09:00) を明示付与してからパースする。
- */
-function parseSlot(value: unknown): string | null {
-  if (typeof value !== 'string' || !value.trim()) return null
-  const raw = value.trim()
-  const hasOffset = /Z$|[+-]\d{2}:\d{2}$/.test(raw)
-  const withOffset = hasOffset ? raw : `${raw}+09:00`
-  const d = new Date(withOffset)
-  if (Number.isNaN(d.getTime())) return null
-  return d.toISOString()
 }
 
 /**
@@ -284,6 +272,21 @@ export async function POST(request: NextRequest) {
       )
     } catch (notifyErr) {
       console.error('[api/referral/bookings] notify error:', notifyErr)
+    }
+
+    // タスクC: 送信直後の受付メール(クライアント向け)。失敗しても予約リクエスト自体は成功扱い。
+    try {
+      const listUrl = list.slug ? `${APP_URL}/r/${list.slug}` : APP_URL
+      if (userId || clientEmail) {
+        await notifyBookingReceivedToClient(
+          { userId, email: clientEmail },
+          receiverPro.name,
+          listUrl,
+          { paymentFlowActive: paymentRequired }
+        )
+      }
+    } catch (notifyErr) {
+      console.error('[api/referral/bookings] receipt notify error:', notifyErr)
     }
 
     return NextResponse.json({ booking })

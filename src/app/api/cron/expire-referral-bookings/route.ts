@@ -52,8 +52,10 @@ export async function GET(req: NextRequest) {
   const supabase = getSupabaseAdmin()
   const nowIso = new Date().toISOString()
   const paymentEnabled = isReferralPaymentEnabled()
+  // レビューFAIL修正(中2): counter_slots(逆指定)の有無で48h失効メールの文言を分岐するため、
+  // preferred_slotsも取得する。
   const selectFields =
-    'id, list_id, sender_pro_id, receiver_pro_id, client_id, client_email, status, expires_at, clients(id, user_id, nickname), referral_lists(slug)'
+    'id, list_id, sender_pro_id, receiver_pro_id, client_id, client_email, status, expires_at, preferred_slots, clients(id, user_id, nickname), referral_lists(slug)'
 
   // 軽微指摘: 決済経路のdraftのまま25h(Checkoutセッションの24h自然失効+バッファ)経過した
   // 「ゴミ行」を掃除する(通知なし・ログのみ。ユーザーには何も届いていないため通知不要)。
@@ -278,6 +280,7 @@ export async function GET(req: NextRequest) {
               confirmedSlotText,
               successUrl: `${listUrl}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
               cancelUrl: `${listUrl}?payment=canceled&session_id={CHECKOUT_SESSION_ID}`,
+              listUrl,
             })
             // 成否はissueFeePaymentLinkAndNotify内でログ済み。失敗時もここでは握って次回cronに委ねる。
           } catch (rowErr) {
@@ -357,6 +360,10 @@ export async function GET(req: NextRequest) {
         const clientNickname = row.clients?.nickname || 'クライアント'
         const clientUserId = row.clients?.user_id || ''
         const clientEmail = row.client_email || null
+        // レビューFAIL修正(中2): counter_slots(逆指定の提案)が有る状態で失効した場合、
+        // 「受け手が確定しなかった」ではなく「クライアントが提案日時に返答しなかった」が真因のため
+        // 文言を分岐する(事実と逆の通知を防ぐ)。
+        const hadCounterProposal = (row.preferred_slots?.counter_slots?.length || 0) > 0
 
         // クライアントへ通知(失敗しても失効処理自体は成功扱い)
         try {
@@ -366,7 +373,9 @@ export async function GET(req: NextRequest) {
               '予約リクエストが失効しました',
               emailShell(
                 '予約リクエスト失効のお知らせ',
-                `${escapeHtml(receiverName)}さんへのご相談リクエストは、48時間以内に確定のご連絡がなかったため失効しました。<br>他の先生もご紹介できますので、よろしければご覧ください。`,
+                hadCounterProposal
+                  ? `${escapeHtml(receiverName)}さんからご提案した日時へのご返答が48時間以内に確認できなかったため、予約リクエストは失効しました。<br>他の先生もご紹介できますので、よろしければご覧ください。`
+                  : `${escapeHtml(receiverName)}さんへのご相談リクエストは、48時間以内に確定のご連絡がなかったため失効しました。<br>他の先生もご紹介できますので、よろしければご覧ください。`,
                 '他の先生を見る',
                 listUrl
               )
@@ -388,7 +397,8 @@ export async function GET(req: NextRequest) {
               },
               clientNickname,
               receiverName,
-              listUrl
+              listUrl,
+              { hadCounterProposal }
             )
           }
         } catch (notifyErr) {

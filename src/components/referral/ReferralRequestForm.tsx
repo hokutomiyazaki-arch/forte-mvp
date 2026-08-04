@@ -12,20 +12,13 @@
 import { useEffect, useState } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { isAcceptingOpen } from '@/lib/referral-accepting'
+// レビューFAIL修正(軽微2): ローカル実装(ReferralBookingReceivedCard.tsxと重複)を撤去し、
+// src/lib/referral-format.ts の formatSlotWithWeekday に統一する(referral-formatはimport 0本の
+// リーフでチャンクグラフ安全)。
+import { formatSlotWithWeekday } from '@/lib/referral-format'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-/** CEO指摘(先行テスト第3弾): datetime-localの値を「9/3（木）23:58」形式の曜日付きで
- * プレビュー表示する。値はオフセット無しローカル文字列なのでJST前提でそのままパースしてよい
- * (表示専用。送信時の+09:00付与はサーバー側parseSlotが行う)。 */
-function formatSlotWithWeekday(value: string): string | null {
-  if (!value) return null
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return null
-  const weekdays = ['日', '月', '火', '水', '木', '金', '土']
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getMonth() + 1}/${d.getDate()}（${weekdays[d.getDay()]}）${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
 /** レビューFAIL修正(軽微5): 表記(+81/空白/括弧/ハイフン)は許容し、数字だけで10桁以上かで判定する */
 function isValidPhone(value: string): boolean {
   return value.replace(/\D/g, '').length >= 10
