@@ -95,12 +95,16 @@ export default function ReferralCompletedList({ proId, onCountChange }: Props) {
                 padding: '12px 14px',
               }}
             >
-              <div style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6 }}>
-                <strong>{item.client_nickname}さん</strong>とのセッションは完了しています
-                {item.sender_pro?.name && (
-                  <span style={{ color: '#6B7280' }}>(紹介元: {item.sender_pro.name}さん)</span>
-                )}
+              {/* CEO追加指示(2026-08-04): 「〜とのセッションは完了しています」は完了リスト自体が
+                  完了済みを示すため冗長。名前大きく太く＋紹介元1行の統一パターンに合わせる。 */}
+              <div style={{ fontSize: 17, fontWeight: 800, color: '#1A1A2E', lineHeight: 1.4 }}>
+                {item.client_nickname}さん
               </div>
+              {item.sender_pro?.name && (
+                <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>
+                  紹介元: {item.sender_pro.name}さん
+                </div>
+              )}
               {item.completed_at && (
                 <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>
                   完了日: {new Date(item.completed_at).toLocaleDateString('ja-JP')}

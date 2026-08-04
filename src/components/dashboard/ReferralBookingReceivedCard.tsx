@@ -466,12 +466,16 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
             }}
           >
             <StatusPill label="要対応" bg="#FFE4DE" color="#C2410C" />
-            <div style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6, marginBottom: 8 }}>
-              <strong>{item.client_nickname}さん</strong>から紹介予約のリクエストが届いています
-              {item.sender_pro?.name && (
-                <span style={{ color: '#6B7280' }}>(紹介元: {item.sender_pro.name}さん)</span>
-              )}
+            {/* CEO追加指示(2026-08-04): 「〜から紹介予約のリクエストが届いています」は左上「要対応」
+                ラベルと重複するため削除。名前を大きく太く・紹介元を1行で表記する統一パターン。 */}
+            <div style={{ fontSize: 17, fontWeight: 800, color: '#1A1A2E', lineHeight: 1.4, marginBottom: item.sender_pro?.name ? 0 : 8 }}>
+              {item.client_nickname}さん
             </div>
+            {item.sender_pro?.name && (
+              <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2, marginBottom: 8 }}>
+                紹介元: {item.sender_pro.name}さん
+              </div>
+            )}
             {theme && <div style={{ fontSize: 13, color: '#555', marginBottom: 4 }}>テーマ: {theme}</div>}
             {item.menu_name && <div style={{ fontSize: 13, color: '#555', marginBottom: 4 }}>メニュー: {item.menu_name}</div>}
             {note && <div style={{ fontSize: 13, color: '#555', marginBottom: 8 }}>補足: {note}</div>}
@@ -706,7 +710,16 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                 }}
               >
                 <StatusPill label="キャンセル" bg="#F1F5F9" color="#64748B" />
-                <div style={{ fontSize: 13, color: '#4B4B4B', lineHeight: 1.6 }}>
+                {/* CEO追加指示(2026-08-04): 名前大きく太く＋紹介元1行のパターンに統一 */}
+                <div style={{ fontSize: 17, fontWeight: 800, color: '#1A1A2E', lineHeight: 1.4 }}>
+                  {item.client_nickname}さん
+                </div>
+                {item.sender_pro?.name && (
+                  <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>
+                    紹介元: {item.sender_pro.name}さん
+                  </div>
+                )}
+                <div style={{ fontSize: 13, color: '#4B4B4B', lineHeight: 1.6, marginTop: 6 }}>
                   キャンセルしました。返金がある場合は手続き済みです。
                 </div>
               </div>
@@ -736,13 +749,16 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
               <StatusPill label="確定済み" bg="#DCFCE7" color="#166534" />
             )}
 
-            {/* 1. クライアント名(+紹介元) */}
-            <div style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6 }}>
-              <strong>{item.client_nickname}さん</strong>との紹介予約が確定しています
-              {item.sender_pro?.name && (
-                <span style={{ color: '#6B7280' }}>(紹介元: {item.sender_pro.name}さん)</span>
-              )}
+            {/* 1. クライアント名(+紹介元)。CEO追加指示(2026-08-04): 「〜との紹介予約が確定しています」は
+                左上ステータスpillと重複するため削除。名前を大きく太く・紹介元を1行で表記する。 */}
+            <div style={{ fontSize: 17, fontWeight: 800, color: '#1A1A2E', lineHeight: 1.4 }}>
+              {item.client_nickname}さん
             </div>
+            {item.sender_pro?.name && (
+              <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>
+                紹介元: {item.sender_pro.name}さん
+              </div>
+            )}
 
             {/* 2. 確定日時(CEO承認済みモック: 一番大きく・太字) */}
             {confirmedSlotText && (
@@ -1242,8 +1258,13 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
             }}
           >
             <StatusPill label="キャンセル" bg="#F1F5F9" color="#64748B" />
-            <div style={{ fontSize: 13, color: '#4B4B4B', lineHeight: 1.6 }}>
-              <strong>{item.client_nickname}さん</strong>の紹介予約は、期限内にお支払いが確認できなかったためキャンセルされました
+            {/* CEO追加指示(2026-08-04): 名前大きく太くの統一パターン。この種別にはsender_pro
+                データが無いため紹介元行は出さず、キャンセル理由の説明文をそのまま残す。 */}
+            <div style={{ fontSize: 17, fontWeight: 800, color: '#1A1A2E', lineHeight: 1.4 }}>
+              {item.client_nickname}さん
+            </div>
+            <div style={{ fontSize: 13, color: '#4B4B4B', lineHeight: 1.6, marginTop: 4 }}>
+              紹介予約は、期限内にお支払いが確認できなかったためキャンセルされました
             </div>
             {confirmedSlotText && (
               <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>
