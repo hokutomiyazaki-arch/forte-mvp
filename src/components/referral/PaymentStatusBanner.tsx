@@ -81,7 +81,7 @@ export default function PaymentStatusBanner({ payment, sessionId }: Props) {
 
   const messageMap: Record<ResolvedStatus, string> = {
     checking: '決済結果を確認しています…',
-    paid: 'お支払いが完了し、予約が成立しました。',
+    paid: 'お支払いが完了し、紹介予約が成立しました。',
     pending: '決済結果を確認中です。しばらくしてから画面を更新してご確認ください。',
   }
 

@@ -30,8 +30,8 @@ export default function ReferralActionBanner() {
 
   const label =
     requestedCount > 0
-      ? `新しい予約リクエストが${requestedCount}件あります`
-      : `対応中の予約が${confirmedCount}件あります`
+      ? `新しい紹介予約リクエストが${requestedCount}件あります`
+      : `対応中の紹介予約が${confirmedCount}件あります`
 
   return (
     <a

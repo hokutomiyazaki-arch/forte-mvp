@@ -28,7 +28,7 @@ const T = {
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
-    title: 'ご予約の日時選択 | REAL PROOF',
+    title: 'ご紹介予約の日時選択 | REAL PROOF',
     robots: { index: false, follow: false },
   }
 }
@@ -67,7 +67,7 @@ export default async function BookingCapabilityPage({
             textAlign: 'center',
           }}
         >
-          <p style={{ fontSize: 13, color: T.textSub, lineHeight: 1.8 }}>この予約は無効になりました。</p>
+          <p style={{ fontSize: 13, color: T.textSub, lineHeight: 1.8 }}>この紹介予約は無効になりました。</p>
         </div>
       )}
 
@@ -81,7 +81,7 @@ export default async function BookingCapabilityPage({
             textAlign: 'center',
           }}
         >
-          <p style={{ fontSize: 13, color: T.textSub, lineHeight: 1.8 }}>予約は確定済みです。</p>
+          <p style={{ fontSize: 13, color: T.textSub, lineHeight: 1.8 }}>紹介予約は確定済みです。</p>
           {data.paymentStatus === 'awaiting' && (
             <p style={{ fontSize: 12, color: T.textMuted, marginTop: 8, lineHeight: 1.7 }}>
               お支払いのご案内メールをご確認ください。

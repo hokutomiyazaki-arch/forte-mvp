@@ -167,10 +167,10 @@ export async function GET(req: NextRequest) {
               if (clientUserId || clientEmail) {
                 await notifyClientByEmail(
                   { userId: clientUserId, email: clientEmail },
-                  'お支払いが確認できなかったため予約はキャンセルされました',
+                  'お支払いが確認できなかったため紹介予約はキャンセルされました',
                   emailShell(
-                    '予約キャンセルのお知らせ',
-                    'お支払いが確認できなかったため、予約は自動的にキャンセルされました。<br>ご希望の際は再度お申し込みください。',
+                    '紹介予約キャンセルのお知らせ',
+                    'お支払いが確認できなかったため、紹介予約は自動的にキャンセルされました。<br>ご希望の際は再度お申し込みください。',
                     '他の先生を見る',
                     listUrl
                   )
@@ -370,11 +370,11 @@ export async function GET(req: NextRequest) {
           if (clientUserId || clientEmail) {
             await notifyClientByEmail(
               { userId: clientUserId, email: clientEmail },
-              '予約リクエストが失効しました',
+              '紹介予約のリクエストが失効しました',
               emailShell(
-                '予約リクエスト失効のお知らせ',
+                '紹介予約リクエスト失効のお知らせ',
                 hadCounterProposal
-                  ? `${escapeHtml(receiverName)}さんからご提案した日時へのご返答が48時間以内に確認できなかったため、予約リクエストは失効しました。<br>他の先生もご紹介できますので、よろしければご覧ください。`
+                  ? `${escapeHtml(receiverName)}さんからご提案した日時へのご返答が48時間以内に確認できなかったため、紹介予約のリクエストは失効しました。<br>他の先生もご紹介できますので、よろしければご覧ください。`
                   : `${escapeHtml(receiverName)}さんへのご相談リクエストは、48時間以内に確定のご連絡がなかったため失効しました。<br>他の先生もご紹介できますので、よろしければご覧ください。`,
                 '他の先生を見る',
                 listUrl

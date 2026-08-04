@@ -33,6 +33,23 @@ interface BookingItem {
   client_contact: { name: string | null; phone: string | null; email: string | null } | null
 }
 
+/**
+ * タスク①(2026-08-04・CEO指示): 支払い期限切れで自動キャンセルされた紹介予約(受け手向け)。
+ * 連絡先(client_contact)は含めない(開示条件外・PII厳守)。
+ */
+interface CancelledUnpaidItem {
+  id: string
+  menu_name: string | null
+  preferred_slots: {
+    slots?: (string | null)[]
+    confirmed_index?: number
+    counter_slots?: string[]
+    confirmed_counter_index?: number
+  } | null
+  confirmed_at: string | null
+  client_nickname: string
+}
+
 interface Props {
   /** §2-10: 案件スレッドの参加者判定に使う自分のprofessionals.id。未指定時はスレッドを表示しない。 */
   proId?: string
@@ -46,6 +63,7 @@ interface Props {
  */
 export default function ReferralBookingReceivedCard({ proId }: Props) {
   const [items, setItems] = useState<BookingItem[]>([])
+  const [cancelledUnpaidItems, setCancelledUnpaidItems] = useState<CancelledUnpaidItem[]>([])
   const [loading, setLoading] = useState(true)
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [selectedSlot, setSelectedSlot] = useState<Record<string, number>>({})
@@ -58,10 +76,22 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.bookings) setItems(data.bookings)
+        if (data?.cancelled_unpaid) setCancelledUnpaidItems(data.cancelled_unpaid)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
+
+  /** タスク①: preferred_slotsから確定日時のisoを解決する(counter経由/通常3枠経由の両方に対応)。 */
+  function resolveConfirmedSlotIso(preferredSlots: CancelledUnpaidItem['preferred_slots']): string | null {
+    if (typeof preferredSlots?.confirmed_counter_index === 'number') {
+      return preferredSlots.counter_slots?.[preferredSlots.confirmed_counter_index] || null
+    }
+    if (typeof preferredSlots?.confirmed_index === 'number') {
+      return preferredSlots.slots?.[preferredSlots.confirmed_index] || null
+    }
+    return null
+  }
 
   const requestedItems = items.filter((i) => i.status === 'requested')
   const confirmedItems = items.filter((i) => i.status === 'confirmed')
@@ -96,7 +126,7 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
   }
 
   async function decline(bookingId: string) {
-    if (!window.confirm('この予約リクエストを辞退しますか？')) return
+    if (!window.confirm('この紹介予約のリクエストを辞退しますか？')) return
     setProcessingId(bookingId)
     try {
       const res = await fetch('/api/referral/bookings/received', {
@@ -183,7 +213,31 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
     }
   }
 
-  if (loading || (requestedItems.length === 0 && confirmedItems.length === 0)) return null
+  /** タスク①(2026-08-04・CEO指示): 支払い期限切れキャンセルカードを閉じる(window.confirm不要)。 */
+  async function dismissCancelled(bookingId: string) {
+    setProcessingId(bookingId)
+    try {
+      const res = await fetch('/api/referral/bookings/received', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ booking_id: bookingId, action: 'dismiss_cancelled' }),
+      })
+      if (res.ok) {
+        setCancelledUnpaidItems((prev) => prev.filter((i) => i.id !== bookingId))
+      } else {
+        window.alert('処理に失敗しました')
+      }
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
+  if (
+    loading ||
+    (requestedItems.length === 0 && confirmedItems.length === 0 && cancelledUnpaidItems.length === 0)
+  )
+    return null
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
@@ -205,7 +259,7 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
             }}
           >
             <div style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6, marginBottom: 8 }}>
-              <strong>{item.client_nickname}さん</strong>から予約リクエストが届いています
+              <strong>{item.client_nickname}さん</strong>から紹介予約のリクエストが届いています
               {item.sender_pro?.name && (
                 <span style={{ color: '#6B7280' }}>(紹介元: {item.sender_pro.name}さん)</span>
               )}
@@ -424,7 +478,7 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
             }}
           >
             <div style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6 }}>
-              <strong>{item.client_nickname}さん</strong>との予約が確定しています
+              <strong>{item.client_nickname}さん</strong>との紹介予約が確定しています
               {item.sender_pro?.name && (
                 <span style={{ color: '#6B7280' }}>(紹介元: {item.sender_pro.name}さん)</span>
               )}
@@ -537,6 +591,54 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
           </div>
           )
         })}
+
+      {/* タスク①(2026-08-04・CEO指示): 支払い期限切れで自動キャンセルされた紹介予約。
+          対応不要のお知らせのため、ReferralActionBannerのカウントには含めない(§0-6準拠)。 */}
+      {cancelledUnpaidItems.map((item) => {
+        const confirmedSlotText = formatSlot(resolveConfirmedSlotIso(item.preferred_slots))
+        return (
+          <div
+            key={item.id}
+            style={{
+              background: '#F5F5F5',
+              border: '1px solid #E0E0E0',
+              borderRadius: 12,
+              padding: '14px 16px',
+            }}
+          >
+            <div style={{ fontSize: 13, color: '#4B4B4B', lineHeight: 1.6 }}>
+              <strong>{item.client_nickname}さん</strong>の紹介予約は、期限内にお支払いが確認できなかったためキャンセルされました
+            </div>
+            {confirmedSlotText && (
+              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>
+                確定日時: {confirmedSlotText}
+              </div>
+            )}
+            {item.menu_name && (
+              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>メニュー: {item.menu_name}</div>
+            )}
+            <button
+              onClick={() => dismissCancelled(item.id)}
+              disabled={processingId === item.id}
+              style={{
+                marginTop: 10,
+                width: '100%',
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid #D1D5DB',
+                background: '#fff',
+                color: '#6B7280',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: processingId === item.id ? 'default' : 'pointer',
+                opacity: processingId === item.id ? 0.6 : 1,
+              }}
+            >
+              閉じる
+            </button>
+          </div>
+        )
+      })}
 
     </div>
   )

@@ -50,9 +50,9 @@ export default function BookingAcceptForm({ bookingId, receiverProName, counterS
         }
         setDone(true)
       } else if (data.error === 'not_pending') {
-        setErrorMsg('この予約は既に処理済みです。')
+        setErrorMsg('この紹介予約は既に処理済みです。')
       } else if (data.error === 'expired') {
-        setErrorMsg('この予約は無効になりました。')
+        setErrorMsg('この紹介予約は無効になりました。')
       } else {
         setErrorMsg('処理に失敗しました。もう一度お試しください。')
       }
@@ -74,7 +74,7 @@ export default function BookingAcceptForm({ bookingId, receiverProName, counterS
           textAlign: 'center',
         }}
       >
-        <p style={{ fontSize: 14, fontWeight: 700, color: T.dark, marginBottom: 8 }}>予約が確定しました</p>
+        <p style={{ fontSize: 14, fontWeight: 700, color: T.dark, marginBottom: 8 }}>紹介予約が確定しました</p>
         <p style={{ fontSize: 13, color: T.textSub, lineHeight: 1.8 }}>
           担当: {receiverProName}さん。当日はよろしくお願いいたします。
         </p>

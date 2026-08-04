@@ -88,6 +88,8 @@ function canDiscloseContact(booking: { status: string; payment_status?: string |
  * client_contact(name/phone/email)を追加で含める。満たさない行は client_contact: null。
  * ★ isReferralEnabled ではゲートしない(受け手は先行アクセス外でもリクエストを受けられる必要がある)。
  * タスク⑥: レスポンスに `completed`(completed_at desc・limit 200)を追加。既存の `bookings` の形は変更しない。
+ * タスク①(2026-08-04・CEO指示): レスポンスに `cancelled_unpaid`(支払い期限切れキャンセル・
+ * confirmed_at desc・limit 20)を追加。連絡先(client_contact)は含めない(開示条件外)。
  */
 export async function GET() {
   try {
@@ -140,6 +142,34 @@ export async function GET() {
       }
     } catch (completedErr) {
       console.error('[api/referral/bookings/received] completed fetch error (fail-soft):', completedErr)
+    }
+
+    // タスク①(2026-08-04・CEO指示): 支払い期限切れで自動キャンセルされた紹介予約を受け手へ可視化する。
+    // 対象は「確定後に予約フィー未払いで自動キャンセルされたもの」のみ(confirmed_at IS NOT NULL)。
+    // draft掃除由来のcancelled(confirmed_at無し)は自然に除外される。receiver_dismissed_atが
+    // 入っている行(閉じるボタン押下済み)は対象外。paymentEnabled(migration 036依存カラム)の
+    // 間だけ実行する(fail-soft・既存配列の形は変えない)。
+    let cancelledUnpaidRows: any[] = []
+    if (paymentEnabled) {
+      try {
+        const { data: cancelledRows, error: cancelledError } = await supabase
+          .from('referral_bookings')
+          .select('id, menu_id, preferred_slots, confirmed_at, clients(id, nickname), pro_menus(name)')
+          .eq('receiver_pro_id', ownPro.id)
+          .eq('status', 'cancelled')
+          .eq('payment_status', 'canceled')
+          .not('confirmed_at', 'is', null)
+          .is('receiver_dismissed_at', null)
+          .order('confirmed_at', { ascending: false })
+          .limit(20)
+        if (cancelledError) {
+          console.error('[api/referral/bookings/received] cancelled_unpaid fetch error (fail-soft):', cancelledError)
+        } else {
+          cancelledUnpaidRows = cancelledRows || []
+        }
+      } catch (cancelledErr) {
+        console.error('[api/referral/bookings/received] cancelled_unpaid fetch error (fail-soft):', cancelledErr)
+      }
     }
 
     // referral_bookings は professionals への FK が2本(sender/receiver)あり embed が曖昧になるため、
@@ -225,7 +255,16 @@ export async function GET() {
         : null,
     }))
 
-    return NextResponse.json({ bookings: result, completed: completedResult })
+    // タスク①: 連絡先(client_contact)は含めない(キャンセル済みは開示条件外・PII厳守)。
+    const cancelledUnpaidResult = cancelledUnpaidRows.map((b: any) => ({
+      id: b.id,
+      menu_name: b.pro_menus?.name || null,
+      preferred_slots: b.preferred_slots,
+      confirmed_at: b.confirmed_at,
+      client_nickname: b.clients?.nickname || 'クライアント',
+    }))
+
+    return NextResponse.json({ bookings: result, completed: completedResult, cancelled_unpaid: cancelledUnpaidResult })
   } catch (err: any) {
     console.error('[api/referral/bookings/received] GET error:', err)
     return NextResponse.json({ error: err.message || 'internal_error' }, { status: 500 })
@@ -234,11 +273,13 @@ export async function GET() {
 
 /**
  * PATCH /api/referral/bookings/received
- * body: { booking_id, action: 'confirm' | 'decline' | 'complete' | 'counter', confirmed_index?, counter_slots? }
+ * body: { booking_id, action: 'confirm' | 'decline' | 'complete' | 'counter' | 'dismiss_cancelled', confirmed_index?, counter_slots? }
  * 受け手プロ本人のみ操作可。confirm/decline/counter は requested のみ、expires_at超過は409。
  * §2-4-7(決済なし版)/中11レビュー指摘: complete は confirmed のみ→completed。
  * ライフサイクル改善(タスクA・逆指定): counter は、受け手が別日時を提案する。requestedのまま
  * preferred_slots.counter_slots に保存し、expires_atを48hリセットする(クライアントの返答待ち)。
+ * タスク①(2026-08-04・CEO指示): dismiss_cancelled は支払い期限切れキャンセルカードの「閉じる」。
+ * cancelled のみ対象。receiver_dismissed_at を記録するのみで行は物理削除しない。
  */
 export async function PATCH(request: NextRequest) {
   try {
@@ -254,7 +295,11 @@ export async function PATCH(request: NextRequest) {
 
     if (
       !bookingId ||
-      (action !== 'confirm' && action !== 'decline' && action !== 'complete' && action !== 'counter')
+      (action !== 'confirm' &&
+        action !== 'decline' &&
+        action !== 'complete' &&
+        action !== 'counter' &&
+        action !== 'dismiss_cancelled')
     ) {
       return NextResponse.json({ error: 'invalid_params' }, { status: 400 })
     }
@@ -322,6 +367,31 @@ export async function PATCH(request: NextRequest) {
       }
 
       return NextResponse.json({ success: true, status: 'completed' })
+    }
+
+    // タスク①(2026-08-04・CEO指示): 支払い期限切れキャンセルカードの「閉じる」ボタン。
+    // 行の物理削除はしない(決済・監査記録のため)。receiver_dismissed_atのみ記録する。
+    if (action === 'dismiss_cancelled') {
+      if (booking.status !== 'cancelled') {
+        return NextResponse.json({ error: 'not_cancelled' }, { status: 409 })
+      }
+      const { data: dismissedRows, error: dismissError } = await supabase
+        .from('referral_bookings')
+        .update({ receiver_dismissed_at: new Date().toISOString() })
+        .eq('id', bookingId)
+        .eq('status', 'cancelled')
+        .is('receiver_dismissed_at', null)
+        .select('id')
+
+      if (dismissError) {
+        console.error('[api/referral/bookings/received] PATCH dismiss_cancelled error:', dismissError)
+        return NextResponse.json({ error: 'failed_to_update' }, { status: 500 })
+      }
+      if (!dismissedRows || dismissedRows.length === 0) {
+        return NextResponse.json({ error: 'already_dismissed' }, { status: 409 })
+      }
+
+      return NextResponse.json({ success: true })
     }
 
     if (booking.status !== 'requested') {
@@ -563,7 +633,7 @@ export async function PATCH(request: NextRequest) {
           const safeOwnProName = escapeHtml(ownPro.name)
           await notifyClientByEmail(
             { userId: clientUserId, email: booking.client_email },
-            `${ownPro.name}さんとのご予約が確定しました`,
+            `${ownPro.name}さんとのご紹介予約が確定しました`,
             emailShell(
               'ご相談確定のお知らせ',
               `${confirmedSlotText ? `${confirmedSlotText} に確定しました。` : 'ご相談の日時が確定しました。'}<br>担当: ${safeOwnProName}さん${senderQuote}${referralListFooterHtml(listUrl)}`

@@ -2070,8 +2070,9 @@ export default function DashboardPage() {
       {/* §2-4: 受信した予約リクエストの確定・辞退カード。タブ・フラグに依存せず常時表示（requestedが無ければ非表示） */}
       {/* §2-10: 案件スレッド表示のため自分のprofessionals.idを渡す */}
       {/* CEO指示(2026-08-04): やりとりカードの全文をトップに常駐させない。件数付きの
-          1行リンクのみ表示し、操作は紹介タブ内(ReferralBookingReceivedCard)で行う */}
-      {pro && <ReferralActionBanner />}
+          1行リンクのみ表示し、操作は紹介タブ内(ReferralBookingReceivedCard)で行う。
+          紹介タブ表示中はリンク先に既にいるため出さない(CEO指摘) */}
+      {pro && dashboardTab !== 'referral' && <ReferralActionBanner />}
 
       {/* LINE 週次レポートバナー */}
       {!isSettingsTab && lineBannerState === 'show_banner' && process.env.NEXT_PUBLIC_LINE_FRIEND_URL && (

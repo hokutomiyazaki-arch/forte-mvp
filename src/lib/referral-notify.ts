@@ -144,11 +144,11 @@ export async function notifyBookingRequested(
   const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
   const safeClientNickname = escapeHtml(clientNickname)
   return sendProNotification(target, {
-    lineText: `紹介経由の予約リクエストが届いています(${clientNickname}さん)。48時間以内にダッシュボードからご確認ください。\n${dashboardUrl}`,
-    emailSubject: '紹介経由の予約リクエストが届いています',
+    lineText: `紹介予約のリクエストが届いています(${clientNickname}さん)。48時間以内にダッシュボードからご確認ください。\n${dashboardUrl}`,
+    emailSubject: '紹介予約のリクエストが届いています',
     emailBodyHtml: emailShell(
-      '予約リクエストのお知らせ',
-      `${safeClientNickname}さんから予約リクエストが届いています。<br><strong>48時間以内</strong>にダッシュボードからご確認ください。`,
+      '紹介予約リクエストのお知らせ',
+      `${safeClientNickname}さんから紹介予約のリクエストが届いています。<br><strong>48時間以内</strong>にダッシュボードからご確認ください。`,
       'ダッシュボードを開く',
       dashboardUrl,
     ),
@@ -171,7 +171,7 @@ export async function notifyBookingConfirmedToSender(
     emailSubject: 'あなたの紹介が成立しました',
     emailBodyHtml: emailShell(
       '紹介成立のお知らせ',
-      `${safeClientNickname}さんの予約が、${safeReceiverProName}さんとの間で確定しました。<br>あなたの紹介がつながりました。`,
+      `${safeClientNickname}さんの紹介予約が、${safeReceiverProName}さんとの間で確定しました。<br>あなたの紹介がつながりました。`,
       'ダッシュボードを開く',
       dashboardUrl,
     ),
@@ -193,11 +193,11 @@ export async function notifyBookingPaymentCompletedToReceiver(
   // ただしメール本文には電話番号等のPIIを直接書かない(メールは転送・誤送信リスクがあるため
   // 参照導線のみとする。実際の値はダッシュボードのAPI経由でのみ表示する)。
   return sendProNotification(target, {
-    lineText: `${clientNickname}さんのお支払いが完了し、予約が成立しました。クライアントの連絡先はダッシュボードでご確認ください。\n${dashboardUrl}`,
-    emailSubject: 'お支払いが完了し、予約が成立しました',
+    lineText: `${clientNickname}さんのお支払いが完了し、紹介予約が成立しました。クライアントの連絡先はダッシュボードでご確認ください。\n${dashboardUrl}`,
+    emailSubject: 'お支払いが完了し、紹介予約が成立しました',
     emailBodyHtml: emailShell(
-      '予約成立のお知らせ',
-      `${safeClientNickname}さんのお支払いが完了し、予約が成立しました。<br>クライアントの連絡先はダッシュボードでご確認ください。`,
+      '紹介予約成立のお知らせ',
+      `${safeClientNickname}さんのお支払いが完了し、紹介予約が成立しました。<br>クライアントの連絡先はダッシュボードでご確認ください。`,
       'ダッシュボードを開く',
       dashboardUrl,
     ),
@@ -214,11 +214,11 @@ export async function notifyBookingPaymentExpiredToPro(
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
   const safeClientNickname = escapeHtml(clientNickname)
   return sendProNotification(target, {
-    lineText: `${clientNickname}さんとの予約は、お支払いが確認できなかったため自動的にキャンセルされました。`,
-    emailSubject: '予約がキャンセルされました',
+    lineText: `${clientNickname}さんとの紹介予約は、お支払いが確認できなかったため自動的にキャンセルされました。`,
+    emailSubject: '紹介予約がキャンセルされました',
     emailBodyHtml: emailShell(
-      '予約キャンセルのお知らせ',
-      `${safeClientNickname}さんとの予約は、お支払いが確認できなかったため自動的にキャンセルされました。`,
+      '紹介予約キャンセルのお知らせ',
+      `${safeClientNickname}さんとの紹介予約は、お支払いが確認できなかったため自動的にキャンセルされました。`,
     ),
   })
 }
@@ -240,15 +240,15 @@ export async function notifyBookingExpiredToSender(
   const safeClientNickname = escapeHtml(clientNickname)
   const safeReceiverProName = escapeHtml(receiverProName)
   const bodyHtml = opts?.hadCounterProposal
-    ? `${safeClientNickname}さんへ提案した日時への返答が48時間以内に確認できず、${safeReceiverProName}さんの予約リクエストは失効しました。<br>別の候補もご紹介いただけます。`
-    : `${safeClientNickname}さんの${safeReceiverProName}さんへの予約リクエストは、48時間以内に確定のご連絡がなかったため失効しました。<br>別の候補もご紹介いただけます。`
+    ? `${safeClientNickname}さんへ提案した日時への返答が48時間以内に確認できず、${safeReceiverProName}さんの紹介予約のリクエストは失効しました。<br>別の候補もご紹介いただけます。`
+    : `${safeClientNickname}さんの${safeReceiverProName}さんへの紹介予約のリクエストは、48時間以内に確定のご連絡がなかったため失効しました。<br>別の候補もご紹介いただけます。`
   const lineText = opts?.hadCounterProposal
     ? `${clientNickname}さんからの返答がなく、提案した日時が48時間以内に確認されなかったため失効しました。\n${listUrl}`
-    : `${clientNickname}さんの${receiverProName}さんへの予約リクエストが、48時間以内に確定されなかったため失効しました。\n${listUrl}`
+    : `${clientNickname}さんの${receiverProName}さんへの紹介予約のリクエストが、48時間以内に確定されなかったため失効しました。\n${listUrl}`
   return sendProNotification(target, {
     lineText,
-    emailSubject: '予約リクエストが失効しました',
-    emailBodyHtml: emailShell('予約リクエスト失効のお知らせ', bodyHtml, 'リストを見る', listUrl),
+    emailSubject: '紹介予約のリクエストが失効しました',
+    emailBodyHtml: emailShell('紹介予約リクエスト失効のお知らせ', bodyHtml, 'リストを見る', listUrl),
   })
 }
 
@@ -418,7 +418,7 @@ export async function notifyCounterAcceptedToReceiver(
   const safeClientNickname = escapeHtml(clientNickname)
   const slotPart = confirmedSlotText ? `${confirmedSlotText} で確定` : '日時を選択'
   const paymentNote = opts?.awaitingPayment
-    ? 'クライアントのお支払い完了で予約成立となります。'
+    ? 'クライアントのお支払い完了で紹介予約成立となります。'
     : ''
   return sendProNotification(target, {
     lineText: `${clientNickname}さんが日時を選択しました(${slotPart})。${paymentNote}\n${dashboardUrl}`,
@@ -475,7 +475,7 @@ export async function notifyBookingReceivedToClient(
     ? '②確定すると、メールでお知らせします(予約フィーのお支払いご案内も届きます)'
     : '②確定次第、メールでお知らせします'
   const step3 = opts.paymentFlowActive
-    ? '③お支払いが完了すると予約が成立します(総額は変わりません。当日は残額のみ)'
+    ? '③お支払いが完了すると紹介予約が成立します(総額は変わりません。当日は残額のみ)'
     : '③確定のご連絡をお待ちください'
   return notifyClientByEmail(
     target,

@@ -195,7 +195,7 @@ export async function issueFeePaymentLinkAndNotify(params: {
         emailShell(
           'ご相談確定・お支払いのご案内',
           `${params.confirmedSlotText ? `${params.confirmedSlotText} に確定しました。` : 'ご相談の日時が確定しました。'}<br>担当: ${safeReceiverProName}さん<br><br>` +
-            `予約フィー ¥${params.feeAmountJpy.toLocaleString()} のお支払いで予約が成立します(24時間以内)。<br>` +
+            `予約フィー ¥${params.feeAmountJpy.toLocaleString()} のお支払いで紹介予約が成立します(24時間以内)。<br>` +
             `当日は残額 ¥${residualJpy.toLocaleString()} を${safeReceiverProName}さんに直接お支払いください(合計 ¥${params.priceJpy.toLocaleString()} は変わりません)。` +
             referralListFooterHtml(listUrl),
           'お支払いを行う',
@@ -331,10 +331,10 @@ export async function applyReferralCheckoutSession(
       const listUrl = slug ? `${APP_URL}/r/${slug}` : APP_URL
       await notifyClientByEmail(
         { userId: client?.user_id, email: booking.client_email },
-        'お支払いが完了し、予約が成立しました',
+        'お支払いが完了し、紹介予約が成立しました',
         emailShell(
-          '予約成立のお知らせ',
-          `お支払いが完了し、予約が成立しました。当日はよろしくお願いいたします。${referralListFooterHtml(listUrl)}`
+          '紹介予約成立のお知らせ',
+          `お支払いが完了し、紹介予約が成立しました。当日はよろしくお願いいたします。${referralListFooterHtml(listUrl)}`
         )
       )
     }
