@@ -19,6 +19,9 @@ import {
 // 再試行ブロックの両方から同じ関数を呼ぶ(同じ処理を2箇所に書かない)。
 // 軽微5レビュー指摘: 24hキャンセル時にセッションを明示失効させる関数も同様に委譲する。
 import { issueFeePaymentLinkAndNotify, expireReferralCheckoutSession } from '@/lib/referral-payment'
+// ステージ4(送り手分配・2026-08-04・CEO決定): Stripeに触らない独立ファイル。自動完了確定時にも
+// 送り手分配行(referral_payouts)を1回だけ作成する(受け手の手動completeと同じ関数を呼ぶ)。
+import { createReferralPayoutIfEligible } from '@/lib/referral-payout'
 
 export const dynamic = 'force-dynamic'
 
@@ -397,6 +400,13 @@ export async function GET(req: NextRequest) {
               continue
             }
             autoCompletedCount++
+
+            // ステージ4(送り手分配・CEO決定): 自動完了確定の直後に分配行を作成する(fail-soft)。
+            try {
+              await createReferralPayoutIfEligible(row.id)
+            } catch (payoutErr) {
+              console.error(`[cron/expire-referral-bookings] auto-complete payout create error for ${row.id}:`, payoutErr)
+            }
 
             const receiverName = row.receiver_pro_id ? proMap4[row.receiver_pro_id]?.name || 'プロ' : 'プロ'
             const clientNickname = row.clients?.nickname || 'クライアント'

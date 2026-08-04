@@ -31,6 +31,9 @@ import { isReferralPaymentEnabled, REFERRAL_MIN_FEE_JPY, REFERRAL_FEE_TOTAL_BPS 
 // 中1レビュー指摘から継続: Stripe importはこのAPI routeに持たせない(Webpackチャンクグラフ対策)。
 // Checkout Session作成+メール送付(共通処理)はsrc/lib/referral-payment.tsの関数呼び出しに委譲する。
 import { issueFeePaymentLinkAndNotify, refundReferralBookingFee, expireReferralCheckoutSession } from '@/lib/referral-payment'
+// ステージ4(送り手分配・2026-08-04・CEO決定): Stripeに触らない独立ファイル(referral-payment.tsとは
+// チャンクグラフを分ける)。完了確定時に送り手分配行(referral_payouts)を1回だけ作成する。
+import { createReferralPayoutIfEligible } from '@/lib/referral-payout'
 
 export const dynamic = 'force-dynamic'
 
@@ -427,15 +430,28 @@ export async function PATCH(request: NextRequest) {
       if (paymentEnabled && booking.payment_status === 'awaiting') {
         return NextResponse.json({ error: 'payment_pending' }, { status: 409 })
       }
-      const { error: completeError } = await supabase
+      // レビュー指摘(重大3b): cronの自動完了と同じ作法で0行(競合で既にキャンセル済み等)を明示的に
+      // 検出し、その場合は分配作成・通知を一切行わず409で止める(誤計上防止)。
+      const { data: completedRows, error: completeError } = await supabase
         .from('referral_bookings')
         .update({ status: 'completed', completed_at: new Date().toISOString() })
         .eq('id', bookingId)
         .eq('status', 'confirmed')
+        .select('id')
 
       if (completeError) {
         console.error('[api/referral/bookings/received] PATCH complete error:', completeError)
         return NextResponse.json({ error: 'failed_to_update' }, { status: 500 })
+      }
+      if (!completedRows || completedRows.length === 0) {
+        return NextResponse.json({ error: 'not_confirmed' }, { status: 409 })
+      }
+
+      // ステージ4(送り手分配・CEO決定): 完了確定の直後に分配行を作成する(fail-soft・失敗しても完了処理自体は成功扱い)。
+      try {
+        await createReferralPayoutIfEligible(bookingId)
+      } catch (payoutErr) {
+        console.error('[api/referral/bookings/received] complete payout create error:', payoutErr)
       }
 
       // ライフサイクル改善(タスクD): 完了時、送り手プロへ通知する(失敗しても完了処理自体は成功扱い)。

@@ -95,6 +95,17 @@ export const REFERRAL_FEE_TOTAL_BPS = 3360
 export const CONFIRM_PAYMENT_DEADLINE_HOURS = 24
 
 /**
+ * レビュー指摘(重大1・指示書§2-4修正): referral_bookings.fee_sender_bps のフォールバック値。
+ * ★ price_jpy(セッション価格そのもの)に対するbps(fee_amount_jpyに対する比率ではない)。
+ * 3000 = 価格の30%。例: 価格10,000円 → 送り手フィー3,000円(fee_total_bps=3360=33.6%のうち
+ * 送り手分・決済実費360円=fee_platform_bpsはリアプル取り分ではなくStripe実費・§2-4参照)。
+ * referral_bookings.fee_sender_bps は NOT NULL(migration 032・DEFAULT 2800)だが、
+ * 決済無効期(paymentEnabled=false)の間はカラム自体を選択しない箇所があるため、
+ * この値を防御的フォールバックとして referral-payout.ts(独立ファイル・Stripe importなし)から参照する。
+ */
+export const REFERRAL_SENDER_SHARE_BPS = 3000
+
+/**
  * レビュー指摘(中5・単一情報源化): クライアント都合キャンセルの返金締切(日)は
  * env非依存の`src/lib/referral-format.ts`が本体(client/server両用の純関数と同じ場所に置く)。
  * このファイルはサーバー専用(process.env直読み)のため、既存importの後方互換のためだけに

@@ -67,6 +67,16 @@ interface SentBooking {
   receiver_pro: { id: string; name: string } | null
 }
 
+/** ステージ4(送り手分配・CEO決定): /api/referral/payouts が返す分配行(PIIなし)。 */
+interface SentPayout {
+  id: string
+  booking_id: string
+  amount_jpy: number
+  status: 'pending' | 'paid' | 'cancelled'
+  created_at: string
+  paid_at: string | null
+}
+
 const SENT_STATUS_LABEL: Record<SentBooking['status'], string> = {
   requested: 'リクエスト中',
   confirmed: '確定',
@@ -192,6 +202,13 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
   const [sentBookings, setSentBookings] = useState<SentBooking[]>([])
   const [sentLoading, setSentLoading] = useState(true)
 
+  // ステージ4(送り手分配・CEO決定): 「紹介した案件」タブの報酬サマリー・案件ごとの確定表示用
+  const [sentPayouts, setSentPayouts] = useState<SentPayout[]>([])
+  const [sentPayoutsLoaded, setSentPayoutsLoaded] = useState(false)
+  // レビュー指摘(軽微8): サマリー合計はサーバー側集計値(全件対象)を使う(一覧の直近500件には依存しない)
+  const [sentPayoutsPendingTotalJpy, setSentPayoutsPendingTotalJpy] = useState(0)
+  const [sentPayoutsPaidTotalJpy, setSentPayoutsPaidTotalJpy] = useState(0)
+
   useEffect(() => {
     fetch('/api/referral/lists', { cache: 'no-store' })
       .then((res) => (res.ok ? res.json() : null))
@@ -220,6 +237,20 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
       })
       .catch(() => {})
       .finally(() => setSentLoading(false))
+  }, [])
+
+  // ステージ4(送り手分配・CEO決定): 分配台帳(referral_payouts)は別APIで取得する(fail-soft・
+  // migration 039未実行の環境では空配列/0円が返るだけで、このタブの他表示を壊さない)。
+  useEffect(() => {
+    fetch('/api/referral/payouts', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.payouts) setSentPayouts(data.payouts)
+        if (typeof data?.pending_total_jpy === 'number') setSentPayoutsPendingTotalJpy(data.pending_total_jpy)
+        if (typeof data?.paid_total_jpy === 'number') setSentPayoutsPaidTotalJpy(data.paid_total_jpy)
+      })
+      .catch(() => {})
+      .finally(() => setSentPayoutsLoaded(true))
   }, [])
 
   // CEO指示(2026-08-04・IA再変更): 「紹介した案件」タブの件数バッジ(進行中)・空状態判定用に
@@ -1631,6 +1662,15 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
     </div>
   )
 
+  // ステージ4(送り手分配・CEO決定): 「紹介した案件」タブの報酬サマリー(確定済み未払い/支払い済み累計)
+  // レビュー指摘(軽微8): 合計はサーバー側集計値(sentPayoutsPending/PaidTotalJpy・全件対象)を使う。
+  // レビュー指摘(中4): cancelled(手動返金で取消済み)の行は案件カードに表示しない。
+  const payoutByBookingId: Record<string, SentPayout> = {}
+  for (const p of sentPayouts) {
+    if (p.status === 'cancelled') continue
+    payoutByBookingId[p.booking_id] = p
+  }
+
   return (
     <div>
       {/* UI再構成(2026-08-04・CEO承認済み): 「紹介を受ける」サブタブ側 = 完了した紹介(受け手側)。
@@ -1642,6 +1682,25 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
       {/* CEO指示(2026-08-04・IA再変更): 「紹介した案件」サブタブ = 成立した紹介(送り手側の
           予約一覧・担当プロとのやりとりスレッド)。旧「紹介する」タブから独立した3番目のタブ。 */}
       <div style={{ display: subtab === 'cases' ? 'flex' : 'none', flexDirection: 'column', gap: 12 }}>
+        {/* ステージ4(送り手分配・CEO決定): 報酬サマリーカード。0件時は説明のみ表示する。 */}
+        {sentPayoutsLoaded && (
+          <div style={{ background: '#FAF7EF', borderRadius: 14, padding: '14px 16px', border: '1.5px solid #EAD9A6' }}>
+            {sentPayoutsPendingTotalJpy === 0 && sentPayoutsPaidTotalJpy === 0 ? (
+              <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6 }}>
+                紹介報酬はセッション完了時に確定します(セッション価格の30%・予約金のお支払いが完了した案件が対象)。
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.8 }}>
+                <div>確定済み(未払い): <strong>¥{sentPayoutsPendingTotalJpy.toLocaleString()}</strong></div>
+                <div>支払い済み累計: <strong>¥{sentPayoutsPaidTotalJpy.toLocaleString()}</strong></div>
+              </div>
+            )}
+            <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 6, lineHeight: 1.6 }}>
+              お支払いは月次でのお振込です。口座の自動受け取り(Stripe)は準備中です。
+            </div>
+          </div>
+        )}
+
         {sentLoading ? (
           <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>読み込み中...</div>
         ) : sentBookings.length === 0 ? (
@@ -1649,7 +1708,9 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
             まだ紹介した案件はありません
           </div>
         ) : (
-          sentBookings.map((b) => (
+          sentBookings.map((b) => {
+            const payout = payoutByBookingId[b.id]
+            return (
             <div key={b.id} style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', border: '1.5px solid #E5E7EB', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
               <div style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6 }}>
                 <strong>{b.client_nickname}さん</strong>
@@ -1657,6 +1718,11 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
                 <span style={{ marginLeft: 8, fontSize: 13, color: '#9CA3AF' }}>{SENT_STATUS_LABEL[b.status]}</span>
               </div>
               {b.menu_name && <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>メニュー: {b.menu_name}</div>}
+              {payout && (
+                <div style={{ fontSize: 12, color: '#8A6D1F', marginTop: 4, fontWeight: 600 }}>
+                  紹介報酬 ¥{payout.amount_jpy.toLocaleString()} {payout.status === 'paid' ? '支払い済み' : '確定'}
+                </div>
+              )}
               <BookingThread
                 bookingId={b.id}
                 ownProId={proId}
@@ -1666,7 +1732,8 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
                 partnerName={b.receiver_pro?.name}
               />
             </div>
-          ))
+            )
+          })
         )}
       </div>
 
