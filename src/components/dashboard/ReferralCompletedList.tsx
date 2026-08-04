@@ -156,6 +156,8 @@ export default function ReferralCompletedList({ proId, onCountChange }: Props) {
                 ownProId={proId}
                 isSender={false}
                 initialHandoverNote={item.handover_note}
+                partnerRoleLabel={item.sender_pro ? '紹介元' : undefined}
+                partnerName={item.sender_pro?.name}
               />
             </div>
           ))}

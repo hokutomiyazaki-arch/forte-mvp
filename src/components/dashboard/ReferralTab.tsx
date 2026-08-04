@@ -1450,6 +1450,8 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
                 ownProId={proId}
                 isSender={true}
                 initialHandoverNote={b.handover_note}
+                partnerRoleLabel={b.receiver_pro ? '担当プロ' : undefined}
+                partnerName={b.receiver_pro?.name}
               />
             </div>
           ))}

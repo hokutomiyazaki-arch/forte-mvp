@@ -23,6 +23,12 @@ interface Props {
   /** 送り手本人かどうか。true の場合のみ引き継ぎメモの編集フォームを表示する。 */
   isSender: boolean
   initialHandoverNote: Partial<HandoverNote> | null
+  /** CEO追加指示(2026-08-04): 「誰とのやりとりか」を明示するための相手の関係性ラベル
+   * (受け手視点なら'紹介元'、送り手視点なら'担当プロ'等)。未指定時は既存の汎用文言のまま
+   * (直接予約等で相手ラベルが無い場合)。呼び出し元の既存表示ロジックは変更しない。 */
+  partnerRoleLabel?: string
+  /** 相手の名前(任意)。指定時は「{partnerRoleLabel}の{partnerName}さんとのやりとりです」と表示する。 */
+  partnerName?: string
 }
 
 const EMPTY_NOTE: HandoverNote = { theme: '', history: '', tried: '', notes: '' }
@@ -31,7 +37,14 @@ const EMPTY_NOTE: HandoverNote = { theme: '', history: '', tried: '', notes: '' 
  * §2-10: 案件スレッド(自由記述コメント)+ 引き継ぎメモ(構造化)の開閉式ビュー。
  * 参加者(送り手・受け手)のみ利用可能。原文表示(AI変換は適用しない)。
  */
-export default function BookingThread({ bookingId, ownProId, isSender, initialHandoverNote }: Props) {
+export default function BookingThread({
+  bookingId,
+  ownProId,
+  isSender,
+  initialHandoverNote,
+  partnerRoleLabel,
+  partnerName,
+}: Props) {
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [loadingMessages, setLoadingMessages] = useState(false)
@@ -109,11 +122,24 @@ export default function BookingThread({ bookingId, ownProId, isSender, initialHa
           fontWeight: 600, cursor: 'pointer', padding: 0,
         }}
       >
-        {open ? '案件スレッドを閉じる ▲' : '案件スレッド・引き継ぎメモを開く ▼'}
+        {open
+          ? '案件スレッドを閉じる ▲'
+          : partnerRoleLabel
+            ? `${partnerRoleLabel}とのやりとり・引き継ぎメモを開く ▼`
+            : '案件スレッド・引き継ぎメモを開く ▼'}
       </button>
 
       {open && (
         <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* CEO追加指示(2026-08-04): 「誰とのやりとりか」＋「クライアントには表示されません」を
+              視点に依らず共通で明示する(誤爆防止の安心材料)。 */}
+          <div style={{ fontSize: 13, color: '#6B7280' }}>
+            {partnerRoleLabel
+              ? partnerName
+                ? `${partnerRoleLabel}の${partnerName}さんとのやりとりです（クライアントには表示されません）`
+                : `${partnerRoleLabel}とのやりとりです（クライアントには表示されません）`
+              : 'このやりとりはクライアントには表示されません'}
+          </div>
           {/* 引き継ぎメモ */}
           <div style={{ background: '#F9FAFB', borderRadius: 8, padding: '10px 12px' }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: '#1A1A2E', marginBottom: 6 }}>引き継ぎメモ</div>

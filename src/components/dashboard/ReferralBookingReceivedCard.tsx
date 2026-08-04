@@ -922,6 +922,8 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
               ownProId={proId}
               isSender={false}
               initialHandoverNote={item.handover_note}
+              partnerRoleLabel={item.sender_pro ? '紹介元' : undefined}
+              partnerName={item.sender_pro?.name}
             />
 
             {/* 例外操作: 「変更・キャンセルなどの操作 ▼」に集約。一度に1つのことだけ画面に出す原則
