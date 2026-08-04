@@ -1785,6 +1785,14 @@ export default function DashboardPage() {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none" placeholder="you@example.com" />
             <p className="text-xs text-gray-400 mt-1">カードページに「このプロに相談する」ボタンが表示されます（ログインメールとは別に設定できます）</p>
           </div>
+          {/* CEO指示(2026-08-04): 予約HPを持たないプロ向けに電話番号でも連絡先を満たせるようにする
+              (サービス・案内タブと同じ form.phone_number を編集・保存は既存payloadに含まれている) */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">電話番号</label>
+            <input type="tel" inputMode="tel" value={form.phone_number} onChange={e => setForm({...form, phone_number: e.target.value.slice(0, 20)})}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none" placeholder="090-1234-5678" />
+            <p className="text-xs text-gray-400 mt-1">URL・メール・電話番号のいずれか1つがあれば連絡先の設定は完了です</p>
+          </div>
           {/* パスワードはClerkで管理 */}
 
           {/* ── 通知設定 ── */}
@@ -2364,11 +2372,14 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Phase 2: 予約・連絡先URL 未設定バナー
-          表示条件: setup 完了済み + booking_url 空 + 投票 1 票以上 */}
+      {/* Phase 2: 予約・連絡先 未設定バナー
+          CEO指示(2026-08-04): 予約HPを持たない人も居るため、booking_url・contact_email・
+          phone_number のいずれか1つでも設定されていれば消える条件に変更 */}
       {pro &&
         (pro as any).setup_completed === true &&
         (!pro.booking_url || pro.booking_url.trim() === '') &&
+        (!(pro as any).contact_email || String((pro as any).contact_email).trim() === '') &&
+        (!(pro as any).phone_number || String((pro as any).phone_number).trim() === '') &&
         voteCount > 0 && (
           <BookingUrlBanner
             proName={`${pro.last_name || ''}${pro.first_name || ''}`.trim()}

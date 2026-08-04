@@ -35,20 +35,22 @@ export default function BookingUrlBanner({ proName, voteCount }: Props) {
       <div className="text-2xl flex-shrink-0" aria-hidden="true">⚠️</div>
       <div className="flex-1 min-w-0">
         <h3 className="text-base font-bold text-[#1A1A2E] mb-2">
-          予約・連絡先URLが未設定です
+          予約・連絡先が未設定です
         </h3>
         <p className="text-sm text-[#1A1A2E] mb-3 leading-relaxed">
           {proName ? `${proName}さん` : 'あなた'}を応援したお客さん{' '}
           <strong className="text-[#C4A35A]">{voteCount}人</strong>。
           <br />
           「予約したい」と思った時の連絡先がプロフィールにありません。
+          <br />
+          URL・メールアドレス・電話番号のいずれか1つでOKです。
         </p>
         <Link
           href="/dashboard?tab=profile&edit=true"
           className="inline-block px-5 py-2 rounded-md text-sm font-bold no-underline"
           style={{ background: '#1A1A2E', color: '#FAFAF7' }}
         >
-          予約・連絡先URLを設定する →
+          予約・連絡先を設定する →
         </Link>
       </div>
     </div>
