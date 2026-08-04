@@ -708,7 +708,7 @@ export function buildRescheduleContactNoteHtml(pro: {
   contact_email: string | null
 }): string {
   if (!hasProContactInfo(pro)) return ''
-  return '<br><br>日時のご変更をご希望の場合は、上記のご連絡先へ直接ご連絡ください。'
+  return '<br><br>日時のご変更・キャンセルのご希望は、上記のご連絡先へ直接ご連絡ください。'
 }
 
 /**
@@ -828,7 +828,7 @@ export async function notifyRescheduleConfirmedToClient(
     '日時変更が確定しました',
     emailShell(
       '日時変更確定のお知らせ',
-      `${safeReceiverProName}さんとのご相談日時が変更になりました。${newSlotText ? `<br>新日時: ${escapeHtml(newSlotText)}` : ''}` +
+      `${safeReceiverProName}さんとの紹介予約の日時が変更になりました。${newSlotText ? `<br>新日時: ${escapeHtml(newSlotText)}` : ''}` +
         buildCalendarLinkHtml(calendarUrl) +
         referralListFooterHtml(listUrl),
     ),

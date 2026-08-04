@@ -91,6 +91,8 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
   const [locationSaveDefault, setLocationSaveDefault] = useState<Record<string, boolean>>({})
   const [locationSentIds, setLocationSentIds] = useState<Set<string>>(new Set())
   const [receiverAddressSet, setReceiverAddressSet] = useState(false)
+  // CEO指摘(2026-08-04): 住所設定済みの場合は「設定済みの場所を成立メールで送付済み」表示に使う実値
+  const [receiverAddress, setReceiverAddress] = useState<string | null>(null)
   // タスクB(2026-08-04・CEO指示): 「日時変更を提案する」の開閉と入力値(bookingIdごと)
   const [rescheduleOpenId, setRescheduleOpenId] = useState<string | null>(null)
   const [rescheduleInputs, setRescheduleInputs] = useState<Record<string, [string, string, string]>>({})
@@ -110,6 +112,7 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
         if (data?.bookings) setItems(data.bookings)
         if (data?.cancelled_unpaid) setCancelledUnpaidItems(data.cancelled_unpaid)
         if (typeof data?.receiver_address_set === 'boolean') setReceiverAddressSet(data.receiver_address_set)
+        if (typeof data?.receiver_address === 'string') setReceiverAddress(data.receiver_address)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -790,6 +793,29 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                     場所を送信しました
                   </div>
                 ) : !isLocationOpen ? (
+                  // CEO指摘(2026-08-04): 住所設定済みのプロは成立メールで場所を自動送付済みのため、
+                  // 「当日の場所を送る」ボタンではなく送付済みの案内を表示する(別の場所を送る導線は小さく残す)
+                  receiverAddressSet ? (
+                    <div style={{ fontSize: 12, color: '#6B7280', background: '#F9FAFB', borderRadius: 8, padding: '8px 10px' }}>
+                      設定済みの場所（{receiverAddress}）は予約成立時のメールでクライアントへお送りしています。
+                      <button
+                        onClick={() => setLocationOpenId(item.id)}
+                        style={{
+                          display: 'block',
+                          marginTop: 4,
+                          padding: 0,
+                          border: 'none',
+                          background: 'transparent',
+                          color: '#6B7280',
+                          fontSize: 11,
+                          textDecoration: 'underline',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        別の場所を送る
+                      </button>
+                    </div>
+                  ) : (
                   <button
                     onClick={() => setLocationOpenId(item.id)}
                     style={{
@@ -806,6 +832,7 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                   >
                     当日の場所を送る
                   </button>
+                  )
                 ) : (
                   <div style={{ padding: '10px 12px', background: '#fff', borderRadius: 8, border: '1px solid #D1D5DB' }}>
                     <label style={{ fontSize: 11, color: '#6B7280', display: 'block', marginBottom: 4 }}>

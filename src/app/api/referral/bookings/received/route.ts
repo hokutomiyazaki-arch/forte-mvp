@@ -149,13 +149,17 @@ export async function GET() {
     // タスクA(2026-08-04・CEO指示): 「デフォルトの場所として保存する」チェックボックスは
     // professionals.address が未設定の場合のみ表示する(受け手自身の設定なので全カード共通の1値)。
     let receiverAddressSet = false
+    // CEO指摘(2026-08-04): 住所設定済みの場合、カードには「設定済みの場所を成立メールで送付済み」と
+    // 表示するため住所の実値も返す(受け手本人のプロフィール値で公開カードにも表示される情報・PIIゲート対象外)。
+    let receiverAddress: string | null = null
     try {
       const { data: addressRow } = await supabase
         .from('professionals')
         .select('address')
         .eq('id', ownPro.id)
         .maybeSingle()
-      receiverAddressSet = !!(addressRow as { address: string | null } | null)?.address
+      receiverAddress = (addressRow as { address: string | null } | null)?.address || null
+      receiverAddressSet = !!receiverAddress
     } catch (addressErr) {
       console.error('[api/referral/bookings/received] address fetch error (fail-soft):', addressErr)
     }
@@ -334,6 +338,7 @@ export async function GET() {
       completed: completedResult,
       cancelled_unpaid: cancelledUnpaidResult,
       receiver_address_set: receiverAddressSet,
+      receiver_address: receiverAddress,
     })
   } catch (err: any) {
     console.error('[api/referral/bookings/received] GET error:', err)
@@ -1077,7 +1082,7 @@ export async function PATCH(request: NextRequest) {
             const calendarUrl = slotIsoForCalendar
               ? buildGoogleCalendarUrl({
                   startIso: slotIsoForCalendar,
-                  title: `${ownPro.name}さんとのご相談(REAL PROOF)`,
+                  title: `${ownPro.name}さんとの紹介予約(REAL PROOF)`,
                   location: receiverAccessInfo?.address || undefined,
                 })
               : null

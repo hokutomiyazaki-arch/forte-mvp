@@ -416,9 +416,9 @@ export async function issueFeePaymentLinkAndNotify(params: {
     if (params.clientUserId || params.clientEmail) {
       await notifyClientByEmail(
         { userId: params.clientUserId, email: params.clientEmail },
-        `${params.receiverProName}さんとのご相談確定・お支払いのご案内`,
+        `${params.receiverProName}さんとの紹介予約確定・お支払いのご案内`,
         emailShell(
-          'ご相談確定・お支払いのご案内',
+          '紹介予約確定・お支払いのご案内',
           `${params.confirmedSlotText ? `${params.confirmedSlotText} に確定しました。` : 'ご相談の日時が確定しました。'}<br>担当: ${safeReceiverProName}さん<br><br>` +
             `予約金 ¥${params.feeAmountJpy.toLocaleString()} のお支払いで紹介予約が成立します(24時間以内)。<br>` +
             `当日は残額 ¥${residualJpy.toLocaleString()} を${safeReceiverProName}さんに直接お支払いください(合計 ¥${params.priceJpy.toLocaleString()} は変わりません)。<br>` +
@@ -579,7 +579,7 @@ export async function applyReferralCheckoutSession(
       const calendarUrl = confirmedSlotIso
         ? buildGoogleCalendarUrl({
             startIso: confirmedSlotIso,
-            title: `${receiverPro?.name || 'プロ'}さんとのご相談(REAL PROOF)`,
+            title: `${receiverPro?.name || 'プロ'}さんとの紹介予約(REAL PROOF)`,
             location: receiverPro?.address || undefined,
           })
         : null

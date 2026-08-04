@@ -194,7 +194,7 @@ export async function POST(request: NextRequest, { params }: { params: { booking
         const calendarUrl = selectedIso
           ? buildGoogleCalendarUrl({
               startIso: selectedIso,
-              title: `${receiverProName}さんとのご相談(REAL PROOF)`,
+              title: `${receiverProName}さんとの紹介予約(REAL PROOF)`,
               location: receiverPro?.address || undefined,
             })
           : null

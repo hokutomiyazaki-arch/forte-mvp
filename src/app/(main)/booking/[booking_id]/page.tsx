@@ -58,7 +58,7 @@ export default async function BookingCapabilityPage({
   const calendarUrl = data.confirmedSlotIso
     ? buildGoogleCalendarUrl({
         startIso: data.confirmedSlotIso,
-        title: `${data.receiverProName}さんとのご相談(REAL PROOF)`,
+        title: `${data.receiverProName}さんとの紹介予約(REAL PROOF)`,
         location: data.receiverAddress || undefined,
       })
     : null
