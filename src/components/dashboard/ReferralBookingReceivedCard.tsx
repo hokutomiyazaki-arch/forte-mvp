@@ -75,6 +75,29 @@ interface Props {
 }
 
 /**
+ * CEO追加指示(2026-08-04): カード左上に現在ステータスを1つだけ色分けpillで表示する。
+ * 文字は13px以上・絵文字なし(§0-6)。
+ */
+function StatusPill({ label, bg, color }: { label: string; bg: string; color: string }) {
+  return (
+    <div
+      style={{
+        display: 'inline-block',
+        marginBottom: 8,
+        padding: '2px 10px',
+        borderRadius: 999,
+        background: bg,
+        color,
+        fontSize: 13,
+        fontWeight: 700,
+      }}
+    >
+      {label}
+    </div>
+  )
+}
+
+/**
  * §2-4/§4-8: 受信した予約リクエストの確定・辞退カード。
  * §2-10: 確定済み予約には案件スレッド・引き継ぎメモの開閉式ビューを表示する。
  * ★ isReferralEnabled ではゲートしない(受け手は先行アクセス外でもリクエストを受けられる必要がある)。
@@ -434,11 +457,15 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
             key={item.id}
             style={{
               background: '#F0F7FF',
-              border: '1px solid #B8D4F0',
+              // CEO追加指示(2026-08-04): カード枠の視認性強化。requestedカードはラベルと同系の
+              // オレンジ寄りにして「要対応」が一目で分かるようにする。
+              border: '1.5px solid #E8A874',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
               borderRadius: 12,
               padding: '14px 16px',
             }}
           >
+            <StatusPill label="要対応" bg="#FFE4DE" color="#C2410C" />
             <div style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6, marginBottom: 8 }}>
               <strong>{item.client_nickname}さん</strong>から紹介予約のリクエストが届いています
               {item.sender_pro?.name && (
@@ -672,11 +699,13 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                 key={item.id}
                 style={{
                   background: '#F5F5F5',
-                  border: '1px solid #E0E0E0',
+                  border: '1.5px solid #C5CBD3',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
                   borderRadius: 12,
                   padding: '14px 16px',
                 }}
               >
+                <StatusPill label="キャンセル" bg="#F1F5F9" color="#64748B" />
                 <div style={{ fontSize: 13, color: '#4B4B4B', lineHeight: 1.6 }}>
                   キャンセルしました。返金がある場合は手続き済みです。
                 </div>
@@ -691,11 +720,22 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
             key={item.id}
             style={{
               background: '#F9FFF9',
-              border: '1px solid #C8E6C9',
+              border: '1.5px solid #8FCB9F',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
               borderRadius: 12,
               padding: '14px 16px',
             }}
           >
+            {/* CEO追加指示(2026-08-04): 現在ステータスを1つだけ左上に表示(優先順位: 支払い待ち >
+                日時変更の返答待ち > 確定済み)。 */}
+            {item.payment_status === 'awaiting' ? (
+              <StatusPill label="お支払い待ち" bg="#FFF3E0" color="#B26A00" />
+            ) : rescheduleProposed ? (
+              <StatusPill label="日時変更の返答待ち" bg="#FEF9C3" color="#946800" />
+            ) : (
+              <StatusPill label="確定済み" bg="#DCFCE7" color="#166534" />
+            )}
+
             {/* 1. クライアント名(+紹介元) */}
             <div style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6 }}>
               <strong>{item.client_nickname}さん</strong>との紹介予約が確定しています
@@ -712,25 +752,10 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
             )}
 
             {/* 3. 状態バッジ(あるときだけ) */}
-            {/* §2-4ステージ3(予約フィー方式): 決済リンク送付済み・未払いの間はバッジを表示し、
-                完了ボタンをdisabledにする(レビュー指摘・重大2: フィー未収のまま完了させない)。
-                金額・連絡先は出さない。 */}
-            {item.payment_status === 'awaiting' && (
-              <div
-                style={{
-                  display: 'inline-block',
-                  marginTop: 8,
-                  padding: '3px 10px',
-                  borderRadius: 999,
-                  background: '#FFF3E0',
-                  color: '#B26A00',
-                  fontSize: 13,
-                  fontWeight: 600,
-                }}
-              >
-                クライアントのお支払い待ち
-              </div>
-            )}
+            {/* §2-4ステージ3(予約フィー方式): 決済リンク送付済み・未払いの間は完了ボタンをdisabled
+                にする(レビュー指摘・重大2: フィー未収のまま完了させない)。金額・連絡先は出さない。
+                CEO追加指示(2026-08-04): 「クライアントのお支払い待ち」バッジは左上ステータスpillと
+                重複するため本文側から削除(説明文「お支払い完了後に完了できます」は残す)。 */}
             {/* レビュー指摘(R3): confirm時のCheckout作成失敗フォールバック(unpaid)は自動再試行で
                 回復するが、その間の無説明を避ける(連絡先が出ない理由を正直に示す)。
                 レビュー指摘(軽微6): 13px化でpill(borderRadius:999)が2行折返しで崩れるため、
@@ -1210,11 +1235,13 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
             key={item.id}
             style={{
               background: '#F5F5F5',
-              border: '1px solid #E0E0E0',
+              border: '1.5px solid #C5CBD3',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
               borderRadius: 12,
               padding: '14px 16px',
             }}
           >
+            <StatusPill label="キャンセル" bg="#F1F5F9" color="#64748B" />
             <div style={{ fontSize: 13, color: '#4B4B4B', lineHeight: 1.6 }}>
               <strong>{item.client_nickname}さん</strong>の紹介予約は、期限内にお支払いが確認できなかったためキャンセルされました
             </div>
