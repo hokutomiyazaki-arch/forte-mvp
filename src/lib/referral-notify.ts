@@ -494,53 +494,86 @@ export async function notifyBookingCompletedToSender(
 }
 
 /**
- * タスク②(2026-08-04・CEO指示): プロ都合キャンセル＋自動返金。確定済み予約を受け手プロが
- * キャンセルした際、送り手プロへ通知する(進捗通知にはリンクを付けない・主語を明示する既存方針を踏襲)。
+ * タスク②(2026-08-04・CEO指示): プロ都合/クライアント都合キャンセル＋自動返金。確定済み予約が
+ * キャンセルされた際、送り手プロへ通知する(進捗通知にはリンクを付けない・主語を明示する既存方針を踏襲)。
+ * CEO決定(2026-08-04・追加): reasonでプロ都合/クライアント都合の文言を分岐する。
  */
 export async function notifyBookingCancelledByReceiverToSender(
   target: ProNotifyTarget,
   receiverProName: string,
   clientNickname: string,
+  reason: 'pro' | 'client' = 'pro',
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
   const safeClientNickname = escapeHtml(clientNickname)
   const safeReceiverProName = escapeHtml(receiverProName)
+  const reasonText = reason === 'client' ? 'クライアントのご希望により' : `${receiverProName}さん(受け手)の都合により`
+  const safeReasonText = reason === 'client' ? 'クライアントのご希望により' : `${safeReceiverProName}さん(受け手)の都合により`
   return sendProNotification(target, {
-    lineText: `あなたが紹介した${clientNickname}さんの紹介予約は、${receiverProName}さん(受け手)の都合によりキャンセルされました。`,
+    lineText: `あなたが紹介した${clientNickname}さんの紹介予約は、${reasonText}キャンセルされました。`,
     emailSubject: `あなたが紹介した${clientNickname}さんの紹介予約がキャンセルされました`,
     emailBodyHtml: emailShell(
       '紹介予約キャンセルのお知らせ',
-      `あなたが紹介した${safeClientNickname}さんの紹介予約は、${safeReceiverProName}さん(受け手)の都合によりキャンセルされました。`,
+      `あなたが紹介した${safeClientNickname}さんの紹介予約は、${safeReasonText}キャンセルされました。`,
     ),
   })
 }
 
 /**
- * タスク②(2026-08-04・CEO指示): 確定済み予約を受け手プロがキャンセルした際、クライアントへ
- * 通知する。返金有無で文言を分岐する(refundedAmountJpy: 返金対象額。null/0=返金なし/対象外)。
+ * タスク②(2026-08-04・CEO指示): 確定済み予約がキャンセルされた際、クライアントへ通知する。
+ * 返金有無で文言を分岐する(refundedAmountJpy: 返金対象額。null/0=返金なし/対象外)。
  * 返金は「手続きを行った」旨のみ伝える(カード会社の反映まで数日かかるため断言しすぎない)。
  * レビュー指摘(重大2): 事前告知で全額返金を約束済みのため、paid×返金失敗(refundPending)の場合は
  * 必ず「担当より別途ご連絡」の一文を入れる(返金の記述が一切出ない状態を防ぐ)。
  * レビュー指摘(軽微7): refundedAmountJpyは`!== null`ではなく`> 0`で判定する(¥0の「全額返金」表示を防ぐ)。
+ * CEO決定(2026-08-04・追加): reason='client'の場合、リード文を「ご希望によるキャンセルを承りました。」に
+ * 変更し、noRefundByPolicy(セッション開始72時間前ルールによる「返金なし」・システム障害ではない)を
+ * 専用文言で案内する(refundPendingの「担当より別途ご連絡」とは意味が違うため混同しない)。
+ * レビュー指摘(軽微8): 返金額表示の2分岐(pro/client)はpaidPrefixのみの差のため1本化する。
+ * レビュー指摘(軽微9): reason='client'の場合、どの予約のキャンセルか特定できるよう
+ * 「{受け手プロ名}さんとのご予約({確定日時})」を明記する(confirmedSlotTextは呼び出し元で解決済みの
+ * ものを渡す・本関数では再解決しない)。noRefundByPolicy時は問い合わせ先の一文を追加する
+ * (Resendのreply-to設定が無いため、返信誘導ではなくinfo@proof-app.jp宛の案内にする)。
  */
 export async function notifyBookingCancelledByReceiverToClient(
   target: { userId?: string | null; email?: string | null },
   receiverProName: string,
   listUrl: string,
-  opts: { refundedAmountJpy: number | null; refundPending: boolean },
+  opts: {
+    reason?: 'pro' | 'client'
+    refundedAmountJpy: number | null
+    refundPending: boolean
+    noRefundByPolicy?: boolean
+    confirmedSlotText?: string | null
+  },
 ): Promise<{ sent: boolean }> {
   const safeReceiverProName = escapeHtml(receiverProName)
-  const refundPart = opts.refundPending
-    ? '<br><br>ご返金の手続きについては、担当より別途ご連絡いたします(数日以内)。'
-    : opts.refundedAmountJpy !== null && opts.refundedAmountJpy > 0
-      ? `<br><br>お支払いいただいた予約金(¥${opts.refundedAmountJpy.toLocaleString()})は全額返金の手続きを行いました。カード会社により反映まで数日かかる場合があります。`
-      : ''
+  const reason = opts.reason || 'pro'
+  const safeConfirmedSlotText = opts.confirmedSlotText ? escapeHtml(opts.confirmedSlotText) : null
+  const leadHtml =
+    reason === 'client'
+      ? safeConfirmedSlotText
+        ? `${safeReceiverProName}さんとのご予約(${safeConfirmedSlotText})について、ご希望によるキャンセルを承りました。`
+        : `${safeReceiverProName}さんとのご予約について、ご希望によるキャンセルを承りました。`
+      : `${safeReceiverProName}さんの都合により、紹介予約はキャンセルされました。`
+
+  let refundPart = ''
+  if (opts.refundPending) {
+    refundPart = '<br><br>ご返金の手続きについては、担当より別途ご連絡いたします(数日以内)。'
+  } else if (opts.refundedAmountJpy !== null && opts.refundedAmountJpy > 0) {
+    const paidPrefix = reason === 'client' ? '' : 'お支払いいただいた'
+    refundPart = `<br><br>${paidPrefix}予約金(¥${opts.refundedAmountJpy.toLocaleString()})は全額返金の手続きを行いました。カード会社により反映まで数日かかる場合があります。`
+  } else if (reason === 'client' && opts.noRefundByPolicy) {
+    refundPart =
+      '<br><br>セッション開始の72時間前を過ぎていたため、予約金の返金はございません(ご案内済みのキャンセルポリシーに基づきます)。' +
+      '<br>ご希望と異なる場合はお手数ですが info@proof-app.jp までご連絡ください。'
+  }
+
   return notifyClientByEmail(
     target,
-    `${receiverProName}さんの都合により紹介予約がキャンセルされました`,
+    reason === 'client' ? 'ご希望によるキャンセルを承りました' : `${receiverProName}さんの都合により紹介予約がキャンセルされました`,
     emailShell(
       '紹介予約キャンセルのお知らせ',
-      `${safeReceiverProName}さんの都合により、紹介予約はキャンセルされました。${refundPart}` +
-        referralListFooterHtml(listUrl, '他の先生もご紹介できます'),
+      `${leadHtml}${refundPart}` + referralListFooterHtml(listUrl, '他の先生もご紹介できます'),
     ),
   )
 }
@@ -618,7 +651,7 @@ export async function notifyBookingReceivedToClient(
     ? '②確定すると、メールでお知らせします(予約金のお支払いご案内も届きます)'
     : '②確定次第、メールでお知らせします'
   const step3 = opts.paymentFlowActive
-    ? '③お支払いが完了すると紹介予約が成立します(総額は変わりません。当日は残額のみ。プロの都合でキャンセルとなった場合は予約金が全額返金されます)'
+    ? '③お支払いが完了すると紹介予約が成立します(総額は変わりません。当日は残額のみ。プロの都合でキャンセルとなった場合は予約金が全額返金されます。クライアント様のご都合によるキャンセルは、セッション開始の72時間前まで全額返金・それ以降は返金いたしかねます)'
     : '③確定のご連絡をお待ちください'
   return notifyClientByEmail(
     target,

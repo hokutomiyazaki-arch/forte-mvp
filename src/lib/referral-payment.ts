@@ -424,6 +424,8 @@ export async function issueFeePaymentLinkAndNotify(params: {
             `当日は残額 ¥${residualJpy.toLocaleString()} を${safeReceiverProName}さんに直接お支払いください(合計 ¥${params.priceJpy.toLocaleString()} は変わりません)。<br>` +
             // 予約フィー説明不足対応(CEO指示・2026-08-04): 3点セットの③(返金条件)を明記する。
             `${safeReceiverProName}さんの都合でキャンセルとなった場合、予約金は全額返金されます。` +
+            // CEO決定(2026-08-04・追加): キャンセルポリシーの4点目(クライアント都合の72時間前ルール)。
+            `クライアント様のご都合によるキャンセルは、セッション開始の72時間前まで全額返金・それ以降は返金いたしかねます。` +
             // バグ報告(2026-08-04)対応: 決済リンク切れ・中断時の自己救済導線(予約ページから再開できる)
             `<br><br>お支払い状況の確認・再開はこちら: <a href="${APP_URL}/booking/${params.bookingId}" style="color:#888888;text-decoration:underline;">${APP_URL}/booking/${params.bookingId}</a>` +
             referralListFooterHtml(listUrl),

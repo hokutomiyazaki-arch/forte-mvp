@@ -1,7 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { formatSlot, formatSlotWithWeekday, resolveConfirmedSlotIso } from '@/lib/referral-format'
+import {
+  formatSlot,
+  formatSlotWithWeekday,
+  resolveConfirmedSlotIso,
+  isWithinClientRefundDeadline,
+} from '@/lib/referral-format'
 import BookingThread from '@/components/dashboard/BookingThread'
 
 interface BookingItem {
@@ -91,6 +96,10 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
   const [rescheduleInputs, setRescheduleInputs] = useState<Record<string, [string, string, string]>>({})
   // タスク②(2026-08-04・CEO指示): 「どうしてもキャンセルが必要な場合はこちら」の開閉
   const [cancelOpenId, setCancelOpenId] = useState<string | null>(null)
+  // CEO決定(2026-08-04・追加): キャンセルの「どちらの都合か」選択(bookingIdごと・デフォルト'pro')
+  const [cancelReasonInputs, setCancelReasonInputs] = useState<Record<string, 'pro' | 'client'>>({})
+  // レビュー指摘(重大3): 「クライアントから連絡を受けた日時」の任意入力(bookingIdごと・reason='client'時のみ表示)
+  const [clientRequestedAtInputs, setClientRequestedAtInputs] = useState<Record<string, string>>({})
   // レビュー指摘(軽微8): キャンセル成功時、カードが消える前に一時フィードバックを表示するID集合
   const [cancelledFeedbackIds, setCancelledFeedbackIds] = useState<Set<string>>(new Set())
 
@@ -310,25 +319,38 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
   }
 
   /**
-   * タスク②(2026-08-04・CEO指示): プロ都合キャンセル＋自動返金。「どうしてもキャンセルが必要な
-   * 場合はこちら」を開いた後の「キャンセルする」ボタンから呼ぶ(注意文の表示=1段目、
-   * window.confirmでの最終確認=2段目)。理由入力は不要。
+   * タスク②(2026-08-04・CEO指示): プロ都合/クライアント都合キャンセル＋自動返金判定。
+   * 「どうしてもキャンセルが必要な場合はこちら」を開いた後の「キャンセルする」ボタンから呼ぶ
+   * (注意文の表示=1段目、window.confirmでの最終確認=2段目)。理由入力(自由記述)は不要。
+   * CEO決定(2026-08-04・追加): reasonで確認文言を分岐する(clientはセッション開始72時間前ルールに言及)。
    */
-  async function cancelByReceiver(bookingId: string) {
-    if (
-      !window.confirm(
-        'この紹介予約をキャンセルします。クライアントへ通知が送られ、お支払い済みの予約金は全額返金されます。この操作は取り消せません。よろしいですか？'
-      )
-    ) {
+  async function cancelByReceiver(bookingId: string, reason: 'pro' | 'client') {
+    const confirmMessage =
+      reason === 'client'
+        ? 'クライアントの希望による紹介予約のキャンセルとして処理します。返金の有無はセッション開始72時間前ルールで自動判定されます。この操作は取り消せません。よろしいですか？'
+        : 'この紹介予約をキャンセルします。クライアントへ通知が送られ、お支払い済みの予約金は全額返金されます。この操作は取り消せません。よろしいですか？'
+    if (!window.confirm(confirmMessage)) {
       return
     }
     setProcessingId(bookingId)
     try {
+      // レビュー指摘(重大3): 「クライアントから連絡を受けた日時」(任意入力・reason='client'時のみ)。
+      // 未入力・不正値は送らない(サーバー側は未指定=現在時刻を基準にする現状動作にフォールバック)。
+      const clientRequestedAtValue = clientRequestedAtInputs[bookingId] || ''
+      const clientRequestedAtMs = clientRequestedAtValue ? new Date(clientRequestedAtValue).getTime() : NaN
+      const clientRequestedAtIso =
+        reason === 'client' && !Number.isNaN(clientRequestedAtMs) ? new Date(clientRequestedAtMs).toISOString() : null
+
       const res = await fetch('/api/referral/bookings/received', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
-        body: JSON.stringify({ booking_id: bookingId, action: 'cancel_by_receiver' }),
+        body: JSON.stringify({
+          booking_id: bookingId,
+          action: 'cancel_by_receiver',
+          reason,
+          ...(clientRequestedAtIso ? { client_requested_at: clientRequestedAtIso } : {}),
+        }),
       })
       if (res.ok) {
         setCancelOpenId(null)
@@ -599,6 +621,18 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
           // counter経由(逆指定)/通常3枠経由の順にフォールバックする(共通ロジックはreferral-format.ts)。
           const confirmedSlotIso = resolveConfirmedSlotIso(item.preferred_slots)
           const confirmedSlotText = formatSlot(confirmedSlotIso)
+          // レビュー指摘(重大1): 返金プレビューは「予約金が支払済み(paid)」の場合のみ意味を持つ
+          // (未払い/決済対象外はそもそも返金する金額が無い)。
+          const feePaid = item.payment_status === 'paid'
+          const selectedCancelReason = cancelReasonInputs[item.id] || 'pro'
+          // レビュー指摘(重大3): 「クライアントから連絡を受けた日時」の入力値をプレビューにも
+          // 反映する(サーバー側と同じMath.min(入力値, 現在時刻)を基準時刻にする・中5で単一情報源化)。
+          const clientRequestedAtInputValue = clientRequestedAtInputs[item.id] || ''
+          const clientRequestedAtInputMs = clientRequestedAtInputValue ? new Date(clientRequestedAtInputValue).getTime() : NaN
+          const cancelPreviewBaseMs = !Number.isNaN(clientRequestedAtInputMs)
+            ? Math.min(clientRequestedAtInputMs, Date.now())
+            : Date.now()
+          const clientCancelWithinDeadline = isWithinClientRefundDeadline(confirmedSlotIso, cancelPreviewBaseMs)
           const rescheduleProposed =
             (item.preferred_slots?.reschedule_slots?.length || 0) > 0 && !item.preferred_slots?.reschedule_resolved_at
           // レビュー指摘(軽微1): confirmed_slot_isoは他ラウンドでも残るため、単独では2周目以降の
@@ -919,11 +953,109 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                   }}
                 >
                   <p style={{ fontSize: 11, color: '#B00020', lineHeight: 1.6, margin: '0 0 8px 0' }}>
-                    クライアントへキャンセルの通知が送られ、お支払い済みの予約金は全額返金されます。この操作は取り消せません。
+                    クライアントへキャンセルの通知が送られます。この操作は取り消せません。
                   </p>
+
+                  {/* CEO決定(2026-08-04・追加): どちらの都合によるキャンセルかを選択する。 */}
+                  <div style={{ marginBottom: 8 }}>
+                    <label
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        fontSize: 12,
+                        color: '#333',
+                        marginBottom: 4,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name={`cancel-reason-${item.id}`}
+                        checked={selectedCancelReason === 'pro'}
+                        onChange={() => setCancelReasonInputs((prev) => ({ ...prev, [item.id]: 'pro' }))}
+                      />
+                      {/* レビュー指摘(重大1): 「(全額返金)」ラベルはpaymentが実際にpaidの場合のみ付与する。 */}
+                      自分(プロ)の都合でキャンセル{feePaid ? '(全額返金)' : ''}
+                    </label>
+                    <label
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#333', cursor: 'pointer' }}
+                    >
+                      <input
+                        type="radio"
+                        name={`cancel-reason-${item.id}`}
+                        checked={selectedCancelReason === 'client'}
+                        onChange={() => setCancelReasonInputs((prev) => ({ ...prev, [item.id]: 'client' }))}
+                      />
+                      クライアントの希望によるキャンセル
+                    </label>
+                  </div>
+
+                  {selectedCancelReason === 'client' && (
+                    <>
+                      {/* レビュー指摘(重大3): クライアントから連絡を受けた日時(任意)。72時間前ルールの
+                          基準時刻として、現在時刻より前ならこちらを優先する(サーバー側もMath.minで同じ)。 */}
+                      <div style={{ marginBottom: 8 }}>
+                        <label style={{ fontSize: 11, color: '#6B7280', display: 'block', marginBottom: 4 }}>
+                          クライアントから連絡を受けた日時(任意)
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={clientRequestedAtInputValue}
+                          onChange={(e) =>
+                            setClientRequestedAtInputs((prev) => ({ ...prev, [item.id]: e.target.value }))
+                          }
+                          style={{
+                            width: '100%',
+                            padding: '6px 8px',
+                            borderRadius: 6,
+                            border: '1px solid #D1D5DB',
+                            fontSize: 12,
+                            boxSizing: 'border-box' as const,
+                          }}
+                        />
+                        <p style={{ fontSize: 10, color: '#6B7280', marginTop: 4, lineHeight: 1.5 }}>
+                          セッション開始の72時間前までにご連絡を受けていた場合は、受けた日時を入力すると
+                          全額返金の対象になります。
+                        </p>
+                      </div>
+
+                      {feePaid ? (
+                        <p
+                          style={{
+                            fontSize: 11,
+                            color: clientCancelWithinDeadline ? '#1A6B3C' : '#B00020',
+                            background: '#fff',
+                            borderRadius: 6,
+                            padding: '6px 8px',
+                            marginBottom: 8,
+                          }}
+                        >
+                          現時点でキャンセルした場合:{' '}
+                          {clientCancelWithinDeadline
+                            ? '全額返金されます'
+                            : '返金はありません(セッション開始72時間前を過ぎているため)'}
+                        </p>
+                      ) : (
+                        <p
+                          style={{
+                            fontSize: 11,
+                            color: '#6B7280',
+                            background: '#fff',
+                            borderRadius: 6,
+                            padding: '6px 8px',
+                            marginBottom: 8,
+                          }}
+                        >
+                          予約金のお支払いがないため返金は発生しません。
+                        </p>
+                      )}
+                    </>
+                  )}
+
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button
-                      onClick={() => cancelByReceiver(item.id)}
+                      onClick={() => cancelByReceiver(item.id, selectedCancelReason)}
                       disabled={processingId === item.id}
                       style={{
                         flex: 1,

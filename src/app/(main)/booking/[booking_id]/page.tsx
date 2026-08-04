@@ -137,6 +137,8 @@ export default async function BookingCapabilityPage({
                 総額は変わりません(当日は残額のみのお支払いです)。
                 <br />
                 {data.receiverProName}さんの都合でキャンセルとなった場合、予約金は全額返金されます。
+                <br />
+                クライアント様のご都合によるキャンセルは、セッション開始の72時間前まで全額返金・それ以降は返金いたしかねます。
               </p>
             </div>
           )}

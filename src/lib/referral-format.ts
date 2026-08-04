@@ -132,3 +132,26 @@ export function resolveConfirmedSlotIso(preferredSlots: PreferredSlotsShape | nu
   }
   return null
 }
+
+/**
+ * CEO決定(2026-08-04・追加): クライアントの希望によるキャンセル(cancel_by_receiver・reason='client')の
+ * 返金締切(日)。単一情報源(レビュー指摘・中5)。env非依存の純関数を置くファイルのため、
+ * サーバー専用の`src/lib/feature-flags.ts`ではなくここに置く(クライアント側UIプレビューからも
+ * そのまま安全にimportできる)。feature-flags.ts側はこの値を再輸出するだけにする。
+ */
+export const CLIENT_CANCEL_REFUND_DEADLINE_DAYS = 3
+
+/**
+ * 確定日時(slotIso)が「セッション開始の72時間(CLIENT_CANCEL_REFUND_DEADLINE_DAYS日)前」より
+ * 前の時点かどうかを判定する(true=まだ72時間より前=全額返金対象)。baseMsは基準時刻
+ * (省略時はDate.now()。重大3: クライアントから連絡を受けた日時をサーバー側で基準にする際に使う)。
+ * slotIsoが解決できない場合は安全側(=true・全額返金)を返す(スロット情報欠損で
+ * クライアントが損しないように)。
+ */
+export function isWithinClientRefundDeadline(slotIso: string | null | undefined, baseMs: number = Date.now()): boolean {
+  if (!slotIso) return true
+  const slotMs = new Date(slotIso).getTime()
+  if (Number.isNaN(slotMs)) return true
+  const deadlineMs = CLIENT_CANCEL_REFUND_DEADLINE_DAYS * 24 * 60 * 60 * 1000
+  return slotMs - deadlineMs > baseMs
+}

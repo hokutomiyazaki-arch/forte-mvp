@@ -25,6 +25,7 @@ import {
   parseSlot,
   buildGoogleCalendarUrl,
   resolveConfirmedSlotIso,
+  isWithinClientRefundDeadline,
 } from '@/lib/referral-format'
 import { isReferralPaymentEnabled, REFERRAL_MIN_FEE_JPY, REFERRAL_FEE_TOTAL_BPS } from '@/lib/feature-flags'
 // 中1レビュー指摘から継続: Stripe importはこのAPI routeに持たせない(Webpackチャンクグラフ対策)。
@@ -64,6 +65,12 @@ interface PreferredSlots {
    * cronの支払い期限切れ自動キャンセル(payment_status='canceled'共用)との区別に使う。
    */
   cancelled_by_receiver_at?: string | null
+  /**
+   * CEO決定(2026-08-04・追加): cancel_by_receiverの「どちらの都合か」の記録。
+   * 'pro'=プロ都合(常に全額返金)/'client_early'=クライアント都合・セッション開始72時間前ルール内(全額返金)/
+   * 'client_late'=クライアント都合・セッション開始72時間前ルール外(返金なし)。監査・表示用途で残す(集計未実装)。
+   */
+  cancel_reason?: 'pro' | 'client_early' | 'client_late' | null
   /**
    * レビュー指摘(軽微1): クライアントが「候補では難しいため現在の日時を希望する」(keep_current)を
    * 選んだ際のマーカー。reschedule-respond側で解決時に必ず明示的にセット/nullで上書きする
@@ -355,6 +362,19 @@ export async function PATCH(request: NextRequest) {
     const bookingId = typeof body.booking_id === 'string' ? body.booking_id : ''
     const action = body.action
     const confirmedIndex = typeof body.confirmed_index === 'number' ? body.confirmed_index : null
+    // CEO決定(2026-08-04・追加): cancel_by_receiverの「どちらの都合か」。未指定は'pro'(既存互換)。
+    // レビュー指摘(中6): undefined以外で'pro'/'client'以外の値は明示的に400で弾く(不正値の黒箱化を防ぐ)。
+    if (body.reason !== undefined && body.reason !== 'pro' && body.reason !== 'client') {
+      return NextResponse.json({ error: 'invalid_reason' }, { status: 400 })
+    }
+    const cancelReason: 'pro' | 'client' = body.reason === 'client' ? 'client' : 'pro'
+    // レビュー指摘(重大3): クライアントから連絡を受けた日時(任意入力・reason='client'時のみUIで表示)。
+    // 不正値はnull(=現在時刻を基準にする現状動作にフォールバック)。
+    const rawClientRequestedAt = typeof body.client_requested_at === 'string' ? body.client_requested_at : null
+    const clientRequestedAtMs =
+      rawClientRequestedAt && !Number.isNaN(new Date(rawClientRequestedAt).getTime())
+        ? new Date(rawClientRequestedAt).getTime()
+        : null
 
     if (
       !bookingId ||
@@ -608,6 +628,19 @@ export async function PATCH(request: NextRequest) {
       const basePreferredSlots =
         (freshSlotsRow?.preferred_slots as PreferredSlots | null) || booking.preferred_slots || {}
 
+      // CEO決定(2026-08-04・追加): クライアント都合キャンセルのセッション開始72時間前返金ルール。
+      // レビュー指摘(重大3): 「クライアントから連絡を受けた日時」(client_requested_at・任意入力)が
+      // 現在時刻より前ならそちらを基準にする(Math.min=より古い方=クライアントに有利な側を採用)。
+      // 未指定・不正値は現在時刻のみを基準にする(現状動作と同じ)。
+      // レビュー指摘(中5): 判定ロジックは単一情報源(referral-format.ts)の純関数に集約する。
+      const confirmedSlotIsoForCancel = resolveConfirmedSlotIso(basePreferredSlots)
+      const cancelBaseMs = clientRequestedAtMs !== null ? Math.min(clientRequestedAtMs, Date.now()) : Date.now()
+      const withinClientRefundDeadline = isWithinClientRefundDeadline(confirmedSlotIsoForCancel, cancelBaseMs)
+      // pro都合は常に全額返金。client都合はセッション開始72時間前ルール内のみ全額返金。
+      const shouldRefundIfPaid = cancelReason === 'pro' || withinClientRefundDeadline
+      const cancelReasonMarker: 'pro' | 'client_early' | 'client_late' =
+        cancelReason === 'pro' ? 'pro' : withinClientRefundDeadline ? 'client_early' : 'client_late'
+
       // レビュー指摘(重大1): payment_statusもPATCH冒頭のスタレスナップショットのため、CASのUPDATE
       // 自体に`.select('id, payment_status')`を付け、更新確定と同時点の実値を取得して分岐する
       // (webhookの支払い完了と競合しても、この時点の実値で正しくpaid/awaitingを判定できる)。
@@ -616,7 +649,11 @@ export async function PATCH(request: NextRequest) {
         .from('referral_bookings')
         .update({
           status: 'cancelled',
-          preferred_slots: { ...basePreferredSlots, cancelled_by_receiver_at: new Date().toISOString() },
+          preferred_slots: {
+            ...basePreferredSlots,
+            cancelled_by_receiver_at: new Date().toISOString(),
+            cancel_reason: cancelReasonMarker,
+          },
         })
         .eq('id', bookingId)
         .eq('status', 'confirmed')
@@ -641,21 +678,29 @@ export async function PATCH(request: NextRequest) {
       // レビュー指摘(重大2): paid確定(通常/競合再検出のいずれか)で返金を試みたが失敗した場合、
       // クライアント宛メールに「担当より別途ご連絡」を必ず入れるためのフラグ。
       let refundPending = false
+      // CEO決定(2026-08-04・追加): client都合×セッション開始72時間前ルール外で「返金しない」と
+      // 決めた場合の記録(システム障害のrefundPendingとは別。ポリシーどおりの正常系)。
+      let noRefundByPolicy = false
 
       if (paymentEnabled) {
         if (paymentStatusAtCancel === 'paid') {
-          const refundResult = await refundReferralBookingFee({
-            bookingId: booking.id,
-            stripePaymentIntentId: booking.stripe_payment_intent_id,
-            fallbackAmountJpy,
-          })
-          if (refundResult.refunded) {
-            refundedAmountJpy = refundResult.amountJpy
+          if (shouldRefundIfPaid) {
+            const refundResult = await refundReferralBookingFee({
+              bookingId: booking.id,
+              stripePaymentIntentId: booking.stripe_payment_intent_id,
+              fallbackAmountJpy,
+            })
+            if (refundResult.refunded) {
+              refundedAmountJpy = refundResult.amountJpy
+            } else {
+              refundPending = true
+            }
+            // 返金API呼び出し自体が失敗した場合はrefundReferralBookingFee内でCRITICALログ済み。
+            // 返金失敗でもキャンセル自体は成立させる(fail open・①のCASは既に確定している)。
           } else {
-            refundPending = true
+            // client都合・セッション開始72時間前ルール外: 返金しない。payment_statusは'paid'のまま(返金なしの記録)。
+            noRefundByPolicy = true
           }
-          // 返金API呼び出し自体が失敗した場合はrefundReferralBookingFee内でCRITICALログ済み。
-          // 返金失敗でもキャンセル自体は成立させる(fail open・①のCASは既に確定している)。
         } else if (paymentStatusAtCancel === 'awaiting') {
           // 支払いは未確定のため返金は不要。決済リンクを失効させ、誰にも課金させない。
           const { data: awaitingCancelRows, error: awaitingCancelError } = await supabase
@@ -672,22 +717,27 @@ export async function PATCH(request: NextRequest) {
           }
           if (!awaitingCancelError && (!awaitingCancelRows || awaitingCancelRows.length === 0)) {
             // レビュー指摘(重大1②): 0行=競合(その間にwebhookがpaidへ進めた可能性)。実状態を
-            // 再SELECTし、'paid'であれば返金へ回す(課金されたまま返金なしになる穴を閉塞)。
+            // 再SELECTし、'paid'であれば返金判定(shouldRefundIfPaid)に回す(課金されたまま
+            // 返金なしになる穴を閉塞。client都合×セッション開始72時間前ルール外ならここでも返金しない)。
             const { data: latestPaymentRow } = await supabase
               .from('referral_bookings')
               .select('payment_status, stripe_payment_intent_id')
               .eq('id', bookingId)
               .maybeSingle()
             if (latestPaymentRow?.payment_status === 'paid') {
-              const refundResult = await refundReferralBookingFee({
-                bookingId: booking.id,
-                stripePaymentIntentId: latestPaymentRow.stripe_payment_intent_id,
-                fallbackAmountJpy,
-              })
-              if (refundResult.refunded) {
-                refundedAmountJpy = refundResult.amountJpy
+              if (shouldRefundIfPaid) {
+                const refundResult = await refundReferralBookingFee({
+                  bookingId: booking.id,
+                  stripePaymentIntentId: latestPaymentRow.stripe_payment_intent_id,
+                  fallbackAmountJpy,
+                })
+                if (refundResult.refunded) {
+                  refundedAmountJpy = refundResult.amountJpy
+                } else {
+                  refundPending = true
+                }
               } else {
-                refundPending = true
+                noRefundByPolicy = true
               }
             }
             // 'paid'以外(既にcanceled/refunded等)は他経路が処理済みのため何もしない。
@@ -704,6 +754,9 @@ export async function PATCH(request: NextRequest) {
       const clientNicknameForCancel = booking.clients?.nickname || 'クライアント'
       const slugForCancel = booking.referral_lists?.slug || ''
       const listUrlForCancel = slugForCancel ? `${APP_URL}/r/${slugForCancel}` : APP_URL
+      // レビュー指摘(軽微9): クライアント宛メールに「◯◯さんとのご予約(確定日時)」を明記するため、
+      // 呼び出し元(このルート)で確定日時を解決して渡す(通知関数側では再解決しない)。
+      const confirmedSlotTextForCancel = formatSlotWithWeekday(confirmedSlotIsoForCancel)
 
       try {
         if (clientUserIdForCancel || booking.client_email) {
@@ -711,7 +764,13 @@ export async function PATCH(request: NextRequest) {
             { userId: clientUserIdForCancel, email: booking.client_email },
             ownPro.name,
             listUrlForCancel,
-            { refundedAmountJpy, refundPending }
+            {
+              reason: cancelReason,
+              refundedAmountJpy,
+              refundPending,
+              noRefundByPolicy,
+              confirmedSlotText: confirmedSlotTextForCancel,
+            }
           )
         }
       } catch (notifyErr) {
@@ -734,6 +793,7 @@ export async function PATCH(request: NextRequest) {
               },
               ownPro.name,
               clientNicknameForCancel,
+              cancelReason,
             )
           }
         }

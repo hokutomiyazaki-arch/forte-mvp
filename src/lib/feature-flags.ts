@@ -93,3 +93,11 @@ export const REFERRAL_FEE_TOTAL_BPS = 3360
  * (レビュー指摘・中5・cron交差の1時間窓の穴閉塞)。
  */
 export const CONFIRM_PAYMENT_DEADLINE_HOURS = 24
+
+/**
+ * レビュー指摘(中5・単一情報源化): クライアント都合キャンセルの返金締切(日)は
+ * env非依存の`src/lib/referral-format.ts`が本体(client/server両用の純関数と同じ場所に置く)。
+ * このファイルはサーバー専用(process.env直読み)のため、既存importの後方互換のためだけに
+ * 再輸出する(新規呼び出しはreferral-format.tsから直接importすること)。
+ */
+export { CLIENT_CANCEL_REFUND_DEADLINE_DAYS } from '@/lib/referral-format'
