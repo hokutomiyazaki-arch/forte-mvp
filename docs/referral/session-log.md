@@ -130,3 +130,9 @@
 - 【指示書未反映】相談送信直後のクライアント受付メール新設（今後の流れ①〜⑤明記）。全クライアント向けメールに紹介リストリンク常設。辞退メールは「他の先生への相談はこちら」。
 - 送り手プロへの結果通知を網羅（確定・別日時提案・辞退・成立・失効・未払いキャンセル・完了）。
 - レビュー1周（FAIL: 受け手に確定日時が届かない・counter中confirm素通り・失効文言→全て修正済み）。記録のみの残課題: counter_slotsの未来日時検証なし（既存の希望日時と同水準）・/booking/[id]のServer Component直DB参照（/r/と同型の逸脱）。
+
+### 実装: §2-4ステージ3（決済確認後の連絡先開示）— 2026-08-04 朝
+- 開示条件は canDiscloseContact() に一元化: status IN (confirmed, completed) かつ payment_status IN (paid, not_required) または null（決済無効期の旧予約は確定時点で開示=CEO決定）。awaiting/unpaid/requested等は不開示。
+- 受け手の確定カード・完了一覧に「クライアント連絡先」（名前・タップ発信tel:・mailto:）を表示。「日程の調整・当日のご連絡はこちらへ直接どうぞ」。
+- 支払い完了の受け手通知に「連絡先はダッシュボードで確認」を追記（メール本文にPII直書きしない）。
+- レビューPASS（PII漏れ経路ゼロをsent/accept/booking/webhook/cron横断で確認）。追加対応: unpaidフォールバック中のカードに「お支払いのご案内を準備中です」の説明バッジ・tel:/mailtoのencodeURIComponent。

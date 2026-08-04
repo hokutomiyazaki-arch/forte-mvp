@@ -39,8 +39,8 @@ interface PreferredSlots {
 
 /**
  * PII注意: clients.user_id / client_email はメール送信にのみ使う。レスポンスには絶対含めない。
- * client_name/client_phone は§2-4ステージ1で開示制御対象(受け手への開示は別ステージで実装)のため、
- * この一覧取得では select しない。
+ * client_name/client_phone/client_email は§2-4ステージ3(CEO決定)で開示制御対象。
+ * GETのレスポンスへは canDiscloseContact() の条件を満たす行のみ client_contact として含める。
  */
 interface BookingRow {
   id: string
@@ -66,8 +66,26 @@ interface BookingRow {
 }
 
 /**
+ * §2-4ステージ3(決済確認後の連絡先開示・CEO決定): クライアントの氏名・電話番号・メールは
+ * 「決済確認がとれた後」にのみ受け手プロへ開示する。開示条件は以下のみ:
+ *   status IN ('confirmed','completed') かつ
+ *   (payment_status === 'paid' または 'not_required' または null/undefined(決済無効期に
+ *    作られた旧予約でpayment_statusカラム自体を参照しない場合))
+ * awaiting/unpaid(支払い前)は開示しない。requested/draft/cancelled/expiredは状態に関わらず
+ * 開示しない(status条件で既に弾かれる)。
+ * ★ この関数がPIIの唯一のゲートになる。開示条件を変更する場合は必ずレビューを通すこと。
+ */
+function canDiscloseContact(booking: { status: string; payment_status?: string | null }): boolean {
+  if (booking.status !== 'confirmed' && booking.status !== 'completed') return false
+  const ps = booking.payment_status
+  return ps === 'paid' || ps === 'not_required' || ps === null || ps === undefined
+}
+
+/**
  * GET /api/referral/bookings/received
- * 受け手プロ本人の requested/confirmed 一覧。クライアントは nickname のみ(PII含めない)。
+ * 受け手プロ本人の requested/confirmed 一覧。クライアントは原則 nickname のみ(PII含めない)。
+ * §2-4ステージ3(決済確認後の連絡先開示・CEO決定): canDiscloseContact() の条件を満たす行のみ
+ * client_contact(name/phone/email)を追加で含める。満たさない行は client_contact: null。
  * ★ isReferralEnabled ではゲートしない(受け手は先行アクセス外でもリクエストを受けられる必要がある)。
  * タスク⑥: レスポンスに `completed`(completed_at desc・limit 200)を追加。既存の `bookings` の形は変更しない。
  */
@@ -81,10 +99,14 @@ export async function GET() {
     const supabase = getSupabaseAdmin()
     // §2-4ステージ3(予約フィー方式): payment_statusはmigration 036依存のカラムのため、
     // 既存の他ファイル(cron/expire-referral-bookings等)と同様にフラグゲート付きで選択する。
-    // 受け手APIへの追加はstatusのみ(金額・連絡先はここでは選択しない)。
+    // paymentEnabledがfalseの間はカラム自体を選択しない(=canDiscloseContactにはundefinedが渡り、
+    // 「決済無効期」として扱われる。これは仕様どおり: フラグOFFの予約は確定時点で開示してよい)。
+    // client_name/client_phone/client_emailはcanDiscloseContact()の条件を満たす行のみ
+    // レスポンスに含める(このAPI内で組み立てる。selectはPII開示制御の対象ではなく、
+    // レスポンス組み立て側でゲートする)。
     const paymentEnabled = isReferralPaymentEnabled()
     const baseBookingSelect =
-      'id, list_id, sender_pro_id, receiver_pro_id, client_id, menu_id, theme_tags, preferred_slots, status, price_jpy, expires_at, confirmed_at, completed_at, created_at, clients(id, nickname), referral_lists(id, slug, comment), pro_menus(name)'
+      'id, list_id, sender_pro_id, receiver_pro_id, client_id, client_name, client_phone, client_email, menu_id, theme_tags, preferred_slots, status, price_jpy, expires_at, confirmed_at, completed_at, created_at, clients(id, nickname), referral_lists(id, slug, comment), pro_menus(name)'
     const bookingSelect = paymentEnabled ? `${baseBookingSelect}, payment_status` : baseBookingSelect
     const { data: bookings, error } = await supabase
       .from('referral_bookings')
@@ -101,11 +123,12 @@ export async function GET() {
     // タスク⑥: 完了済み(completed)は別クエリで取得(fail-soft)。requested/confirmedの取得を壊さない。
     let completedBookings: any[] = []
     try {
+      const completedBaseSelect =
+        'id, list_id, sender_pro_id, receiver_pro_id, client_id, client_name, client_phone, client_email, menu_id, theme_tags, status, price_jpy, handover_note, confirmed_at, completed_at, created_at, clients(id, nickname), pro_menus(name)'
+      const completedSelect = paymentEnabled ? `${completedBaseSelect}, payment_status` : completedBaseSelect
       const { data: completedRows, error: completedError } = await supabase
         .from('referral_bookings')
-        .select(
-          'id, list_id, sender_pro_id, receiver_pro_id, client_id, menu_id, theme_tags, status, price_jpy, handover_note, confirmed_at, completed_at, created_at, clients(id, nickname), pro_menus(name)'
-        )
+        .select(completedSelect)
         .eq('receiver_pro_id', ownPro.id)
         .eq('status', 'completed')
         .order('completed_at', { ascending: false })
@@ -167,7 +190,7 @@ export async function GET() {
       preferred_slots: b.preferred_slots,
       status: b.status,
       price_jpy: b.price_jpy,
-      // §2-4ステージ3: 決済有効時のみpayment_status(状態のみ)を返す。金額・連絡先は含めない。
+      // §2-4ステージ3: 決済有効時のみpayment_status(状態のみ)を返す。金額は含めない。
       payment_status: paymentEnabled ? b.payment_status || null : null,
       handover_note: handoverMap[b.id] || null,
       expires_at: b.expires_at,
@@ -175,6 +198,10 @@ export async function GET() {
       created_at: b.created_at,
       client_nickname: b.clients?.nickname || 'クライアント',
       sender_pro: b.sender_pro_id ? sendersMap[b.sender_pro_id] || null : null,
+      // §2-4ステージ3(CEO決定): 決済確認後(canDiscloseContact参照)のみ連絡先を開示する。
+      client_contact: canDiscloseContact({ status: b.status, payment_status: paymentEnabled ? b.payment_status : undefined })
+        ? { name: b.client_name || null, phone: b.client_phone || null, email: b.client_email || null }
+        : null,
     }))
 
     const completedResult = completedBookings.map((b: any) => ({
@@ -191,6 +218,11 @@ export async function GET() {
       created_at: b.created_at,
       client_nickname: b.clients?.nickname || 'クライアント',
       sender_pro: b.sender_pro_id ? sendersMap[b.sender_pro_id] || null : null,
+      // タスク①: completed一覧も同条件で開示する(completedはpaid/not_requiredのはずだが、
+      // 念のためcanDiscloseContactを必ず通す)。
+      client_contact: canDiscloseContact({ status: b.status, payment_status: paymentEnabled ? b.payment_status : undefined })
+        ? { name: b.client_name || null, phone: b.client_phone || null, email: b.client_email || null }
+        : null,
     }))
 
     return NextResponse.json({ bookings: result, completed: completedResult })

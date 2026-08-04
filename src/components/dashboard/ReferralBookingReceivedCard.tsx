@@ -21,7 +21,7 @@ interface BookingItem {
   } | null
   status: 'requested' | 'confirmed'
   price_jpy: number
-  /** §2-4ステージ3(予約フィー方式): 決済有効時のみ入る。金額・連絡先は含まれない(status相当のみ)。 */
+  /** §2-4ステージ3(予約フィー方式): 決済有効時のみ入る。金額は含まれない(status相当のみ)。 */
   payment_status?: string | null
   handover_note: { theme?: string; history?: string; tried?: string; notes?: string } | null
   expires_at: string | null
@@ -29,6 +29,8 @@ interface BookingItem {
   created_at: string
   client_nickname: string
   sender_pro: { id: string; name: string } | null
+  /** §2-4ステージ3(決済確認後の連絡先開示・CEO決定): 開示条件を満たす場合のみAPIから入る。 */
+  client_contact: { name: string | null; phone: string | null; email: string | null } | null
 }
 
 interface Props {
@@ -449,6 +451,57 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                 }}
               >
                 クライアントのお支払い待ち
+              </div>
+            )}
+            {/* レビュー指摘(R3): confirm時のCheckout作成失敗フォールバック(unpaid)は自動再試行で
+                回復するが、その間の無説明を避ける(連絡先が出ない理由を正直に示す) */}
+            {item.payment_status === 'unpaid' && (
+              <div
+                style={{
+                  display: 'inline-block', marginTop: 6, padding: '3px 10px', borderRadius: 999,
+                  background: '#F3F4F6', color: '#6B7280', fontSize: 11, fontWeight: 600,
+                }}
+              >
+                お支払いのご案内を準備中です（連絡先はお支払い完了後に表示されます）
+              </div>
+            )}
+            {/* §2-4ステージ3(決済確認後の連絡先開示・CEO決定): 開示条件を満たす場合のみ表示する。
+                日程調整・当日連絡はここから直接どうぞ、の案内。 */}
+            {item.client_contact && (
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: '10px 12px',
+                  background: '#fff',
+                  border: '1px solid #C8E6C9',
+                  borderRadius: 8,
+                }}
+              >
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>
+                  クライアント連絡先
+                </div>
+                {item.client_contact.name && (
+                  <div style={{ fontSize: 12, color: '#1A1A2E' }}>{item.client_contact.name}さん</div>
+                )}
+                {item.client_contact.phone && (
+                  <div style={{ fontSize: 12, color: '#1A1A2E' }}>
+                    電話:{' '}
+                    <a href={`tel:${encodeURIComponent(item.client_contact.phone)}`} style={{ color: '#1A6B3C' }}>
+                      {item.client_contact.phone}
+                    </a>
+                  </div>
+                )}
+                {item.client_contact.email && (
+                  <div style={{ fontSize: 12, color: '#1A1A2E' }}>
+                    メール:{' '}
+                    <a href={`mailto:${encodeURIComponent(item.client_contact.email)}`} style={{ color: '#1A6B3C' }}>
+                      {item.client_contact.email}
+                    </a>
+                  </div>
+                )}
+                <div style={{ fontSize: 11, color: '#6B7280', marginTop: 4 }}>
+                  日程の調整・当日のご連絡はこちらへ直接どうぞ
+                </div>
               </div>
             )}
             <BookingThread

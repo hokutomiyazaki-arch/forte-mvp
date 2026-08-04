@@ -18,6 +18,8 @@ interface CompletedBookingItem {
   created_at: string
   client_nickname: string
   sender_pro: { id: string; name: string } | null
+  /** §2-4ステージ3(決済確認後の連絡先開示・CEO決定): 開示条件を満たす場合のみAPIから入る。 */
+  client_contact: { name: string | null; phone: string | null; email: string | null } | null
 }
 
 interface Props {
@@ -93,6 +95,44 @@ export default function ReferralCompletedList({ proId }: Props) {
               )}
               {item.menu_name && (
                 <div style={{ fontSize: 12, color: '#555', marginTop: 4 }}>メニュー: {item.menu_name}</div>
+              )}
+              {/* §2-4ステージ3(決済確認後の連絡先開示・CEO決定): 履歴としても確認できるよう表示する。 */}
+              {item.client_contact && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    padding: '10px 12px',
+                    background: '#FAFAFA',
+                    border: '1px solid #E5E7EB',
+                    borderRadius: 8,
+                  }}
+                >
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>
+                    クライアント連絡先
+                  </div>
+                  {item.client_contact.name && (
+                    <div style={{ fontSize: 12, color: '#1A1A2E' }}>{item.client_contact.name}さん</div>
+                  )}
+                  {item.client_contact.phone && (
+                    <div style={{ fontSize: 12, color: '#1A1A2E' }}>
+                      電話:{' '}
+                      <a href={`tel:${encodeURIComponent(item.client_contact.phone)}`} style={{ color: '#1A6B3C' }}>
+                        {item.client_contact.phone}
+                      </a>
+                    </div>
+                  )}
+                  {item.client_contact.email && (
+                    <div style={{ fontSize: 12, color: '#1A1A2E' }}>
+                      メール:{' '}
+                      <a href={`mailto:${encodeURIComponent(item.client_contact.email)}`} style={{ color: '#1A6B3C' }}>
+                        {item.client_contact.email}
+                      </a>
+                    </div>
+                  )}
+                  <div style={{ fontSize: 11, color: '#6B7280', marginTop: 4 }}>
+                    日程の調整・当日のご連絡はこちらへ直接どうぞ
+                  </div>
+                </div>
               )}
               <BookingThread
                 bookingId={item.id}

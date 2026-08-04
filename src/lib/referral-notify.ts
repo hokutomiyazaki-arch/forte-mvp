@@ -188,12 +188,16 @@ export async function notifyBookingPaymentCompletedToReceiver(
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
   const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
   const safeClientNickname = escapeHtml(clientNickname)
+  // §2-4ステージ3(決済確認後の連絡先開示・CEO決定): 決済確認がとれたこの時点から
+  // クライアントの連絡先(氏名・電話番号・メール)がダッシュボードで開示される。
+  // ただしメール本文には電話番号等のPIIを直接書かない(メールは転送・誤送信リスクがあるため
+  // 参照導線のみとする。実際の値はダッシュボードのAPI経由でのみ表示する)。
   return sendProNotification(target, {
-    lineText: `${clientNickname}さんのお支払いが完了し、予約が成立しました。\n${dashboardUrl}`,
+    lineText: `${clientNickname}さんのお支払いが完了し、予約が成立しました。クライアントの連絡先はダッシュボードでご確認ください。\n${dashboardUrl}`,
     emailSubject: 'お支払いが完了し、予約が成立しました',
     emailBodyHtml: emailShell(
       '予約成立のお知らせ',
-      `${safeClientNickname}さんのお支払いが完了し、予約が成立しました。<br>ダッシュボードからご確認ください。`,
+      `${safeClientNickname}さんのお支払いが完了し、予約が成立しました。<br>クライアントの連絡先はダッシュボードでご確認ください。`,
       'ダッシュボードを開く',
       dashboardUrl,
     ),
