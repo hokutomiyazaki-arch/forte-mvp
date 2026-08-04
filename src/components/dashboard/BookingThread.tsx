@@ -190,12 +190,14 @@ export default function BookingThread({ bookingId, ownProId, isSender, initialHa
                 ))}
               </div>
             )}
-            <div style={{ display: 'flex', gap: 6 }}>
+            {/* CEO指摘(スクショ・機種による横スクロール対策): 送信ボタンを入力欄の右横ではなく
+                下(右寄せ)に配置し、入力欄は常に幅いっぱいにする(はみ出し防止)。 */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <input
                 value={newBody}
                 onChange={(e) => setNewBody(e.target.value.slice(0, 2000))}
                 placeholder="コメントを入力"
-                style={{ flex: 1, padding: '6px 8px', borderRadius: 6, border: '1px solid #E5E7EB', fontSize: 12, boxSizing: 'border-box' as const }}
+                style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #E5E7EB', fontSize: 12, boxSizing: 'border-box' as const }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
@@ -207,7 +209,7 @@ export default function BookingThread({ bookingId, ownProId, isSender, initialHa
                 onClick={sendMessage}
                 disabled={sending || !newBody.trim()}
                 style={{
-                  padding: '6px 14px', borderRadius: 6, border: 'none',
+                  alignSelf: 'flex-end', padding: '6px 14px', borderRadius: 6, border: 'none',
                   background: '#C4A35A', color: '#fff', fontSize: 12, fontWeight: 600,
                   cursor: sending || !newBody.trim() ? 'default' : 'pointer',
                   opacity: sending || !newBody.trim() ? 0.6 : 1,
