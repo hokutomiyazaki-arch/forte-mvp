@@ -178,6 +178,18 @@ export async function POST(req: NextRequest) {
       return max
     }
 
+    // 申請時点の票数スナップショット（グランドファザリング用・CEO決定2026-08-04）。
+    // 集計方式(vote_summary)が後で変わっても、このプロの物理カード/賞状は申請時点の
+    // この値で不変にする。取得は certification-card.ts の getCertStatsForPro が読む。
+    const statsSnapshotPayload = {
+      method: 'vote_summary_live',
+      captured_at: new Date().toISOString(),
+      proofs: Object.fromEntries(vcMap),
+    }
+    // stats_snapshot カラム未作成環境（migration 038 未実行）向けのfail-softフラグ。
+    // 42703（undefined column）を検知したら以降このリクエスト内では付けずに再試行する。
+    let includeStatsSnapshot = true
+
     let curMax = await getMaxCertNum()
     const inserted: Array<Row & { certNumber: string; id: string }> = []
 
@@ -186,33 +198,38 @@ export async function POST(req: NextRequest) {
       let terminalError: { code?: string; message?: string } | null = null
       for (let attempt = 0; attempt < 12 && !done; attempt++) {
         const candidate = `${numPrefix}${String(curMax + 1).padStart(4, '0')}`
+        const basePayload = {
+          professional_id: professionalId,
+          category_slug: r.categorySlug,
+          application_group_id: groupId,
+          proof_count_at_apply: r.voteCount,
+          top_personality: topPersonality || null,
+          full_name_kanji: fullNameKanji,
+          full_name_romaji: fullNameRomaji,
+          organization: organization || null,
+          postal_code: postalCode,
+          prefecture,
+          city_address: cityAddress,
+          building: building || null,
+          phone,
+          certification_number: candidate,
+          status: 'pending',
+          payment_status: r.paymentStatus,
+          payment_tier: r.tier,
+          payment_amount: r.paymentAmount,
+          // 物理プロダクト選択（グループ単位・全行に同値）。管理ダッシュボードで金属/盾の申請を判別する。
+          want_metal: wantMetalEff,
+          want_shield: wantShieldEff,
+          // 金属選択時は顔写真非対応のため false。未指定は既定 true（写真あり運用踏襲）
+          use_photo_on_card: wantMetal ? false : (usePhotoOnCard !== false),
+        }
+        const payload = includeStatsSnapshot
+          ? { ...basePayload, stats_snapshot: statsSnapshotPayload }
+          : basePayload
+
         const { data: ins, error } = await supabase
           .from('certification_applications')
-          .insert({
-            professional_id: professionalId,
-            category_slug: r.categorySlug,
-            application_group_id: groupId,
-            proof_count_at_apply: r.voteCount,
-            top_personality: topPersonality || null,
-            full_name_kanji: fullNameKanji,
-            full_name_romaji: fullNameRomaji,
-            organization: organization || null,
-            postal_code: postalCode,
-            prefecture,
-            city_address: cityAddress,
-            building: building || null,
-            phone,
-            certification_number: candidate,
-            status: 'pending',
-            payment_status: r.paymentStatus,
-            payment_tier: r.tier,
-            payment_amount: r.paymentAmount,
-            // 物理プロダクト選択（グループ単位・全行に同値）。管理ダッシュボードで金属/盾の申請を判別する。
-            want_metal: wantMetalEff,
-            want_shield: wantShieldEff,
-            // 金属選択時は顔写真非対応のため false。未指定は既定 true（写真あり運用踏襲）
-            use_photo_on_card: wantMetal ? false : (usePhotoOnCard !== false),
-          })
+          .insert(payload)
           .select('id, certification_number')
           .maybeSingle()
 
@@ -221,6 +238,18 @@ export async function POST(req: NextRequest) {
           inserted.push({ ...r, certNumber: candidate, id: ins.id })
           done = true
           break
+        }
+        // stats_snapshot カラムが無い（038未実行）: PostgRESTはINSERTボディの未知キーに
+        // PGRST204 を返す（42703はSELECT側のエラーコード）。メッセージにカラム名が
+        // 含まれるケースも含めて拾う → 外して同じcandidateで1回だけ再試行。
+        if (
+          error &&
+          includeStatsSnapshot &&
+          (error.code === '42703' || error.code === 'PGRST204' || /stats_snapshot/i.test(error.message || ''))
+        ) {
+          console.error('[certification/apply] stats_snapshot column missing — retrying without it:', error.code, error.message)
+          includeStatsSnapshot = false
+          continue
         }
         if (error && error.code === '23505') {
           const msg = error.message || ''

@@ -289,6 +289,91 @@ export async function getNextCertNumber(sb: SupabaseClient): Promise<string> {
   return `${prefix}${String(max + 1).padStart(4, '0')}`
 }
 
+// ===== 認定基準票数の取得（スナップショット∪ライブの proof単位 max・単一の入口） =====
+
+/** PostgRESTがカラム欠落を返すエラーコード/メッセージ判定（SELECT=42703, INSERT=PGRST204 双方をカバー）。 */
+function isMissingColumnError(err: { code?: string; message?: string } | null): boolean {
+  if (!err) return false
+  return err.code === '42703' || err.code === 'PGRST204' || /stats_snapshot/i.test(err.message || '')
+}
+
+/**
+ * このプロの「認定基準となる票数」を proof_id ごとに取得する。
+ *
+ * ⚠️ 物理成果物のグランドファザリング原則（指示書§2-8・CEO決定2026-08-04）。
+ * 「一度到達した水準は下げない」＝ 各申請(certification_applications)の
+ * stats_snapshot.proofs（申請時点の票数・複数申請があれば全て）と、現在の
+ * vote_summary（ライブ）を proof_id ごとに比較し、**大きい方**を採用する
+ * (Math.max)。スナップショットは下限（フロア）として機能し、集計方式変更
+ * (票数→人数化等)で下がっても凍結水準を守る。一方、票が本当に伸びた場合は
+ * ライブ値が上回るため levelUp 判定は生きたまま機能する。
+ * カードと賞状は必ずこの関数を経由し、同一の取得結果を使うこと。
+ * 集計方式の変更時もここは触らないこと。変更時は必ずレビュー。
+ */
+export async function getCertStatsForPro(
+  sb: SupabaseClient,
+  proId: string
+): Promise<{ source: 'max' | 'live'; counts: Map<string, number> }> {
+  const { data: appsRaw, error: appsError } = await sb
+    .from('certification_applications')
+    .select('applied_at, stats_snapshot')
+    .eq('professional_id', proId)
+    .order('applied_at', { ascending: false, nullsFirst: false })
+
+  const counts = new Map<string, number>()
+  let hasSnapshot = false
+
+  if (appsError) {
+    if (!isMissingColumnError(appsError)) {
+      // カラム欠落系以外の実エラー＝一時障害の可能性。物理成果物(カード/賞状)は不可逆のため、
+      // 誤った(新方式の)数字でそのまま生成させず throw して呼び出し側に失敗させる。
+      console.error('[certification-card] snapshot fetch failed:', appsError.code, appsError.message)
+      throw new Error(`getCertStatsForPro: snapshot fetch failed (${appsError.code}): ${appsError.message}`)
+    }
+    console.error(
+      '[certification-card] stats_snapshot column missing — falling back to live:',
+      appsError.code,
+      appsError.message
+    )
+  } else {
+    type SnapRow = { applied_at: string | null; stats_snapshot: { proofs?: Record<string, number> } | null }
+    const apps = (appsRaw as SnapRow[] | null) ?? []
+    for (const a of apps) {
+      const proofs = a.stats_snapshot?.proofs
+      if (!proofs) continue
+      hasSnapshot = true
+      for (const [proofId, count] of Object.entries(proofs)) {
+        const n = typeof count === 'number' ? count : Number(count) || 0
+        const cur = counts.get(proofId) ?? 0
+        if (n > cur) counts.set(proofId, n)
+      }
+    }
+  }
+
+  // ライブ vote_summary も同じ proof_id で max反映。
+  const { data: vsRaw, error: vsError } = await sb
+    .from('vote_summary')
+    .select('proof_id, vote_count')
+    .eq('professional_id', proId)
+  if (vsError) {
+    console.error('[certification-card] vote_summary fetch failed:', vsError.code, vsError.message)
+    if (!hasSnapshot) {
+      // スナップショットも無くライブも取れない＝データソースが無い。空のまま返して
+      // 実績なしとして誤って刷ってしまうより、失敗させる。
+      throw new Error(`getCertStatsForPro: vote_summary fetch failed (${vsError.code}): ${vsError.message}`)
+    }
+    // スナップショットがあれば、ライブ取得の一時失敗でも凍結水準(フロア)のまま継続する。
+  } else {
+    for (const r of (vsRaw as { proof_id: string; vote_count: number | null }[] | null) ?? []) {
+      const n = r.vote_count ?? 0
+      const cur = counts.get(r.proof_id) ?? 0
+      if (n > cur) counts.set(r.proof_id, n)
+    }
+  }
+
+  return { source: hasSnapshot ? 'max' : 'live', counts }
+}
+
 // ===== メインビルダー =====
 
 type CertAppRow = {
@@ -370,13 +455,11 @@ export async function buildCardData(
     .maybeSingle()
   const pro = (proRaw as ProRow | null) ?? null
 
-  // 3. 実績ベースの項目: vote_summary から 15票以上(PROVEN_THRESHOLD)の proof_id を全取得（票数降順）
-  const { data: vsRaw } = await sb
-    .from('vote_summary')
-    .select('proof_id, vote_count')
-    .eq('professional_id', proId)
-  const achieved = ((vsRaw as { proof_id: string; vote_count: number | null }[] | null) ?? [])
-    .map((r) => ({ proofId: r.proof_id, voteCount: r.vote_count ?? 0 }))
+  // 3. 実績ベースの項目: getCertStatsForPro（スナップショット優先）から
+  //    15票以上(PROVEN_THRESHOLD)の proof_id を全取得（票数降順）
+  const { counts: statsCounts } = await getCertStatsForPro(sb, proId)
+  const achieved = Array.from(statsCounts.entries())
+    .map(([proofId, voteCount]) => ({ proofId, voteCount }))
     .filter((r) => r.voteCount >= PROVEN_THRESHOLD)
     .sort((a, b) => b.voteCount - a.voteCount)
 
@@ -604,13 +687,10 @@ export async function buildCertificates(
     if (a.category_slug) appByCat.set(a.category_slug, { certification_number: a.certification_number, applied_at: a.applied_at })
   }
 
-  // 実績（30票以上の全カテゴリ）
-  const { data: vsRaw } = await sb
-    .from('vote_summary')
-    .select('proof_id, vote_count')
-    .eq('professional_id', proId)
-  const achieved = ((vsRaw as { proof_id: string; vote_count: number | null }[] | null) ?? [])
-    .map((r) => ({ proofId: r.proof_id, voteCount: r.vote_count ?? 0 }))
+  // 実績（30票以上の全カテゴリ）: getCertStatsForPro（スナップショット優先・カードと同一取得結果）
+  const { counts: statsCounts } = await getCertStatsForPro(sb, proId)
+  const achieved = Array.from(statsCounts.entries())
+    .map(([proofId, voteCount]) => ({ proofId, voteCount }))
     .filter((r) => r.voteCount >= SPECIALIST_THRESHOLD)
     .sort((a, b) => b.voteCount - a.voteCount)
 
@@ -762,14 +842,9 @@ export async function setCertificateShipped(
   proofId: string,
   shipped: boolean
 ): Promise<{ ok: boolean; error?: string; proofId: string; shipped: boolean; certNumber: string | null; tier: CertificateTier | null }> {
-  // 現ティア（ライブ票数）
-  const { data: vs } = await sb
-    .from('vote_summary')
-    .select('vote_count')
-    .eq('professional_id', proId)
-    .eq('proof_id', proofId)
-    .maybeSingle()
-  const voteCount = (vs as { vote_count: number | null } | null)?.vote_count ?? 0
+  // 現ティア（getCertStatsForPro・スナップショット優先＝カード/賞状表示と同一の取得結果で判定）
+  const { counts: statsCounts } = await getCertStatsForPro(sb, proId)
+  const voteCount = statsCounts.get(proofId) ?? 0
   const tier = getCertificateTier(voteCount)
   if (shipped && !tier) {
     return { ok: false, error: 'not_certified', proofId, shipped: false, certNumber: null, tier: null }
