@@ -18,12 +18,15 @@ import {
 // 中1レビュー指摘: 「決済リンク発行+メール送付」はconfirm時(received PATCH)とこのcronの
 // 再試行ブロックの両方から同じ関数を呼ぶ(同じ処理を2箇所に書かない)。
 // 軽微5レビュー指摘: 24hキャンセル時にセッションを明示失効させる関数も同様に委譲する。
-import { issueFeePaymentLinkAndNotify, expireReferralCheckoutSession } from '@/lib/referral-payment'
+import { issueFeePaymentLinkAndNotify, expireReferralCheckoutSession, executeReferralPayoutTransfer } from '@/lib/referral-payment'
 // ステージ4(送り手分配・2026-08-04・CEO決定): Stripeに触らない独立ファイル。自動完了確定時にも
 // 送り手分配行(referral_payouts)を1回だけ作成する(受け手の手動completeと同じ関数を呼ぶ)。
 import { createReferralPayoutIfEligible } from '@/lib/referral-payout'
 
 export const dynamic = 'force-dynamic'
+// レビュー指摘(中6・2026-08-05): 自動送金の再試行ブロック追加でcronの処理時間が伸びうるため、
+// Vercelのデフォルトタイムアウトに対して明示的に上限を宣言する(Hobby/Pro双方で60sは許容範囲)。
+export const maxDuration = 60
 
 const APP_URL = 'https://realproof.jp'
 const BATCH_LIMIT = 100
@@ -53,6 +56,19 @@ const AUTO_COMPLETE_LIMIT = 500
  * (元の確定日時 = resolveConfirmedSlotIsoのフォールバック基準で完了させる)。
  */
 const RESCHEDULE_PROPOSAL_STALE_DAYS = 7
+/**
+ * ステージ4「自動送金」(CEO承認済み・2026-08-05): status='pending'の取り残し(口座未登録で
+ * executeReferralPayoutTransferがno_accountを返した行等)を毎回再試行する上限件数。
+ * レビュー指摘(中6): maxDuration(60s)に収まるよう20→10に縮小。
+ */
+const PAYOUT_TRANSFER_RETRY_LIMIT = 10
+
+/** referral_payouts / professionals(Connectカラム)未反映(migration 039/040未実行)を示すエラーコード。 */
+function isMissingPayoutSchemaError(err: { code?: string } | null | undefined): boolean {
+  if (!err) return false
+  const code = err.code || ''
+  return code === '42P01' || code === 'PGRST205' || code === '42703'
+}
 
 function isRescheduleProposalStale(proposedAt: unknown): boolean {
   if (typeof proposedAt !== 'string' || !proposedAt) return false
@@ -402,10 +418,22 @@ export async function GET(req: NextRequest) {
             autoCompletedCount++
 
             // ステージ4(送り手分配・CEO決定): 自動完了確定の直後に分配行を作成する(fail-soft)。
+            let autoCompletePayoutId: string | null = null
             try {
-              await createReferralPayoutIfEligible(row.id)
+              const payoutResult = await createReferralPayoutIfEligible(row.id)
+              autoCompletePayoutId = payoutResult.payoutId
             } catch (payoutErr) {
               console.error(`[cron/expire-referral-bookings] auto-complete payout create error for ${row.id}:`, payoutErr)
+            }
+
+            // ステージ4「自動送金」(CEO承認済み・2026-08-05): 分配行の作成/既存確認の直後に送金を試みる
+            // (fail-soft・自動完了処理を絶対に壊さない)。
+            if (autoCompletePayoutId) {
+              try {
+                await executeReferralPayoutTransfer(autoCompletePayoutId)
+              } catch (transferErr) {
+                console.error(`[cron/expire-referral-bookings] auto-complete payout transfer error for ${row.id}:`, transferErr)
+              }
             }
 
             const receiverName = row.receiver_pro_id ? proMap4[row.receiver_pro_id]?.name || 'プロ' : 'プロ'
@@ -436,6 +464,63 @@ export async function GET(req: NextRequest) {
     console.error('[cron/expire-referral-bookings] auto-complete unexpected error:', autoCompleteErr)
   }
 
+  // ステージ4「自動送金」(CEO承認済み・2026-08-05): status='pending'の取り残しを毎回再試行する
+  // (テーブル/カラム未反映のmigration未実行環境でも他のcron処理を壊さない・fail-soft)。
+  // レビュー指摘(重大2): 口座未登録/未有効の送り手の行がPAYOUT_TRANSFER_RETRY_LIMIT件を占有し続けると、
+  // 新しく有効化された送り手の行が永久に処理されない(starvation)。事前に
+  // stripe_connect_payouts_enabled=trueの送り手IDだけに絞り込み、対象が0人ならブロック自体をスキップする。
+  let transfersAttempted = 0
+  let transfersSucceeded = 0
+  let transfersNoAccount = 0
+  // レビュー指摘(軽微9): outcome別カウンタ(transferred/no_account/error)。capped/skipped/not_readyは
+  // 「新規送金は起こらなかった」という監視上の意味合いが同じため、このerrorバケットへ合算する。
+  let transfersError = 0
+  try {
+    const { data: enabledSenders, error: enabledSendersError } = await supabase
+      .from('professionals')
+      .select('id')
+      .not('stripe_connect_account_id', 'is', null)
+      .eq('stripe_connect_payouts_enabled', true)
+
+    if (enabledSendersError) {
+      if (!isMissingPayoutSchemaError(enabledSendersError)) {
+        console.error('[cron/expire-referral-bookings] enabled senders query error:', enabledSendersError.message)
+      }
+    } else {
+      const enabledSenderIds = ((enabledSenders || []) as Array<{ id: string }>).map((s) => s.id)
+      if (enabledSenderIds.length > 0) {
+        const { data: pendingPayouts, error: pendingPayoutsError } = await supabase
+          .from('referral_payouts')
+          .select('id')
+          .eq('status', 'pending')
+          .in('sender_pro_id', enabledSenderIds)
+          .order('created_at', { ascending: true })
+          .limit(PAYOUT_TRANSFER_RETRY_LIMIT)
+
+        if (pendingPayoutsError) {
+          if (!isMissingPayoutSchemaError(pendingPayoutsError)) {
+            console.error('[cron/expire-referral-bookings] pending payouts query error:', pendingPayoutsError.message)
+          }
+        } else {
+          for (const row of (pendingPayouts || []) as Array<{ id: string }>) {
+            transfersAttempted++
+            try {
+              const result = await executeReferralPayoutTransfer(row.id)
+              if (result.outcome === 'transferred') transfersSucceeded++
+              else if (result.outcome === 'no_account') transfersNoAccount++
+              else transfersError++
+            } catch (transferErr) {
+              transfersError++
+              console.error(`[cron/expire-referral-bookings] payout transfer retry error for ${row.id}:`, transferErr)
+            }
+          }
+        }
+      }
+    }
+  } catch (payoutRetryErr) {
+    console.error('[cron/expire-referral-bookings] payout transfer retry unexpected error:', payoutRetryErr)
+  }
+
   try {
     const { data: targets, error: queryError } = await supabase
       .from('referral_bookings')
@@ -453,7 +538,15 @@ export async function GET(req: NextRequest) {
     console.log(`[cron/expire-referral-bookings] found ${rows.length} target(s) to expire`)
 
     if (rows.length === 0) {
-      return NextResponse.json({ expired: 0, checked: 0, auto_completed: autoCompletedCount })
+      return NextResponse.json({
+        expired: 0,
+        checked: 0,
+        auto_completed: autoCompletedCount,
+        transfers_attempted: transfersAttempted,
+        transfers_succeeded: transfersSucceeded,
+        transfers_no_account: transfersNoAccount,
+        transfers_error: transfersError,
+      })
     }
 
     // referral_bookings は professionals への FK が2本(sender/receiver)あり embed が曖昧になるため、
@@ -552,7 +645,15 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ expired: expiredCount, checked: rows.length, auto_completed: autoCompletedCount })
+    return NextResponse.json({
+      expired: expiredCount,
+      checked: rows.length,
+      auto_completed: autoCompletedCount,
+      transfers_attempted: transfersAttempted,
+      transfers_succeeded: transfersSucceeded,
+      transfers_no_account: transfersNoAccount,
+      transfers_error: transfersError,
+    })
   } catch (err) {
     console.error('[cron/expire-referral-bookings] Unexpected error:', err)
     return NextResponse.json({ error: 'Internal error' }, { status: 500 })

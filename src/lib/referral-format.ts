@@ -155,3 +155,62 @@ export function isWithinClientRefundDeadline(slotIso: string | null | undefined,
   const deadlineMs = CLIENT_CANCEL_REFUND_DEADLINE_DAYS * 24 * 60 * 60 * 1000
   return slotMs - deadlineMs > baseMs
 }
+
+/**
+ * ステージ4「自動送金」振込予定日の目安(CEO追加指示・2026-08-05): Stripe Transferはプラットフォーム
+ * 残高から送り手のConnect口座へ即時に入るが、実際の銀行振込はStripe側の入金スケジュール
+ * (日本のExpressは通常、数営業日周期)で行われるため正確な日付は取得できない。土日スキップのみの
+ * 簡易計算(祝日は考慮しない)でN営業日後の日付を返す純関数。サーバー/クライアント両方から使うため
+ * env非依存でこのファイルに置く(feature-flags.tsではない)。Asia/Tokyoの日付境界で判定する
+ * (実行環境のTZに依存させない)。
+ */
+export function addBusinessDays(iso: string, businessDays: number): Date | null {
+  const start = new Date(iso)
+  if (Number.isNaN(start.getTime())) return null
+
+  const jstParts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(start)
+  const get = (type: string) => jstParts.find((p) => p.type === type)?.value ?? '01'
+  // 時刻は正午(UTC)に固定して1日ずつ進める(DST等の影響を避け、日付境界だけを見る)。
+  let cursor = new Date(Date.UTC(Number(get('year')), Number(get('month')) - 1, Number(get('day')), 12, 0, 0))
+
+  let remaining = businessDays
+  while (remaining > 0) {
+    cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000)
+    const weekday = cursor.getUTCDay() // 正午UTC固定のため日付境界のズレは発生しない
+    if (weekday !== 0 && weekday !== 6) remaining--
+  }
+  return cursor
+}
+
+/** dateを「M/D」形式(Asia/Tokyo)に整形する。無効な入力はnull。 */
+export function formatMonthDay(date: Date | null): string | null {
+  if (!date || Number.isNaN(date.getTime())) return null
+  const parts = new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    month: 'numeric',
+    day: 'numeric',
+  }).formatToParts(date)
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
+  return `${get('month')}/${get('day')}`
+}
+
+/** 送金完了(paid_at)からの「口座への反映予定」目安の営業日数。土日スキップのみ(祝日考慮なし)。 */
+export const REFERRAL_PAYOUT_REFLECTION_BUSINESS_DAYS = 5
+
+/**
+ * paid_at(送金完了時刻)から「口座への反映予定」目安を「M/D」形式で返す。paidAtIsoが無い/無効な場合、
+ * または算出した目安日時が既に過去(レビュー指摘・軽微8: 古いpaid_at行を一覧表示する際、
+ * 過ぎた日付の「予定」を出し続けると誤解を招くため)の場合はnull
+ * (呼び出し元は「(目安)」の注記も含めて表示すること。この関数自体は「M/D」のみを返す)。
+ */
+export function estimateReferralPayoutReflectionText(paidAtIso: string | null | undefined): string | null {
+  if (!paidAtIso) return null
+  const estimated = addBusinessDays(paidAtIso, REFERRAL_PAYOUT_REFLECTION_BUSINESS_DAYS)
+  if (!estimated || estimated.getTime() < Date.now()) return null
+  return formatMonthDay(estimated)
+}

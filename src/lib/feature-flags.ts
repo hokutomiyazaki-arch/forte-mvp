@@ -106,6 +106,14 @@ export const CONFIRM_PAYMENT_DEADLINE_HOURS = 24
 export const REFERRAL_SENDER_SHARE_BPS = 3000
 
 /**
+ * レビュー指摘(中4・2026-08-05): executeReferralPayoutTransfer(referral-payment.ts)が自動送金してよい
+ * 1件あたりの上限額(JPY)。これを超える金額は自動送金せず、CRITICALログ('TRANSFER AMOUNT EXCEEDS CAP -
+ * 手動送金要')を残してpendingのまま人手対応に回す(価格入力ミス・不整合データによる想定外の高額送金を防ぐ)。
+ * Stripe importを持たないファイルに置く(既存のREFERRAL_MIN_FEE_JPY等と同じ理由)。
+ */
+export const REFERRAL_MAX_AUTO_TRANSFER_JPY = 100000
+
+/**
  * レビュー指摘(中5・単一情報源化): クライアント都合キャンセルの返金締切(日)は
  * env非依存の`src/lib/referral-format.ts`が本体(client/server両用の純関数と同じ場所に置く)。
  * このファイルはサーバー専用(process.env直読み)のため、既存importの後方互換のためだけに

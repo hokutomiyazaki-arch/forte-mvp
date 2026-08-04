@@ -11,6 +11,16 @@ function isMissingSchemaError(err: { code?: string } | null | undefined): boolea
   return code === '42P01' || code === 'PGRST205' || code === '42703'
 }
 
+/** レビュー指摘(軽微7): 配列を100件ずつに分割する(`.in()`のURL長・パラメータ数を安全な範囲に保つ)。 */
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const chunks: T[][] = []
+  for (let i = 0; i < arr.length; i += size) {
+    chunks.push(arr.slice(i, i + size))
+  }
+  return chunks
+}
+const IN_CLAUSE_CHUNK_SIZE = 100
+
 /**
  * GET /api/referral/payouts
  * ステージ4(送り手分配・CEO決定): 自分が送り手(sender_pro_id)の分配行(referral_payouts・
@@ -73,6 +83,53 @@ export async function GET() {
       return NextResponse.json({ error: 'failed_to_fetch' }, { status: 500 })
     }
 
+    // 報酬表示の再設計(CEO指示・2026-08-05): お支払い履歴に「◯◯さんの紹介」を表示するため、
+    // referral_payouts→referral_bookings→clients の順でニックネームを解決する(fail-soft・
+    // 取れない場合はnull=表示側でフォールバック文言を出す)。PIIはニックネームのみ(1000行キャップ
+    // 注意: 現状の500件limitの範囲でin()解決する)。
+    const bookingIds = Array.from(
+      new Set(((payouts || []) as any[]).map((p) => p.booking_id).filter(Boolean))
+    )
+    const clientNicknameByBookingId: Record<string, string | null> = {}
+    if (bookingIds.length > 0) {
+      try {
+        const bookingRows: Array<{ id: string; client_id: string | null }> = []
+        for (const chunk of chunkArray(bookingIds, IN_CLAUSE_CHUNK_SIZE)) {
+          const { data: chunkRows, error: bookingRowsError } = await supabase
+            .from('referral_bookings')
+            .select('id, client_id')
+            .in('id', chunk)
+          if (bookingRowsError) {
+            console.error('[api/referral/payouts] GET booking rows fetch error (fail-soft):', bookingRowsError)
+            continue
+          }
+          bookingRows.push(...((chunkRows || []) as Array<{ id: string; client_id: string | null }>))
+        }
+
+        const clientIds = Array.from(new Set(bookingRows.map((b) => b.client_id).filter(Boolean))) as string[]
+        const nicknameByClientId: Record<string, string | null> = {}
+        for (const chunk of chunkArray(clientIds, IN_CLAUSE_CHUNK_SIZE)) {
+          const { data: clientRows, error: clientRowsError } = await supabase
+            .from('clients')
+            .select('id, nickname')
+            .in('id', chunk)
+          if (clientRowsError) {
+            console.error('[api/referral/payouts] GET client rows fetch error (fail-soft):', clientRowsError)
+            continue
+          }
+          for (const c of (clientRows || []) as Array<{ id: string; nickname: string | null }>) {
+            nicknameByClientId[c.id] = c.nickname || null
+          }
+        }
+
+        for (const b of bookingRows) {
+          clientNicknameByBookingId[b.id] = b.client_id ? nicknameByClientId[b.client_id] ?? null : null
+        }
+      } catch (resolveErr) {
+        console.error('[api/referral/payouts] GET client nickname resolve error (fail-soft):', resolveErr)
+      }
+    }
+
     const result = ((payouts || []) as any[]).map((p) => ({
       id: p.id,
       booking_id: p.booking_id,
@@ -80,6 +137,7 @@ export async function GET() {
       status: p.status,
       created_at: p.created_at,
       paid_at: p.paid_at,
+      client_nickname: clientNicknameByBookingId[p.booking_id] ?? null,
     }))
 
     return NextResponse.json({

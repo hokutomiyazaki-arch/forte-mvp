@@ -5,6 +5,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import BookingThread from '@/components/dashboard/BookingThread'
 import ReferralCompletedList from '@/components/dashboard/ReferralCompletedList'
 import { computeReferralSignal, REFERRAL_SIGNAL_DOT } from '@/lib/referral-accepting'
+import { estimateReferralPayoutReflectionText } from '@/lib/referral-format'
 
 interface PinPro {
   id: string
@@ -67,7 +68,7 @@ interface SentBooking {
   receiver_pro: { id: string; name: string } | null
 }
 
-/** ステージ4(送り手分配・CEO決定): /api/referral/payouts が返す分配行(PIIなし)。 */
+/** ステージ4(送り手分配・CEO決定): /api/referral/payouts が返す分配行(PIIなし・client_nicknameのみ)。 */
 interface SentPayout {
   id: string
   booking_id: string
@@ -75,6 +76,8 @@ interface SentPayout {
   status: 'pending' | 'paid' | 'cancelled'
   created_at: string
   paid_at: string | null
+  /** 報酬表示の再設計(CEO指示・2026-08-05): お支払い履歴に「◯◯さんの紹介」を表示するため。 */
+  client_nickname: string | null
 }
 
 const SENT_STATUS_LABEL: Record<SentBooking['status'], string> = {
@@ -83,6 +86,21 @@ const SENT_STATUS_LABEL: Record<SentBooking['status'], string> = {
   completed: '完了',
   cancelled: '辞退・キャンセル',
   expired: '失効',
+}
+
+/** 報酬表示の再設計(CEO指示・2026-08-05): お支払い履歴の日付表示「YYYY/M/D」(Asia/Tokyo)。無効値は空文字。 */
+function formatPayoutDate(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const parts = new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  }).formatToParts(d)
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
+  return `${get('year')}/${get('month')}/${get('day')}`
 }
 
 const MAX_PINS = 3
@@ -208,6 +226,8 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
   // レビュー指摘(軽微8): サマリー合計はサーバー側集計値(全件対象)を使う(一覧の直近500件には依存しない)
   const [sentPayoutsPendingTotalJpy, setSentPayoutsPendingTotalJpy] = useState(0)
   const [sentPayoutsPaidTotalJpy, setSentPayoutsPaidTotalJpy] = useState(0)
+  // 報酬表示の再設計(CEO指示・2026-08-05): お支払い履歴は直近10件のみ表示し、「もっと見る」で全件展開する。
+  const [payoutHistoryExpanded, setPayoutHistoryExpanded] = useState(false)
 
   useEffect(() => {
     fetch('/api/referral/lists', { cache: 'no-store' })
@@ -1721,6 +1741,20 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
     payoutByBookingId[p.booking_id] = p
   }
 
+  // 報酬表示の再設計(CEO指示・2026-08-05): お支払い履歴(status='paid'のみ)をpaid_at新しい順に並べる。
+  const paidPayoutsSorted = sentPayouts
+    .filter((p) => p.status === 'paid')
+    .slice()
+    .sort((a, b) => {
+      const at = a.paid_at ? new Date(a.paid_at).getTime() : 0
+      const bt = b.paid_at ? new Date(b.paid_at).getTime() : 0
+      return bt - at
+    })
+  const PAYOUT_HISTORY_PREVIEW_COUNT = 10
+  const visiblePaidPayouts = payoutHistoryExpanded
+    ? paidPayoutsSorted
+    : paidPayoutsSorted.slice(0, PAYOUT_HISTORY_PREVIEW_COUNT)
+
   return (
     <div>
       {/* UI再構成(2026-08-04・CEO承認済み): 「紹介を受ける」サブタブ側 = 完了した紹介(受け手側)。
@@ -1740,9 +1774,17 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
                 紹介報酬はセッション完了時に確定します(セッション価格の30%・予約金のお支払いが完了した案件が対象)。
               </div>
             ) : (
-              <div style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.8 }}>
-                <div>確定済み(未払い): <strong>¥{sentPayoutsPendingTotalJpy.toLocaleString()}</strong></div>
-                <div>支払い済み累計: <strong>¥{sentPayoutsPaidTotalJpy.toLocaleString()}</strong></div>
+              // 報酬表示の再設計(CEO指示・2026-08-05): 報酬サマリーを主役化する。「確定済みの報酬」
+              // (未払い)を大きく(13pxラベル+22px/800の金額)、「支払い済み累計」はその下に少し
+              // 小さめ(16px/700)で表示する。
+              <div style={{ color: '#1A1A2E' }}>
+                <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.4 }}>確定済みの報酬</div>
+                <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.3, marginTop: 2 }}>
+                  ¥{sentPayoutsPendingTotalJpy.toLocaleString()}
+                </div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#6B7280', marginTop: 8 }}>
+                  支払い済み累計 ¥{sentPayoutsPaidTotalJpy.toLocaleString()}
+                </div>
               </div>
             )}
             {/* ステージ4「Stripe Connect 口座登録導線」(CEO承認済み・2026-08-04) */}
@@ -1799,9 +1841,65 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
 
             <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 6, lineHeight: 1.6 }}>
               {connectStatus === 'enabled'
-                ? '自動送金の開始まで、お支払いは月次のお振込です。'
+                ? '報酬はセッション完了後、自動でお受け取り口座へ送金されます(反映まで数日)。'
                 : 'お支払いは月次でのお振込です。口座の自動受け取り(Stripe)は準備中です。'}
             </div>
+          </div>
+        )}
+
+        {/* 報酬表示の再設計(CEO指示・2026-08-05): お支払い履歴(noteのお支払いページ風)。
+            status='paid'をpaid_at新しい順に表示。直近10件+「もっと見る」で全件展開。 */}
+        {sentPayoutsLoaded && (
+          <div style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', border: '1.5px solid #E5E7EB', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', marginBottom: 8 }}>お支払い履歴</div>
+            {paidPayoutsSorted.length === 0 ? (
+              <div style={{ fontSize: 13, color: '#9CA3AF' }}>まだお支払いはありません</div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {visiblePaidPayouts.map((p) => {
+                    const reflectionText = estimateReferralPayoutReflectionText(p.paid_at)
+                    return (
+                      <div
+                        key={p.id}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'flex-start',
+                          fontSize: 13,
+                          borderBottom: '1px solid #F3F4F6',
+                          paddingBottom: 8,
+                        }}
+                      >
+                        <div style={{ color: '#1A1A2E', lineHeight: 1.6 }}>
+                          <div>{formatPayoutDate(p.paid_at)}</div>
+                          <div style={{ color: '#6B7280' }}>{p.client_nickname || 'クライアント'}さんの紹介</div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontWeight: 700, color: '#1A1A2E' }}>¥{p.amount_jpy.toLocaleString()}</div>
+                          {reflectionText && (
+                            <div style={{ fontSize: 13, color: '#9CA3AF', marginTop: 2 }}>
+                              口座への反映予定: {reflectionText}頃(目安)
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                {paidPayoutsSorted.length > PAYOUT_HISTORY_PREVIEW_COUNT && (
+                  <button
+                    onClick={() => setPayoutHistoryExpanded((v) => !v)}
+                    style={{
+                      marginTop: 10, fontSize: 13, color: '#6B7280', background: 'none', border: 'none',
+                      textDecoration: 'underline', cursor: 'pointer', padding: 0,
+                    }}
+                  >
+                    {payoutHistoryExpanded ? '閉じる' : 'もっと見る'}
+                  </button>
+                )}
+              </>
+            )}
           </div>
         )}
 

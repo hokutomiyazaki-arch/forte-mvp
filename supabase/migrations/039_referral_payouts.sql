@@ -19,6 +19,14 @@
 --   実行はCEOがSupabase SQL Editorで。例:
 --     UPDATE referral_payouts SET status='cancelled', note='手動返金のため取消' WHERE booking_id='<UUID>';）
 --
+-- 運用手順(ステージ4「自動送金」レビュー指摘・重大1・2026-08-05追記): status='paid'（=Stripe
+--   transfers.create で送り手のConnectアカウントへ実際に送金済み）の行を後から取り消す場合、
+--   このUPDATEだけでは送金済みの資金は戻らない。Stripe側で
+--   `stripe.transfers.createReversal(<transfer_id>)`（transfer_idはこのテーブルのnoteカラムに
+--   記録済み）を実行して初めて資金が戻る。status更新（'cancelled'化）は台帳上の記録に過ぎず、
+--   reversal実行とは別の手動操作として必ず両方行うこと（片方だけだと「DB上は取消済みなのに
+--   実際は送金されたまま」という不整合が残る）。
+--
 -- 安全性: 新規テーブル追加のみ（既存テーブルへの変更なし）。新規カラムに
 --   DEFAULT値は付けない方針だが、status は運用管理カラム（036/031と同じ流儀で
 --   CHECK制約は付けずコード側で値を管理）としてのみ 'pending' を初期値にする。

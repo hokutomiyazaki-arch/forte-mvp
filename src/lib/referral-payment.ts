@@ -36,12 +36,14 @@ import {
   hasProLocationInfo,
   buildCalendarLinkHtml,
   buildRescheduleContactNoteHtml,
+  notifyReferralPayoutTransferred,
 } from '@/lib/referral-notify'
-import { buildGoogleCalendarUrl, resolveConfirmedSlotIso } from '@/lib/referral-format'
+import { buildGoogleCalendarUrl, resolveConfirmedSlotIso, estimateReferralPayoutReflectionText } from '@/lib/referral-format'
 import {
   REFERRAL_FEE_TOTAL_BPS,
   REFERRAL_MIN_FEE_JPY,
   CONFIRM_PAYMENT_DEADLINE_HOURS,
+  REFERRAL_MAX_AUTO_TRANSFER_JPY,
   isReferralPaymentEnabled,
 } from '@/lib/feature-flags'
 
@@ -793,4 +795,227 @@ export async function applyReferralCheckoutSession(
   }
 
   return 'paid'
+}
+
+/**
+ * ステージ4「送り手分配の自動送金」(CEO承認済み・2026-08-05): referral_payouts の1行(status='pending')を
+ * プラットフォーム残高から送り手のStripe Connectアカウントへ transfers.create で送金する。
+ *
+ * 呼び出し元: bookings/received PATCH complete(受け手の手動完了)、cron/expire-referral-bookings
+ * (自動完了直後・および status='pending' の取り残しを再試行するブロック)。いずれも
+ * createReferralPayoutIfEligible が返す payoutId を使って呼ぶ(fail-soft・失敗しても完了処理自体は成功扱い)。
+ *
+ * 二重送金防止(最優先・多層防御・レビュー指摘・重大1で追加):
+ * ① 既送金チェック(耐久的・最優先): transfers.create の前に
+ *    `stripe.transfers.list({ transfer_group: 'booking-'+booking_id })` で、このpayoutId用の
+ *    transferが既に存在しないか確認する(metadata.payout_idで一致判定)。idempotencyKeyは24hで
+ *    Stripe側から失効するため、「DB更新失敗・関数タイムアウト・レスポンス切断でtransferは成立済みなのに
+ *    referral_payouts.statusがpendingのまま24h超残留 → cron再試行」のパスではidempotencyKeyが
+ *    効かず二重transferになりうる。この既送金チェックが実質的な防御の本体。
+ * ② Stripe側(保険): 新規作成時のみ transfers.create に idempotencyKey(`rp-payout-${payoutId}`)を付与
+ *    (24h以内のネットワーク再試行等で多重送金にならない・①の穴を24h以内は二重に塞ぐ)。
+ * ③ DB側: 送金成功後のstatus更新は CAS(`.eq('status','pending')`)で行う。0行(競合・別呼び出しが
+ *    既にpaidへ進めていた)の場合、Stripe側は既に送金済みのため取り消せない。CRITICALログを残し
+ *    (payout_id・transfer id)、手動確認に回す(送金自体はoutcome:'transferred'として返す)。
+ *
+ * レビュー指摘(重大3): transfer実行の直前に referral_bookings を再SELECTし、
+ * status='completed' && payment_status='paid' でなければ送金しない(CEOが手動返金してから
+ * referral_payouts.status を'cancelled'に更新するまでの窓・打ち忘れで、返金済み予約に送金してしまう
+ * 穴を閉塞する)。paid化済みのpayoutを後から取り消す場合はStripeのtransfer reversalが必要
+ * (migration 039のコメントに運用メモを追記済み)。
+ *
+ * レビュー指摘(中4): amount_jpyが0以下ならskip。REFERRAL_MAX_AUTO_TRANSFER_JPY(feature-flags.ts)を
+ * 超える金額は自動送金せず、CRITICALログ('TRANSFER AMOUNT EXCEEDS CAP - 手動送金要')を残して
+ * pendingのまま人手対応に回す(価格入力ミス等による想定外の高額送金を防ぐ)。
+ *
+ * レビュー指摘(中5): アカウントIDはあるがキャッシュ(stripe_connect_payouts_enabled)がfalseの場合、
+ * 送金試行前に既存の getConnectStatus() を1回呼んでStripe側の最新状態にリフレッシュする
+ * (キャッシュ更新のタイミングが遅れて「本当は有効なのに永久にno_account」になる穴を閉塞)。
+ *
+ * fail-soft対象はスキーマ未反映(migration 039/040未実行)のみ。isReferralPaymentEnabled()が
+ * falseの間はStripeキー未設定環境の防御として先頭でnot_readyを返す(既存のConnect関数と同じ規約)。
+ * 口座未登録/審査未完了(payouts_enabled!==true)は no_account を返し、pendingのまま残す
+ * (cronの再試行ブロックが毎回拾い直す。エラーではない)。
+ */
+export async function executeReferralPayoutTransfer(
+  payoutId: string
+): Promise<
+  | { outcome: 'transferred' }
+  | { outcome: 'skipped' }
+  | { outcome: 'no_account' }
+  | { outcome: 'capped' }
+  | { outcome: 'not_ready' }
+  | { outcome: 'error' }
+> {
+  if (!isReferralPaymentEnabled()) return { outcome: 'not_ready' }
+
+  const supabase = getSupabaseAdmin()
+
+  const { data: payout, error: payoutError } = await supabase
+    .from('referral_payouts')
+    .select('id, booking_id, sender_pro_id, amount_jpy, status, note')
+    .eq('id', payoutId)
+    .maybeSingle()
+
+  if (payoutError) {
+    if (isConnectSchemaMissing(payoutError)) return { outcome: 'not_ready' }
+    console.error(`[referral-payment] executeReferralPayoutTransfer payout fetch error (payout ${payoutId}):`, payoutError)
+    return { outcome: 'error' }
+  }
+  if (!payout || payout.status !== 'pending') return { outcome: 'skipped' }
+
+  // レビュー指摘(重大3): 送金直前にbookingの実状態を再確認する(手動返金の打ち忘れ穴の閉塞)。
+  const { data: bookingCheck, error: bookingCheckError } = await supabase
+    .from('referral_bookings')
+    .select('status, payment_status')
+    .eq('id', payout.booking_id)
+    .maybeSingle()
+
+  if (bookingCheckError) {
+    if (isConnectSchemaMissing(bookingCheckError)) return { outcome: 'not_ready' }
+    console.error(
+      `[referral-payment] executeReferralPayoutTransfer booking check error (payout ${payoutId}):`,
+      bookingCheckError
+    )
+    return { outcome: 'error' }
+  }
+  if (!bookingCheck || bookingCheck.status !== 'completed' || bookingCheck.payment_status !== 'paid') {
+    return { outcome: 'skipped' }
+  }
+
+  // レビュー指摘(重大1): idempotencyKeyは24hで失効するため、これが実質的な多重送金防止の本体。
+  // このpayout用のtransferが既に存在すれば新規createせず、既存transferでCASだけやり直す。
+  const transferGroup = `booking-${payout.booking_id}`
+  let existingTransfer: Stripe.Transfer | null = null
+  try {
+    const stripe = getReferralStripe()
+    const list = await stripe.transfers.list({ transfer_group: transferGroup, limit: 100 })
+    existingTransfer = list.data.find((t) => t.metadata?.payout_id === payoutId) || null
+  } catch (err) {
+    console.error(
+      `[referral-payment] executeReferralPayoutTransfer existing-transfer check error (payout ${payoutId}):`,
+      err instanceof Error ? err.message : err
+    )
+    return { outcome: 'error' }
+  }
+
+  let transfer: Stripe.Transfer
+  if (existingTransfer) {
+    transfer = existingTransfer
+  } else {
+    // レビュー指摘(中4): 新規送金を開始する場合のみ金額ガードを適用する
+    // (既送金の場合は金額に関わらずDB側の記録合わせのみ行う)。
+    if (!(payout.amount_jpy > 0)) return { outcome: 'skipped' }
+    if (payout.amount_jpy > REFERRAL_MAX_AUTO_TRANSFER_JPY) {
+      console.error(
+        `[referral-payment] TRANSFER AMOUNT EXCEEDS CAP - 手動送金要 (payout ${payoutId}, amount ${payout.amount_jpy})`
+      )
+      return { outcome: 'capped' }
+    }
+
+    const { data: pro, error: proError } = await supabase
+      .from('professionals')
+      .select('id, stripe_connect_account_id, stripe_connect_payouts_enabled')
+      .eq('id', payout.sender_pro_id)
+      .maybeSingle()
+
+    if (proError) {
+      if (isConnectSchemaMissing(proError)) return { outcome: 'not_ready' }
+      console.error(`[referral-payment] executeReferralPayoutTransfer pro fetch error (payout ${payoutId}):`, proError)
+      return { outcome: 'error' }
+    }
+    const accountId: string | null = (pro as any)?.stripe_connect_account_id || null
+    if (!accountId) return { outcome: 'no_account' }
+
+    let payoutsEnabled: boolean = (pro as any)?.stripe_connect_payouts_enabled === true
+    if (!payoutsEnabled) {
+      // レビュー指摘(中5): キャッシュがfalseの場合のみ、既存のgetConnectStatus()でStripe側の
+      // 最新状態に1回リフレッシュする(キャッシュ反映の遅れによる永久no_accountを防ぐ)。
+      const refreshed = await getConnectStatus(payout.sender_pro_id)
+      payoutsEnabled = refreshed.outcome === 'ok' && refreshed.status === 'enabled'
+    }
+    if (!payoutsEnabled) return { outcome: 'no_account' }
+
+    try {
+      const stripe = getReferralStripe()
+      transfer = await stripe.transfers.create(
+        {
+          amount: payout.amount_jpy,
+          currency: 'jpy',
+          destination: accountId,
+          transfer_group: transferGroup,
+          metadata: { payout_id: payout.id, booking_id: payout.booking_id },
+        },
+        { idempotencyKey: `rp-payout-${payoutId}` }
+      )
+    } catch (err) {
+      // PIIなし(payout_idのみ)。Stripeの生エラーはメッセージのみ残す。
+      console.error(
+        `[referral-payment] TRANSFER FAILED (payout ${payoutId}):`,
+        err instanceof Error ? err.message : err
+      )
+      return { outcome: 'error' }
+    }
+  }
+
+  // レビュー指摘(軽微10): noteは上書きでなく追記(既存note・手動運用メモが残るように)。
+  const paidAtIso = new Date().toISOString()
+  const nextNote = payout.note ? `${payout.note} / ${transfer.id}` : transfer.id
+  const { data: updatedRows, error: updateError } = await supabase
+    .from('referral_payouts')
+    .update({ status: 'paid', paid_at: paidAtIso, note: nextNote })
+    .eq('id', payoutId)
+    .eq('status', 'pending')
+    .select('id')
+
+  if (updateError) {
+    console.error(
+      `[referral-payment] TRANSFER DONE BUT STATUS RACE (payout ${payoutId}, transfer ${transfer.id}) - update error:`,
+      updateError.message
+    )
+    return { outcome: 'transferred' }
+  }
+  if (!updatedRows || updatedRows.length === 0) {
+    console.error(`[referral-payment] TRANSFER DONE BUT STATUS RACE (payout ${payoutId}, transfer ${transfer.id})`)
+    return { outcome: 'transferred' }
+  }
+
+  // 通知(transfer成功+CAS成功時のみ1回・失敗しても送金処理自体は成功扱い)
+  try {
+    const { data: bookingRow } = await supabase
+      .from('referral_bookings')
+      .select('client_id')
+      .eq('id', payout.booking_id)
+      .maybeSingle()
+    let clientNickname: string | null = null
+    if (bookingRow?.client_id) {
+      const { data: clientRow } = await supabase
+        .from('clients')
+        .select('nickname')
+        .eq('id', bookingRow.client_id)
+        .maybeSingle()
+      clientNickname = clientRow?.nickname || null
+    }
+    const { data: senderPro } = await supabase
+      .from('professionals')
+      .select('name, contact_email, line_messaging_user_id')
+      .eq('id', payout.sender_pro_id)
+      .maybeSingle()
+    if (senderPro) {
+      await notifyReferralPayoutTransferred(
+        {
+          name: senderPro.name,
+          contact_email: senderPro.contact_email,
+          line_messaging_user_id: senderPro.line_messaging_user_id,
+        },
+        payout.amount_jpy,
+        clientNickname,
+        estimateReferralPayoutReflectionText(paidAtIso)
+      )
+    }
+  } catch (notifyErr) {
+    console.error(`[referral-payment] executeReferralPayoutTransfer notify error (payout ${payoutId}):`, notifyErr)
+  }
+
+  return { outcome: 'transferred' }
 }

@@ -310,3 +310,11 @@
 - 【SQL・未実行】migration 040: professionals に stripe_connect_account_id / stripe_connect_payouts_enabled 追加（DEFAULTなし=規約準拠・次フェーズでUNIQUE INDEX予定）。カラム未作成でも not_ready fail-soft（列実在チェック込み）でデプロイ安全。
 - レビュー1周（FAIL→修正済み）: アローリスト外プロの直叩きでConnectアカウント作成可能な穴・キー未設定時の生エラー漏れ・競合時の未保存アカウント使用による増殖・列サイレントnull時の孤児作成ほか12件。
 - 【積み残し】自動送金（完了時transfer）・account.updated webhook・本番Connect有効化（本番アカウントの審査通過後）。
+
+### 実装: ステージ4完結・送り手分配の自動送金＋報酬表示の再設計 — 2026-08-05（CEO承認）
+- 自動送金: セッション完了（手動・24h自動とも）→ Stripe Transfer で送り手のConnect口座へ即時送金（transfer_group='booking-{id}'・metadata に payout_id）→ payouts を paid 化＋送り手に「報酬◯◯円を送金しました・口座への反映は M/D 頃（目安）」通知。口座未登録は pending 保留→毎時cronが登録済み送り手分のみ再試行（starvation対策）。
+- 二重送金の多層防御（レビュー重大指摘の修正）: ①送金前に transfers.list で既送金の実在をStripe側で確認（idempotencyKeyの24h失効後も検出可能）②idempotencyKey（保険）③DB CAS（pending→paidを1回だけ）④送金直前に booking を再確認し completed×paid 以外へは送金しない（手動返金済み予約への送金防止）。金額ガード（0以下skip・10万円超はCRITICALで手動送金へ）。
+- 報酬表示（CEO指示）: 「確定済みの報酬」を22px太字で主役化・「お支払い履歴」（noteのお支払いページ風・支払日/◯◯さんの紹介/金額/口座への反映予定M/D頃（目安・過去日は非表示）・直近10件＋もっと見る）。口座登録済みの注記は「セッション完了後、自動でお受け取り口座へ送金されます」。
+- 039のrunbookに「paid化済みpayoutの取消はStripeのtransfer reversalが必要」を追記。
+- 【運用メモ】完了後の手動返金時は payouts を cancelled にSQL更新（打ち忘れても④のガードで自動送金は止まる）。
+- これでステージ4のコア（台帳→口座登録→自動送金）が完結。残り: 本番Connect有効化（本人確認審査通過後・A方式）・account.updated webhook（積み残し）。

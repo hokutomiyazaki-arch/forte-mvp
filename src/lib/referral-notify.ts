@@ -857,6 +857,41 @@ export async function notifyLocationToClient(
 }
 
 /**
+ * ステージ4「自動送金」(CEO承認済み・2026-08-05): referral_payouts の送金(Stripe transfers.create)が
+ * 成功し、CASでのstatus更新も成功した直後に1回だけ送り手プロへ通知する(referral-payment.tsの
+ * executeReferralPayoutTransfer から呼ぶ)。リンクは付けない(操作不要な事後報告・既存の進捗通知と同方針)。
+ * clientNicknameが解決できない場合は主語なしの文言にフォールバックする。
+ * CEO追加指示(2026-08-05): 口座への反映予定(目安)を末尾に明記する。reflectionDateTextが
+ * 解決できない(paid_atが取れない等)場合は目安の一文自体を出さない(不確かな情報を出さない)。
+ */
+export async function notifyReferralPayoutTransferred(
+  target: ProNotifyTarget,
+  amountJpy: number,
+  clientNickname: string | null,
+  reflectionDateText: string | null,
+): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  const amountText = `¥${amountJpy.toLocaleString()}`
+  const safeClientNickname = clientNickname ? escapeHtml(clientNickname) : null
+  const leadHtml = safeClientNickname
+    ? `あなたが紹介した${safeClientNickname}さんの紹介報酬 ${amountText} を、お受け取り口座へ送金しました。`
+    : `紹介報酬 ${amountText} を、お受け取り口座へ送金しました。`
+  const leadText = clientNickname
+    ? `あなたが紹介した${clientNickname}さんの紹介報酬 ${amountText} を、お受け取り口座へ送金しました。`
+    : `紹介報酬 ${amountText} を、お受け取り口座へ送金しました。`
+  const reflectionHtml = reflectionDateText
+    ? `口座への反映は ${escapeHtml(reflectionDateText)} 頃の見込みです(金融機関により前後します)。`
+    : ''
+  const reflectionText = reflectionDateText
+    ? `口座への反映は ${reflectionDateText} 頃の見込みです(金融機関により前後します)。`
+    : ''
+  return sendProNotification(target, {
+    lineText: `${leadText}${reflectionText}`,
+    emailSubject: '紹介報酬を送金しました',
+    emailBodyHtml: emailShell('紹介報酬送金のお知らせ', `${leadHtml}${reflectionHtml ? `<br>${reflectionHtml}` : ''}`),
+  })
+}
+
+/**
  * §2-9: 招待経由でRP未登録のプロが登録を完了したことを、招待した側のプロへ通知する。
  */
 export async function notifyInviteRegistered(

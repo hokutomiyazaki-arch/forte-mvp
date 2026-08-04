@@ -43,9 +43,14 @@ function isMissingSchemaError(err: { code?: string; message?: string } | null | 
 
 /**
  * 完了した紹介案件(bookingId)が分配対象なら referral_payouts に1行作成する。
- * 呼び出し元は戻り値を見て分岐する必要はない(fail-soft・失敗しても完了処理自体は成功のまま)。
+ *
+ * ステージ4「自動送金」(CEO承認済み・2026-08-05)対応: 呼び出し元(bookings/received PATCH complete・
+ * cron/expire-referral-bookings)が続けて executeReferralPayoutTransfer(referral-payment.ts)を
+ * 呼べるよう、作成/既に存在した(23505衝突)いずれの場合も payoutId を返す。分配対象外・エラー時は
+ * payoutId: null(呼び出し元は送金を試みない・fail-soft・失敗しても完了処理自体は成功のまま)。
+ * このファイル自体はStripeに触らない(既存規約通り)。
  */
-export async function createReferralPayoutIfEligible(bookingId: string): Promise<void> {
+export async function createReferralPayoutIfEligible(bookingId: string): Promise<{ payoutId: string | null }> {
   try {
     const supabase = getSupabaseAdmin()
 
@@ -61,27 +66,27 @@ export async function createReferralPayoutIfEligible(bookingId: string): Promise
           `[referral-payout] createReferralPayoutIfEligible: schema not ready (fail-soft) for booking ${bookingId}:`,
           bookingError.message
         )
-        return
+        return { payoutId: null }
       }
       console.error(
         `[referral-payout] createReferralPayoutIfEligible: booking fetch error for ${bookingId}:`,
         bookingError.message
       )
-      return
+      return { payoutId: null }
     }
-    if (!booking) return
+    if (!booking) return { payoutId: null }
 
     // レビュー指摘(重大3a): cancelled等への誤計上防止。呼び出し元は完了更新の直後に呼ぶ想定だが、
     // 競合(その間に別経路がcancelledへ進めた等)に備えて必ずstatusを見る。
-    if (booking.status !== 'completed') return
+    if (booking.status !== 'completed') return { payoutId: null }
     // 対象条件: sender_pro_id有り かつ payment_status='paid'。not_required/null/フラグOFFは分配なし。
-    if (!booking.sender_pro_id) return
-    if (booking.payment_status !== 'paid') return
-    if (!(booking.price_jpy > 0)) return
+    if (!booking.sender_pro_id) return { payoutId: null }
+    if (booking.payment_status !== 'paid') return { payoutId: null }
+    if (!(booking.price_jpy > 0)) return { payoutId: null }
 
     // レビュー指摘(重大2): 予約ごとに固定された fee_sender_bps を使う(遡及適用禁止・指示書:275)。
     const feeSenderBps = booking.fee_sender_bps ?? REFERRAL_SENDER_SHARE_BPS
-    if (!(feeSenderBps > 0) || feeSenderBps >= 10000) return
+    if (!(feeSenderBps > 0) || feeSenderBps >= 10000) return { payoutId: null }
 
     const distribution = computeFeeDistribution(booking.price_jpy, [
       { proId: booking.sender_pro_id, role: 'sender', shareBps: feeSenderBps },
@@ -89,37 +94,52 @@ export async function createReferralPayoutIfEligible(bookingId: string): Promise
     ])
     const senderShare = distribution.find((d) => d.role === 'sender')
     const amountJpy = senderShare?.amountJpy ?? 0
-    if (amountJpy <= 0) return
+    if (amountJpy <= 0) return { payoutId: null }
 
     // 監査用: Stripeで実際に collect した予約金の総額(price_jpy*fee_total_bps/10000)。
     // amount_jpy(送り手取り分)とは別の値。fee_total_bps未設定行はREFERRAL_FEE_TOTAL_BPSへフォールバック。
     const feeTotalBps = booking.fee_total_bps ?? REFERRAL_FEE_TOTAL_BPS
     const feeAmountJpy = Math.floor((booking.price_jpy * feeTotalBps) / 10000)
 
-    const { error: insertError } = await supabase.from('referral_payouts').insert({
-      booking_id: booking.id,
-      sender_pro_id: booking.sender_pro_id,
-      receiver_pro_id: booking.receiver_pro_id,
-      amount_jpy: amountJpy,
-      fee_amount_jpy: feeAmountJpy,
-    })
+    const { data: insertedRows, error: insertError } = await supabase
+      .from('referral_payouts')
+      .insert({
+        booking_id: booking.id,
+        sender_pro_id: booking.sender_pro_id,
+        receiver_pro_id: booking.receiver_pro_id,
+        amount_jpy: amountJpy,
+        fee_amount_jpy: feeAmountJpy,
+      })
+      .select('id')
 
     if (insertError) {
       // 23505 = unique_violation(booking_id UNIQUE) → 既に作成済み。冪等に成功扱い。
-      if ((insertError as { code?: string }).code === '23505') return
+      // ステージ4「自動送金」対応: 呼び出し元が送金を試みられるよう、既存行のidを再SELECTして返す。
+      if ((insertError as { code?: string }).code === '23505') {
+        const { data: existing } = await supabase
+          .from('referral_payouts')
+          .select('id')
+          .eq('booking_id', booking.id)
+          .maybeSingle()
+        return { payoutId: existing?.id || null }
+      }
       if (isMissingSchemaError(insertError)) {
         console.error(
           `[referral-payout] createReferralPayoutIfEligible: schema not ready on insert (fail-soft) for booking ${bookingId}:`,
           insertError.message
         )
-        return
+        return { payoutId: null }
       }
       console.error(
         `[referral-payout] createReferralPayoutIfEligible: insert error for booking ${bookingId}:`,
         insertError.message
       )
+      return { payoutId: null }
     }
+
+    return { payoutId: insertedRows?.[0]?.id || null }
   } catch (err) {
     console.error(`[referral-payout] createReferralPayoutIfEligible: unexpected error for booking ${bookingId}:`, err)
+    return { payoutId: null }
   }
 }

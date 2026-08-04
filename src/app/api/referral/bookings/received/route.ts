@@ -30,7 +30,12 @@ import {
 import { isReferralPaymentEnabled, REFERRAL_MIN_FEE_JPY, REFERRAL_FEE_TOTAL_BPS } from '@/lib/feature-flags'
 // 中1レビュー指摘から継続: Stripe importはこのAPI routeに持たせない(Webpackチャンクグラフ対策)。
 // Checkout Session作成+メール送付(共通処理)はsrc/lib/referral-payment.tsの関数呼び出しに委譲する。
-import { issueFeePaymentLinkAndNotify, refundReferralBookingFee, expireReferralCheckoutSession } from '@/lib/referral-payment'
+import {
+  issueFeePaymentLinkAndNotify,
+  refundReferralBookingFee,
+  expireReferralCheckoutSession,
+  executeReferralPayoutTransfer,
+} from '@/lib/referral-payment'
 // ステージ4(送り手分配・2026-08-04・CEO決定): Stripeに触らない独立ファイル(referral-payment.tsとは
 // チャンクグラフを分ける)。完了確定時に送り手分配行(referral_payouts)を1回だけ作成する。
 import { createReferralPayoutIfEligible } from '@/lib/referral-payout'
@@ -448,10 +453,23 @@ export async function PATCH(request: NextRequest) {
       }
 
       // ステージ4(送り手分配・CEO決定): 完了確定の直後に分配行を作成する(fail-soft・失敗しても完了処理自体は成功扱い)。
+      let payoutIdForTransfer: string | null = null
       try {
-        await createReferralPayoutIfEligible(bookingId)
+        const payoutResult = await createReferralPayoutIfEligible(bookingId)
+        payoutIdForTransfer = payoutResult.payoutId
       } catch (payoutErr) {
         console.error('[api/referral/bookings/received] complete payout create error:', payoutErr)
+      }
+
+      // ステージ4「自動送金」(CEO承認済み・2026-08-05): 分配行の作成/既存確認の直後に送金を試みる
+      // (fail-soft・完了処理を絶対に壊さない。口座未登録はexecuteReferralPayoutTransfer内でno_accountと
+      // してスキップされpendingのまま残る=cronの再試行ブロックが拾い直す)。
+      if (payoutIdForTransfer) {
+        try {
+          await executeReferralPayoutTransfer(payoutIdForTransfer)
+        } catch (transferErr) {
+          console.error('[api/referral/bookings/received] complete payout transfer error:', transferErr)
+        }
       }
 
       // ライフサイクル改善(タスクD): 完了時、送り手プロへ通知する(失敗しても完了処理自体は成功扱い)。
