@@ -38,7 +38,12 @@ import {
   buildRescheduleContactNoteHtml,
 } from '@/lib/referral-notify'
 import { buildGoogleCalendarUrl, resolveConfirmedSlotIso } from '@/lib/referral-format'
-import { REFERRAL_FEE_TOTAL_BPS, REFERRAL_MIN_FEE_JPY, CONFIRM_PAYMENT_DEADLINE_HOURS } from '@/lib/feature-flags'
+import {
+  REFERRAL_FEE_TOTAL_BPS,
+  REFERRAL_MIN_FEE_JPY,
+  CONFIRM_PAYMENT_DEADLINE_HOURS,
+  isReferralPaymentEnabled,
+} from '@/lib/feature-flags'
 
 const APP_URL = 'https://realproof.jp'
 
@@ -439,6 +444,195 @@ export async function issueFeePaymentLinkAndNotify(params: {
   }
 
   return { success: true, checkoutUrl: checkout.url }
+}
+
+/** professionals にまだ040(stripe_connect_account_id等)が反映されていない環境を示すエラーコード。 */
+function isConnectSchemaMissing(err: { code?: string } | null | undefined): boolean {
+  if (!err) return false
+  const code = err.code || ''
+  return code === '42703' || code === 'PGRST204' || code === 'PGRST205' || code === '42P01'
+}
+
+/**
+ * ステージ4「Stripe Connect 口座登録導線」(CEO承認済み・2026-08-04): 送り手プロ向けの
+ * Express onboarding リンクを発行する。Stripeパッケージのimportは既存規約に合わせこの
+ * ファイル(referral-payment.ts)に閉じ、呼び出し元の新規route(/api/referral/connect/onboard)
+ * にはStripeのimportを持たせない(そのroute自体は新規ファイルのためWebpackチャンクグラフの
+ * 既存破壊リスクは無いが、Stripe呼び出しを1箇所に集約する既存規約はそのまま維持する)。
+ *
+ * レビュー指摘(重大2): REFERRAL_STRIPE_SECRET_KEY未設定環境でStripeの生エラーを漏らさない
+ * ため、先頭で isReferralPaymentEnabled() を確認し、未設定なら not_ready を返す
+ * (getReferralStripe()の呼び出しは必ずtry内で行う)。
+ *
+ * 二重作成防止: professionals.stripe_connect_account_id が null の場合のみ
+ * `.is('stripe_connect_account_id', null)` をガードにしたUPDATEでアカウントIDを保存する。
+ * 0行(競合・同時に他リクエストが先にIDを保存した)場合、再SELECTで既存アカウントIDが
+ * 取得できればそれを使うが、取得できない(想定外)場合は作成した孤児アカウントへ
+ * フォールバックせず error を返す(レビュー指摘・中3: 未保存アカウントでKYCが完了すると
+ * professionals側は永久にnoneのまま=クリックごとに新規孤児アカウントが増殖するため)。
+ * 孤児が発生した場合は created.id と proId を console.warn に残す(手動追跡用)。
+ */
+export async function createConnectOnboardingLink(
+  proId: string
+): Promise<{ outcome: 'ok'; url: string } | { outcome: 'not_ready' } | { outcome: 'error' }> {
+  if (!isReferralPaymentEnabled()) return { outcome: 'not_ready' }
+
+  const supabase = getSupabaseAdmin()
+
+  const { data: pro, error: selectError } = await supabase
+    .from('professionals')
+    .select('id, stripe_connect_account_id')
+    .eq('id', proId)
+    .maybeSingle()
+
+  if (selectError) {
+    if (isConnectSchemaMissing(selectError)) return { outcome: 'not_ready' }
+    console.error('[referral-payment] createConnectOnboardingLink select error:', selectError)
+    return { outcome: 'error' }
+  }
+  if (!pro) return { outcome: 'error' }
+  // レビュー指摘(中4): PostgRESTのスキーマキャッシュが未反映(040未実行/未反映直後)だと、
+  // エラーにならずキー自体が存在しない行が返ることがある。列の実在を明示的に確認する。
+  if (!('stripe_connect_account_id' in pro)) return { outcome: 'not_ready' }
+
+  let accountId: string | null = (pro as any).stripe_connect_account_id || null
+
+  if (!accountId) {
+    let created: Stripe.Account
+    try {
+      const stripe = getReferralStripe()
+      created = await stripe.accounts.create(
+        {
+          type: 'express',
+          country: 'JP',
+          capabilities: { transfers: { requested: true } },
+          // レビュー指摘(中5): business_typeは固定せずStripe onboarding側に選ばせる
+          // (法人プロのKYC不整合防止)
+          metadata: { pro_id: proId },
+        },
+        { idempotencyKey: `rp-connect-acct-${proId}` } // レビュー指摘(中6)
+      )
+    } catch (err) {
+      console.error('[referral-payment] createConnectOnboardingLink accounts.create error:', err)
+      return { outcome: 'error' }
+    }
+
+    const { data: updatedRows, error: updateError } = await supabase
+      .from('professionals')
+      .update({ stripe_connect_account_id: created.id })
+      .eq('id', proId)
+      .is('stripe_connect_account_id', null)
+      .select('id')
+
+    if (updateError) {
+      if (isConnectSchemaMissing(updateError)) return { outcome: 'not_ready' }
+      console.error('[referral-payment] createConnectOnboardingLink update error:', updateError)
+      return { outcome: 'error' }
+    }
+
+    if (updatedRows && updatedRows.length > 0) {
+      accountId = created.id
+    } else {
+      // 競合(二重作成防止): 他リクエストが先に保存済み。再SELECTして既存アカウントを使う。
+      const { data: latest } = await supabase
+        .from('professionals')
+        .select('stripe_connect_account_id')
+        .eq('id', proId)
+        .maybeSingle()
+      if (latest?.stripe_connect_account_id) {
+        accountId = latest.stripe_connect_account_id
+      } else {
+        // レビュー指摘(中3): 未保存アカウントへフォールバックしない(孤児増殖の防止)。
+        console.warn(
+          `[referral-payment] createConnectOnboardingLink orphaned Stripe account (unsaved): created.id=${created.id} proId=${proId}`
+        )
+        return { outcome: 'error' }
+      }
+    }
+  }
+
+  if (!accountId) return { outcome: 'error' }
+
+  try {
+    const stripe = getReferralStripe()
+    const accountLink = await stripe.accountLinks.create({
+      account: accountId,
+      type: 'account_onboarding',
+      refresh_url: `${APP_URL}/dashboard?tab=referral&sub=cases&connect=refresh`,
+      return_url: `${APP_URL}/dashboard?tab=referral&sub=cases&connect=return`,
+    })
+    return { outcome: 'ok', url: accountLink.url }
+  } catch (err) {
+    console.error('[referral-payment] createConnectOnboardingLink accountLinks.create error:', err)
+    return { outcome: 'error' }
+  }
+}
+
+/**
+ * ステージ4「Stripe Connect 口座登録導線」: 送り手プロの受け取り口座登録状況を返す。
+ * - アカウント未作成: 'none'
+ * - 作成済みだが本人確認未完了(`details_submitted`がfalse): 'pending'(登録を再開できる)
+ * - 本人確認は提出済みだが`payouts_enabled`がまだfalse(Stripe審査中): 'reviewing'
+ *   (レビュー指摘・軽微7。再開ボタンは出さない=送り手が押しても何も変わらないため)
+ * - `payouts_enabled`がtrue: 'enabled'
+ * Stripe retrieve失敗時はキャッシュ(stripe_connect_payouts_enabled)にフォールバックする
+ * (fail open・表示が一時的に古くなるだけで機能は止めない。reviewingはキャッシュに保存して
+ * いないため、フォールバック時はpending/enabledの2値に縮退する)。
+ */
+export async function getConnectStatus(
+  proId: string
+): Promise<
+  | { outcome: 'ok'; status: 'none' | 'pending' | 'reviewing' | 'enabled' }
+  | { outcome: 'not_ready' }
+  | { outcome: 'error' }
+> {
+  if (!isReferralPaymentEnabled()) return { outcome: 'not_ready' }
+
+  const supabase = getSupabaseAdmin()
+
+  const { data: pro, error } = await supabase
+    .from('professionals')
+    .select('stripe_connect_account_id, stripe_connect_payouts_enabled')
+    .eq('id', proId)
+    .maybeSingle()
+
+  if (error) {
+    if (isConnectSchemaMissing(error)) return { outcome: 'not_ready' }
+    console.error('[referral-payment] getConnectStatus select error:', error)
+    return { outcome: 'error' }
+  }
+  if (!pro) return { outcome: 'error' }
+  // レビュー指摘(中4): スキーマキャッシュ未反映の防御(createConnectOnboardingLinkと同様)
+  if (!('stripe_connect_account_id' in pro)) return { outcome: 'not_ready' }
+
+  const accountId: string | null = (pro as any).stripe_connect_account_id || null
+  if (!accountId) return { outcome: 'ok', status: 'none' }
+
+  const cachedEnabled = !!(pro as any).stripe_connect_payouts_enabled
+
+  try {
+    const stripe = getReferralStripe()
+    const account = await stripe.accounts.retrieve(accountId)
+    const payoutsEnabled = !!account.payouts_enabled
+    const detailsSubmitted = !!account.details_submitted
+
+    if (payoutsEnabled !== cachedEnabled) {
+      const { error: updateError } = await supabase
+        .from('professionals')
+        .update({ stripe_connect_payouts_enabled: payoutsEnabled })
+        .eq('id', proId)
+      if (updateError && !isConnectSchemaMissing(updateError)) {
+        console.error('[referral-payment] getConnectStatus cache update error:', updateError)
+      }
+    }
+
+    if (payoutsEnabled) return { outcome: 'ok', status: 'enabled' }
+    if (detailsSubmitted) return { outcome: 'ok', status: 'reviewing' }
+    return { outcome: 'ok', status: 'pending' }
+  } catch (err) {
+    console.error('[referral-payment] getConnectStatus retrieve error (fallback to cache):', err)
+    return { outcome: 'ok', status: cachedEnabled ? 'enabled' : 'pending' }
+  }
 }
 
 /** 競合(webhookとフォールバックの同時実行等)で更新0行だった場合、DBの実状態を再取得して返す。 */

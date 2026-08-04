@@ -253,6 +253,56 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
       .finally(() => setSentPayoutsLoaded(true))
   }, [])
 
+  // ステージ4「Stripe Connect 口座登録導線」(CEO承認済み・2026-08-04): 受け取り口座の登録状況。
+  // Stripeのreturn_urlは同URLへのフルナビゲーションのため、戻り時はこのコンポーネントが
+  // 再マウントされ自然に最新状態を取得できる。
+  const [connectStatus, setConnectStatus] = useState<
+    'none' | 'pending' | 'reviewing' | 'enabled' | 'not_ready' | null
+  >(null)
+  const [connectStatusLoaded, setConnectStatusLoaded] = useState(false)
+  const [connectOnboarding, setConnectOnboarding] = useState(false)
+  const [connectError, setConnectError] = useState<string | null>(null)
+  // レビュー指摘(軽微9): 「紹介した案件」サブタブを開いた時だけStripe APIを呼ぶ(他サブタブ
+  // 表示中の無駄な呼び出しを防ぐ)。subtabはCSS切替のみで再マウントされないため、初回に
+  // cases になった時だけ1回fetchするようrefで制御する(依存はsubtab文字列のみ)。
+  const connectStatusFetchedRef = useRef(false)
+  useEffect(() => {
+    if (subtab !== 'cases' || connectStatusFetchedRef.current) return
+    connectStatusFetchedRef.current = true
+    fetch('/api/referral/connect/status', { cache: 'no-store' })
+      .then((res) => {
+        if (res.status === 503) return { status: 'not_ready' }
+        return res.ok ? res.json() : null
+      })
+      .then((data) => {
+        if (data?.status) setConnectStatus(data.status)
+      })
+      .catch(() => {})
+      .finally(() => setConnectStatusLoaded(true))
+  }, [subtab])
+
+  const handleConnectOnboard = async () => {
+    setConnectOnboarding(true)
+    setConnectError(null)
+    try {
+      const res = await fetch('/api/referral/connect/onboard', { method: 'POST', cache: 'no-store' })
+      if (res.status === 503) {
+        setConnectStatus('not_ready')
+        setConnectOnboarding(false)
+        return
+      }
+      const data = await res.json().catch(() => null)
+      if (res.ok && data?.url) {
+        window.location.href = data.url
+        return
+      }
+      setConnectError('口座登録の開始に失敗しました。しばらくしてから再度お試しください。')
+    } catch {
+      setConnectError('口座登録の開始に失敗しました。しばらくしてから再度お試しください。')
+    }
+    setConnectOnboarding(false)
+  }
+
   // CEO指示(2026-08-04・IA再変更): 「紹介した案件」タブの件数バッジ(進行中)・空状態判定用に
   // 集計結果を親へ通知する。依存はプリミティブのみ(件数・boolean)。
   const sentActiveCount = sentBookings.filter((b) => b.status === 'requested' || b.status === 'confirmed').length
@@ -1695,8 +1745,62 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
                 <div>支払い済み累計: <strong>¥{sentPayoutsPaidTotalJpy.toLocaleString()}</strong></div>
               </div>
             )}
+            {/* ステージ4「Stripe Connect 口座登録導線」(CEO承認済み・2026-08-04) */}
+            {/* レビュー指摘(軽微8): connectStatusがnull(未確定・403等でロード完了したが値が
+                無い場合)は何も表示せず、空の区切り線だけが出る状態を防ぐ */}
+            {connectStatusLoaded && connectStatus !== null && (
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #EAD9A6' }}>
+                {connectStatus === 'enabled' ? (
+                  <div style={{ fontSize: 13, color: '#2F7A4D', fontWeight: 600 }}>受け取り口座: 登録済み</div>
+                ) : connectStatus === 'not_ready' ? (
+                  <div style={{ fontSize: 12, color: '#9CA3AF' }}>口座登録機能は準備中です</div>
+                ) : connectStatus === 'reviewing' ? (
+                  // レビュー指摘(軽微7): 本人確認は提出済みだがStripe側の審査中。再開ボタンは
+                  // 出さない(送り手が押しても状態が変わらないため)。
+                  <div style={{ fontSize: 12, color: '#B45309' }}>口座情報を審査中です(1〜2営業日)</div>
+                ) : connectStatus === 'pending' ? (
+                  <div>
+                    <button
+                      onClick={handleConnectOnboard}
+                      disabled={connectOnboarding}
+                      style={{
+                        padding: '8px 14px', borderRadius: 8, border: 'none',
+                        background: '#1A1A2E', color: '#fff', fontSize: 12, fontWeight: 600,
+                        cursor: connectOnboarding ? 'default' : 'pointer', opacity: connectOnboarding ? 0.6 : 1,
+                      }}
+                    >
+                      口座登録を再開する
+                    </button>
+                    <div style={{ fontSize: 12, color: '#B45309', marginTop: 4 }}>登録が完了していません</div>
+                  </div>
+                ) : connectStatus === 'none' ? (
+                  <div>
+                    <button
+                      onClick={handleConnectOnboard}
+                      disabled={connectOnboarding}
+                      style={{
+                        padding: '8px 14px', borderRadius: 8, border: 'none',
+                        background: '#1A1A2E', color: '#fff', fontSize: 12, fontWeight: 600,
+                        cursor: connectOnboarding ? 'default' : 'pointer', opacity: connectOnboarding ? 0.6 : 1,
+                      }}
+                    >
+                      報酬のお受け取り口座を登録する
+                    </button>
+                    <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4, lineHeight: 1.6 }}>
+                      Stripeの安全な画面で本人確認と口座登録を行います(REAL PROOFはカード・口座情報を保持しません)
+                    </div>
+                  </div>
+                ) : null}
+                {connectError && (
+                  <div style={{ fontSize: 12, color: '#DC2626', marginTop: 4 }}>{connectError}</div>
+                )}
+              </div>
+            )}
+
             <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 6, lineHeight: 1.6 }}>
-              お支払いは月次でのお振込です。口座の自動受け取り(Stripe)は準備中です。
+              {connectStatus === 'enabled'
+                ? '自動送金の開始まで、お支払いは月次のお振込です。'
+                : 'お支払いは月次でのお振込です。口座の自動受け取り(Stripe)は準備中です。'}
             </div>
           </div>
         )}

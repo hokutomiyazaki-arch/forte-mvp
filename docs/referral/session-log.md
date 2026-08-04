@@ -296,3 +296,17 @@
 - 支払いフロー（当面）: pending行をCEOが手動振込→SQLで status='paid'・paid_at 更新。完了後の手動返金時は該当 payout を status='cancelled'（039コメントに手順記載）。
 - 【SQL・未実行】migration 039（referral_payouts テーブル作成）。実行はCEO・巻き戻しは DROP TABLE。
 - 【積み残し】Stripe Connect有効化（A方式・CEOの都合待ち）→口座登録導線→自動送金。完了通知への分配額記載は未実施。
+
+### 作業: Stripe Connect有効化（サンドボックス）＋本番アカウントの必須タスク解消 — 2026-08-04 未明（A方式）
+- REAL PROOFアカウント（リフェラル専用）のサンドボックスでConnectを有効化。ビジネスモデル=**マーケットプレイス**（自社で回収→受取人に送金・現行の予約金フローと一致）で保存。テスト用連結アカウント作成が可能な状態に（口座登録導線の開発が可能）。
+- 本番アカウントが必須タスク2件の期限超過（2026/08/03）で**決済・入金が一時停止中**だったことが判明: ①担当者（宮崎北斗）の本人確認書類 ②セキュリティ対策措置状況申告書。CEOが両方提出完了（本人確認は情報審査中・1〜2営業日）。審査通過で一時停止解除見込み。
+- 申告書の不正ログイン対策は事実ベースで2項目（登録時のメール確認=Clerk 6桁コード・ログイン試行回数制限=Clerk標準）のみチェック（虚偽申告回避）。
+- 【要対応・軽微】本番アカウントの明細書表記が「REAL PROOOF」（Oが3つ）のタイポ。カード明細に載るため後日修正。
+- 【CEO指摘・launch checklist追加】全体公開で全員が受付中🟢になると、メニュー・金額未設定のプロに予約が通り金額0円→予約金なし成立の穴。「メニュー未設定のプロは🟢でも予約ボタン非表示＋設定促し」の方向で要調査・実装（未着手）。
+
+### 実装: Stripe Connect口座登録導線（Express onboarding） — 2026-08-04 深夜（ステージ4続き）
+- 「紹介した案件」タブの報酬サマリーに口座登録UI: 未登録=「報酬のお受け取り口座を登録する」→StripeホストのExpress onboarding（本人確認・口座入力はStripe側で完結・REALPROOFは口座情報を保持しない）／提出済み審査中=「審査中です（1〜2営業日）」／完了=「受け取り口座: 登録済み」。
+- API: POST /api/referral/connect/onboard・GET /api/referral/connect/status（両方 getOwnPro＋isReferralEnabled 403ガード・レスポンスは url/status のみ）。Stripeロジックは referral-payment.ts に集約（accounts.create は idempotencyKey付き・business_typeはStripeに選ばせる・二重作成は .is(null) CAS＋競合時再SELECT・未保存フォールバック禁止）。
+- 【SQL・未実行】migration 040: professionals に stripe_connect_account_id / stripe_connect_payouts_enabled 追加（DEFAULTなし=規約準拠・次フェーズでUNIQUE INDEX予定）。カラム未作成でも not_ready fail-soft（列実在チェック込み）でデプロイ安全。
+- レビュー1周（FAIL→修正済み）: アローリスト外プロの直叩きでConnectアカウント作成可能な穴・キー未設定時の生エラー漏れ・競合時の未保存アカウント使用による増殖・列サイレントnull時の孤児作成ほか12件。
+- 【積み残し】自動送金（完了時transfer）・account.updated webhook・本番Connect有効化（本番アカウントの審査通過後）。
