@@ -259,7 +259,7 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
       <p style={{ fontSize: 12, color: T.textSub, lineHeight: 1.7, marginBottom: 16 }}>
         決済・会員登録は不要です。プロが日時を確定した後、担当の先生から直接ご連絡します。
         <br />
-        プロが日時を確定すると、予約フィーのお支払いご案内がメールで届きます(お支払いで紹介予約成立・総額は変わりません)。
+        プロが日時を確定すると、予約金のお支払いご案内がメールで届きます(お支払いで紹介予約成立・総額は変わりません)。
       </p>
 
       <div
@@ -316,7 +316,7 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
             </select>
             {/* §2-4ステージ3(§0-6静かに・CEO決定): 予約フィー方式の総額不変を軽く明示 */}
             <p style={{ fontSize: 11, color: T.textMuted, marginTop: 6, lineHeight: 1.6 }}>
-              オンラインでのお支払いは予約フィーのみ。総額は変わりません。
+              オンラインでのお支払いは予約金のみ。総額は変わりません。
             </p>
           </div>
         )}

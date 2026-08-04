@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { formatSlotWithWeekday, buildGoogleCalendarUrl } from '@/lib/referral-format'
+import { formatSlotWithWeekday, buildGoogleCalendarUrl, resolveConfirmedSlotIso } from '@/lib/referral-format'
 import {
   notifyRescheduleConfirmedToReceiver,
   notifyRescheduleConfirmedToSender,
@@ -82,6 +82,10 @@ export async function POST(request: NextRequest, { params }: { params: { booking
       ...(booking.preferred_slots || {}),
       reschedule_slots: null,
       reschedule_resolved_at: nowIso,
+      // レビュー指摘(軽微1): confirmed_slot_isoは他ラウンドでも残り続けるため、単独では
+      // 「今回keep_currentを選んだか」を判別できない。このラウンドの結果を都度明示的に
+      // セット/nullで上書きする専用マーカーとする(2周目以降の偽陰性/偽陽性を防ぐ)。
+      reschedule_kept_current_at: mode === 'keep_current' ? nowIso : null,
       ...(mode === 'select' ? { confirmed_slot_iso: selectedIso } : {}),
     }
 
@@ -117,6 +121,11 @@ export async function POST(request: NextRequest, { params }: { params: { booking
 
     if (mode === 'keep_current') {
       // §2-2改訂(CEO決定): 「現在の日時のまま」の場合は受け手のみ通知(送り手は成立時のみ通知)。
+      // CEO指摘(2026-08-04): 通知文にどの日時を希望しているかを含めるため、更新前のpreferred_slots
+      // (confirmed_index/confirmed_counter_index。keep_currentではconfirmed_slot_isoは設定しない)
+      // から現在の確定日時を解決する。
+      const currentSlotIsoForKeep = resolveConfirmedSlotIso(booking.preferred_slots)
+      const currentSlotTextForKeep = formatSlotWithWeekday(currentSlotIsoForKeep)
       try {
         if (receiverPro) {
           await notifyRescheduleKeptCurrentToReceiver(
@@ -125,7 +134,8 @@ export async function POST(request: NextRequest, { params }: { params: { booking
               contact_email: receiverPro.contact_email,
               line_messaging_user_id: receiverPro.line_messaging_user_id,
             },
-            clientNickname
+            clientNickname,
+            currentSlotTextForKeep
           )
         }
       } catch (notifyErr) {

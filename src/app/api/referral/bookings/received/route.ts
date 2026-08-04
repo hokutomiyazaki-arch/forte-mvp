@@ -16,6 +16,8 @@ import {
   buildRescheduleContactNoteHtml,
   notifyRescheduleProposedToClient,
   notifyLocationToClient,
+  notifyBookingCancelledByReceiverToClient,
+  notifyBookingCancelledByReceiverToSender,
 } from '@/lib/referral-notify'
 import {
   formatSlot,
@@ -27,7 +29,7 @@ import {
 import { isReferralPaymentEnabled, REFERRAL_MIN_FEE_JPY, REFERRAL_FEE_TOTAL_BPS } from '@/lib/feature-flags'
 // 中1レビュー指摘から継続: Stripe importはこのAPI routeに持たせない(Webpackチャンクグラフ対策)。
 // Checkout Session作成+メール送付(共通処理)はsrc/lib/referral-payment.tsの関数呼び出しに委譲する。
-import { issueFeePaymentLinkAndNotify } from '@/lib/referral-payment'
+import { issueFeePaymentLinkAndNotify, refundReferralBookingFee, expireReferralCheckoutSession } from '@/lib/referral-payment'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,6 +59,17 @@ interface PreferredSlots {
    * confirmed_counter_index による解決より優先する(既存箇所が多いためフォールバックとして両方維持)。
    */
   confirmed_slot_iso?: string | null
+  /**
+   * タスク②(2026-08-04・CEO指示): プロ都合キャンセル(cancel_by_receiver)実行時のマーカー。
+   * cronの支払い期限切れ自動キャンセル(payment_status='canceled'共用)との区別に使う。
+   */
+  cancelled_by_receiver_at?: string | null
+  /**
+   * レビュー指摘(軽微1): クライアントが「候補では難しいため現在の日時を希望する」(keep_current)を
+   * 選んだ際のマーカー。reschedule-respond側で解決時に必ず明示的にセット/nullで上書きする
+   * (confirmed_slot_isoは他ラウンドでも残るため、単独では2周目以降の判別に使えない)。
+   */
+  reschedule_kept_current_at?: string | null
 }
 
 /**
@@ -78,6 +91,10 @@ interface BookingRow {
   price_jpy: number
   payment_status: string | null
   fee_total_bps: number | null
+  /** タスク②(2026-08-04・CEO指示): プロ都合キャンセル時の決済リンク失効に使う(migration 036依存)。 */
+  stripe_checkout_session_id: string | null
+  /** タスク②(2026-08-04・CEO指示): プロ都合キャンセル時の返金照合に使う(migration 032で作成済み)。 */
+  stripe_payment_intent_id: string | null
   expires_at: string | null
   confirmed_at: string | null
   completed_at: string | null
@@ -186,6 +203,9 @@ export async function GET() {
     // draft掃除由来のcancelled(confirmed_at無し)は自然に除外される。receiver_dismissed_atが
     // 入っている行(閉じるボタン押下済み)は対象外。paymentEnabled(migration 036依存カラム)の
     // 間だけ実行する(fail-soft・既存配列の形は変えない)。
+    // タスク②(2026-08-04・CEO指示): プロ都合キャンセル(cancel_by_receiver)はpayment_status='canceled'を
+    // 共用するため、この一覧に混ざらないよう preferred_slots.cancelled_by_receiver_at(マーカー)が
+    // 付いている行は除外する(既存のreschedule-respond routeと同じ ->> JSON path filter方式)。
     let cancelledUnpaidRows: any[] = []
     if (paymentEnabled) {
       try {
@@ -197,6 +217,7 @@ export async function GET() {
           .eq('payment_status', 'canceled')
           .not('confirmed_at', 'is', null)
           .is('receiver_dismissed_at', null)
+          .filter('preferred_slots->>cancelled_by_receiver_at', 'is', null)
           .order('confirmed_at', { ascending: false })
           .limit(20)
         if (cancelledError) {
@@ -343,7 +364,8 @@ export async function PATCH(request: NextRequest) {
         action !== 'counter' &&
         action !== 'dismiss_cancelled' &&
         action !== 'send_location' &&
-        action !== 'reschedule')
+        action !== 'reschedule' &&
+        action !== 'cancel_by_receiver')
     ) {
       return NextResponse.json({ error: 'invalid_params' }, { status: 400 })
     }
@@ -355,7 +377,11 @@ export async function PATCH(request: NextRequest) {
     // payment_status/fee_total_bpsはmigration 036依存のためフラグゲート付きで選択する。
     const baseConfirmSelect =
       'id, list_id, sender_pro_id, receiver_pro_id, client_id, client_email, status, price_jpy, expires_at, preferred_slots, clients(id, user_id, nickname), referral_lists(id, slug, comment), pro_menus(name)'
-    const confirmSelect = paymentEnabled ? `${baseConfirmSelect}, payment_status, fee_total_bps` : baseConfirmSelect
+    // タスク②(2026-08-04・CEO指示): cancel_by_receiver用にstripe_checkout_session_id/
+    // stripe_payment_intent_idも取得する(いずれもmigration 036依存カラムと同じpaymentEnabledゲート内)。
+    const confirmSelect = paymentEnabled
+      ? `${baseConfirmSelect}, payment_status, fee_total_bps, stripe_checkout_session_id, stripe_payment_intent_id`
+      : baseConfirmSelect
     const { data: bookingData } = await supabase
       .from('referral_bookings')
       .select(confirmSelect)
@@ -491,6 +517,9 @@ export async function PATCH(request: NextRequest) {
         reschedule_slots: parsedRescheduleSlots,
         reschedule_proposed_at: new Date().toISOString(),
         reschedule_resolved_at: null,
+        // レビュー指摘(軽微1): 新しいラウンド開始時、前回のkeep_currentマーカーを必ずクリアする
+        // (クリアしないと前回「現在の日時を希望」だった表示が新ラウンド中も残ってしまう)。
+        reschedule_kept_current_at: null,
       }
 
       const { data: updatedRescheduleRows, error: rescheduleError } = await supabase
@@ -561,6 +590,158 @@ export async function PATCH(request: NextRequest) {
       }
 
       return NextResponse.json({ success: true })
+    }
+
+    // タスク②(2026-08-04・CEO指示): プロ都合キャンセル＋自動返金。確定済み(confirmed)のみ対象。
+    // 実行順序(二重返金防止のため厳守): ①CASでキャンセル確定 → ②返金/決済リンク失効 → ③通知。
+    // preferred_slotsにcancelled_by_receiver_atのマーカーを立てる理由: 支払期限切れ自動キャンセル
+    // (cron)もpayment_status='canceled'を使うため、GET側のcancelled_unpaid一覧に混ざらないよう
+    // このマーカーで区別する(既存のreschedule-respondと同じ ->> JSON path filter方式で除外する)。
+    if (action === 'cancel_by_receiver') {
+      // レビュー指摘(軽微3): preferred_slotsはPATCH冒頭で取得したスタレなスナップショットのため、
+      // マーカー書き込み直前に再SELECTして最新値をベースにマージする(既存キーの消失リスクを縮小)。
+      const { data: freshSlotsRow } = await supabase
+        .from('referral_bookings')
+        .select('preferred_slots')
+        .eq('id', bookingId)
+        .maybeSingle()
+      const basePreferredSlots =
+        (freshSlotsRow?.preferred_slots as PreferredSlots | null) || booking.preferred_slots || {}
+
+      // レビュー指摘(重大1): payment_statusもPATCH冒頭のスタレスナップショットのため、CASのUPDATE
+      // 自体に`.select('id, payment_status')`を付け、更新確定と同時点の実値を取得して分岐する
+      // (webhookの支払い完了と競合しても、この時点の実値で正しくpaid/awaitingを判定できる)。
+      const cancelReturnSelect = paymentEnabled ? 'id, payment_status' : 'id'
+      const { data: cancelRows, error: cancelUpdateError } = await supabase
+        .from('referral_bookings')
+        .update({
+          status: 'cancelled',
+          preferred_slots: { ...basePreferredSlots, cancelled_by_receiver_at: new Date().toISOString() },
+        })
+        .eq('id', bookingId)
+        .eq('status', 'confirmed')
+        .select(cancelReturnSelect)
+
+      if (cancelUpdateError) {
+        console.error('[api/referral/bookings/received] PATCH cancel_by_receiver error:', cancelUpdateError)
+        return NextResponse.json({ error: 'failed_to_update' }, { status: 500 })
+      }
+      if (!cancelRows || cancelRows.length === 0) {
+        return NextResponse.json({ error: 'not_confirmed' }, { status: 409 })
+      }
+      const paymentStatusAtCancel: string | null = paymentEnabled
+        ? (cancelRows[0] as any).payment_status ?? null
+        : null
+
+      // ②返金/決済リンク失効(①のCASキャンセル確定が通った後にのみ実行する)
+      const feeTotalBpsForRefund = booking.fee_total_bps ?? REFERRAL_FEE_TOTAL_BPS
+      const fallbackAmountJpy =
+        booking.price_jpy > 0 ? Math.floor((booking.price_jpy * feeTotalBpsForRefund) / 10000) : 0
+      let refundedAmountJpy: number | null = null
+      // レビュー指摘(重大2): paid確定(通常/競合再検出のいずれか)で返金を試みたが失敗した場合、
+      // クライアント宛メールに「担当より別途ご連絡」を必ず入れるためのフラグ。
+      let refundPending = false
+
+      if (paymentEnabled) {
+        if (paymentStatusAtCancel === 'paid') {
+          const refundResult = await refundReferralBookingFee({
+            bookingId: booking.id,
+            stripePaymentIntentId: booking.stripe_payment_intent_id,
+            fallbackAmountJpy,
+          })
+          if (refundResult.refunded) {
+            refundedAmountJpy = refundResult.amountJpy
+          } else {
+            refundPending = true
+          }
+          // 返金API呼び出し自体が失敗した場合はrefundReferralBookingFee内でCRITICALログ済み。
+          // 返金失敗でもキャンセル自体は成立させる(fail open・①のCASは既に確定している)。
+        } else if (paymentStatusAtCancel === 'awaiting') {
+          // 支払いは未確定のため返金は不要。決済リンクを失効させ、誰にも課金させない。
+          const { data: awaitingCancelRows, error: awaitingCancelError } = await supabase
+            .from('referral_bookings')
+            .update({ payment_status: 'canceled' })
+            .eq('id', bookingId)
+            .eq('payment_status', 'awaiting')
+            .select('id')
+          if (awaitingCancelError) {
+            console.error(
+              '[api/referral/bookings/received] cancel_by_receiver awaiting payment_status update error:',
+              awaitingCancelError
+            )
+          }
+          if (!awaitingCancelError && (!awaitingCancelRows || awaitingCancelRows.length === 0)) {
+            // レビュー指摘(重大1②): 0行=競合(その間にwebhookがpaidへ進めた可能性)。実状態を
+            // 再SELECTし、'paid'であれば返金へ回す(課金されたまま返金なしになる穴を閉塞)。
+            const { data: latestPaymentRow } = await supabase
+              .from('referral_bookings')
+              .select('payment_status, stripe_payment_intent_id')
+              .eq('id', bookingId)
+              .maybeSingle()
+            if (latestPaymentRow?.payment_status === 'paid') {
+              const refundResult = await refundReferralBookingFee({
+                bookingId: booking.id,
+                stripePaymentIntentId: latestPaymentRow.stripe_payment_intent_id,
+                fallbackAmountJpy,
+              })
+              if (refundResult.refunded) {
+                refundedAmountJpy = refundResult.amountJpy
+              } else {
+                refundPending = true
+              }
+            }
+            // 'paid'以外(既にcanceled/refunded等)は他経路が処理済みのため何もしない。
+          }
+          if (booking.stripe_checkout_session_id) {
+            await expireReferralCheckoutSession(booking.stripe_checkout_session_id)
+          }
+        }
+        // 'not_required'/null/'unpaid'はpayment_statusを変更しない(そのままキャンセルのみ)。
+      }
+
+      // ③通知(失敗しても処理自体は成功扱い)
+      const clientUserIdForCancel = booking.clients?.user_id || ''
+      const clientNicknameForCancel = booking.clients?.nickname || 'クライアント'
+      const slugForCancel = booking.referral_lists?.slug || ''
+      const listUrlForCancel = slugForCancel ? `${APP_URL}/r/${slugForCancel}` : APP_URL
+
+      try {
+        if (clientUserIdForCancel || booking.client_email) {
+          await notifyBookingCancelledByReceiverToClient(
+            { userId: clientUserIdForCancel, email: booking.client_email },
+            ownPro.name,
+            listUrlForCancel,
+            { refundedAmountJpy, refundPending }
+          )
+        }
+      } catch (notifyErr) {
+        console.error('[api/referral/bookings/received] cancel_by_receiver client notify error:', notifyErr)
+      }
+
+      try {
+        if (booking.sender_pro_id) {
+          const { data: senderPro } = await supabase
+            .from('professionals')
+            .select('name, contact_email, line_messaging_user_id')
+            .eq('id', booking.sender_pro_id)
+            .maybeSingle()
+          if (senderPro) {
+            await notifyBookingCancelledByReceiverToSender(
+              {
+                name: senderPro.name,
+                contact_email: senderPro.contact_email,
+                line_messaging_user_id: senderPro.line_messaging_user_id,
+              },
+              ownPro.name,
+              clientNicknameForCancel,
+            )
+          }
+        }
+      } catch (notifyErr) {
+        console.error('[api/referral/bookings/received] cancel_by_receiver sender notify error:', notifyErr)
+      }
+
+      return NextResponse.json({ success: true, status: 'cancelled' })
     }
 
     if (booking.status !== 'requested') {

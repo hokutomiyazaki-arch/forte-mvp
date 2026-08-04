@@ -24,6 +24,10 @@ interface BookingItem {
     reschedule_resolved_at?: string | null
     /** クライアントが日時変更提案から選んだ確定ISO(既存のconfirmed_index等より優先)。 */
     confirmed_slot_iso?: string | null
+    /** タスク②(2026-08-04・CEO指示): プロ都合キャンセル実行時のマーカー(表示には未使用)。 */
+    cancelled_by_receiver_at?: string | null
+    /** レビュー指摘(軽微1): 直近ラウンドで「現在の日時を希望する」が選ばれた場合のみ立つマーカー。 */
+    reschedule_kept_current_at?: string | null
   } | null
   status: 'requested' | 'confirmed'
   price_jpy: number
@@ -85,6 +89,10 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
   // タスクB(2026-08-04・CEO指示): 「日時変更を提案する」の開閉と入力値(bookingIdごと)
   const [rescheduleOpenId, setRescheduleOpenId] = useState<string | null>(null)
   const [rescheduleInputs, setRescheduleInputs] = useState<Record<string, [string, string, string]>>({})
+  // タスク②(2026-08-04・CEO指示): 「どうしてもキャンセルが必要な場合はこちら」の開閉
+  const [cancelOpenId, setCancelOpenId] = useState<string | null>(null)
+  // レビュー指摘(軽微8): キャンセル成功時、カードが消える前に一時フィードバックを表示するID集合
+  const [cancelledFeedbackIds, setCancelledFeedbackIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     fetch('/api/referral/bookings/received', { cache: 'no-store' })
@@ -295,6 +303,47 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
         } else {
           window.alert('提案の送信に失敗しました')
         }
+      }
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
+  /**
+   * タスク②(2026-08-04・CEO指示): プロ都合キャンセル＋自動返金。「どうしてもキャンセルが必要な
+   * 場合はこちら」を開いた後の「キャンセルする」ボタンから呼ぶ(注意文の表示=1段目、
+   * window.confirmでの最終確認=2段目)。理由入力は不要。
+   */
+  async function cancelByReceiver(bookingId: string) {
+    if (
+      !window.confirm(
+        'この紹介予約をキャンセルします。クライアントへ通知が送られ、お支払い済みの予約金は全額返金されます。この操作は取り消せません。よろしいですか？'
+      )
+    ) {
+      return
+    }
+    setProcessingId(bookingId)
+    try {
+      const res = await fetch('/api/referral/bookings/received', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ booking_id: bookingId, action: 'cancel_by_receiver' }),
+      })
+      if (res.ok) {
+        setCancelOpenId(null)
+        // レビュー指摘(軽微8): カードを即時に消さず、一時フィードバックを見せてから消す。
+        setCancelledFeedbackIds((prev) => new Set(prev).add(bookingId))
+        setTimeout(() => {
+          setItems((prev) => prev.filter((i) => i.id !== bookingId))
+          setCancelledFeedbackIds((prev) => {
+            const next = new Set(prev)
+            next.delete(bookingId)
+            return next
+          })
+        }, 2000)
+      } else {
+        window.alert('処理に失敗しました')
       }
     } finally {
       setProcessingId(null)
@@ -552,9 +601,33 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
           const confirmedSlotText = formatSlot(confirmedSlotIso)
           const rescheduleProposed =
             (item.preferred_slots?.reschedule_slots?.length || 0) > 0 && !item.preferred_slots?.reschedule_resolved_at
+          // レビュー指摘(軽微1): confirmed_slot_isoは他ラウンドでも残るため、単独では2周目以降の
+          // 判別に使えない(偽陰性の原因)。reschedule_kept_current_at専用マーカーで判別する
+          // (reschedule-respond側で解決の都度セット/nullで明示的に上書きされる)。
+          const clientKeptCurrentSlot = !!item.preferred_slots?.reschedule_kept_current_at
           const isLocationOpen = locationOpenId === item.id
           const isRescheduleOpen = rescheduleOpenId === item.id
           const rescheduleInput = rescheduleInputs[item.id] || ['', '', '']
+
+          // レビュー指摘(軽微8): キャンセル成功直後は、カードが消える前に一時フィードバックのみ表示する。
+          if (cancelledFeedbackIds.has(item.id)) {
+            return (
+              <div
+                key={item.id}
+                style={{
+                  background: '#F5F5F5',
+                  border: '1px solid #E0E0E0',
+                  borderRadius: 12,
+                  padding: '14px 16px',
+                }}
+              >
+                <div style={{ fontSize: 13, color: '#4B4B4B', lineHeight: 1.6 }}>
+                  キャンセルしました。返金がある場合は手続き済みです。
+                </div>
+              </div>
+            )
+          }
+
           return (
           <div
             key={item.id}
@@ -660,6 +733,20 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                 日時変更を提案済み・クライアントの返答待ちです
               </div>
             )}
+            {clientKeptCurrentSlot && (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: '#1A6B3C',
+                  background: '#F0FFF4',
+                  borderRadius: 8,
+                  padding: '8px 10px',
+                  marginTop: 8,
+                }}
+              >
+                クライアントは現在の日時を希望しています
+              </div>
+            )}
 
             {/* タスクA(2026-08-04・CEO指示): 当日の場所を送る(確定済み・支払い待ちでないカードのみ)。 */}
             {item.payment_status !== 'awaiting' && (
@@ -757,12 +844,12 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                       cursor: 'pointer',
                     }}
                   >
-                    日時変更を提案する
+                    日時の変更をお願いする
                   </button>
                 ) : (
                   <div style={{ padding: '10px 12px', background: '#fff', borderRadius: 8, border: '1px solid #D1D5DB' }}>
                     <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 8 }}>
-                      クライアントに日時変更を提案します(第1希望は必須。ご都合が合わない場合は現在の日時のまま実施されます)
+                      確定した日時にどうしても都合がつかなくなった場合に、クライアントへ新しい日時をお願いします(第1希望は必須)。クライアントには「あなたの都合による変更のお願い」として届きます。
                     </div>
                     {[0, 1, 2].map((i) => (
                       <div key={i} style={{ marginBottom: 8 }}>
@@ -816,6 +903,77 @@ export default function ReferralBookingReceivedCard({ proId }: Props) {
                 )}
               </div>
             )}
+
+            {/* タスク②(2026-08-04・CEO指示): プロ都合キャンセル＋自動返金。控えめなテキストリンクで、
+                誤操作を避ける(理由入力は不要。二段確認=注意文パネル+window.confirm)。 */}
+            <div style={{ marginTop: 8, textAlign: 'right' }}>
+              {cancelOpenId === item.id ? (
+                <div
+                  style={{
+                    marginTop: 4,
+                    padding: '10px 12px',
+                    background: '#FFF5F5',
+                    borderRadius: 8,
+                    border: '1px solid #F5C6CB',
+                    textAlign: 'left',
+                  }}
+                >
+                  <p style={{ fontSize: 11, color: '#B00020', lineHeight: 1.6, margin: '0 0 8px 0' }}>
+                    クライアントへキャンセルの通知が送られ、お支払い済みの予約金は全額返金されます。この操作は取り消せません。
+                  </p>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={() => cancelByReceiver(item.id)}
+                      disabled={processingId === item.id}
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        borderRadius: 8,
+                        border: 'none',
+                        background: '#B00020',
+                        color: '#fff',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: processingId === item.id ? 'default' : 'pointer',
+                        opacity: processingId === item.id ? 0.6 : 1,
+                      }}
+                    >
+                      キャンセルする
+                    </button>
+                    <button
+                      onClick={() => setCancelOpenId(null)}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 8,
+                        border: '1px solid #D1D5DB',
+                        background: '#fff',
+                        color: '#6B7280',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      やめる
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setCancelOpenId(item.id)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#9CA3AF',
+                    fontSize: 11,
+                    textDecoration: 'underline',
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
+                >
+                  どうしてもキャンセルが必要な場合はこちら
+                </button>
+              )}
+            </div>
 
             <BookingThread
               bookingId={item.id}

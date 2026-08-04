@@ -4,6 +4,10 @@
  * ライフサイクル改善(タスクB・2026-08-04・CEO指示): 確定後にプロが提案した日時変更の選択UI。
  * 認証不要(秘匿URL=booking_id)。BookingAcceptForm(逆指定・requested時点)と同じ流儀を踏襲する。
  * クライアントの氏名・電話番号・メールアドレスは一切表示しない(第三者閲覧に備える)。
+ *
+ * CEO指摘(2026-08-04・意味合い変更): 「プロの中立的な提案」から「プロがどうしても確定日時に
+ * 都合がつかなくなったための変更のお願い」へ全面変更。「現在の日時のまま」ボタンは残すが、
+ * 文言は「候補では難しいためのクライアントからの回答」に変える(keep_current modeはそのまま使う)。
  */
 
 import { useState } from 'react'
@@ -78,8 +82,9 @@ export default function BookingRescheduleForm({ bookingId, receiverProName, resc
   if (done === 'keep_current') {
     return (
       <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 16, padding: '24px 20px', textAlign: 'center' }}>
-        <p style={{ fontSize: 14, fontWeight: 700, color: T.dark, marginBottom: 8 }}>現在の日時のまま実施します</p>
+        <p style={{ fontSize: 14, fontWeight: 700, color: T.dark, marginBottom: 8 }}>現在の日時のご希望を送信しました</p>
         {currentSlotText && <p style={{ fontSize: 13, color: T.textSub, lineHeight: 1.8 }}>{currentSlotText}</p>}
+        <p style={{ fontSize: 12, color: T.textSub, lineHeight: 1.7, marginTop: 8 }}>{receiverProName}さんからのご連絡をお待ちください。</p>
       </div>
     )
   }
@@ -87,13 +92,7 @@ export default function BookingRescheduleForm({ bookingId, receiverProName, resc
   return (
     <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 16, padding: '18px 16px' }}>
       <p style={{ fontSize: 13, color: T.textSub, lineHeight: 1.8, marginBottom: 14 }}>
-        {receiverProName}さんから、日時変更のご提案があります。
-        {currentSlotText && (
-          <>
-            <br />
-            現在確定している日時は <strong>{currentSlotText}</strong> です。ご都合が合わない場合はそのまま現在の日時で実施されます。
-          </>
-        )}
+        {receiverProName}さんの都合により日時変更のお願いが届いています。以下の候補からお選びいただくか、候補では難しい場合は現在の日時のご希望をお伝えください。
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
@@ -157,8 +156,12 @@ export default function BookingRescheduleForm({ bookingId, receiverProName, resc
           cursor: submitting ? 'default' : 'pointer',
         }}
       >
-        現在の日時のまま
+        候補の日時では難しいため、現在の日時を希望する
       </button>
+
+      <p style={{ fontSize: 11, color: T.textMuted, lineHeight: 1.7, marginTop: 10, textAlign: 'center' }}>
+        いずれも難しい場合は、予約成立時のメールに記載のご連絡先へ直接ご相談ください。
+      </p>
     </div>
   )
 }

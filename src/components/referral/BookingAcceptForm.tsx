@@ -141,11 +141,11 @@ export default function BookingAcceptForm({ bookingId, receiverProName, counterS
           <p style={{ fontSize: 12, color: T.textSub, lineHeight: 1.8, margin: 0 }}>
             日時を選択するとお支払いのご案内に進みます。
             <br />
-            予約の成立には予約フィー(セッション料金の一部・¥{feeAmountJpy.toLocaleString('ja-JP')})のお支払いが必要です。
+            予約の成立には予約金(セッション料金の一部・¥{feeAmountJpy.toLocaleString('ja-JP')})のお支払いが必要です。
             <br />
             総額は変わりません(当日は残額のみのお支払いです)。
             <br />
-            {receiverProName}さんの都合でキャンセルとなった場合、予約フィーは全額返金されます。
+            {receiverProName}さんの都合でキャンセルとなった場合、予約金は全額返金されます。
           </p>
         </div>
       )}

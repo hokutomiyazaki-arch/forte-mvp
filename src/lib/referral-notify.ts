@@ -494,6 +494,58 @@ export async function notifyBookingCompletedToSender(
 }
 
 /**
+ * タスク②(2026-08-04・CEO指示): プロ都合キャンセル＋自動返金。確定済み予約を受け手プロが
+ * キャンセルした際、送り手プロへ通知する(進捗通知にはリンクを付けない・主語を明示する既存方針を踏襲)。
+ */
+export async function notifyBookingCancelledByReceiverToSender(
+  target: ProNotifyTarget,
+  receiverProName: string,
+  clientNickname: string,
+): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  const safeClientNickname = escapeHtml(clientNickname)
+  const safeReceiverProName = escapeHtml(receiverProName)
+  return sendProNotification(target, {
+    lineText: `あなたが紹介した${clientNickname}さんの紹介予約は、${receiverProName}さん(受け手)の都合によりキャンセルされました。`,
+    emailSubject: `あなたが紹介した${clientNickname}さんの紹介予約がキャンセルされました`,
+    emailBodyHtml: emailShell(
+      '紹介予約キャンセルのお知らせ',
+      `あなたが紹介した${safeClientNickname}さんの紹介予約は、${safeReceiverProName}さん(受け手)の都合によりキャンセルされました。`,
+    ),
+  })
+}
+
+/**
+ * タスク②(2026-08-04・CEO指示): 確定済み予約を受け手プロがキャンセルした際、クライアントへ
+ * 通知する。返金有無で文言を分岐する(refundedAmountJpy: 返金対象額。null/0=返金なし/対象外)。
+ * 返金は「手続きを行った」旨のみ伝える(カード会社の反映まで数日かかるため断言しすぎない)。
+ * レビュー指摘(重大2): 事前告知で全額返金を約束済みのため、paid×返金失敗(refundPending)の場合は
+ * 必ず「担当より別途ご連絡」の一文を入れる(返金の記述が一切出ない状態を防ぐ)。
+ * レビュー指摘(軽微7): refundedAmountJpyは`!== null`ではなく`> 0`で判定する(¥0の「全額返金」表示を防ぐ)。
+ */
+export async function notifyBookingCancelledByReceiverToClient(
+  target: { userId?: string | null; email?: string | null },
+  receiverProName: string,
+  listUrl: string,
+  opts: { refundedAmountJpy: number | null; refundPending: boolean },
+): Promise<{ sent: boolean }> {
+  const safeReceiverProName = escapeHtml(receiverProName)
+  const refundPart = opts.refundPending
+    ? '<br><br>ご返金の手続きについては、担当より別途ご連絡いたします(数日以内)。'
+    : opts.refundedAmountJpy !== null && opts.refundedAmountJpy > 0
+      ? `<br><br>お支払いいただいた予約金(¥${opts.refundedAmountJpy.toLocaleString()})は全額返金の手続きを行いました。カード会社により反映まで数日かかる場合があります。`
+      : ''
+  return notifyClientByEmail(
+    target,
+    `${receiverProName}さんの都合により紹介予約がキャンセルされました`,
+    emailShell(
+      '紹介予約キャンセルのお知らせ',
+      `${safeReceiverProName}さんの都合により、紹介予約はキャンセルされました。${refundPart}` +
+        referralListFooterHtml(listUrl, '他の先生もご紹介できます'),
+    ),
+  )
+}
+
+/**
  * ライフサイクル改善(タスクB・レビューFAIL修正・重大1): クライアントが逆指定の提案日時の中から
  * 1つを選択した際、受け手プロへ必ず通知する(決済対象/対象外に関わらず。確定した日時が
  * 受け手に届かないと現場で確認しようがないため)。決済対象で支払い待ちの場合は
@@ -563,10 +615,10 @@ export async function notifyBookingReceivedToClient(
 ): Promise<{ sent: boolean }> {
   const safeReceiverProName = escapeHtml(receiverProName)
   const step2 = opts.paymentFlowActive
-    ? '②確定すると、メールでお知らせします(予約フィーのお支払いご案内も届きます)'
+    ? '②確定すると、メールでお知らせします(予約金のお支払いご案内も届きます)'
     : '②確定次第、メールでお知らせします'
   const step3 = opts.paymentFlowActive
-    ? '③お支払いが完了すると紹介予約が成立します(総額は変わりません。当日は残額のみ。プロの都合でキャンセルとなった場合は予約フィーが全額返金されます)'
+    ? '③お支払いが完了すると紹介予約が成立します(総額は変わりません。当日は残額のみ。プロの都合でキャンセルとなった場合は予約金が全額返金されます)'
     : '③確定のご連絡をお待ちください'
   return notifyClientByEmail(
     target,
@@ -627,8 +679,10 @@ export function buildRescheduleContactNoteHtml(pro: {
 }
 
 /**
- * ライフサイクル改善(タスクB・2026-08-04・CEO指示): 受け手が確定後に別日時を提案した際、
- * クライアントへ通知する(既存日時のまま実施されることも明示する)。
+ * CEO指摘(2026-08-04・意味合い変更): 「プロの中立的な提案」から「プロがどうしても確定日時に
+ * 都合がつかなくなったための変更のお願い」へ全面変更。「ご都合が合わない場合はそのまま現在の
+ * 日時で実施されます」はプロが来られない前提と矛盾するため削除し、代わりに「予約成立時のメールの
+ * 連絡先へ直接ご相談ください」の案内に置き換える。
  */
 export async function notifyRescheduleProposedToClient(
   target: { userId?: string | null; email?: string | null },
@@ -640,25 +694,26 @@ export async function notifyRescheduleProposedToClient(
 ): Promise<{ sent: boolean }> {
   const safeReceiverProName = escapeHtml(receiverProName)
   const slotListHtml = slotTexts.map((t) => `<li>${escapeHtml(t)}</li>`).join('')
-  const currentLine = currentSlotText
-    ? `現在確定している日時は ${escapeHtml(currentSlotText)} です。ご都合が合わない場合はそのまま現在の日時で実施されます。`
-    : 'ご都合が合わない場合はそのまま現在の日時で実施されます。'
+  const currentPart = currentSlotText ? `(変更前: ${escapeHtml(currentSlotText)})` : ''
   return notifyClientByEmail(
     target,
-    `${receiverProName}さんから日時変更のご提案があります`,
+    `${receiverProName}さんから日時変更のお願い`,
     emailShell(
-      '日時変更のご提案',
-      `${safeReceiverProName}さんから、日時変更のご提案があります。` +
+      '日時変更のお願い',
+      `${safeReceiverProName}さんの都合により、確定済みの日時${currentPart}でのご対応が難しくなりました。大変申し訳ありませんが、以下の候補から新しい日時をお選びください。` +
         `<ul style="padding-left:18px;margin:12px 0;">${slotListHtml}</ul>` +
-        `${currentLine}` +
+        `いずれの日時もご都合が合わない場合は、予約成立時のメールに記載のご連絡先へ直接ご相談ください。` +
         referralListFooterHtml(listUrl),
-      'ご希望の日時を選ぶ',
+      '新しい日時を選ぶ',
       bookingUrl,
     ),
   )
 }
 
-/** タスクB: クライアントが日時変更の提案から1つを選んだ際、受け手プロへ通知する。 */
+/**
+ * タスクB: クライアントが日時変更のお願いから1つを選んだ際、受け手プロへ通知する。
+ * CEO指摘(2026-08-04・意味合い変更): 「提案」→「お願い」の用語統一(必要最小限の調整)。
+ */
 export async function notifyRescheduleConfirmedToReceiver(
   target: ProNotifyTarget,
   clientNickname: string,
@@ -668,7 +723,7 @@ export async function notifyRescheduleConfirmedToReceiver(
   const safeClientNickname = escapeHtml(clientNickname)
   const slotPart = newSlotText ? `${newSlotText} に変更` : '新しい日時に変更'
   return sendProNotification(target, {
-    lineText: `${clientNickname}さんが日時変更のご提案から新しい日時を選びました(${slotPart})。\n${dashboardUrl}`,
+    lineText: `${clientNickname}さんが日時変更のお願いから新しい日時を選びました(${slotPart})。\n${dashboardUrl}`,
     emailSubject: '日時変更が確定しました',
     emailBodyHtml: emailShell(
       '日時変更確定のお知らせ',
@@ -700,18 +755,28 @@ export async function notifyRescheduleConfirmedToSender(
   })
 }
 
-/** タスクB: クライアントが「現在の日時のまま」を選んだ際、受け手プロへ通知する。 */
+/**
+ * タスクB(2026-08-04・CEO指示・意味合い変更): クライアントが「候補では難しいため現在の日時を
+ * 希望する」を選んだ際、受け手プロへ通知する。どうしても都合がつかない場合の代替導線として、
+ * ダッシュボードからのキャンセル(予約金は全額返金)を案内する。
+ */
 export async function notifyRescheduleKeptCurrentToReceiver(
   target: ProNotifyTarget,
   clientNickname: string,
+  currentSlotText: string | null = null,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
   const safeClientNickname = escapeHtml(clientNickname)
+  const slotPart = currentSlotText ? `(${currentSlotText})` : ''
+  const safeSlotPart = currentSlotText ? `(${escapeHtml(currentSlotText)})` : ''
   return sendProNotification(target, {
-    lineText: `${clientNickname}さんは現在の日時を希望しました(日時変更の提案は不採用)。`,
-    emailSubject: 'クライアントは現在の日時を希望しました',
+    lineText: `${clientNickname}さんは現在の日時${slotPart}を希望しています。どうしてもご都合がつかない場合は、ダッシュボードからキャンセル(予約金は全額返金されます)をご検討ください。\n${dashboardUrl}`,
+    emailSubject: 'クライアントは現在の日時を希望しています',
     emailBodyHtml: emailShell(
       '日時変更のお知らせ',
-      `${safeClientNickname}さんは現在の日時を希望しました。日時変更のご提案は不採用となりました。`,
+      `${safeClientNickname}さんは現在の日時${safeSlotPart}を希望しています。<br>どうしてもご都合がつかない場合は、ダッシュボードからキャンセル(予約金は全額返金されます)をご検討ください。`,
+      'ダッシュボードを開く',
+      dashboardUrl,
     ),
   })
 }

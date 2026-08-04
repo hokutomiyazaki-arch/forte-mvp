@@ -115,7 +115,7 @@ export default async function BookingCapabilityPage({
           }}
         >
           <p style={{ fontSize: 13, color: T.dark, fontWeight: 700, lineHeight: 1.8 }}>
-            日時は確定しています。予約の成立には予約フィーのお支払いが必要です。
+            日時は確定しています。予約の成立には予約金のお支払いが必要です。
           </p>
           {data.confirmedSlotText && (
             <p style={{ fontSize: 13, color: T.textSub, marginTop: 10, lineHeight: 1.7 }}>{data.confirmedSlotText}</p>
@@ -132,11 +132,11 @@ export default async function BookingCapabilityPage({
               }}
             >
               <p style={{ fontSize: 12, color: T.textSub, lineHeight: 1.8, margin: 0 }}>
-                予約の成立には予約フィー(セッション料金の一部・¥{data.feeAmountJpy.toLocaleString('ja-JP')})のお支払いが必要です。
+                予約の成立には予約金(セッション料金の一部・¥{data.feeAmountJpy.toLocaleString('ja-JP')})のお支払いが必要です。
                 <br />
                 総額は変わりません(当日は残額のみのお支払いです)。
                 <br />
-                {data.receiverProName}さんの都合でキャンセルとなった場合、予約フィーは全額返金されます。
+                {data.receiverProName}さんの都合でキャンセルとなった場合、予約金は全額返金されます。
               </p>
             </div>
           )}

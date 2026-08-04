@@ -127,6 +127,71 @@ export async function cancelReferralAuthorization(paymentIntentId: string): Prom
 }
 
 /**
+ * タスク②(CEO指示・2026-08-04): プロ都合キャンセル時、支払済みの予約金(fee)を全額返金する。
+ * 呼び出し元(bookings/received PATCH cancel_by_receiver)は、UPDATEで status='cancelled' への
+ * 遷移をCASで確定させた**後**にこの関数を呼ぶこと(二重返金防止・呼び出し順序を守る)。
+ * 冪等性: Stripe側が既に返金済み(charge_already_refunded)の場合は成功扱いにする。
+ * レビュー指摘(中2): 不可逆操作の保険として `refunds.create` にidempotencyKeyを付与する
+ * (再試行(cron等)で同一bookingに対して二重に返金APIを叩いても1回分しか実行されない)。
+ * 返金API呼び出し自体が失敗した場合は CRITICAL ログ('REFUND FAILED - 手動返金要')を残し、
+ * refunded:false を返す(呼び出し元はこれをキャンセル自体の失敗にはしない=fail open)。
+ * 返金成功後、payment_status を 'paid' → 'refunded' に更新する(CHECK制約なしのカラム・DDL不要)。
+ * レビュー指摘(中1): メールに載せる返金額はコード再計算ではなくStripeの戻り値(refund.amount)を
+ * 正とする。charge_already_refunded(冪等ヒット)時のみ、Stripe側の金額が取得できないため
+ * fallbackAmountJpy(呼び出し元が計算した予約金額)にフォールバックする。
+ */
+export async function refundReferralBookingFee(params: {
+  bookingId: string
+  stripePaymentIntentId: string | null
+  fallbackAmountJpy: number
+}): Promise<{ refunded: boolean; amountJpy: number | null; reason?: 'no_payment_intent' | 'stripe_error' }> {
+  if (!params.stripePaymentIntentId) {
+    console.error(
+      `[referral-payment] REFUND FAILED - 手動返金要 (booking ${params.bookingId}): stripe_payment_intent_id が無い`
+    )
+    return { refunded: false, amountJpy: null, reason: 'no_payment_intent' }
+  }
+
+  let refundedAmountJpy: number | null = null
+  try {
+    const stripe = getReferralStripe()
+    const refund = await stripe.refunds.create(
+      { payment_intent: params.stripePaymentIntentId },
+      { idempotencyKey: `refund-${params.bookingId}` }
+    )
+    // JPYは最小単位=円のため換算不要(Checkout作成時のunit_amountと同じ規約)。
+    refundedAmountJpy = typeof refund.amount === 'number' ? refund.amount : params.fallbackAmountJpy
+  } catch (err: any) {
+    // 冪等性: 既に返金済みなら成功扱いで続行する(この場合Stripeの金額は取得できないためフォールバック)
+    const code = err?.code || err?.raw?.code
+    if (code !== 'charge_already_refunded') {
+      console.error(
+        `[referral-payment] REFUND FAILED - 手動返金要 (booking ${params.bookingId}):`,
+        err?.message || err
+      )
+      return { refunded: false, amountJpy: null, reason: 'stripe_error' }
+    }
+    refundedAmountJpy = params.fallbackAmountJpy
+  }
+
+  const supabase = getSupabaseAdmin()
+  const { error } = await supabase
+    .from('referral_bookings')
+    .update({ payment_status: 'refunded' })
+    .eq('id', params.bookingId)
+    .eq('payment_status', 'paid')
+
+  if (error) {
+    console.error(
+      `[referral-payment] refundReferralBookingFee: payment_status update failed (booking ${params.bookingId}):`,
+      error.message
+    )
+  }
+
+  return { refunded: true, amountJpy: refundedAmountJpy }
+}
+
+/**
  * バグ報告(2026-08-04・CEO): 決済を中断すると再開導線が無い問題への対応。
  * /booking/[booking_id] の「お支払いに進む」ボタンから叩かれる決済リンク再取得の中核処理。
  * Stripeロジックはこの関数に集約し、呼び出し元のAPI routeにはStripeのimportを持たせない
@@ -226,7 +291,7 @@ export async function getOrCreateFeePaymentLink(
   const created = await createReferralCheckoutSession({
     bookingId,
     amountJpy: feeAmountJpy,
-    itemName: `予約フィー（${menuName || 'ご相談'}）`,
+    itemName: `予約金（${menuName || 'ご相談'}）`,
     clientEmail: booking.client_email || undefined,
     successUrl: `${listUrl}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
     cancelUrl: `${APP_URL}/booking/${bookingId}?payment=canceled`,
@@ -310,7 +375,7 @@ export async function issueFeePaymentLinkAndNotify(params: {
   const checkout = await createReferralCheckoutSession({
     bookingId: params.bookingId,
     amountJpy: params.feeAmountJpy,
-    itemName: `予約フィー（${params.menuName || 'ご相談'}）`,
+    itemName: `予約金（${params.menuName || 'ご相談'}）`,
     clientEmail: params.clientEmail || undefined,
     successUrl: params.successUrl,
     cancelUrl: params.cancelUrl,
@@ -355,10 +420,10 @@ export async function issueFeePaymentLinkAndNotify(params: {
         emailShell(
           'ご相談確定・お支払いのご案内',
           `${params.confirmedSlotText ? `${params.confirmedSlotText} に確定しました。` : 'ご相談の日時が確定しました。'}<br>担当: ${safeReceiverProName}さん<br><br>` +
-            `予約フィー ¥${params.feeAmountJpy.toLocaleString()} のお支払いで紹介予約が成立します(24時間以内)。<br>` +
+            `予約金 ¥${params.feeAmountJpy.toLocaleString()} のお支払いで紹介予約が成立します(24時間以内)。<br>` +
             `当日は残額 ¥${residualJpy.toLocaleString()} を${safeReceiverProName}さんに直接お支払いください(合計 ¥${params.priceJpy.toLocaleString()} は変わりません)。<br>` +
             // 予約フィー説明不足対応(CEO指示・2026-08-04): 3点セットの③(返金条件)を明記する。
-            `${safeReceiverProName}さんの都合でキャンセルとなった場合、予約フィーは全額返金されます。` +
+            `${safeReceiverProName}さんの都合でキャンセルとなった場合、予約金は全額返金されます。` +
             // バグ報告(2026-08-04)対応: 決済リンク切れ・中断時の自己救済導線(予約ページから再開できる)
             `<br><br>お支払い状況の確認・再開はこちら: <a href="${APP_URL}/booking/${params.bookingId}" style="color:#888888;text-decoration:underline;">${APP_URL}/booking/${params.bookingId}</a>` +
             referralListFooterHtml(listUrl),
