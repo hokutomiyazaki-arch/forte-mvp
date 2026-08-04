@@ -372,9 +372,12 @@ export default function DashboardPage() {
   // 🔴1(再レビュー): 受付ステータスウィジェットの表示可否。allowlist内 or 共有リストに掲載中の本人
   const [acceptingEditable, setAcceptingEditable] = useState(false)
 
-  // UI再構成(2026-08-04・CEO承認済み): 紹介タブのサブタブ「受ける/する」。
+  // CEO指示(2026-08-04・IA再変更): 紹介タブのサブタブを「受ける/する/紹介した案件」の3つに。
   // requestedが1件以上あれば「受ける」、なければlocalStorageの前回選択、初回は「する」がデフォルト。
-  const [referralSubtab, setReferralSubtab] = useState<'receive' | 'send'>('send')
+  const [referralSubtab, setReferralSubtab] = useState<'receive' | 'send' | 'cases'>('send')
+  const [referralSentActiveCount, setReferralSentActiveCount] = useState(0)
+  const [referralSentTotalCount, setReferralSentTotalCount] = useState(0)
+  const [referralSentLoaded, setReferralSentLoaded] = useState(false)
   const [referralRequestedCount, setReferralRequestedCount] = useState(0)
   // 空状態判定用(受け手側の総件数・完了件数・読み込み完了フラグ)。データ取得ロジック自体は
   // ReferralBookingReceivedCard/ReferralCompletedList側の既存fetchを変更せず、結果件数のみ受け取る。
@@ -412,10 +415,10 @@ export default function DashboardPage() {
     try {
       stored = window.localStorage.getItem('rp_referral_subtab')
     } catch {}
-    setReferralSubtab(stored === 'receive' || stored === 'send' ? stored : 'send')
+    setReferralSubtab(stored === 'receive' || stored === 'send' || stored === 'cases' ? stored : 'send')
   }
 
-  function handleReferralSubtabClick(tab: 'receive' | 'send') {
+  function handleReferralSubtabClick(tab: 'receive' | 'send' | 'cases') {
     // レビュー指摘(中2): fetch完了前にユーザーが手動でサブタブを選んだ場合、後から届く
     // 自動判定(handleReferralReceivedStatus)がその選択を引き戻さないよう、ここで初期化済み
     // フラグを立てる。
@@ -434,6 +437,17 @@ export default function DashboardPage() {
     }
     setReferralCompletedCount(count)
     setReferralCompletedLoaded(true)
+  }
+
+  // CEO指示(2026-08-04・IA再変更): 「紹介した案件」タブの件数バッジ(進行中)・空状態判定用。
+  function handleReferralSentStatus(info: { activeCount: number; totalCount: number; loaded: boolean }) {
+    if (!info.loaded) {
+      setReferralSentLoaded(false)
+      return
+    }
+    setReferralSentActiveCount(info.activeCount)
+    setReferralSentTotalCount(info.totalCount)
+    setReferralSentLoaded(true)
   }
 
   // メンバー用: 所属団体のリソース state
@@ -468,11 +482,11 @@ export default function DashboardPage() {
     }
   }, [tabParam, loading])
 
-  // レビュー指摘(軽微7): ?tab=referral&sub=send|receive のクエリで初期サブタブを固定する
-  // (localStorage・requested件数による自動判定より優先)。依存はプリミティブのみ。
+  // レビュー指摘(軽微7)→CEO指示(IA再変更): ?tab=referral&sub=send|receive|cases のクエリで
+  // 初期サブタブを固定する(localStorage・requested件数による自動判定より優先)。依存はプリミティブのみ。
   const referralSubParam = searchParams.get('sub')
   useEffect(() => {
-    if (referralSubParam === 'send' || referralSubParam === 'receive') {
+    if (referralSubParam === 'send' || referralSubParam === 'receive' || referralSubParam === 'cases') {
       referralSubtabInitRef.current = true
       setReferralSubtab(referralSubParam)
     }
@@ -4790,17 +4804,18 @@ export default function DashboardPage() {
       </>)}
 
       {/* ═══ Tab: 紹介（§0 アローリスト方式・リスト管理はreferralEnabledでゲート） ═══ */}
-      {/* UI再構成(2026-08-04・CEO承認済み): 役割別サブタブ「紹介を受ける／紹介する」。
-          受け手機能はallowlist外プロにも必要(受け手は非ゲートが仕様)なため、
-          ReferralBookingReceivedCardはreferralEnabledでゲートしない(既存仕様のまま)。 */}
+      {/* CEO指示(2026-08-04・IA再変更): 役割別サブタブを「紹介を受ける／紹介する／紹介した案件」の
+          3つに変更(前回の2タブ判断を撤回)。受け手機能はallowlist外プロにも必要(受け手は
+          非ゲートが仕様)なため、ReferralBookingReceivedCardはreferralEnabledでゲートしない
+          (既存仕様のまま)。 */}
       {dashboardTab === 'referral' && pro && (
         <div style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid #E5E7EB' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 2, marginBottom: 16, borderBottom: '1px solid #E5E7EB' }}>
             <button
               onClick={() => handleReferralSubtabClick('receive')}
               style={{
-                padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
-                fontSize: 14, fontWeight: 700,
+                padding: '10px 10px', border: 'none', background: 'none', cursor: 'pointer',
+                fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' as const,
                 color: referralSubtab === 'receive' ? '#1A1A2E' : '#9CA3AF',
                 borderBottom: referralSubtab === 'receive' ? '2px solid #C4A35A' : '2px solid transparent',
               }}
@@ -4810,13 +4825,24 @@ export default function DashboardPage() {
             <button
               onClick={() => handleReferralSubtabClick('send')}
               style={{
-                padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
-                fontSize: 14, fontWeight: 700,
+                padding: '10px 10px', border: 'none', background: 'none', cursor: 'pointer',
+                fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' as const,
                 color: referralSubtab === 'send' ? '#1A1A2E' : '#9CA3AF',
                 borderBottom: referralSubtab === 'send' ? '2px solid #C4A35A' : '2px solid transparent',
               }}
             >
               紹介する
+            </button>
+            <button
+              onClick={() => handleReferralSubtabClick('cases')}
+              style={{
+                padding: '10px 10px', border: 'none', background: 'none', cursor: 'pointer',
+                fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' as const,
+                color: referralSubtab === 'cases' ? '#1A1A2E' : '#9CA3AF',
+                borderBottom: referralSubtab === 'cases' ? '2px solid #C4A35A' : '2px solid transparent',
+              }}
+            >
+              紹介した案件{referralSentActiveCount > 0 ? ` (${referralSentActiveCount})` : ''}
             </button>
           </div>
 
@@ -4839,12 +4865,17 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* 紹介する: 紹介リスト(作成・追加・QR/共有・削除)・気になるリスト・成立した紹介(送り手側)
-              単一マウントのReferralTab(referralEnabled時のみ)。表示はsubtabに応じて内部でCSS切替。 */}
+          {/* 紹介する(紹介リスト管理)・紹介した案件(送り手側の成立予約)。いずれも単一マウントの
+              ReferralTab(referralEnabled時のみ)。表示はsubtabに応じて内部でCSS切替。 */}
           {referralEnabled && pro && (
-            <ReferralTab proId={pro.id} subtab={referralSubtab} onCompletedCountChange={handleReferralCompletedStatus} />
+            <ReferralTab
+              proId={pro.id}
+              subtab={referralSubtab}
+              onCompletedCountChange={handleReferralCompletedStatus}
+              onSentStatusChange={handleReferralSentStatus}
+            />
           )}
-          {!referralEnabled && referralSubtab === 'send' && (
+          {!referralEnabled && (referralSubtab === 'send' || referralSubtab === 'cases') && (
             <div style={{ textAlign: 'center', padding: '40px 20px', color: '#9CA3AF', fontSize: 13 }}>
               リスト作成などの紹介機能は現在先行公開中です
             </div>

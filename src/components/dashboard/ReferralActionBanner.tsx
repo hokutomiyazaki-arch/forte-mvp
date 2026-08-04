@@ -58,11 +58,11 @@ export default function ReferralActionBanner() {
     label = `${receivedPart}・紹介した案件が${sentActiveCount}件進行中です`
   }
 
-  // レビュー指摘(軽微7): 送り手のみの文言なら「する」サブタブへ、受け手側を含む場合は
-  // 「受ける」サブタブへ直接着地させる(?sub=send|receiveはdashboard/page.tsx側で
-  // localStorage/自動判定より優先される)。
+  // CEO指示(2026-08-04・IA再変更): 送り手のみの文言なら新設の「紹介した案件」サブタブへ、
+  // 受け手側を含む場合は「受ける」サブタブへ直接着地させる(?sub=receive|casesは
+  // dashboard/page.tsx側でlocalStorage/自動判定より優先される)。
   const hasReceivedPart = requestedCount > 0 || confirmedCount > 0
-  const href = hasReceivedPart ? '/dashboard?tab=referral&sub=receive' : '/dashboard?tab=referral&sub=send'
+  const href = hasReceivedPart ? '/dashboard?tab=referral&sub=receive' : '/dashboard?tab=referral&sub=cases'
 
   return (
     <a

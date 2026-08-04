@@ -82,16 +82,19 @@ const NEW_LIST_SENTINEL = '__new_list__'
 
 interface Props {
   proId: string
-  /** UI再構成(2026-08-04・CEO承認済み): サブタブ「受ける/する」のどちらを表示するか。
-   * lists/sentBookingsのfetchは1回だけ(既存のまま)行い、表示はCSSで切り替える
+  /** CEO指示(2026-08-04・IA再変更): サブタブ「受ける/する/紹介した案件」の3つのうちどれを
+   * 表示するか。lists/sentBookingsのfetchは1回だけ(既存のまま)行い、表示はCSSで切り替える
    * (subtab切替時の再フェッチ・二重マウントを避ける)。 */
-  subtab: 'receive' | 'send'
+  subtab: 'receive' | 'send' | 'cases'
   /** 「紹介を受ける」タブの空状態判定用に、完了した紹介(受け手側)の件数と読み込み完了フラグを
    * 親へ通知する(レビュー指摘・軽微7: loadedを渡し到着順による空状態フラッシュを防ぐ)。 */
   onCompletedCountChange?: (count: number, loaded: boolean) => void
+  /** CEO指示(2026-08-04・IA再変更): 「紹介した案件」タブの件数バッジ(進行中=requested/confirmed)・
+   * 空状態判定用に、送り手側の集計を親へ通知する。 */
+  onSentStatusChange?: (info: { activeCount: number; totalCount: number; loaded: boolean }) => void
 }
 
-export default function ReferralTab({ proId, subtab, onCompletedCountChange }: Props) {
+export default function ReferralTab({ proId, subtab, onCompletedCountChange, onSentStatusChange }: Props) {
   // リスト一覧
   const [lists, setLists] = useState<ReferralList[]>([])
   const [listsLoading, setListsLoading] = useState(true)
@@ -218,6 +221,15 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
       .catch(() => {})
       .finally(() => setSentLoading(false))
   }, [])
+
+  // CEO指示(2026-08-04・IA再変更): 「紹介した案件」タブの件数バッジ(進行中)・空状態判定用に
+  // 集計結果を親へ通知する。依存はプリミティブのみ(件数・boolean)。
+  const sentActiveCount = sentBookings.filter((b) => b.status === 'requested' || b.status === 'confirmed').length
+  const sentTotalCount = sentBookings.length
+  useEffect(() => {
+    onSentStatusChange?.({ activeCount: sentActiveCount, totalCount: sentTotalCount, loaded: !sentLoading })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sentActiveCount, sentTotalCount, sentLoading])
 
   // CEO追加指示(タスク4): 作成直後のリストへスクロールする(依存はプリミティブのみ)。
   useEffect(() => {
@@ -1627,15 +1639,17 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
         <ReferralCompletedList proId={proId} onCountChange={onCompletedCountChange} />
       </div>
 
-      {/* 「紹介する」サブタブ側 = ①成立した紹介(送り手側)②紹介リスト群③新規作成
-          CEO追加指示(2026-08-04・タスク1): 進行中案件を最上部へ・気になるプロはこのタブから撤去し
-          /bookmarksへ移設(下部の案内リンク参照)。 */}
-      <div style={{ display: subtab === 'send' ? 'flex' : 'none', flexDirection: 'column', gap: 24 }}>
-      {/* ① §2-10: 成立した紹介（送り手側の予約一覧・案件スレッド・引き継ぎメモ） */}
-      {!sentLoading && sentBookings.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E' }}>成立した紹介</h3>
-          {sentBookings.map((b) => (
+      {/* CEO指示(2026-08-04・IA再変更): 「紹介した案件」サブタブ = 成立した紹介(送り手側の
+          予約一覧・担当プロとのやりとりスレッド)。旧「紹介する」タブから独立した3番目のタブ。 */}
+      <div style={{ display: subtab === 'cases' ? 'flex' : 'none', flexDirection: 'column', gap: 12 }}>
+        {sentLoading ? (
+          <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>読み込み中...</div>
+        ) : sentBookings.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>
+            まだ紹介した案件はありません
+          </div>
+        ) : (
+          sentBookings.map((b) => (
             <div key={b.id} style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', border: '1.5px solid #E5E7EB', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
               <div style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6 }}>
                 <strong>{b.client_nickname}さん</strong>
@@ -1652,9 +1666,16 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
                 partnerName={b.receiver_pro?.name}
               />
             </div>
-          ))}
-        </div>
-      )}
+          ))
+        )}
+      </div>
+
+      {/* 「紹介する」サブタブ側 = ①新規作成(CEO指摘: 埋もれ解消のため最上部に)②紹介リスト群
+          CEO指示(2026-08-04・IA再変更): 成立した紹介は「紹介した案件」タブへ移動・
+          気になるプロの移設案内は削除(恒久表示の撤回)。 */}
+      <div style={{ display: subtab === 'send' ? 'flex' : 'none', flexDirection: 'column', gap: 24 }}>
+      {/* ① 新規作成 */}
+      {createListCard}
 
       {/* ② リスト一覧(公開/リンク共有のみ。気になるプロ=非公開リストは/bookmarksへ移設済み) */}
       {listsLoading ? (
@@ -1668,15 +1689,6 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange }: P
           {publicLists.map((list) => renderListCard(list, false))}
         </div>
       )}
-
-      {/* レビュー指摘(重大3・CC決定=CEOの「前のブックマークメニューに戻す」の字義どおり):
-          気になるプロの移設案内。恒久表示(このタブに気になるプロが無い理由を示す固定の案内文)。 */}
-      <div style={{ fontSize: 13, color: '#9CA3AF' }}>
-        気になるプロは<a href="/bookmarks" style={{ color: '#C4A35A', fontWeight: 600 }}>ホームのブックマーク</a>へ移動しました
-      </div>
-
-      {/* ③ 新規作成 */}
-      {createListCard}
 
       {/* CEO指摘(先行テスト・UI修正②): クライアントに共有するURLのQRコードモーダル(タップで閉じる) */}
       {qrModalListId && (() => {
