@@ -19,7 +19,8 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs'
 import { join, resolve } from 'path'
 
-const MODEL = 'gpt-image-2'
+// gpt-image-2 は background:transparent 非対応のため、item.model で指定可能に(既定は2・透過が要る場合は 'gpt-image-1' を指定)
+const DEFAULT_MODEL = 'gpt-image-2'
 
 const [, , manifestPath, outDirArg] = process.argv
 if (!manifestPath) {
@@ -52,10 +53,11 @@ for (const [i, item] of manifest.entries()) {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: MODEL,
+        model: item.model || DEFAULT_MODEL,
         prompt: item.prompt,
         size: item.size || '1024x1024',
         quality: item.quality || 'low',
+        ...(item.background ? { background: item.background } : {}),
       }),
     })
     if (!res.ok) {

@@ -29,7 +29,7 @@ export default function CharacterGenderBanner() {
           タイプ分析のキャラクターが新しくなりました
         </h3>
         <p className="text-sm text-[#1A1A2E] mb-3 leading-relaxed">
-          あなたのキャラクターの見た目（男性/女性/まんじゅう）を選んでください。
+          あなたのキャラクターの見た目（男性/女性/スタンダード）を選んでください。
         </p>
         <Link
           href="/dashboard?tab=profile&edit=true"

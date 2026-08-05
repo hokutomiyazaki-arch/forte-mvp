@@ -10,7 +10,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 
 import { join, resolve, extname, basename } from 'path'
 
 const MODEL = 'gpt-image-2'
-const [, , inputDir, outputDir, prompt, quality = 'medium'] = process.argv
+const [, , inputDir, outputDir, prompt, quality = 'medium', background = ''] = process.argv
 if (!inputDir || !outputDir || !prompt) {
   console.error('usage: node scripts/edit-images.mjs <inputDir> <outputDir> "<prompt>" [quality]')
   process.exit(1)
@@ -33,6 +33,7 @@ for (const [i, file] of files.entries()) {
     form.append('model', MODEL)
     form.append('prompt', prompt)
     form.append('quality', quality)
+    if (background) form.append('background', background)
     const buf = readFileSync(join(resolve(inputDir), file))
     form.append('image', new Blob([buf], { type: 'image/png' }), file)
     const res = await fetch('https://api.openai.com/v1/images/edits', {

@@ -1981,7 +1981,7 @@ export default function DashboardPage() {
               <option value="">未選択</option>
               <option value="male">男性</option>
               <option value="female">女性</option>
-              <option value="neutral">まんじゅうのまま</option>
+              <option value="neutral">スタンダード（デフォルト）</option>
             </select>
           </div>
 
