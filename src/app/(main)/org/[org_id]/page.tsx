@@ -35,7 +35,7 @@ export default function OrgPublicPage() {
   const [proofTopMembers, setProofTopMembers] = useState<any[]>([])
   const [topStrengthItems, setTopStrengthItems] = useState<{ label: string; count: number }[]>([])
   const [recentComments, setRecentComments] = useState<any[]>([])
-  // §2-5育成プルーフ: growth_role='founder'のアクティブメンバー（複数代表も許容・fail-soft）
+  // §2-5育成プルーフ: organizations.owner_id === professionals.user_id の代表（自動判定・fail-soft）
   const [founders, setFounders] = useState<{ id: string; name: string; photo_url: string | null }[]>([])
   const [error, setError] = useState('')
   const [shareCopied, setShareCopied] = useState(false)
@@ -112,7 +112,7 @@ export default function OrgPublicPage() {
         <h1 className="text-2xl font-bold text-[#1A1A2E]">{org.name}</h1>
         <p className="text-sm text-gray-400 mt-1">{L.typeName}</p>
 
-        {/* §2-5育成プルーフ: 代表（growth_role='founder'）へのリンク行。founders空なら何も出さない */}
+        {/* §2-5育成プルーフ: 代表（organizations.owner_id自動判定）へのリンク行。founders空なら何も出さない */}
         {founders.length > 0 && (
           <div className="flex flex-col items-center gap-1 mt-2">
             {founders.map(f => (

@@ -139,56 +139,72 @@ export interface GrowthCardOrg {
 
 /**
  * §2-5 育成プルーフ: 主宰/講師本人ページのみ表示する団体の役割情報を取得する。
+ * CEO指示(2026-08-05): 代表(founder)判定は手動 growth_role='founder' 依存をやめ、
+ * organizations.owner_id === professionals.user_id の自動判定に変更(団体を作れば
+ * 自動的に代表として表示される)。growth_role は「指導者(instructor)」指定専用に縮小。
+ * founder と instructor が同一団体に該当する場合は founder を優先し重複表示しない。
  * fail-soft必須: migration 045(growth_role等カラム・org_growth_summary VIEW)が
  * 未実行の本番でも、42703(カラム無し)/42P01(VIEW無し)等でカードページ全体を落とさずnullを返す。
  */
 async function getGrowthCards(
   supabase: ReturnType<typeof getSupabaseAdmin>,
-  proId: string
+  proId: string,
+  proUserId: string | null
 ): Promise<GrowthCardOrg[] | null> {
   if (!isOrgCardEnabled()) return null
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: roleRows, error: roleError } = await (supabase as any)
+    const byOrg = new Map<string, { organization: any; role: 'founder' | 'instructor' }>()
+
+    // (a) founder: organizations.owner_id が自分のClerk user_idと一致する団体を自動判定
+    if (proUserId) {
+      const { data: ownedOrgs } = await supabase
+        .from('organizations')
+        .select('id, name, type')
+        .eq('owner_id', proUserId)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const org of (ownedOrgs || []) as any[]) {
+        if (!org?.id) continue
+        byOrg.set(org.id, { organization: org, role: 'founder' })
+      }
+    }
+
+    // (b) instructor: org_members.growth_role='instructor' の手動指定を維持
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: roleRows } = await (supabase as any)
       .from('org_members')
       .select('organization_id, growth_role, organizations(id, name, type)')
       .eq('professional_id', proId)
       .eq('status', 'active')
       .is('removed_at', null)
-      .not('growth_role', 'is', null)
+      .eq('growth_role', 'instructor')
 
-    if (roleError || !roleRows || roleRows.length === 0) return null
-
-    // org_members は1プロ×バッジごとに複数行(CLAUDE.md: JOINは必ずDISTINCT)。
-    // 同一団体の行を organization_id で1行に潰す(founder と instructor が混在したら founder 優先)。
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const byOrg = new Map<string, any>()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    for (const row of roleRows as any[]) {
-      const existing = byOrg.get(row.organization_id)
-      if (!existing || (existing.growth_role !== 'founder' && row.growth_role === 'founder')) {
-        byOrg.set(row.organization_id, row)
-      }
+    for (const row of (roleRows || []) as any[]) {
+      const org = row.organizations
+      if (!org?.id) continue
+      // founder が既にあれば instructor で上書きしない(founder優先・重複表示防止)
+      if (byOrg.has(org.id)) continue
+      byOrg.set(org.id, { organization: org, role: 'instructor' })
     }
 
-    const cards: GrowthCardOrg[] = []
-    for (const row of Array.from(byOrg.values())) {
-      const org = row.organizations
-      if (!org?.id || !row.growth_role) continue
+    if (byOrg.size === 0) return null
 
+    const cards: GrowthCardOrg[] = []
+    for (const [organizationId, { organization: org, role }] of Array.from(byOrg.entries())) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: summary } = await (supabase as any)
         .from('org_growth_summary')
         .select('member_count')
-        .eq('organization_id', row.organization_id)
+        .eq('organization_id', organizationId)
         .maybeSingle()
       if (!summary) continue
 
       cards.push({
-        organizationId: row.organization_id,
+        organizationId,
         organizationName: org.name,
         organizationType: org.type ?? null,
-        role: row.growth_role as 'founder' | 'instructor',
+        role,
         memberCount: summary.member_count || 0,
       })
     }
@@ -481,7 +497,8 @@ export async function getCardData(
   }
 
   // === §2-5 育成プルーフ: 主宰/講師本人ページのみの団体役割情報（fail-soft・flag off時は未クエリ） ===
-  const growthCards = await getGrowthCards(supabase, proId)
+  const proUserId = (proResult.data as { user_id?: string | null } | null)?.user_id ?? null
+  const growthCards = await getGrowthCards(supabase, proId, proUserId)
 
   // === enrichedComments: 機密フィールドを除外し voter_pro / reply を付与 ===
   const enrichedComments: EnrichedComment[] = commentsRaw.map(c => {

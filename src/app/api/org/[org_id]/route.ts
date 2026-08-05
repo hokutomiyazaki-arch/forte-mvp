@@ -291,30 +291,27 @@ export async function GET(
       }
     }
 
-    // §2-5育成プルーフ: 団体ページ上部の「代表：〇〇 →」表示用。growth_role='founder'の
-    // アクティブメンバーを取得(複数代表も許容)。org_membersは1プロ×バッジごとに複数行あるため
-    // professional_idでDISTINCT必須。fail-soft: エラー時はfounders:[]で既存レスポンスを壊さない。
+    // §2-5育成プルーフ: 団体ページ上部の「代表：〇〇 →」表示用。CEO指示(2026-08-05)により
+    // 手動 growth_role='founder' 依存をやめ、organizations.owner_id(Clerk userId) ==
+    // professionals.user_id の自動判定に変更(団体を作れば自動的に代表として表示される)。
+    // fail-soft: エラー時はfounders:[]で既存レスポンスを壊さない。
     let founders: { id: string; name: string; photo_url: string | null }[] = []
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: founderRows } = await (supabase as any)
-        .from('org_members')
-        .select('professional_id, professionals(id, name, last_name, first_name, photo_url, deactivated_at)')
-        .eq('organization_id', orgId)
-        .eq('growth_role', 'founder')
-        .eq('status', 'active')
-        .is('removed_at', null)
+      if (org.owner_id) {
+        const { data: ownerPros } = await supabase
+          .from('professionals')
+          .select('id, name, photo_url, deactivated_at')
+          .eq('user_id', org.owner_id)
+          .is('deactivated_at', null)
 
-      const seenFounderIds = new Set<string>()
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      for (const row of (founderRows || []) as any[]) {
-        const p = row.professionals
-        if (!p?.id || p.deactivated_at || seenFounderIds.has(p.id)) continue
-        seenFounderIds.add(p.id)
-        founders.push({ id: p.id, name: p.name || '', photo_url: p.photo_url || null })
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const p of (ownerPros || []) as any[]) {
+          if (!p?.id) continue
+          founders.push({ id: p.id, name: p.name || '', photo_url: p.photo_url || null })
+        }
       }
     } catch (e) {
-      // fail-soft: growth_role未作成の本番でも団体ページ全体を落とさない
+      // fail-soft: 予期しないエラーでも団体ページ全体を落とさない
       console.error('founders fetch error (fail-soft, returning []):', e)
       founders = []
     }
