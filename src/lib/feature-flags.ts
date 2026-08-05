@@ -56,6 +56,16 @@ export function isAiSanitizeEnabled(): boolean {
 }
 
 /**
+ * 育成プルーフ（団体リレーション・§2-5）の個人ページ表示フラグ。'true' の時のみ、
+ * migration 045(org_members.growth_role等 + org_growth_summary/org_growth_proof_top VIEW)
+ * を参照する。未設定/'true'以外は常にfalse＝DDL未実行の本番でも安全にデプロイできる
+ * (card-data.ts側もこのフラグがfalseの間は一切クエリしない)。
+ */
+export function isOrgCardEnabled(): boolean {
+  return process.env.FEATURE_ORG_CARD === 'true'
+}
+
+/**
  * §2-4ステージ2: 相談リクエスト時のStripeオーソリ（与信確保）。
  * REFERRAL_STRIPE_SECRET_KEY 未設定の間は、決済フロー（Checkout Session作成）も
  * referral_bookings の新カラム（payment_status等・migration 036）参照も一切行わない
