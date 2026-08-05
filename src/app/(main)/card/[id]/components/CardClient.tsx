@@ -324,13 +324,14 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
     return () => clearTimeout(t)
   }, [])
 
-  // §15-2: bio が5行を超えるかを判定（未展開時の -webkit-line-clamp:5 適用時に測定）。
-  // 短いbioには「続きを読む」を出さない。依存はプリミティブのみ(pro?.bio)。
+  // §15-2(2026-08-05改訂・CEO指示): bio が指定行数を超えるかを判定
+  // （未展開時の -webkit-line-clamp 適用時に測定）。ギャラリーありは3行（3行＋画像2行=5行分）、
+  // ギャラリーなしは従来通り5行。短いbioには「続きを読む」を出さない。依存はプリミティブのみ(pro?.bio, hasGallery)。
   useEffect(() => {
     const el = bioRef.current
     if (!el) return
     setBioClamped(el.scrollHeight > el.clientHeight + 1)
-  }, [pro?.bio])
+  }, [pro?.bio, hasGallery])
 
   // §15-4: ヘッダーカードの可視判定 → 画面外に出たらstickyバーを表示。依存配列はプリミティブのみ([])。
   useEffect(() => {
@@ -687,50 +688,54 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
         </div>
       </div>
 
-      {/* ═══ BIO（5行クランプ＋続きを読む。ヘッダー直後に配置） ═══
-          §15-3(2026-08-05: サービス・案内タブから移設・CEO指示): 写真(最大6枚)・紹介動画(YouTube)を
-          自己紹介ブロックの下に統合。bioが空でもギャラリー/動画があれば表示する
-          (旧: 自己紹介の写真1枚=bio_image_urlは廃止・統合済み)。 */}
+      {/* ═══ BIO（本文クランプ＋続きを読む。ヘッダー直後に配置） ═══
+          §15-3(2026-08-05再改訂・CEO指示): 写真(最大6枚)・紹介動画(YouTube)を自己紹介ブロックの下に統合。
+          ルール:
+          1. 画像(ギャラリー)あり: 折りたたみ状態でもカルーセルは常時表示。本文クランプは3行(3行+画像2行=5行分)
+          2. 画像なし: 従来通り本文5行クランプ
+          3. 動画は折りたたみ状態では絶対に表示しない(展開時のみ)。動画がある場合は本文が短くても必ず「続きを読む」を出す
+          4. 展開後は全文＋カルーセル＋動画
+          5. 「続きを読む」表示条件 = 本文がクランプ行数を超える(bioClamped) || 動画あり(hasIntroVideo)
+          bioが空でもギャラリー/動画があれば表示する(旧: 自己紹介の写真1枚=bio_image_urlは廃止・統合済み)。 */}
       {(pro.bio || hasGallery || hasIntroVideo) && (
         <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: '16px 18px', marginBottom: 12 }}>
           {pro.bio && (
-            <>
-              <p
-                ref={bioRef}
-                style={{
-                  fontSize: 12, color: T.textSub, lineHeight: 1.9, whiteSpace: 'pre-wrap', margin: 0, fontWeight: 500,
-                  ...(!bioExpanded ? {
-                    display: '-webkit-box',
-                    WebkitLineClamp: 5,
-                    WebkitBoxOrient: 'vertical' as const,
-                    overflow: 'hidden',
-                  } : {}),
-                }}
-              >
-                {pro.bio}
-              </p>
-              {bioClamped && (
-                <button
-                  onClick={() => setBioExpanded(v => !v)}
-                  style={{
-                    background: 'transparent', border: 'none', padding: 0, marginTop: 6,
-                    fontSize: 11, fontWeight: 700, color: T.gold, cursor: 'pointer', fontFamily: T.font,
-                  }}
-                >
-                  {bioExpanded ? '閉じる' : '続きを読む'}
-                </button>
-              )}
-            </>
+            <p
+              ref={bioRef}
+              style={{
+                fontSize: 12, color: T.textSub, lineHeight: 1.9, whiteSpace: 'pre-wrap', margin: 0, fontWeight: 500,
+                ...(!bioExpanded ? {
+                  display: '-webkit-box',
+                  WebkitLineClamp: hasGallery ? 3 : 5,
+                  WebkitBoxOrient: 'vertical' as const,
+                  overflow: 'hidden',
+                } : {}),
+              }}
+            >
+              {pro.bio}
+            </p>
           )}
-          {/* 写真(最大6枚)・紹介動画。5行以内のbioは展開ボタンが出ないため、クランプされていない
-              場合は常時表示・クランプ時のみ展開後に表示する(旧bio_image_urlと同じ表示条件)。 */}
-          {(!bioClamped || bioExpanded) && hasGallery && (
+          {/* ルール1: ギャラリーは折りたたみ状態でも常時表示(トップ表示OK) */}
+          {hasGallery && (
             <div style={{ marginTop: pro.bio ? 12 : 0 }}>
               <GalleryCarousel images={galleryImages} />
             </div>
           )}
-          {(!bioClamped || bioExpanded) && hasIntroVideo && (
-            <div style={{ marginTop: (pro.bio || hasGallery) ? 12 : 0 }}>
+          {/* ルール5: 本文がクランプを超える or 動画がある場合のみ「続きを読む」を出す */}
+          {(bioClamped || hasIntroVideo) && (
+            <button
+              onClick={() => setBioExpanded(v => !v)}
+              style={{
+                background: 'transparent', border: 'none', padding: 0, marginTop: 6,
+                fontSize: 11, fontWeight: 700, color: T.gold, cursor: 'pointer', fontFamily: T.font,
+              }}
+            >
+              {bioExpanded ? '閉じる' : '続きを読む'}
+            </button>
+          )}
+          {/* ルール3・4: 動画は展開時のみ表示 */}
+          {bioExpanded && hasIntroVideo && (
+            <div style={{ marginTop: 12 }}>
               <YouTubeEmbed url={pro.intro_video_url} />
             </div>
           )}
