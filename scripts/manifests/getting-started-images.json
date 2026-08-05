@@ -1,0 +1,20 @@
+[
+  {
+    "name": "start-prepare",
+    "prompt": "Clean flat line-art illustration: preparation concept — a small wrapped gift box with a ribbon (a thank-you reward) and a sleek NFC card being tapped near a smartphone, gentle sparkles suggesting setup is ready. Friendly onboarding-guide style. Color palette: deep navy #1A1A2E and gold #C4A35A on pure white background. Minimal, generous whitespace. Absolutely no text, no letters, no numbers, no labels anywhere in the image.",
+    "size": "1536x1024",
+    "quality": "medium"
+  },
+  {
+    "name": "start-daily",
+    "prompt": "Clean flat line-art illustration: after a training session, a friendly professional showing a smartphone with a QR code to a happy client who holds up their own phone to scan it. Warm daily-routine mood, two simple figures. Color palette: deep navy #1A1A2E and gold #C4A35A on pure white background. Minimal, generous whitespace. The QR code is an abstract stylized pattern of squares. Absolutely no text, no letters, no numbers, no labels anywhere in the image.",
+    "size": "1536x1024",
+    "quality": "medium"
+  },
+  {
+    "name": "start-grow",
+    "prompt": "Clean flat line-art illustration: growth concept — a profile card of a professional with small gold medal icons accumulating around it and a gentle upward sparkling path, suggesting reputation growing with each client voice. Hopeful, rewarding mood. Color palette: deep navy #1A1A2E and gold #C4A35A on pure white background. Minimal, generous whitespace. Absolutely no text, no letters, no numbers, no labels anywhere in the image.",
+    "size": "1536x1024",
+    "quality": "medium"
+  }
+]

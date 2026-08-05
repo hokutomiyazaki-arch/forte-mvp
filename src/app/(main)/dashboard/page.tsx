@@ -52,6 +52,29 @@ function filterAndSortBadges(badges: { id: string; label: string; image_url: str
   return filtered
 }
 
+/**
+ * 追加(2026-08-05・CEO指示): はじめかたガイド(dashboardTab==='guide')用のAI生成イラスト
+ * (public/getting-started/・1200px幅PNG・文字なし)。referral-guide/badge-guideページと同じ
+ * GuideImageパターン(max-width:100%・height:auto・角丸12px・横スクロール厳禁)。
+ */
+function GuideImage({ src, alt }: { src: string; alt: string }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={alt}
+      style={{
+        display: 'block',
+        width: '100%',
+        maxWidth: '100%',
+        height: 'auto',
+        borderRadius: 12,
+        marginBottom: 16,
+      }}
+    />
+  )
+}
+
 // プルーフ項目の型
 interface ProofItem {
   id: string
@@ -4289,6 +4312,7 @@ export default function DashboardPage() {
           <span style={{ background: '#C4A35A', color: '#1A1A2E', fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 4, marginRight: 8 }}>STEP 1</span>
           <span style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>最初にやること</span>
         </div>
+        <GuideImage src="/getting-started/start-prepare.png" alt="プロフィール・リワード・NFCカードを準備するイメージ" />
 
         {/* アコーディオン1: プロフィール */}
         <div style={{ border: '1px solid #E5E7EB', borderRadius: 8, marginBottom: 8, overflow: 'hidden' }}>
@@ -4406,6 +4430,7 @@ export default function DashboardPage() {
           <span style={{ background: '#C4A35A', color: '#1A1A2E', fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 4, marginRight: 8 }}>STEP 2</span>
           <span style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>毎日やること</span>
         </div>
+        <GuideImage src="/getting-started/start-daily.png" alt="お客さんへ声をかけてNFCカードを渡すイメージ" />
 
         {/* アコーディオン5: 声かけ */}
         <div style={{ border: '1px solid #E5E7EB', borderRadius: 8, marginBottom: 8, overflow: 'hidden' }}>
@@ -4480,6 +4505,7 @@ export default function DashboardPage() {
           <span style={{ background: '#C4A35A', color: '#1A1A2E', fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 4, marginRight: 8 }}>STEP 3</span>
           <span style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>知っておくと安心</span>
         </div>
+        <GuideImage src="/getting-started/start-grow.png" alt="お客さんが回答してプロフィールが進化していくイメージ" />
 
         {/* アコーディオン7: プルーフの仕組みとルール */}
         <div style={{ border: '1px solid #E5E7EB', borderRadius: 8, marginBottom: 8, overflow: 'hidden' }}>

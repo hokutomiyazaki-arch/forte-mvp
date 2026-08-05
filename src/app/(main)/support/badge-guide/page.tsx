@@ -36,6 +36,29 @@ function P({ children }: { children: React.ReactNode }) {
   )
 }
 
+/**
+ * 追加(2026-08-05・CEO指示): AI生成イラスト(public/badge-guide/・1200px幅PNG・文字なし)を
+ * 各セクションに挿入する。referral-guideページと同じGuideImageパターン
+ * (max-width:100%・height:auto・角丸12px・横スクロール厳禁)。
+ */
+function GuideImage({ src, alt }: { src: string; alt: string }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={alt}
+      style={{
+        display: 'block',
+        width: '100%',
+        maxWidth: '100%',
+        height: 'auto',
+        borderRadius: 12,
+        marginBottom: 20,
+      }}
+    />
+  )
+}
+
 export default function BadgeGuidePage() {
   return (
     <div
@@ -71,6 +94,8 @@ export default function BadgeGuidePage() {
         >
           認定バッジの使い方
         </h1>
+
+        <GuideImage src="/badge-guide/badge-hero.png" alt="認定バッジがホームページやSNSに掲載されているイメージ" />
 
         <P>
           REAL PROOFで一定数の「証明」が集まると、あなたの強みを示す
@@ -149,6 +174,8 @@ export default function BadgeGuidePage() {
         {/* ① HTMLメダルの貼り方 */}
         <H2>① HTMLメダルの貼り方（サイト・ブログ・メルマガ向け）</H2>
 
+        <GuideImage src="/badge-guide/badge-html.png" alt="HTMLメダルをサイトやブログに貼り付けるイメージ" />
+
         <P>タップするとあなたの公開ページに飛ぶ、メダル付きバッジを埋め込めます。</P>
 
         <ol style={{ paddingLeft: 22, marginBottom: 18 }}>
@@ -215,6 +242,8 @@ export default function BadgeGuidePage() {
 
         {/* ② 画像の保存方法 */}
         <H2>② 画像（PNG）の保存方法</H2>
+
+        <GuideImage src="/badge-guide/badge-image-save.png" alt="バッジ画像を保存してSNSに投稿するイメージ" />
 
         <P>
           「縦長画像」「横長画像」ボタンを押すと、画像が

@@ -1,0 +1,20 @@
+[
+  {
+    "name": "badge-hero",
+    "prompt": "Clean flat line-art illustration: a proud professional trainer displaying an elegant certification medal badge, with a laptop showing a website and a smartphone showing a social media profile beside them, suggesting the badge can be placed anywhere online. Warm, trustworthy, editorial explainer style. Color palette: deep navy #1A1A2E and gold #C4A35A on pure white background. Minimal, generous whitespace. Absolutely no text, no letters, no numbers, no labels anywhere in the image.",
+    "size": "1536x1024",
+    "quality": "medium"
+  },
+  {
+    "name": "badge-html",
+    "prompt": "Clean flat line-art illustration: a website page mockup on a laptop screen with an elegant gold medal badge being placed into the page layout, a simple cursor arrow and abstract code brackets floating nearby suggesting embedding. Friendly tech-explainer style. Color palette: deep navy #1A1A2E and gold #C4A35A on pure white background. Minimal, generous whitespace. Absolutely no text, no letters, no numbers, no code characters, no labels anywhere in the image.",
+    "size": "1536x1024",
+    "quality": "medium"
+  },
+  {
+    "name": "badge-image-save",
+    "prompt": "Clean flat line-art illustration: a smartphone with an elegant gold medal badge image on screen and a gentle downward arrow into a photo gallery icon, suggesting saving an image to the phone. Next to it, a small printed card with the same badge, suggesting print use. Friendly explainer style. Color palette: deep navy #1A1A2E and gold #C4A35A on pure white background. Minimal, generous whitespace. Absolutely no text, no letters, no numbers, no labels anywhere in the image.",
+    "size": "1536x1024",
+    "quality": "medium"
+  }
+]
