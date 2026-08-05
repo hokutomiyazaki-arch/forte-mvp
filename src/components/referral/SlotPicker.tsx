@@ -14,6 +14,11 @@
  *   5. 「別の日付を選ぶ」リンクは週選択の段。date input選択後はステップ3の時刻へ直行。
  *   6. 第2・第3希望の「選択を解除」は完了表示の横。
  *
+ * 各段の「1つ前に戻る」リンク(2026-08-05・CEO追加指示): 曜日選択段に「← 週の選択に戻る」、
+ * 時刻選択段には遷移経路に応じて「← 曜日の選択に戻る」(週→曜日経由)または
+ * 「← 日付の選択に戻る」(週→別の日付を選ぶ経由)を表示する。戻った際、週(segment)・
+ * 曜日/日付(pendingDate)の選択はstateを消さずに保持し、再表示時にハイライトする。
+ *
  * クライアント相談フォーム(ReferralRequestForm)3枠・プロ側counter/reschedule
  * (ReferralBookingReceivedCard)で共通利用する(重複実装しない)。
  * 内部で保持する値は既存互換の"YYYY-MM-DDTHH:mm"文字列(datetime-local互換形式)。
@@ -72,18 +77,22 @@ export default function SlotPicker({ value, onChange, timeOptions, clearable }: 
   // 週選択→曜日選択(または手動日付)で確定した「日付のみ」。時刻選択が完了するとvalueへ反映される。
   const [pendingDate, setPendingDate] = useState<string>(value ? value.split('T')[0] || '' : '')
   const [manualDateOpen, setManualDateOpen] = useState(false)
+  // 「1つ前に戻る」リンクの表示・遷移先を決める: pendingDateが曜日ボタン経由か手動日付入力経由か。
+  const [dateSource, setDateSource] = useState<'weekday' | 'manual' | null>(null)
 
   const currentDate = value ? value.split('T')[0] || '' : ''
   const currentTime = value ? value.split('T')[1] || '' : ''
 
   function pickWeekday(dateForOption: string) {
     setPendingDate(dateForOption)
+    setDateSource('weekday')
     setPhase('time')
   }
 
   function pickManualDate(nextDate: string) {
     if (!nextDate) return
     setPendingDate(nextDate)
+    setDateSource('manual')
     setPhase('time')
   }
 
@@ -141,32 +150,36 @@ export default function SlotPicker({ value, onChange, timeOptions, clearable }: 
         </div>
       )}
 
-      {/* ステップ1: 週選択(+別の日付を選ぶ) */}
+      {/* ステップ1: 週選択(+別の日付を選ぶ)。戻ってきた場合、選択済みの週をハイライトする
+          (dateSource==='weekday'の場合のみ。手動日付経由はどの週にも属さないためハイライトしない)。 */}
       {phase === 'week' && (
         <div>
           <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' as const }}>
-            {SEGMENT_OPTIONS.map((opt) => (
-              <button
-                key={opt.weekOffset}
-                type="button"
-                onClick={() => {
-                  setSegment(opt.weekOffset)
-                  setPhase('weekday')
-                }}
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: 8,
-                  border: '1px solid #D1D5DB',
-                  background: '#fff',
-                  color: '#2D2D2D',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                {opt.label} {formatWeekRangeLabel(opt.weekOffset)}
-              </button>
-            ))}
+            {SEGMENT_OPTIONS.map((opt) => {
+              const isSelected = dateSource === 'weekday' && !!pendingDate && segment === opt.weekOffset
+              return (
+                <button
+                  key={opt.weekOffset}
+                  type="button"
+                  onClick={() => {
+                    setSegment(opt.weekOffset)
+                    setPhase('weekday')
+                  }}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: 8,
+                    border: `1px solid ${isSelected ? '#C4A35A' : '#D1D5DB'}`,
+                    background: isSelected ? '#FAF3E4' : '#fff',
+                    color: isSelected ? '#8A6D1F' : '#2D2D2D',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {opt.label} {formatWeekRangeLabel(opt.weekOffset)}
+                </button>
+              )
+            })}
           </div>
           {!manualDateOpen ? (
             <button type="button" onClick={() => setManualDateOpen(true)} style={linkStyle}>
@@ -190,8 +203,13 @@ export default function SlotPicker({ value, onChange, timeOptions, clearable }: 
       {/* ステップ2: 曜日選択 */}
       {phase === 'weekday' && (
         <div>
-          <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 6 }}>
-            選択中: {formatWeekRangeLabel(segment)}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, flexWrap: 'wrap' as const }}>
+            <div style={{ fontSize: 13, color: '#6B7280' }}>
+              選択中: {formatWeekRangeLabel(segment)}
+            </div>
+            <button type="button" onClick={() => setPhase('week')} style={linkStyle}>
+              ← 週の選択に戻る
+            </button>
           </div>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' as const }}>
             {WEEKDAY_QUICK_OPTIONS.map((opt) => {
@@ -200,6 +218,7 @@ export default function SlotPicker({ value, onChange, timeOptions, clearable }: 
                 segment === 0 &&
                 (isPastWeekdayInCurrentWeek(opt.weekdayMon0) ||
                   (isTodayWeekday(opt.weekdayMon0) && !hasRemainingHalfHourSlotToday()))
+              const isSelected = !disabled && dateSource === 'weekday' && pendingDate === dateForOption
               return (
                 <button
                   key={opt.weekdayMon0}
@@ -209,9 +228,9 @@ export default function SlotPicker({ value, onChange, timeOptions, clearable }: 
                   style={{
                     padding: '4px 8px',
                     borderRadius: 8,
-                    border: '1px solid #D1D5DB',
-                    background: disabled ? '#F3F4F6' : '#fff',
-                    color: disabled ? '#C0C4CB' : '#555555',
+                    border: `1px solid ${isSelected ? '#C4A35A' : '#D1D5DB'}`,
+                    background: disabled ? '#F3F4F6' : isSelected ? '#FAF3E4' : '#fff',
+                    color: disabled ? '#C0C4CB' : isSelected ? '#8A6D1F' : '#555555',
                     fontSize: 13,
                     fontWeight: 600,
                     cursor: disabled ? 'not-allowed' : 'pointer',
@@ -229,8 +248,25 @@ export default function SlotPicker({ value, onChange, timeOptions, clearable }: 
       {/* ステップ3: 時刻選択 */}
       {phase === 'time' && (
         <div>
-          <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 6 }}>
-            選択中: {formatDateValueWithWeekday(pendingDate)}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, flexWrap: 'wrap' as const }}>
+            <div style={{ fontSize: 13, color: '#6B7280' }}>
+              選択中: {formatDateValueWithWeekday(pendingDate)}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (dateSource === 'manual') {
+                  // 「別の日付を選ぶ」経由: 週選択の段に戻り、date inputを再展開して選択値を保持する。
+                  setManualDateOpen(true)
+                  setPhase('week')
+                } else {
+                  setPhase('weekday')
+                }
+              }}
+              style={linkStyle}
+            >
+              {dateSource === 'manual' ? '← 日付の選択に戻る' : '← 曜日の選択に戻る'}
+            </button>
           </div>
           <select
             value={timeSelectValue}
