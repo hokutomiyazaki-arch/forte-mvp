@@ -225,26 +225,47 @@ function CandidateCard({
 
       {/* §2-2改訂(CEO決定): 受付中(open。NULL含む・fail-open)以外は予約ボタンを出さない。
           「選べたのに送信で409」という初回体験を作らない（🔴停止中は非表示・🟡は代理展開でカバー） */}
+      {/* メニュー未設定プロの予約穴の閉塞(2026-08-05・CEO指示): 受付中でも予約可能な有料メニューが
+          1件も無い受け手はボタンを出さず「準備中」表示にする(price_jpy=0の無決済成立→即時開示を防ぐ)。
+          プロフィールを見るリンクはカード上部に既に出ているためここでは省略しない(§保護方針)。 */}
       {isAcceptingOpen(candidate.acceptingStatus) ? (
-        <a
-          href={`/r/${slug}/request?pro=${candidate.pro.id}`}
-          style={{
-            display: 'block',
-            width: '100%',
-            padding: '11px 0',
-            borderRadius: 10,
-            border: 'none',
-            background: T.dark,
-            color: '#fff',
-            fontSize: 13,
-            fontWeight: 600,
-            textAlign: 'center',
-            textDecoration: 'none',
-            boxSizing: 'border-box' as const,
-          }}
-        >
-          この先生に相談する
-        </a>
+        candidate.hasBookableMenu ? (
+          <a
+            href={`/r/${slug}/request?pro=${candidate.pro.id}`}
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '11px 0',
+              borderRadius: 10,
+              border: 'none',
+              background: T.dark,
+              color: '#fff',
+              fontSize: 13,
+              fontWeight: 600,
+              textAlign: 'center',
+              textDecoration: 'none',
+              boxSizing: 'border-box' as const,
+            }}
+          >
+            この先生に相談する
+          </a>
+        ) : (
+          <div
+            style={{
+              width: '100%',
+              padding: '11px 0',
+              borderRadius: 10,
+              background: '#F0EDE6',
+              color: T.textMuted,
+              fontSize: 13,
+              fontWeight: 600,
+              textAlign: 'center',
+              boxSizing: 'border-box' as const,
+            }}
+          >
+            このプロは現在オンライン予約を準備中です
+          </div>
+        )
       ) : (
         <div
           style={{

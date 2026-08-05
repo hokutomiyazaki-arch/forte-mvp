@@ -143,6 +143,9 @@ export async function GET() {
       proofVoteCountResult,
       // 🔴1(再レビュー): allowlist外でも共有リストに承諾済みで掲載されているか(受付ウィジェット表示ゲート用)
       pinnedOnSharedList,
+      // メニュー未設定プロの予約穴の閉塞(2026-08-05・CEO指示): 予約可能な有料メニューが1件でもあるか
+      // (受付中バナー表示のゲート用。件数は使わないのでheadカウントのみの軽量クエリ)
+      bookableMenuCountResult,
     ] = await Promise.all([
       // リワード
       supabase.from('rewards').select('*').eq('professional_id', proId).order('sort_order'),
@@ -216,6 +219,13 @@ export async function GET() {
         .eq('vote_type', 'proof'),
       // 🔴1(再レビュー): allowlist内なら判定不要(無駄なクエリを避けるためfalse固定で返す)
       isReferralEnabled(proId) ? Promise.resolve(false) : isPinnedOnSharedList(supabase, proId),
+      // メニュー未設定プロの予約穴の閉塞: pro_menus(is_referral_bookable=true・price_jpy>0)の件数
+      supabase.from('pro_menus')
+        .select('id', { count: 'exact', head: true })
+        .eq('professional_id', proId)
+        .eq('is_referral_bookable', true)
+        .neq('is_active', false)
+        .gt('price_jpy', 0),
     ])
 
     if (isDev) console.log('[Dashboard API] Phase 2 done:', Date.now() - startTime, 'ms')
@@ -455,6 +465,8 @@ export async function GET() {
       referralEnabled: isReferralEnabled(proId),
       // 🔴1(再レビュー): 受付ステータス操作は allowlist外でも共有リストに掲載中の本人には開放する
       acceptingEditable: isReferralEnabled(proId) || pinnedOnSharedList,
+      // メニュー未設定プロの予約穴の閉塞(2026-08-05・CEO指示): 受付中バナーの表示ゲート用
+      hasBookableReferralMenu: (bookableMenuCountResult.count || 0) > 0,
     })
   } catch (err: any) {
     console.error('[api/dashboard] error:', err)

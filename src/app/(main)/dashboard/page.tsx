@@ -404,6 +404,9 @@ export default function DashboardPage() {
   const [referralEnabled, setReferralEnabled] = useState(false)
   // 🔴1(再レビュー): 受付ステータスウィジェットの表示可否。allowlist内 or 共有リストに掲載中の本人
   const [acceptingEditable, setAcceptingEditable] = useState(false)
+  // メニュー未設定プロの予約穴の閉塞(2026-08-05・CEO指示): 予約可能な有料メニューが1件でもあるか
+  // (受付中バナーの表示ゲート用)
+  const [hasBookableReferralMenu, setHasBookableReferralMenu] = useState(false)
 
   // CEO指示(2026-08-04・IA再変更): 紹介タブのサブタブを「受ける/する/紹介した案件」の3つに。
   // requestedが1件以上あれば「受ける」、なければlocalStorageの前回選択、初回は「する」がデフォルト。
@@ -681,6 +684,8 @@ export default function DashboardPage() {
         setReferralEnabled(!!data.referralEnabled)
         // 🔴1(再レビュー): 受付ステータスの操作可否（allowlist内 or 共有リストに掲載中の本人）
         setAcceptingEditable(!!data.acceptingEditable)
+        // メニュー未設定プロの予約穴の閉塞: 予約可能な有料メニューが1件でもあるか
+        setHasBookableReferralMenu(!!data.hasBookableReferralMenu)
 
         setForm({
           name: proData.name || '',
@@ -2514,6 +2519,7 @@ export default function DashboardPage() {
           initialAcceptingNote={pro.accepting_note ?? null}
           initialDelegateListId={pro.delegate_list_id ?? null}
           canManageLists={referralEnabled}
+          hasBookableMenu={hasBookableReferralMenu}
           onUpdated={(status, note, delegateListId) =>
             setPro(prev => prev ? { ...prev, accepting_status: status, accepting_note: note, delegate_list_id: delegateListId } : prev)
           }

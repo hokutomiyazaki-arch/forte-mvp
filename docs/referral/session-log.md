@@ -385,3 +385,9 @@
 - 【SQL・未実行】migration 042: gallery_image_urls text[]・intro_video_url text・gallery-imagesバケット作成＋RLS。コードはカラム未作成でもfail-soft（非表示・保存はキー除外再試行）。
 - 【CC直接レビュー】videoId抽出に英数字検証を追加（embed URLの変形防止）。sticky/カルーセル/保護リストの非接触・アップロードパスのuserIdスコープを確認。
 - 【発見・バックログ化】既存 /api/storage は認証ユーザーなら任意bucket/pathに書ける穴（他人のavatar上書き可）→ 別タスクとしてチップ化（task_540e454e）。今回の追加分の使い方自体は自分のuserId配下で安全。
+
+### 実装: メニュー未設定プロの予約穴を閉塞 — 2026-08-05（CEO指摘・launch checklist）
+- 「予約可能なメニュー」定義を3箇所で統一: is_referral_bookable=true × is_active × **price_jpy > 0**（既存の price_jpy=0 も予約可能扱いだった抜け穴も同時に閉塞）。
+- ①/r/[slug]: 該当メニュー0件の受付中プロは予約ボタン非表示＋「オンライン予約を準備中です」②requestページ: フォーム非表示＋リストへ戻る③bookings POST: 400 receiver_not_bookable（直叩き対策・エラーマッピング3点セット完備）④受付中×メニュー0件のプロのダッシュボードに設定促しバナー。
+- 既存の price 0 予約・決済フラグOFF環境の既存フローには非接触（新規作成のみゲート）。
+- 【重要発見・CEO判断待ち】**pro_menus の price_jpy / is_referral_bookable を設定できるセルフサービスUIが存在しない**（サービス設定のメニュー管理は name/price_text等のみ）。バナーの誘導先で自己解決できないため、全体公開前に「メニュー管理UIへの料金（数値）・紹介予約受付フラグの入力欄追加」タスクが必要。

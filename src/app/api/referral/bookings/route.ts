@@ -138,19 +138,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'receiver_not_accepting' }, { status: 409 })
     }
 
+    // メニュー未設定プロの予約穴の閉塞(2026-08-05・CEO指示・launch checklistの穴埋め): 受け手に
+    // price_jpy > 0 の予約可能メニューが1件も無い場合は予約リクエスト自体を作れない
+    // (price_jpy=0での無決済成立→連絡先の即時開示を防ぐ。/r/[slug]・requestページのUI非表示の
+    // 直叩き対策)。旧仕様(メニュー0件の受け手のみメニューなし無料相談を許容)はここで終了する。
+    // カウント取得自体が失敗した場合は既存の他カウントチェック(pendingCountError等)と同様にfail open。
+    const { count: bookableMenuCount, error: menuCountError } = await supabase
+      .from('pro_menus')
+      .select('id', { count: 'exact', head: true })
+      .eq('professional_id', receiverProId)
+      .eq('is_referral_bookable', true)
+      .neq('is_active', false)
+      .gt('price_jpy', 0)
+
+    if (!menuCountError && (bookableMenuCount || 0) === 0) {
+      return NextResponse.json({ error: 'receiver_not_bookable' }, { status: 400 })
+    }
+
     // CEO決定(2026-08-03): 受け手に紹介予約可能なメニューが1件以上あるならメニュー選択は必須。
     // 未選択(=0円)を許すと決済(与信)を素通りできてしまうため(ステージ2の狙いの無効化防止)。
-    // メニューが1件も無い受け手のみ、従来通りメニューなし相談を許容する。
     if (!menuId) {
-      const { count: bookableMenuCount, error: menuCountError } = await supabase
-        .from('pro_menus')
-        .select('id', { count: 'exact', head: true })
-        .eq('professional_id', receiverProId)
-        .eq('is_referral_bookable', true)
-        .neq('is_active', false)
-      if (!menuCountError && (bookableMenuCount || 0) > 0) {
-        return NextResponse.json({ error: 'menu_required' }, { status: 400 })
-      }
+      return NextResponse.json({ error: 'menu_required' }, { status: 400 })
     }
 
     let priceJpy = 0
@@ -168,7 +176,9 @@ export async function POST(request: NextRequest) {
         menu.professional_id !== receiverProId ||
         !menu.is_referral_bookable ||
         menu.is_active === false ||
-        typeof menu.price_jpy !== 'number'
+        typeof menu.price_jpy !== 'number' ||
+        // メニュー未設定プロの予約穴の閉塞(2026-08-05): 0円メニューの直接指定も同じ穴になるため拒否
+        menu.price_jpy <= 0
       ) {
         return NextResponse.json({ error: 'invalid_menu' }, { status: 400 })
       }

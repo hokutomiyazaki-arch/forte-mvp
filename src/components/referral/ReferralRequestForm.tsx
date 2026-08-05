@@ -248,6 +248,10 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
           setErrorMsg('過去の日時は選択できません。ご希望日時をご確認ください。')
         } else if (data.error === 'menu_required') {
           setErrorMsg('メニューを選択してください。')
+        } else if (data.error === 'receiver_not_bookable') {
+          // メニュー未設定プロの予約穴の閉塞(2026-08-05): 通常はページ側で事前にフォーム非表示にするため
+          // このエラーは主に直叩き/タイミング差(送信直前にメニューが削除された等)への保険。
+          setErrorMsg('この先生は現在オンライン予約を準備中です。')
         } else if (data.error === 'invalid_menu_price') {
           setErrorMsg('このメニューは現在オンライン決済に対応していません。先生に直接お問い合わせください。')
         } else {

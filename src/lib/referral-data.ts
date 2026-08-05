@@ -53,6 +53,13 @@ export interface ReferralCandidate {
   firstRecordedAt: string | null
   /** AI変換済み（フラグoff時は原文）のVoice抜粋、最大2件 */
   voiceExcerpts: string[]
+  /**
+   * メニュー未設定プロの予約穴の閉塞（2026-08-05・CEO指示）: この受け手に
+   * price_jpy > 0 かつ is_referral_bookable=true のメニューが1件以上あるか。
+   * false の間は候補カードの予約ボタンを出さない（price_jpy=0での無決済成立を防ぐ）。
+   * 取得エラー時は fail-safe で false（表示を止めるだけで実害はない）。
+   */
+  hasBookableMenu: boolean
 }
 
 export interface ReferralPageData {
@@ -156,6 +163,23 @@ async function getProSupportStats(
   }
 }
 
+/**
+ * メニュー未設定プロの予約穴の閉塞（2026-08-05・CEO指示）: 受け手に予約可能な有料メニュー
+ * （price_jpy > 0 かつ is_referral_bookable=true かつ is_active）が1件以上あるかだけを見る
+ * 軽量count(全件取得しない)。/api/referral/bookings POST の受け手検証と定義を統一する。
+ */
+async function getHasBookableMenu(supabase: SupabaseAdmin, proId: string): Promise<boolean> {
+  const { count, error } = await supabase
+    .from('pro_menus')
+    .select('id', { count: 'exact', head: true })
+    .eq('professional_id', proId)
+    .eq('is_referral_bookable', true)
+    .neq('is_active', false)
+    .gt('price_jpy', 0)
+  if (error) return false
+  return (count || 0) > 0
+}
+
 async function getVoiceExcerpts(supabase: SupabaseAdmin, proId: string): Promise<string[]> {
   const { data } = await supabase
     .from('votes')
@@ -201,9 +225,10 @@ async function buildCandidate(
   // §2-2改訂: 2値のうちopen以外は全てclosed扱い(fail safe)
   const isPaused = !isAcceptingOpen(pro.accepting_status)
 
-  const [stats, voiceExcerpts] = await Promise.all([
+  const [stats, voiceExcerpts, hasBookableMenu] = await Promise.all([
     getProSupportStats(supabase, proId, itemLabelMap),
     getVoiceExcerpts(supabase, proId),
+    getHasBookableMenu(supabase, proId),
   ])
 
   let delegate: ReferralCandidate[] | null = null
@@ -230,6 +255,7 @@ async function buildCandidate(
     supporterCount: stats.supporterCount,
     firstRecordedAt: stats.firstRecordedAt,
     voiceExcerpts,
+    hasBookableMenu,
   }
 }
 

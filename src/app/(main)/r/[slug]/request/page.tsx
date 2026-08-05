@@ -52,6 +52,11 @@ async function getBusinessHours(proId: string): Promise<{ start: string | null; 
   }
 }
 
+/**
+ * メニュー未設定プロの予約穴の閉塞(2026-08-05・CEO指示): 「予約可能なメニュー」は
+ * price_jpy > 0 のものだけ(0円は無決済成立の抜け道になるため対象外)。
+ * referral-data.ts の getHasBookableMenu / bookings POST の受け手検証と定義を統一する。
+ */
 async function getBookableMenus(proId: string): Promise<BookableMenu[]> {
   const supabase = getSupabaseAdmin()
   const { data } = await supabase
@@ -60,7 +65,7 @@ async function getBookableMenus(proId: string): Promise<BookableMenu[]> {
     .eq('professional_id', proId)
     .eq('is_active', true)
     .eq('is_referral_bookable', true)
-    .not('price_jpy', 'is', null)
+    .gt('price_jpy', 0)
     .order('display_order', { ascending: true })
 
   return (data || []) as BookableMenu[]
@@ -93,6 +98,21 @@ export default async function ReferralRequestPage({
 
   // 軽微7(レビュー指摘): 互いに依存しない2つのフェッチをPromise.allで並列化する。
   const [menus, businessHours] = await Promise.all([getBookableMenus(proId), getBusinessHours(proId)])
+
+  // メニュー未設定プロの予約穴の閉塞(2026-08-05・CEO指示): 予約可能な有料メニューが1件も無い
+  // 受け手はフォームを出さない(price_jpy=0での無決済成立→即時開示を防ぐ)。直接URLで開いた場合の対策。
+  if (menus.length === 0) {
+    return (
+      <div style={{ maxWidth: 480, margin: '0 auto', padding: '60px 16px', textAlign: 'center' }}>
+        <p style={{ fontSize: 13, color: '#555555', lineHeight: 1.8, marginBottom: 16 }}>
+          このプロは現在オンライン予約を準備中です。
+        </p>
+        <a href={`/r/${slug}`} style={{ fontSize: 12, color: '#C4A35A', textDecoration: 'none', fontWeight: 600 }}>
+          ← 紹介リストに戻る
+        </a>
+      </div>
+    )
+  }
 
   return (
     <ReferralRequestForm

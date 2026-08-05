@@ -44,6 +44,9 @@ interface Props {
   /** 軽微指摘: allowlist外プロ(referralEnabled=false)では代理リスト機能(🟡)がまだ実行不能なため、
    * 🟡セグメントをdisabledにし誘導文を差し替える。既存呼び出しを壊さないようオプショナル+デフォルトtrue。 */
   canManageLists?: boolean
+  /** メニュー未設定プロの予約穴の閉塞(2026-08-05・CEO指示): 予約可能な有料メニューが1件でもあるか。
+   * false の間、受付中(🟢)表示にメニュー登録を促すバナーを出す。既存呼び出しを壊さないようオプショナル。 */
+  hasBookableMenu?: boolean
 }
 
 const SEGMENTS: ReferralSignal[] = ['closed', 'delegate', 'open']
@@ -60,6 +63,7 @@ export default function AcceptingStatusWidget({
   initialDelegateListId,
   onUpdated,
   canManageLists = true,
+  hasBookableMenu = true,
 }: Props) {
   // 先行テスト第3弾: DB上のNULLはそのまま保持するが、表示・分岐は effectiveStatus (下記) で
   // 'open' に丸める(PATCH送信時のみ明示値を送るため、stateそのものはnull保持で問題ない)。
@@ -332,6 +336,29 @@ export default function AcceptingStatusWidget({
               ))}
             </select>
           )}
+        </div>
+      )}
+
+      {/* メニュー未設定プロの予約穴の閉塞(2026-08-05・CEO指示): 受付中(🟢)だが予約可能な
+          有料メニューが1件も無い間は、予約リクエスト自体が作れない(閲覧側もボタン非表示)ため
+          サービス設定への誘導を出す。 */}
+      {!yellowSetupMode && signal === 'open' && !hasBookableMenu && (
+        <div
+          style={{
+            fontSize: 11,
+            color: '#8A6D00',
+            background: '#FFF8E1',
+            border: '1px solid #F5E3A3',
+            borderRadius: 8,
+            padding: '8px 10px',
+            lineHeight: 1.6,
+          }}
+        >
+          紹介予約を受け付けるには、サービス設定でメニューと料金を登録してください。
+          {' '}
+          <a href="/dashboard?tab=business-info" style={{ color: '#8A6D00', fontWeight: 700, textDecoration: 'underline' }}>
+            サービス設定へ →
+          </a>
         </div>
       )}
 
