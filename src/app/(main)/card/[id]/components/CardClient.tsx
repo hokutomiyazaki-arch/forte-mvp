@@ -714,8 +714,10 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
               {bioExpanded ? '閉じる' : '続きを読む'}
             </button>
           )}
-          {/* 自己紹介の展開時のみ表示する写真1枚(任意)。カラム未作成環境ではpro.bio_image_urlがundefinedのままなのでfail-soft(非表示)。 */}
-          {bioExpanded && pro.bio_image_url && (
+          {/* 自己紹介の写真1枚(任意)。CEO指摘(2026-08-05): 5行以内のbioは展開ボタンが出ないため、
+              クランプされていない場合は常時表示・クランプ時のみ展開後に表示する。
+              カラム未作成環境ではpro.bio_image_urlがundefinedのままなのでfail-soft(非表示)。 */}
+          {(!bioClamped || bioExpanded) && pro.bio_image_url && (
             <img
               src={pro.bio_image_url}
               alt=""
