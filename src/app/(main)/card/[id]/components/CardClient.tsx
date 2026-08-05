@@ -1257,12 +1257,6 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
       {/* ═══ タブコンテンツ: サービス・案内 ═══ */}
       {activeTab === 'menus' && showServiceTab && (
         <div style={{ marginBottom: 12 }}>
-          {/* ── §15-3: 写真カルーセル(MENUブロックの上) ── */}
-          {hasGallery && <GalleryCarousel images={galleryImages} />}
-
-          {/* ── §15-3: 紹介動画(YouTube) ── */}
-          {hasIntroVideo && <YouTubeEmbed url={pro.intro_video_url} />}
-
           {/* ── メニュー(Phase A1・既存) ── */}
           {hasMenus && (
             <>
@@ -1422,6 +1416,14 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
               </div>
             </>
           )}
+
+          {/* ── §15-3: 写真カルーセル・紹介動画（CEO指示2026-08-05: タブの一番下に配置） ── */}
+          {hasGallery && (
+            <div style={{ marginTop: (hasMenus || hasAccessInfo || hasLinks) ? 24 : 0 }}>
+              <GalleryCarousel images={galleryImages} />
+            </div>
+          )}
+          {hasIntroVideo && <YouTubeEmbed url={pro.intro_video_url} />}
         </div>
       )}
 
