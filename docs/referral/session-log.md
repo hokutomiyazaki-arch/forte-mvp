@@ -495,3 +495,12 @@
 - 対象特定の経緯: CEOの「所属・認定ブロック」はダッシュボードのスクショ由来で、公開カードにはヘッダー内所属団体ピル（CardClient.tsx:646付近）しか存在しない→ピルが正しい対象と確認。
 - 役割行はproofs数の直下へ（訪問者が「proofsが少ない」と見た文脈を隣で補うため・ヘッダー上部の行数も増やさない）。「団体ページを見る→」文字は削除し行全体タップ＋末尾›のみで1行厳守。最終形:「Functional Neuro Training [代表] ・ 認定者160名 ›」。
 - CEO確認済み: 数字1つだけ／160名（代表除外）／[代表]・[指導者]表記／メンバーピル非接触／団体ページの代表行はそのまま。肩書き欄の自己申告「FNT代表」との重複は当面併存。
+
+### 仕組み化: 代表(founder)判定をorganizations.owner_idベースの自動判定へ — 2026-08-05（CEO指示「毎回手動でお願いするのではない」・48e41b4）
+- 変更前: org_members.growth_role='founder' を手動UPDATEした人だけ表示（宮崎のみ）。
+- 変更後: **団体を作った人（organizations.owner_id = professionals.user_id）を自動で代表判定**。新規団体作成でも即反映・手動作業ゼロ。growth_role は「指導者(instructor)」の指定専用として残置（founder値の残置は無害・コードはowner_id優先）。
+- 団体ページの founders も owner_id ベースに統一。
+- 【SQL実行済み・CEO承認「ok」・CC代行】046: org_growth_summary / org_growth_proof_top の members CTE に「団体オーナー本人を認定者側から除外」条件を追加（CREATE OR REPLACE・非破壊）。検証: FNT=160名/1850件/+255、脳疲労=**14名**（15→14・太田ゆりか＝オーナーが除外された）。
+- 自動対象の実データ: FNT=宮崎ほくと、脳疲労快復MSJ=太田ゆりか、Functional Neuro Pilates=家子マモル（認定者が本人のみ→member_count 0でVIEWに行が出ず**カード非表示**＝0名表示より自然なfail-safe）、テスト団体=オーナーがプロ未紐付けで対象外。
+- 太田ゆりかは「脳疲労の代表」かつ「FNTの認定者」＝役割が排他でないケースの実データ検証（脳疲労は役割行・FNTは従来ピル）。
+- 実行時トラブル: Chrome拡張の一時切断とclassifierのcmd+a拒否により前クエリ末尾に追記実行（SELECT+CREATE OR REPLACEの複文として有効・実害なし）。
