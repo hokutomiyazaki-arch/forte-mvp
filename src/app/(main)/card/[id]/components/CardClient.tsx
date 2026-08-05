@@ -648,34 +648,6 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
               }
               return null
             })()}
-            {/* §2-5育成プルーフ(CEO方針転換2026-08-05): 新規セクションは作らず既存の所属団体ピルを
-                役割で出し分ける。代表(founder)/指導者(instructor)を務める団体は、下のピルではなく
-                1行ブロック(団体名＋役割バッジ＋認定者◯名＋団体ページを見る→)で表示する。
-                役割は排他ではないため、この行と下のメンバーピルは同じヘッダー内に共存できる。 */}
-            {growthCards && growthCards.length > 0 && (
-              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {growthCards.map(g => (
-                  <div key={g.organizationId} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: T.dark }}>{g.organizationName}</span>
-                    <span
-                      style={{
-                        fontSize: 11, fontWeight: 700, color: '#fff', background: T.gold,
-                        borderRadius: 6, padding: '2px 8px',
-                      }}
-                    >
-                      {g.role === 'founder' ? '代表' : '指導者'}
-                    </span>
-                    <span style={{ fontSize: 13, color: T.textSub }}>認定者 {g.memberCount}名</span>
-                    <a
-                      href={`/org/${g.organizationId}`}
-                      style={{ fontSize: 12, fontWeight: 600, color: T.gold, textDecoration: 'none' }}
-                    >
-                      団体ページを見る →
-                    </a>
-                  </div>
-                ))}
-              </div>
-            )}
             {pillOrgs.length > 0 && (
               <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {pillOrgs.map(o => (
@@ -710,6 +682,31 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
           {showUniqueCount && (
             <div style={{ marginTop: 8, fontSize: 11, color: T.textSub, fontWeight: 600 }}>
               ユニーク {uniqueVoters}人 ／ 累計 {totalVotes}件 ／ 常連 {regular90Count}人
+            </div>
+          )}
+          {/* §2-5育成プルーフ(CEO最終指示2026-08-05): 役割行はproofs数の直下に置く。
+              訪問者が個人のproofs数を見た文脈を隣で補うのが育成プルーフの役割のため、数字に最も近い位置に出す。
+              1行厳守: 行全体をタップ可能にして末尾に › のみ(文字リンクは置かない)。数字は認定者数1つだけ。 */}
+          {growthCards && growthCards.length > 0 && (
+            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {growthCards.map(g => (
+                <a
+                  key={g.organizationId}
+                  href={`/org/${g.organizationId}`}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    fontSize: 13, color: T.textSub, textDecoration: 'none',
+                    whiteSpace: 'nowrap', overflow: 'hidden',
+                  }}
+                >
+                  <span style={{ fontWeight: 700, color: T.dark, overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.organizationName}</span>
+                  <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: '#fff', background: T.gold, borderRadius: 6, padding: '1px 7px' }}>
+                    {g.role === 'founder' ? '代表' : '指導者'}
+                  </span>
+                  <span style={{ flexShrink: 0 }}>・ 認定者{g.memberCount}名</span>
+                  <span style={{ flexShrink: 0, color: T.textMuted }}>›</span>
+                </a>
+              ))}
             </div>
           )}
           {/* 称号アイコン一覧（旧 specialist/proven/♡ 統計を置き換え。SPECIALIST以上のみ・上位順・称号ゼロは非表示） */}
