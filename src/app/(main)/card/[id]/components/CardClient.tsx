@@ -300,12 +300,25 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
   // §3-4: ユニーク/常連(新定義)。既存の firstTimerCount/repeaterCount/regularCount とは別軸の追加表示
   const [uniqueVoters] = useState(cardData.uniqueVoters ?? 0)
   const [regular90Count] = useState(cardData.regular90Count ?? 0)
+  // §15-2: 自己紹介の3行クランプ。文字数制限はかけず表示のみクランプ。
+  // bioClamped は実際に3行を超える場合のみ true（scrollHeight vs clientHeight 比較で判定）。
+  const [bioExpanded, setBioExpanded] = useState(false)
+  const [bioClamped, setBioClamped] = useState(false)
+  const bioRef = useRef<HTMLParagraphElement>(null)
 
   // 初回マウント時のアニメーション (旧 load() 末尾の setTimeout(setAnimated, 100) 相当)
   useEffect(() => {
     const t = setTimeout(() => setAnimated(true), 100)
     return () => clearTimeout(t)
   }, [])
+
+  // §15-2: bio が3行を超えるかを判定（未展開時の -webkit-line-clamp:3 適用時に測定）。
+  // 短いbioには「続きを読む」を出さない。依存はプリミティブのみ(pro?.bio)。
+  useEffect(() => {
+    const el = bioRef.current
+    if (!el) return
+    setBioClamped(el.scrollHeight > el.clientHeight + 1)
+  }, [pro?.bio])
 
   const toggleProofDates = async (proofId: string) => {
     if (expandedProofId === proofId) {
@@ -450,8 +463,8 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
   const maxVotes = Math.ceil(rawMax * 1.5)
   const voiceCount = comments.length
 
+  // §15-2: top3 はバッジ直後の常時表示セクションで使用。強みタブ内は sortedVotes 全件を表示。
   const top3 = sortedVotes.slice(0, 3)
-  const rest = sortedVotes.slice(3)
 
   return (
     <div style={{ background: T.bg, minHeight: '100vh', maxWidth: 420, margin: '0 auto', padding: 16, fontFamily: T.font }}>
@@ -603,10 +616,175 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
         </div>
       </div>
 
-      {/* ═══ BIO ═══ */}
+      {/* ═══ 強みプルーフ TOP3（§15-2: バッジ直後・タブの外に常時表示） ═══ */}
+      {top3.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: T.textMuted, letterSpacing: 2, textTransform: 'uppercase', fontFamily: T.fontMono, marginBottom: 10 }}>
+            TOP STRENGTHS
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {top3.map((v, i) => {
+              const pct = (v.vote_count / maxVotes) * 100
+              const certTier = getCertifiableTier(v.vote_count)  // SPECIALIST/MASTER/LEGEND/null
+              const isProven = v.vote_count >= PROVEN_THRESHOLD
+              const nextTier = getNextTier(v.vote_count)
+              // ティア別カードスタイル: SPECIALIST+ はティア別bg+枠、それ以外は白背景+グレー枠で統一
+              const cardStyle = certTier ? TIER_CARD_STYLE[certTier] : null
+              const cardBg = cardStyle ? cardStyle.bg : T.cardBg
+              const cardBorder = cardStyle ? cardStyle.border : T.cardBorder
+              const cardBorderWidth = cardStyle ? '2px' : '1px'
+              const labelColor = certTier ? '#C4A35A' : isProven ? PROVEN_GOLD : T.text
+              const countColor = certTier ? '#C4A35A' : isProven ? PROVEN_GOLD : T.gold
+              const barTrack = certTier ? '#2A2A3E' : '#F0EDE6'
+              const barFill = certTier
+                ? 'linear-gradient(90deg, #C4A35A, #E8D9A8)'
+                : isProven ? PROVEN_GOLD : getBarColor(i)
+              const barHeight = certTier ? 5 : 8
+              return (
+                <div key={v.category} style={{
+                  background: cardBg,
+                  border: `${cardBorderWidth} solid ${cardBorder}`,
+                  borderRadius: 14,
+                  padding: 18,
+                  // SPECIALIST+ はメダルはみ出しスペース確保 + 隣カードとの間隔追加
+                  paddingTop: certTier ? 32 : 18,
+                  marginTop: certTier ? 24 : 0,
+                  cursor: 'pointer',
+                  // SPECIALIST+ はメダルはみ出しのため overflow:visible、他は overflow:hidden
+                  overflow: certTier ? 'visible' as const : 'hidden' as const,
+                  position: 'relative' as const,
+                }}
+                  onClick={() => v.proof_id && toggleProofDates(v.proof_id)}>
+                  {/* メダル左上はみ出し配置 (SPECIALIST+ のみ、半分はみ出し) */}
+                  {certTier && (
+                    <div style={{
+                      position: 'absolute' as const,
+                      top: -24,
+                      left: 16,
+                      zIndex: 2,
+                    }}>
+                      <TierBadge tier={certTier} size="lg" showLabel={false} />
+                    </div>
+                  )}
+                  {/* ティアラベル: テキストのみ (メダル画像は左上絶対配置で表示済)。PROVEN は 🛡 絵文字 + テキスト */}
+                  {certTier ? (
+                    <div style={{ marginBottom: 4 }}>
+                      <span style={{
+                        fontSize: 12,
+                        fontWeight: 'bold' as const,
+                        color: '#C4A35A',
+                        letterSpacing: '0.05em',
+                      }}>
+                        {certTier}
+                      </span>
+                    </div>
+                  ) : isProven ? (
+                    <div style={{ marginBottom: 4 }}>
+                      <span style={{
+                        fontSize: 12,
+                        fontWeight: 'bold' as const,
+                        color: '#C4A35A',
+                        letterSpacing: '0.05em',
+                      }}>
+                        🛡 PROVEN
+                      </span>
+                    </div>
+                  ) : null}
+                  <div style={{ marginBottom: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: labelColor, lineHeight: 1.5, overflowWrap: 'anywhere' as const }}>
+                        {v.strength_label || v.category}
+                      </span>
+                      <span style={{ fontSize: certTier ? 18 : 16, fontWeight: 'bold', color: countColor, fontFamily: T.fontMono, flexShrink: 0 }}>
+                        {v.vote_count}<span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'inherit', marginLeft: 2 }}>人が証明</span>
+                      </span>
+                    </div>
+                    {v.strength_label && (
+                      <div style={{ fontSize: 11, color: certTier ? 'rgba(255,255,255,0.55)' : T.textMuted, marginTop: 2 }}>
+                        {v.category}
+                      </div>
+                    )}
+                    {v.tab && TAB_DISPLAY_NAMES[v.tab] && (
+                      <div style={{ marginTop: 4 }}>
+                        <span style={{ fontSize: 10, fontWeight: 600, color: 'rgba(196,163,90,0.6)', background: 'rgba(196,163,90,0.08)', padding: '2px 8px', borderRadius: 4 }}>
+                          {TAB_DISPLAY_NAMES[v.tab]}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ width: '100%', height: barHeight, background: barTrack, borderRadius: 99 }}>
+                    <div style={{
+                      height: barHeight, borderRadius: 99,
+                      background: barFill,
+                      width: animated ? `${pct}%` : '0%',
+                      transition: `width 1.2s ease ${i * 0.08}s`,
+                    }} />
+                  </div>
+                  {/* 次の目標テキスト: tier に応じて Next: SPECIALIST/MASTER/LEGEND を出し分け */}
+                  {certTier && nextTier && (
+                    <div style={{ fontSize: 10, color: '#C4A35A', textAlign: 'right' as const, marginTop: 6 }}>
+                      Next: {TIER_DISPLAY[nextTier.tier].label} ({nextTier.threshold})
+                    </div>
+                  )}
+                  {!certTier && isProven && nextTier && (
+                    <div style={{ fontSize: 10, color: 'rgba(196,163,90,0.5)', textAlign: 'right' as const, marginTop: 6 }}>
+                      あと{nextTier.remaining}人で{TIER_DISPLAY[nextTier.tier].label}
+                    </div>
+                  )}
+                  {/* 日付アコーディオン */}
+                  {v.proof_id && expandedProofId === v.proof_id && (
+                    <div style={{ marginTop: 10, borderTop: `1px solid ${certTier ? '#3A3A4E' : T.divider}`, paddingTop: 10 }}>
+                      {proofDatesLoading === v.proof_id ? (
+                        <div style={{ fontSize: 11, color: certTier ? 'rgba(255,255,255,0.5)' : T.textMuted }}>読み込み中...</div>
+                      ) : (proofDatesCache[v.proof_id] || []).length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: certTier ? 'rgba(255,255,255,0.5)' : T.textMuted, letterSpacing: 1, marginBottom: 2 }}>投票日</div>
+                          {(proofDatesCache[v.proof_id] || []).map((date, di) => (
+                            <div key={di} style={{ fontSize: 11, color: certTier ? 'rgba(255,255,255,0.7)' : T.textSub, fontFamily: T.fontMono }}>
+                              {date}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 11, color: certTier ? 'rgba(255,255,255,0.5)' : T.textMuted }}>日付データなし</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ═══ BIO（§15-2: 3行クランプ＋続きを読む） ═══ */}
       {pro.bio && (
         <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: '16px 18px', marginBottom: 12 }}>
-          <p style={{ fontSize: 12, color: T.textSub, lineHeight: 1.9, whiteSpace: 'pre-wrap', margin: 0, fontWeight: 500 }}>{pro.bio}</p>
+          <p
+            ref={bioRef}
+            style={{
+              fontSize: 12, color: T.textSub, lineHeight: 1.9, whiteSpace: 'pre-wrap', margin: 0, fontWeight: 500,
+              ...(!bioExpanded ? {
+                display: '-webkit-box',
+                WebkitLineClamp: 3,
+                WebkitBoxOrient: 'vertical' as const,
+                overflow: 'hidden',
+              } : {}),
+            }}
+          >
+            {pro.bio}
+          </p>
+          {bioClamped && (
+            <button
+              onClick={() => setBioExpanded(v => !v)}
+              style={{
+                background: 'transparent', border: 'none', padding: 0, marginTop: 6,
+                fontSize: 11, fontWeight: 700, color: T.gold, cursor: 'pointer', fontFamily: T.font,
+              }}
+            >
+              {bioExpanded ? '閉じる' : '続きを読む'}
+            </button>
+          )}
         </div>
       )}
 
@@ -666,46 +844,35 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
             </div>
           )}
 
-          {/* STRENGTH PROOFS */}
+          {/* STRENGTH PROOFS — 全件（TOP3は上部セクションへ移動済み・§15-2） */}
           {sortedVotes.length > 0 && (
             <>
               <div style={{ fontSize: 10, fontWeight: 700, color: T.textMuted, letterSpacing: 2, textTransform: 'uppercase', fontFamily: T.fontMono, marginBottom: 10 }}>
                 STRENGTH PROOFS
               </div>
 
-              {/* Top 3 — バーチャート（票数でティア分け + PROVEN対応） */}
-              {top3.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
-                  {top3.map((v, i) => {
+              <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: 18, marginBottom: 10 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {sortedVotes.map((v, i) => {
                     const pct = (v.vote_count / maxVotes) * 100
                     const certTier = getCertifiableTier(v.vote_count)  // SPECIALIST/MASTER/LEGEND/null
                     const isProven = v.vote_count >= PROVEN_THRESHOLD
                     const nextTier = getNextTier(v.vote_count)
-                    // ティア別カードスタイル: SPECIALIST+ はティア別bg+枠、それ以外は白背景+グレー枠で統一
+                    // ティア別カードスタイル (SPECIALIST 以上のみ。PROVEN以下はテキスト行のまま)
                     const cardStyle = certTier ? TIER_CARD_STYLE[certTier] : null
-                    const cardBg = cardStyle ? cardStyle.bg : T.cardBg
-                    const cardBorder = cardStyle ? cardStyle.border : T.cardBorder
-                    const cardBorderWidth = cardStyle ? '2px' : '1px'
-                    const labelColor = certTier ? '#C4A35A' : isProven ? PROVEN_GOLD : T.text
-                    const countColor = certTier ? '#C4A35A' : isProven ? PROVEN_GOLD : T.gold
-                    const barTrack = certTier ? '#2A2A3E' : '#F0EDE6'
-                    const barFill = certTier
-                      ? 'linear-gradient(90deg, #C4A35A, #E8D9A8)'
-                      : isProven ? PROVEN_GOLD : getBarColor(i)
-                    const barHeight = certTier ? 5 : 8
                     return (
                       <div key={v.category} style={{
-                        background: cardBg,
-                        border: `${cardBorderWidth} solid ${cardBorder}`,
-                        borderRadius: 14,
-                        padding: 18,
-                        // SPECIALIST+ はメダルはみ出しスペース確保 + 隣カードとの間隔追加
-                        paddingTop: certTier ? 32 : 18,
-                        marginTop: certTier ? 24 : 0,
-                        cursor: 'pointer',
-                        // SPECIALIST+ はメダルはみ出しのため overflow:visible、他は overflow:hidden
-                        overflow: certTier ? 'visible' as const : 'hidden' as const,
-                        position: 'relative' as const,
+                        width: '100%', cursor: 'pointer',
+                        ...(cardStyle ? {
+                          border: `2px solid ${cardStyle.border}`,
+                          borderRadius: 10,
+                          padding: '10px 12px',
+                          paddingTop: 28,        // メダルはみ出し分の上余白
+                          marginTop: 24,         // 上のrowとの間隔(メダルはみ出し分)
+                          background: cardStyle.bg,
+                          position: 'relative' as const,
+                          overflow: 'visible' as const,  // メダルはみ出しを許可
+                        } : {}),
                       }}
                         onClick={() => v.proof_id && toggleProofDates(v.proof_id)}>
                         {/* メダル左上はみ出し配置 (SPECIALIST+ のみ、半分はみ出し) */}
@@ -713,7 +880,7 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
                           <div style={{
                             position: 'absolute' as const,
                             top: -24,
-                            left: 16,
+                            left: 12,
                             zIndex: 2,
                           }}>
                             <TierBadge tier={certTier} size="lg" showLabel={false} />
@@ -721,7 +888,7 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
                         )}
                         {/* ティアラベル: テキストのみ (メダル画像は左上絶対配置で表示済)。PROVEN は 🛡 絵文字 + テキスト */}
                         {certTier ? (
-                          <div style={{ marginBottom: 4 }}>
+                          <div style={{ marginBottom: 2 }}>
                             <span style={{
                               fontSize: 12,
                               fontWeight: 'bold' as const,
@@ -732,7 +899,7 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
                             </span>
                           </div>
                         ) : isProven ? (
-                          <div style={{ marginBottom: 4 }}>
+                          <div style={{ marginBottom: 2 }}>
                             <span style={{
                               fontSize: 12,
                               fontWeight: 'bold' as const,
@@ -743,54 +910,54 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
                             </span>
                           </div>
                         ) : null}
-                        <div style={{ marginBottom: 6 }}>
+                        <div style={{ marginBottom: 4 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                            <span style={{ fontSize: 15, fontWeight: 700, color: labelColor, lineHeight: 1.5, overflowWrap: 'anywhere' as const }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: certTier ? '#C4A35A' : isProven ? PROVEN_GOLD : T.text, lineHeight: 1.5, overflowWrap: 'anywhere' as const }}>
                               {v.strength_label || v.category}
                             </span>
-                            <span style={{ fontSize: certTier ? 18 : 16, fontWeight: 'bold', color: countColor, fontFamily: T.fontMono, flexShrink: 0 }}>
-                              {v.vote_count}<span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'inherit', marginLeft: 2 }}>人が証明</span>
+                            <span style={{ fontSize: certTier ? 15 : 13, color: certTier ? '#C4A35A' : isProven ? PROVEN_GOLD : T.textMuted, fontFamily: T.fontMono, flexShrink: 0, fontWeight: certTier ? 'bold' : undefined }}>
+                              {v.vote_count}<span style={{ fontSize: 10, fontWeight: 600, marginLeft: 2 }}>人が証明</span>
                             </span>
                           </div>
                           {v.strength_label && (
-                            <div style={{ fontSize: 11, color: certTier ? 'rgba(255,255,255,0.55)' : T.textMuted, marginTop: 2 }}>
+                            <div style={{ fontSize: 10, color: certTier ? 'rgba(255,255,255,0.55)' : T.textMuted, marginTop: 2 }}>
                               {v.category}
                             </div>
                           )}
                           {v.tab && TAB_DISPLAY_NAMES[v.tab] && (
-                            <div style={{ marginTop: 4 }}>
+                            <div style={{ marginTop: 3 }}>
                               <span style={{ fontSize: 10, fontWeight: 600, color: 'rgba(196,163,90,0.6)', background: 'rgba(196,163,90,0.08)', padding: '2px 8px', borderRadius: 4 }}>
                                 {TAB_DISPLAY_NAMES[v.tab]}
                               </span>
                             </div>
                           )}
                         </div>
-                        <div style={{ width: '100%', height: barHeight, background: barTrack, borderRadius: 99 }}>
+                        <div style={{ width: '100%', height: 5, background: certTier ? '#2A2A3E' : '#F0EDE6', borderRadius: 99 }}>
                           <div style={{
-                            height: barHeight, borderRadius: 99,
-                            background: barFill,
+                            height: 5, borderRadius: 99,
+                            background: certTier ? 'linear-gradient(90deg, #C4A35A, #E8D9A8)' : isProven ? PROVEN_GOLD : getBarColor(3),
                             width: animated ? `${pct}%` : '0%',
                             transition: `width 1.2s ease ${i * 0.08}s`,
                           }} />
                         </div>
                         {/* 次の目標テキスト: tier に応じて Next: SPECIALIST/MASTER/LEGEND を出し分け */}
                         {certTier && nextTier && (
-                          <div style={{ fontSize: 10, color: '#C4A35A', textAlign: 'right' as const, marginTop: 6 }}>
+                          <div style={{ fontSize: 10, color: '#C4A35A', textAlign: 'right' as const, marginTop: 4 }}>
                             Next: {TIER_DISPLAY[nextTier.tier].label} ({nextTier.threshold})
                           </div>
                         )}
                         {!certTier && isProven && nextTier && (
-                          <div style={{ fontSize: 10, color: 'rgba(196,163,90,0.5)', textAlign: 'right' as const, marginTop: 6 }}>
+                          <div style={{ fontSize: 10, color: 'rgba(196,163,90,0.5)', textAlign: 'right' as const, marginTop: 4 }}>
                             あと{nextTier.remaining}人で{TIER_DISPLAY[nextTier.tier].label}
                           </div>
                         )}
                         {/* 日付アコーディオン */}
                         {v.proof_id && expandedProofId === v.proof_id && (
-                          <div style={{ marginTop: 10, borderTop: `1px solid ${certTier ? '#3A3A4E' : T.divider}`, paddingTop: 10 }}>
+                          <div style={{ marginTop: 8, borderTop: `1px solid ${certTier ? '#3A3A4E' : T.divider}`, paddingTop: 8 }}>
                             {proofDatesLoading === v.proof_id ? (
                               <div style={{ fontSize: 11, color: certTier ? 'rgba(255,255,255,0.5)' : T.textMuted }}>読み込み中...</div>
                             ) : (proofDatesCache[v.proof_id] || []).length > 0 ? (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                                 <div style={{ fontSize: 10, fontWeight: 700, color: certTier ? 'rgba(255,255,255,0.5)' : T.textMuted, letterSpacing: 1, marginBottom: 2 }}>投票日</div>
                                 {(proofDatesCache[v.proof_id] || []).map((date, di) => (
                                   <div key={di} style={{ fontSize: 11, color: certTier ? 'rgba(255,255,255,0.7)' : T.textSub, fontFamily: T.fontMono }}>
@@ -807,135 +974,7 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
                     )
                   })}
                 </div>
-              )}
-
-              {/* 残り — バーチャート（PROVEN対応） */}
-              {rest.length > 0 && (
-                <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: 18, marginBottom: 10 }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {rest.map((v, i) => {
-                      const pct = (v.vote_count / maxVotes) * 100
-                      const certTier = getCertifiableTier(v.vote_count)  // SPECIALIST/MASTER/LEGEND/null
-                      const isProven = v.vote_count >= PROVEN_THRESHOLD
-                      const nextTier = getNextTier(v.vote_count)
-                      // ティア別カードスタイル (SPECIALIST 以上のみ。PROVEN以下はテキスト行のまま)
-                      const cardStyle = certTier ? TIER_CARD_STYLE[certTier] : null
-                      return (
-                        <div key={v.category} style={{
-                          width: '100%', cursor: 'pointer',
-                          ...(cardStyle ? {
-                            border: `2px solid ${cardStyle.border}`,
-                            borderRadius: 10,
-                            padding: '10px 12px',
-                            paddingTop: 28,        // メダルはみ出し分の上余白
-                            marginTop: 24,         // 上のrowとの間隔(メダルはみ出し分)
-                            background: cardStyle.bg,
-                            position: 'relative' as const,
-                            overflow: 'visible' as const,  // メダルはみ出しを許可
-                          } : {}),
-                        }}
-                          onClick={() => v.proof_id && toggleProofDates(v.proof_id)}>
-                          {/* メダル左上はみ出し配置 (SPECIALIST+ のみ、半分はみ出し) */}
-                          {certTier && (
-                            <div style={{
-                              position: 'absolute' as const,
-                              top: -24,
-                              left: 12,
-                              zIndex: 2,
-                            }}>
-                              <TierBadge tier={certTier} size="lg" showLabel={false} />
-                            </div>
-                          )}
-                          {/* ティアラベル: テキストのみ (メダル画像は左上絶対配置で表示済)。PROVEN は 🛡 絵文字 + テキスト */}
-                          {certTier ? (
-                            <div style={{ marginBottom: 2 }}>
-                              <span style={{
-                                fontSize: 12,
-                                fontWeight: 'bold' as const,
-                                color: '#C4A35A',
-                                letterSpacing: '0.05em',
-                              }}>
-                                {certTier}
-                              </span>
-                            </div>
-                          ) : isProven ? (
-                            <div style={{ marginBottom: 2 }}>
-                              <span style={{
-                                fontSize: 12,
-                                fontWeight: 'bold' as const,
-                                color: '#C4A35A',
-                                letterSpacing: '0.05em',
-                              }}>
-                                🛡 PROVEN
-                              </span>
-                            </div>
-                          ) : null}
-                          <div style={{ marginBottom: 4 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                              <span style={{ fontSize: 13, fontWeight: 600, color: certTier ? '#C4A35A' : isProven ? PROVEN_GOLD : T.text, lineHeight: 1.5, overflowWrap: 'anywhere' as const }}>
-                                {v.strength_label || v.category}
-                              </span>
-                              <span style={{ fontSize: certTier ? 15 : 13, color: certTier ? '#C4A35A' : isProven ? PROVEN_GOLD : T.textMuted, fontFamily: T.fontMono, flexShrink: 0, fontWeight: certTier ? 'bold' : undefined }}>
-                                {v.vote_count}<span style={{ fontSize: 10, fontWeight: 600, marginLeft: 2 }}>人が証明</span>
-                              </span>
-                            </div>
-                            {v.strength_label && (
-                              <div style={{ fontSize: 10, color: certTier ? 'rgba(255,255,255,0.55)' : T.textMuted, marginTop: 2 }}>
-                                {v.category}
-                              </div>
-                            )}
-                            {v.tab && TAB_DISPLAY_NAMES[v.tab] && (
-                              <div style={{ marginTop: 3 }}>
-                                <span style={{ fontSize: 10, fontWeight: 600, color: 'rgba(196,163,90,0.6)', background: 'rgba(196,163,90,0.08)', padding: '2px 8px', borderRadius: 4 }}>
-                                  {TAB_DISPLAY_NAMES[v.tab]}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                          <div style={{ width: '100%', height: 5, background: certTier ? '#2A2A3E' : '#F0EDE6', borderRadius: 99 }}>
-                            <div style={{
-                              height: 5, borderRadius: 99,
-                              background: certTier ? 'linear-gradient(90deg, #C4A35A, #E8D9A8)' : isProven ? PROVEN_GOLD : getBarColor(3),
-                              width: animated ? `${pct}%` : '0%',
-                              transition: `width 1.2s ease ${(i + 3) * 0.08}s`,
-                            }} />
-                          </div>
-                          {/* 次の目標テキスト: tier に応じて Next: SPECIALIST/MASTER/LEGEND を出し分け */}
-                          {certTier && nextTier && (
-                            <div style={{ fontSize: 10, color: '#C4A35A', textAlign: 'right' as const, marginTop: 4 }}>
-                              Next: {TIER_DISPLAY[nextTier.tier].label} ({nextTier.threshold})
-                            </div>
-                          )}
-                          {!certTier && isProven && nextTier && (
-                            <div style={{ fontSize: 10, color: 'rgba(196,163,90,0.5)', textAlign: 'right' as const, marginTop: 4 }}>
-                              あと{nextTier.remaining}人で{TIER_DISPLAY[nextTier.tier].label}
-                            </div>
-                          )}
-                          {/* 日付アコーディオン */}
-                          {v.proof_id && expandedProofId === v.proof_id && (
-                            <div style={{ marginTop: 8, borderTop: `1px solid ${certTier ? '#3A3A4E' : T.divider}`, paddingTop: 8 }}>
-                              {proofDatesLoading === v.proof_id ? (
-                                <div style={{ fontSize: 11, color: certTier ? 'rgba(255,255,255,0.5)' : T.textMuted }}>読み込み中...</div>
-                              ) : (proofDatesCache[v.proof_id] || []).length > 0 ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                                  <div style={{ fontSize: 10, fontWeight: 700, color: certTier ? 'rgba(255,255,255,0.5)' : T.textMuted, letterSpacing: 1, marginBottom: 2 }}>投票日</div>
-                                  {(proofDatesCache[v.proof_id] || []).map((date, di) => (
-                                    <div key={di} style={{ fontSize: 11, color: certTier ? 'rgba(255,255,255,0.7)' : T.textSub, fontFamily: T.fontMono }}>
-                                      {date}
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <div style={{ fontSize: 11, color: certTier ? 'rgba(255,255,255,0.5)' : T.textMuted }}>日付データなし</div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
+              </div>
             </>
           )}
 
