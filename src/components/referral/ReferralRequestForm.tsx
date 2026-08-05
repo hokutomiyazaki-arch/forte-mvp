@@ -132,6 +132,59 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
                     ? '情報共有への同意にチェックすると送信できます'
                     : ''
 
+  // プログレッシブフォーム(2026-08-05・CEO指示): 上から順に「メニュー→日時→お名前→電話番号→
+  // メールアドレス→テーマ・補足・同意・送信」の順で1項目ずつ出現させる。表示済みの項目は
+  // 畳まない(値を消しても隠さない)ため、各段の「出現済みか」はuseStateで一方向にのみtrueへ
+  // 遷移させる(いわゆる高水位線パターン)。Reactは「レンダー中の条件付きsetState」を
+  // 公式にサポートしており、useEffectに依存しないためdeps配列の懸念自体が発生しない。
+  const hasMenus = menus.length > 0
+  const menuDone = !hasMenus || !!menuId
+  const slot1Done = !!slot1
+  const nameDone = clientName.trim().length > 0
+  const phoneDone = isValidPhone(clientPhone)
+  const emailDone = !!clientEmail && EMAIL_PATTERN.test(clientEmail)
+
+  const [slotRevealed, setSlotRevealed] = useState(menuDone)
+  if (menuDone && !slotRevealed) setSlotRevealed(true)
+
+  const [nameRevealed, setNameRevealed] = useState(slotRevealed && slot1Done)
+  if (slotRevealed && slot1Done && !nameRevealed) setNameRevealed(true)
+
+  const [phoneRevealed, setPhoneRevealed] = useState(nameRevealed && nameDone)
+  if (nameRevealed && nameDone && !phoneRevealed) setPhoneRevealed(true)
+
+  const [emailRevealed, setEmailRevealed] = useState(phoneRevealed && phoneDone)
+  if (phoneRevealed && phoneDone && !emailRevealed) setEmailRevealed(true)
+
+  // 最終ブロック(テーマ・補足・同意・送信ボタン)。テーマ・補足は任意項目のため個別の出現ゲートを
+  // 設けず、メールアドレスの妥当な入力後にまとめて表示する。
+  const [finalRevealed, setFinalRevealed] = useState(emailRevealed && emailDone)
+  if (emailRevealed && emailDone && !finalRevealed) setFinalRevealed(true)
+
+  // 「最新出現の項目」の強調表示用(左ボーダー)。優先順位は出現順の末尾から判定する。
+  const latestStep: 'menu' | 'slot' | 'name' | 'phone' | 'email' | 'final' = finalRevealed
+    ? 'final'
+    : emailRevealed
+      ? 'email'
+      : phoneRevealed
+        ? 'phone'
+        : nameRevealed
+          ? 'name'
+          : slotRevealed
+            ? 'slot'
+            : 'menu'
+  const activeBorderStyle = { borderLeft: `3px solid ${T.gold}`, paddingLeft: 10 }
+
+  // 送信ボタンの「あと◯項目です」進捗表示(任意実装・CEO指示)。missingReasonと同じ必須項目を数える。
+  const remainingRequiredCount = [
+    nameDone,
+    phoneDone,
+    emailDone,
+    ...(hasMenus ? [!!menuId] : []),
+    slot1Done,
+    consent,
+  ].filter((d) => !d).length
+
   // CEO指示(2026-08-05・タスク2): プロの確定期限(48時間)に近い希望日時が1件でもあれば警告(ブロックしない)。
   const hasNear48hSlot =
     isWithinHoursFromNow(slot1, 48) || isWithinHoursFromNow(slot2, 48) || isWithinHoursFromNow(slot3, 48)
@@ -308,38 +361,11 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
           gap: 16,
         }}
       >
-        <div>
-          <label style={labelStyle}>お名前(必須)</label>
-          <input
-            value={clientName}
-            onChange={(e) => setClientName(e.target.value.slice(0, 50))}
-            placeholder="山田 太郎"
-            style={inputStyle}
-          />
-        </div>
-        <div>
-          <label style={labelStyle}>電話番号(必須)</label>
-          <input
-            value={clientPhone}
-            onChange={(e) => setClientPhone(e.target.value.slice(0, 20))}
-            placeholder="090-1234-5678"
-            inputMode="tel"
-            style={inputStyle}
-          />
-        </div>
-        <div>
-          <label style={labelStyle}>メールアドレス(必須)</label>
-          <input
-            value={clientEmail}
-            onChange={(e) => setClientEmail(e.target.value.slice(0, 254))}
-            placeholder="example@mail.com"
-            inputMode="email"
-            style={inputStyle}
-          />
-        </div>
-
-        {menus.length > 0 && (
-          <div>
+        {/* プログレッシブフォーム(2026-08-05・CEO指示): ①メニュー→②日時→③お名前→④電話番号→
+            ⑤メールアドレス→⑥テーマ・⑦補足(+同意・送信)の順で1項目ずつ出現させる。
+            表示済みの項目は畳まない(値を消しても隠れない・高水位線パターン)。 */}
+        {hasMenus && (
+          <div style={latestStep === 'menu' ? activeBorderStyle : undefined}>
             <label style={labelStyle}>メニュー（必須）</label>
             <select value={menuId} onChange={(e) => setMenuId(e.target.value)} style={inputStyle}>
               <option value="">選択してください</option>
@@ -356,111 +382,169 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
           </div>
         )}
 
-        {/* 追加3(2026-08-05・CEO指示・設計variantB): 受け手プロの受付時間(設定済みの場合のみ表示)。 */}
-        {businessHoursText && (
-          <div style={{ fontSize: 13, color: T.textSub, marginTop: -8 }}>
-            受付時間: {businessHoursText}
+        {slotRevealed && (
+          <div style={latestStep === 'slot' ? activeBorderStyle : undefined}>
+            {/* 追加3(2026-08-05・CEO指示・設計variantB): 受け手プロの受付時間(設定済みの場合のみ表示)。 */}
+            {businessHoursText && (
+              <div style={{ fontSize: 13, color: T.textSub, marginBottom: 8 }}>
+                受付時間: {businessHoursText}
+              </div>
+            )}
+            {/* カード化(2026-08-05・CEO指示): 第1〜第3希望を独立カード+段階的追加で表示する
+                (境界を明確化・第1希望のみ最初に表示・完了後に次の希望を追加できる)。 */}
+            <SlotCardGroup
+              values={[slot1, slot2, slot3]}
+              onChangeAt={(index, next) => {
+                if (index === 0) setSlot1(next)
+                else if (index === 1) setSlot2(next)
+                else setSlot3(next)
+              }}
+              timeOptions={timeOptions}
+            />
+            {hasNear48hSlot && (
+              <div
+                style={{
+                  background: '#FFF8E1',
+                  border: '1px solid #F0D98C',
+                  borderRadius: 8,
+                  padding: '10px 12px',
+                  fontSize: 13,
+                  color: '#8A6D00',
+                  lineHeight: 1.7,
+                  marginTop: 10,
+                }}
+              >
+                先生のご確定には最大48時間かかることがあります。直近の日時はご希望に添えない場合があります。
+              </div>
+            )}
+            {/* 追加3(2026-08-05・CEO指示): 受付時間外/定休日の可能性がある枠の警告(ブロックしない)。 */}
+            {hasOutsideBusinessHoursSlot && (
+              <div
+                style={{
+                  background: '#FFF8E1',
+                  border: '1px solid #F0D98C',
+                  borderRadius: 8,
+                  padding: '10px 12px',
+                  fontSize: 13,
+                  color: '#8A6D00',
+                  lineHeight: 1.7,
+                  marginTop: 10,
+                }}
+              >
+                この日時は{receiverPro.name}さんの受付時間外の可能性があります。
+              </div>
+            )}
           </div>
         )}
 
-        {/* カード化(2026-08-05・CEO指示): 第1〜第3希望を独立カード+段階的追加で表示する
-            (境界を明確化・第1希望のみ最初に表示・完了後に次の希望を追加できる)。 */}
-        <SlotCardGroup
-          values={[slot1, slot2, slot3]}
-          onChangeAt={(index, next) => {
-            if (index === 0) setSlot1(next)
-            else if (index === 1) setSlot2(next)
-            else setSlot3(next)
-          }}
-          timeOptions={timeOptions}
-        />
-        {hasNear48hSlot && (
+        {nameRevealed && (
+          <div style={latestStep === 'name' ? activeBorderStyle : undefined}>
+            <label style={labelStyle}>お名前(必須)</label>
+            <input
+              value={clientName}
+              onChange={(e) => setClientName(e.target.value.slice(0, 50))}
+              placeholder="山田 太郎"
+              style={inputStyle}
+            />
+          </div>
+        )}
+
+        {phoneRevealed && (
+          <div style={latestStep === 'phone' ? activeBorderStyle : undefined}>
+            <label style={labelStyle}>電話番号(必須)</label>
+            <input
+              value={clientPhone}
+              onChange={(e) => setClientPhone(e.target.value.slice(0, 20))}
+              placeholder="090-1234-5678"
+              inputMode="tel"
+              style={inputStyle}
+            />
+          </div>
+        )}
+
+        {emailRevealed && (
+          <div style={latestStep === 'email' ? activeBorderStyle : undefined}>
+            <label style={labelStyle}>メールアドレス(必須)</label>
+            <input
+              value={clientEmail}
+              onChange={(e) => setClientEmail(e.target.value.slice(0, 254))}
+              placeholder="example@mail.com"
+              inputMode="email"
+              style={inputStyle}
+            />
+          </div>
+        )}
+
+        {finalRevealed && (
           <div
             style={{
-              background: '#FFF8E1',
-              border: '1px solid #F0D98C',
-              borderRadius: 8,
-              padding: '10px 12px',
-              fontSize: 13,
-              color: '#8A6D00',
-              lineHeight: 1.7,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+              ...(latestStep === 'final' ? activeBorderStyle : {}),
             }}
           >
-            先生のご確定には最大48時間かかることがあります。直近の日時はご希望に添えない場合があります。
+            <div>
+              <label style={labelStyle}>ご相談のテーマ(任意)</label>
+              <input
+                value={theme}
+                onChange={(e) => setTheme(e.target.value.slice(0, 100))}
+                placeholder="例: 産後の骨盤ケアについて"
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>補足(任意)</label>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value.slice(0, 500))}
+                placeholder="伝えておきたいことがあればご記入ください"
+                style={{ ...inputStyle, minHeight: 70, resize: 'vertical' as const }}
+              />
+            </div>
+
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: T.textSub, lineHeight: 1.6 }}>
+              <input
+                type="checkbox"
+                checked={consent}
+                onChange={(e) => setConsent(e.target.checked)}
+                style={{ marginTop: 2 }}
+              />
+              <span>
+                お名前・ご希望日時・ご相談のテーマが、紹介元と紹介先の先生に共有されることに同意します。
+                お名前・電話番号・メールアドレスは、日程確定のご連絡と、確定後に担当の先生への共有のために保存されます。
+              </span>
+            </label>
+
+            {errorMsg && <p style={{ fontSize: 12, color: '#B00020' }}>{errorMsg}</p>}
+            {!errorMsg && missingReason && (
+              <p style={{ fontSize: 12, color: T.textMuted }}>{missingReason}</p>
+            )}
+            {/* 進捗表示(任意実装・CEO指示): 送信ボタンがdisabledの間、残り必須項目数を1行で示す。 */}
+            {remainingRequiredCount > 0 && (
+              <p style={{ fontSize: 13, color: T.textMuted }}>あと{remainingRequiredCount}項目です</p>
+            )}
+
+            <button
+              onClick={handleSubmit}
+              disabled={submitting || !!missingReason}
+              style={{
+                width: '100%',
+                padding: '13px 0',
+                borderRadius: 10,
+                border: 'none',
+                background: submitting || missingReason ? '#E8E4DC' : T.dark,
+                color: submitting || missingReason ? T.textMuted : '#fff',
+                fontSize: 14,
+                fontWeight: 700,
+                cursor: submitting || missingReason ? 'default' : 'pointer',
+              }}
+            >
+              {submitting ? '送信中...' : 'この内容でリクエストする'}
+            </button>
           </div>
         )}
-        {/* 追加3(2026-08-05・CEO指示): 受付時間外/定休日の可能性がある枠の警告(ブロックしない)。 */}
-        {hasOutsideBusinessHoursSlot && (
-          <div
-            style={{
-              background: '#FFF8E1',
-              border: '1px solid #F0D98C',
-              borderRadius: 8,
-              padding: '10px 12px',
-              fontSize: 13,
-              color: '#8A6D00',
-              lineHeight: 1.7,
-            }}
-          >
-            この日時は{receiverPro.name}さんの受付時間外の可能性があります。
-          </div>
-        )}
-
-        <div>
-          <label style={labelStyle}>ご相談のテーマ(任意)</label>
-          <input
-            value={theme}
-            onChange={(e) => setTheme(e.target.value.slice(0, 100))}
-            placeholder="例: 産後の骨盤ケアについて"
-            style={inputStyle}
-          />
-        </div>
-
-        <div>
-          <label style={labelStyle}>補足(任意)</label>
-          <textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value.slice(0, 500))}
-            placeholder="伝えておきたいことがあればご記入ください"
-            style={{ ...inputStyle, minHeight: 70, resize: 'vertical' as const }}
-          />
-        </div>
-
-        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: T.textSub, lineHeight: 1.6 }}>
-          <input
-            type="checkbox"
-            checked={consent}
-            onChange={(e) => setConsent(e.target.checked)}
-            style={{ marginTop: 2 }}
-          />
-          <span>
-            お名前・ご希望日時・ご相談のテーマが、紹介元と紹介先の先生に共有されることに同意します。
-            お名前・電話番号・メールアドレスは、日程確定のご連絡と、確定後に担当の先生への共有のために保存されます。
-          </span>
-        </label>
-
-        {errorMsg && <p style={{ fontSize: 12, color: '#B00020' }}>{errorMsg}</p>}
-        {!errorMsg && missingReason && (
-          <p style={{ fontSize: 12, color: T.textMuted }}>{missingReason}</p>
-        )}
-
-        <button
-          onClick={handleSubmit}
-          disabled={submitting || !!missingReason}
-          style={{
-            width: '100%',
-            padding: '13px 0',
-            borderRadius: 10,
-            border: 'none',
-            background: submitting || missingReason ? '#E8E4DC' : T.dark,
-            color: submitting || missingReason ? T.textMuted : '#fff',
-            fontSize: 14,
-            fontWeight: 700,
-            cursor: submitting || missingReason ? 'default' : 'pointer',
-          }}
-        >
-          {submitting ? '送信中...' : 'この内容でリクエストする'}
-        </button>
       </div>
     </div>
   )
