@@ -434,10 +434,11 @@ export async function issueFeePaymentLinkAndNotify(params: {
             // CEO決定(2026-08-04・追加): キャンセルポリシーの4点目(クライアント都合の72時間前ルール)。
             `クライアント様のご都合によるキャンセルは、セッション開始の72時間前まで全額返金・それ以降は返金いたしかねます。` +
             // バグ報告(2026-08-04)対応: 決済リンク切れ・中断時の自己救済導線(予約ページから再開できる)
-            `<br><br>お支払い状況の確認・再開はこちら: <a href="${APP_URL}/booking/${params.bookingId}" style="color:#888888;text-decoration:underline;">${APP_URL}/booking/${params.bookingId}</a>` +
-            referralListFooterHtml(listUrl),
+            `<br><br>お支払い状況の確認・再開はこちら: <a href="${APP_URL}/booking/${params.bookingId}" style="color:#888888;text-decoration:underline;">${APP_URL}/booking/${params.bookingId}</a>`,
           'お支払いを行う',
-          checkout.url
+          checkout.url,
+          // 中3(レビュー指摘): リストリンクはCTAボタン(「お支払いを行う」)の下に来るようafterCtaHtmlへ移す。
+          referralListFooterHtml(listUrl)
         )
       )
     }
@@ -571,6 +572,54 @@ export async function createConnectOnboardingLink(
 }
 
 /**
+ * 口座管理導線(2026-08-05・CEO指示): 送り手プロが受け取り口座を変更・送金履歴を確認できるよう、
+ * Stripe Express のホスト型ダッシュボードへのログインリンクを発行する。
+ * ログインリンクはワンタイム(1回使うと失効)のためキャッシュせず、呼ばれるたびに新規発行する。
+ * アカウント未作成(stripe_connect_account_id無し)の場合は'no_account'を返す(呼び出し元は
+ * 「まだ口座登録がお済みでない場合はご案内できません」的なfail-soft表示に倒す)。
+ * 既存のConnect関数(createConnectOnboardingLink/getConnectStatus)と同じ規約(isConnectSchemaMissing
+ * でのnot_ready判定・エラーはログのみで`error`扱い)を踏襲する。
+ */
+export async function createConnectLoginLink(
+  proId: string
+): Promise<
+  | { outcome: 'ok'; url: string }
+  | { outcome: 'no_account' }
+  | { outcome: 'not_ready' }
+  | { outcome: 'error' }
+> {
+  if (!isReferralPaymentEnabled()) return { outcome: 'not_ready' }
+
+  const supabase = getSupabaseAdmin()
+
+  const { data: pro, error } = await supabase
+    .from('professionals')
+    .select('stripe_connect_account_id')
+    .eq('id', proId)
+    .maybeSingle()
+
+  if (error) {
+    if (isConnectSchemaMissing(error)) return { outcome: 'not_ready' }
+    console.error('[referral-payment] createConnectLoginLink select error:', error)
+    return { outcome: 'error' }
+  }
+  if (!pro) return { outcome: 'error' }
+  if (!('stripe_connect_account_id' in pro)) return { outcome: 'not_ready' }
+
+  const accountId: string | null = (pro as any).stripe_connect_account_id || null
+  if (!accountId) return { outcome: 'no_account' }
+
+  try {
+    const stripe = getReferralStripe()
+    const loginLink = await stripe.accounts.createLoginLink(accountId)
+    return { outcome: 'ok', url: loginLink.url }
+  } catch (err) {
+    console.error('[referral-payment] createConnectLoginLink createLoginLink error:', err)
+    return { outcome: 'error' }
+  }
+}
+
+/**
  * ステージ4「Stripe Connect 口座登録導線」: 送り手プロの受け取り口座登録状況を返す。
  * - アカウント未作成: 'none'
  * - 作成済みだが本人確認未完了(`details_submitted`がfalse): 'pending'(登録を再開できる)
@@ -665,7 +714,9 @@ export async function applyReferralCheckoutSession(
   const { data: booking } = await supabase
     .from('referral_bookings')
     .select(
-      'id, payment_status, status, sender_pro_id, receiver_pro_id, client_id, client_email, preferred_slots, referral_lists(slug)'
+      // タスクA(2026-08-05・CEO指示): 受け手宛の成立メールに「当日クライアントから受け取る金額」を
+      // 追記するため、price_jpy/fee_total_bpsも取得する。
+      'id, payment_status, status, sender_pro_id, receiver_pro_id, client_id, client_email, price_jpy, fee_total_bps, preferred_slots, referral_lists(slug)'
     )
     .eq('id', bookingId)
     .maybeSingle()
@@ -728,6 +779,11 @@ export async function applyReferralCheckoutSession(
       .maybeSingle()
 
     if (receiverPro) {
+      // タスクA(2026-08-05・CEO指示): 予約金支払い完了時点のfee_total_bpsで内訳を確定する
+      // (このbooking固有の値・後から料率が変わっても遡及しない)。
+      const feeTotalBpsForNotify = booking.fee_total_bps ?? REFERRAL_FEE_TOTAL_BPS
+      const feeAmountJpyForNotify =
+        booking.price_jpy > 0 ? Math.floor((booking.price_jpy * feeTotalBpsForNotify) / 10000) : 0
       await notifyBookingPaymentCompletedToReceiver(
         {
           name: receiverPro.name,
@@ -735,7 +791,11 @@ export async function applyReferralCheckoutSession(
           line_messaging_user_id: receiverPro.line_messaging_user_id,
         },
         clientNickname,
-        { remindMissingLocationInfo: !hasProLocationInfo(receiverPro) }
+        {
+          remindMissingLocationInfo: !hasProLocationInfo(receiverPro),
+          priceJpy: booking.price_jpy,
+          feeAmountJpy: feeAmountJpyForNotify,
+        }
       )
     }
 

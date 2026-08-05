@@ -49,8 +49,12 @@ function isMissingSchemaError(err: { code?: string; message?: string } | null | 
  * 呼べるよう、作成/既に存在した(23505衝突)いずれの場合も payoutId を返す。分配対象外・エラー時は
  * payoutId: null(呼び出し元は送金を試みない・fail-soft・失敗しても完了処理自体は成功のまま)。
  * このファイル自体はStripeに触らない(既存規約通り)。
+ * CEO追加指示(2026-08-05): 完了通知(notifyBookingCompletedToSender)に送り手報酬額を載せるため、
+ * 戻り値に amountJpy(送り手取り分・分配対象外/エラー時はnull)を追加する(後方互換の追加フィールド)。
  */
-export async function createReferralPayoutIfEligible(bookingId: string): Promise<{ payoutId: string | null }> {
+export async function createReferralPayoutIfEligible(
+  bookingId: string
+): Promise<{ payoutId: string | null; amountJpy: number | null }> {
   try {
     const supabase = getSupabaseAdmin()
 
@@ -66,27 +70,27 @@ export async function createReferralPayoutIfEligible(bookingId: string): Promise
           `[referral-payout] createReferralPayoutIfEligible: schema not ready (fail-soft) for booking ${bookingId}:`,
           bookingError.message
         )
-        return { payoutId: null }
+        return { payoutId: null, amountJpy: null }
       }
       console.error(
         `[referral-payout] createReferralPayoutIfEligible: booking fetch error for ${bookingId}:`,
         bookingError.message
       )
-      return { payoutId: null }
+      return { payoutId: null, amountJpy: null }
     }
-    if (!booking) return { payoutId: null }
+    if (!booking) return { payoutId: null, amountJpy: null }
 
     // レビュー指摘(重大3a): cancelled等への誤計上防止。呼び出し元は完了更新の直後に呼ぶ想定だが、
     // 競合(その間に別経路がcancelledへ進めた等)に備えて必ずstatusを見る。
-    if (booking.status !== 'completed') return { payoutId: null }
+    if (booking.status !== 'completed') return { payoutId: null, amountJpy: null }
     // 対象条件: sender_pro_id有り かつ payment_status='paid'。not_required/null/フラグOFFは分配なし。
-    if (!booking.sender_pro_id) return { payoutId: null }
-    if (booking.payment_status !== 'paid') return { payoutId: null }
-    if (!(booking.price_jpy > 0)) return { payoutId: null }
+    if (!booking.sender_pro_id) return { payoutId: null, amountJpy: null }
+    if (booking.payment_status !== 'paid') return { payoutId: null, amountJpy: null }
+    if (!(booking.price_jpy > 0)) return { payoutId: null, amountJpy: null }
 
     // レビュー指摘(重大2): 予約ごとに固定された fee_sender_bps を使う(遡及適用禁止・指示書:275)。
     const feeSenderBps = booking.fee_sender_bps ?? REFERRAL_SENDER_SHARE_BPS
-    if (!(feeSenderBps > 0) || feeSenderBps >= 10000) return { payoutId: null }
+    if (!(feeSenderBps > 0) || feeSenderBps >= 10000) return { payoutId: null, amountJpy: null }
 
     const distribution = computeFeeDistribution(booking.price_jpy, [
       { proId: booking.sender_pro_id, role: 'sender', shareBps: feeSenderBps },
@@ -94,7 +98,7 @@ export async function createReferralPayoutIfEligible(bookingId: string): Promise
     ])
     const senderShare = distribution.find((d) => d.role === 'sender')
     const amountJpy = senderShare?.amountJpy ?? 0
-    if (amountJpy <= 0) return { payoutId: null }
+    if (amountJpy <= 0) return { payoutId: null, amountJpy: null }
 
     // 監査用: Stripeで実際に collect した予約金の総額(price_jpy*fee_total_bps/10000)。
     // amount_jpy(送り手取り分)とは別の値。fee_total_bps未設定行はREFERRAL_FEE_TOTAL_BPSへフォールバック。
@@ -121,25 +125,26 @@ export async function createReferralPayoutIfEligible(bookingId: string): Promise
           .select('id')
           .eq('booking_id', booking.id)
           .maybeSingle()
-        return { payoutId: existing?.id || null }
+        // 既に作成済み(冪等)なので、直前に算出したamountJpy(このbooking固有・決定論的)を返してよい。
+        return { payoutId: existing?.id || null, amountJpy }
       }
       if (isMissingSchemaError(insertError)) {
         console.error(
           `[referral-payout] createReferralPayoutIfEligible: schema not ready on insert (fail-soft) for booking ${bookingId}:`,
           insertError.message
         )
-        return { payoutId: null }
+        return { payoutId: null, amountJpy: null }
       }
       console.error(
         `[referral-payout] createReferralPayoutIfEligible: insert error for booking ${bookingId}:`,
         insertError.message
       )
-      return { payoutId: null }
+      return { payoutId: null, amountJpy: null }
     }
 
-    return { payoutId: insertedRows?.[0]?.id || null }
+    return { payoutId: insertedRows?.[0]?.id || null, amountJpy }
   } catch (err) {
     console.error(`[referral-payout] createReferralPayoutIfEligible: unexpected error for booking ${bookingId}:`, err)
-    return { payoutId: null }
+    return { payoutId: null, amountJpy: null }
   }
 }

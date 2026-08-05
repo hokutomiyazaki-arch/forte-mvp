@@ -157,6 +157,16 @@ export function isWithinClientRefundDeadline(slotIso: string | null | undefined,
 }
 
 /**
+ * レビュー指摘(中4・2026-08-05・単一情報源化): §2-4ステージ3(予約フィー方式)の予約フィー合計
+ * bps(basis points)のフォールバック値。CLIENT_CANCEL_REFUND_DEADLINE_DAYSと同じ理由(env非依存・
+ * クライアント側UIからも安全にimportできる)でこのファイルを本体とする。
+ * feature-flags.ts側は既存importの後方互換のためだけに再輸出する(新規呼び出しはここから
+ * 直接importすること)。3360のハードコード二重管理を解消する目的で追加(既存箇所は
+ * feature-flags.ts経由の再輸出でそのまま動く)。
+ */
+export const REFERRAL_FEE_TOTAL_BPS = 3360
+
+/**
  * ステージ4「自動送金」振込予定日の目安(CEO追加指示・2026-08-05): Stripe Transferはプラットフォーム
  * 残高から送り手のConnect口座へ即時に入るが、実際の銀行振込はStripe側の入金スケジュール
  * (日本のExpressは通常、数営業日周期)で行われるため正確な日付は取得できない。土日スキップのみの

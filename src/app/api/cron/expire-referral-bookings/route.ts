@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import {
-  notifyBookingExpiredToSender,
   notifyBookingPaymentExpiredToPro,
   notifyBookingCompletedToSender,
   notifyClientByEmail,
@@ -225,6 +224,8 @@ export async function GET(req: NextRequest) {
               console.error(`[cron/expire-referral-bookings] unpaid confirmed client notify error for ${row.id}:`, notifyErr)
             }
 
+            // CEO指示(2026-08-05): 未払い自動キャンセルの送り手宛通知は削減(成立通知前に消える
+            // ものは知らせない方針)。受け手宛は維持する。
             try {
               const receiverInfo = proMap2[row.receiver_pro_id]
               if (receiverInfo) {
@@ -235,18 +236,6 @@ export async function GET(req: NextRequest) {
                     line_messaging_user_id: receiverInfo.line_messaging_user_id,
                   },
                   clientNickname
-                )
-              }
-              const senderInfo = row.sender_pro_id ? proMap2[row.sender_pro_id] : null
-              if (senderInfo) {
-                await notifyBookingPaymentExpiredToPro(
-                  {
-                    name: senderInfo.name,
-                    contact_email: senderInfo.contact_email,
-                    line_messaging_user_id: senderInfo.line_messaging_user_id,
-                  },
-                  clientNickname,
-                  { forSender: true }
                 )
               }
             } catch (notifyErr) {
@@ -419,9 +408,12 @@ export async function GET(req: NextRequest) {
 
             // ステージ4(送り手分配・CEO決定): 自動完了確定の直後に分配行を作成する(fail-soft)。
             let autoCompletePayoutId: string | null = null
+            // CEO指示(2026-08-05): 完了通知に報酬額を載せるため保持する(分配対象外はnullのまま)。
+            let autoCompletePayoutAmountJpy: number | null = null
             try {
               const payoutResult = await createReferralPayoutIfEligible(row.id)
               autoCompletePayoutId = payoutResult.payoutId
+              autoCompletePayoutAmountJpy = payoutResult.amountJpy
             } catch (payoutErr) {
               console.error(`[cron/expire-referral-bookings] auto-complete payout create error for ${row.id}:`, payoutErr)
             }
@@ -448,7 +440,8 @@ export async function GET(req: NextRequest) {
                     line_messaging_user_id: senderInfo.line_messaging_user_id,
                   },
                   clientNickname,
-                  receiverName
+                  receiverName,
+                  autoCompletePayoutAmountJpy
                 )
               } catch (notifyErr) {
                 console.error(`[cron/expire-referral-bookings] auto-complete sender notify error for ${row.id}:`, notifyErr)
@@ -621,25 +614,8 @@ export async function GET(req: NextRequest) {
           console.error(`[cron/expire-referral-bookings] client notify error for ${row.id}:`, notifyErr)
         }
 
-        // 送り手プロへ通知
-        try {
-          const senderInfo = row.sender_pro_id ? proMap[row.sender_pro_id] : null
-          if (senderInfo) {
-            await notifyBookingExpiredToSender(
-              {
-                name: senderInfo.name,
-                contact_email: senderInfo.contact_email,
-                line_messaging_user_id: senderInfo.line_messaging_user_id,
-              },
-              clientNickname,
-              receiverName,
-              listUrl,
-              { hadCounterProposal }
-            )
-          }
-        } catch (notifyErr) {
-          console.error(`[cron/expire-referral-bookings] sender notify error for ${row.id}:`, notifyErr)
-        }
+        // CEO指示(2026-08-05): 送り手プロ宛の48時間失効通知は削減(クリティカルな結果のみに絞る)。
+        // クライアント宛の失効メール(上記)は維持する。
       } catch (rowErr) {
         console.error(`[cron/expire-referral-bookings] row error for ${row.id}:`, rowErr)
       }

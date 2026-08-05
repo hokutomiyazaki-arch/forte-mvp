@@ -3,7 +3,6 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { formatSlotWithWeekday, buildGoogleCalendarUrl, resolveConfirmedSlotIso } from '@/lib/referral-format'
 import {
   notifyRescheduleConfirmedToReceiver,
-  notifyRescheduleConfirmedToSender,
   notifyRescheduleKeptCurrentToReceiver,
   notifyRescheduleConfirmedToClient,
 } from '@/lib/referral-notify'
@@ -166,28 +165,8 @@ export async function POST(request: NextRequest, { params }: { params: { booking
       console.error('[api/referral/bookings/[booking_id]/reschedule-respond] receiver notify error:', notifyErr)
     }
 
-    try {
-      if (booking.sender_pro_id) {
-        const { data: senderPro } = await supabase
-          .from('professionals')
-          .select('name, contact_email, line_messaging_user_id')
-          .eq('id', booking.sender_pro_id)
-          .maybeSingle()
-        if (senderPro) {
-          await notifyRescheduleConfirmedToSender(
-            {
-              name: senderPro.name,
-              contact_email: senderPro.contact_email,
-              line_messaging_user_id: senderPro.line_messaging_user_id,
-            },
-            clientNickname,
-            newSlotText
-          )
-        }
-      }
-    } catch (notifyErr) {
-      console.error('[api/referral/bookings/[booking_id]/reschedule-respond] sender notify error:', notifyErr)
-    }
+    // CEO指示(2026-08-05): 送り手プロ宛の日時変更確定通知は削減(クリティカルな結果のみに絞る)。
+    // 受け手・クライアント宛は維持する。
 
     try {
       if (clientUserId || booking.client_email) {

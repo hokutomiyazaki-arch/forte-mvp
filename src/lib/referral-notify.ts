@@ -10,6 +10,11 @@
  * (呼び出し側で try/catch する前提)。
  *
  * PII注意: 通知文面に normalized_email 等は含めない。
+ *
+ * 送り手プロ向け通知の方針(2026-08-05・CEO決定): 進捗系(辞退・別日時提案・失効・日時変更確定等)は
+ * リンクを付けず削減し、クリティカルな結果(成立・完了・キャンセル・送金)のみ通知する。
+ * ★例外: セッション完了通知(notifyBookingCompletedToSender)はお金が動くクリティカル通知のため、
+ * 「送り手宛はリンク無し」規約の例外としてダッシュボードへのリンクを付ける。
  */
 
 import { clerkClient } from '@clerk/nextjs/server'
@@ -115,7 +120,13 @@ export function buildBookingLocationContactHtml(pro: ProAccessInfo): string {
   return html
 }
 
-function emailShell(title: string, bodyHtml: string, ctaText?: string, ctaUrl?: string): string {
+/**
+ * CEO指摘(2026-08-05): CTAボタン(ctaText/ctaUrl)があるメールで、リストリンク等の付随リンクを
+ * bodyHtml末尾に連結すると、描画順(bodyHtml→CTA)によりCTAボタンより上にリンクが来てしまう。
+ * `afterCtaHtml`はCTAブロックの後ろに描画する第5引数(省略可・既存呼び出しへの後方互換を維持)。
+ * CTAが無いメールはbodyHtml末尾に付随リンクを連結する既存のやり方のままでよい。
+ */
+function emailShell(title: string, bodyHtml: string, ctaText?: string, ctaUrl?: string, afterCtaHtml?: string): string {
   return `
     <div style="max-width:480px;margin:0 auto;font-family:sans-serif;">
       <div style="background:#1A1A2E;padding:24px;border-radius:12px 12px 0 0;">
@@ -136,6 +147,14 @@ function emailShell(title: string, bodyHtml: string, ctaText?: string, ctaUrl?: 
                   ${ctaText || ''}
                 </a>
               </div>`
+            : ''
+        }
+        ${
+          // 軽微(レビュー指摘): afterCtaHtmlの内容(referralListFooterHtml等)は先頭に
+          // <br><br>を含む前提(bodyHtml末尾への連結を想定した形)のため、<p>自体の既定マージンを
+          // margin:0で無効化し、二重の余白(<p>のマージン+<br><br>)を防ぐ。
+          afterCtaHtml
+            ? `<p style="color:#333;font-size:14px;line-height:1.7;margin:0;">${afterCtaHtml}</p>`
             : ''
         }
       </div>
@@ -262,27 +281,43 @@ export async function notifyBookingConfirmedToSender(
 export async function notifyBookingPaymentCompletedToReceiver(
   target: ProNotifyTarget,
   clientNickname: string,
-  /**
-   * CEO決定(2026-08-04): 場所情報(住所/最寄駅/アクセスメモ/地図)が未設定のプロの場合のみ、
-   * クライアントへの当日案内を別途連絡するよう促す(クライアント宛メールに場所が載らないため)。
-   */
-  opts?: { remindMissingLocationInfo?: boolean },
+  opts?: {
+    /**
+     * CEO決定(2026-08-04): 場所情報(住所/最寄駅/アクセスメモ/地図)が未設定のプロの場合のみ、
+     * クライアントへの当日案内を別途連絡するよう促す(クライアント宛メールに場所が載らないため)。
+     */
+    remindMissingLocationInfo?: boolean
+    /**
+     * タスクA(2026-08-05・CEO指示・後方互換の追加引数): 「当日クライアントから受け取る金額」を
+     * 追記するためのセッション料金・予約金(いずれも渡された場合のみ表示。受け手のみに出す・
+     * 送り手・クライアントには出さない方針)。
+     */
+    priceJpy?: number | null
+    feeAmountJpy?: number | null
+  },
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
   const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
   const safeClientNickname = escapeHtml(clientNickname)
   const reminder = opts?.remindMissingLocationInfo
     ? 'プロフィールに場所情報が未設定のため、クライアントへ当日の場所をお伝えください。'
     : ''
+  // タスクA(2026-08-05・CEO指示): 当日受取額の内訳(ReferralBookingReceivedCardの
+  // formatReceiverTodayAmountTextと同じ考え方・単一情報源はここではなく各呼び出し元が算出済みの
+  // feeAmountJpyを渡す形。priceJpy/feeAmountJpyのいずれも無ければ表示しない)。
+  const amountText =
+    typeof opts?.priceJpy === 'number' && opts.priceJpy > 0 && typeof opts?.feeAmountJpy === 'number' && opts.feeAmountJpy > 0
+      ? `当日クライアントから受け取る金額: ¥${(opts.priceJpy - opts.feeAmountJpy).toLocaleString('ja-JP')}(セッション料金 ¥${opts.priceJpy.toLocaleString('ja-JP')} − 予約金 ¥${opts.feeAmountJpy.toLocaleString('ja-JP')})`
+      : ''
   // §2-4ステージ3(決済確認後の連絡先開示・CEO決定): 決済確認がとれたこの時点から
   // クライアントの連絡先(氏名・電話番号・メール)がダッシュボードで開示される。
   // ただしメール本文には電話番号等のPIIを直接書かない(メールは転送・誤送信リスクがあるため
   // 参照導線のみとする。実際の値はダッシュボードのAPI経由でのみ表示する)。
   return sendProNotification(target, {
-    lineText: `${clientNickname}さんのお支払いが完了し、紹介予約が成立しました。クライアントの連絡先はダッシュボードでご確認ください。${reminder ? ' ' + reminder : ''}\n${dashboardUrl}`,
+    lineText: `${clientNickname}さんのお支払いが完了し、紹介予約が成立しました。クライアントの連絡先はダッシュボードでご確認ください。${amountText ? ' ' + amountText : ''}${reminder ? ' ' + reminder : ''}\n${dashboardUrl}`,
     emailSubject: 'お支払いが完了し、紹介予約が成立しました',
     emailBodyHtml: emailShell(
       '紹介予約成立のお知らせ',
-      `${safeClientNickname}さんのお支払いが完了し、紹介予約が成立しました。<br>クライアントの連絡先はダッシュボードでご確認ください。${reminder ? `<br>${reminder}` : ''}`,
+      `${safeClientNickname}さんのお支払いが完了し、紹介予約が成立しました。<br>クライアントの連絡先はダッシュボードでご確認ください。${amountText ? `<br>${amountText}` : ''}${reminder ? `<br>${reminder}` : ''}`,
       'ダッシュボードを開く',
       dashboardUrl,
     ),
@@ -291,59 +326,22 @@ export async function notifyBookingPaymentCompletedToReceiver(
 
 /**
  * §2-4ステージ3(予約フィー方式): 確定後24時間以内に予約フィーの支払いが確認できず自動キャンセルに
- * なった際、受け手・送り手の両プロへ通知する(役割で文面を分けない汎用文言)。
+ * なった際、受け手プロへ通知する。
+ * CEO指示(2026-08-05・通知削減): 送り手宛は削減した(成立通知前に消えるものは知らせない方針)。
+ * このため`forSender`オプションは撤去し、受け手向けの文言に一本化する(受け手宛でのみ使用)。
  */
 export async function notifyBookingPaymentExpiredToPro(
   target: ProNotifyTarget,
   clientNickname: string,
-  /** CEO指摘(2026-08-04): 送り手宛は「あなたが紹介した◯◯さん」と主語を明示する(受け手と文面を分ける)。 */
-  opts?: { forSender?: boolean },
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
   const safeClientNickname = escapeHtml(clientNickname)
-  const subjectText = opts?.forSender
-    ? `あなたが紹介した${clientNickname}さんの紹介予約は`
-    : `${clientNickname}さんとの紹介予約は`
-  const safeSubjectText = opts?.forSender
-    ? `あなたが紹介した${safeClientNickname}さんの紹介予約は`
-    : `${safeClientNickname}さんとの紹介予約は`
   return sendProNotification(target, {
-    lineText: `${subjectText}、お支払いが確認できなかったため自動的にキャンセルされました。`,
+    lineText: `${clientNickname}さんとの紹介予約は、お支払いが確認できなかったため自動的にキャンセルされました。`,
     emailSubject: '紹介予約がキャンセルされました',
     emailBodyHtml: emailShell(
       '紹介予約キャンセルのお知らせ',
-      `${safeSubjectText}、お支払いが確認できなかったため自動的にキャンセルされました。`,
+      `${safeClientNickname}さんとの紹介予約は、お支払いが確認できなかったため自動的にキャンセルされました。`,
     ),
-  })
-}
-
-/**
- * §2-4: 48時間自動失効時、送り手プロへ通知する。
- */
-export async function notifyBookingExpiredToSender(
-  target: ProNotifyTarget,
-  clientNickname: string,
-  receiverProName: string,
-  listUrl: string,
-  /**
-   * レビューFAIL修正(中2): counter_slots(逆指定の提案)が有る状態で失効した場合、
-   * 「受け手が確定しなかった」ではなく「クライアントが返答しなかった」が真因のため文言を分岐する。
-   */
-  opts?: { hadCounterProposal?: boolean },
-): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const safeClientNickname = escapeHtml(clientNickname)
-  const safeReceiverProName = escapeHtml(receiverProName)
-  // CEO決定(2026-08-04): 送り手宛の進捗通知にはリンクを付けない(listUrl引数は互換のため残置)
-  void listUrl
-  const bodyHtml = opts?.hadCounterProposal
-    ? `あなたが紹介した${safeClientNickname}さんから提案日時への返答が48時間以内になく、${safeReceiverProName}さんへの紹介予約のリクエストは失効しました。<br>別の候補もご紹介いただけます。`
-    : `あなたが紹介した${safeClientNickname}さんの${safeReceiverProName}さんへの紹介予約のリクエストは、48時間以内に確定のご連絡がなかったため失効しました。<br>別の候補もご紹介いただけます。`
-  const lineText = opts?.hadCounterProposal
-    ? `あなたが紹介した${clientNickname}さんから提案日時への返答がなく、${receiverProName}さんへの紹介予約のリクエストは48時間で失効しました。`
-    : `あなたが紹介した${clientNickname}さんの${receiverProName}さんへの紹介予約のリクエストが、48時間以内に確定されなかったため失効しました。`
-  return sendProNotification(target, {
-    lineText,
-    emailSubject: '紹介予約のリクエストが失効しました',
-    emailBodyHtml: emailShell('紹介予約リクエスト失効のお知らせ', bodyHtml),
   })
 }
 
@@ -433,65 +431,39 @@ export function referralListFooterHtml(listUrl: string, label = '紹介リスト
 }
 
 /**
- * ライフサイクル改善(タスクD): 受け手が辞退した際、送り手プロへ通知する。
- */
-export async function notifyBookingDeclinedToSender(
-  target: ProNotifyTarget,
-  receiverProName: string,
-  clientNickname: string,
-): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  // CEO決定(2026-08-04): 送り手宛の進捗通知にはリンクを付けない・「あなたが紹介した◯◯さん」と主語を明示
-  const safeReceiverProName = escapeHtml(receiverProName)
-  const safeClientNickname = escapeHtml(clientNickname)
-  return sendProNotification(target, {
-    lineText: `あなたが紹介した${clientNickname}さんのご相談を、${receiverProName}さんが辞退しました。`,
-    emailSubject: `ご紹介先の${receiverProName}さんが辞退しました`,
-    emailBodyHtml: emailShell(
-      '辞退のお知らせ',
-      `あなたが紹介した${safeClientNickname}さんのご相談を、${safeReceiverProName}さんが辞退しました。`,
-    ),
-  })
-}
-
-/**
- * ライフサイクル改善(タスクA/D・逆指定): 受け手が別日時を提案した際、送り手プロへ通知する。
- */
-export async function notifyBookingCounterProposedToSender(
-  target: ProNotifyTarget,
-  receiverProName: string,
-  clientNickname: string,
-): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  // CEO決定(2026-08-04): 送り手宛の進捗通知にはリンクを付けない・「あなたが紹介した◯◯さん」と主語を明示
-  const safeReceiverProName = escapeHtml(receiverProName)
-  const safeClientNickname = escapeHtml(clientNickname)
-  return sendProNotification(target, {
-    lineText: `あなたが紹介した${clientNickname}さんへ、${receiverProName}さんが別の日時を提案しました(${clientNickname}さんの返答待ち)。`,
-    emailSubject: `ご紹介先の${receiverProName}さんが別日時を提案しました`,
-    emailBodyHtml: emailShell(
-      '別日時提案のお知らせ',
-      `あなたが紹介した${safeClientNickname}さんへ、${safeReceiverProName}さんが別の日時を提案しました。<br>${safeClientNickname}さんの返答待ちです。`,
-    ),
-  })
-}
-
-/**
  * ライフサイクル改善(タスクD): 紹介セッション完了時、送り手プロへ通知する。
+ * CEO決定(2026-08-04): 送り手宛の進捗通知にはリンクを付けない・「あなたが紹介した◯◯さん」と主語を明示
+ * (旧文言「◯◯さんとのセッションが完了しました」は送り手自身のセッションに読めた)。
+ * ★例外(2026-08-05・CEO指示): 完了通知はお金が動くクリティカル通知のため、「送り手宛はリンク無し」
+ * 規約の例外としてダッシュボードへのリンクを付ける(報酬確定の確認導線)。
+ * payoutAmountJpy(2026-08-05・CEO指示・後方互換の追加引数): 分配対象(予約金の支払いがあった案件)の
+ * 場合のみ createReferralPayoutIfEligible の戻り値から渡す。null/未指定(分配対象外)の場合は
+ * 金額・報酬確定の文言自体を出さず、従来の完了文言+リンクのみにする。
  */
 export async function notifyBookingCompletedToSender(
   target: ProNotifyTarget,
   clientNickname: string,
   receiverProName: string,
+  payoutAmountJpy?: number | null,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  // CEO決定(2026-08-04): 送り手宛の進捗通知にはリンクを付けない・「あなたが紹介した◯◯さん」と主語を明示
-  // (旧文言「◯◯さんとのセッションが完了しました」は送り手自身のセッションに読めた)
   const safeClientNickname = escapeHtml(clientNickname)
   const safeReceiverProName = escapeHtml(receiverProName)
+  const casesUrl = `${APP_URL}/dashboard?tab=referral&sub=cases`
+  const rewardPart =
+    typeof payoutAmountJpy === 'number' && payoutAmountJpy > 0
+      ? `紹介報酬 ¥${payoutAmountJpy.toLocaleString('ja-JP')} が確定しました。送金状況はダッシュボードの「紹介した案件」でご確認ください。`
+      : ''
   return sendProNotification(target, {
-    lineText: `あなたが紹介した${clientNickname}さんと${receiverProName}さんのセッションが完了しました。`,
+    lineText:
+      `あなたが紹介した${clientNickname}さんと${receiverProName}さんのセッションが完了しました。` +
+      (rewardPart ? `${rewardPart}\n${casesUrl}` : `\n${casesUrl}`),
     emailSubject: `あなたが紹介した${clientNickname}さんのセッションが完了しました`,
     emailBodyHtml: emailShell(
       'セッション完了のお知らせ',
-      `あなたが紹介した${safeClientNickname}さんと${safeReceiverProName}さんのセッションが完了しました。`,
+      `あなたが紹介した${safeClientNickname}さんと${safeReceiverProName}さんのセッションが完了しました。` +
+        (rewardPart ? `<br>${rewardPart}` : ''),
+      '紹介した案件を開く',
+      casesUrl,
     ),
   })
 }
@@ -631,10 +603,11 @@ export async function notifyCounterProposedToClient(
       '別日時のご提案',
       `ご希望の日時では難しいため、${safeReceiverProName}さんから別の日時のご提案があります。` +
         `<ul style="padding-left:18px;margin:12px 0;">${slotListHtml}</ul>` +
-        `<strong>48時間以内</strong>にご返答がない場合は無効になります。` +
-        referralListFooterHtml(listUrl),
+        `<strong>48時間以内</strong>にご返答がない場合は無効になります。`,
       'ご希望の日時を選ぶ',
       bookingUrl,
+      // CEO指摘(2026-08-05): リストリンクはCTAボタンより下に来るようafterCtaHtmlへ移す。
+      referralListFooterHtml(listUrl),
     ),
   )
 }
@@ -782,10 +755,11 @@ export async function notifyRescheduleProposedToClient(
       '日時変更のお願い',
       `${safeReceiverProName}さんの都合により、確定済みの日時${currentPart}でのご対応が難しくなりました。大変申し訳ありませんが、以下の候補から新しい日時をお選びください。` +
         `<ul style="padding-left:18px;margin:12px 0;">${slotListHtml}</ul>` +
-        `いずれの日時もご都合が合わない場合は、予約成立時のメールに記載のご連絡先へ直接ご相談ください。` +
-        referralListFooterHtml(listUrl),
+        `いずれの日時もご都合が合わない場合は、予約成立時のメールに記載のご連絡先へ直接ご相談ください。`,
       '新しい日時を選ぶ',
       bookingUrl,
+      // CEO指摘(2026-08-05): リストリンクはCTAボタンより下に来るようafterCtaHtmlへ移す。
+      referralListFooterHtml(listUrl),
     ),
   )
 }
@@ -810,27 +784,6 @@ export async function notifyRescheduleConfirmedToReceiver(
       `${safeClientNickname}さんが新しい日時を選びました(${slotPart})。`,
       'ダッシュボードを開く',
       dashboardUrl,
-    ),
-  })
-}
-
-/**
- * タスクB: 受け手が提案した日時変更をクライアントが承諾した際、送り手プロへ通知する。
- * CEO決定(2026-08-04): 送り手宛の進捗通知にはリンクを付けない・「あなたが紹介した◯◯さん」と主語を明示。
- */
-export async function notifyRescheduleConfirmedToSender(
-  target: ProNotifyTarget,
-  clientNickname: string,
-  newSlotText: string | null,
-): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const safeClientNickname = escapeHtml(clientNickname)
-  const slotPart = newSlotText ? `(新日時: ${newSlotText})` : ''
-  return sendProNotification(target, {
-    lineText: `あなたが紹介した${clientNickname}さんの紹介予約の日時が変更になりました${slotPart}`,
-    emailSubject: 'あなたの紹介予約の日時が変更になりました',
-    emailBodyHtml: emailShell(
-      '日時変更のお知らせ',
-      `あなたが紹介した${safeClientNickname}さんの紹介予約の日時が変更になりました。${newSlotText ? `<br>新日時: ${escapeHtml(newSlotText)}` : ''}`,
     ),
   })
 }

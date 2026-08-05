@@ -146,6 +146,9 @@ export default function Navbar() {
           {isPro && (
             <a href="/support/badge-guide" onClick={closeMenu} style={menuLinkStyle}>認定バッジの使い方</a>
           )}
+          {isPro && (
+            <a href="/support/referral-guide" onClick={closeMenu} style={menuLinkStyle}>紹介のしくみガイド</a>
+          )}
           <a href="/for-stores" onClick={closeMenu} style={menuLinkStyle}>店舗・団体の方へ</a>
           <a href="/announcements" onClick={closeMenu} style={{ ...menuLinkStyle, display: 'flex', alignItems: 'center', gap: 6 }}>
             🔔 お知らせ

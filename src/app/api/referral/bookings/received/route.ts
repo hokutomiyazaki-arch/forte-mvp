@@ -3,8 +3,6 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { getOwnPro } from '@/lib/referral-auth'
 import {
   notifyBookingConfirmedToSender,
-  notifyBookingDeclinedToSender,
-  notifyBookingCounterProposedToSender,
   notifyBookingCompletedToSender,
   notifyCounterProposedToClient,
   notifyClientByEmail,
@@ -181,8 +179,10 @@ export async function GET() {
     // レスポンスに含める(このAPI内で組み立てる。selectはPII開示制御の対象ではなく、
     // レスポンス組み立て側でゲートする)。
     const paymentEnabled = isReferralPaymentEnabled()
+    // タスクA(2026-08-05・CEO指示): fee_total_bpsは受け手側の「当日クライアントから受け取る金額」
+    // 表示に使う(migration 032由来・DEFAULT付きの既存カラムのためpaymentEnabledゲート不要)。
     const baseBookingSelect =
-      'id, list_id, sender_pro_id, receiver_pro_id, client_id, client_name, client_phone, client_email, menu_id, theme_tags, preferred_slots, status, price_jpy, expires_at, confirmed_at, completed_at, created_at, clients(id, nickname), referral_lists(id, slug, comment), pro_menus(name)'
+      'id, list_id, sender_pro_id, receiver_pro_id, client_id, client_name, client_phone, client_email, menu_id, theme_tags, preferred_slots, status, price_jpy, fee_total_bps, expires_at, confirmed_at, completed_at, created_at, clients(id, nickname), referral_lists(id, slug, comment), pro_menus(name)'
     const bookingSelect = paymentEnabled ? `${baseBookingSelect}, payment_status` : baseBookingSelect
     const { data: bookings, error } = await supabase
       .from('referral_bookings')
@@ -298,6 +298,8 @@ export async function GET() {
       preferred_slots: b.preferred_slots,
       status: b.status,
       price_jpy: b.price_jpy,
+      // タスクA(2026-08-05・CEO指示): 「当日クライアントから受け取る金額」表示用。
+      fee_total_bps: b.fee_total_bps ?? null,
       // §2-4ステージ3: 決済有効時のみpayment_status(状態のみ)を返す。金額は含めない。
       payment_status: paymentEnabled ? b.payment_status || null : null,
       handover_note: handoverMap[b.id] || null,
@@ -455,9 +457,12 @@ export async function PATCH(request: NextRequest) {
 
       // ステージ4(送り手分配・CEO決定): 完了確定の直後に分配行を作成する(fail-soft・失敗しても完了処理自体は成功扱い)。
       let payoutIdForTransfer: string | null = null
+      // CEO指示(2026-08-05): 完了通知に報酬額を載せるため保持する(分配対象外はnullのまま)。
+      let payoutAmountJpyForNotify: number | null = null
       try {
         const payoutResult = await createReferralPayoutIfEligible(bookingId)
         payoutIdForTransfer = payoutResult.payoutId
+        payoutAmountJpyForNotify = payoutResult.amountJpy
       } catch (payoutErr) {
         console.error('[api/referral/bookings/received] complete payout create error:', payoutErr)
       }
@@ -490,6 +495,7 @@ export async function PATCH(request: NextRequest) {
               },
               booking.clients?.nickname || 'クライアント',
               ownPro.name,
+              payoutAmountJpyForNotify,
             )
           }
         }
@@ -890,29 +896,7 @@ export async function PATCH(request: NextRequest) {
         console.error('[api/referral/bookings/received] decline notify error:', notifyErr)
       }
 
-      // 送り手プロへ通知(タスクD・失敗しても処理自体は成功扱い)
-      try {
-        if (booking.sender_pro_id) {
-          const { data: senderPro } = await supabase
-            .from('professionals')
-            .select('name, contact_email, line_messaging_user_id')
-            .eq('id', booking.sender_pro_id)
-            .maybeSingle()
-          if (senderPro) {
-            await notifyBookingDeclinedToSender(
-              {
-                name: senderPro.name,
-                contact_email: senderPro.contact_email,
-                line_messaging_user_id: senderPro.line_messaging_user_id,
-              },
-              ownPro.name,
-              clientNickname,
-            )
-          }
-        }
-      } catch (notifyErr) {
-        console.error('[api/referral/bookings/received] decline sender notify error:', notifyErr)
-      }
+      // CEO指示(2026-08-05): 送り手プロ宛の辞退通知は削減(クリティカルな結果のみに絞る)。
 
       return NextResponse.json({ success: true, status: 'cancelled' })
     }
@@ -984,29 +968,7 @@ export async function PATCH(request: NextRequest) {
         console.error('[api/referral/bookings/received] counter client notify error:', notifyErr)
       }
 
-      // 送り手プロへ通知(クライアントの返答待ちであることを明示)
-      try {
-        if (booking.sender_pro_id) {
-          const { data: senderPro } = await supabase
-            .from('professionals')
-            .select('name, contact_email, line_messaging_user_id')
-            .eq('id', booking.sender_pro_id)
-            .maybeSingle()
-          if (senderPro) {
-            await notifyBookingCounterProposedToSender(
-              {
-                name: senderPro.name,
-                contact_email: senderPro.contact_email,
-                line_messaging_user_id: senderPro.line_messaging_user_id,
-              },
-              ownPro.name,
-              clientNickname,
-            )
-          }
-        }
-      } catch (notifyErr) {
-        console.error('[api/referral/bookings/received] counter sender notify error:', notifyErr)
-      }
+      // CEO指示(2026-08-05): 送り手プロ宛の別日時提案(返答待ち)通知は削減(クリティカルな結果のみに絞る)。
 
       return NextResponse.json({ success: true, status: 'requested', counter_proposed: true })
     }

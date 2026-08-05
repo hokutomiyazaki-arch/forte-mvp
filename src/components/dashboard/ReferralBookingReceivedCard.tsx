@@ -9,6 +9,7 @@ import {
   snapToHalfHourUp,
   isPastDatetimeLocalValue,
   buildHalfHourTimeOptions,
+  REFERRAL_FEE_TOTAL_BPS,
 } from '@/lib/referral-format'
 import BookingThread from '@/components/dashboard/BookingThread'
 // カード化(2026-08-05・CEO指示): クライアント向けフォームと同じSlotCardGroup(第1〜第3希望の
@@ -17,6 +18,29 @@ import SlotCardGroup from '@/components/referral/SlotCardGroup'
 
 /** 日時ピッカー設計最終版: プロ側counter/reschedule共通の時刻選択肢(06:00〜23:30の全域)。 */
 const PRO_SLOT_TIME_OPTIONS = buildHalfHourTimeOptions('06:00', '24:00')
+
+/**
+ * タスクA(2026-08-05・CEO指示): 受け手が「当日クライアントから受け取る金額」の表示文言を組み立てる。
+ * 予約金が発生する予約(payment_status が unpaid/awaiting/paid)は、セッション料金から予約金を
+ * 引いた当日受領額+内訳を表示する。'unpaid'はrequestedカード(確定前・まだ決済リンク未発行)の
+ * 実際の値であり、確定すれば必ず予約金が発生するため「発生している予約」に含める
+ * (confirmedカードでは'awaiting'/'paid'に進む)。not_required/null(予約金なし・全額当日受領)は
+ * セッション料金そのものを注釈なしで表示する。fee_total_bpsは単一情報源(referral-format.ts の
+ * REFERRAL_FEE_TOTAL_BPS)へフォールバックする(レビュー指摘・中4: 3360のハードコード二重管理を解消)。
+ */
+function formatReceiverTodayAmountText(priceJpy: number, feeTotalBps: number | null | undefined, paymentStatus: string | null | undefined): string | null {
+  if (!priceJpy || priceJpy <= 0) return null
+  const hasDeposit = paymentStatus === 'unpaid' || paymentStatus === 'awaiting' || paymentStatus === 'paid'
+  if (!hasDeposit) {
+    return `当日クライアントから受け取る金額: ¥${priceJpy.toLocaleString('ja-JP')}`
+  }
+  const feeAmountJpy = Math.floor((priceJpy * (feeTotalBps ?? REFERRAL_FEE_TOTAL_BPS)) / 10000)
+  if (feeAmountJpy <= 0) {
+    return `当日クライアントから受け取る金額: ¥${priceJpy.toLocaleString('ja-JP')}`
+  }
+  const receiveAmountJpy = priceJpy - feeAmountJpy
+  return `当日クライアントから受け取る金額: ¥${receiveAmountJpy.toLocaleString('ja-JP')}(セッション料金 ¥${priceJpy.toLocaleString('ja-JP')} − 予約金 ¥${feeAmountJpy.toLocaleString('ja-JP')})`
+}
 
 interface BookingItem {
   id: string
@@ -45,6 +69,8 @@ interface BookingItem {
   } | null
   status: 'requested' | 'confirmed'
   price_jpy: number
+  /** タスクA(2026-08-05・CEO指示): 「当日クライアントから受け取る金額」計算用(migration 032由来)。 */
+  fee_total_bps?: number | null
   /** §2-4ステージ3(予約フィー方式): 決済有効時のみ入る。金額は含まれない(status相当のみ)。 */
   payment_status?: string | null
   handover_note: { theme?: string; history?: string; tried?: string; notes?: string } | null
@@ -476,6 +502,8 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
         const counterProposed = (item.preferred_slots?.counter_slots?.length || 0) > 0
         const isCounterOpen = counterOpenId === item.id
         const counterInput = counterInputs[item.id] || ['', '', '']
+        // 軽微(レビュー指摘): 同じ算出を2回呼ばないようconstに固定する。
+        const receiverTodayAmountText = formatReceiverTodayAmountText(item.price_jpy, item.fee_total_bps, item.payment_status)
         return (
           <div
             key={item.id}
@@ -503,6 +531,12 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
             {theme && <div style={{ fontSize: 13, color: '#555', marginBottom: 4 }}>テーマ: {theme}</div>}
             {item.menu_name && <div style={{ fontSize: 13, color: '#555', marginBottom: 4 }}>メニュー: {item.menu_name}</div>}
             {note && <div style={{ fontSize: 13, color: '#555', marginBottom: 8 }}>補足: {note}</div>}
+            {/* タスクA(2026-08-05・CEO指示): 確定判断の材料として、requestedカードにも当日受取額を出す。 */}
+            {receiverTodayAmountText && (
+              <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 8 }}>
+                {receiverTodayAmountText}
+              </div>
+            )}
 
             {counterProposed ? (
               <>
@@ -704,6 +738,8 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
           // 判別に使えない(偽陰性の原因)。reschedule_kept_current_at専用マーカーで判別する
           // (reschedule-respond側で解決の都度セット/nullで明示的に上書きされる)。
           const clientKeptCurrentSlot = !!item.preferred_slots?.reschedule_kept_current_at
+          // 軽微(レビュー指摘): 同じ算出を2回呼ばないようconstに固定する。
+          const receiverTodayAmountText = formatReceiverTodayAmountText(item.price_jpy, item.fee_total_bps, item.payment_status)
           // CEO追加指示(2026-08-04): プロ側にもGoogleカレンダー追加リンクを出す。支払い待ち(awaiting)
           // 中はまだ成立していないため非表示、確定日時が解決できない場合も非表示(buildGoogleCalendarUrl
           // 自体もinvalid ISOでnullを返す・env非依存でclientからimport可能)。
@@ -787,6 +823,12 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
             {confirmedSlotText && (
               <div style={{ fontSize: 20, fontWeight: 800, color: '#1A6B3C', marginTop: 6, lineHeight: 1.4 }}>
                 {confirmedSlotText}
+              </div>
+            )}
+            {/* タスクA(2026-08-05・CEO指示): 確定日時のすぐ下に当日の受取額を表示する。 */}
+            {receiverTodayAmountText && (
+              <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>
+                {receiverTodayAmountText}
               </div>
             )}
             {/* CEO追加指示(2026-08-04): プロ側のGoogleカレンダー追加リンク(控えめなテキストリンク)。 */}

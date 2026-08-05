@@ -82,9 +82,11 @@ export const REFERRAL_MIN_FEE_JPY = 50
  * referral_bookings.fee_total_bpsが未設定の行向けのフォールバックとして、bookings作成時・
  * received/accept確定時・cron再試行・決済リンク再取得(getOrCreateFeePaymentLink)の
  * 複数ファイルでこの値を共有する(リテラル二重管理の解消・レビュー指摘・軽微8)。
- * ★ REFERRAL_MIN_FEE_JPYと同じ理由でこのファイルに置く(Stripe importを持たない)。
+ * レビュー指摘(中4・2026-08-05): 本体は`src/lib/referral-format.ts`(env非依存・
+ * CLIENT_CANCEL_REFUND_DEADLINE_DAYSと同じパターン)に移動した。このファイルは
+ * 既存importの後方互換のためだけに再輸出する(新規呼び出しはreferral-format.tsから直接importすること)。
  */
-export const REFERRAL_FEE_TOTAL_BPS = 3360
+export { REFERRAL_FEE_TOTAL_BPS } from '@/lib/referral-format'
 
 /**
  * §2-4ステージ3: 確定後、予約フィー決済が無ければ自動キャンセルするまでの猶予時間(時間)。

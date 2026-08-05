@@ -282,6 +282,9 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
   const [connectStatusLoaded, setConnectStatusLoaded] = useState(false)
   const [connectOnboarding, setConnectOnboarding] = useState(false)
   const [connectError, setConnectError] = useState<string | null>(null)
+  // 口座管理導線(2026-08-05・CEO指示): ログインリンクはワンタイムのためキャッシュせず、
+  // クリックのたびにPOSTで新規発行する。
+  const [connectManaging, setConnectManaging] = useState(false)
   // レビュー指摘(軽微9): 「紹介した案件」サブタブを開いた時だけStripe APIを呼ぶ(他サブタブ
   // 表示中の無駄な呼び出しを防ぐ)。subtabはCSS切替のみで再マウントされないため、初回に
   // cases になった時だけ1回fetchするようrefで制御する(依存はsubtab文字列のみ)。
@@ -321,6 +324,28 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
       setConnectError('口座登録の開始に失敗しました。しばらくしてから再度お試しください。')
     }
     setConnectOnboarding(false)
+  }
+
+  /** 口座管理導線(2026-08-05・CEO指示): Stripe Expressのホスト型ダッシュボードへ遷移する。 */
+  const handleConnectManage = async () => {
+    setConnectManaging(true)
+    setConnectError(null)
+    try {
+      const res = await fetch('/api/referral/connect/manage', { method: 'POST', cache: 'no-store' })
+      const data = await res.json().catch(() => null)
+      if (res.ok && data?.url) {
+        window.location.href = data.url
+        return
+      }
+      setConnectError('口座管理画面を開けませんでした。しばらくしてから再度お試しください。')
+    } catch {
+      setConnectError('口座管理画面を開けませんでした。しばらくしてから再度お試しください。')
+    } finally {
+      // 軽微(レビュー指摘): 遷移成功パスでも(returnの前段で)必ずフラグを解除する。
+      // window.location.href代入後も実際の遷移完了までは一定のタイムラグがあり、
+      // ポップアップブロック等で遷移自体が失敗した場合にボタンが固着するのを防ぐ。
+      setConnectManaging(false)
+    }
   }
 
   // CEO指示(2026-08-04・IA再変更): 「紹介した案件」タブの件数バッジ(進行中)・空状態判定用に
@@ -1793,13 +1818,48 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
             {connectStatusLoaded && connectStatus !== null && (
               <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #EAD9A6' }}>
                 {connectStatus === 'enabled' ? (
-                  <div style={{ fontSize: 13, color: '#2F7A4D', fontWeight: 600 }}>受け取り口座: 登録済み</div>
+                  <div>
+                    <div style={{ fontSize: 13, color: '#2F7A4D', fontWeight: 600 }}>受け取り口座: 登録済み</div>
+                    {/* 口座管理導線(2026-08-05・CEO指示): 控えめなリンク。Stripe Expressのホスト型
+                        ダッシュボードで口座変更・送金履歴の確認ができる。 */}
+                    <button
+                      onClick={handleConnectManage}
+                      disabled={connectManaging}
+                      style={{
+                        background: 'none', border: 'none', padding: 0, marginTop: 6,
+                        color: '#6B7280', fontSize: 13, textDecoration: 'underline',
+                        cursor: connectManaging ? 'default' : 'pointer',
+                      }}
+                    >
+                      {connectManaging ? '開いています...' : '口座情報を管理する'}
+                    </button>
+                    <div style={{ fontSize: 13, color: '#9CA3AF', marginTop: 2, lineHeight: 1.6 }}>
+                      Stripeの管理画面で口座の変更や送金履歴の確認ができます
+                    </div>
+                  </div>
                 ) : connectStatus === 'not_ready' ? (
                   <div style={{ fontSize: 12, color: '#9CA3AF' }}>口座登録機能は準備中です</div>
                 ) : connectStatus === 'reviewing' ? (
                   // レビュー指摘(軽微7): 本人確認は提出済みだがStripe側の審査中。再開ボタンは
                   // 出さない(送り手が押しても状態が変わらないため)。
-                  <div style={{ fontSize: 12, color: '#B45309' }}>口座情報を審査中です(1〜2営業日)</div>
+                  <div>
+                    <div style={{ fontSize: 12, color: '#B45309' }}>口座情報を審査中です(1〜2営業日)</div>
+                    {/* 口座管理導線(2026-08-05・CEO指示): 審査中でも既存アカウントの管理画面は開ける。 */}
+                    <button
+                      onClick={handleConnectManage}
+                      disabled={connectManaging}
+                      style={{
+                        background: 'none', border: 'none', padding: 0, marginTop: 6,
+                        color: '#6B7280', fontSize: 13, textDecoration: 'underline',
+                        cursor: connectManaging ? 'default' : 'pointer',
+                      }}
+                    >
+                      {connectManaging ? '開いています...' : '口座情報を管理する'}
+                    </button>
+                    <div style={{ fontSize: 13, color: '#9CA3AF', marginTop: 2, lineHeight: 1.6 }}>
+                      Stripeの管理画面で口座の変更や送金履歴の確認ができます
+                    </div>
+                  </div>
                 ) : connectStatus === 'pending' ? (
                   <div>
                     <button
