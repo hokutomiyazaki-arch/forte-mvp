@@ -1,22 +1,24 @@
 /**
  * クロップ後の画像をCanvasで切り出してBlobに変換
- * 最大400x400pxにリサイズ
+ * 既定は400x400px（プロフィール写真用）。outputWidth/outputHeightで出力サイズを変更可能
+ * （例: サービス写真ギャラリーは1600x1200・4:3で呼ぶ）。
  */
 export async function getCroppedImage(
   imageSrc: string,
-  pixelCrop: { x: number; y: number; width: number; height: number }
+  pixelCrop: { x: number; y: number; width: number; height: number },
+  outputWidth = 400,
+  outputHeight = 400
 ): Promise<Blob> {
   const image = await createImage(imageSrc)
   const canvas = document.createElement('canvas')
-  const MAX_SIZE = 400
-  canvas.width = MAX_SIZE
-  canvas.height = MAX_SIZE
+  canvas.width = outputWidth
+  canvas.height = outputHeight
   const ctx = canvas.getContext('2d')!
 
   ctx.drawImage(
     image,
     pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height,
-    0, 0, MAX_SIZE, MAX_SIZE
+    0, 0, outputWidth, outputHeight
   )
 
   return new Promise((resolve) => {

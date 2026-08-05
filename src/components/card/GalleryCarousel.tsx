@@ -38,7 +38,7 @@ export function GalleryCarousel({ images }: Props) {
           loading="lazy"
           style={{
             width: '100%',
-            maxHeight: 420,
+            aspectRatio: '4 / 3',
             borderRadius: 12,
             objectFit: 'cover',
             display: 'block',
@@ -69,7 +69,7 @@ export function GalleryCarousel({ images }: Props) {
             style={{
               flex: '0 0 100%',
               width: '100%',
-              maxHeight: 420,
+              aspectRatio: '4 / 3',
               objectFit: 'cover',
               scrollSnapAlign: 'start',
               borderRadius: 12,

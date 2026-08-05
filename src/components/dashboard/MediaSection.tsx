@@ -2,8 +2,8 @@
 
 import { useRef, useState } from 'react'
 import { uploadFile } from '@/lib/db'
-import { resizeImageLongSide } from '@/lib/image-utils'
 import { extractYouTubeVideoId } from '@/lib/validation'
+import PhotoCropper from '@/components/PhotoCropper'
 
 /** §15-3: サービス・案内タブの「写真（最大6枚）」「紹介動画（YouTube）」。
  * 既存の受付時間/外部リンク保存(AccessLinksSection→doSaveLogic)と同じ流儀: ローカルstateを編集→「保存」で professionals へ反映。
@@ -33,12 +33,14 @@ export default function MediaSection({ media, onMediaChange, onSave, saving, use
   const [uploadError, setUploadError] = useState('')
   const [videoError, setVideoError] = useState('')
   const [savedToast, setSavedToast] = useState(false)
+  const [cropSrc, setCropSrc] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const photos = Array.isArray(media.gallery_image_urls) ? media.gallery_image_urls : []
   const atLimit = photos.length >= MAX_PHOTOS
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ファイル選択 → クロッパーを開く（アップロードはクロップ確定後）
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
@@ -51,11 +53,23 @@ export default function MediaSection({ media, onMediaChange, onSave, saving, use
       return
     }
     setUploadError('')
+    const reader = new FileReader()
+    reader.onload = () => setCropSrc(reader.result as string)
+    reader.readAsDataURL(file)
+  }
+
+  // クロップ確定（4:3・1600x1200 JPEG）→ アップロード
+  const handleCropComplete = async (blob: Blob) => {
+    setCropSrc(null)
+    if (!userId) {
+      setUploadError('アップロードに失敗しました。もう一度お試しください。')
+      return
+    }
+    setUploadError('')
     setUploading(true)
     try {
-      const resized = await resizeImageLongSide(file, 1600, 0.85)
       const path = `${userId}/gallery/${Date.now()}.jpg`
-      const result = await uploadFile('gallery-images', path, resized, { upsert: true })
+      const result = await uploadFile('gallery-images', path, blob, { upsert: true })
       if (result.publicUrl) {
         onMediaChange({ gallery_image_urls: [...photos, result.publicUrl] })
       } else {
@@ -67,6 +81,8 @@ export default function MediaSection({ media, onMediaChange, onSave, saving, use
       setUploading(false)
     }
   }
+
+  const handleCropCancel = () => setCropSrc(null)
 
   const removePhoto = (index: number) => {
     onMediaChange({ gallery_image_urls: photos.filter((_, i) => i !== index) })
@@ -174,6 +190,17 @@ export default function MediaSection({ media, onMediaChange, onSave, saving, use
         onChange={handleFileSelect}
         style={{ display: 'none' }}
       />
+
+      {cropSrc && (
+        <PhotoCropper
+          imageSrc={cropSrc}
+          aspect={4 / 3}
+          outputWidth={1600}
+          outputHeight={1200}
+          onCropComplete={handleCropComplete}
+          onCancel={handleCropCancel}
+        />
+      )}
 
       {uploadError && <p style={errorTextStyle}>{uploadError}</p>}
 
