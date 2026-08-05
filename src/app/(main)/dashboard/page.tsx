@@ -17,6 +17,7 @@ import type { VoiceComment } from '@/components/card/types'
 import VoiceReplyModal from '@/components/VoiceReplyModal'
 import CertificationModal from '@/components/CertificationModal'
 import ImageCropper from '@/components/ImageCropper'
+import PhotoCropper from '@/components/PhotoCropper'
 import InstallPrompt from '@/components/InstallPrompt'
 import { PREFECTURES } from '@/lib/prefectures'
 import XDayCountdown from '@/components/XDayCountdown'
@@ -118,6 +119,10 @@ export default function DashboardPage() {
   const [editing, setEditing] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
+  // 自己紹介の写真(1枚・任意)。既存のPhotoCropper(4:3・1600x1200)を再利用。
+  const [bioImageUploading, setBioImageUploading] = useState(false)
+  const [bioImageCropSrc, setBioImageCropSrc] = useState<string | null>(null)
+  const [bioImageError, setBioImageError] = useState('')
   const [loading, setLoading] = useState(true)
   // LINE連携バナー状態
   const [lineBannerState, setLineBannerState] = useState<'hidden' | 'show_banner' | 'show_code_input' | 'linked'>('hidden')
@@ -158,6 +163,8 @@ export default function DashboardPage() {
     // §15-3: サービス・案内タブの写真(最大6枚)・紹介動画(YouTube)
     gallery_image_urls: [] as string[],
     intro_video_url: '',
+    // 自己紹介の展開時のみ表示する写真1枚(任意)
+    bio_image_url: '',
   })
   const [customResultFortes, setCustomResultFortes] = useState<CustomForte[]>([])
   const [customPersonalityFortes, setCustomPersonalityFortes] = useState<CustomForte[]>([])
@@ -723,6 +730,8 @@ export default function DashboardPage() {
           // になる(select('*')はサイレントに既存カラムのみ返す・fail-soft)。
           gallery_image_urls: Array.isArray(proData.gallery_image_urls) ? proData.gallery_image_urls : [],
           intro_video_url: proData.intro_video_url || '',
+          // カラム未作成時はproData.bio_image_urlがundefinedのまま(fail-soft)。
+          bio_image_url: proData.bio_image_url || '',
         })
         setCustomResultFortes(proData.custom_result_fortes || [])
         setCustomPersonalityFortes(proData.custom_personality_fortes || [])
@@ -1239,6 +1248,8 @@ export default function DashboardPage() {
       // §15-3: サービス・案内タブの写真(最大6枚)・紹介動画(YouTube)。DEFAULTを付けない(任意設定)。
       gallery_image_urls: form.gallery_image_urls.length > 0 ? form.gallery_image_urls : null,
       intro_video_url: form.intro_video_url.trim() || null,
+      // 自己紹介の展開時のみ表示する写真1枚(任意)。DEFAULTを付けない。
+      bio_image_url: form.bio_image_url || null,
     }
 
     const isNew = !pro
@@ -1266,6 +1277,7 @@ export default function DashboardPage() {
       business_hours: '受付時間',
       gallery_image_urls: '写真',
       intro_video_url: '紹介動画',
+      bio_image_url: '自己紹介の写真',
     }
     if (saveError && upsertRecord && typeof upsertRecord === 'object') {
       const isSchemaErr = (saveError as any).code === '42703' || (saveError as any).code === 'PGRST204'
@@ -1796,6 +1808,28 @@ export default function DashboardPage() {
     setUploading(false)
   }
 
+  // 自己紹介の写真クロッパー確定後：トリミング済み画像をSupabase Storageにアップロード(4:3・1600x1200)
+  async function handleBioImageCropComplete(croppedBlob: Blob) {
+    setBioImageCropSrc(null)
+    if (!user) return
+    setBioImageError('')
+    setBioImageUploading(true)
+    try {
+      const path = `${user.id}/bio/${Date.now()}.jpg`
+      const result = await uploadFile('gallery-images', path, croppedBlob, { upsert: true })
+      if (result.publicUrl) {
+        setForm(prev => ({ ...prev, bio_image_url: result.publicUrl as string }))
+      } else {
+        console.error('Bio image upload error:', result.error)
+        setBioImageError('アップロードに失敗しました。もう一度お試しください。')
+      }
+    } catch (e) {
+      console.error('Bio image upload error:', e)
+      setBioImageError('アップロードに失敗しました。もう一度お試しください。')
+    }
+    setBioImageUploading(false)
+  }
+
   // プロ登録解除 → / にリダイレクト
   async function handleDeactivate() {
     setDeactivating(true)
@@ -1947,6 +1981,57 @@ export default function DashboardPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">自己紹介</label>
             <textarea value={form.bio} onChange={e => setForm({...form, bio: e.target.value})} rows={4}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none resize-none" />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              自己紹介の写真（1枚・任意）
+            </label>
+            <p className="text-xs text-gray-500 mb-2">
+              カードページで自己紹介を「続きを読む」で展開した時に表示されます。
+            </p>
+            {form.bio_image_url ? (
+              <div className="relative inline-block">
+                <img
+                  src={form.bio_image_url}
+                  alt=""
+                  loading="lazy"
+                  className={`w-40 h-auto rounded-lg object-cover mb-2 ${bioImageUploading ? 'opacity-40' : ''}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setForm(prev => ({ ...prev, bio_image_url: '' }))}
+                  disabled={bioImageUploading}
+                  className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-[#1A1A2E] text-white text-xs flex items-center justify-center"
+                  aria-label="削除"
+                >
+                  ×
+                </button>
+              </div>
+            ) : null}
+            <div>
+              <label className={`text-sm text-[#C4A35A] hover:underline ${bioImageUploading ? 'pointer-events-none opacity-50' : 'cursor-pointer'}`}>
+                {bioImageUploading ? 'アップロード中...' : form.bio_image_url ? '写真を変更' : '写真を追加'}
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  e.target.value = ''
+                  if (!file) return
+                  if (file.size > 10 * 1024 * 1024) {
+                    setBioImageError('ファイルサイズは10MB以内にしてください')
+                    return
+                  }
+                  if (!file.type.startsWith('image/')) {
+                    setBioImageError('画像ファイルを選択してください')
+                    return
+                  }
+                  setBioImageError('')
+                  const reader = new FileReader()
+                  reader.onload = () => setBioImageCropSrc(reader.result as string)
+                  reader.readAsDataURL(file)
+                }} />
+              </label>
+            </div>
+            {bioImageError && <p className="text-red-500 text-xs mt-1">{bioImageError}</p>}
           </div>
 
           <div>
@@ -2237,6 +2322,18 @@ export default function DashboardPage() {
             onCancel={() => setCropImageSrc(null)}
             cropShape="round"
             aspectRatio={1}
+          />
+        )}
+
+        {/* 自己紹介の写真クロッパー(4:3・1600x1200) */}
+        {bioImageCropSrc && (
+          <PhotoCropper
+            imageSrc={bioImageCropSrc}
+            aspect={4 / 3}
+            outputWidth={1600}
+            outputHeight={1200}
+            onCropComplete={handleBioImageCropComplete}
+            onCancel={() => setBioImageCropSrc(null)}
           />
         )}
       </div>
