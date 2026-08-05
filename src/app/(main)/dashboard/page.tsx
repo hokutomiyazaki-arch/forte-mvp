@@ -558,6 +558,10 @@ export default function DashboardPage() {
     if (editAutoOpenedRef.current) return
     editAutoOpenedRef.current = true
     setEditing(true)
+    // edit=true をURLから即除去（残すと保存後のリロードで編集画面が再オープンする）
+    const url = new URL(window.location.href)
+    url.searchParams.delete('edit')
+    window.history.replaceState(null, '', url.toString())
   }, [editParam, loading, proIdForEditOpen])
 
   // Navbar「認定申請」メニューからの導線: /dashboard?action=certification で
