@@ -211,8 +211,10 @@ export default function VoiceShareModal({
             padding: '0 20px',
             boxSizing: 'border-box' as const,
           } : {
+            width: 340,
             padding: 24,
             backgroundColor: '#FFFFFF',
+            boxSizing: 'border-box' as const,
           }}>
             {/* stamp: 外枠 dashed ボーダー */}
             <div style={exportMode === 'stories' && currentShape.hasStamp ? {
@@ -221,7 +223,7 @@ export default function VoiceShareModal({
               width: exportMode === 'stories' ? '100%' : 340,
               boxSizing: 'border-box' as const,
             } : {
-              width: exportMode === 'stories' ? '100%' : 340,
+              width: '100%',
             }}>
             {/* ticket: 切り欠き用ラッパー */}
             <div style={{ position: 'relative' }}>
