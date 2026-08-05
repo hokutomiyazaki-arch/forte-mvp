@@ -1,0 +1,26 @@
+[
+  {
+    "name": "guide-flow",
+    "prompt": "Clean flat line-art illustration, warm and trustworthy mood. A professional trainer gently introducing a client to another specialist: three simple friendly figures, the middle one connecting the other two with a soft gesture, an arrow of trust flowing left to right. Color palette: deep navy #1A1A2E and gold #C4A35A accents on pure white background. Minimal, generous whitespace, editorial style. Absolutely no text, no letters, no numbers, no labels anywhere in the image.",
+    "size": "1536x1024",
+    "quality": "medium"
+  },
+  {
+    "name": "guide-fee",
+    "prompt": "Clean flat line-art illustration of money flow: a stack of coins splitting into two paths, a larger portion flowing toward one person icon and a small portion toward a card-payment terminal icon. Abstract, friendly, financial-explainer style. Color palette: deep navy #1A1A2E and gold #C4A35A on pure white background. Minimal, generous whitespace. Absolutely no text, no letters, no numbers, no currency symbols, no labels anywhere in the image.",
+    "size": "1536x1024",
+    "quality": "medium"
+  },
+  {
+    "name": "guide-schedule",
+    "prompt": "Clean flat line-art illustration of scheduling: a calendar page with a circled day, a clock beside it, and two curved arrows suggesting rescheduling between two dates. Friendly, calm, editorial explainer style. Color palette: deep navy #1A1A2E and gold #C4A35A on pure white background. Minimal, generous whitespace. Absolutely no text, no letters, no numbers, no labels anywhere in the image.",
+    "size": "1536x1024",
+    "quality": "medium"
+  },
+  {
+    "name": "guide-payout",
+    "prompt": "Clean flat line-art illustration of automatic payout: a smartphone showing a simple bank-transfer motif, coins flowing along a dotted line from a completed-session handshake icon into the phone. Reassuring, modern fintech-explainer style. Color palette: deep navy #1A1A2E and gold #C4A35A on pure white background. Minimal, generous whitespace. Absolutely no text, no letters, no numbers, no currency symbols, no labels anywhere in the image.",
+    "size": "1536x1024",
+    "quality": "medium"
+  }
+]

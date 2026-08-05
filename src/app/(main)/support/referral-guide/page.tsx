@@ -60,6 +60,29 @@ const noteBoxStyle: React.CSSProperties = {
   marginBottom: 18,
 }
 
+/**
+ * 追加(2026-08-05・CEO指示): AI生成イラスト(public/referral-guide/・1200px幅PNG・文字なし)を
+ * 各セクションに挿入する。max-width:100%・height:autoでページ幅に収める(横スクロール厳禁)。
+ * 既存パターン(badge-guideページの図解画像)と同じ素のimg要素を使う(next/imageは本アプリ未導入)。
+ */
+function GuideImage({ src, alt }: { src: string; alt: string }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={alt}
+      style={{
+        display: 'block',
+        width: '100%',
+        maxWidth: '100%',
+        height: 'auto',
+        borderRadius: 12,
+        marginBottom: 20,
+      }}
+    />
+  )
+}
+
 export default function ReferralGuidePage() {
   return (
     <div
@@ -103,6 +126,7 @@ export default function ReferralGuidePage() {
 
         {/* ① 紹介のしくみ */}
         <H2>紹介のしくみ</H2>
+        <GuideImage src="/referral-guide/guide-flow.png" alt="紹介の流れ: 送り手が受け手を紹介し、クライアントが予約リクエストを送るイラスト" />
         <ol style={{ paddingLeft: 22, marginBottom: 18 }}>
           <li style={liStyle}>あなた(送り手)が紹介リストで別の先生(受け手)を紹介する</li>
           <li style={liStyle}>クライアントがリストから受け手を選び、希望日時を入れて相談リクエストを送る</li>
@@ -117,6 +141,7 @@ export default function ReferralGuidePage() {
 
         {/* ② 予約金とは */}
         <H2>予約金とは</H2>
+        <GuideImage src="/referral-guide/guide-fee.png" alt="予約金のイメージ: セッション料金のうち一部をオンライン決済で事前に受け取るイラスト" />
         <P>
           紹介予約が確定すると、クライアントはセッション料金の<strong>30%＋Stripeの決済実費(3.6%)</strong>
           にあたる<strong>予約金(合計33.6%)</strong>を、オンラインでその場でお支払いいただきます。
@@ -139,6 +164,7 @@ export default function ReferralGuidePage() {
 
         {/* ④ 送り手プロの紹介報酬 */}
         <H2>送り手プロの紹介報酬</H2>
+        <GuideImage src="/referral-guide/guide-payout.png" alt="紹介報酬の自動送金イメージ: セッション完了後に報酬がお受け取り口座へ送金されるイラスト" />
         <P>
           紹介した案件のセッションが完了すると、<strong>セッション価格の30%</strong>が紹介報酬として確定し、
           お受け取り口座へ<strong>自動で送金</strong>されます。送金には事前の口座登録(Stripe Express)が必要です。
@@ -166,6 +192,7 @@ export default function ReferralGuidePage() {
 
         {/* ⑥ 日時変更のしくみ */}
         <H2>日時変更のしくみ</H2>
+        <GuideImage src="/referral-guide/guide-schedule.png" alt="日時変更のイメージ: 確定後に新しい候補日時を選び直すイラスト" />
         <P>
           確定後にどうしても都合がつかなくなった場合、受け手プロから「日時変更のお願い」を送れます。
           クライアントは提示された候補から新しい日時を選ぶか、候補が合わない場合は
