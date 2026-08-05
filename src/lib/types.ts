@@ -57,6 +57,8 @@ export interface Professional {
   intro_video_url?: string | null
   // 旧: 自己紹介の展開時のみ表示する写真1枚(bio_image_url)は2026-08-05に廃止(gallery_image_urlsへ統合)。
   // DBカラムは残置(無害)だがコードは参照しない。
+  // 2026-08-05: タイプ分析キャラクターの性別出し分け。カラム未作成環境ではundefined(fail-soft)。
+  character_gender?: 'male' | 'female' | null
 }
 
 export interface CustomForte {

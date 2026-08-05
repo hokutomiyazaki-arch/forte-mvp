@@ -31,6 +31,7 @@ import AcceptingStatusWidget from '@/components/dashboard/AcceptingStatusWidget'
 import ReferralBookingReceivedCard from '@/components/dashboard/ReferralBookingReceivedCard'
 import ReferralActionBanner from '@/components/dashboard/ReferralActionBanner'
 import { createClient as createSupabaseClient } from '@/lib/supabase'
+import { resolveCharacterImageUrl } from '@/lib/character-image'
 
 // バッジ階層: FNTはBDCの上位資格。同レベルのFNTを持っていたらBDCは非表示
 const BADGE_ORDER: Record<string, number> = {
@@ -159,6 +160,8 @@ export default function DashboardPage() {
     // §15-3(2026-08-05: 自己紹介欄直下へ移設): 写真(最大6枚)・紹介動画(YouTube)
     gallery_image_urls: [] as string[],
     intro_video_url: '',
+    // 2026-08-05: タイプ分析キャラクターの性別出し分け('' = 未設定/デフォルト → null で保存)
+    character_gender: '' as '' | 'male' | 'female',
   })
   const [customResultFortes, setCustomResultFortes] = useState<CustomForte[]>([])
   const [customPersonalityFortes, setCustomPersonalityFortes] = useState<CustomForte[]>([])
@@ -724,6 +727,10 @@ export default function DashboardPage() {
           // になる(select('*')はサイレントに既存カラムのみ返す・fail-soft)。
           gallery_image_urls: Array.isArray(proData.gallery_image_urls) ? proData.gallery_image_urls : [],
           intro_video_url: proData.intro_video_url || '',
+          // 2026-08-05: カラム未作成時はproData.character_genderがundefinedのまま(fail-soft)
+          character_gender: proData.character_gender === 'male' || proData.character_gender === 'female'
+            ? proData.character_gender
+            : '',
         })
         setCustomResultFortes(proData.custom_result_fortes || [])
         setCustomPersonalityFortes(proData.custom_personality_fortes || [])
@@ -797,7 +804,8 @@ export default function DashboardPage() {
               label: item.label,
               description: item.description ?? null,
               votes: voteCountMap.get(item.id) || 0,
-              image_url: item.image_url ?? null,
+              // 2026-08-05: 自分が設定した character_gender で性別出し分け(fail-soft・カラム未作成時は素通し)
+              image_url: resolveCharacterImageUrl(item.image_url ?? null, proData.character_gender),
             }))
           setPersonalityTypeItems(typeItems)
         }
@@ -1242,6 +1250,8 @@ export default function DashboardPage() {
       // カラム自体はDBに残置(無害)だが本コードは参照しない(gallery_image_urls/intro_video_urlに統合)。
       gallery_image_urls: form.gallery_image_urls.length > 0 ? form.gallery_image_urls : null,
       intro_video_url: form.intro_video_url.trim() || null,
+      // 2026-08-05: タイプ分析キャラクターの性別出し分け。DEFAULTを付けない(未設定=null)。
+      character_gender: form.character_gender || null,
     }
 
     const isNew = !pro
@@ -1269,6 +1279,7 @@ export default function DashboardPage() {
       business_hours: '受付時間',
       gallery_image_urls: '写真',
       intro_video_url: '紹介動画',
+      character_gender: 'キャラクターの表示',
     }
     if (saveError && upsertRecord && typeof upsertRecord === 'object') {
       const isSchemaErr = (saveError as any).code === '42703' || (saveError as any).code === 'PGRST204'
@@ -1950,6 +1961,23 @@ export default function DashboardPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">自己紹介</label>
             <textarea value={form.bio} onChange={e => setForm({...form, bio: e.target.value})} rows={4}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none resize-none" />
+          </div>
+
+          {/* 2026-08-05: タイプ分析キャラクターの性別出し分け(CEO承認)。DB未反映環境でもfail-softで保存スキップされるだけ */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">キャラクターの表示</label>
+            <p className="text-xs text-gray-500 mb-2 leading-relaxed">
+              タイプ分析のキャラクターの見た目を選べます。
+            </p>
+            <select
+              value={form.character_gender}
+              onChange={e => setForm({ ...form, character_gender: e.target.value as '' | 'male' | 'female' })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
+            >
+              <option value="">未設定（デフォルト）</option>
+              <option value="male">男性</option>
+              <option value="female">女性</option>
+            </select>
           </div>
 
           {/* §15-3(2026-08-05: サービス・案内タブから自己紹介欄直下へ移設・CEO指示):

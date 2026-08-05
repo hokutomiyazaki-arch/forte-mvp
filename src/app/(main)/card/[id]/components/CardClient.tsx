@@ -28,6 +28,7 @@ import type { VoiceComment, Supporter } from '@/components/card/types'
 import { computeReferralSignal, REFERRAL_SIGNAL_COLOR } from '@/lib/referral-accepting'
 import { GalleryCarousel } from '@/components/card/GalleryCarousel'
 import { YouTubeEmbed } from '@/components/card/YouTubeEmbed'
+import { resolveCharacterImageUrl } from '@/lib/character-image'
 
 interface PersonalityItemWithVotes {
   id: string
@@ -170,7 +171,8 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
       description: item.description ?? null,
       category: (item.category || 'inner') as PersonalityCategory,
       votes: voteCountMap.get(item.id) || 0,
-      image_url: item.image_url ?? null,
+      // 2026-08-05: そのプロが設定した character_gender で性別出し分け(fail-soft・カラム未作成時は素通し)
+      image_url: resolveCharacterImageUrl(item.image_url ?? null, initialPro?.character_gender),
     }))
     initialPersonalityV2Items = (
       cardData.personalityItems as Array<{

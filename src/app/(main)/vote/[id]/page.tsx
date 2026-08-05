@@ -14,6 +14,7 @@ import { checkProCooldownFromClient, PRO_COOLDOWN_MESSAGE } from '@/lib/vote-coo
 import { Suspense } from 'react'
 import { PERSONALITY_CATEGORIES, PersonalityCategory } from '@/lib/personality'
 import { useShouldShowOAuth } from '@/hooks/useShouldShowOAuth'
+import { resolveCharacterImageUrl } from '@/lib/character-image'
 // AuthMethodSelector は login ページで使用。投票ページはフォーム内のためインライン実装
 
 interface ProofItem {
@@ -698,7 +699,15 @@ function VoteForm() {
       if (proData) setPro(proData)
 
       // 人柄プルーフセット
-      if (persResult.data) setPersonalityItems(persResult.data)
+      // 2026-08-05: 投票対象プロが設定した character_gender で性別出し分け(fail-soft・カラム未作成時は素通し)
+      if (persResult.data) {
+        setPersonalityItems(
+          persResult.data.map((item: PersonalityItem) => ({
+            ...item,
+            image_url: resolveCharacterImageUrl(item.image_url ?? null, proData?.character_gender),
+          }))
+        )
+      }
 
       // 強み未設定チェック → 準備中ページにリダイレクト
       if (proData) {

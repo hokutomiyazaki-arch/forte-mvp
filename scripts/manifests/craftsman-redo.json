@@ -1,0 +1,14 @@
+[
+  {
+    "name": "craftsman-male",
+    "prompt": "Cute chibi human mascot character, male version with short simple navy hair: a dedicated body-work artisan with a small white towel draped over his shoulder, holding both hands up in front of his chest like a master craftsman presenting his polished skilled hands, palms gently glowing with a soft gold aura, focused proud gentle expression, navy work apron. Big head small body chibi proportions, simple dot eyes, soft blush. Flat vector line-art with clean deep navy #1A1A2E outlines, white clothing with navy accents, gold #C4A35A glow details, restrained palette, matching a modern editorial illustration system. Full body, centered on pure white background, generous margin. Absolutely no text, no letters, no labels.",
+    "size": "1024x1024",
+    "quality": "medium"
+  },
+  {
+    "name": "craftsman-female",
+    "prompt": "Cute chibi human mascot character, female version with a simple navy short bob hairstyle (same pose and outfit as the matching male version, differing only in hairstyle and silhouette): a dedicated body-work artisan with a small white towel draped over her shoulder, holding both hands up in front of her chest like a master craftsman presenting her polished skilled hands, palms gently glowing with a soft gold aura, focused proud gentle expression, navy work apron. Big head small body chibi proportions, simple dot eyes, soft blush. Flat vector line-art with clean deep navy #1A1A2E outlines, white clothing with navy accents, gold #C4A35A glow details, restrained palette, matching a modern editorial illustration system. Full body, centered on pure white background, generous margin. Absolutely no text, no letters, no labels.",
+    "size": "1024x1024",
+    "quality": "medium"
+  }
+]
