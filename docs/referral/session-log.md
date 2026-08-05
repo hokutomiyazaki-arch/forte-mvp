@@ -476,3 +476,11 @@
 - admin「一斉送信」から対象=全プロ・チャネル=自動（LINE優先）で送信（送信実行の最終確認ダイアログはCEOがクリック）。
 - 結果（broadcast_logsで検証・全行同一タイムスタンプ=1バッチ・1人1件で二重送信なし）: **LINE 95件送信・メール167件送信・メール26件失敗**（計288通・スキップ9人）。
 - プレビュー（メール122）と実送信（メール193試行）の差異の真因: プレビューは contact_email のみで判定、実送信は generateAllWeeklyReports 経由で **Clerk登録メール優先＋contact_emailフォールバック**のため対象が広い（weekly-report.ts:490）。二重送信ではない。プレビューの過少表示は既知の不整合としてバックログ。
+
+## 2026-08-05 育成プルーフ §2-5 着手（Phase 0調査＋SQL実行＋実装）
+- Phase 0（rp-investigator）: コード側は完全未着手を確認。FNTは新方式（organizations id 86c757d3）に登録済み・アクティブ認定者161名（指示書の数字と一致）。バッジ5種（basic/advance/master/TBU/VIP）。「ファシリテーター」認定レベルは存在しない。宮崎本人=professional_id 9b1b653f・FNTに5行（全role=member・is_owner行なし）。
+- 【指示書未反映・チャット提示済み】指示書§2-5のVIEW元案「growth_role is null」の行単位フィルタは、1プロ複数行（バッジごと）のため代表・講師の他バッジ行が認定者側に混入するバグ→「同org同proにgrowth_roleが1行でもあれば人ごと除外」（NOT EXISTS）に修正。412行目「role in (...)」はgrowth_roleの誤記と判断（357-360行の修正方針に従う）。
+- 【SQL実行済み・CEO承認「SQL OK」・CC代行】①org_membersに growth_role/aggregate_opt_in(DEFAULT true)/growth_visibility(DEFAULT 'public')＋CHECK2本 ②宮崎の5行にgrowth_role='founder'（RETURNING 5行確認）③VIEW2本作成。検証SELECT: FNT=認定者160名（宮崎除外が効いている）・実績1,850件・直近30日255・ユニーク1,303。
+- 実行時トラブル: Supabase SQLエディタの多重実行癖でgrowth_role関連だけ先行コミットされ42710エラー→残りを冪等形（IF NOT EXISTS/DROP CONSTRAINT IF EXISTS）で再実行し復旧。実害なし。
+- 実装（rp-implementer・型チェック通過）: migration 045ファイル・isOrgCardEnabled()（FEATURE_ORG_CARD・既定OFF）・card-data getGrowthCards()（フラグOFFで未クエリ・fail-soft）・CardClientに育成カード（タブ外・臨床と別カード・「認定者/代表/講師」用語）。レビュー実行中。
+- instructor（講師）の指定はCEO保留中（founderのみで開始可）。フラグONはコードデプロイ後にVercel環境変数 FEATURE_ORG_CARD=true で。
