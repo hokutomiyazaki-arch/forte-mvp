@@ -445,3 +445,10 @@
 ### SQL実行＋実装: character_gender・告知バナー — 2026-08-05（CEO承認「sqlmok」）
 - 【SQL実行済み・CC代行】044: professionals.character_gender text＋CHECK('male'/'female'/'neutral')。検証SELECTでカラム実在確認。
 - 選択肢: 未選択/男性/女性/**まんじゅうのまま(neutral)**。未選択(null)のプロ全員のダッシュボードに告知バナー「タイプ分析のキャラクターが新しくなりました。見た目を選んでください」→プロフィール編集へ（何か選ぶと消える）。
+
+## 2026-08-05 キャラ画像の背景透過＋「まんじゅう」文言排除（fa76ace）
+- CEO指摘「全部背景が消えてない」→ 全27枚が非透過（gpt-image-2 は background:transparent 非対応）だったことが原因。
+- 対応: 再生成ではなく**承認済み画像の背景をプログラム除去**（外周から連結する背景色のみフラッドフィル・キャラ内部の白は保持）。人間18枚=白背景、まんじゅう9枚=緑/白背景を角の色基準で除去。全27枚 alpha 確認済み。
+- 【指示書未反映】gpt-image-1 での透過再生成案は画風が変わるため不採用。既存承認デザイン維持を優先（自己判断）。
+- CEO指摘「まんじゅうってみんなに言わないで」→ プロフィールのキャラ表示セレクトを「スタンダード（デフォルト）」、CharacterGenderBanner を「（男性/女性/スタンダード）」表記に修正。
+- ツール恒久化: generate-images.mjs に item.model/item.background、edit-images.mjs に background 引数を追加。
