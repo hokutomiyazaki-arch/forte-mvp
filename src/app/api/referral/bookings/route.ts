@@ -154,6 +154,8 @@ export async function POST(request: NextRequest) {
     }
 
     let priceJpy = 0
+    // 申し込み内容の控え(2026-08-05・CEO指示): 受付メールにメニュー名を載せるため保持する。
+    let menuName: string | null = null
     if (menuId) {
       const { data: menu } = await supabase
         .from('pro_menus')
@@ -171,6 +173,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'invalid_menu' }, { status: 400 })
       }
       priceJpy = menu.price_jpy
+      menuName = menu.name
     }
 
     // §2-4ステージ3(予約フィー方式・CEO決定): 相談送信時は決済を挟まない(従来の無決済フローに戻す)。
@@ -291,7 +294,17 @@ export async function POST(request: NextRequest) {
           { userId, email: clientEmail },
           receiverPro.name,
           listUrl,
-          { paymentFlowActive: paymentRequired }
+          {
+            paymentFlowActive: paymentRequired,
+            // 申し込み内容の控え(2026-08-05・CEO指示): お名前・電話番号は渡さない(PII最小化)。
+            menuName,
+            menuPriceJpy: menuId ? priceJpy : null,
+            slot1,
+            slot2,
+            slot3,
+            theme: theme || null,
+            note,
+          }
         )
       }
     } catch (notifyErr) {

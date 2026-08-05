@@ -14,6 +14,9 @@
 
 import { clerkClient } from '@clerk/nextjs/server'
 import { sendLinePushText } from '@/lib/line-push'
+// お申し込み内容の控え(2026-08-05・CEO指示): 受付メールで希望日時を曜日付き整形するために使う。
+// referral-format.tsはimport 0本のリーフ(既存の各API routeでも利用済み・チャンクグラフ安全)。
+import { formatSlotWithWeekday } from '@/lib/referral-format'
 
 const APP_URL = 'https://realproof.jp'
 
@@ -639,12 +642,25 @@ export async function notifyCounterProposedToClient(
 /**
  * ライフサイクル改善(タスクC): 相談リクエスト送信直後、クライアントへ受付メールを送る。
  * 決済フロー対象かどうかで②③のステップ文言を分岐する(paymentFlowActive)。
+ * 申し込み内容の控え(2026-08-05・CEO指示): メニュー・ご希望日時・テーマ・補足を「お申し込み内容」
+ * セクションとして本文に追加する(すべて任意・後方互換の追加引数)。
+ * ★PII注意: お名前・電話番号は記載しない(メール転送・誤送信時の連絡先露出を最小化する方針)。
  */
 export async function notifyBookingReceivedToClient(
   target: { userId?: string | null; email?: string | null },
   receiverProName: string,
   listUrl: string,
-  opts: { paymentFlowActive: boolean },
+  opts: {
+    paymentFlowActive: boolean
+    /** 申し込み内容の控え用(2026-08-05・CEO指示): いずれも省略可(後方互換)。 */
+    menuName?: string | null
+    menuPriceJpy?: number | null
+    slot1?: string | null
+    slot2?: string | null
+    slot3?: string | null
+    theme?: string | null
+    note?: string | null
+  },
 ): Promise<{ sent: boolean }> {
   const safeReceiverProName = escapeHtml(receiverProName)
   const step2 = opts.paymentFlowActive
@@ -653,12 +669,43 @@ export async function notifyBookingReceivedToClient(
   const step3 = opts.paymentFlowActive
     ? '③お支払いが完了すると紹介予約が成立します(総額は変わりません。当日は残額のみ。プロの都合でキャンセルとなった場合は予約金が全額返金されます。クライアント様のご都合によるキャンセルは、セッション開始の72時間前まで全額返金・それ以降は返金いたしかねます)'
     : '③確定のご連絡をお待ちください'
+
+  // 申し込み内容の控え(2026-08-05・CEO指示): テーマ・補足はユーザー入力のためescapeHtml必須。
+  // 改行は<br>変換する(メール本文はプレーンテキストの改行だけではレイアウトが崩れるため)。
+  const summaryLines: string[] = [`担当の先生: ${safeReceiverProName}さん`]
+  if (opts.menuName) {
+    const priceText = typeof opts.menuPriceJpy === 'number' && opts.menuPriceJpy > 0
+      ? `(${opts.menuPriceJpy.toLocaleString('ja-JP')}円)`
+      : ''
+    summaryLines.push(`メニュー: ${escapeHtml(opts.menuName)}${priceText}`)
+  }
+  const slotTexts = [opts.slot1, opts.slot2, opts.slot3]
+    .map((s, i) => {
+      const formatted = formatSlotWithWeekday(s)
+      return formatted ? `第${i + 1}希望 ${escapeHtml(formatted)}` : null
+    })
+    .filter((t): t is string => !!t)
+  if (slotTexts.length > 0) {
+    summaryLines.push(`ご希望日時: ${slotTexts.join(' / ')}`)
+  }
+  if (opts.theme) {
+    summaryLines.push(`ご相談のテーマ: ${escapeHtml(opts.theme).replace(/\n/g, '<br>')}`)
+  }
+  if (opts.note) {
+    summaryLines.push(`補足: ${escapeHtml(opts.note).replace(/\n/g, '<br>')}`)
+  }
+  const summaryHtml =
+    `<div style="margin:16px 0;padding:12px 14px;background:#F9FAFB;border-radius:8px;">` +
+    `<strong>お申し込み内容</strong><br>${summaryLines.join('<br>')}` +
+    `</div>`
+
   return notifyClientByEmail(
     target,
     `${receiverProName}さんへのリクエストを受け付けました`,
     emailShell(
       'リクエスト受付のお知らせ',
       `${safeReceiverProName}さんへのご相談リクエストを受け付けました。<br><br>` +
+        summaryHtml +
         `<strong>今後の流れ</strong><br>` +
         `①48時間以内に${safeReceiverProName}さんが日時を確定します(別日時のご提案の場合もあります)<br>` +
         `${step2}<br>` +
