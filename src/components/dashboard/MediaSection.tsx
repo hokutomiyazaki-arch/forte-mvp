@@ -6,9 +6,8 @@ import { resizeImageLongSide } from '@/lib/image-utils'
 import { extractYouTubeVideoId } from '@/lib/validation'
 
 /** §15-3: サービス・案内タブの「写真（最大6枚）」「紹介動画（YouTube）」。
- * タスクB: 「ヘッダー写真（1枚・任意）」も同セクションに追加(カードページ最上部に横長表示)。
  * 既存の受付時間/外部リンク保存(AccessLinksSection→doSaveLogic)と同じ流儀: ローカルstateを編集→「保存」で professionals へ反映。
- * DBカラム(gallery_image_urls/intro_video_url/hero_image_url)が未作成の環境でも壊れないfail-soft
+ * DBカラム(gallery_image_urls/intro_video_url)が未作成の環境でも壊れないfail-soft
  * (保存はdoSaveLogic側のPGRST204再試行に委ねる。本コンポーネントはUIのみ)。 */
 
 const MAX_PHOTOS = 6
@@ -17,7 +16,6 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024 // 元ファイル10MBまで受け付け�
 export interface MediaFormPart {
   gallery_image_urls: string[]
   intro_video_url: string
-  hero_image_url: string
 }
 
 interface Props {
@@ -36,47 +34,9 @@ export default function MediaSection({ media, onMediaChange, onSave, saving, use
   const [videoError, setVideoError] = useState('')
   const [savedToast, setSavedToast] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  // §15-2改訂(タスクB): ヘッダー写真(LP的な1枚・任意)。gallery(最大6枚)とは別カラム(hero_image_url)。
-  const [uploadingHero, setUploadingHero] = useState(false)
-  const [uploadErrorHero, setUploadErrorHero] = useState('')
-  const heroFileInputRef = useRef<HTMLInputElement>(null)
 
   const photos = Array.isArray(media.gallery_image_urls) ? media.gallery_image_urls : []
   const atLimit = photos.length >= MAX_PHOTOS
-
-  const handleHeroFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
-    if (!userId) {
-      setUploadErrorHero('アップロードに失敗しました。もう一度お試しください。')
-      return
-    }
-    if (file.size > MAX_FILE_SIZE) {
-      setUploadErrorHero('ファイルサイズは10MB以内にしてください')
-      return
-    }
-    setUploadErrorHero('')
-    setUploadingHero(true)
-    try {
-      const resized = await resizeImageLongSide(file, 1600, 0.85)
-      const path = `${userId}/hero/${Date.now()}.jpg`
-      const result = await uploadFile('gallery-images', path, resized, { upsert: true })
-      if (result.publicUrl) {
-        onMediaChange({ hero_image_url: result.publicUrl })
-      } else {
-        setUploadErrorHero('アップロードに失敗しました。もう一度お試しください。')
-      }
-    } catch {
-      setUploadErrorHero('アップロードに失敗しました。もう一度お試しください。')
-    } finally {
-      setUploadingHero(false)
-    }
-  }
-
-  const removeHero = () => {
-    onMediaChange({ hero_image_url: '' })
-  }
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -157,77 +117,6 @@ export default function MediaSection({ media, onMediaChange, onSave, saving, use
   return (
     <>
       <hr style={{ margin: '32px 0 0', border: 'none', borderTop: '1px solid #E5E7EB' }} />
-
-      {/* ── ヘッダー写真(1枚・任意) ── */}
-      <h3 style={sectionTitleStyle}>ヘッダー写真（1枚・任意）</h3>
-      <p style={sectionDescStyle}>
-        カードページの最上部に横長で表示されます。未設定の場合は表示されません。
-      </p>
-
-      {media.hero_image_url ? (
-        <div style={{ position: 'relative' as const, width: '100%', maxWidth: 320, marginBottom: 8 }}>
-          <img
-            src={media.hero_image_url}
-            alt=""
-            style={{ width: '100%', aspectRatio: '2 / 1', borderRadius: 10, objectFit: 'cover', display: 'block' }}
-          />
-          <button
-            type="button"
-            onClick={removeHero}
-            aria-label="削除"
-            style={{
-              position: 'absolute', top: -6, right: -6,
-              width: 22, height: 22, borderRadius: '50%',
-              background: '#1A1A2E', color: '#fff', border: '2px solid #fff',
-              fontSize: 12, lineHeight: 1, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            ×
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => heroFileInputRef.current?.click()}
-          disabled={uploadingHero}
-          style={{
-            width: '100%', maxWidth: 320, aspectRatio: '2 / 1', borderRadius: 10,
-            background: 'white', border: '1px dashed #C4A35A',
-            color: '#C4A35A', fontSize: 12, fontWeight: 600,
-            cursor: uploadingHero ? 'not-allowed' : 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            marginBottom: 8,
-          }}
-        >
-          {uploadingHero ? '…' : '+ 追加'}
-        </button>
-      )}
-
-      {media.hero_image_url && (
-        <button
-          type="button"
-          onClick={() => heroFileInputRef.current?.click()}
-          disabled={uploadingHero}
-          style={{
-            fontSize: 12, fontWeight: 600, color: '#C4A35A',
-            background: 'transparent', border: 'none', padding: 0, marginBottom: 8,
-            cursor: uploadingHero ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {uploadingHero ? '差し替え中…' : '差し替える'}
-        </button>
-      )}
-
-      <input
-        ref={heroFileInputRef}
-        type="file"
-        accept="image/*"
-        onChange={handleHeroFileSelect}
-        style={{ display: 'none' }}
-      />
-
-      {uploadErrorHero && <p style={errorTextStyle}>{uploadErrorHero}</p>}
 
       {/* ── 写真 ── */}
       <h3 style={sectionTitleStyle}>写真（最大{MAX_PHOTOS}枚）</h3>

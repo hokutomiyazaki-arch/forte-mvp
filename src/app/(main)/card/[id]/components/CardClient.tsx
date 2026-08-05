@@ -495,17 +495,6 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
   return (
     <div style={{ background: T.bg, minHeight: '100vh', maxWidth: 420, margin: '0 auto', padding: 16, fontFamily: T.font }}>
 
-      {/* ═══ ヘッダー写真(タスクB: LP的な1枚・任意設定時のみ表示。未設定なら何も出ない) ═══ */}
-      {pro.hero_image_url && (
-        <div style={{ width: '100%', aspectRatio: '2 / 1', borderRadius: 16, overflow: 'hidden', marginBottom: 12 }}>
-          <img
-            src={pro.hero_image_url}
-            alt=""
-            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-          />
-        </div>
-      )}
-
       {/* ═══ sticky予約バー(§15-4): ヘッダーカードが画面外に出たら表示 ═══ */}
       {hasStickyCta && showStickyBar && (
         <div
