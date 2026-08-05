@@ -121,40 +121,30 @@ export interface CardData {
   /** §2-2改訂: pro.delegate_list_id が「有効な代理リスト」(承諾済み+受付中のメンバーが1名以上)かどうか。
    * 未設定(null)の場合は常にfalse。公開カードの3分岐(computeReferralSignal)に渡す。 */
   delegateHasActiveMember?: boolean
-  /** §2-5 育成プルーフ: このプロが主宰(founder)/講師(instructor)を務める団体の集計カード。
+  /** §2-5 育成プルーフ: このプロが主宰(founder)/講師(instructor)を務める団体の役割情報。
    * FEATURE_ORG_CARDが無効、対象外(通常メンバー)、またはVIEW/カラム未作成(fail-soft)の場合は null。
-   * 1階(臨床プルーフ)とは合算しない別カード（§2-5 表示ルール）。 */
+   * CEO方針転換(2026-08-05): 新規セクションは作らず、既存の所属団体ピルを役割で出し分ける
+   * ための最小情報(団体名/役割/認定者数のみ)。実績件数・直近30日・強みTOP5は個人ページに出さない。 */
   growthCards: GrowthCardOrg[] | null
 }
 
-/** §2-5 育成プルーフ: 認定者の強みTOP5（1件） */
-export interface GrowthCardTopProof {
-  label: string
-  count: number
-}
-
-/** §2-5 育成プルーフ: 個人ページに表示する団体1件分の集計カード */
+/** §2-5 育成プルーフ: 個人ページの役割行に表示する団体1件分の情報 */
 export interface GrowthCardOrg {
   organizationId: string
   organizationName: string
   organizationType: string | null
   role: 'founder' | 'instructor'
   memberCount: number
-  proofCount: number
-  last30d: number
-  uniqueClients: number
-  topProofs: GrowthCardTopProof[]
 }
 
 /**
- * §2-5 育成プルーフ: 主宰/講師本人ページのみ表示する団体集計カードを取得する。
- * fail-soft必須: migration 045(growth_role等カラム・org_growth_summary/org_growth_proof_top VIEW)が
+ * §2-5 育成プルーフ: 主宰/講師本人ページのみ表示する団体の役割情報を取得する。
+ * fail-soft必須: migration 045(growth_role等カラム・org_growth_summary VIEW)が
  * 未実行の本番でも、42703(カラム無し)/42P01(VIEW無し)等でカードページ全体を落とさずnullを返す。
  */
 async function getGrowthCards(
   supabase: ReturnType<typeof getSupabaseAdmin>,
-  proId: string,
-  itemLabelMap: Record<string, string>
+  proId: string
 ): Promise<GrowthCardOrg[] | null> {
   if (!isOrgCardEnabled()) return null
   try {
@@ -189,27 +179,10 @@ async function getGrowthCards(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: summary } = await (supabase as any)
         .from('org_growth_summary')
-        .select('member_count, growth_proof_count, last_30d, unique_clients')
+        .select('member_count')
         .eq('organization_id', row.organization_id)
         .maybeSingle()
       if (!summary) continue
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: topRows } = await (supabase as any)
-        .from('org_growth_proof_top')
-        .select('proof_id, client_count')
-        .eq('organization_id', row.organization_id)
-        .order('client_count', { ascending: false })
-        .limit(5)
-
-      const topProofs: GrowthCardTopProof[] = (topRows || [])
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .map((t: any) => {
-          const label = itemLabelMap[t.proof_id]
-          if (!label) return null
-          return { label, count: t.client_count || 0 }
-        })
-        .filter((x): x is GrowthCardTopProof => !!x)
 
       cards.push({
         organizationId: row.organization_id,
@@ -217,10 +190,6 @@ async function getGrowthCards(
         organizationType: org.type ?? null,
         role: row.growth_role as 'founder' | 'instructor',
         memberCount: summary.member_count || 0,
-        proofCount: summary.growth_proof_count || 0,
-        last30d: summary.last_30d || 0,
-        uniqueClients: summary.unique_clients || 0,
-        topProofs,
       })
     }
     return cards.length > 0 ? cards : null
@@ -511,8 +480,8 @@ export async function getCardData(
     if (item?.id && item?.label) itemLabelMap[item.id] = item.label
   }
 
-  // === §2-5 育成プルーフ: 主宰/講師本人ページのみの団体集計カード（fail-soft・flag off時は未クエリ） ===
-  const growthCards = await getGrowthCards(supabase, proId, itemLabelMap)
+  // === §2-5 育成プルーフ: 主宰/講師本人ページのみの団体役割情報（fail-soft・flag off時は未クエリ） ===
+  const growthCards = await getGrowthCards(supabase, proId)
 
   // === enrichedComments: 機密フィールドを除外し voter_pro / reply を付与 ===
   const enrichedComments: EnrichedComment[] = commentsRaw.map(c => {

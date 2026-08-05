@@ -236,8 +236,11 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
   const [loading] = useState(false)
   const menus = cardData.menus || []
   const hasMenus = menus.length > 0
-  // §2-5 育成プルーフ: 主宰(founder)/講師(instructor)本人ページのみ非nullで渡ってくる(fail-soft・card-data.ts参照)
+  // §2-5 育成プルーフ: 主宰(founder)/指導者(instructor)本人ページのみ非nullで渡ってくる(fail-soft・card-data.ts参照)
   const growthCards = cardData.growthCards || null
+  // その団体だけは既存ピルでなく役割行(団体名＋役割バッジ＋認定者数＋団体ページを見る→)で表示するため、
+  // 下のピル一覧からは除外する(役割は排他ではないため他団体のピルは維持)。
+  const growthOrgIds = new Set((growthCards || []).map(g => g.organizationId))
   // Phase A2: アクセス情報・外部リンクの表示条件
   // service_formats=['online'] のみのプロは「●オンライン対応」バッジで足り、ACCESS セクションは冗長になるため
   // 物理アクセス(店舗/訪問/住所等)が無い限り非表示にする
@@ -281,6 +284,8 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
   // CEO決定(A案+♡プロ専用化): カード♡はプロ閲覧時のみ表示。クライアント/未ログインはnull。
   const [viewerProId] = useState<string | null>(cardData.viewerProId)
   const [orgs] = useState<{ id: string; name: string; type: string }[]>(initialOrgs)
+  // §2-5育成プルーフ: 代表/指導者を務める団体は上の役割行に出すため、ピル一覧からは除外する
+  const pillOrgs = orgs.filter(o => !growthOrgIds.has(o.id))
   const [credentialBadges] = useState<
     {
       id: string
@@ -643,9 +648,37 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
               }
               return null
             })()}
-            {orgs.length > 0 && (
+            {/* §2-5育成プルーフ(CEO方針転換2026-08-05): 新規セクションは作らず既存の所属団体ピルを
+                役割で出し分ける。代表(founder)/指導者(instructor)を務める団体は、下のピルではなく
+                1行ブロック(団体名＋役割バッジ＋認定者◯名＋団体ページを見る→)で表示する。
+                役割は排他ではないため、この行と下のメンバーピルは同じヘッダー内に共存できる。 */}
+            {growthCards && growthCards.length > 0 && (
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {growthCards.map(g => (
+                  <div key={g.organizationId} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: T.dark }}>{g.organizationName}</span>
+                    <span
+                      style={{
+                        fontSize: 11, fontWeight: 700, color: '#fff', background: T.gold,
+                        borderRadius: 6, padding: '2px 8px',
+                      }}
+                    >
+                      {g.role === 'founder' ? '代表' : '指導者'}
+                    </span>
+                    <span style={{ fontSize: 13, color: T.textSub }}>認定者 {g.memberCount}名</span>
+                    <a
+                      href={`/org/${g.organizationId}`}
+                      style={{ fontSize: 12, fontWeight: 600, color: T.gold, textDecoration: 'none' }}
+                    >
+                      団体ページを見る →
+                    </a>
+                  </div>
+                ))}
+              </div>
+            )}
+            {pillOrgs.length > 0 && (
               <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {orgs.map(o => (
+                {pillOrgs.map(o => (
                   <a
                     key={o.id}
                     href={`/org/${o.id}`}
@@ -691,30 +724,6 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
           })()}
         </div>
       </div>
-
-      {/* ═══ 育成プルーフカード(§2-5・Phase 1.5): 主宰/講師本人ページのみ表示。
-          臨床プルーフ(上のヘッダーカード)とは別カード。合算・総合スコア化は絶対にしない。
-          用語は「認定者」「指導者」に統一(門下・弟子・師匠は使わない)。 ═══ */}
-      {growthCards && growthCards.length > 0 && growthCards.map((g) => (
-        <div key={g.organizationId} style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 16, padding: 20, marginBottom: 12 }}>
-          <div style={{ fontSize: 14, fontWeight: 800, color: T.dark }}>
-            主宰団体：{g.organizationName}（{g.role === 'founder' ? '代表' : '講師'}）
-          </div>
-          <div style={{ fontSize: 13, color: T.textSub, marginTop: 8, lineHeight: 1.8 }}>
-            認定者 {g.memberCount}名 ／ 認定者が積み上げた実績 {g.proofCount}件 ／ 直近30日 +{g.last30d}
-          </div>
-          {g.topProofs.length > 0 && (
-            <div style={{ fontSize: 13, color: T.textSub, marginTop: 6, lineHeight: 1.8 }}>
-              認定者の強みTOP5：
-              {g.topProofs.map((p, i) => (
-                <span key={i}>
-                  {p.label} {p.count}人{i < g.topProofs.length - 1 ? ' ／ ' : ''}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
 
       {/* ═══ BIO（本文クランプ＋続きを読む。ヘッダー直後に配置） ═══
           §15-3(2026-08-05再改訂・CEO指示): 写真(最大6枚)・紹介動画(YouTube)を自己紹介ブロックの下に統合。
