@@ -466,3 +466,8 @@
   - 共通: `..`/空セグメント拒否・2セグメント以上・512字上限・10MB 上限。許可外は 403。
 - 呼び出し元5系統（setup avatar・dashboard avatar・MediaSection gallery・org logo・badge 新規/編集）は全て既存 path が検証を通ることを確認済み。既存フロー非接触。
 - 【観察・非接触】/api/upload-client-photo（投票フロー=保護リスト）は voteId 所有確認なしで votes.client_photo_url を更新できるが、voteId は UUID・ファイル上書き不可のため今回はスコープ外。気になるなら別タスクで。
+
+## 2026-08-05 プロフ写真・動画機能のお知らせ配信（admin・アプリ内バナー）
+- CEO指示により admin ダッシュボード「お知らせ管理」から配信（CCがChrome経由で操作・ログインはCEO）。
+- 内容: タイトル「【新機能】プロフィールに写真・動画を載せられるようになりました」／本文「プロフィール編集から、自己紹介に写真（複数枚・横スライド対応）や動画を追加できるようになりました。…」／リンク「プロフィールを編集する」→ https://realproof.jp/dashboard?tab=profile&edit=true
+- 設定: 対象=プロフェッショナルのみ・タイプ=success・即時公開・終了無期限。LINE/メール一斉送信は未実施（バナーのみ）。
