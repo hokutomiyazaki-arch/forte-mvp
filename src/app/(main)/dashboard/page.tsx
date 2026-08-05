@@ -23,6 +23,7 @@ import XDayCountdown from '@/components/XDayCountdown'
 import { validateBookingUrl, validateSocialHandle } from '@/lib/validation'
 import { getProVoteCount } from '@/lib/vote-count'
 import BookingUrlBanner from '@/components/BookingUrlBanner'
+import CharacterGenderBanner from '@/components/CharacterGenderBanner'
 import ShareButton from '@/components/ShareButton'
 import BusinessInfoTab from '@/components/dashboard/BusinessInfoTab'
 import MediaSection from '@/components/dashboard/MediaSection'
@@ -160,8 +161,8 @@ export default function DashboardPage() {
     // §15-3(2026-08-05: 自己紹介欄直下へ移設): 写真(最大6枚)・紹介動画(YouTube)
     gallery_image_urls: [] as string[],
     intro_video_url: '',
-    // 2026-08-05: タイプ分析キャラクターの性別出し分け('' = 未設定/デフォルト → null で保存)
-    character_gender: '' as '' | 'male' | 'female',
+    // 2026-08-05: タイプ分析キャラクターの性別出し分け('' = 未選択 → null で保存)
+    character_gender: '' as '' | 'male' | 'female' | 'neutral',
   })
   const [customResultFortes, setCustomResultFortes] = useState<CustomForte[]>([])
   const [customPersonalityFortes, setCustomPersonalityFortes] = useState<CustomForte[]>([])
@@ -728,9 +729,12 @@ export default function DashboardPage() {
           gallery_image_urls: Array.isArray(proData.gallery_image_urls) ? proData.gallery_image_urls : [],
           intro_video_url: proData.intro_video_url || '',
           // 2026-08-05: カラム未作成時はproData.character_genderがundefinedのまま(fail-soft)
-          character_gender: proData.character_gender === 'male' || proData.character_gender === 'female'
-            ? proData.character_gender
-            : '',
+          character_gender:
+            proData.character_gender === 'male' ||
+            proData.character_gender === 'female' ||
+            proData.character_gender === 'neutral'
+              ? proData.character_gender
+              : '',
         })
         setCustomResultFortes(proData.custom_result_fortes || [])
         setCustomPersonalityFortes(proData.custom_personality_fortes || [])
@@ -1971,12 +1975,13 @@ export default function DashboardPage() {
             </p>
             <select
               value={form.character_gender}
-              onChange={e => setForm({ ...form, character_gender: e.target.value as '' | 'male' | 'female' })}
+              onChange={e => setForm({ ...form, character_gender: e.target.value as '' | 'male' | 'female' | 'neutral' })}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
             >
-              <option value="">未設定（デフォルト）</option>
+              <option value="">未選択</option>
               <option value="male">男性</option>
               <option value="female">女性</option>
+              <option value="neutral">まんじゅうのまま</option>
             </select>
           </div>
 
@@ -2628,6 +2633,12 @@ export default function DashboardPage() {
             voteCount={voteCount}
           />
         )}
+
+      {/* 2026-08-05: タイプ分析キャラクター性別出し分けの告知バナー(CEO指示)。
+          character_gender が未選択(null)のプロにのみ表示。保存すれば(neutral含む)自動的に消える */}
+      {pro && !(pro as any).character_gender && (
+        <CharacterGenderBanner />
+      )}
 
       {/* QRコード（タブの上に配置） */}
       {!isSettingsTab && (

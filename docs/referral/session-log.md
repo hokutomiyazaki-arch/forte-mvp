@@ -441,3 +441,7 @@
 - 画像: まんじゅう9体を既存デザイン維持の紺×金色替え（線の濃さは冒険者/情熱家/愛情/兄貴姉御/天然を個別調整）で既存パス上書き。人間版18枚（Aテイスト・男女は同ポーズ同衣装で髪型のみ差・職人は「輝く手＋肩タオル」に変更）を male/ female/ に配置。
 - 出し分け: resolveCharacterImageUrl ヘルパーで personality_items.image_url を性別サブフォルダへ変換（カード・ダッシュボード・投票画面の3経路・プロ本人の設定に従う）。プロフィール編集に「キャラクターの表示: 未設定/男性/女性」（未設定=まんじゅう・fail-soft）。
 - 【SQL・承認待ち】044: professionals.character_gender text＋CHECK（チャット提示済み・CEO OK後にCC実行）。
+
+### SQL実行＋実装: character_gender・告知バナー — 2026-08-05（CEO承認「sqlmok」）
+- 【SQL実行済み・CC代行】044: professionals.character_gender text＋CHECK('male'/'female'/'neutral')。検証SELECTでカラム実在確認。
+- 選択肢: 未選択/男性/女性/**まんじゅうのまま(neutral)**。未選択(null)のプロ全員のダッシュボードに告知バナー「タイプ分析のキャラクターが新しくなりました。見た目を選んでください」→プロフィール編集へ（何か選ぶと消える）。
