@@ -118,10 +118,33 @@ export default function PhotoCropper({
         </>
       )}
 
-      {/* クロッパーモーダル */}
+      {/* クロッパーモーダル
+       * Tailwindクラス(fixed/relative/flex-1等)のみに頼らず、ImageCropper.tsx実績パターンに合わせ
+       * position/overflow/背景を全てインラインstyleで確定させる。加えてreact-easy-cropの
+       * Cropper自体にも style.containerStyle/mediaStyle/cropAreaStyle でクロップ領域の
+       * position/overflow/中央寄せ/暗転オーバーレイをインライン指定し、ライブラリ側の
+       * クラスベースCSS適用に何らかの理由で失敗しても(画像非表示・グリッド線が画面全体に
+       * 漏れる不透明化不能バグ)、必ずコンテナに閉じ込められ・画像が中央に見える状態を保証する。 */}
       {imageSrc && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex flex-col">
-          <div className="relative flex-1">
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            background: 'rgba(0,0,0,0.85)',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <div
+            style={{
+              position: 'relative',
+              flex: 1,
+              minHeight: 0,
+              overflow: 'hidden',
+              background: '#1A1A2E',
+            }}
+          >
             <Cropper
               image={imageSrc}
               crop={crop}
@@ -130,20 +153,73 @@ export default function PhotoCropper({
               onCropChange={setCrop}
               onZoomChange={setZoom}
               onCropComplete={onCropDone}
+              style={{
+                containerStyle: {
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  overflow: 'hidden',
+                },
+                mediaStyle: {
+                  position: 'absolute',
+                  top: 0,
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  margin: 'auto',
+                  maxWidth: '100%',
+                  maxHeight: '100%',
+                },
+                cropAreaStyle: {
+                  border: '1px solid rgba(255,255,255,0.5)',
+                  boxShadow: '0 0 0 9999em rgba(0,0,0,0.6)',
+                },
+              }}
             />
           </div>
-          <div className="bg-white p-4 flex flex-col items-center gap-2">
+          <div
+            style={{
+              background: '#fff',
+              padding: 16,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
             {confirmError && (
-              <p className="text-xs text-center" style={{ color: '#E24B4A' }}>{confirmError}</p>
+              <p style={{ fontSize: 12, textAlign: 'center', color: '#E24B4A' }}>{confirmError}</p>
             )}
-            <div className="flex gap-3 justify-center">
-              <button onClick={handleCancel}
-                className="px-6 py-2 border rounded text-sm">
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+              <button
+                onClick={handleCancel}
+                style={{
+                  padding: '8px 24px',
+                  border: '1px solid #ccc',
+                  borderRadius: 6,
+                  fontSize: 14,
+                  background: '#fff',
+                  cursor: 'pointer',
+                }}
+              >
                 キャンセル
               </button>
-              <button onClick={handleConfirm}
+              <button
+                onClick={handleConfirm}
                 disabled={confirming || !croppedAreaPixels}
-                className="px-6 py-2 bg-[#C4A35A] text-white rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                style={{
+                  padding: '8px 24px',
+                  background: '#C4A35A',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 6,
+                  fontSize: 14,
+                  opacity: (confirming || !croppedAreaPixels) ? 0.5 : 1,
+                  cursor: (confirming || !croppedAreaPixels) ? 'not-allowed' : 'pointer',
+                }}
+              >
                 {confirming ? '処理中…' : (!croppedAreaPixels ? '読み込み中…' : '決定')}
               </button>
             </div>
