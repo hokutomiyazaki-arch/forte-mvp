@@ -728,7 +728,13 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
         </div>
       )}
 
-      {/* ═══ 強みプルーフ TOP3（§15-2: バッジ直後・タブの外に常時表示） ═══ */}
+      {/* ═══ Supporters Strip（CEO指示2026-08-05: 自己紹介の直後・TOP3の上＝従来位置） ═══ */}
+      <SupportersStrip
+        supporters={supporters}
+        onSupporterClick={handleSupporterClick}
+      />
+
+      {/* ═══ 強みプルーフ TOP3（§15-2: タブの外に常時表示） ═══ */}
       {top3.length > 0 && (
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: T.textMuted, letterSpacing: 2, textTransform: 'uppercase', fontFamily: T.fontMono, marginBottom: 10 }}>
@@ -868,12 +874,6 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
           </div>
         </div>
       )}
-
-      {/* ═══ Supporters Strip（紹介文の下、タブの上） ═══ */}
-      <SupportersStrip
-        supporters={supporters}
-        onSupporterClick={handleSupporterClick}
-      />
 
       {/* ═══ タブ切替 ═══ */}
       <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 12, padding: 3, display: 'flex', marginBottom: 12 }}>
