@@ -15,7 +15,19 @@ import { isAcceptingOpen } from '@/lib/referral-accepting'
 // レビューFAIL修正(軽微2): ローカル実装(ReferralBookingReceivedCard.tsxと重複)を撤去し、
 // src/lib/referral-format.ts の formatSlotWithWeekday に統一する(referral-formatはimport 0本の
 // リーフでチャンクグラフ安全)。
-import { formatSlotWithWeekday } from '@/lib/referral-format'
+// 日時選択UX改善(2026-08-05・CEO指示): 過去日時ブロック・確定期限48h警告・受付時間の
+// 選択肢生成で使う純関数(datetime-local廃止・SlotPickerで自前ピッカーに統一)。
+import {
+  formatSlotWithWeekday,
+  isPastDatetimeLocalValue,
+  isWithinHoursFromNow,
+  snapToHalfHourUp,
+  formatBusinessHoursText,
+  isOutsideBusinessHours,
+  buildHalfHourTimeOptions,
+  type BusinessHours,
+} from '@/lib/referral-format'
+import SlotPicker from '@/components/referral/SlotPicker'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -40,6 +52,8 @@ interface Props {
     photoUrl: string | null
     title: string | null
     acceptingStatus: 'open' | 'closed' | null
+    /** 追加3(2026-08-05・CEO指示・設計variantB): 受付時間(未設定/カラム未作成時はnull=非表示・fail-soft)。 */
+    businessHours?: BusinessHours | null
   }
   menus: BookableMenu[]
 }
@@ -112,9 +126,26 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
               ? 'メニューを選択すると送信できます'
               : !slot1
                 ? '第1希望日時を入力すると送信できます'
-                : !consent
-                  ? '情報共有への同意にチェックすると送信できます'
-                  : ''
+                : isPastDatetimeLocalValue(slot1) || isPastDatetimeLocalValue(slot2) || isPastDatetimeLocalValue(slot3)
+                  ? '過去の日時は選択できません'
+                  : !consent
+                    ? '情報共有への同意にチェックすると送信できます'
+                    : ''
+
+  // CEO指示(2026-08-05・タスク2): プロの確定期限(48時間)に近い希望日時が1件でもあれば警告(ブロックしない)。
+  const hasNear48hSlot =
+    isWithinHoursFromNow(slot1, 48) || isWithinHoursFromNow(slot2, 48) || isWithinHoursFromNow(slot3, 48)
+
+  // 追加3(2026-08-05・CEO指示)/日時ピッカー設計最終版: 受付時間の表示テキスト・時刻選択肢
+  // (business_hours設定済みならその範囲・終了の30分前まで。未設定なら07:00〜22:00)・
+  // 受付時間外/定休日の警告(ブロックしない)。
+  const businessHours = receiverPro.businessHours ?? null
+  const businessHoursText = formatBusinessHoursText(businessHours)
+  const timeOptions = buildHalfHourTimeOptions(businessHours?.start || '07:00', businessHours?.end || '22:00')
+  const hasOutsideBusinessHoursSlot =
+    isOutsideBusinessHours(slot1, businessHours) ||
+    isOutsideBusinessHours(slot2, businessHours) ||
+    isOutsideBusinessHours(slot3, businessHours)
 
   async function handleSubmit() {
     if (submitting) return
@@ -133,9 +164,11 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
           list_id: listId,
           receiver_pro_id: receiverPro.id,
           menu_id: menuId || null,
-          slot1,
-          slot2: slot2 || null,
-          slot3: slot3 || null,
+          // 追加1(2026-08-05・CEO指示): 送信時にも30分刻みへスナップする(onChangeで既に揃っているはず
+          // だが、二重の安全網としてここでも正規化する)。
+          slot1: snapToHalfHourUp(slot1),
+          slot2: slot2 ? snapToHalfHourUp(slot2) : null,
+          slot3: slot3 ? snapToHalfHourUp(slot3) : null,
           theme,
           note,
           info_share_consent: true,
@@ -158,6 +191,8 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
           setErrorMsg('お名前・電話番号・メールアドレスをご確認ください。')
         } else if (data.error === 'too_many_requests') {
           setErrorMsg('現在リクエストが集中しています。しばらくしてからお試しください。')
+        } else if (data.error === 'invalid_slots') {
+          setErrorMsg('過去の日時は選択できません。ご希望日時をご確認ください。')
         } else if (data.error === 'menu_required') {
           setErrorMsg('メニューを選択してください。')
         } else if (data.error === 'invalid_menu_price') {
@@ -321,13 +356,21 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
           </div>
         )}
 
-        {/* CEO指摘(先行テスト第3弾): OSの日時ピッカーは曜日を出せないため、選択直後に
-            曜日付きのプレビューを表示する。第1希望のみ必須を視覚的に強調(第2・第3は任意を薄く)。 */}
+        {/* 追加3(2026-08-05・CEO指示・設計variantB): 受け手プロの受付時間(設定済みの場合のみ表示)。 */}
+        {businessHoursText && (
+          <div style={{ fontSize: 13, color: T.textSub, marginTop: -8 }}>
+            受付時間: {businessHoursText}
+          </div>
+        )}
+
+        {/* 日時ピッカー設計最終版(2026-08-05・CEO指示): datetime-localのAndroid崩壊(実機確認)を
+            受け、SlotPicker(週+曜日ボタン or 手動日付 + 時刻セレクト)に統一。第1希望のみ必須を
+            視覚的に強調(第2・第3は任意を薄く・選択解除リンク付き)。 */}
         <div>
           <label style={labelStyle}>
             第1希望日時 <span style={{ color: T.gold }}>（必須）</span>
           </label>
-          <input type="datetime-local" value={slot1} onChange={(e) => setSlot1(e.target.value)} style={inputStyle} />
+          <SlotPicker value={slot1} onChange={setSlot1} timeOptions={timeOptions} />
           {formatSlotWithWeekday(slot1) && (
             <div style={{ fontSize: 12, color: T.gold, fontWeight: 600, marginTop: 4 }}>
               {formatSlotWithWeekday(slot1)}
@@ -336,7 +379,7 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
         </div>
         <div>
           <label style={{ ...labelStyle, color: T.textMuted, fontWeight: 600 }}>第2希望（任意・あると調整しやすくなります）</label>
-          <input type="datetime-local" value={slot2} onChange={(e) => setSlot2(e.target.value)} style={inputStyle} />
+          <SlotPicker value={slot2} onChange={setSlot2} timeOptions={timeOptions} clearable />
           {formatSlotWithWeekday(slot2) && (
             <div style={{ fontSize: 12, color: T.textSub, fontWeight: 600, marginTop: 4 }}>
               {formatSlotWithWeekday(slot2)}
@@ -345,13 +388,44 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
         </div>
         <div>
           <label style={{ ...labelStyle, color: T.textMuted, fontWeight: 600 }}>第3希望（任意）</label>
-          <input type="datetime-local" value={slot3} onChange={(e) => setSlot3(e.target.value)} style={inputStyle} />
+          <SlotPicker value={slot3} onChange={setSlot3} timeOptions={timeOptions} clearable />
           {formatSlotWithWeekday(slot3) && (
             <div style={{ fontSize: 12, color: T.textSub, fontWeight: 600, marginTop: 4 }}>
               {formatSlotWithWeekday(slot3)}
             </div>
           )}
         </div>
+        {hasNear48hSlot && (
+          <div
+            style={{
+              background: '#FFF8E1',
+              border: '1px solid #F0D98C',
+              borderRadius: 8,
+              padding: '10px 12px',
+              fontSize: 13,
+              color: '#8A6D00',
+              lineHeight: 1.7,
+            }}
+          >
+            先生のご確定には最大48時間かかることがあります。直近の日時はご希望に添えない場合があります。
+          </div>
+        )}
+        {/* 追加3(2026-08-05・CEO指示): 受付時間外/定休日の可能性がある枠の警告(ブロックしない)。 */}
+        {hasOutsideBusinessHoursSlot && (
+          <div
+            style={{
+              background: '#FFF8E1',
+              border: '1px solid #F0D98C',
+              borderRadius: 8,
+              padding: '10px 12px',
+              fontSize: 13,
+              color: '#8A6D00',
+              lineHeight: 1.7,
+            }}
+          >
+            この日時は{receiverPro.name}さんの受付時間外の可能性があります。
+          </div>
+        )}
 
         <div>
           <label style={labelStyle}>ご相談のテーマ(任意)</label>

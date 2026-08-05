@@ -1844,62 +1844,62 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
                 ? '報酬はセッション完了後、自動でお受け取り口座へ送金されます(反映まで数日)。'
                 : 'お支払いは月次でのお振込です。口座の自動受け取り(Stripe)は準備中です。'}
             </div>
-          </div>
-        )}
 
-        {/* 報酬表示の再設計(CEO指示・2026-08-05): お支払い履歴(noteのお支払いページ風)。
-            status='paid'をpaid_at新しい順に表示。直近10件+「もっと見る」で全件展開。 */}
-        {sentPayoutsLoaded && (
-          <div style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', border: '1.5px solid #E5E7EB', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', marginBottom: 8 }}>お支払い履歴</div>
-            {paidPayoutsSorted.length === 0 ? (
-              <div style={{ fontSize: 13, color: '#9CA3AF' }}>まだお支払いはありません</div>
-            ) : (
-              <>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {visiblePaidPayouts.map((p) => {
-                    const reflectionText = estimateReferralPayoutReflectionText(p.paid_at)
-                    return (
-                      <div
-                        key={p.id}
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'flex-start',
-                          fontSize: 13,
-                          borderBottom: '1px solid #F3F4F6',
-                          paddingBottom: 8,
-                        }}
-                      >
-                        <div style={{ color: '#1A1A2E', lineHeight: 1.6 }}>
-                          <div>{formatPayoutDate(p.paid_at)}</div>
-                          <div style={{ color: '#6B7280' }}>{p.client_nickname || 'クライアント'}さんの紹介</div>
+            {/* CEO指示(2026-08-05): 「お支払い履歴」は独立した白カードではなく、この報酬サマリーカード
+                (金色系ボーダー)の中に区切り線で続ける形に統合する(金色カード=お金関連・白カード=案件、
+                という視覚分離のため)。中身(支払日・◯◯さんの紹介・金額・反映予定・10件+もっと見る・
+                0件時文言)は既存のまま変更しない。 */}
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #EAD9A6' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', marginBottom: 8 }}>お支払い履歴</div>
+              {paidPayoutsSorted.length === 0 ? (
+                <div style={{ fontSize: 13, color: '#9CA3AF' }}>まだお支払いはありません</div>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {visiblePaidPayouts.map((p) => {
+                      const reflectionText = estimateReferralPayoutReflectionText(p.paid_at)
+                      return (
+                        <div
+                          key={p.id}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'flex-start',
+                            fontSize: 13,
+                            borderBottom: '1px solid #F3F4F6',
+                            paddingBottom: 8,
+                          }}
+                        >
+                          <div style={{ color: '#1A1A2E', lineHeight: 1.6 }}>
+                            <div>{formatPayoutDate(p.paid_at)}</div>
+                            <div style={{ color: '#6B7280' }}>{p.client_nickname || 'クライアント'}さんの紹介</div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontWeight: 700, color: '#1A1A2E' }}>¥{p.amount_jpy.toLocaleString()}</div>
+                            {reflectionText && (
+                              <div style={{ fontSize: 13, color: '#9CA3AF', marginTop: 2 }}>
+                                口座への反映予定: {reflectionText}頃(目安)
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontWeight: 700, color: '#1A1A2E' }}>¥{p.amount_jpy.toLocaleString()}</div>
-                          {reflectionText && (
-                            <div style={{ fontSize: 13, color: '#9CA3AF', marginTop: 2 }}>
-                              口座への反映予定: {reflectionText}頃(目安)
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-                {paidPayoutsSorted.length > PAYOUT_HISTORY_PREVIEW_COUNT && (
-                  <button
-                    onClick={() => setPayoutHistoryExpanded((v) => !v)}
-                    style={{
-                      marginTop: 10, fontSize: 13, color: '#6B7280', background: 'none', border: 'none',
-                      textDecoration: 'underline', cursor: 'pointer', padding: 0,
-                    }}
-                  >
-                    {payoutHistoryExpanded ? '閉じる' : 'もっと見る'}
-                  </button>
-                )}
-              </>
-            )}
+                      )
+                    })}
+                  </div>
+                  {paidPayoutsSorted.length > PAYOUT_HISTORY_PREVIEW_COUNT && (
+                    <button
+                      onClick={() => setPayoutHistoryExpanded((v) => !v)}
+                      style={{
+                        marginTop: 10, fontSize: 13, color: '#6B7280', background: 'none', border: 'none',
+                        textDecoration: 'underline', cursor: 'pointer', padding: 0,
+                      }}
+                    >
+                      {payoutHistoryExpanded ? '閉じる' : 'もっと見る'}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         )}
 

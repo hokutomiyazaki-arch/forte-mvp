@@ -32,6 +32,26 @@ interface BookableMenu {
   duration_min: number | null
 }
 
+/**
+ * 追加3(2026-08-05・CEO指示・構造化版): 受け手プロの受付時間(professionals.business_hours jsonb)。
+ * getReferralPageData/ReferralCandidateには含めない専用の軽量フェッチ(共有関数を汚さない・fail-soft)。
+ * migration未反映(カラム未作成)の間はerrorを検出してnullを返す(=非表示。CEO決定通りサイレントnull)。
+ */
+async function getBusinessHours(proId: string): Promise<{ start: string | null; end: string | null; closed_days: string[] | null } | null> {
+  try {
+    const supabase = getSupabaseAdmin()
+    const { data, error } = await supabase
+      .from('professionals')
+      .select('business_hours')
+      .eq('id', proId)
+      .maybeSingle()
+    if (error || !data) return null
+    return (data as { business_hours: { start: string | null; end: string | null; closed_days: string[] | null } | null }).business_hours || null
+  } catch {
+    return null
+  }
+}
+
 async function getBookableMenus(proId: string): Promise<BookableMenu[]> {
   const supabase = getSupabaseAdmin()
   const { data } = await supabase
@@ -71,7 +91,8 @@ export default async function ReferralRequestPage({
   const candidate = findCandidate(data.candidates, proId)
   if (!candidate) notFound()
 
-  const menus = await getBookableMenus(proId)
+  // 軽微7(レビュー指摘): 互いに依存しない2つのフェッチをPromise.allで並列化する。
+  const [menus, businessHours] = await Promise.all([getBookableMenus(proId), getBusinessHours(proId)])
 
   return (
     <ReferralRequestForm
@@ -83,6 +104,7 @@ export default async function ReferralRequestPage({
         photoUrl: candidate.pro.photoUrl,
         title: candidate.pro.title,
         acceptingStatus: candidate.acceptingStatus,
+        businessHours,
       }}
       menus={menus}
     />

@@ -76,6 +76,8 @@ interface Props {
   onAccessLinksChange: (next: Partial<AccessLinksFormPart>) => void
   onSaveAccessLinks: () => void | Promise<void>
   savingAccessLinks: boolean
+  /** 軽微5(レビュー指摘): fail-soft再試行(business_hours列未作成)発火時の非ブロッキング注記。 */
+  accessLinksSaveNote?: string
 }
 
 interface FormState {
@@ -101,6 +103,7 @@ export default function BusinessInfoTab({
   onAccessLinksChange,
   onSaveAccessLinks,
   savingAccessLinks,
+  accessLinksSaveNote,
 }: Props) {
   const [professionType, setProfessionType] = useState<ProfessionType | null>(initialProfessionType)
   const [editModalOpen, setEditModalOpen] = useState(false)
@@ -674,6 +677,7 @@ export default function BusinessInfoTab({
         onAccessLinksChange={onAccessLinksChange}
         onSave={onSaveAccessLinks}
         saving={savingAccessLinks}
+        saveNote={accessLinksSaveNote}
       />
 
       <ProfessionTypeModal

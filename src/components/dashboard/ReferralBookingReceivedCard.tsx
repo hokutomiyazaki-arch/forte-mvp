@@ -7,8 +7,17 @@ import {
   resolveConfirmedSlotIso,
   isWithinClientRefundDeadline,
   buildGoogleCalendarUrl,
+  snapToHalfHourUp,
+  isPastDatetimeLocalValue,
+  buildHalfHourTimeOptions,
 } from '@/lib/referral-format'
 import BookingThread from '@/components/dashboard/BookingThread'
+// 日時ピッカー設計最終版(2026-08-05・CEO指示): クライアント向けフォームと同じSlotPickerを共有する
+// (datetime-local廃止・Android実機でのstep無視崩壊対策)。
+import SlotPicker from '@/components/referral/SlotPicker'
+
+/** 日時ピッカー設計最終版: プロ側counter/reschedule共通の時刻選択肢(06:00〜23:30の全域)。 */
+const PRO_SLOT_TIME_OPTIONS = buildHalfHourTimeOptions('06:00', '24:00')
 
 interface BookingItem {
   id: string
@@ -220,6 +229,12 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
       window.alert('第1希望の日時を入力してください')
       return
     }
+    // 中2a(レビュー指摘): 相談フォームと同じく送信前に過去日時チェックを行う(直叩き対策の
+    // サーバー400とは別に、ここで早期にフィードバックする)。
+    if (isPastDatetimeLocalValue(slot1) || isPastDatetimeLocalValue(slot2) || isPastDatetimeLocalValue(slot3)) {
+      window.alert('過去の日時は選択できません')
+      return
+    }
     setProcessingId(bookingId)
     try {
       const res = await fetch('/api/referral/bookings/received', {
@@ -229,7 +244,8 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
         body: JSON.stringify({
           booking_id: bookingId,
           action: 'counter',
-          counter_slots: [slot1, slot2 || null, slot3 || null].filter(Boolean),
+          // 追加1(2026-08-05・CEO指示): 送信時にも30分刻みへスナップする(二重の安全網)。
+          counter_slots: [snapToHalfHourUp(slot1), slot2 ? snapToHalfHourUp(slot2) : null, slot3 ? snapToHalfHourUp(slot3) : null].filter(Boolean),
         }),
       })
       if (res.ok) {
@@ -243,6 +259,8 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
         const data = await res.json().catch(() => ({}))
         if (data.error === 'counter_already_proposed') {
           window.alert('既に別日時を提案済みです')
+        } else if (data.error === 'invalid_slots') {
+          window.alert('過去の日時は選択できません。未来の日時を入力してください')
         } else {
           window.alert('提案の送信に失敗しました')
         }
@@ -329,6 +347,11 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
       window.alert('第1希望の日時を入力してください')
       return
     }
+    // 中2a(レビュー指摘): 送信前に過去日時チェックを行う(counterと同じ・サーバー400とは別に早期フィードバック)。
+    if (isPastDatetimeLocalValue(slot1) || isPastDatetimeLocalValue(slot2) || isPastDatetimeLocalValue(slot3)) {
+      window.alert('過去の日時は選択できません')
+      return
+    }
     setProcessingId(bookingId)
     try {
       const res = await fetch('/api/referral/bookings/received', {
@@ -338,7 +361,8 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
         body: JSON.stringify({
           booking_id: bookingId,
           action: 'reschedule',
-          reschedule_slots: [slot1, slot2 || null, slot3 || null].filter(Boolean),
+          // 追加1(2026-08-05・CEO指示): 送信時にも30分刻みへスナップする(二重の安全網)。
+          reschedule_slots: [snapToHalfHourUp(slot1), slot2 ? snapToHalfHourUp(slot2) : null, slot3 ? snapToHalfHourUp(slot3) : null].filter(Boolean),
         }),
       })
       if (res.ok) {
@@ -609,15 +633,15 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                         <label style={{ fontSize: 13, color: '#6B7280', display: 'block', marginBottom: 4 }}>
                           第{i + 1}希望{i > 0 ? '(任意)' : '(必須)'}
                         </label>
-                        <input
-                          type="datetime-local"
+                        <SlotPicker
                           value={counterInput[i]}
-                          onChange={(e) => {
-                            const next: [string, string, string] = [...counterInput] as [string, string, string]
-                            next[i] = e.target.value
-                            setCounterInputs((prev) => ({ ...prev, [item.id]: next }))
+                          timeOptions={PRO_SLOT_TIME_OPTIONS}
+                          clearable={i > 0}
+                          onChange={(next) => {
+                            const nextInput: [string, string, string] = [...counterInput] as [string, string, string]
+                            nextInput[i] = next
+                            setCounterInputs((prev) => ({ ...prev, [item.id]: nextInput }))
                           }}
-                          style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #D1D5DB', fontSize: 13, boxSizing: 'border-box' }}
                         />
                         {formatSlotWithWeekday(counterInput[i]) && (
                           <div style={{ fontSize: 13, color: '#C4A35A', fontWeight: 600, marginTop: 2 }}>
@@ -1075,15 +1099,15 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                       <label style={{ fontSize: 13, color: '#6B7280', display: 'block', marginBottom: 4 }}>
                         第{i + 1}希望{i > 0 ? '(任意)' : '(必須)'}
                       </label>
-                      <input
-                        type="datetime-local"
+                      <SlotPicker
                         value={rescheduleInput[i]}
-                        onChange={(e) => {
-                          const next: [string, string, string] = [...rescheduleInput] as [string, string, string]
-                          next[i] = e.target.value
-                          setRescheduleInputs((prev) => ({ ...prev, [item.id]: next }))
+                        timeOptions={PRO_SLOT_TIME_OPTIONS}
+                        clearable={i > 0}
+                        onChange={(next) => {
+                          const nextInput: [string, string, string] = [...rescheduleInput] as [string, string, string]
+                          nextInput[i] = next
+                          setRescheduleInputs((prev) => ({ ...prev, [item.id]: nextInput }))
                         }}
-                        style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #D1D5DB', fontSize: 13, boxSizing: 'border-box' }}
                       />
                       {formatSlotWithWeekday(rescheduleInput[i]) && (
                         <div style={{ fontSize: 13, color: '#C4A35A', fontWeight: 600, marginTop: 2 }}>

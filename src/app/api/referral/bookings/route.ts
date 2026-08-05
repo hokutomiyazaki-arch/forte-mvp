@@ -6,7 +6,7 @@ import { verifyReceiverAllowedInList } from '@/lib/referral-data'
 import { notifyBookingRequested, notifyBookingReceivedToClient } from '@/lib/referral-notify'
 import { isAcceptingOpen } from '@/lib/referral-accepting'
 import { isReferralPaymentEnabled, REFERRAL_MIN_FEE_JPY } from '@/lib/feature-flags'
-import { parseSlot } from '@/lib/referral-format'
+import { parseSlot, snapToHalfHourUp } from '@/lib/referral-format'
 
 const APP_URL = 'https://realproof.jp'
 
@@ -68,15 +68,24 @@ export async function POST(request: NextRequest) {
     const clientEmail =
       typeof body.client_email === 'string' ? body.client_email.trim().slice(0, MAX_EMAIL_LEN).toLowerCase() : ''
 
-    const slot1 = parseSlot(body.slot1)
-    const slot2 = parseSlot(body.slot2)
-    const slot3 = parseSlot(body.slot3)
+    // 追加1(2026-08-05・CEO指示): 30分刻みへの正規化(拒否ではなく丸め・秒は切り捨て)。
+    // 直叩き対策として、フロント側のstep/onChangeスナップに関わらずサーバー側でも丸める。
+    const slot1 = parseSlot(snapToHalfHourUp(typeof body.slot1 === 'string' ? body.slot1 : null))
+    const slot2 = parseSlot(snapToHalfHourUp(typeof body.slot2 === 'string' ? body.slot2 : null))
+    const slot3 = parseSlot(snapToHalfHourUp(typeof body.slot3 === 'string' ? body.slot3 : null))
 
     if (!listId || !receiverProId) {
       return NextResponse.json({ error: 'invalid_params' }, { status: 400 })
     }
     if (!slot1) {
       return NextResponse.json({ error: 'slot1_required' }, { status: 400 })
+    }
+    // 日時選択UX改善(2026-08-05・CEO指示): 過去日時のブロック。フロント側にmin属性+送信時
+    // バリデーションを入れたが、直叩き対策としてサーバー側でも検証する。1件でも過去日時が
+    // 含まれる場合は、その枠だけ静かに落とすのではなく400で明示してクライアントに直させる。
+    const providedSlots = [slot1, slot2, slot3].filter((s): s is string => !!s)
+    if (providedSlots.some((iso) => new Date(iso).getTime() <= Date.now())) {
+      return NextResponse.json({ error: 'invalid_slots' }, { status: 400 })
     }
     if (!infoShareConsent) {
       return NextResponse.json({ error: 'consent_required' }, { status: 400 })

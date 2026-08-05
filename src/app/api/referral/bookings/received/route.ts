@@ -23,6 +23,7 @@ import {
   formatSlot,
   formatSlotWithWeekday,
   parseSlot,
+  snapToHalfHourUp,
   buildGoogleCalendarUrl,
   resolveConfirmedSlotIso,
   isWithinClientRefundDeadline,
@@ -560,14 +561,18 @@ export async function PATCH(request: NextRequest) {
       }
 
       const rawRescheduleSlots = Array.isArray(body.reschedule_slots) ? body.reschedule_slots : []
-      // レビュー指摘(軽微2): 過去日時の提案を防ぐ。未来日時のみ採用する。
+      // 追加1(2026-08-05・CEO指示): 30分刻みへの正規化(拒否ではなく丸め)をparseSlotの前段で適用する。
       const parsedRescheduleSlots = rawRescheduleSlots
-        .map((s: unknown) => parseSlot(s))
+        .map((s: unknown) => parseSlot(snapToHalfHourUp(typeof s === 'string' ? s : null)))
         .filter((s: string | null): s is string => !!s)
-        .filter((iso: string) => new Date(iso).getTime() > Date.now())
         .slice(0, 3)
 
       if (parsedRescheduleSlots.length === 0) {
+        return NextResponse.json({ error: 'invalid_slots' }, { status: 400 })
+      }
+      // 中2b(レビュー指摘): counterと統一し、過去日時を静かに除外するのではなく、1件でも
+      // 過去なら400で明示する(クライアントに直させる)。
+      if (parsedRescheduleSlots.some((iso) => new Date(iso).getTime() <= Date.now())) {
         return NextResponse.json({ error: 'invalid_slots' }, { status: 400 })
       }
 
@@ -920,14 +925,20 @@ export async function PATCH(request: NextRequest) {
       }
 
       // §2-4 bookings POSTのparseSlotと同等の+09:00補正を適用(datetime-local由来の文字列)
+      // 追加1(2026-08-05・CEO指示): 30分刻みへの正規化(拒否ではなく丸め)をparseSlotの前段で適用する。
       const rawCounterSlots = Array.isArray(body.counter_slots) ? body.counter_slots : []
       const parsedCounterSlots = rawCounterSlots
-        .map((s: unknown) => parseSlot(s))
+        .map((s: unknown) => parseSlot(snapToHalfHourUp(typeof s === 'string' ? s : null)))
         .filter((s: string | null): s is string => !!s)
         .slice(0, 3)
 
       if (parsedCounterSlots.length === 0) {
         return NextResponse.json({ error: 'counter_slot_required' }, { status: 400 })
+      }
+      // 日時選択UX改善(2026-08-05・CEO指示): 過去日時のブロック。bookings POSTと同じ方針で、
+      // 1件でも過去日時が含まれる場合はその枠だけ静かに落とすのではなく400で明示する。
+      if (parsedCounterSlots.some((iso) => new Date(iso).getTime() <= Date.now())) {
+        return NextResponse.json({ error: 'invalid_slots' }, { status: 400 })
       }
 
       const counterExpiresAt = new Date(Date.now() + COUNTER_EXPIRES_HOURS * 60 * 60 * 1000).toISOString()

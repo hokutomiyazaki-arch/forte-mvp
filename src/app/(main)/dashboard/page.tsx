@@ -121,6 +121,10 @@ export default function DashboardPage() {
     access_note: '',
     service_formats: [] as string[],
     google_maps_url: '',
+    // 追加3(2026-08-05・CEO指示・構造化版): 受付時間(professionals.business_hours jsonb)
+    business_hours_start: '',
+    business_hours_end: '',
+    business_hours_closed_days: [] as string[],
     // Phase A2: 外部リンク
     website_url: '',
     instagram_handle: '',
@@ -144,6 +148,9 @@ export default function DashboardPage() {
   const [showDeactivateModal, setShowDeactivateModal] = useState(false)
   const [deactivating, setDeactivating] = useState(false)
   const [formError, setFormError] = useState('')
+  // 軽微5(レビュー指摘): fail-soft再試行(business_hours列未作成)が発火した場合の非ブロッキング注記。
+  // 保存成功後にAccessLinksSectionの「✓ 保存しました」トーストと一緒に表示する。
+  const [businessHoursSaveNote, setBusinessHoursSaveNote] = useState('')
   // Phase 2: booking_url バリデーション専用のフィールドエラー (入力欄直下に表示)
   const [bookingUrlError, setBookingUrlError] = useState('')
   // Phase 2: 累積投票数 (BookingUrlBanner で「○○人を応援した」の表示に使用)
@@ -667,6 +674,13 @@ export default function DashboardPage() {
           access_note: proData.access_note || '',
           service_formats: Array.isArray(proData.service_formats) ? proData.service_formats : [],
           google_maps_url: proData.google_maps_url || '',
+          // 追加3(2026-08-05・CEO指示・構造化版): カラム未作成時はproData.business_hoursがundefined
+          // のままになる(select('*')はサイレントに既存カラムのみ返す・fail-soft)。
+          business_hours_start: proData.business_hours?.start || '',
+          business_hours_end: proData.business_hours?.end || '',
+          business_hours_closed_days: Array.isArray(proData.business_hours?.closed_days)
+            ? proData.business_hours.closed_days
+            : [],
           // Phase A2: 外部リンク
           website_url: proData.website_url || '',
           instagram_handle: proData.instagram_handle || '',
@@ -1171,6 +1185,15 @@ export default function DashboardPage() {
       access_note: form.access_note.trim() || null,
       service_formats: form.service_formats,
       google_maps_url: form.google_maps_url.trim() || null,
+      // 追加3(2026-08-05・CEO指示・構造化版): 全て未入力ならnull(DEFAULTを付けない・任意設定)。
+      business_hours:
+        form.business_hours_start || form.business_hours_end || form.business_hours_closed_days.length > 0
+          ? {
+              start: form.business_hours_start || null,
+              end: form.business_hours_end || null,
+              closed_days: form.business_hours_closed_days.length > 0 ? form.business_hours_closed_days : null,
+            }
+          : null,
       // Phase A2: 外部リンク
       website_url: form.website_url.trim() || null,
       instagram_handle: validateSocialHandle(form.instagram_handle, 'Instagram').normalized || null,
@@ -1182,14 +1205,52 @@ export default function DashboardPage() {
 
     const isNew = !pro
 
-    const upsertRecord = pro ? { ...record, id: pro.id } : record
+    let upsertRecord: any = pro ? { ...record, id: pro.id } : record
     console.log('[handleSave] user.id:', user.id)
     console.log('[handleSave] pro:', pro)
     console.log('[handleSave] upsertRecord:', JSON.stringify(upsertRecord))
-    const { data: savedData, error: saveError } = await db.upsert(
+    let { data: savedData, error: saveError } = await db.upsert(
       'professionals', upsertRecord, { onConflict: 'user_id' },
       { select: '*', maybeSingle: true }
     )
+
+    // 軽微5(レビュー指摘): 前回の再試行結果を持ち越さない(今回の保存が正常なら注記を出さない)。
+    setBusinessHoursSaveNote('')
+
+    // fail-soft(2026-08-05・CEO指示): migration 041(business_hours列追加)が未実行の環境向け。
+    // certification/apply の stats_snapshot と同じパターン(§10調査技法): PGRST204(INSERT/UPSERT
+    // ボディの未知キー)/42703(undefined column)、またはメッセージにカラム名が含まれる場合を検知し、
+    // business_hoursキーを除いたペイロードで1回だけ再試行する。これで041の実行タイミングが
+    // デプロイ前後どちらでも安全になる(DB先→コード後の順序に依存しない)。
+    // 軽微5(レビュー指摘): メッセージ判定は`business_hours`の完全一致語(\b境界)に限定を強める
+    // (誤検知でbusiness_hoursを毎回除去してしまうのを防ぐ)。
+    if (
+      saveError &&
+      upsertRecord &&
+      typeof upsertRecord === 'object' &&
+      'business_hours' in upsertRecord &&
+      ((saveError as any).code === '42703' ||
+        (saveError as any).code === 'PGRST204' ||
+        /\bbusiness_hours\b/.test(saveError.message || ''))
+    ) {
+      console.error(
+        '[handleSave] business_hours column missing — retrying without it:',
+        (saveError as any).code,
+        saveError.message
+      )
+      const { business_hours: _omit, ...upsertRecordWithoutBusinessHours } = upsertRecord
+      upsertRecord = upsertRecordWithoutBusinessHours
+      const retryResult = await db.upsert(
+        'professionals', upsertRecord, { onConflict: 'user_id' },
+        { select: '*', maybeSingle: true }
+      )
+      savedData = retryResult.data
+      saveError = retryResult.error
+      // 軽微5: 再試行が成功した場合のみ注記を出す(再試行後もエラーなら通常のエラー表示に任せる)。
+      if (!saveError) {
+        setBusinessHoursSaveNote('（受付時間はデータベース更新前のため保存されませんでした）')
+      }
+    }
 
     if (saveError) {
       console.error('[handleSave] upsert pro error:', saveError.message, 'code:', (saveError as any).code, 'details:', (saveError as any).details)
@@ -4633,6 +4694,9 @@ export default function DashboardPage() {
             access_note: form.access_note,
             service_formats: form.service_formats,
             google_maps_url: form.google_maps_url,
+            business_hours_start: form.business_hours_start,
+            business_hours_end: form.business_hours_end,
+            business_hours_closed_days: form.business_hours_closed_days,
             website_url: form.website_url,
             instagram_handle: form.instagram_handle,
             twitter_handle: form.twitter_handle,
@@ -4643,6 +4707,7 @@ export default function DashboardPage() {
           onAccessLinksChange={(next) => setForm(prev => ({ ...prev, ...next }))}
           onSaveAccessLinks={() => doSaveLogic()}
           savingAccessLinks={saving}
+          accessLinksSaveNote={businessHoursSaveNote}
         />
       )}
 

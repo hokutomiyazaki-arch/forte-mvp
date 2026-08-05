@@ -15,6 +15,17 @@ const SERVICE_FORMAT_OPTIONS: { value: string; label: string }[] = [
   { value: 'online', label: 'オンライン' },
 ]
 
+/** 追加3(2026-08-05・CEO指示): closed_daysの値は英語3文字の小文字曜日コード(単一情報源はreferral-format.ts)。 */
+const CLOSED_DAY_OPTIONS: { value: string; label: string }[] = [
+  { value: 'mon', label: '月' },
+  { value: 'tue', label: '火' },
+  { value: 'wed', label: '水' },
+  { value: 'thu', label: '木' },
+  { value: 'fri', label: '金' },
+  { value: 'sat', label: '土' },
+  { value: 'sun', label: '日' },
+]
+
 export interface AccessLinksFormPart {
   address: string
   nearest_station: string
@@ -28,6 +39,11 @@ export interface AccessLinksFormPart {
   facebook_url: string
   youtube_url: string
   phone_number: string
+  // 追加3(2026-08-05・CEO指示・構造化版): 受付時間(professionals.business_hours jsonb)。
+  // {"start","end","closed_days"}の各フィールドをフラットなフォーム状態として保持する。
+  business_hours_start: string
+  business_hours_end: string
+  business_hours_closed_days: string[]
 }
 
 interface Props {
@@ -35,9 +51,12 @@ interface Props {
   onAccessLinksChange: (next: Partial<AccessLinksFormPart>) => void
   onSave: () => void | Promise<void>
   saving: boolean
+  /** 軽微5(レビュー指摘): fail-soft再試行(business_hours列未作成)が発火した場合の非ブロッキング注記。
+   * 保存成功トースト表示中のみ一緒に出す(saving完了直後の1回分の結果を表す)。 */
+  saveNote?: string
 }
 
-export default function AccessLinksSection({ accessLinks, onAccessLinksChange, onSave, saving }: Props) {
+export default function AccessLinksSection({ accessLinks, onAccessLinksChange, onSave, saving, saveNote }: Props) {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [savedToast, setSavedToast] = useState(false)
 
@@ -56,6 +75,13 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
     const current = Array.isArray(accessLinks.service_formats) ? accessLinks.service_formats : []
     const next = current.includes(value) ? current.filter(v => v !== value) : [...current, value]
     setField('service_formats', next)
+  }
+
+  /** 追加3(2026-08-05・CEO指示): 定休日チェックボックスのトグル。 */
+  const toggleClosedDay = (value: string) => {
+    const current = Array.isArray(accessLinks.business_hours_closed_days) ? accessLinks.business_hours_closed_days : []
+    const next = current.includes(value) ? current.filter(v => v !== value) : [...current, value]
+    setField('business_hours_closed_days', next)
   }
 
   const handleSubmit = async () => {
@@ -87,6 +113,16 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
 
     const v9 = validatePhoneNumber(accessLinks.phone_number)
     if (!v9.valid) errs.phone_number = v9.error
+
+    // 中4(レビュー指摘): 開始・終了とも入力時はstart<endを検証する(日をまたぐ深夜営業は非対応のため)。
+    // "HH:mm"はゼロ埋め済みの固定長文字列のため文字列比較で時刻比較が成立する。
+    if (
+      accessLinks.business_hours_start &&
+      accessLinks.business_hours_end &&
+      accessLinks.business_hours_start >= accessLinks.business_hours_end
+    ) {
+      errs.business_hours_end = '終了時刻は開始時刻より後にしてください'
+    }
 
     if (Object.keys(errs).length > 0) {
       setErrors(errs)
@@ -222,6 +258,63 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
         {errors.service_formats && <p style={errorTextStyle}>{errors.service_formats}</p>}
       </div>
 
+      {/* 追加3(2026-08-05・CEO指示・構造化版): 受付時間(開始/終了時刻・定休日)。すべて任意。 */}
+      <div style={{ marginBottom: 16 }}>
+        <label style={labelStyle}>受付時間(任意)</label>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 8 }}>
+          <div>
+            <label style={{ ...labelStyle, color: '#6B7280' }}>開始時刻</label>
+            <input
+              type="time"
+              value={accessLinks.business_hours_start}
+              step={1800}
+              onChange={e => setField('business_hours_start', e.target.value)}
+              style={inputStyle(false)}
+            />
+          </div>
+          <div>
+            <label style={{ ...labelStyle, color: '#6B7280' }}>終了時刻</label>
+            <input
+              type="time"
+              value={accessLinks.business_hours_end}
+              step={1800}
+              onChange={e => setField('business_hours_end', e.target.value)}
+              style={inputStyle(!!errors.business_hours_end)}
+            />
+            {errors.business_hours_end && <p style={errorTextStyle}>{errors.business_hours_end}</p>}
+          </div>
+        </div>
+        {/* 中4(レビュー指摘): 日をまたぐ深夜営業設定は現在非対応であることを明示する。 */}
+        <p style={{ fontSize: 13, color: '#9CA3AF', marginTop: -4, marginBottom: 10, lineHeight: 1.6 }}>
+          日をまたぐ設定(深夜営業)は現在非対応です。
+        </p>
+        <label style={{ ...labelStyle, color: '#6B7280' }}>定休日</label>
+        <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 8 }}>
+          {CLOSED_DAY_OPTIONS.map(opt => {
+            const checked = accessLinks.business_hours_closed_days.includes(opt.value)
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => toggleClosedDay(opt.value)}
+                style={{
+                  fontSize: 13,
+                  padding: '6px 12px',
+                  background: checked ? '#C4A35A' : 'white',
+                  color: checked ? '#1A1A2E' : '#6B7280',
+                  border: `1px solid ${checked ? '#C4A35A' : '#E5E7EB'}`,
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontWeight: checked ? 700 : 500,
+                }}
+              >
+                {opt.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
       <div style={{ marginBottom: 16 }}>
         <label style={labelStyle}>GoogleMaps URL</label>
         <input
@@ -334,9 +427,17 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
       </button>
 
       {savedToast && (
-        <p style={{ fontSize: 13, color: '#10B981', textAlign: 'center' as const, marginTop: 4 }}>
-          ✓ 保存しました
-        </p>
+        <>
+          <p style={{ fontSize: 13, color: '#10B981', textAlign: 'center' as const, marginTop: 4 }}>
+            ✓ 保存しました
+          </p>
+          {/* 軽微5(レビュー指摘): fail-soft再試行(business_hours列未作成)が発火した場合のみ表示。 */}
+          {saveNote && (
+            <p style={{ fontSize: 13, color: '#B45309', textAlign: 'center' as const, marginTop: 2 }}>
+              {saveNote}
+            </p>
+          )}
+        </>
       )}
     </>
   )
