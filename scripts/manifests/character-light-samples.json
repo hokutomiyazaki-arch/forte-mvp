@@ -1,0 +1,20 @@
+[
+  {
+    "name": "light-adventurer",
+    "prompt": "Mascot character design: a cute lantern character (vintage camping lantern with a warm glowing gold flame as its face area - the flame has tiny dot eyes and a small smile), stubby little arms and legs, one arm raised pointing forward adventurously, tiny compass hanging on its side. Completely genderless object character. Flat vector line-art with clean deep navy #1A1A2E outlines, warm gold #C4A35A glow and accents, matching a modern editorial illustration system. Full body, centered on pure white background, generous margin, small sparkle dots around. Absolutely no text, no letters, no labels.",
+    "size": "1024x1024",
+    "quality": "medium"
+  },
+  {
+    "name": "light-passionate",
+    "prompt": "Mascot character design: a cute bonfire character - a lively gold flame with tiny dot eyes and a determined big smile sitting on a small bundle of navy logs, stubby little arms raised in a cheering pose, energy sparks around. Completely genderless object character. Flat vector line-art with clean deep navy #1A1A2E outlines, warm gold #C4A35A flame, matching a modern editorial illustration system. Full body, centered on pure white background, generous margin. Absolutely no text, no letters, no labels.",
+    "size": "1024x1024",
+    "quality": "medium"
+  },
+  {
+    "name": "light-leader",
+    "prompt": "Mascot character design: a cute lighthouse character - a small sturdy navy-striped lighthouse with a friendly face (tiny dot eyes, confident gentle smile) on its tower, a warm gold light beam shining from its top, stubby little arms, one hand giving a reassuring thumbs-up. Completely genderless object character. Flat vector line-art with clean deep navy #1A1A2E outlines, gold #C4A35A light, matching a modern editorial illustration system. Full body, centered on pure white background, generous margin. Absolutely no text, no letters, no labels.",
+    "size": "1024x1024",
+    "quality": "medium"
+  }
+]

@@ -253,12 +253,13 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
     pro.youtube_url ||
     pro.phone_number
   )
-  // §15-3: 写真(最大6枚)・紹介動画(YouTube)。カラム未作成環境ではpro.gallery_image_urls/
-  // intro_video_urlがundefinedのままなのでfail-soft(サイレントに非表示)。
+  // §15-3(2026-08-05: 自己紹介ブロックへ移設・CEO指示): 写真(最大6枚)・紹介動画(YouTube)。
+  // カラム未作成環境ではpro.gallery_image_urls/intro_video_urlがundefinedのままなのでfail-soft(サイレントに非表示)。
+  // 「サービス・案内」タブの表示条件からは外す(メニュー・アクセス・リンクのみに戻す)。
   const galleryImages: string[] = Array.isArray(pro.gallery_image_urls) ? pro.gallery_image_urls : []
   const hasGallery = galleryImages.length > 0
   const hasIntroVideo = !!pro.intro_video_url
-  const showServiceTab = hasMenus || hasAccessInfo || hasLinks || hasGallery || hasIntroVideo
+  const showServiceTab = hasMenus || hasAccessInfo || hasLinks
   const initialTab: 'strengths' | 'certs' | 'voices' | 'menus' =
     tabParam === 'voices' || tabParam === 'certs'
       ? tabParam
@@ -686,43 +687,52 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
         </div>
       </div>
 
-      {/* ═══ BIO（5行クランプ＋続きを読む。ヘッダー直後に配置） ═══ */}
-      {pro.bio && (
+      {/* ═══ BIO（5行クランプ＋続きを読む。ヘッダー直後に配置） ═══
+          §15-3(2026-08-05: サービス・案内タブから移設・CEO指示): 写真(最大6枚)・紹介動画(YouTube)を
+          自己紹介ブロックの下に統合。bioが空でもギャラリー/動画があれば表示する
+          (旧: 自己紹介の写真1枚=bio_image_urlは廃止・統合済み)。 */}
+      {(pro.bio || hasGallery || hasIntroVideo) && (
         <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: '16px 18px', marginBottom: 12 }}>
-          <p
-            ref={bioRef}
-            style={{
-              fontSize: 12, color: T.textSub, lineHeight: 1.9, whiteSpace: 'pre-wrap', margin: 0, fontWeight: 500,
-              ...(!bioExpanded ? {
-                display: '-webkit-box',
-                WebkitLineClamp: 5,
-                WebkitBoxOrient: 'vertical' as const,
-                overflow: 'hidden',
-              } : {}),
-            }}
-          >
-            {pro.bio}
-          </p>
-          {bioClamped && (
-            <button
-              onClick={() => setBioExpanded(v => !v)}
-              style={{
-                background: 'transparent', border: 'none', padding: 0, marginTop: 6,
-                fontSize: 11, fontWeight: 700, color: T.gold, cursor: 'pointer', fontFamily: T.font,
-              }}
-            >
-              {bioExpanded ? '閉じる' : '続きを読む'}
-            </button>
+          {pro.bio && (
+            <>
+              <p
+                ref={bioRef}
+                style={{
+                  fontSize: 12, color: T.textSub, lineHeight: 1.9, whiteSpace: 'pre-wrap', margin: 0, fontWeight: 500,
+                  ...(!bioExpanded ? {
+                    display: '-webkit-box',
+                    WebkitLineClamp: 5,
+                    WebkitBoxOrient: 'vertical' as const,
+                    overflow: 'hidden',
+                  } : {}),
+                }}
+              >
+                {pro.bio}
+              </p>
+              {bioClamped && (
+                <button
+                  onClick={() => setBioExpanded(v => !v)}
+                  style={{
+                    background: 'transparent', border: 'none', padding: 0, marginTop: 6,
+                    fontSize: 11, fontWeight: 700, color: T.gold, cursor: 'pointer', fontFamily: T.font,
+                  }}
+                >
+                  {bioExpanded ? '閉じる' : '続きを読む'}
+                </button>
+              )}
+            </>
           )}
-          {/* 自己紹介の写真1枚(任意)。CEO指摘(2026-08-05): 5行以内のbioは展開ボタンが出ないため、
-              クランプされていない場合は常時表示・クランプ時のみ展開後に表示する。
-              カラム未作成環境ではpro.bio_image_urlがundefinedのままなのでfail-soft(非表示)。 */}
-          {(!bioClamped || bioExpanded) && pro.bio_image_url && (
-            <img
-              src={pro.bio_image_url}
-              alt=""
-              style={{ width: '100%', borderRadius: 12, marginTop: 12, display: 'block' }}
-            />
+          {/* 写真(最大6枚)・紹介動画。5行以内のbioは展開ボタンが出ないため、クランプされていない
+              場合は常時表示・クランプ時のみ展開後に表示する(旧bio_image_urlと同じ表示条件)。 */}
+          {(!bioClamped || bioExpanded) && hasGallery && (
+            <div style={{ marginTop: pro.bio ? 12 : 0 }}>
+              <GalleryCarousel images={galleryImages} />
+            </div>
+          )}
+          {(!bioClamped || bioExpanded) && hasIntroVideo && (
+            <div style={{ marginTop: (pro.bio || hasGallery) ? 12 : 0 }}>
+              <YouTubeEmbed url={pro.intro_video_url} />
+            </div>
           )}
         </div>
       )}
@@ -1416,14 +1426,6 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
               </div>
             </>
           )}
-
-          {/* ── §15-3: 写真カルーセル・紹介動画（CEO指示2026-08-05: タブの一番下に配置） ── */}
-          {hasGallery && (
-            <div style={{ marginTop: (hasMenus || hasAccessInfo || hasLinks) ? 24 : 0 }}>
-              <GalleryCarousel images={galleryImages} />
-            </div>
-          )}
-          {hasIntroVideo && <YouTubeEmbed url={pro.intro_video_url} />}
         </div>
       )}
 

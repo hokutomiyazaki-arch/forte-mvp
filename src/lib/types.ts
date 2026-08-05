@@ -51,11 +51,12 @@ export interface Professional {
   accepting_note?: string | null
   accepting_updated_at?: string | null
   delegate_list_id?: string | null
-  // §15-3: サービス・案内タブの写真(最大6枚)・紹介動画(YouTube)。カラム未作成環境ではundefined(fail-soft)。
+  // §15-3(2026-08-05: サービス・案内タブから自己紹介ブロック直下へ移設・CEO指示): 写真(最大6枚)・
+  // 紹介動画(YouTube)。カラム未作成環境ではundefined(fail-soft)。
   gallery_image_urls?: string[] | null
   intro_video_url?: string | null
-  // 自己紹介の展開時のみ表示する写真1枚。カラム未作成環境ではundefined(fail-soft)。
-  bio_image_url?: string | null
+  // 旧: 自己紹介の展開時のみ表示する写真1枚(bio_image_url)は2026-08-05に廃止(gallery_image_urlsへ統合)。
+  // DBカラムは残置(無害)だがコードは参照しない。
 }
 
 export interface CustomForte {

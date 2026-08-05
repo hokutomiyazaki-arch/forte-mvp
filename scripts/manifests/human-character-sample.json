@@ -1,0 +1,14 @@
+[
+  {
+    "name": "adventurer-male",
+    "prompt": "Cute chibi human mascot character, male version: a small cheerful young man with short simple navy hair, wearing a navy explorer outfit and safari hat with gold band, holding a gold compass, adventurous joyful stance. Rounded friendly proportions (big head, small body), flat vector line-art with clean deep navy #1A1A2E outlines, white clothing with navy accents, gold #C4A35A details, modern editorial illustration system. Simple dot eyes, warm smile. Full body, centered on pure white background, generous margin. Absolutely no text, no letters, no labels.",
+    "size": "1024x1024",
+    "quality": "medium"
+  },
+  {
+    "name": "adventurer-female",
+    "prompt": "Cute chibi human mascot character, female version: a small cheerful young woman with a simple navy short bob hairstyle, wearing a navy explorer outfit and safari hat with gold band, holding a gold compass, adventurous joyful stance. Rounded friendly proportions (big head, small body), flat vector line-art with clean deep navy #1A1A2E outlines, white clothing with navy accents, gold #C4A35A details, modern editorial illustration system. Simple dot eyes, warm smile. Full body, centered on pure white background, generous margin. Same pose and outfit design as a matching male version, differing only in hairstyle and silhouette. Absolutely no text, no letters, no labels.",
+    "size": "1024x1024",
+    "quality": "medium"
+  }
+]
