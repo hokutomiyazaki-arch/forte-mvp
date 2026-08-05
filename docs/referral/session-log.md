@@ -484,3 +484,9 @@
 - 実行時トラブル: Supabase SQLエディタの多重実行癖でgrowth_role関連だけ先行コミットされ42710エラー→残りを冪等形（IF NOT EXISTS/DROP CONSTRAINT IF EXISTS）で再実行し復旧。実害なし。
 - 実装（rp-implementer・型チェック通過）: migration 045ファイル・isOrgCardEnabled()（FEATURE_ORG_CARD・既定OFF）・card-data getGrowthCards()（フラグOFFで未クエリ・fail-soft）・CardClientに育成カード（タブ外・臨床と別カード・「認定者/代表/講師」用語）。レビュー実行中。
 - instructor（講師）の指定はCEO保留中（founderのみで開始可）。フラグONはコードデプロイ後にVercel環境変数 FEATURE_ORG_CARD=true で。
+
+### 方針転換・作り直し: 育成プルーフの表示は新規セクションを作らない — 2026-08-05（CEO決定・fcc6aa2）
+- ①個人ページ: 既存「所属団体」表示を役割で出し分け。メンバー=現状ピルのまま／代表・指導者=役割行（団体名＋[代表]/[指導者]＋認定者◯名＋団体ページを見る→）。数字はmember_count**1つだけ**（個人プルーフとの誤読防止・1階と2階を混ぜない）。詳細統計（実績件数・直近30日・TOP5）は個人ページから撤去し団体ページに委譲。役割は排他でなく複数行共存可。
+- ②団体ページ上部に「代表：[顔写真] 名前 →」（growth_role='founder'・/card/へ相互リンク・複数代表許容・professional_id DISTINCT・deactivated除外・fail-soft）。**こちらはフラグ無関係でデプロイ即時有効**（growth_roleは設定済みのため）。個人ページ側はFEATURE_ORG_CARD=trueで有効化。
+- 【補足】現状の個人ページのメンバー表示に[認定]表記・認定日は元々無い（CEO認識と相違・チャットで報告済み。「現状のまま」に従い非接触）。org_growth_proof_top VIEWは未使用になったが残置（DROPはCEO判断待ち・保守コストなし）。カード側の認定者数=160（代表除外）と団体ページの既存認定者数=161（代表込み）は定義差として存置。
+- レビュー: rp-reviewerが529過負荷で2回失敗→CC本体が直接diffレビュー（重大1件=org_members複数行による団体カード重複を検出・修正済み）。
