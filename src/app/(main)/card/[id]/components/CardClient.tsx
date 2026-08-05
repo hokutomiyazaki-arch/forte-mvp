@@ -692,10 +692,10 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
           §15-3(2026-08-05再改訂・CEO指示): 写真(最大6枚)・紹介動画(YouTube)を自己紹介ブロックの下に統合。
           ルール:
           1. 画像(ギャラリー)あり: 折りたたみ状態でもカルーセルは常時表示。本文クランプは3行(3行+画像2行=5行分)
-          2. 画像なし: 従来通り本文5行クランプ
-          3. 動画は折りたたみ状態では絶対に表示しない(展開時のみ)。動画がある場合は本文が短くても必ず「続きを読む」を出す
+          2. 写真・動画は折りたたみ状態では表示しない(CEO最終決定2026-08-05: 写真も必ず畳む)。
+          3. 写真または動画がある場合は本文が短くても必ず「続きを読む」を出す
           4. 展開後は全文＋カルーセル＋動画
-          5. 「続きを読む」表示条件 = 本文がクランプ行数を超える(bioClamped) || 動画あり(hasIntroVideo)
+          5. 「続きを読む」表示条件 = 本文が5行を超える(bioClamped) || 写真あり || 動画あり
           bioが空でもギャラリー/動画があれば表示する(旧: 自己紹介の写真1枚=bio_image_urlは廃止・統合済み)。 */}
       {(pro.bio || hasGallery || hasIntroVideo) && (
         <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: '16px 18px', marginBottom: 12 }}>
@@ -706,7 +706,7 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
                 fontSize: 12, color: T.textSub, lineHeight: 1.9, whiteSpace: 'pre-wrap', margin: 0, fontWeight: 500,
                 ...(!bioExpanded ? {
                   display: '-webkit-box',
-                  WebkitLineClamp: hasGallery ? 3 : 5,
+                  WebkitLineClamp: 5,
                   WebkitBoxOrient: 'vertical' as const,
                   overflow: 'hidden',
                 } : {}),
@@ -715,14 +715,14 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
               {pro.bio}
             </p>
           )}
-          {/* ルール1: ギャラリーは折りたたみ状態でも常時表示(トップ表示OK) */}
-          {hasGallery && (
+          {/* ルール2・4: ギャラリーは展開時のみ表示 */}
+          {bioExpanded && hasGallery && (
             <div style={{ marginTop: pro.bio ? 12 : 0 }}>
               <GalleryCarousel images={galleryImages} />
             </div>
           )}
-          {/* ルール5: 本文がクランプを超える or 動画がある場合のみ「続きを読む」を出す */}
-          {(bioClamped || hasIntroVideo) && (
+          {/* ルール5: 本文がクランプを超える or 写真/動画がある場合のみ「続きを読む」を出す */}
+          {(bioClamped || hasGallery || hasIntroVideo) && (
             <button
               onClick={() => setBioExpanded(v => !v)}
               style={{
