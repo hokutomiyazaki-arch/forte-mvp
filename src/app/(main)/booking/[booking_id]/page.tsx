@@ -114,12 +114,27 @@ export default async function BookingCapabilityPage({
             textAlign: 'center',
           }}
         >
+          {/* CEO指摘(2026-08-05・スクショ指摘): 支払い完了までは成立ではないため「確定」ではなく「仮確定」と表記する。 */}
           <p style={{ fontSize: 13, color: T.dark, fontWeight: 700, lineHeight: 1.8 }}>
-            日時は確定しています。予約の成立には予約金のお支払いが必要です。
+            日時は仮確定です。予約の成立には予約金のお支払いが必要です。
           </p>
           {data.confirmedSlotText && (
             <p style={{ fontSize: 13, color: T.textSub, marginTop: 10, lineHeight: 1.7 }}>{data.confirmedSlotText}</p>
           )}
+          {/* CEO指示(2026-08-05・スクショ指示): イラストで柔らかく。見出しの下・予約金説明ボックスの上。 */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/referral-guide/guide-fee.png"
+            alt="予約金のしくみ"
+            style={{
+              display: 'block',
+              width: '100%',
+              maxWidth: 420,
+              height: 'auto',
+              margin: '14px auto 0',
+              borderRadius: 12,
+            }}
+          />
           {data.feeAmountJpy !== null && (
             <div
               style={{

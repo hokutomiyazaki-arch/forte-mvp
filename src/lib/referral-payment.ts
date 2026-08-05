@@ -423,10 +423,11 @@ export async function issueFeePaymentLinkAndNotify(params: {
     if (params.clientUserId || params.clientEmail) {
       await notifyClientByEmail(
         { userId: params.clientUserId, email: params.clientEmail },
-        `${params.receiverProName}さんとの紹介予約確定・お支払いのご案内`,
+        // CEO指摘(2026-08-05・スクショ指摘): 支払い完了までは成立ではないため「確定」ではなく「仮確定」と表記する。
+        `${params.receiverProName}さんとの紹介予約 仮確定・お支払いのご案内`,
         emailShell(
-          '紹介予約確定・お支払いのご案内',
-          `${params.confirmedSlotText ? `${params.confirmedSlotText} に確定しました。` : 'ご相談の日時が確定しました。'}<br>担当: ${safeReceiverProName}さん<br><br>` +
+          '紹介予約 仮確定・お支払いのご案内',
+          `${params.confirmedSlotText ? `${params.confirmedSlotText} で仮確定しています。` : 'ご相談の日時が仮確定しています。'}<br>担当: ${safeReceiverProName}さん<br><br>` +
             `予約金 ¥${params.feeAmountJpy.toLocaleString()} のお支払いで紹介予約が成立します(24時間以内)。<br>` +
             `当日は残額 ¥${residualJpy.toLocaleString()} を${safeReceiverProName}さんに直接お支払いください(合計 ¥${params.priceJpy.toLocaleString()} は変わりません)。<br>` +
             // 予約フィー説明不足対応(CEO指示・2026-08-04): 3点セットの③(返金条件)を明記する。

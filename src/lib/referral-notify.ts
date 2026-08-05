@@ -301,23 +301,36 @@ export async function notifyBookingPaymentCompletedToReceiver(
   const reminder = opts?.remindMissingLocationInfo
     ? 'プロフィールに場所情報が未設定のため、クライアントへ当日の場所をお伝えください。'
     : ''
-  // タスクA(2026-08-05・CEO指示): 当日受取額の内訳(ReferralBookingReceivedCardの
-  // formatReceiverTodayAmountTextと同じ考え方・単一情報源はここではなく各呼び出し元が算出済みの
-  // feeAmountJpyを渡す形。priceJpy/feeAmountJpyのいずれも無ければ表示しない)。
-  const amountText =
+  // タスクA(2026-08-05・CEO指示・再設計): 当日受取額をReferralBookingReceivedCardの
+  // ReceiverTodayAmountBlockと同じ4行構成(ラベル→金額(太字大)→内訳→安心の一文)で示す。
+  // 単一情報源はここではなく各呼び出し元が算出済みのfeeAmountJpyを渡す形。
+  // priceJpy/feeAmountJpyのいずれも無ければ(または対象外)ブロック自体を表示しない。
+  // CEO決定(2026-08-05): 受け手プロ向けの表記は「予約金」ではなく「紹介フィー」に統一する
+  // (対象は受け手画面・メールのみ。クライアント向け「予約金」・送り手向け「紹介報酬」は変更しない)。
+  const hasAmount =
     typeof opts?.priceJpy === 'number' && opts.priceJpy > 0 && typeof opts?.feeAmountJpy === 'number' && opts.feeAmountJpy > 0
-      ? `当日クライアントから受け取る金額: ¥${(opts.priceJpy - opts.feeAmountJpy).toLocaleString('ja-JP')}(セッション料金 ¥${opts.priceJpy.toLocaleString('ja-JP')} − 予約金 ¥${opts.feeAmountJpy.toLocaleString('ja-JP')})`
-      : ''
+  const receiveAmountJpy = hasAmount ? (opts!.priceJpy as number) - (opts!.feeAmountJpy as number) : 0
+  const amountBlockHtml = hasAmount
+    ? `<div style="margin:14px 0;padding:12px 14px;background:#F0FDF4;border-radius:8px;">` +
+      `<div style="font-size:13px;color:#6B7280;">当日クライアントから受け取る金額</div>` +
+      `<div style="font-size:20px;font-weight:800;color:#1A1A2E;margin-top:2px;">¥${receiveAmountJpy.toLocaleString('ja-JP')}</div>` +
+      `<div style="font-size:13px;color:#6B7280;margin-top:2px;">セッション料金 ¥${(opts!.priceJpy as number).toLocaleString('ja-JP')} − 紹介フィー ¥${(opts!.feeAmountJpy as number).toLocaleString('ja-JP')}(クライアントが予約金として支払い済み)</div>` +
+      `<div style="font-size:13px;color:#1A6B3C;font-weight:600;margin-top:4px;">この金額はそのまま全額あなたの受け取りです。REAL PROOFへのお支払いや後日の差し引きはありません。</div>` +
+      `</div>`
+    : ''
+  const amountLineText = hasAmount
+    ? `当日クライアントから受け取る金額: ¥${receiveAmountJpy.toLocaleString('ja-JP')}(セッション料金 ¥${(opts!.priceJpy as number).toLocaleString('ja-JP')} − 紹介フィー ¥${(opts!.feeAmountJpy as number).toLocaleString('ja-JP')}・クライアントが予約金として支払い済み)。この金額はそのまま全額あなたの受け取りです。`
+    : ''
   // §2-4ステージ3(決済確認後の連絡先開示・CEO決定): 決済確認がとれたこの時点から
   // クライアントの連絡先(氏名・電話番号・メール)がダッシュボードで開示される。
   // ただしメール本文には電話番号等のPIIを直接書かない(メールは転送・誤送信リスクがあるため
   // 参照導線のみとする。実際の値はダッシュボードのAPI経由でのみ表示する)。
   return sendProNotification(target, {
-    lineText: `${clientNickname}さんのお支払いが完了し、紹介予約が成立しました。クライアントの連絡先はダッシュボードでご確認ください。${amountText ? ' ' + amountText : ''}${reminder ? ' ' + reminder : ''}\n${dashboardUrl}`,
+    lineText: `${clientNickname}さんのお支払いが完了し、紹介予約が成立しました。クライアントの連絡先はダッシュボードでご確認ください。${amountLineText ? ' ' + amountLineText : ''}${reminder ? ' ' + reminder : ''}\n${dashboardUrl}`,
     emailSubject: 'お支払いが完了し、紹介予約が成立しました',
     emailBodyHtml: emailShell(
       '紹介予約成立のお知らせ',
-      `${safeClientNickname}さんのお支払いが完了し、紹介予約が成立しました。<br>クライアントの連絡先はダッシュボードでご確認ください。${amountText ? `<br>${amountText}` : ''}${reminder ? `<br>${reminder}` : ''}`,
+      `${safeClientNickname}さんのお支払いが完了し、紹介予約が成立しました。<br>クライアントの連絡先はダッシュボードでご確認ください。${amountBlockHtml}${reminder ? `<br>${reminder}` : ''}`,
       'ダッシュボードを開く',
       dashboardUrl,
     ),

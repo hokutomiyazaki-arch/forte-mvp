@@ -20,26 +20,54 @@ import SlotCardGroup from '@/components/referral/SlotCardGroup'
 const PRO_SLOT_TIME_OPTIONS = buildHalfHourTimeOptions('06:00', '24:00')
 
 /**
- * タスクA(2026-08-05・CEO指示): 受け手が「当日クライアントから受け取る金額」の表示文言を組み立てる。
- * 予約金が発生する予約(payment_status が unpaid/awaiting/paid)は、セッション料金から予約金を
- * 引いた当日受領額+内訳を表示する。'unpaid'はrequestedカード(確定前・まだ決済リンク未発行)の
- * 実際の値であり、確定すれば必ず予約金が発生するため「発生している予約」に含める
- * (confirmedカードでは'awaiting'/'paid'に進む)。not_required/null(予約金なし・全額当日受領)は
- * セッション料金そのものを注釈なしで表示する。fee_total_bpsは単一情報源(referral-format.ts の
- * REFERRAL_FEE_TOTAL_BPS)へフォールバックする(レビュー指摘・中4: 3360のハードコード二重管理を解消)。
+ * タスクA(2026-08-05・CEO指示・再設計): 受け手が「当日クライアントから受け取る金額」を算出する。
+ * 予約金が発生する予約(payment_status が unpaid/awaiting/paid)は、セッション料金から紹介フィーを
+ * 引いた当日受領額+内訳を返す。'unpaid'はrequestedカード(確定前・まだ決済リンク未発行)の実際の値であり、
+ * 確定すれば必ず紹介フィーが発生するため「発生している予約」に含める(confirmedカードでは
+ * 'awaiting'/'paid'に進む)。not_required/null(紹介フィーなし・全額当日受領)はセッション料金
+ * そのものを返す。fee_total_bpsは単一情報源(referral-format.ts の REFERRAL_FEE_TOTAL_BPS)へ
+ * フォールバックする(レビュー指摘・中4: 3360のハードコード二重管理を解消)。
+ * CEO決定(2026-08-05): 受け手プロ向け画面では「予約金」ではなく「紹介フィー」と呼ぶ(クライアント向けの
+ * 「予約金」表記・送り手向けの「紹介報酬」表記はここでは変更しない・対象は受け手画面のみ)。
  */
-function formatReceiverTodayAmountText(priceJpy: number, feeTotalBps: number | null | undefined, paymentStatus: string | null | undefined): string | null {
+interface ReceiverTodayAmount {
+  amountJpy: number
+  breakdownText: string
+}
+function computeReceiverTodayAmount(priceJpy: number, feeTotalBps: number | null | undefined, paymentStatus: string | null | undefined): ReceiverTodayAmount | null {
   if (!priceJpy || priceJpy <= 0) return null
   const hasDeposit = paymentStatus === 'unpaid' || paymentStatus === 'awaiting' || paymentStatus === 'paid'
   if (!hasDeposit) {
-    return `当日クライアントから受け取る金額: ¥${priceJpy.toLocaleString('ja-JP')}`
+    return { amountJpy: priceJpy, breakdownText: 'セッション料金の全額です' }
   }
   const feeAmountJpy = Math.floor((priceJpy * (feeTotalBps ?? REFERRAL_FEE_TOTAL_BPS)) / 10000)
   if (feeAmountJpy <= 0) {
-    return `当日クライアントから受け取る金額: ¥${priceJpy.toLocaleString('ja-JP')}`
+    return { amountJpy: priceJpy, breakdownText: 'セッション料金の全額です' }
   }
-  const receiveAmountJpy = priceJpy - feeAmountJpy
-  return `当日クライアントから受け取る金額: ¥${receiveAmountJpy.toLocaleString('ja-JP')}(セッション料金 ¥${priceJpy.toLocaleString('ja-JP')} − 予約金 ¥${feeAmountJpy.toLocaleString('ja-JP')})`
+  return {
+    amountJpy: priceJpy - feeAmountJpy,
+    breakdownText: `セッション料金 ¥${priceJpy.toLocaleString('ja-JP')} − 紹介フィー ¥${feeAmountJpy.toLocaleString('ja-JP')}(クライアントが予約金として支払い済み)`,
+  }
+}
+
+/**
+ * CEO指示(2026-08-05・再設計): 当日受取額を1行圧縮ではなく小ブロック化して表示する共通コンポーネント。
+ * ①ラベル(13px灰) ②金額(20px太字濃色・主役) ③内訳(13px灰) ④安心の一文(13px・「もらっていいの？」の
+ * 不安を潰す固定文言)。requested/confirmed両カードで共有する。
+ */
+function ReceiverTodayAmountBlock({ amount }: { amount: ReceiverTodayAmount }) {
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ fontSize: 13, color: '#6B7280' }}>当日クライアントから受け取る金額</div>
+      <div style={{ fontSize: 20, fontWeight: 800, color: '#1A1A2E', marginTop: 2 }}>
+        ¥{amount.amountJpy.toLocaleString('ja-JP')}
+      </div>
+      <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>{amount.breakdownText}</div>
+      <div style={{ fontSize: 13, color: '#1A6B3C', fontWeight: 600, marginTop: 4, lineHeight: 1.6 }}>
+        この金額はそのまま全額あなたの受け取りです。REAL PROOFへのお支払いや後日の差し引きはありません。
+      </div>
+    </div>
+  )
 }
 
 interface BookingItem {
@@ -503,7 +531,7 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
         const isCounterOpen = counterOpenId === item.id
         const counterInput = counterInputs[item.id] || ['', '', '']
         // 軽微(レビュー指摘): 同じ算出を2回呼ばないようconstに固定する。
-        const receiverTodayAmountText = formatReceiverTodayAmountText(item.price_jpy, item.fee_total_bps, item.payment_status)
+        const receiverTodayAmount = computeReceiverTodayAmount(item.price_jpy, item.fee_total_bps, item.payment_status)
         return (
           <div
             key={item.id}
@@ -531,12 +559,8 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
             {theme && <div style={{ fontSize: 13, color: '#555', marginBottom: 4 }}>テーマ: {theme}</div>}
             {item.menu_name && <div style={{ fontSize: 13, color: '#555', marginBottom: 4 }}>メニュー: {item.menu_name}</div>}
             {note && <div style={{ fontSize: 13, color: '#555', marginBottom: 8 }}>補足: {note}</div>}
-            {/* タスクA(2026-08-05・CEO指示): 確定判断の材料として、requestedカードにも当日受取額を出す。 */}
-            {receiverTodayAmountText && (
-              <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 8 }}>
-                {receiverTodayAmountText}
-              </div>
-            )}
+            {/* タスクA(2026-08-05・CEO指示・再設計): 確定判断の材料として、requestedカードにも当日受取額を出す。 */}
+            {receiverTodayAmount && <ReceiverTodayAmountBlock amount={receiverTodayAmount} />}
 
             {counterProposed ? (
               <>
@@ -739,7 +763,7 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
           // (reschedule-respond側で解決の都度セット/nullで明示的に上書きされる)。
           const clientKeptCurrentSlot = !!item.preferred_slots?.reschedule_kept_current_at
           // 軽微(レビュー指摘): 同じ算出を2回呼ばないようconstに固定する。
-          const receiverTodayAmountText = formatReceiverTodayAmountText(item.price_jpy, item.fee_total_bps, item.payment_status)
+          const receiverTodayAmount = computeReceiverTodayAmount(item.price_jpy, item.fee_total_bps, item.payment_status)
           // CEO追加指示(2026-08-04): プロ側にもGoogleカレンダー追加リンクを出す。支払い待ち(awaiting)
           // 中はまだ成立していないため非表示、確定日時が解決できない場合も非表示(buildGoogleCalendarUrl
           // 自体もinvalid ISOでnullを返す・env非依存でclientからimport可能)。
@@ -825,10 +849,10 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                 {confirmedSlotText}
               </div>
             )}
-            {/* タスクA(2026-08-05・CEO指示): 確定日時のすぐ下に当日の受取額を表示する。 */}
-            {receiverTodayAmountText && (
-              <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>
-                {receiverTodayAmountText}
+            {/* タスクA(2026-08-05・CEO指示・再設計): 確定日時のすぐ下に当日の受取額を表示する。 */}
+            {receiverTodayAmount && (
+              <div style={{ marginTop: 6 }}>
+                <ReceiverTodayAmountBlock amount={receiverTodayAmount} />
               </div>
             )}
             {/* CEO追加指示(2026-08-04): プロ側のGoogleカレンダー追加リンク(控えめなテキストリンク)。 */}
