@@ -9,6 +9,8 @@ const MENU_LIMIT = 20
 const NAME_MAX = 100
 const PRICE_MAX = 100
 const DESC_MAX = 200
+// タスクC(§2-3): 紹介予約の決済計算に使う数値の料金。上限は1000万円程度。
+const PRICE_JPY_MAX = 10_000_000
 const ALLOWED_TAGS = [
   '個人セッション',
   'グループ',
@@ -27,6 +29,21 @@ async function resolveProfessionalId(userId: string) {
     .is('deactivated_at', null)
     .maybeSingle()
   return pro?.id ?? null
+}
+
+/** タスクC(§2-3): price_jpy は未指定/null許可・入力時は1〜PRICE_JPY_MAXの整数のみ許可。 */
+function validatePriceJpy(value: unknown): number | null | { error: string } {
+  if (value === undefined || value === null) return null
+  if (typeof value !== 'number' || !Number.isInteger(value)) {
+    return { error: '料金（円）は整数で指定してください' }
+  }
+  if (value < 1) {
+    return { error: '1円以上の金額を入力してください' }
+  }
+  if (value > PRICE_JPY_MAX) {
+    return { error: `料金（円）は${PRICE_JPY_MAX.toLocaleString()}円以内で入力してください` }
+  }
+  return value
 }
 
 function validateTags(tags: unknown): string[] | { error: string } {
@@ -55,7 +72,7 @@ export async function GET() {
     const supabase = getSupabaseAdmin()
     const { data, error } = await supabase
       .from('pro_menus')
-      .select('id, name, price_text, category_tags, description, display_order, is_active, created_at, updated_at')
+      .select('id, name, price_text, category_tags, description, display_order, is_active, created_at, updated_at, price_jpy, is_referral_bookable')
       .eq('professional_id', professionalId)
       .eq('is_active', true)
       .order('display_order', { ascending: true })
@@ -125,6 +142,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: tagsResult.error }, { status: 400 })
     }
 
+    // タスクC(§2-3): 料金(円・数値)・紹介予約受付フラグ
+    const priceJpyResult = validatePriceJpy(body?.price_jpy)
+    if (priceJpyResult !== null && typeof priceJpyResult === 'object' && 'error' in priceJpyResult) {
+      return NextResponse.json({ error: priceJpyResult.error }, { status: 400 })
+    }
+    const priceJpy = priceJpyResult as number | null
+    const isReferralBookable = body?.is_referral_bookable === true
+    if (isReferralBookable && (priceJpy === null || priceJpy <= 0)) {
+      return NextResponse.json(
+        { error: '紹介予約を受け付けるには料金（円）の入力が必要です' },
+        { status: 400 }
+      )
+    }
+
     const supabase = getSupabaseAdmin()
 
     // 上限チェック (is_active = true のみカウント)
@@ -171,8 +202,10 @@ export async function POST(req: NextRequest) {
         category_tags: tagsResult,
         display_order: nextOrder,
         is_active: true,
+        price_jpy: priceJpy,
+        is_referral_bookable: isReferralBookable,
       })
-      .select('id, name, price_text, category_tags, description, display_order, is_active, created_at, updated_at')
+      .select('id, name, price_text, category_tags, description, display_order, is_active, created_at, updated_at, price_jpy, is_referral_bookable')
       .maybeSingle()
 
     if (insertError) {

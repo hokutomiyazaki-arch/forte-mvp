@@ -54,6 +54,8 @@ export interface Professional {
   // §15-3: サービス・案内タブの写真(最大6枚)・紹介動画(YouTube)。カラム未作成環境ではundefined(fail-soft)。
   gallery_image_urls?: string[] | null
   intro_video_url?: string | null
+  // ヘッダー写真(LP的な1枚・任意)。カラム未作成環境ではundefined(fail-soft)。
+  hero_image_url?: string | null
 }
 
 export interface CustomForte {

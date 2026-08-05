@@ -158,6 +158,8 @@ export default function DashboardPage() {
     // §15-3: サービス・案内タブの写真(最大6枚)・紹介動画(YouTube)
     gallery_image_urls: [] as string[],
     intro_video_url: '',
+    // タスクB: ヘッダー写真(LP的な1枚・任意)
+    hero_image_url: '',
   })
   const [customResultFortes, setCustomResultFortes] = useState<CustomForte[]>([])
   const [customPersonalityFortes, setCustomPersonalityFortes] = useState<CustomForte[]>([])
@@ -723,6 +725,8 @@ export default function DashboardPage() {
           // になる(select('*')はサイレントに既存カラムのみ返す・fail-soft)。
           gallery_image_urls: Array.isArray(proData.gallery_image_urls) ? proData.gallery_image_urls : [],
           intro_video_url: proData.intro_video_url || '',
+          // タスクB: カラム未作成時はproData.hero_image_urlがundefinedのまま(fail-soft)
+          hero_image_url: proData.hero_image_url || '',
         })
         setCustomResultFortes(proData.custom_result_fortes || [])
         setCustomPersonalityFortes(proData.custom_personality_fortes || [])
@@ -1239,6 +1243,8 @@ export default function DashboardPage() {
       // §15-3: サービス・案内タブの写真(最大6枚)・紹介動画(YouTube)。DEFAULTを付けない(任意設定)。
       gallery_image_urls: form.gallery_image_urls.length > 0 ? form.gallery_image_urls : null,
       intro_video_url: form.intro_video_url.trim() || null,
+      // タスクB: ヘッダー写真(LP的な1枚・任意)。DEFAULTを付けない(任意設定)。
+      hero_image_url: form.hero_image_url.trim() || null,
     }
 
     const isNew = !pro
@@ -1266,6 +1272,7 @@ export default function DashboardPage() {
       business_hours: '受付時間',
       gallery_image_urls: '写真',
       intro_video_url: '紹介動画',
+      hero_image_url: 'ヘッダー写真',
     }
     if (saveError && upsertRecord && typeof upsertRecord === 'object') {
       const isSchemaErr = (saveError as any).code === '42703' || (saveError as any).code === 'PGRST204'
@@ -4760,6 +4767,7 @@ export default function DashboardPage() {
           media={{
             gallery_image_urls: form.gallery_image_urls,
             intro_video_url: form.intro_video_url,
+            hero_image_url: form.hero_image_url,
           }}
           onMediaChange={(next) => setForm(prev => ({ ...prev, ...next }))}
           userId={user?.id}

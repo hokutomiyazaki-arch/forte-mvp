@@ -31,7 +31,12 @@ interface Menu {
   is_active: boolean
   created_at: string
   updated_at: string
+  // タスクC(§2-3): 紹介予約の決済計算に使う数値の料金・受付フラグ。カラム未作成環境ではundefined(fail-soft)。
+  price_jpy?: number | null
+  is_referral_bookable?: boolean | null
 }
+
+const PRICE_JPY_MAX = 10_000_000
 
 const PROFESSION_LABEL: Record<ProfessionType, string> = {
   trainer: 'トレーナー',
@@ -92,6 +97,9 @@ interface FormState {
   price_text: string
   description: string
   category_tags: Tag[]
+  // タスクC(§2-3): 料金(円・数値)と紹介予約受付フラグ
+  price_jpy: string
+  is_referral_bookable: boolean
 }
 
 const EMPTY_FORM: FormState = {
@@ -100,6 +108,8 @@ const EMPTY_FORM: FormState = {
   price_text: '',
   description: '',
   category_tags: [],
+  price_jpy: '',
+  is_referral_bookable: false,
 }
 
 export default function BusinessInfoTab({
@@ -171,6 +181,8 @@ export default function BusinessInfoTab({
       category_tags: (m.category_tags || []).filter((t): t is Tag =>
         (ALLOWED_TAGS as readonly string[]).includes(t)
       ),
+      price_jpy: typeof m.price_jpy === 'number' ? String(m.price_jpy) : '',
+      is_referral_bookable: !!m.is_referral_bookable,
     })
   }
 
@@ -217,6 +229,26 @@ export default function BusinessInfoTab({
       return
     }
 
+    // タスクC(§2-3): 料金(円・数値)。空欄は null 可、入力時は1以上の整数のみ許可。
+    const priceJpyRaw = editing.price_jpy.trim()
+    let priceJpy: number | null = null
+    if (priceJpyRaw !== '') {
+      const parsed = Number(priceJpyRaw)
+      if (!Number.isInteger(parsed) || parsed < 1) {
+        setFormError('1円以上の金額を入力してください')
+        return
+      }
+      if (parsed > PRICE_JPY_MAX) {
+        setFormError(`料金（円）は${PRICE_JPY_MAX.toLocaleString()}円以内で入力してください`)
+        return
+      }
+      priceJpy = parsed
+    }
+    if (editing.is_referral_bookable && (priceJpy === null || priceJpy <= 0)) {
+      setFormError('紹介予約を受け付けるには料金（円）の入力が必要です')
+      return
+    }
+
     setSaving(true)
     setFormError('')
     try {
@@ -225,6 +257,8 @@ export default function BusinessInfoTab({
         price_text: priceText,
         description: description || null,
         category_tags: editing.category_tags,
+        price_jpy: priceJpy,
+        is_referral_bookable: editing.is_referral_bookable,
       }
 
       const isUpdate = !!editing.id
@@ -509,6 +543,47 @@ export default function BusinessInfoTab({
             <div style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'right' as const, marginTop: 2 }}>
               {editing.price_text.length} / {PRICE_MAX}
             </div>
+          </div>
+
+          {/* タスクC(§2-3): 料金(円・数値)。紹介予約の決済計算に使う。表示用の料金表記は上の「料金」欄。 */}
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ display: 'block', fontSize: 12, color: '#6B7280', marginBottom: 4 }}>
+              料金（円）(任意)
+            </label>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              value={editing.price_jpy}
+              onChange={e => setEditing({ ...editing, price_jpy: e.target.value })}
+              placeholder="例: 10000"
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                fontSize: 14,
+                border: '1px solid #E5E7EB',
+                borderRadius: 6,
+                boxSizing: 'border-box' as const,
+              }}
+            />
+            <p style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4, lineHeight: 1.6 }}>
+              料金（円）は紹介予約の決済計算に使われます。表示用の料金表記は上の「料金」欄へ（従来どおり自由記述）。
+            </p>
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#1A1A2E', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={editing.is_referral_bookable}
+                onChange={e => setEditing({ ...editing, is_referral_bookable: e.target.checked })}
+                style={{ width: 16, height: 16 }}
+              />
+              紹介予約を受け付ける
+            </label>
+            <p style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4, marginLeft: 24, lineHeight: 1.6 }}>
+              ONにするには料金（円）の入力が必要です。
+            </p>
           </div>
 
           <div style={{ marginBottom: 12 }}>

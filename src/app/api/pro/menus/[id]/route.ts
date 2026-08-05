@@ -8,6 +8,8 @@ export const runtime = 'nodejs'
 const NAME_MAX = 100
 const PRICE_MAX = 100
 const DESC_MAX = 200
+// タスクC(§2-3): 紹介予約の決済計算に使う数値の料金。上限は1000万円程度。
+const PRICE_JPY_MAX = 10_000_000
 const ALLOWED_TAGS = [
   '個人セッション',
   'グループ',
@@ -34,7 +36,7 @@ async function loadOwnedMenu(menuId: string, professionalId: string) {
   const supabase = getSupabaseAdmin()
   const { data: menu } = await supabase
     .from('pro_menus')
-    .select('id, professional_id')
+    .select('id, professional_id, price_jpy, is_referral_bookable')
     .eq('id', menuId)
     .maybeSingle()
 
@@ -42,7 +44,7 @@ async function loadOwnedMenu(menuId: string, professionalId: string) {
   if (menu.professional_id !== professionalId) {
     return { status: 403 as const, body: { error: 'forbidden' } }
   }
-  return { status: 200 as const }
+  return { status: 200 as const, menu }
 }
 
 function validateTags(tags: unknown): string[] | { error: string } {
@@ -156,6 +158,46 @@ export async function PATCH(
       update.is_active = body.is_active
     }
 
+    // タスクC(§2-3): 料金(円・数値)・紹介予約受付フラグ
+    if (body?.price_jpy !== undefined) {
+      if (body.price_jpy === null) {
+        update.price_jpy = null
+      } else if (typeof body.price_jpy === 'number' && Number.isInteger(body.price_jpy)) {
+        if (body.price_jpy < 1) {
+          return NextResponse.json({ error: '1円以上の金額を入力してください' }, { status: 400 })
+        }
+        if (body.price_jpy > PRICE_JPY_MAX) {
+          return NextResponse.json(
+            { error: `料金（円）は${PRICE_JPY_MAX.toLocaleString()}円以内で入力してください` },
+            { status: 400 }
+          )
+        }
+        update.price_jpy = body.price_jpy
+      } else {
+        return NextResponse.json({ error: '料金（円）は整数で指定してください' }, { status: 400 })
+      }
+    }
+
+    if (body?.is_referral_bookable !== undefined) {
+      if (typeof body.is_referral_bookable !== 'boolean') {
+        return NextResponse.json({ error: 'is_referral_bookable must be boolean' }, { status: 400 })
+      }
+      update.is_referral_bookable = body.is_referral_bookable
+    }
+
+    // 更新後に有効となる price_jpy / is_referral_bookable の組み合わせを検証
+    // (body側で指定が無いフィールドは既存値 = owned.menu を使う)。
+    const effectivePriceJpy: number | null =
+      'price_jpy' in update ? update.price_jpy : (owned.menu?.price_jpy ?? null)
+    const effectiveBookable: boolean =
+      'is_referral_bookable' in update ? update.is_referral_bookable : !!owned.menu?.is_referral_bookable
+    if (effectiveBookable && (effectivePriceJpy === null || effectivePriceJpy <= 0)) {
+      return NextResponse.json(
+        { error: '紹介予約を受け付けるには料金（円）の入力が必要です' },
+        { status: 400 }
+      )
+    }
+
     if (Object.keys(update).length === 0) {
       return NextResponse.json({ error: 'no fields to update' }, { status: 400 })
     }
@@ -168,7 +210,7 @@ export async function PATCH(
       .update(update)
       .eq('id', id)
       .eq('professional_id', professionalId)
-      .select('id, name, price_text, category_tags, description, display_order, is_active, created_at, updated_at')
+      .select('id, name, price_text, category_tags, description, display_order, is_active, created_at, updated_at, price_jpy, is_referral_bookable')
       .maybeSingle()
 
     if (error) {

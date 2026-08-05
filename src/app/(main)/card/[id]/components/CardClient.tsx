@@ -307,8 +307,8 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
   // §3-4: ユニーク/常連(新定義)。既存の firstTimerCount/repeaterCount/regularCount とは別軸の追加表示
   const [uniqueVoters] = useState(cardData.uniqueVoters ?? 0)
   const [regular90Count] = useState(cardData.regular90Count ?? 0)
-  // §15-2: 自己紹介の3行クランプ。文字数制限はかけず表示のみクランプ。
-  // bioClamped は実際に3行を超える場合のみ true（scrollHeight vs clientHeight 比較で判定）。
+  // §15-2: 自己紹介の5行クランプ。文字数制限はかけず表示のみクランプ。
+  // bioClamped は実際に5行を超える場合のみ true（scrollHeight vs clientHeight 比較で判定）。
   const [bioExpanded, setBioExpanded] = useState(false)
   const [bioClamped, setBioClamped] = useState(false)
   const bioRef = useRef<HTMLParagraphElement>(null)
@@ -323,7 +323,7 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
     return () => clearTimeout(t)
   }, [])
 
-  // §15-2: bio が3行を超えるかを判定（未展開時の -webkit-line-clamp:3 適用時に測定）。
+  // §15-2: bio が5行を超えるかを判定（未展開時の -webkit-line-clamp:5 適用時に測定）。
   // 短いbioには「続きを読む」を出さない。依存はプリミティブのみ(pro?.bio)。
   useEffect(() => {
     const el = bioRef.current
@@ -494,6 +494,17 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
 
   return (
     <div style={{ background: T.bg, minHeight: '100vh', maxWidth: 420, margin: '0 auto', padding: 16, fontFamily: T.font }}>
+
+      {/* ═══ ヘッダー写真(タスクB: LP的な1枚・任意設定時のみ表示。未設定なら何も出ない) ═══ */}
+      {pro.hero_image_url && (
+        <div style={{ width: '100%', aspectRatio: '2 / 1', borderRadius: 16, overflow: 'hidden', marginBottom: 12 }}>
+          <img
+            src={pro.hero_image_url}
+            alt=""
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          />
+        </div>
+      )}
 
       {/* ═══ sticky予約バー(§15-4): ヘッダーカードが画面外に出たら表示 ═══ */}
       {hasStickyCta && showStickyBar && (
@@ -686,6 +697,37 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
         </div>
       </div>
 
+      {/* ═══ BIO（§15-2: 5行クランプ＋続きを読む。ヘッダー直後・TOP STRENGTHSの上に配置） ═══ */}
+      {pro.bio && (
+        <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: '16px 18px', marginBottom: 12 }}>
+          <p
+            ref={bioRef}
+            style={{
+              fontSize: 12, color: T.textSub, lineHeight: 1.9, whiteSpace: 'pre-wrap', margin: 0, fontWeight: 500,
+              ...(!bioExpanded ? {
+                display: '-webkit-box',
+                WebkitLineClamp: 5,
+                WebkitBoxOrient: 'vertical' as const,
+                overflow: 'hidden',
+              } : {}),
+            }}
+          >
+            {pro.bio}
+          </p>
+          {bioClamped && (
+            <button
+              onClick={() => setBioExpanded(v => !v)}
+              style={{
+                background: 'transparent', border: 'none', padding: 0, marginTop: 6,
+                fontSize: 11, fontWeight: 700, color: T.gold, cursor: 'pointer', fontFamily: T.font,
+              }}
+            >
+              {bioExpanded ? '閉じる' : '続きを読む'}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* ═══ 強みプルーフ TOP3（§15-2: バッジ直後・タブの外に常時表示） ═══ */}
       {top3.length > 0 && (
         <div style={{ marginBottom: 12 }}>
@@ -824,37 +866,6 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
               )
             })}
           </div>
-        </div>
-      )}
-
-      {/* ═══ BIO（§15-2: 3行クランプ＋続きを読む） ═══ */}
-      {pro.bio && (
-        <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: '16px 18px', marginBottom: 12 }}>
-          <p
-            ref={bioRef}
-            style={{
-              fontSize: 12, color: T.textSub, lineHeight: 1.9, whiteSpace: 'pre-wrap', margin: 0, fontWeight: 500,
-              ...(!bioExpanded ? {
-                display: '-webkit-box',
-                WebkitLineClamp: 3,
-                WebkitBoxOrient: 'vertical' as const,
-                overflow: 'hidden',
-              } : {}),
-            }}
-          >
-            {pro.bio}
-          </p>
-          {bioClamped && (
-            <button
-              onClick={() => setBioExpanded(v => !v)}
-              style={{
-                background: 'transparent', border: 'none', padding: 0, marginTop: 6,
-                fontSize: 11, fontWeight: 700, color: T.gold, cursor: 'pointer', fontFamily: T.font,
-              }}
-            >
-              {bioExpanded ? '閉じる' : '続きを読む'}
-            </button>
-          )}
         </div>
       )}
 
