@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import ProfessionTypeModal, { type ProfessionType } from './ProfessionTypeModal'
 import AccessLinksSection, { type AccessLinksFormPart } from './AccessLinksSection'
+import MediaSection, { type MediaFormPart } from './MediaSection'
 
 const MENU_LIMIT = 20
 const NAME_MAX = 100
@@ -78,6 +79,11 @@ interface Props {
   savingAccessLinks: boolean
   /** 軽微5(レビュー指摘): fail-soft再試行(business_hours列未作成)発火時の非ブロッキング注記。 */
   accessLinksSaveNote?: string
+  // §15-3: 写真(最大6枚)・紹介動画(YouTube)。保存は既存のdoSaveLogic/upsert経路を共有する。
+  media: MediaFormPart
+  onMediaChange: (next: Partial<MediaFormPart>) => void
+  /** アップロード先パスの一意性確保用(professionals.user_id相当)。 */
+  userId: string | null | undefined
 }
 
 interface FormState {
@@ -104,6 +110,9 @@ export default function BusinessInfoTab({
   onSaveAccessLinks,
   savingAccessLinks,
   accessLinksSaveNote,
+  media,
+  onMediaChange,
+  userId,
 }: Props) {
   const [professionType, setProfessionType] = useState<ProfessionType | null>(initialProfessionType)
   const [editModalOpen, setEditModalOpen] = useState(false)
@@ -670,6 +679,16 @@ export default function BusinessInfoTab({
           </div>
         </div>
       )}
+
+      {/* ── §15-3: 写真・紹介動画 ── */}
+      <MediaSection
+        media={media}
+        onMediaChange={onMediaChange}
+        onSave={onSaveAccessLinks}
+        saving={savingAccessLinks}
+        userId={userId}
+        saveNote={accessLinksSaveNote}
+      />
 
       {/* ── Phase A2: アクセス情報・外部リンク ── */}
       <AccessLinksSection

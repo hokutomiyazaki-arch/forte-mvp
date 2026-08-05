@@ -51,6 +51,9 @@ export interface Professional {
   accepting_note?: string | null
   accepting_updated_at?: string | null
   delegate_list_id?: string | null
+  // §15-3: サービス・案内タブの写真(最大6枚)・紹介動画(YouTube)。カラム未作成環境ではundefined(fail-soft)。
+  gallery_image_urls?: string[] | null
+  intro_video_url?: string | null
 }
 
 export interface CustomForte {

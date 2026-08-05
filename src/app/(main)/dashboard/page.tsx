@@ -155,6 +155,9 @@ export default function DashboardPage() {
     facebook_url: '',
     youtube_url: '',
     phone_number: '',
+    // §15-3: サービス・案内タブの写真(最大6枚)・紹介動画(YouTube)
+    gallery_image_urls: [] as string[],
+    intro_video_url: '',
   })
   const [customResultFortes, setCustomResultFortes] = useState<CustomForte[]>([])
   const [customPersonalityFortes, setCustomPersonalityFortes] = useState<CustomForte[]>([])
@@ -711,6 +714,10 @@ export default function DashboardPage() {
           facebook_url: proData.facebook_url || '',
           youtube_url: proData.youtube_url || '',
           phone_number: proData.phone_number || '',
+          // §15-3: カラム未作成時はproData.gallery_image_urls/intro_video_urlがundefinedのまま
+          // になる(select('*')はサイレントに既存カラムのみ返す・fail-soft)。
+          gallery_image_urls: Array.isArray(proData.gallery_image_urls) ? proData.gallery_image_urls : [],
+          intro_video_url: proData.intro_video_url || '',
         })
         setCustomResultFortes(proData.custom_result_fortes || [])
         setCustomPersonalityFortes(proData.custom_personality_fortes || [])
@@ -1224,6 +1231,9 @@ export default function DashboardPage() {
       facebook_url: form.facebook_url.trim() || null,
       youtube_url: form.youtube_url.trim() || null,
       phone_number: form.phone_number.trim() || null,
+      // §15-3: サービス・案内タブの写真(最大6枚)・紹介動画(YouTube)。DEFAULTを付けない(任意設定)。
+      gallery_image_urls: form.gallery_image_urls.length > 0 ? form.gallery_image_urls : null,
+      intro_video_url: form.intro_video_url.trim() || null,
     }
 
     const isNew = !pro
@@ -1240,38 +1250,45 @@ export default function DashboardPage() {
     // 軽微5(レビュー指摘): 前回の再試行結果を持ち越さない(今回の保存が正常なら注記を出さない)。
     setBusinessHoursSaveNote('')
 
-    // fail-soft(2026-08-05・CEO指示): migration 041(business_hours列追加)が未実行の環境向け。
-    // certification/apply の stats_snapshot と同じパターン(§10調査技法): PGRST204(INSERT/UPSERT
-    // ボディの未知キー)/42703(undefined column)、またはメッセージにカラム名が含まれる場合を検知し、
-    // business_hoursキーを除いたペイロードで1回だけ再試行する。これで041の実行タイミングが
-    // デプロイ前後どちらでも安全になる(DB先→コード後の順序に依存しない)。
-    // 軽微5(レビュー指摘): メッセージ判定は`business_hours`の完全一致語(\b境界)に限定を強める
-    // (誤検知でbusiness_hoursを毎回除去してしまうのを防ぐ)。
-    if (
-      saveError &&
-      upsertRecord &&
-      typeof upsertRecord === 'object' &&
-      'business_hours' in upsertRecord &&
-      ((saveError as any).code === '42703' ||
-        (saveError as any).code === 'PGRST204' ||
-        /\bbusiness_hours\b/.test(saveError.message || ''))
-    ) {
-      console.error(
-        '[handleSave] business_hours column missing — retrying without it:',
-        (saveError as any).code,
-        saveError.message
+    // fail-soft(2026-08-05・CEO指示 / §15-3拡張): migration 041(business_hours)・042
+    // (gallery_image_urls・intro_video_url)が未実行の環境向け。certification/apply の
+    // stats_snapshot と同じパターン(§10調査技法): PGRST204(INSERT/UPSERTボディの未知キー)/
+    // 42703(undefined column)、またはメッセージにカラム名が含まれる場合を検知し、該当キーを
+    // 除いたペイロードで1回だけ再試行する。これでDB先→コード後の順序に依存せず安全になる。
+    // 軽微5(レビュー指摘): メッセージ判定は各カラム名の完全一致語(\b境界)に限定を強める
+    // (誤検知で毎回除去してしまうのを防ぐ)。
+    const OPTIONAL_COLUMN_LABELS: Record<string, string> = {
+      business_hours: '受付時間',
+      gallery_image_urls: '写真',
+      intro_video_url: '紹介動画',
+    }
+    if (saveError && upsertRecord && typeof upsertRecord === 'object') {
+      const isSchemaErr = (saveError as any).code === '42703' || (saveError as any).code === 'PGRST204'
+      const colsToStrip = Object.keys(OPTIONAL_COLUMN_LABELS).filter(col =>
+        col in upsertRecord &&
+        (isSchemaErr || new RegExp(`\\b${col}\\b`).test(saveError!.message || ''))
       )
-      const { business_hours: _omit, ...upsertRecordWithoutBusinessHours } = upsertRecord
-      upsertRecord = upsertRecordWithoutBusinessHours
-      const retryResult = await db.upsert(
-        'professionals', upsertRecord, { onConflict: 'user_id' },
-        { select: '*', maybeSingle: true }
-      )
-      savedData = retryResult.data
-      saveError = retryResult.error
-      // 軽微5: 再試行が成功した場合のみ注記を出す(再試行後もエラーなら通常のエラー表示に任せる)。
-      if (!saveError) {
-        setBusinessHoursSaveNote('（受付時間はデータベース更新前のため保存されませんでした）')
+      if (colsToStrip.length > 0) {
+        console.error(
+          '[handleSave] optional column(s) missing — retrying without them:',
+          colsToStrip,
+          (saveError as any).code,
+          saveError.message
+        )
+        const strippedRecord = { ...upsertRecord }
+        for (const col of colsToStrip) delete strippedRecord[col]
+        upsertRecord = strippedRecord
+        const retryResult = await db.upsert(
+          'professionals', upsertRecord, { onConflict: 'user_id' },
+          { select: '*', maybeSingle: true }
+        )
+        savedData = retryResult.data
+        saveError = retryResult.error
+        // 軽微5: 再試行が成功した場合のみ注記を出す(再試行後もエラーなら通常のエラー表示に任せる)。
+        if (!saveError) {
+          const labels = colsToStrip.map(col => OPTIONAL_COLUMN_LABELS[col]).join('・')
+          setBusinessHoursSaveNote(`（${labels}はデータベース更新前のため保存されませんでした）`)
+        }
       }
     }
 
@@ -4734,6 +4751,12 @@ export default function DashboardPage() {
           onSaveAccessLinks={() => doSaveLogic()}
           savingAccessLinks={saving}
           accessLinksSaveNote={businessHoursSaveNote}
+          media={{
+            gallery_image_urls: form.gallery_image_urls,
+            intro_video_url: form.intro_video_url,
+          }}
+          onMediaChange={(next) => setForm(prev => ({ ...prev, ...next }))}
+          userId={user?.id}
         />
       )}
 

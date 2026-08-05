@@ -1,0 +1,20 @@
+[
+  {
+    "name": "adventurer-A",
+    "prompt": "Character design for a gender-neutral mascot: a round white dumpling-shaped head character (like a smooth mochi bun), NO hair, tiny black dot eyes, small simple smile, soft blush circles on cheeks. Small chubby body wearing a tiny explorer outfit: navy safari hat with gold band, navy scarf, holding a small gold compass. Completely genderless — no hair, no eyelashes, no gendered features. Flat vector line-art style with clean deep navy #1A1A2E outlines and clothing, gold #C4A35A accents, exactly matching a modern editorial illustration system. Full body, centered on pure white background, generous margin. Absolutely no text, no letters, no labels.",
+    "size": "1024x1024",
+    "quality": "medium"
+  },
+  {
+    "name": "adventurer-B",
+    "prompt": "Character design for a gender-neutral mascot: a single soft rounded blob-shaped body (head and body as one smooth mochi form), NO hair, tiny black dot eyes, small simple smile, soft blush marks, stubby little arms and feet. Wearing only a tiny navy explorer hat with gold band and carrying a tiny gold compass on a strap. Completely genderless — no hair, no gendered features. Flat vector line-art style with clean deep navy #1A1A2E outlines, gold #C4A35A accents, matching a modern editorial illustration system. Full body, centered on pure white background, generous margin. Absolutely no text, no letters, no labels.",
+    "size": "1024x1024",
+    "quality": "medium"
+  },
+  {
+    "name": "adventurer-C",
+    "prompt": "Character design for a gender-neutral mascot: a round white dumpling-shaped head character, NO hair, tiny black dot eyes, gentle smile, blush circles. Bold uniform thick outline like a die-cut sticker, flat colors only. Tiny body in navy explorer vest and navy boots, gold safari hat, gold compass in one hand, one arm raised cheerfully. Completely genderless — no hair, no gendered features. Deep navy #1A1A2E and gold #C4A35A palette only, pure white background, sticker-style. Full body, centered, generous margin. Absolutely no text, no letters, no labels.",
+    "size": "1024x1024",
+    "quality": "medium"
+  }
+]

@@ -1,0 +1,26 @@
+[
+  {
+    "name": "dir-cat",
+    "prompt": "Mascot character design: a chubby round cat character, gender-neutral, wearing a tiny navy explorer hat with gold band and holding a small gold compass, cheerful adventurous pose. Flat vector line-art with clean deep navy #1A1A2E outlines, white and navy fur, gold #C4A35A accents, matching a modern editorial illustration system. Simple dot eyes, friendly smile. Full body, centered on pure white background, generous margin. Absolutely no text, no letters, no labels.",
+    "size": "1024x1024",
+    "quality": "medium"
+  },
+  {
+    "name": "dir-bird",
+    "prompt": "Mascot character design: a small round plump bird character, gender-neutral, wearing a tiny navy explorer hat with gold band, a tiny gold compass hanging on its chest, stubby wings raised in excitement. Flat vector line-art with clean deep navy #1A1A2E outlines, white and navy feathers, gold #C4A35A beak and accents, matching a modern editorial illustration system. Simple dot eyes. Full body, centered on pure white background, generous margin. Absolutely no text, no letters, no labels.",
+    "size": "1024x1024",
+    "quality": "medium"
+  },
+  {
+    "name": "dir-robot",
+    "prompt": "Mascot character design: a small friendly rounded robot character, gender-neutral, smooth capsule body with simple dot eyes on a small screen face, tiny antenna with a gold light, wearing a tiny navy explorer hat and holding a gold compass, cheerful pose. Flat vector line-art with clean deep navy #1A1A2E outlines, white body with navy panels, gold #C4A35A accents, matching a modern editorial illustration system. Full body, centered on pure white background, generous margin. Absolutely no text, no letters, no labels.",
+    "size": "1024x1024",
+    "quality": "medium"
+  },
+  {
+    "name": "dir-star",
+    "prompt": "Mascot character design: a small glowing star spirit character, gender-neutral — a rounded five-pointed gold star with a simple cute face (dot eyes, small smile), stubby arms and legs, wearing a tiny navy explorer hat and holding a tiny navy compass, sparkle trail behind. Flat vector line-art with clean deep navy #1A1A2E outlines, warm gold #C4A35A body, matching a modern editorial illustration system. Full body, centered on pure white background, generous margin. Absolutely no text, no letters, no labels.",
+    "size": "1024x1024",
+    "quality": "medium"
+  }
+]

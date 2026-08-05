@@ -26,6 +26,8 @@ import { VoiceCommentCard } from '@/components/card/VoiceCommentCard'
 import { PersonalityPodium } from '@/components/card/PersonalityPodium'
 import type { VoiceComment, Supporter } from '@/components/card/types'
 import { computeReferralSignal, REFERRAL_SIGNAL_COLOR } from '@/lib/referral-accepting'
+import { GalleryCarousel } from '@/components/card/GalleryCarousel'
+import { YouTubeEmbed } from '@/components/card/YouTubeEmbed'
 
 interface PersonalityItemWithVotes {
   id: string
@@ -251,7 +253,12 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
     pro.youtube_url ||
     pro.phone_number
   )
-  const showServiceTab = hasMenus || hasAccessInfo || hasLinks
+  // §15-3: 写真(最大6枚)・紹介動画(YouTube)。カラム未作成環境ではpro.gallery_image_urls/
+  // intro_video_urlがundefinedのままなのでfail-soft(サイレントに非表示)。
+  const galleryImages: string[] = Array.isArray(pro.gallery_image_urls) ? pro.gallery_image_urls : []
+  const hasGallery = galleryImages.length > 0
+  const hasIntroVideo = !!pro.intro_video_url
+  const showServiceTab = hasMenus || hasAccessInfo || hasLinks || hasGallery || hasIntroVideo
   const initialTab: 'strengths' | 'certs' | 'voices' | 'menus' =
     tabParam === 'voices' || tabParam === 'certs'
       ? tabParam
@@ -306,6 +313,10 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
   const [bioClamped, setBioClamped] = useState(false)
   const bioRef = useRef<HTMLParagraphElement>(null)
 
+  // §15-4: sticky予約バー。ヘッダーカードが画面外に出たら表示する。
+  const headerCardRef = useRef<HTMLDivElement>(null)
+  const [showStickyBar, setShowStickyBar] = useState(false)
+
   // 初回マウント時のアニメーション (旧 load() 末尾の setTimeout(setAnimated, 100) 相当)
   useEffect(() => {
     const t = setTimeout(() => setAnimated(true), 100)
@@ -319,6 +330,18 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
     if (!el) return
     setBioClamped(el.scrollHeight > el.clientHeight + 1)
   }, [pro?.bio])
+
+  // §15-4: ヘッダーカードの可視判定 → 画面外に出たらstickyバーを表示。依存配列はプリミティブのみ([])。
+  useEffect(() => {
+    const el = headerCardRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => setShowStickyBar(!entry.isIntersecting),
+      { threshold: 0 }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   const toggleProofDates = async (proofId: string) => {
     if (expandedProofId === proofId) {
@@ -466,11 +489,58 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
   // §15-2: top3 はバッジ直後の常時表示セクションで使用。強みタブ内は sortedVotes 全件を表示。
   const top3 = sortedVotes.slice(0, 3)
 
+  // §15-4: sticky予約バーの表示条件(booking_urlまたはcontact_emailを持つプロのみ)
+  const hasStickyCta = !!(pro.booking_url || pro.contact_email)
+
   return (
     <div style={{ background: T.bg, minHeight: '100vh', maxWidth: 420, margin: '0 auto', padding: 16, fontFamily: T.font }}>
 
+      {/* ═══ sticky予約バー(§15-4): ヘッダーカードが画面外に出たら表示 ═══ */}
+      {hasStickyCta && showStickyBar && (
+        <div
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, zIndex: 60,
+            height: 48, background: '#fff',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '0 12px', gap: 8,
+          }}
+        >
+          <div style={{
+            fontSize: 13, fontWeight: 700, color: T.dark,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0,
+          }}>
+            {pro.name}
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+            {pro.booking_url && (
+              <a href={pro.booking_url} target="_blank" rel="noopener"
+                onClick={() => trackEvent(id, 'booking_click', shareSrc || undefined)}
+                style={{
+                  display: 'inline-block', padding: '8px 12px', borderRadius: 8,
+                  background: T.dark, color: T.gold, fontWeight: 700, fontSize: 12,
+                  textDecoration: 'none', whiteSpace: 'nowrap',
+                }}>
+                予約する
+              </a>
+            )}
+            {pro.contact_email && (
+              <a href={(() => { const subject = encodeURIComponent(`REAL PROOFを見て相談：${pro.name}さん`); const body = encodeURIComponent(`${pro.name}さん\n\nREAL PROOFであなたのプロフィールを拝見し、ご相談したくご連絡しました。\n\n`); return `mailto:${pro.contact_email}?subject=${subject}&body=${body}` })()}
+                onClick={() => trackEvent(id, 'consultation_click', shareSrc || undefined)}
+                style={{
+                  display: 'inline-block', padding: '8px 12px', borderRadius: 8,
+                  background: 'transparent', border: `1.5px solid ${T.dark}`, color: T.dark,
+                  fontWeight: 700, fontSize: 12, textDecoration: 'none', whiteSpace: 'nowrap',
+                }}>
+                相談する
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ═══ ヘッダーカード ═══ */}
-      <div style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 16, padding: 20, marginBottom: 12 }}>
+      <div ref={headerCardRef} style={{ background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 16, padding: 20, marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
           {pro.photo_url ? (
             <img src={pro.photo_url} alt={pro.name}
@@ -1179,6 +1249,12 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
       {/* ═══ タブコンテンツ: サービス・案内 ═══ */}
       {activeTab === 'menus' && showServiceTab && (
         <div style={{ marginBottom: 12 }}>
+          {/* ── §15-3: 写真カルーセル(MENUブロックの上) ── */}
+          {hasGallery && <GalleryCarousel images={galleryImages} />}
+
+          {/* ── §15-3: 紹介動画(YouTube) ── */}
+          {hasIntroVideo && <YouTubeEmbed url={pro.intro_video_url} />}
+
           {/* ── メニュー(Phase A1・既存) ── */}
           {hasMenus && (
             <>

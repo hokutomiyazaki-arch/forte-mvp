@@ -130,3 +130,43 @@ export function validateServiceFormats(arr: string[]): { valid: boolean; error: 
   }
   return { valid: true, error: '' }
 }
+
+/**
+ * §15-3: 紹介動画(YouTube)URL から videoId を抽出する。
+ * 対応形式: watch?v=xxx / youtu.be/xxx / shorts/xxx / embed/xxx (www./m. どちらも可)。
+ * 抽出できない場合は null (呼び出し側で「YouTubeの動画URLを入力してください」を出す)。
+ * DB には入力URLをそのまま保存する(videoIdは表示側で都度抽出する)。
+ */
+export function extractYouTubeVideoId(url: string): string | null {
+  const trimmed = url.trim()
+  if (!trimmed) return null
+  // videoIdはiframeのsrcに埋め込まれるため、英数字・-・_のみを許可する
+  // (パス区切りやクエリ文字の混入でembed URLが変形するのを構造的に防ぐ)
+  const isValidId = (id: string | null): id is string => !!id && /^[A-Za-z0-9_-]{6,20}$/.test(id)
+
+  let u: URL
+  try {
+    u = new URL(trimmed)
+  } catch {
+    return null
+  }
+
+  const host = u.hostname.replace(/^www\./, '').replace(/^m\./, '')
+  const parts = u.pathname.split('/').filter(Boolean)
+
+  if (host === 'youtu.be') {
+    return isValidId(parts[0] || null) ? parts[0] : null
+  }
+
+  if (host === 'youtube.com' || host === 'music.youtube.com') {
+    if (u.pathname === '/watch') {
+      const v = u.searchParams.get('v')
+      return isValidId(v) ? v : null
+    }
+    if ((parts[0] === 'shorts' || parts[0] === 'embed') && isValidId(parts[1] || null)) {
+      return parts[1]
+    }
+  }
+
+  return null
+}
