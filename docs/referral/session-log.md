@@ -331,3 +331,6 @@
 
 ### 記録: migration 039/040/041 実行済み — 2026-08-05（CEO実行）
 - 039 referral_payouts・040 professionals.stripe_connect_account_id等・041 professionals.business_hours の3本すべてCEOがSupabase SQL Editorで実行完了（039/040は読み取りプローブで確認・041はCEO報告）。
+
+### 修正: SlotPickerを段階表示＋実日付併記に — 2026-08-05（CEO指示）
+- 一度に全段出すと混乱するため、週選択→曜日→時刻→完了表示の段階表示（状態機械）に変更。常に実日付を併記（「今週 8/4〜8/10」「月 8/4」「選択中: 8月7日(金)」「8月7日(金) 10:00＋変更リンク」）。「別の日付を選ぶ」は日付選択後に時刻ステップへ直行。

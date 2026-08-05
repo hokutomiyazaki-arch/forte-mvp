@@ -288,6 +288,44 @@ export function isPastWeekdayInCurrentWeek(weekdayMon0: number): boolean {
   return weekdayMon0 < jstTodayDateParts().weekdayMon0
 }
 
+/** "YYYY-MM-DD"文字列を正午UTC固定のDateに変換する(純粋なカレンダー演算・実TZに依存しない)。 */
+function dateValueToNoonUtcDate(dateValue: string): Date | null {
+  const match = dateValue.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!match) return null
+  const [, y, m, d] = match
+  return new Date(Date.UTC(Number(y), Number(m) - 1, Number(d), 12, 0, 0))
+}
+
+/**
+ * 段階表示ピッカー(2026-08-05・CEO指示): 週選択ボタンに併記する日付範囲「8/4〜8/10」
+ * (weekOffsetの月曜〜日曜・Asia/Tokyo)。formatMonthDayは本ファイル後方で定義されるが、
+ * function宣言のホイスティングにより本関数からの呼び出しは問題ない。
+ */
+export function formatWeekRangeLabel(weekOffset: WeekQuickSegment): string {
+  const mondayLabel = formatMonthDay(dateValueToNoonUtcDate(buildQuickWeekdayDate(weekOffset, 0))) || ''
+  const sundayLabel = formatMonthDay(dateValueToNoonUtcDate(buildQuickWeekdayDate(weekOffset, 6))) || ''
+  return `${mondayLabel}〜${sundayLabel}`
+}
+
+/** 段階表示ピッカー(2026-08-05・CEO指示): 曜日ボタンに併記する日付「8/4」。 */
+export function formatDateValueAsMonthDay(dateValue: string): string {
+  return formatMonthDay(dateValueToNoonUtcDate(dateValue)) || ''
+}
+
+/** 段階表示ピッカー(2026-08-05・CEO指示): 選択中の日付見出し「8月7日(金)」。 */
+export function formatDateValueWithWeekday(dateValue: string): string {
+  const d = dateValueToNoonUtcDate(dateValue)
+  if (!d) return ''
+  const parts = new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    month: 'numeric',
+    day: 'numeric',
+    weekday: 'short',
+  }).formatToParts(d)
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
+  return `${get('month')}月${get('day')}日(${get('weekday')})`
+}
+
 /** 指定曜日(weekdayMon0)が「今日」と同じ曜日かどうか(軽微6: 当日ボタンの特別扱いに使う)。 */
 export function isTodayWeekday(weekdayMon0: number): boolean {
   return weekdayMon0 === jstTodayDateParts().weekdayMon0
