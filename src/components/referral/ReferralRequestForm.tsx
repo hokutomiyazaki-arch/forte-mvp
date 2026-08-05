@@ -18,7 +18,6 @@ import { isAcceptingOpen } from '@/lib/referral-accepting'
 // 日時選択UX改善(2026-08-05・CEO指示): 過去日時ブロック・確定期限48h警告・受付時間の
 // 選択肢生成で使う純関数(datetime-local廃止・SlotPickerで自前ピッカーに統一)。
 import {
-  formatSlotWithWeekday,
   isPastDatetimeLocalValue,
   isWithinHoursFromNow,
   snapToHalfHourUp,
@@ -27,7 +26,8 @@ import {
   buildHalfHourTimeOptions,
   type BusinessHours,
 } from '@/lib/referral-format'
-import SlotPicker from '@/components/referral/SlotPicker'
+// カード化(2026-08-05・CEO指示): 第1〜第3希望を独立カード+段階的追加で表示する共通ラッパー。
+import SlotCardGroup from '@/components/referral/SlotCardGroup'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -363,38 +363,17 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
           </div>
         )}
 
-        {/* 日時ピッカー設計最終版(2026-08-05・CEO指示): datetime-localのAndroid崩壊(実機確認)を
-            受け、SlotPicker(週+曜日ボタン or 手動日付 + 時刻セレクト)に統一。第1希望のみ必須を
-            視覚的に強調(第2・第3は任意を薄く・選択解除リンク付き)。 */}
-        <div>
-          <label style={labelStyle}>
-            第1希望日時 <span style={{ color: T.gold }}>（必須）</span>
-          </label>
-          <SlotPicker value={slot1} onChange={setSlot1} timeOptions={timeOptions} />
-          {formatSlotWithWeekday(slot1) && (
-            <div style={{ fontSize: 12, color: T.gold, fontWeight: 600, marginTop: 4 }}>
-              {formatSlotWithWeekday(slot1)}
-            </div>
-          )}
-        </div>
-        <div>
-          <label style={{ ...labelStyle, color: T.textMuted, fontWeight: 600 }}>第2希望（任意・あると調整しやすくなります）</label>
-          <SlotPicker value={slot2} onChange={setSlot2} timeOptions={timeOptions} clearable />
-          {formatSlotWithWeekday(slot2) && (
-            <div style={{ fontSize: 12, color: T.textSub, fontWeight: 600, marginTop: 4 }}>
-              {formatSlotWithWeekday(slot2)}
-            </div>
-          )}
-        </div>
-        <div>
-          <label style={{ ...labelStyle, color: T.textMuted, fontWeight: 600 }}>第3希望（任意）</label>
-          <SlotPicker value={slot3} onChange={setSlot3} timeOptions={timeOptions} clearable />
-          {formatSlotWithWeekday(slot3) && (
-            <div style={{ fontSize: 12, color: T.textSub, fontWeight: 600, marginTop: 4 }}>
-              {formatSlotWithWeekday(slot3)}
-            </div>
-          )}
-        </div>
+        {/* カード化(2026-08-05・CEO指示): 第1〜第3希望を独立カード+段階的追加で表示する
+            (境界を明確化・第1希望のみ最初に表示・完了後に次の希望を追加できる)。 */}
+        <SlotCardGroup
+          values={[slot1, slot2, slot3]}
+          onChangeAt={(index, next) => {
+            if (index === 0) setSlot1(next)
+            else if (index === 1) setSlot2(next)
+            else setSlot3(next)
+          }}
+          timeOptions={timeOptions}
+        />
         {hasNear48hSlot && (
           <div
             style={{

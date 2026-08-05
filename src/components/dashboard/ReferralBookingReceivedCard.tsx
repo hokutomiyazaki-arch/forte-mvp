@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import {
   formatSlot,
-  formatSlotWithWeekday,
   resolveConfirmedSlotIso,
   isWithinClientRefundDeadline,
   buildGoogleCalendarUrl,
@@ -12,9 +11,9 @@ import {
   buildHalfHourTimeOptions,
 } from '@/lib/referral-format'
 import BookingThread from '@/components/dashboard/BookingThread'
-// 日時ピッカー設計最終版(2026-08-05・CEO指示): クライアント向けフォームと同じSlotPickerを共有する
-// (datetime-local廃止・Android実機でのstep無視崩壊対策)。
-import SlotPicker from '@/components/referral/SlotPicker'
+// カード化(2026-08-05・CEO指示): クライアント向けフォームと同じSlotCardGroup(第1〜第3希望の
+// 独立カード+段階的追加)を共有する(datetime-local廃止・Android実機でのstep無視崩壊対策)。
+import SlotCardGroup from '@/components/referral/SlotCardGroup'
 
 /** 日時ピッカー設計最終版: プロ側counter/reschedule共通の時刻選択肢(06:00〜23:30の全域)。 */
 const PRO_SLOT_TIME_OPTIONS = buildHalfHourTimeOptions('06:00', '24:00')
@@ -628,28 +627,16 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                     <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 8 }}>
                       クライアントに別日時を提案します(第1希望は必須)
                     </div>
-                    {[0, 1, 2].map((i) => (
-                      <div key={i} style={{ marginBottom: 8 }}>
-                        <label style={{ fontSize: 13, color: '#6B7280', display: 'block', marginBottom: 4 }}>
-                          第{i + 1}希望{i > 0 ? '(任意)' : '(必須)'}
-                        </label>
-                        <SlotPicker
-                          value={counterInput[i]}
-                          timeOptions={PRO_SLOT_TIME_OPTIONS}
-                          clearable={i > 0}
-                          onChange={(next) => {
-                            const nextInput: [string, string, string] = [...counterInput] as [string, string, string]
-                            nextInput[i] = next
-                            setCounterInputs((prev) => ({ ...prev, [item.id]: nextInput }))
-                          }}
-                        />
-                        {formatSlotWithWeekday(counterInput[i]) && (
-                          <div style={{ fontSize: 13, color: '#C4A35A', fontWeight: 600, marginTop: 2 }}>
-                            {formatSlotWithWeekday(counterInput[i])}
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                    {/* カード化(2026-08-05・CEO指示): 第1〜第3希望を独立カード+段階的追加で表示する。 */}
+                    <SlotCardGroup
+                      values={counterInput}
+                      timeOptions={PRO_SLOT_TIME_OPTIONS}
+                      onChangeAt={(i, next) => {
+                        const nextInput: [string, string, string] = [...counterInput] as [string, string, string]
+                        nextInput[i] = next
+                        setCounterInputs((prev) => ({ ...prev, [item.id]: nextInput }))
+                      }}
+                    />
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button
                         onClick={() => submitCounter(item.id)}
@@ -1094,28 +1081,16 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                   <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 8 }}>
                     確定した日時にどうしても都合がつかなくなった場合に、クライアントへ新しい日時をお願いします(第1希望は必須)。クライアントには「あなたの都合による変更のお願い」として届きます。
                   </div>
-                  {[0, 1, 2].map((i) => (
-                    <div key={i} style={{ marginBottom: 8 }}>
-                      <label style={{ fontSize: 13, color: '#6B7280', display: 'block', marginBottom: 4 }}>
-                        第{i + 1}希望{i > 0 ? '(任意)' : '(必須)'}
-                      </label>
-                      <SlotPicker
-                        value={rescheduleInput[i]}
-                        timeOptions={PRO_SLOT_TIME_OPTIONS}
-                        clearable={i > 0}
-                        onChange={(next) => {
-                          const nextInput: [string, string, string] = [...rescheduleInput] as [string, string, string]
-                          nextInput[i] = next
-                          setRescheduleInputs((prev) => ({ ...prev, [item.id]: nextInput }))
-                        }}
-                      />
-                      {formatSlotWithWeekday(rescheduleInput[i]) && (
-                        <div style={{ fontSize: 13, color: '#C4A35A', fontWeight: 600, marginTop: 2 }}>
-                          {formatSlotWithWeekday(rescheduleInput[i])}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                  {/* カード化(2026-08-05・CEO指示): 第1〜第3希望を独立カード+段階的追加で表示する。 */}
+                  <SlotCardGroup
+                    values={rescheduleInput}
+                    timeOptions={PRO_SLOT_TIME_OPTIONS}
+                    onChangeAt={(i, next) => {
+                      const nextInput: [string, string, string] = [...rescheduleInput] as [string, string, string]
+                      nextInput[i] = next
+                      setRescheduleInputs((prev) => ({ ...prev, [item.id]: nextInput }))
+                    }}
+                  />
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button
                       onClick={() => submitReschedule(item.id)}
