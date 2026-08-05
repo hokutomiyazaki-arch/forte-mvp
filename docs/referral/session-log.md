@@ -457,3 +457,12 @@
 - 症状: プロフ編集→保存→ダッシュボードをリロードすると編集画面に戻ってしまう。
 - 真因: バナー/メニュー導線の `?tab=profile&edit=true` が保存後もURLに残存。リロードで自動オープン防止のrefがリセットされ再発火。
 - 対応: 編集画面を自動オープンした直後に `history.replaceState` で `edit` パラメータをURLから除去（tabパラメータは維持）。
+
+## 2026-08-05 /api/storage 認可穴の閉塞（バックログ task_540e454e 消化）
+- 前セッションで発見・チップ化した「認証ユーザーなら任意 bucket/path に書ける（他人の avatar 上書き可）」を修正。
+- 対応: bucket 許可リスト（avatars / gallery-images / badge-images のみ）＋path スコープ検証。
+  - avatars / gallery-images: path 先頭セグメント = 自分の Clerk userId 必須。
+  - badge-images: `org-logos/{orgId}/...` or `{orgId}/...` のみ・`organizations.owner_id = 自分` を maybeSingle で確認。
+  - 共通: `..`/空セグメント拒否・2セグメント以上・512字上限・10MB 上限。許可外は 403。
+- 呼び出し元5系統（setup avatar・dashboard avatar・MediaSection gallery・org logo・badge 新規/編集）は全て既存 path が検証を通ることを確認済み。既存フロー非接触。
+- 【観察・非接触】/api/upload-client-photo（投票フロー=保護リスト）は voteId 所有確認なしで votes.client_photo_url を更新できるが、voteId は UUID・ファイル上書き不可のため今回はスコープ外。気になるなら別タスクで。
