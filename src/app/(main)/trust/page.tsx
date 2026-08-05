@@ -21,7 +21,7 @@ export const metadata: Metadata = {
 }
 
 // 4つの担保構造。見出し + 本文（確定文言）。
-const SECTIONS: { heading: string; lines: string[] }[] = [
+const SECTIONS: { heading: string; lines: string[]; image: string }[] = [
   {
     heading: 'ネット上から誰でも書ける仕組みではありません',
     lines: [
@@ -29,6 +29,7 @@ const SECTIONS: { heading: string; lines: string[] }[] = [
       'その場で提示されたQRコードからのみ、記録できます。',
       '会ったことのない誰かが、書き込むことはできません。',
     ],
+    image: '/trust/trust-qr.png',
   },
   {
     heading: '同じ人が連続して記録することはできません',
@@ -36,6 +37,7 @@ const SECTIONS: { heading: string; lines: string[] }[] = [
       '一人が短期間に何度も記録することはできない仕組みです。',
       '数を水増しすることはできません。',
     ],
+    image: '/trust/trust-once.png',
   },
   {
     heading: 'あとから書き換えることはできません',
@@ -43,6 +45,7 @@ const SECTIONS: { heading: string; lines: string[] }[] = [
       '記録された声は、暗号技術(暗号ハッシュチェーン)によって守られています。',
       '一度記録された声は、本人にも、プロにも、運営にも書き換えられません。',
     ],
+    image: '/trust/trust-chain.png',
   },
   {
     heading: 'お金で順位は変わりません',
@@ -50,8 +53,32 @@ const SECTIONS: { heading: string; lines: string[] }[] = [
       'REALPROOFに広告枠はありません。',
       '表示される順番を、お金で買うことはできません。',
     ],
+    image: '/trust/trust-nomoney.png',
   },
 ]
+
+/**
+ * 追加(2026-08-05・CEO指示): 線画イラスト(public/trust/・1200px幅PNG・文字なし)を
+ * 各セクションの見出し直後に挿入する。width:100%・height:autoでページ幅に収める
+ * (横スクロール厳禁)。referral-guideページの GuideImage と同じパターン。
+ */
+function SectionImage({ src, alt }: { src: string; alt: string }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={alt}
+      style={{
+        display: 'block',
+        width: '100%',
+        maxWidth: '100%',
+        height: 'auto',
+        borderRadius: 12,
+        marginBottom: 14,
+      }}
+    />
+  )
+}
 
 export default function TrustPage() {
   return (
@@ -128,6 +155,7 @@ export default function TrustPage() {
             >
               {sec.heading}
             </h2>
+            <SectionImage src={sec.image} alt={sec.heading} />
             {sec.lines.map((line, i) => (
               <p
                 key={i}

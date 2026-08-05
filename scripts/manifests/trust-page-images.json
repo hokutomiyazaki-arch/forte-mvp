@@ -1,0 +1,26 @@
+[
+  {
+    "name": "trust-qr",
+    "prompt": "Clean flat line-art illustration: in-person authenticity — a professional showing a smartphone with an abstract stylized QR-pattern to a client right after a training session, both standing together in the same room, a small gold shield-with-check motif floating between them. Warm trustworthy editorial style. Deep navy #1A1A2E outlines, gold #C4A35A accents, pure white background, minimal, generous whitespace. Absolutely no text, no letters, no numbers, no labels.",
+    "size": "1536x1024",
+    "quality": "medium"
+  },
+  {
+    "name": "trust-once",
+    "prompt": "Clean flat line-art illustration: no repeated submissions — a simple calendar page with one single gold checkmark on one day, and a gentle clock beside it; duplicate ghost checkmarks fading away crossed softly. Calm editorial explainer style. Deep navy #1A1A2E outlines, gold #C4A35A accents, pure white background, minimal, generous whitespace. Absolutely no text, no letters, no numbers, no labels.",
+    "size": "1536x1024",
+    "quality": "medium"
+  },
+  {
+    "name": "trust-chain",
+    "prompt": "Clean flat line-art illustration: tamper-proof records — a row of sealed document cards connected by an elegant gold chain, each card bearing a small wax-seal-like gold emblem, with a padlock at the end of the chain. Calm, secure, editorial style. Deep navy #1A1A2E outlines, gold #C4A35A chain and seals, pure white background, minimal, generous whitespace. Absolutely no text, no letters, no numbers, no labels.",
+    "size": "1536x1024",
+    "quality": "medium"
+  },
+  {
+    "name": "trust-nomoney",
+    "prompt": "Clean flat line-art illustration: rankings cannot be bought — a balanced scale where a stack of coins on one side is clearly outweighed by a single glowing gold heart-voice bubble on the other side. Honest, fair, editorial style. Deep navy #1A1A2E outlines, gold #C4A35A accents, pure white background, minimal, generous whitespace. Absolutely no text, no letters, no numbers, no currency symbols, no labels.",
+    "size": "1536x1024",
+    "quality": "medium"
+  }
+]
