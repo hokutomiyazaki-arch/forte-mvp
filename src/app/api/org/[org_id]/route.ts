@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { selectInChunks } from '@/lib/supabase-batch'
 
 export const dynamic = 'force-dynamic'
 
@@ -79,14 +80,22 @@ export async function GET(
     )
 
     // org_proof_summary VIEWの代わりにvotesテーブルから直接集計（Vercelキャッシュ問題回避）
+    // 真因対応(2026-08): .range() が無く、団体の総投票数が1000行を超えると無音truncateしていた。
+    // 共通ヘルパー(IN句100件チャンク+range()ページネーション)で全件取得する。
     let votesMap = new Map<string, number>()
     if (professionalIds.length > 0) {
-      const { data: votesPerPro } = await supabase
-        .from('votes')
-        .select('professional_id')
-        .in('professional_id', professionalIds)
+      const votesPerPro = await selectInChunks<{ id: string; professional_id: string }>(
+        professionalIds,
+        (chunkIds, from, to) =>
+          supabase
+            .from('votes')
+            .select('id, professional_id')
+            .in('professional_id', chunkIds)
+            .order('id', { ascending: true })
+            .range(from, to)
+      )
       const countMap: Record<string, number> = {}
-      for (const v of votesPerPro || []) {
+      for (const v of votesPerPro) {
         countMap[v.professional_id] = (countMap[v.professional_id] || 0) + 1
       }
       votesMap = new Map(Object.entries(countMap))
@@ -163,14 +172,27 @@ export async function GET(
       // §2-8: continuation行は selected_proof_ids を保持したまま保存されるため、
       // vote_type='proof' に絞って強み項目別集計（プルーフ別トップメンバー）から除外する。
       // normalized_email は DISTINCT 人数カウント専用（集計後に破棄。レスポンスには含めない）。
-      const { data: votesWithProofs } = await supabase
-        .from('votes')
-        .select('id, professional_id, selected_proof_ids, normalized_email')
-        .in('professional_id', professionalIds)
-        .eq('vote_type', 'proof')
-        .not('selected_proof_ids', 'is', null)
+      // 真因対応(2026-08): 同上。.range() が無く1000行超で無音truncateしていたため、
+      // 共通ヘルパー(IN句100件チャンク+range()ページネーション)で全件取得する。
+      const votesWithProofs = await selectInChunks<{
+        id: string
+        professional_id: string
+        selected_proof_ids: string[] | null
+        normalized_email: string | null
+      }>(
+        professionalIds,
+        (chunkIds, from, to) =>
+          supabase
+            .from('votes')
+            .select('id, professional_id, selected_proof_ids, normalized_email')
+            .in('professional_id', chunkIds)
+            .eq('vote_type', 'proof')
+            .not('selected_proof_ids', 'is', null)
+            .order('id', { ascending: true })
+            .range(from, to)
+      )
 
-      if (votesWithProofs && votesWithProofs.length > 0) {
+      if (votesWithProofs.length > 0) {
         // proof_item_id ごと × professional_id ごとの集計
         // §2-8(中B): 票数ではなく人数（DISTINCT normalized_email）でカウントする。
         // vote_summary の STEP4 DISTINCT化後のカード表示（同一プロ×同一項目）と数値を一致させるため。

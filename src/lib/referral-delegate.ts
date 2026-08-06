@@ -15,6 +15,7 @@
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { selectInChunks } from '@/lib/supabase-batch'
 
 type SupabaseAdmin = ReturnType<typeof getSupabaseAdmin>
 
@@ -25,39 +26,39 @@ export async function getValidDelegateListIds(
   const ids = Array.from(new Set(listIds.filter((id): id is string => !!id)))
   if (ids.length === 0) return new Set()
 
-  // 1000行キャップについて: 呼び出し側は共有可能(link/public)リストのIDのみを渡す運用
-  // （accepting PATCH が private を代理指定不可にしており、lists API も private を除外）。
-  // 共有リストのピンは approved 込みで最大3件/リストのため、1000行に達しない前提。
-  // この前提が崩れる呼び出し方を追加する場合は .range() ページネーションを入れること。
-  const { data: items, error: itemsError } = await supabase
-    .from('referral_list_items')
-    .select('list_id, pro_id')
-    .in('list_id', ids)
-    .eq('consent_status', 'approved')
-
-  if (itemsError) {
-    console.error('[getValidDelegateListIds] items error:', itemsError)
-    return new Set()
-  }
-  const rows = (items || []) as Array<{ list_id: string; pro_id: string }>
+  // 真因対応(2026-08): 呼び出し側の想定(共有リストのピンは最大3件/リスト)が崩れる規模に
+  // なっても無音truncateしないよう、共通ヘルパー(IN句100件チャンク+range()ページネーション)
+  // で全件取得する。
+  const rows = await selectInChunks<{ id: string; list_id: string; pro_id: string }>(
+    ids,
+    (chunkIds, from, to) =>
+      supabase
+        .from('referral_list_items')
+        .select('id, list_id, pro_id')
+        .in('list_id', chunkIds)
+        .eq('consent_status', 'approved')
+        .order('id', { ascending: true })
+        .range(from, to)
+  )
   if (rows.length === 0) return new Set()
 
   const proIds = Array.from(new Set(rows.map((r) => r.pro_id)))
   // §2-2改訂(先行テスト第3弾・fail-open): NULL(未設定)も受付中として扱う。closedのみ除外。
   // §16-18追記: 'conditional'(紹介のみ停止)もisAcceptingOpenと同じ判定基準で除外する。
-  const { data: openPros, error: prosError } = await supabase
-    .from('professionals')
-    .select('id')
-    .in('id', proIds)
-    .or('accepting_status.is.null,and(accepting_status.neq.closed,accepting_status.neq.conditional)')
-    .is('deactivated_at', null)
+  const openPros = await selectInChunks<{ id: string }>(
+    proIds,
+    (chunkIds, from, to) =>
+      supabase
+        .from('professionals')
+        .select('id')
+        .in('id', chunkIds)
+        .or('accepting_status.is.null,and(accepting_status.neq.closed,accepting_status.neq.conditional)')
+        .is('deactivated_at', null)
+        .order('id', { ascending: true })
+        .range(from, to)
+  )
 
-  if (prosError) {
-    console.error('[getValidDelegateListIds] professionals error:', prosError)
-    return new Set()
-  }
-
-  const openProIdSet = new Set(((openPros || []) as Array<{ id: string }>).map((p) => p.id))
+  const openProIdSet = new Set(openPros.map((p) => p.id))
   const validListIds = new Set<string>()
   for (const row of rows) {
     if (openProIdSet.has(row.pro_id)) validListIds.add(row.list_id)

@@ -35,6 +35,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { getDistinctSupporterCounts } from '@/lib/referral-data'
 import { isAcceptingOpen } from '@/lib/referral-accepting'
 import { TAB_DISPLAY_NAMES } from '@/lib/constants'
+import { selectInChunks } from '@/lib/supabase-batch'
 
 type SupabaseAdmin = ReturnType<typeof getSupabaseAdmin>
 
@@ -259,11 +260,9 @@ export async function getDelegateCandidates(
     )
     if (memberIds.length === 0) return null
 
-    const { data: memberPros } = await supabase
-      .from('professionals')
-      .select('id, name, title, photo_url, prefecture, accepting_status, deactivated_at')
-      .in('id', memberIds)
-    const openMembers = ((memberPros || []) as Array<{
+    // 真因対応(2026-08): memberIdsが100件を超える団体・vote_summary行数が1000超の団体で
+    // 無音truncateしないよう、共通ヘルパー(IN句100件チャンク+range()ページネーション)で全件取得する。
+    const memberPros = await selectInChunks<{
       id: string
       name: string
       title: string | null
@@ -271,22 +270,40 @@ export async function getDelegateCandidates(
       prefecture: string | null
       accepting_status: string | null
       deactivated_at: string | null
-    }>).filter((p) => !p.deactivated_at && isAcceptingOpen(p.accepting_status))
+    }>(
+      memberIds,
+      (chunkIds, from, to) =>
+        supabase
+          .from('professionals')
+          .select('id, name, title, photo_url, prefecture, accepting_status, deactivated_at')
+          .in('id', chunkIds)
+          .order('id', { ascending: true })
+          .range(from, to)
+    )
+    const openMembers = memberPros.filter((p) => !p.deactivated_at && isAcceptingOpen(p.accepting_status))
     if (openMembers.length === 0) return null
     const openMemberIds = openMembers.map((p) => p.id)
 
     // メンバー全員のvote_summaryを1クエリで取得しJS側で集計(N+1回避)
-    const { data: memberSummaryRows } = await supabase
-      .from('vote_summary')
-      .select('professional_id, proof_id, vote_count')
-      .in('professional_id', openMemberIds)
-      .gt('vote_count', 0)
-    const summaryByMember = new Map<string, Array<{ proof_id: string; vote_count: number }>>()
-    for (const row of (memberSummaryRows || []) as Array<{
+    // vote_summaryはVIEWで id カラムが無いため、決定的順序は professional_id, proof_id の複合キーで代替する。
+    const memberSummaryRows = await selectInChunks<{
       professional_id: string
       proof_id: string
       vote_count: number
-    }>) {
+    }>(
+      openMemberIds,
+      (chunkIds, from, to) =>
+        supabase
+          .from('vote_summary')
+          .select('professional_id, proof_id, vote_count')
+          .in('professional_id', chunkIds)
+          .gt('vote_count', 0)
+          .order('professional_id', { ascending: true })
+          .order('proof_id', { ascending: true })
+          .range(from, to)
+    )
+    const summaryByMember = new Map<string, Array<{ proof_id: string; vote_count: number }>>()
+    for (const row of memberSummaryRows) {
       if (!summaryByMember.has(row.professional_id)) summaryByMember.set(row.professional_id, [])
       summaryByMember.get(row.professional_id)!.push(row)
     }

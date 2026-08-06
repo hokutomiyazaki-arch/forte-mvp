@@ -4,6 +4,7 @@ import { isSearchPrivate } from '@/lib/feature-flags'
 import { getViewerIsPro, getViewerIsProStrict } from '@/lib/viewer-role'
 import { computeReferralSignal } from '@/lib/referral-accepting'
 import { getValidDelegateListIds } from '@/lib/referral-delegate'
+import { selectInChunks } from '@/lib/supabase-batch'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,39 +43,33 @@ const CATEGORY_TAB_MAP: Record<string, string[]> = {
 }
 
 // votes テーブルの全件ページネーション取得ヘルパー
-// 真因対応: Supabase max-rows=1000 でキャップされる問題を回避するため
-// .range() で 1000 件ずつ取得し、空ページに当たるまで継続する。
-// 決定的順序が必須なので .order('id') を強制する。
-// 注意: 呼び出し側が created_at 順を要求する場合は、戻り値を JS 側でソートし直すこと。
+// 真因対応(2026-08): 本ヘルパーは引数 proIds を受け取っていたのに一度もクエリに使っていなかった
+// (`.in('professional_id', proIds)` が無い)ため、confirmed の votes を毎回全件スキャンしていた。
+// proIds を実際にフィルタへ反映しつつ、①IN句を100件ずつチャンク分割 ②各チャンクを
+// .range()+.order('id') でページネーション、の二重対策を共通ヘルパー(selectInChunks)に委譲する。
+// 注意: 呼び出し側が created_at 順を要求する場合は、戻り値を JS 側でソートし直すこと(既存通り)。
 async function fetchAllVotesPaginated(
   supabase: any,
   proIds: string[],
   selectCols: string,
   voteType: string | string[] | null
 ) {
-  const all: any[] = []
-  let from = 0
-  const pageSize = 1000
-  while (true) {
+  if (!proIds || proIds.length === 0) return []
+  return selectInChunks<any>(proIds, (chunkIds, from, to) => {
     let q = supabase
       .from('votes')
       .select(selectCols)
       .eq('status', 'confirmed')
+      .in('professional_id', chunkIds)
       .order('id', { ascending: true })
-      .range(from, from + pageSize - 1)
+      .range(from, to)
     if (Array.isArray(voteType)) {
       q = q.in('vote_type', voteType)
     } else if (voteType) {
       q = q.eq('vote_type', voteType)
     }
-    const { data, error } = await q
-    if (error) { console.error('votes pagination error:', error); break }
-    if (!data || data.length === 0) break
-    all.push(...data)
-    if (data.length < pageSize) break
-    from += pageSize
-  }
-  return all
+    return q
+  })
 }
 
 export async function GET(request: Request) {
@@ -106,25 +101,50 @@ export async function GET(request: Request) {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
 
     // 全アクティブプロを取得（プルーフ0除外はあとでフィルタ）
-    let proQuery = supabase
-      .from('professionals')
-      .select(`
-        id, name, title, prefecture, area_description, bio,
-        photo_url, selected_proofs,
-        badge_rising, badge_specialist, badge_multi, badge_top,
-        featured_vote_id, featured_proof_id, created_at,
-        accepting_status, accepting_note, delegate_list_id
-      `)
-      .is('deactivated_at', null)
-      .not('selected_proofs', 'is', null)
+    // 真因対応(2026-08): .range() が無く、Supabase max-rows=1000 でプロ数が1000名を超えた
+    // 時点で無音truncateする問題があった。ここではまず全件取得できるようページネーションする。
+    // ただしプロ数が数万規模になれば全件メモリロード自体がボトルネックになる(Postgres側集計への
+    // リファクタが将来必要)。無音破綻を避けるため、上限件数でキャップしログで検知できるようにする。
+    const PROFESSIONALS_FETCH_CAP = 5000
+    const professionals: any[] = []
+    {
+      let from = 0
+      const pageSize = 1000
+      while (true) {
+        let proQuery = supabase
+          .from('professionals')
+          .select(`
+            id, name, title, prefecture, area_description, bio,
+            photo_url, selected_proofs,
+            badge_rising, badge_specialist, badge_multi, badge_top,
+            featured_vote_id, featured_proof_id, created_at,
+            accepting_status, accepting_note, delegate_list_id
+          `)
+          .is('deactivated_at', null)
+          .not('selected_proofs', 'is', null)
+          .order('id', { ascending: true })
+          .range(from, from + pageSize - 1)
 
-    if (prefecture) {
-      proQuery = proQuery.eq('prefecture', prefecture)
+        if (prefecture) {
+          proQuery = proQuery.eq('prefecture', prefecture)
+        }
+
+        const { data, error: prosError } = await proQuery
+        if (prosError) throw prosError
+        if (!data || data.length === 0) break
+        professionals.push(...data)
+        if (data.length < pageSize) break
+        from += pageSize
+        if (professionals.length >= PROFESSIONALS_FETCH_CAP) {
+          console.error(
+            `[api/search] professionals fetch cap (${PROFESSIONALS_FETCH_CAP}) reached - truncating results. ` +
+            `Postgres側集計(RPC/VIEW)へのリファクタが必要な規模に到達した可能性あり。`
+          )
+          break
+        }
+      }
     }
 
-    const { data: professionals, error: prosError } = await proQuery
-
-    if (prosError) throw prosError
     if (!professionals || professionals.length === 0) {
       return NextResponse.json({ professionals: [] }, {
         headers: { 'Cache-Control': 'no-store' }
