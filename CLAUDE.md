@@ -6,8 +6,19 @@
 
 ## 🚨 絶対ルール（最優先）
 - **ブランチを作らない。常に main に直接コミット。** worktree も作らない。`git checkout -b` は使わない。
-- **CC は自動で commit / push しない（最優先・絶対）。** CC はファイルを編集するところまで。`git add` / `git commit` / `git push` は実行しない。commit と push はほくとが GitHub Desktop で行う。
+- **CC は自動で commit / push しない（PC・GitHub Desktop 運用時の既定）。** CC はファイルを編集するところまで。`git add` / `git commit` / `git push` は実行しない。commit と push はほくとが GitHub Desktop で行う。
   - CC は編集後に「どのファイルを変更したか」を報告するだけ。git 操作の代行が必要なときは、ほくとが明示的に指示した場合のみ。
+- **【恒久ルール・2026-08-06 CEO決定】外出中（スマホから起動した web セッション）は上記の例外。**
+  ほくとが GitHub Desktop を触れないため、CC が **commit / push / 承認済みSQLの実行まで代行する**（毎回確認を取らない）。
+  - SQL は「CEOが承認したもの」だけ。未承認のSQLは提示にとどめる。この線は外出中でも変えない。
+  - 破壊的操作（DROP / DELETE / UPDATE 等）は代行対象でも 5段階プロトコルと神山プロトコルをそのまま適用する。
+  - 1修正=1コミットは維持。コミットメッセージに何をどう直したかと真因を書く。
+  - **main への取り込みは PR 方式（CEO決定・2026-08-06）。** web セッションは main に直接 push できずブランチ指定に
+    なるため、作業が一区切りしたら **CC が PR を作る**。ほくとはスマホの GitHub アプリで中身を見て Merge を押すだけ。
+    CC が main に直接 push することはしない。PR を出したら「未マージ＝まだ本番に出ていない」と明示して伝える。
+  - **web セッションから Chrome 拡張は使えない**（クラウド上の隔離コンテナで動くため、ほくとの Mac の Chrome に届かない）。
+    web セッションでの SQL 実行は **Supabase MCP**（`.mcp.json`・コミット済み）を使う。接続に必要な残作業と
+    調査結果は `.claude/MCP-SETUP.md` 参照。**未接続の間は「実行できない」と明示し、SQLをチャットに直貼りする。**
 - `npm run build` はしない → ほくと手動。型チェックのみ `npx tsc --noEmit`。
 - 各 🛑 STOP ポイントで CEO 承認待ち。DB 操作（Supabase SQL Editor）・本番検証はほくたが実施。
 
@@ -75,7 +86,9 @@
 - [ ] カテゴリ表示名は DB でなく **`src/lib/constants.ts` の `TAB_DISPLAY_NAMES`**。
 - [ ] 効果カテゴリは**9種**（治療・回復/体の機能改善/ボディメイク/パフォーマンス/マインド/発見・気づき/指導力/ビューティー/栄養・生活）・**85項目**。
       **「最大9選択」はプロ側プロフィール設定（`professionals.selected_proofs`）の上限**。投票者が1回の投票で選べる強み項目は**最大3件**（`vote/[id]/page.tsx` の `MAX_PROOF=3`）。混同注意。
-- [ ] `vote_type` は `hopeful` / `proof` / `personality_only` の3種。
+- [ ] `vote_type` は **4種**：`hopeful` / `proof` / `personality_only` / **`continuation`**（2回目以降＝リピーターの記録）。
+      **「施術を受けた記録」＝`proof` + `continuation`**（`/api/vote-count` が正）。`vote_type='proof'` だけで絞ると
+      **リピーターの記録が丸ごと落ちる**（2026-08-06 admin 日別プルーフ獲得者の事故）。
 
 ## D. 外部連携（LINE / Email / mailto）
 - [ ] LINE 内蔵ブラウザは callback が2回発火 → 冪等性／中断リカバリ。

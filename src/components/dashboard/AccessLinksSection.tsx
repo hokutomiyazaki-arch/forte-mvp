@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import SettingsSection from './SettingsSection'
 import {
   validateOptionalUrl,
   validateSocialHandle,
@@ -25,6 +26,9 @@ const CLOSED_DAY_OPTIONS: { value: string; label: string }[] = [
   { value: 'sat', label: '土' },
   { value: 'sun', label: '日' },
 ]
+
+/** 「アクセス情報」ブロック側に属するエラーキー。これ以外は「外部リンク」ブロック側とみなす。 */
+const ACCESS_ERROR_KEYS = ['walk_minutes', 'service_formats', 'business_hours_end', 'google_maps_url']
 
 export interface AccessLinksFormPart {
   address: string
@@ -59,6 +63,10 @@ interface Props {
 export default function AccessLinksSection({ accessLinks, onAccessLinksChange, onSave, saving, saveNote }: Props) {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [savedToast, setSavedToast] = useState(false)
+
+  // CEO指示(2026-08-06): 項目ごとに畳めるように。既定は全て閉。
+  const [openAccess, setOpenAccess] = useState(false)
+  const [openLinks, setOpenLinks] = useState(false)
 
   const setField = <K extends keyof AccessLinksFormPart>(key: K, value: AccessLinksFormPart[K]) => {
     onAccessLinksChange({ [key]: value } as Partial<AccessLinksFormPart>)
@@ -125,6 +133,10 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
     }
 
     if (Object.keys(errs).length > 0) {
+      // 畳んだままだとエラー文言が見えないので、該当するブロックを開いてから表示する
+      const keys = Object.keys(errs)
+      if (keys.some(k => ACCESS_ERROR_KEYS.includes(k))) setOpenAccess(true)
+      if (keys.some(k => !ACCESS_ERROR_KEYS.includes(k))) setOpenLinks(true)
       setErrors(errs)
       return
     }
@@ -151,29 +163,16 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
     boxSizing: 'border-box' as const,
   })
   const errorTextStyle = { color: '#E24B4A', fontSize: 12, marginTop: 4 }
-  const sectionTitleStyle = {
-    fontSize: 15,
-    fontWeight: 700,
-    color: '#1A1A2E',
-    marginTop: 32,
-    marginBottom: 4,
-  }
-  const sectionDescStyle = {
-    fontSize: 12,
-    color: '#6B7280',
-    marginBottom: 16,
-    lineHeight: 1.6,
-  }
 
   return (
     <>
-      <hr style={{ margin: '32px 0 0', border: 'none', borderTop: '1px solid #E5E7EB' }} />
-
       {/* ── アクセス情報 ── */}
-      <h3 style={sectionTitleStyle}>アクセス情報</h3>
-      <p style={sectionDescStyle}>
-        来店・出張・オンラインの可否や、アクセスをカードページに表示します。すべて任意です。
-      </p>
+      <SettingsSection
+        title="アクセス情報"
+        description="来店・出張・オンラインの可否や、アクセスをカードページに表示します。すべて任意です。"
+        open={openAccess}
+        onToggle={() => setOpenAccess(v => !v)}
+      >
 
       <div style={{ marginBottom: 16 }}>
         <label style={labelStyle}>住所</label>
@@ -327,11 +326,15 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
         {errors.google_maps_url && <p style={errorTextStyle}>{errors.google_maps_url}</p>}
       </div>
 
+      </SettingsSection>
+
       {/* ── 外部リンク ── */}
-      <h3 style={sectionTitleStyle}>外部リンク</h3>
-      <p style={sectionDescStyle}>
-        公式HPやSNSアカウントをカードページに表示します。すべて任意です。
-      </p>
+      <SettingsSection
+        title="外部リンク"
+        description="公式HPやSNSアカウントをカードページに表示します。すべて任意です。"
+        open={openLinks}
+        onToggle={() => setOpenLinks(v => !v)}
+      >
 
       <div style={{ marginBottom: 16 }}>
         <label style={labelStyle}>公式HP URL</label>
@@ -406,6 +409,10 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
         {errors.phone_number && <p style={errorTextStyle}>{errors.phone_number}</p>}
       </div>
 
+      </SettingsSection>
+
+      {/* 保存はアクセス情報・外部リンクの両方を1回で書き込むため、アコーディオンの外に常時出す
+          （入力値は親のフォーム状態なので、畳んでいるブロックの値もそのまま保存される） */}
       <button
         type="button"
         onClick={handleSubmit}

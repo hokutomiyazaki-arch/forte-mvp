@@ -29,6 +29,7 @@ import BusinessInfoTab from '@/components/dashboard/BusinessInfoTab'
 import MediaSection from '@/components/dashboard/MediaSection'
 import ReferralTab from '@/components/dashboard/ReferralTab'
 import AcceptingStatusWidget from '@/components/dashboard/AcceptingStatusWidget'
+import SettingsSection from '@/components/dashboard/SettingsSection'
 import ReferralBookingReceivedCard from '@/components/dashboard/ReferralBookingReceivedCard'
 import ReferralActionBanner from '@/components/dashboard/ReferralActionBanner'
 import { createClient as createSupabaseClient } from '@/lib/supabase'
@@ -215,6 +216,14 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState('healing')
   const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'card' | 'org' | 'myorgs' | 'guide' | 'business-info' | 'badges' | 'referral'>('profile')
   const [openSections, setOpenSections] = useState<Set<string>>(new Set())
+  // CEO指示(2026-08-06): プロフィール編集も項目ごとに畳めるようにする。
+  // 既定は「基本情報」だけ開く(姓名・都道府県が必須のため、初見で入力欄が見えている状態を保つ)。
+  const [openProfileSections, setOpenProfileSections] = useState<Record<string, boolean>>({ basic: true })
+  const toggleProfileSection = (id: string) =>
+    setOpenProfileSections(prev => ({ ...prev, [id]: !prev[id] }))
+  /** 保存エラー時に、該当ブロックが畳まれていてもエラー箇所が見えるように開く。 */
+  const openProfileSection = (id: string) =>
+    setOpenProfileSections(prev => (prev[id] ? prev : { ...prev, [id]: true }))
   // 獲得バッジビュー: HTMLコピーのトースト
   const [badgeToast, setBadgeToast] = useState<string | null>(null)
   // userRole removed: /api/dashboard の role レスポンスで判定
@@ -1234,6 +1243,7 @@ export default function DashboardPage() {
     const bookingValidation = validateBookingUrl(form.booking_url || '')
     if (!bookingValidation.valid) {
       setBookingUrlError(bookingValidation.error)
+      openProfileSection('contact')
       setSaving(false)
       return
     }
@@ -1241,26 +1251,39 @@ export default function DashboardPage() {
     const urlPattern = /https?:\/\/|www\./i
     if (!form.last_name.trim() || !form.first_name.trim()) {
       setFormError('姓と名を入力してください')
+      openProfileSection('basic')
       setSaving(false)
       return
     }
     if (form.last_name.trim().length > 20 || form.first_name.trim().length > 20) {
       setFormError('姓名は各20文字以内で入力してください')
+      openProfileSection('basic')
       setSaving(false)
       return
     }
     if (urlPattern.test(form.last_name) || urlPattern.test(form.first_name)) {
       setFormError('名前にURLを含めることはできません')
+      openProfileSection('basic')
       setSaving(false)
       return
     }
     if (form.store_name.trim().length > 50) {
       setFormError('店舗名は50文字以内で入力してください')
+      openProfileSection('basic')
+      setSaving(false)
+      return
+    }
+    // 都道府県は必須(input側のrequired)。ブロックを畳んだまま保存すると
+    // ブラウザの必須チェックが働かないため、JS側でも同じ条件を見る。
+    if (!form.prefecture) {
+      setFormError('都道府県を選択してください')
+      openProfileSection('basic')
       setSaving(false)
       return
     }
     if (urlPattern.test(form.contact_email)) {
       setFormError('正しいメールアドレスを入力してください')
+      openProfileSection('contact')
       setSaving(false)
       return
     }
@@ -1925,10 +1948,37 @@ export default function DashboardPage() {
   if (editing) {
     return (
       <div className="max-w-lg mx-auto">
-        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-6">
+        {/* CEO指示(2026-08-06): 設定画面は「1行目=タイトル / 2行目=左に← ホームに戻る / 3行目=設定本体」。
+            プロフィール"作成"(初回セットアップ)はまだ戻る先が無いので、pro がいる編集時のみ出す。 */}
+        <h1 className="text-lg font-bold text-[#1A1A2E]">
           {pro ? 'プロフィール編集' : 'プロフィール作成'}
         </h1>
+        {pro && (
+          <div className="mt-2 mb-4">
+            <button
+              type="button"
+              onClick={() => {
+                setEditing(false)
+                setDashboardTab('profile')
+                window.history.replaceState(null, '', '/dashboard')
+              }}
+              style={{ fontSize: 13, color: '#C4A35A', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+            >
+              ← ホームに戻る
+            </button>
+          </div>
+        )}
+        {!pro && <div className="mb-4" />}
         <form onSubmit={handleSave} className="space-y-4">
+
+        {/* ── 基本情報 ── */}
+        <SettingsSection
+          title="基本情報"
+          description="名前・店舗・肩書き・エリアなど、カードの一番上に出る情報です。"
+          open={!!openProfileSections.basic}
+          onToggle={() => toggleProfileSection('basic')}
+        >
+        <div className="space-y-4">
           {/* プロフ写真 */}
           <div className="flex flex-col items-center">
             <div className="relative">
@@ -2019,6 +2069,17 @@ export default function DashboardPage() {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
               placeholder="渋谷・恵比寿エリア / 出張対応：関東全域 など" />
           </div>
+        </div>
+        </SettingsSection>
+
+        {/* ── 自己紹介・写真・動画 ── */}
+        <SettingsSection
+          title="自己紹介・写真・動画"
+          description="カードの自己紹介ブロックに出る内容です。"
+          open={!!openProfileSections.about}
+          onToggle={() => toggleProfileSection('about')}
+        >
+        <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">自己紹介</label>
             <textarea value={form.bio} onChange={e => setForm({...form, bio: e.target.value})} rows={4}
@@ -2057,7 +2118,17 @@ export default function DashboardPage() {
             userId={user?.id}
             saveNote={businessHoursSaveNote}
           />
+        </div>
+        </SettingsSection>
 
+        {/* ── 連絡先 ── */}
+        <SettingsSection
+          title="連絡先"
+          description="お客さんがあなたに連絡する手段。URL・メール・電話のいずれか1つでOKです。"
+          open={!!openProfileSections.contact}
+          onToggle={() => toggleProfileSection('contact')}
+        >
+        <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               予約・連絡先URL
@@ -2097,12 +2168,18 @@ export default function DashboardPage() {
             <p className="text-xs text-gray-400 mt-1">URL・メール・電話番号のいずれか1つがあれば連絡先の設定は完了です</p>
           </div>
           {/* パスワードはClerkで管理 */}
+        </div>
+        </SettingsSection>
 
           {/* ── 通知設定 ── */}
           {pro && (
-            <div className="border-t border-gray-200 pt-4 mt-4">
-              <h3 className="text-sm font-bold text-gray-700 mb-3">通知設定</h3>
-
+            <SettingsSection
+              title="通知設定"
+              description="週次レポートの受け取り方（LINE / メール）。"
+              open={!!openProfileSections.notifications}
+              onToggle={() => toggleProfileSection('notifications')}
+            >
+            <div>
               {/* LINE通知設定 */}
               <div className="bg-gray-50 rounded-lg p-4 mb-3">
                 <div className="flex items-center justify-between mb-1">
@@ -2284,6 +2361,7 @@ export default function DashboardPage() {
                 </div>
               </div>
             </div>
+            </SettingsSection>
           )}
 
           {formError && <p className="text-red-500 text-sm">{formError}</p>}
@@ -2628,68 +2706,94 @@ export default function DashboardPage() {
           単一ファイル内のタブ切替のまま)。ホーム('profile')のみ「ダッシュボード」＋ファウンダーバッジ＋
           メールアドレスを表示。他タブは「(←戻る) タブ名」の1行に集約し、旧: QR枠の下に別行で出していた
           「← ホームに戻る」ボタンをこの行に統合する。受け入れステータストグルは右側に維持(全タブ共通)。 */}
-      <div className="flex items-start justify-between mb-4" style={{ flexWrap: 'wrap' as const, gap: 12 }}>
-        <div>
-          {dashboardTab === 'profile' ? (
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <h1 className="text-2xl font-bold text-[#1A1A2E]">ダッシュボード</h1>
-                {(pro as any)?.founding_member_status === 'achieved' && (
-                  <a
-                    href="https://line.me/R/ti/g/2C5JXJyc68"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="Founding Memberグループに参加"
-                  >
-                    <img
-                      src="/images/founding-member-badge.png"
-                      alt="Founding Member"
-                      style={{ width: 40, height: 40, objectFit: 'contain' }}
-                    />
-                  </a>
-                )}
-              </div>
-              {user?.email && (
-                <p className="text-sm text-gray-400 mt-1 truncate max-w-[260px]">
-                  {user.email.startsWith('line_') && user.email.endsWith('@line.realproof.jp') ? 'LINE連携済み' : user.email}
-                </p>
-              )}
-            </>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' as const }}>
-              {isSettingsTab && (
-                <button
-                  onClick={() => {
-                    if (!pro) {
-                      window.location.href = '/'
-                    } else {
-                      setDashboardTab('profile')
-                      window.history.replaceState(null, '', '/dashboard')
-                    }
-                  }}
-                  style={{ fontSize: 13, color: '#C4A35A', background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0 }}
+      {/* CEO指示(2026-08-06): 設定画面の並びを「1行目=タイトル / 2行目=左に← ホームに戻る / 3行目=設定本体」に統一。
+          受付中トグルは、設定メニューの中では サービス設定 にだけ出す(他の設定画面には出さない)。
+          ホーム('profile')は従来どおり見出し行の右にトグルを置く。 */}
+      {dashboardTab === 'profile' ? (
+        <div className="flex items-start justify-between mb-4" style={{ flexWrap: 'wrap' as const, gap: 12 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <h1 className="text-2xl font-bold text-[#1A1A2E]">ダッシュボード</h1>
+              {(pro as any)?.founding_member_status === 'achieved' && (
+                <a
+                  href="https://line.me/R/ti/g/2C5JXJyc68"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Founding Memberグループに参加"
                 >
-                  ← ホームに戻る
-                </button>
+                  <img
+                    src="/images/founding-member-badge.png"
+                    alt="Founding Member"
+                    style={{ width: 40, height: 40, objectFit: 'contain' }}
+                  />
+                </a>
               )}
-              <h1 className="text-lg font-bold text-[#1A1A2E]">{DASHBOARD_TAB_HEADING[dashboardTab] || ''}</h1>
             </div>
+            {user?.email && (
+              <p className="text-sm text-gray-400 mt-1 truncate max-w-[260px]">
+                {user.email.startsWith('line_') && user.email.endsWith('@line.realproof.jp') ? 'LINE連携済み' : user.email}
+              </p>
+            )}
+          </div>
+          {/* 🔴1(再レビュー): allowlist内に加え、共有リストに掲載中の本人にも表示する(唯一のオプトアウト手段のため) */}
+          {pro && acceptingEditable && (
+            <AcceptingStatusWidget
+              initialAcceptingStatus={pro.accepting_status ?? null}
+              initialAcceptingNote={pro.accepting_note ?? null}
+              initialDelegateListId={pro.delegate_list_id ?? null}
+              canManageLists={referralEnabled}
+              hasBookableMenu={hasBookableReferralMenu}
+              onUpdated={(status, note, delegateListId) =>
+                setPro(prev => prev ? { ...prev, accepting_status: status, accepting_note: note, delegate_list_id: delegateListId } : prev)
+              }
+            />
           )}
         </div>
-        {/* 🔴1(再レビュー): allowlist内に加え、共有リストに掲載中の本人にも表示する(唯一のオプトアウト手段のため) */}
-        {pro && acceptingEditable && (
-          <AcceptingStatusWidget
-            initialAcceptingStatus={pro.accepting_status ?? null}
-            initialAcceptingNote={pro.accepting_note ?? null}
-            initialDelegateListId={pro.delegate_list_id ?? null}
-            canManageLists={referralEnabled}
-            hasBookableMenu={hasBookableReferralMenu}
-            onUpdated={(status, note, delegateListId) =>
-              setPro(prev => prev ? { ...prev, accepting_status: status, accepting_note: note, delegate_list_id: delegateListId } : prev)
-            }
-          />
-        )}
-      </div>
+      ) : (
+        <div className="mb-4">
+          {/* 1行目: タイトル */}
+          <h1 className="text-lg font-bold text-[#1A1A2E]">{DASHBOARD_TAB_HEADING[dashboardTab] || ''}</h1>
+          {/* 2行目: 左に「ホームに戻る」／右は受付トグル。
+              トグルは設定画面ではサービス設定のみ(CEO指示)。設定以外のタブ(Voices等)は従来どおり表示。
+              どちらも出ないタブでは空行を作らない。 */}
+          {(isSettingsTab || (pro && acceptingEditable)) && (
+          <div
+            className="mt-2"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' as const }}
+          >
+            {isSettingsTab ? (
+              <button
+                onClick={() => {
+                  if (!pro) {
+                    window.location.href = '/'
+                  } else {
+                    setDashboardTab('profile')
+                    window.history.replaceState(null, '', '/dashboard')
+                  }
+                }}
+                style={{ fontSize: 13, color: '#C4A35A', background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0 }}
+              >
+                ← ホームに戻る
+              </button>
+            ) : (
+              <span />
+            )}
+            {pro && acceptingEditable && (!isSettingsTab || dashboardTab === 'business-info') && (
+              <AcceptingStatusWidget
+                initialAcceptingStatus={pro.accepting_status ?? null}
+                initialAcceptingNote={pro.accepting_note ?? null}
+                initialDelegateListId={pro.delegate_list_id ?? null}
+                canManageLists={referralEnabled}
+                hasBookableMenu={hasBookableReferralMenu}
+                onUpdated={(status, note, delegateListId) =>
+                  setPro(prev => prev ? { ...prev, accepting_status: status, accepting_note: note, delegate_list_id: delegateListId } : prev)
+                }
+              />
+            )}
+          </div>
+          )}
+        </div>
+      )}
 
       {/* 姓名未設定バナー */}
       {pro && !pro.first_name?.trim() && (

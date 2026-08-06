@@ -360,6 +360,65 @@ function MiniBar({ data, dk, color, h = 80 }: {
 // データ取得 & マッピング
 // ============================================================
 
+/**
+ * timestamptz(ISO文字列)を Asia/Tokyo の "YYYY-MM-DD" にする。
+ *
+ * 修正(2026-08-06・CEO報告「日別プルーフ獲得者が正しく反映されていない」):
+ * 従来は `created_at.split('T')[0]` で日付を切り出していたが、Postgres の timestamptz は
+ * UTC で返るため、これは **UTC の日付**になる。日本時間 00:00〜09:00 の出来事が前日に
+ * 混ざり、日別集計が1日ずれていた（例: 8/6 08:00 JST の投票が「8/5」に計上される）。
+ * 表示も集計も JST の日付境界に統一する。
+ */
+function jstDateKey(iso: string | null | undefined): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  // en-CA は "YYYY-MM-DD" 形式
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d)
+}
+
+/** "YYYY-MM-DD" を "M/D" にする。new Date() を通さない(閲覧環境のTZでずれるため)。 */
+function monthDayFromDateKey(key: string): string {
+  const [, m, d] = key.split('-')
+  return `${Number(m)}/${Number(d)}`
+}
+
+/**
+ * 指定時刻以降の votes を全件ページネーション取得するヘルパー。
+ * 真因対応(88d0bb8と同型): .range() 無しだと Supabase の暗黙キャップ max-rows=1000 で
+ * 無音truncateされる。日別集計は件数が伸びるほど静かに欠ける側に倒れるため、
+ * .order('id') で決定的順序を強制して1000件ずつ取得する。
+ */
+async function fetchVotesSince(
+  supabase: any,
+  sinceIso: string,
+  filters?: { status?: string; voteTypes?: string[] }
+) {
+  const all: any[] = []
+  let from = 0
+  const pageSize = 1000
+  while (true) {
+    let q = supabase
+      .from('votes')
+      .select('created_at, professional_id')
+      .gte('created_at', sinceIso)
+    if (filters?.status) q = q.eq('status', filters.status)
+    if (filters?.voteTypes) q = q.in('vote_type', filters.voteTypes)
+    const { data, error } = await q.order('id', { ascending: true }).range(from, from + pageSize - 1)
+    if (error) return { data: all, error }
+    if (!data || data.length === 0) break
+    all.push(...data)
+    if (data.length < pageSize) break
+    from += pageSize
+  }
+  return { data: all, error: null }
+}
+
 // votes(vote_type='proof') を全件ページネーション取得するヘルパー
 // 真因対応: .range() 無しだと Supabase max-rows=1000 でキャップされるため、
 // .order('id') で決定的順序を強制し 1000 件ずつ取得する。
@@ -514,10 +573,21 @@ async function fetchDashboardData() {
     supabase.from('admin_pro_status').select('*'),
     // 認証方式別
     supabase.from('votes').select('auth_method'),
-    // 日別トレンド (30日)
-    supabase.from('votes').select('created_at, professional_id').gte('created_at', thirtyDaysAgo.toISOString()),
-    // 日別プルーフ獲得者 (14日) — JOINなし（proResから名前引き）
-    supabase.from('votes').select('created_at, professional_id').eq('status', 'confirmed').eq('vote_type', 'proof').gte('created_at', fourteenDaysAgo.toISOString()),
+    // 日別トレンド (30日) — 1000件キャップを避けるためページネーション取得
+    fetchVotesSince(supabase, thirtyDaysAgo.toISOString()),
+    // 日別プルーフ獲得者 (14日) — JOINなし（proResから名前引き）・ページネーション取得
+    //
+    // 修正(2026-08-06・CEO報告「表示されてない人がいる」):
+    // 従来は vote_type='proof' だけを数えていたため、**リピーター（2回目以降）の記録が
+    // まるごと落ちていた**。投票画面で「2回目以降」を選ぶと vote_type は 'continuation' に
+    // なる（vote/[id]/page.tsx の determineVoteType）。そのためリピーターの多いプロは
+    // 何票入っても表に出ず、出るのは初回票のある日だけ＝各行が常に1、という見え方になっていた。
+    // 「施術を受けた記録」の正はクライアント向けの /api/vote-count と同じ
+    // ['proof','continuation']（hopeful=期待票 / personality_only=人柄のみ は施術記録ではないので除外）。
+    fetchVotesSince(supabase, fourteenDaysAgo.toISOString(), {
+      status: 'confirmed',
+      voteTypes: ['proof', 'continuation'],
+    }),
     // チャネル別: votes.channel
     supabase.from('votes').select('channel').eq('status', 'confirmed'),
     // シェア分析: シェア経由の予約/相談（tracking_events.source 別・全件ページネーション）
@@ -594,7 +664,7 @@ async function fetchDashboardData() {
   if (trendRes.data && !trendRes.error && Array.isArray(trendRes.data)) {
     const byDate: Record<string, { votes: number; pros: Set<string> }> = {}
     trendRes.data.forEach((row: any) => {
-      const date = row.created_at ? row.created_at.split('T')[0] : null
+      const date = jstDateKey(row.created_at)
       if (!date) return
       if (!byDate[date]) byDate[date] = { votes: 0, pros: new Set() }
       byDate[date].votes++
@@ -602,14 +672,11 @@ async function fetchDashboardData() {
     })
     dailyTrend = Object.entries(byDate)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, data]) => {
-        const dt = new Date(date)
-        return {
-          date: `${dt.getMonth() + 1}/${dt.getDate()}`,
-          votes: data.votes,
-          active_pros: data.pros.size,
-        }
-      })
+      .map(([date, data]) => ({
+        date: monthDayFromDateKey(date),
+        votes: data.votes,
+        active_pros: data.pros.size,
+      }))
   }
 
   // 日別プルーフ獲得者マッピング (14日) — proResから名前引き
@@ -623,7 +690,7 @@ async function fetchDashboardData() {
   if (proofRes.data && !proofRes.error && Array.isArray(proofRes.data)) {
     const byDatePro: Record<string, { pro_name: string; professional_id: string; count: number; dateRaw: string }> = {}
     proofRes.data.forEach((row: any) => {
-      const date = row.created_at ? row.created_at.split('T')[0] : null
+      const date = jstDateKey(row.created_at)
       if (!date) return
       const proName = proNameMap.get(row.professional_id) || '—'
       const key = `${date}_${row.professional_id}`
@@ -631,16 +698,13 @@ async function fetchDashboardData() {
       byDatePro[key].count++
     })
     dailyProofs = Object.entries(byDatePro)
-      .map(([, data]) => {
-        const dt = new Date(data.dateRaw)
-        return {
-          date: `${dt.getMonth() + 1}/${dt.getDate()}`,
-          dateRaw: data.dateRaw,
-          pro_name: data.pro_name,
-          professional_id: data.professional_id,
-          daily_votes: data.count,
-        }
-      })
+      .map(([, data]) => ({
+        date: monthDayFromDateKey(data.dateRaw),
+        dateRaw: data.dateRaw,
+        pro_name: data.pro_name,
+        professional_id: data.professional_id,
+        daily_votes: data.count,
+      }))
       .sort((a, b) => b.dateRaw.localeCompare(a.dateRaw) || b.daily_votes - a.daily_votes)
   }
 
@@ -723,20 +787,22 @@ async function fetchDashboardData() {
   let dailyRegistrations: DailyRegistrationData[] | null = null
   if (registrationRes.data && !registrationRes.error && Array.isArray(registrationRes.data)) {
     totalRegistrations = registrationRes.data.length
-    const cutoff = fourteenDaysAgo.toISOString().split('T')[0]
+    const cutoff = jstDateKey(fourteenDaysAgo.toISOString())
     const byDate: Record<string, { id: string; name: string }[]> = {}
     registrationRes.data.forEach((row: any) => {
-      const date = row.created_at ? row.created_at.split('T')[0] : null
+      const date = jstDateKey(row.created_at)
       if (!date) return
-      if (date < cutoff) return
+      if (cutoff && date < cutoff) return
       if (!byDate[date]) byDate[date] = []
       byDate[date].push({ id: row.id, name: (row.name || '').trim() || '—' })
     })
     dailyRegistrations = Object.entries(byDate)
-      .map(([dateRaw, registrants]) => {
-        const dt = new Date(dateRaw)
-        return { date: `${dt.getMonth() + 1}/${dt.getDate()}`, dateRaw, count: registrants.length, registrants }
-      })
+      .map(([dateRaw, registrants]) => ({
+        date: monthDayFromDateKey(dateRaw),
+        dateRaw,
+        count: registrants.length,
+        registrants,
+      }))
       .sort((a, b) => b.dateRaw.localeCompare(a.dateRaw))
   }
 
