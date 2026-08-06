@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { SignInButton, SignedIn, SignedOut, UserButton, useUser, useClerk } from '@clerk/nextjs'
 import { useProStatus } from '@/lib/useProStatus'
 import { useSharedData } from '@/contexts/SharedDataContext'
+import NewBadge from '@/components/dashboard/NewBadge'
 
 const menuLinkStyle: React.CSSProperties = {
   display: 'block',
@@ -74,9 +75,11 @@ export default function Navbar() {
           {isPro && (
             <a href="/dashboard" onClick={closeMenu} style={{ ...menuLinkStyle, color: '#C4A35A', fontWeight: 700 }}>ダッシュボード</a>
           )}
-          {/* CEO指示(2026-08-03): 紹介はコアメニューのためトップレベルへ昇格(設定グループから移動) */}
+          {/* CEO指示(2026-08-03): 紹介はコアメニューのためトップレベルへ昇格(設定グループから移動)
+              §17-1(CEO指示 2026-08-06): 予約が届くようになったので New を付ける。
+              NewBadge は期限を過ぎると自分で消える（出しっぱなしにしない）。 */}
           {isPro && referralEnabled && (
-            <a href="/dashboard?tab=referral" onClick={closeMenu} style={menuLinkStyle}>紹介</a>
+            <a href="/dashboard?tab=referral" onClick={closeMenu} style={menuLinkStyle}>紹介<NewBadge /></a>
           )}
           {/* CEO指示(2026-08-03): 「獲得バッジ」→「証明書発行」に改名し、認定申請も中に入れるグループに */}
           {isPro && (
@@ -110,7 +113,8 @@ export default function Navbar() {
               </button>
               <div style={{ maxHeight: openMenuGroups.settings ? '500px' : '0px', overflow: 'hidden', transition: 'max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1)' }}>
                 <a href="/dashboard?tab=profile&edit=true" onClick={closeMenu} style={menuLinkStyle}>プロフィール編集</a>
-                <a href="/dashboard?tab=business-info" onClick={closeMenu} style={menuLinkStyle}>サービス設定</a>
+                {/* §17-1: 「予約の受け方」をここへ移動した */}
+                <a href="/dashboard?tab=business-info" onClick={closeMenu} style={menuLinkStyle}>サービス設定<NewBadge /></a>
                 <a href="/dashboard?tab=proofs" onClick={closeMenu} style={menuLinkStyle}>強み設定</a>
                 <a href="/dashboard?tab=rewards" onClick={closeMenu} style={menuLinkStyle}>リワード設定</a>
                 <a href="/dashboard?tab=card" onClick={closeMenu} style={menuLinkStyle}>NFCカード設定</a>

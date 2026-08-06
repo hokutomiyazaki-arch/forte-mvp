@@ -857,6 +857,31 @@ Phase 5 で `markTokenUsed` を呼ぶ追加をしたが、`qr_token` 引数が�
 JST 境界に統一。表示側も `new Date()` を通さない形にした（閲覧環境のTZでずれるため）。
 さらに日別2クエリに `.range()` が無く、Supabase の暗黙キャップ 1000 件で無音truncateされる状態だった。
 
+### J-x. 同じページへのリンクを「操作ボタン」にしない（2026-08-06）
+
+**症状（CEO報告）**: ダッシュボード上部の告知バナー「タイプ分析のキャラクターが新しくなりました」の
+ボタンを**一度タップしたあと、消えないし何も起きない・反応しない**。
+
+**真因**: バナーのCTAが `next/link` で **今いるページと同じ** `/dashboard?tab=profile&edit=true` を指していた。
+受け側は「マウント後1回だけ開く」useEffect（`editAutoOpenedRef`）で、開いた直後に
+`window.history.replaceState` で `edit` を URL から消していた。
+**replaceState は Next の router に伝わらないため `useSearchParams()` は更新されない**。
+その結果:
+1. 1回目: 開く → ref が立つ → URL からは edit が消えるが React 側の searchParams は 'true' のまま
+2. 2回目以降: 同じ href をタップしても searchParams の値が変わらず effect が再実行されない → **無反応**
+
+**鉄則**:
+- **同一ページ内で完結する操作は URL を経由させない**。`onAction` で直接 state を変える。
+  URL は「別ページから来る」ための入口であって、ページ内のボタンの実装手段ではない。
+- URL パラメータを消すなら `router.replace()`（router に伝わる）。`window.history.replaceState` を
+  使うと、以後そのパラメータに反応する処理が**永久に効かなくなる**。
+- 「1回だけ実行する ref」は、**解除する条件も同時に書く**。書けないなら ref を使わない設計にする。
+
+**同時のCEO指示**: 「通知は admin dashboard のバナー通知に統一」「消すボタンを付ける」。
+→ `InlineNoticeBanner`（`AnnouncementBanner` と同じ見た目・✕で閉じて localStorage に記録）に統一し、
+ページ内バナー（キャラクター告知・予約連絡先未設定）をすべてこれに寄せた。
+**告知は必ず消せること**。消せない通知は、読んだ人にとって不具合と区別がつかない。
+
 ---
 
 ## 付録: 教訓の出典

@@ -1,58 +1,40 @@
 'use client'
 
 /**
- * BookingUrlBanner — booking_url 未入力プロ向けの促進バナー
+ * BookingUrlBanner — 予約・連絡先が未設定のプロ向けの促進バナー
  *
  * 表示条件 (親側で制御):
  *   - pro.setup_completed === true
- *   - pro.booking_url が null / 空文字
+ *   - booking_url / contact_email / phone_number がいずれも未設定
  *   - voteCount > 0 (1 票も入ってないプロには出さない)
  *
- * 配置: dashboard/page.tsx で「姓名未設定バナー」の直下、QR コード/タブの上。
- *       全タブ共通エリアなのでどのタブにいても可視。
- *
- * CTA は Link で `/dashboard?tab=profile&edit=true` へ。同ページ内では
- * 既存の useSearchParams 経由 useEffect で setEditing(true) が反応する。
- * 月次通知メールからの直リンクも同 URL を共有。
+ * 2026-08-06(CEO指示): 通知の見た目を admin のお知らせバナーに統一し、✕ で消せるようにした。
+ * CTA は同じページ内の操作なので onOpenProfileEdit(直接開く)を使う
+ * （同一ページへのリンクは2回目以降のタップで反応しなかった。InlineNoticeBanner のコメント参照）。
  */
 
-import Link from 'next/link'
+import InlineNoticeBanner from './InlineNoticeBanner'
 
 interface Props {
   proName: string
   voteCount: number
+  onOpenProfileEdit?: () => void
 }
 
-export default function BookingUrlBanner({ proName, voteCount }: Props) {
+export default function BookingUrlBanner({ proName, voteCount, onOpenProfileEdit }: Props) {
+  const who = proName ? `${proName}さん` : 'あなた'
   return (
-    <div
-      className="flex gap-4 p-5 mb-4 rounded-xl items-start"
-      style={{
-        background: 'linear-gradient(135deg, #FAFAF7, #F5EFDF)',
-        border: '1px solid #C4A35A',
-      }}
-    >
-      <div className="text-2xl flex-shrink-0" aria-hidden="true">⚠️</div>
-      <div className="flex-1 min-w-0">
-        <h3 className="text-base font-bold text-[#1A1A2E] mb-2">
-          予約・連絡先が未設定です
-        </h3>
-        <p className="text-sm text-[#1A1A2E] mb-3 leading-relaxed">
-          {proName ? `${proName}さん` : 'あなた'}を応援したお客さん{' '}
-          <strong className="text-[#C4A35A]">{voteCount}人</strong>。
-          <br />
-          「予約したい」と思った時の連絡先がプロフィールにありません。
-          <br />
-          URL・メールアドレス・電話番号のいずれか1つでOKです。
-        </p>
-        <Link
-          href="/dashboard?tab=profile&edit=true"
-          className="inline-block px-5 py-2 rounded-md text-sm font-bold no-underline"
-          style={{ background: '#1A1A2E', color: '#FAFAF7' }}
-        >
-          予約・連絡先を設定する →
-        </Link>
-      </div>
-    </div>
+    <InlineNoticeBanner
+      id="booking_url_unset"
+      type="warning"
+      title="予約・連絡先が未設定です"
+      body={
+        `${who}を応援したお客さんは${voteCount}人。「予約したい」と思った時の連絡先がプロフィールにありません。\n` +
+        'URL・メールアドレス・電話番号のいずれか1つでOKです。'
+      }
+      actionLabel="予約・連絡先を設定する"
+      onAction={onOpenProfileEdit}
+      href={onOpenProfileEdit ? undefined : '/dashboard?tab=profile&edit=true'}
+    />
   )
 }

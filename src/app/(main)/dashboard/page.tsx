@@ -35,6 +35,7 @@ import ReferralBookingReceivedCard from '@/components/dashboard/ReferralBookingR
 import ReferralActionBanner from '@/components/dashboard/ReferralActionBanner'
 import { createClient as createSupabaseClient } from '@/lib/supabase'
 import { resolveCharacterImageUrl } from '@/lib/character-image'
+import NewBadge from '@/components/dashboard/NewBadge'
 
 // バッジ階層: FNTはBDCの上位資格。同レベルのFNTを持っていたらBDCは非表示
 const BADGE_ORDER: Record<string, number> = {
@@ -639,6 +640,20 @@ export default function DashboardPage() {
     url.searchParams.delete('edit')
     window.history.replaceState(null, '', url.toString())
   }, [editParam, loading, proIdForEditOpen])
+
+  /**
+   * CEO報告(2026-08-06)「一度タップした後に、消えないし、なにも出来ない。反応しない。」の修正。
+   * 真因: バナーのCTAが同じページの `?tab=profile&edit=true` へのリンクで、受け側の
+   * useEffect が「マウント後1回だけ」開く作り（editAutoOpenedRef）だったこと。さらに開いた直後に
+   * window.history.replaceState で edit を消しており、これは Next の router に伝わらないため
+   * useSearchParams が更新されない。結果、2回目以降のタップは何も起きなかった。
+   * 同一ページ内の操作はURLを経由させず、この関数で直接開く。
+   */
+  function openProfileEdit() {
+    setDashboardTab('profile')
+    setEditing(true)
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   // Navbar「認定申請」メニューからの導線: /dashboard?action=certification で
   // 複数カテゴリ一括申請モーダルを自動オープン（対象は描画時に算出）
@@ -2171,56 +2186,6 @@ export default function DashboardPage() {
           onToggle={() => toggleProfileSection('contact')}
         >
         <div className="space-y-4">
-          {/* §17-1（CEO決定 2026-08-06）: 予約の受け方。
-              受け口が2本あると片方を見落とし、お客さんが来ているのに気づかない事故になるため、
-              どちらか一方に必ず倒す。未選択のときは今までの挙動（予約URLがあればそこへ）を保つ。
-              ※ メニューからの予約だけは常にREALPROOFで受ける（外部サイトにメニューを渡せないため）。 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">予約の受け方</label>
-            <p className="text-xs text-gray-500 mb-2 leading-relaxed">
-              公開カードの「予約する」を押したお客さんが、どこへ進むかを決めます。
-            </p>
-            <div className="space-y-2">
-              {[
-                {
-                  value: 'rp',
-                  label: 'REALPROOF で受け取る',
-                  note: 'お客さんが希望日時を送り、あなたが確定します。ダッシュボードに届き、メール・LINEでもお知らせします。お支払いはありません（当日、直接お受け取りください）。',
-                },
-                {
-                  value: 'external',
-                  label: '自分のサイトで受け取る',
-                  note: '下の「予約・連絡先URL」へご案内します。REALPROOF には予約が届きません。',
-                },
-              ].map(opt => (
-                <label
-                  key={opt.value}
-                  className={`flex items-start gap-2 p-3 rounded-lg border cursor-pointer ${
-                    (form.booking_mode || (form.booking_url ? 'external' : 'rp')) === opt.value
-                      ? 'border-[#C4A35A] bg-[#FDFBF6]'
-                      : 'border-gray-300'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="booking_mode"
-                    className="mt-1"
-                    checked={(form.booking_mode || (form.booking_url ? 'external' : 'rp')) === opt.value}
-                    onChange={() => setForm({ ...form, booking_mode: opt.value })}
-                  />
-                  <span>
-                    <span className="block text-sm font-medium text-gray-800">{opt.label}</span>
-                    <span className="block text-xs text-gray-500 mt-1 leading-relaxed">{opt.note}</span>
-                  </span>
-                </label>
-              ))}
-            </div>
-            {form.booking_mode === 'external' && !form.booking_url.trim() && (
-              <p className="text-xs text-red-500 mt-2">
-                予約URLが未入力です。このままだと REALPROOF で受け取ります。
-              </p>
-            )}
-          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               予約・連絡先URL
@@ -2230,6 +2195,12 @@ export default function DashboardPage() {
               応援してくれたお客さんが、次にあなたへ連絡する手段です。
               <br />
               公式LINE・予約サイト・お問い合わせフォームなど、なんでもOK。
+              <br />
+              {/* §17-1(CEO指示 2026-08-06): 予約の受け方はサービス設定へ移動。
+                  ここに置きっぱなしにすると、設定が2か所にあるように見える。 */}
+              <span className="text-gray-400">
+                予約をどこで受けるかは「サービス設定 ＞ 予約の受け方」で選べます。
+              </span>
             </p>
             <input
               type="url"
@@ -2885,13 +2856,14 @@ export default function DashboardPage() {
           <BookingUrlBanner
             proName={`${pro.last_name || ''}${pro.first_name || ''}`.trim()}
             voteCount={voteCount}
+            onOpenProfileEdit={openProfileEdit}
           />
         )}
 
       {/* 2026-08-05: タイプ分析キャラクター性別出し分けの告知バナー(CEO指示)。
           character_gender が未選択(null)のプロにのみ表示。保存すれば(neutral含む)自動的に消える */}
       {pro && !(pro as any).character_gender && (
-        <CharacterGenderBanner />
+        <CharacterGenderBanner onOpenProfileEdit={openProfileEdit} />
       )}
 
       {/* QRコード（タブの上に配置） */}
@@ -5048,6 +5020,9 @@ export default function DashboardPage() {
             facebook_url: form.facebook_url,
             youtube_url: form.youtube_url,
             phone_number: form.phone_number,
+            // §17-1(CEO指示 2026-08-06): 予約の受け方はサービス設定へ移動した
+            booking_mode: form.booking_mode,
+            booking_url: form.booking_url,
           }}
           onAccessLinksChange={(next) => setForm(prev => ({ ...prev, ...next }))}
           onSaveAccessLinks={() => doSaveLogic()}
@@ -5352,6 +5327,7 @@ export default function DashboardPage() {
               {/* §17-1(2026-08-06): REALPROOFの直接予約もここに届くようになったため
                   「紹介を受ける」→「予約を受ける」。中身は同じ受信箱（紹介予約＋直接予約）。 */}
               予約を受ける{referralRequestedCount > 0 ? ` (${referralRequestedCount})` : ''}
+              <NewBadge />
             </button>
             <button
               onClick={() => handleReferralSubtabClick('send')}

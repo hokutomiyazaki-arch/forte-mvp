@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import SettingsSection from './SettingsSection'
+import NewBadge from './NewBadge'
 import {
   validateOptionalUrl,
   validateSocialHandle,
@@ -33,6 +34,8 @@ const FORMAT_ERROR_KEYS = ['service_formats']
 const HOURS_ERROR_KEYS = ['business_hours_end']
 /** 「アクセス情報」ブロック側に属するエラーキー。上記3つ以外は「外部リンク」ブロック側とみなす。 */
 const ACCESS_ERROR_KEYS = ['walk_minutes', 'google_maps_url']
+/** 「予約の受け方」ブロック側に属するエラーキー（§17-1）。 */
+const BOOKING_ERROR_KEYS = ['booking_url']
 
 export interface AccessLinksFormPart {
   address: string
@@ -52,6 +55,14 @@ export interface AccessLinksFormPart {
   business_hours_start: string
   business_hours_end: string
   business_hours_closed_days: string[]
+  /**
+   * §17-1(CEO決定 2026-08-06 / 配置はCEO指示で サービス設定 へ移動): 予約の受け方。
+   * 'rp'=REALPROOFで受ける / 'external'=自分のサイトで受ける / ''=未選択。
+   * 予約URL(booking_url)は連絡先としても使う既存フィールドで、ここでは同じ値を編集する
+   * （保存経路も同じ1回の保存なので、二重管理にはならない）。
+   */
+  booking_mode: string
+  booking_url: string
 }
 
 interface Props {
@@ -69,6 +80,7 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
   const [savedToast, setSavedToast] = useState(false)
 
   // CEO指示(2026-08-06): 項目ごとに畳めるように。既定は全て閉。
+  const [openBooking, setOpenBooking] = useState(false)
   const [openFormats, setOpenFormats] = useState(false)
   const [openHours, setOpenHours] = useState(false)
   const [openAccess, setOpenAccess] = useState(false)
@@ -113,6 +125,10 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
     const v4 = validateOptionalUrl(accessLinks.website_url, '公式HP URL')
     if (!v4.valid) errs.website_url = v4.error
 
+    // §17-1: 予約URLもここで保存するため、同じ形式チェックを通す
+    const v10 = validateOptionalUrl(accessLinks.booking_url, '予約URL')
+    if (!v10.valid) errs.booking_url = v10.error
+
     const v5 = validateOptionalUrl(accessLinks.facebook_url, 'Facebook URL')
     if (!v5.valid) errs.facebook_url = v5.error
 
@@ -144,7 +160,13 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
       if (keys.some(k => FORMAT_ERROR_KEYS.includes(k))) setOpenFormats(true)
       if (keys.some(k => HOURS_ERROR_KEYS.includes(k))) setOpenHours(true)
       if (keys.some(k => ACCESS_ERROR_KEYS.includes(k))) setOpenAccess(true)
-      if (keys.some(k => !FORMAT_ERROR_KEYS.includes(k) && !HOURS_ERROR_KEYS.includes(k) && !ACCESS_ERROR_KEYS.includes(k))) setOpenLinks(true)
+      if (keys.some(k => BOOKING_ERROR_KEYS.includes(k))) setOpenBooking(true)
+      if (keys.some(k =>
+        !FORMAT_ERROR_KEYS.includes(k) &&
+        !HOURS_ERROR_KEYS.includes(k) &&
+        !ACCESS_ERROR_KEYS.includes(k) &&
+        !BOOKING_ERROR_KEYS.includes(k)
+      )) setOpenLinks(true)
       setErrors(errs)
       return
     }
@@ -261,8 +283,101 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
     </div>
   )
 
+  /**
+   * §17-1 予約の受け方（CEO指示 2026-08-06: プロフィール編集の連絡先 → サービス設定へ移動）。
+   * 予約は「どう売るか」の設定なので、連絡先ではなくサービス設定に置くほうが探しやすい。
+   * 受け口は必ず1本に倒す（2本あると片方を見落とし、お客さんを待たせる）。
+   */
+  const currentBookingMode = accessLinks.booking_mode || (accessLinks.booking_url ? 'external' : 'rp')
+  const renderBookingMode = () => (
+    <div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {[
+          {
+            value: 'rp',
+            label: 'REALPROOF で受け取る',
+            note: 'お客さんが希望日時を送り、あなたが確定します。ダッシュボードの「予約を受ける」に届き、メール・LINEでもお知らせします。手数料はありません（お代は当日、直接お受け取りください）。',
+          },
+          {
+            value: 'external',
+            label: '自分のサイトで受け取る',
+            note: '下の予約URLへご案内します。REALPROOF には予約が届きません。',
+          },
+        ].map(opt => {
+          const checked = currentBookingMode === opt.value
+          return (
+            <label
+              key={opt.value}
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 8,
+                padding: '12px 14px',
+                background: 'white',
+                border: `1px solid ${checked ? '#C4A35A' : '#E5E7EB'}`,
+                borderRadius: 8,
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type="radio"
+                name="booking_mode"
+                checked={checked}
+                onChange={() => setField('booking_mode', opt.value)}
+                style={{ marginTop: 3, flexShrink: 0 }}
+              />
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>{opt.label}</span>
+                <span style={{ display: 'block', fontSize: 12, color: '#6B7280', marginTop: 3, lineHeight: 1.7 }}>
+                  {opt.note}
+                </span>
+              </span>
+            </label>
+          )
+        })}
+      </div>
+
+      <div style={{ marginTop: 16 }}>
+        <label style={labelStyle}>予約URL（自分のサイトで受け取る場合）</label>
+        <input
+          type="url"
+          value={accessLinks.booking_url}
+          onChange={e => setField('booking_url', e.target.value)}
+          placeholder="例: https://lin.ee/example"
+          style={inputStyle(!!errors.booking_url)}
+        />
+        {errors.booking_url && <p style={errorTextStyle}>{errors.booking_url}</p>}
+        <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 6, lineHeight: 1.7 }}>
+          プロフィール編集の「予約・連絡先URL」と同じ項目です。どちらから直しても同じところに保存されます。
+        </p>
+        {currentBookingMode === 'external' && !accessLinks.booking_url.trim() && (
+          <p style={errorTextStyle}>
+            予約URLが未入力です。このままだと REALPROOF で受け取ります。
+          </p>
+        )}
+      </div>
+
+      <p style={{ fontSize: 12, color: '#6B7280', marginTop: 16, lineHeight: 1.7 }}>
+        メニューの「このメニューで予約する」は、どちらを選んでいても REALPROOF で受け取ります
+        （外部サイトに「このメニューで」を渡す手段がないためです）。
+        出したくないメニューは、上のメニュー設定で「紹介・予約を受け付ける」を外してください。
+      </p>
+    </div>
+  )
+
   return (
     <>
+      {/* ── 予約の受け方（§17-1・CEO指示でサービス設定へ移動） ── */}
+      <SettingsSection
+        title="予約の受け方"
+        titleBadge={<NewBadge />}
+        description="公開カードの「予約する」を押したお客さんが、どこへ進むかを決めます。"
+        open={openBooking}
+        onToggle={() => setOpenBooking(v => !v)}
+      >
+        {renderBookingMode()}
+      </SettingsSection>
+
       {/* ── 営業形態 ──
           CEO指摘(2026-08-06): 「営業形態も大カテゴリー」。アクセス情報の一項目ではなく独立ブロックにする。 */}
       <SettingsSection
