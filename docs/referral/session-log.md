@@ -554,3 +554,10 @@
 
 ### 記録: Notionに開発ログの正本がある（CEO明言）
 - CCはNotion MCPで直接検索可能。時系列5分冊（01_2026-02〜03 〜 05_旧断片）＋リフェラル設計決定事項ほか。メモリ [[notion-dev-archive]] に記録。**コードのコメントは因果を取り違えていることがある**ため、経緯はLESSONS.md → session-log → Notion の順で当たる。
+
+### 実施: Stripe webhook 登録（テストモード）＋受付UIの整理3点 — 2026-08-06
+- **Stripe webhook（テスト）登録完了**: アカウント `acct_1U0KAEPOXI7suQFW`（REAL PROOF・紹介用。決済履歴¥3,360×6件で紹介用と確定）のテストモードに `referral-booking` を作成。URL `https://realproof.jp/api/webhooks/referral-booking`、イベント4件（checkout.session.completed / expired / charge.refunded / charge.dispute.created）。**署名シークレットのVercel登録はCEOが実施**（CCはトークン入力不可のため分担）。
+- 【重要・本番化の前提】**Stripeはテストと本番でキー・webhook・署名シークレットが全て別**。テストキーのまま `all` に切り替えるとクライアントが本物のカードで払っても決済が成立せず予約が宙に浮く。本番化は4点セット（Connect本人確認→SECRET_KEY差し替え→本番でwebhook再登録→WEBHOOK_SECRET差し替え）。メモリ [[referral-launch-checklist]] に詳細を記録。
+- **バグ修正（f27c790）**: 紹介のみ停止（conditional）にすると条件メモが消える。真因は表示ブロックが `signal==='open'` でゲートされており conditional が closed に畳まれるため。DBの accepting_note は保持されていた（表示だけの問題）。
+- **UI（9069888）**: 受付トグルを2セグメント常時表示→現在の状態だけを示すピル1つに小型化し、「ダッシュボード」見出し＋バッジの右横へ移動（CEO指示・上部が2行詰まる）。受付中→停止中のみ確認を挟み、再開は即時。
+- **UI（4ec8739・CC設計判断）**: クライアント向け検索カードは**受付中では何も出さず、停止中のときだけ「現在ご紹介を受け付けていません」を1行**。理由=受付中が大多数のため「受付中」バッジは情報量がなくノイズになる／停止中は行動を変える情報。色記号は使わず文章（§16-7のクライアント向け方針に統一）。プロ向けの🟢🟡🔴ドットとフィルタは無変更。isReferralFullyLaunchedでゲート。
