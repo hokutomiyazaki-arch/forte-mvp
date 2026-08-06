@@ -525,3 +525,7 @@
 - 完了時は分配台帳（pending）作成のみに変更し、即時送金の呼び出しを2箇所（received/route.ts の手動complete・cron の24h自動完了）から削除。cron の pending 再試行に `created_at < now-7日` フィルタを追加（PAYOUT_HOLD_DAYS=7・**DBマイグレーション不要**）。送り手の「紹介した案件」に「(◯月◯日 送金予定)」を表示。
 - 二重送金防止の多層防御・starvation対策・status='paid' の既存レコードには非接触。
 - 【重要な既知ギャップ・報告済み】**完了後のキャンセル/返金をDBに自動反映する処理は存在しない**（cancel_by_receiver は confirmed のみ対象・webhookに charge.refunded ハンドラなし）。完了後にStripeで手動返金しても referral_payouts が pending のままなら7日後にcronが送金してしまう。今回の7日保留は「手動で cancelled に落とす時間を7日確保する」形であり、自動反映の実装は別タスク（指示範囲外のため未実施）。
+
+### 記録: 決済テストは完走済み（CEO確認・2026-08-06）
+- CEO報告「決済テストはすでに何回も通した。Stripeはテスト環境」。CCが手順書§Fで前提としていた「一度も完走していない」（CEOの指示文中の記述に基づく）は誤りとして訂正。決済の配管（確定→決済案内→支払い→成立）は動作確認済みとして扱う。
+- ただし REFERRAL_STRIPE_WEBHOOK_SECRET 未設定の件は未解消（payment-returnのフォールバックで通っていた可能性が高い）。本番化時に要登録。
