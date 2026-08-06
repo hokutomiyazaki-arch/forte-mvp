@@ -27,10 +27,12 @@ const CLOSED_DAY_OPTIONS: { value: string; label: string }[] = [
   { value: 'sun', label: '日' },
 ]
 
+/** 「営業形態」ブロック側に属するエラーキー。 */
+const FORMAT_ERROR_KEYS = ['service_formats']
 /** 「受付時間」ブロック側に属するエラーキー。 */
 const HOURS_ERROR_KEYS = ['business_hours_end']
-/** 「アクセス情報」ブロック側に属するエラーキー。上記2つ以外は「外部リンク」ブロック側とみなす。 */
-const ACCESS_ERROR_KEYS = ['walk_minutes', 'service_formats', 'google_maps_url']
+/** 「アクセス情報」ブロック側に属するエラーキー。上記3つ以外は「外部リンク」ブロック側とみなす。 */
+const ACCESS_ERROR_KEYS = ['walk_minutes', 'google_maps_url']
 
 export interface AccessLinksFormPart {
   address: string
@@ -67,6 +69,7 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
   const [savedToast, setSavedToast] = useState(false)
 
   // CEO指示(2026-08-06): 項目ごとに畳めるように。既定は全て閉。
+  const [openFormats, setOpenFormats] = useState(false)
   const [openHours, setOpenHours] = useState(false)
   const [openAccess, setOpenAccess] = useState(false)
   const [openLinks, setOpenLinks] = useState(false)
@@ -138,9 +141,10 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
     if (Object.keys(errs).length > 0) {
       // 畳んだままだとエラー文言が見えないので、該当するブロックを開いてから表示する
       const keys = Object.keys(errs)
+      if (keys.some(k => FORMAT_ERROR_KEYS.includes(k))) setOpenFormats(true)
       if (keys.some(k => HOURS_ERROR_KEYS.includes(k))) setOpenHours(true)
       if (keys.some(k => ACCESS_ERROR_KEYS.includes(k))) setOpenAccess(true)
-      if (keys.some(k => !HOURS_ERROR_KEYS.includes(k) && !ACCESS_ERROR_KEYS.includes(k))) setOpenLinks(true)
+      if (keys.some(k => !FORMAT_ERROR_KEYS.includes(k) && !HOURS_ERROR_KEYS.includes(k) && !ACCESS_ERROR_KEYS.includes(k))) setOpenLinks(true)
       setErrors(errs)
       return
     }
@@ -167,6 +171,37 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
     boxSizing: 'border-box' as const,
   })
   const errorTextStyle = { color: '#E24B4A', fontSize: 12, marginTop: 4 }
+
+  /** 営業形態(店舗/訪問/オンライン)。CEO指摘(2026-08-06)で独立ブロックに切り出した。 */
+  const renderServiceFormats = () => (
+    <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 8 }}>
+        {SERVICE_FORMAT_OPTIONS.map(opt => {
+          const checked = (accessLinks.service_formats || []).includes(opt.value)
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => toggleServiceFormat(opt.value)}
+              style={{
+                fontSize: 13,
+                padding: '8px 14px',
+                background: checked ? '#C4A35A' : 'white',
+                color: checked ? '#1A1A2E' : '#6B7280',
+                border: `1px solid ${checked ? '#C4A35A' : '#E5E7EB'}`,
+                borderRadius: 6,
+                cursor: 'pointer',
+                fontWeight: checked ? 700 : 500,
+              }}
+            >
+              {opt.label}
+            </button>
+          )
+        })}
+      </div>
+      {errors.service_formats && <p style={errorTextStyle}>{errors.service_formats}</p>}
+    </div>
+  )
 
   /** 追加3(2026-08-05・CEO指示・構造化版): 受付時間(開始/終了時刻・定休日)。すべて任意。 */
   const renderBusinessHours = () => (
@@ -228,6 +263,17 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
 
   return (
     <>
+      {/* ── 営業形態 ──
+          CEO指摘(2026-08-06): 「営業形態も大カテゴリー」。アクセス情報の一項目ではなく独立ブロックにする。 */}
+      <SettingsSection
+        title="営業形態"
+        description="店舗（対面）・訪問（出張）・オンラインのどれで提供しているかを表示します。"
+        open={openFormats}
+        onToggle={() => setOpenFormats(v => !v)}
+      >
+        {renderServiceFormats()}
+      </SettingsSection>
+
       {/* ── 受付時間 ──
           CEO指摘(2026-08-06): 「受付時間はアクセス情報じゃない」。従来はアクセス情報ブロックの中に
           置いていたが、営業している時間帯の話であってアクセス(場所への行き方)ではないため独立させた。
@@ -244,7 +290,7 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
       {/* ── アクセス情報 ── */}
       <SettingsSection
         title="アクセス情報"
-        description="来店・出張・オンラインの可否や、アクセスをカードページに表示します。すべて任意です。"
+        description="住所・最寄駅・行き方をカードページに表示します。すべて任意です。"
         open={openAccess}
         onToggle={() => setOpenAccess(v => !v)}
       >
@@ -301,35 +347,6 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
           placeholder="例: 新南口より直結"
           style={inputStyle(false)}
         />
-      </div>
-
-      <div style={{ marginBottom: 16 }}>
-        <label style={labelStyle}>営業形態</label>
-        <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 8 }}>
-          {SERVICE_FORMAT_OPTIONS.map(opt => {
-            const checked = (accessLinks.service_formats || []).includes(opt.value)
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => toggleServiceFormat(opt.value)}
-                style={{
-                  fontSize: 13,
-                  padding: '8px 14px',
-                  background: checked ? '#C4A35A' : 'white',
-                  color: checked ? '#1A1A2E' : '#6B7280',
-                  border: `1px solid ${checked ? '#C4A35A' : '#E5E7EB'}`,
-                  borderRadius: 6,
-                  cursor: 'pointer',
-                  fontWeight: checked ? 700 : 500,
-                }}
-              >
-                {opt.label}
-              </button>
-            )
-          })}
-        </div>
-        {errors.service_formats && <p style={errorTextStyle}>{errors.service_formats}</p>}
       </div>
 
       <div style={{ marginBottom: 16 }}>
@@ -429,7 +446,7 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
 
       </SettingsSection>
 
-      {/* 保存は受付時間・アクセス情報・外部リンクを1回で書き込むため、アコーディオンの外に常時出す
+      {/* 保存は営業形態・受付時間・アクセス情報・外部リンクを1回で書き込むため、アコーディオンの外に常時出す
           （入力値は親のフォーム状態なので、畳んでいるブロックの値もそのまま保存される） */}
       <button
         type="button"
@@ -448,7 +465,7 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
           marginBottom: 8,
         }}
       >
-        {saving ? '保存中…' : '受付時間・アクセス情報・外部リンクを保存'}
+        {saving ? '保存中…' : '営業形態・受付時間・アクセス情報・外部リンクを保存'}
       </button>
 
       {savedToast && (
