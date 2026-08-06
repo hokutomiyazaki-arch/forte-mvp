@@ -2731,36 +2731,32 @@ export default function DashboardPage() {
       {/* 移動(2026-08-06・CEO指示): 代理案内の設定UI(旧DelegateCriteriaSettings直置き)は
           紹介タブ「紹介する」サブタブの先頭へ移動した(ReferralTab内でrenderする)。 */}
 
-      {/* §CEO指摘対応(2026-08-06): 上部の見出し二重表示(「ダッシュボード」固定＋各タブ内の見出し)を解消。
-          タブごとに見出しを動的化し、実質ページ移動しているように見せる(実際のルーティングは変えない・
-          単一ファイル内のタブ切替のまま)。ホーム('profile')のみ「ダッシュボード」＋ファウンダーバッジ＋
-          メールアドレスを表示。他タブは「(←戻る) タブ名」の1行に集約し、旧: QR枠の下に別行で出していた
-          「← ホームに戻る」ボタンをこの行に統合する。受け入れステータストグルは右側に維持(全タブ共通)。 */}
-      {/* CEO指示(2026-08-06): 設定画面の並びを「1行目=タイトル / 2行目=左に← ホームに戻る / 3行目=設定本体」に統一。
-          受付中トグルは、設定メニューの中では サービス設定 にだけ出す(他の設定画面には出さない)。
-          ホーム('profile')は従来どおり見出し行の右にトグルを置く。 */}
-      {dashboardTab === 'profile' ? (
-        <div className="flex items-start justify-between mb-4" style={{ flexWrap: 'wrap' as const, gap: 12 }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <h1 className="text-2xl font-bold text-[#1A1A2E]">ダッシュボード</h1>
-              {(pro as any)?.founding_member_status === 'achieved' && (
-                <a
-                  href="https://line.me/R/ti/g/2C5JXJyc68"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="Founding Memberグループに参加"
-                >
-                  <img
-                    src="/images/founding-member-badge.png"
-                    alt="Founding Member"
-                    style={{ width: 40, height: 40, objectFit: 'contain' }}
-                  />
-                </a>
-              )}
-            </div>
+      {/* CEO指示(2026-08-06): 主要タブ（ホーム/認定・資格/Voices/相談）の見出しは出さない。
+          どのタブにいるかはタブバー自体が示しているので「ダッシュボード」「Voices」の表記は
+          情報量がなく場所を取るだけだった。代わりに **タブを変えても常に**
+          ファウンダーバッジとアカウントのメールアドレスを出す。
+          設定画面だけは「1行目=タイトル / 2行目=左に← ホームに戻る / 3行目=設定本体」を維持し、
+          受付中トグルは設定の中では サービス設定 にだけ出す。 */}
+      {!isSettingsTab ? (
+        <div className="flex items-center justify-between mb-4" style={{ flexWrap: 'wrap' as const, gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            {(pro as any)?.founding_member_status === 'achieved' && (
+              <a
+                href="https://line.me/R/ti/g/2C5JXJyc68"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Founding Memberグループに参加"
+                style={{ flexShrink: 0 }}
+              >
+                <img
+                  src="/images/founding-member-badge.png"
+                  alt="Founding Member"
+                  style={{ width: 36, height: 36, objectFit: 'contain' }}
+                />
+              </a>
+            )}
             {user?.email && (
-              <p className="text-sm text-gray-400 mt-1 truncate max-w-[260px]">
+              <p className="text-sm text-gray-400 truncate max-w-[260px]" style={{ margin: 0 }}>
                 {user.email.startsWith('line_') && user.email.endsWith('@line.realproof.jp') ? 'LINE連携済み' : user.email}
               </p>
             )}
@@ -2783,32 +2779,25 @@ export default function DashboardPage() {
         <div className="mb-4">
           {/* 1行目: タイトル */}
           <h1 className="text-lg font-bold text-[#1A1A2E]">{DASHBOARD_TAB_HEADING[dashboardTab] || ''}</h1>
-          {/* 2行目: 左に「ホームに戻る」／右は受付トグル。
-              トグルは設定画面ではサービス設定のみ(CEO指示)。設定以外のタブ(Voices等)は従来どおり表示。
-              どちらも出ないタブでは空行を作らない。 */}
-          {(isSettingsTab || (pro && acceptingEditable)) && (
+          {/* 2行目: 左に「ホームに戻る」／右はサービス設定のときだけ受付トグル */}
           <div
             className="mt-2"
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' as const }}
           >
-            {isSettingsTab ? (
-              <button
-                onClick={() => {
-                  if (!pro) {
-                    window.location.href = '/'
-                  } else {
-                    setDashboardTab('profile')
-                    window.history.replaceState(null, '', '/dashboard')
-                  }
-                }}
-                style={{ fontSize: 13, color: '#C4A35A', background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0 }}
-              >
-                ← ホームに戻る
-              </button>
-            ) : (
-              <span />
-            )}
-            {pro && acceptingEditable && (!isSettingsTab || dashboardTab === 'business-info') && (
+            <button
+              onClick={() => {
+                if (!pro) {
+                  window.location.href = '/'
+                } else {
+                  setDashboardTab('profile')
+                  window.history.replaceState(null, '', '/dashboard')
+                }
+              }}
+              style={{ fontSize: 13, color: '#C4A35A', background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0 }}
+            >
+              ← ホームに戻る
+            </button>
+            {pro && acceptingEditable && dashboardTab === 'business-info' && (
               <AcceptingStatusWidget
                 initialAcceptingStatus={pro.accepting_status ?? null}
                 initialAcceptingNote={pro.accepting_note ?? null}
@@ -2821,7 +2810,6 @@ export default function DashboardPage() {
               />
             )}
           </div>
-          )}
         </div>
       )}
 

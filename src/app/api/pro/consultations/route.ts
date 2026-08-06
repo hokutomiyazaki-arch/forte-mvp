@@ -11,9 +11,10 @@ const THREAD_LIMIT = 100
  * GET /api/pro/consultations — 自分宛の相談一覧（§16-19）
  *
  * PII について:
- *   client_email は **このエンドポイントだけ** が返す。プロ本人のダッシュボード表示用で、
- *   §16-19 の狙い②「クライアントリストが取れる」がここに当たる。
- *   公開側 (/api/consultations/[token]) には絶対に出さない。
+ *   client_email は **どこにも返さない**（CEO決定 2026-08-06「完全に消して。リードはこっちで握る」）。
+ *   返信はダッシュボードに書けばメールが飛ぶので、プロ側がアドレスを持つ必要がない。
+ *   UIから消すだけでなくレスポンスからも外す（開発者ツールで見えては意味がないため）。
+ *   クライアントのメールアドレスは REAL PROOF 側の資産として DB にのみ保持する。
  *
  * access_token も返さない。プロ側の操作は consultation の id で足りるし、
  * token はクライアントの鍵なのでプロ側に配る理由が無い。
@@ -41,7 +42,7 @@ export async function GET(request: Request) {
 
     let threadQuery = supabase
       .from('consultations')
-      .select('id, client_name, client_email, status, created_at, updated_at')
+      .select('id, client_name, status, created_at, updated_at')
       .eq('pro_id', ownPro.id)
     threadQuery = archivedOnly
       ? threadQuery.eq('status', 'archived')

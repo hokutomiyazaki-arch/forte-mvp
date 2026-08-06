@@ -14,8 +14,6 @@ interface Message {
 interface Consultation {
   id: string
   client_name: string
-  /** PII。この画面（プロ本人のダッシュボード）でだけ表示する。 */
-  client_email: string
   status: string
   created_at: string
   updated_at: string
@@ -48,11 +46,6 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
   // §16-25(CEO指示 2026-08-06): 相談を受け付けるかのスイッチ。既定は受け付ける。
   const [accepting, setAccepting] = useState(true)
   const [savingAccepting, setSavingAccepting] = useState(false)
-  // CEO指摘(2026-08-06)「ここに連絡先だす必要ある？」→ 既定では隠す。
-  // 返信はダッシュボードに書けばメールが飛ぶので、返信するだけならアドレスは要らない。
-  // ただし消しはしない（クライアントが返信をやめた時の唯一の連絡手段であり、
-  // §16-19の狙い②「クライアントリストが取れる」の実体でもあるため）。
-  const [emailShownIds, setEmailShownIds] = useState<Record<string, boolean>>({})
 
   async function load(archived = showArchived) {
     try {
@@ -325,25 +318,9 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
                     })}
                   </div>
 
-                  {/* 連絡先（PII）。既定は非表示。会話より上に常時出さない。 */}
-                  <div style={{ marginBottom: 12 }}>
-                    {emailShownIds[c.id] ? (
-                      <div style={{ fontSize: 12, color: '#6B7280', wordBreak: 'break-all' }}>
-                        連絡先: <span style={{ color: '#1A1A2E' }}>{c.client_email}</span>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setEmailShownIds(prev => ({ ...prev, [c.id]: true }))}
-                        style={{
-                          background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-                          fontSize: 12, color: '#9CA3AF', textDecoration: 'underline',
-                        }}
-                      >
-                        連絡先を表示
-                      </button>
-                    )}
-                  </div>
+                  {/* 連絡先は出さない（CEO決定 2026-08-06「完全に消して。リードはこっちで握る」）。
+                      返信はここに書けばメールが飛ぶので、プロ側がアドレスを持つ必要がない。
+                      APIレスポンスからも外してある。 */}
 
                   {c.status !== 'closed' && c.status !== 'archived' && (
                     <>
