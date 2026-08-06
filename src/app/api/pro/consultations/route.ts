@@ -24,6 +24,9 @@ export async function GET(request: Request) {
     if (!ownPro) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
     const supabase = getSupabaseAdmin()
+    // CEO指示(2026-08-06): アーカイブしたスレッドは既定で一覧に出さない。
+    // ?archived=1 で「アーカイブ済みだけ」を見返せる。
+    const archivedOnly = new URL(request.url).searchParams.get('archived') === '1'
 
     // ?countOnly=1: タブの未返信バッジ用。本文まで引かずに件数だけ返す
     // （バッジは相談タブを開く前に出したいので、一覧とは別に軽く叩けるようにする）。
@@ -36,10 +39,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ unread: count || 0 })
     }
 
-    const { data: threads } = await supabase
+    let threadQuery = supabase
       .from('consultations')
       .select('id, client_name, client_email, status, created_at, updated_at')
       .eq('pro_id', ownPro.id)
+    threadQuery = archivedOnly
+      ? threadQuery.eq('status', 'archived')
+      : threadQuery.neq('status', 'archived')
+    const { data: threads } = await threadQuery
       .order('updated_at', { ascending: false })
       .limit(THREAD_LIMIT)
 

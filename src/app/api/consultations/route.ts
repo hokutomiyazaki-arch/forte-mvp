@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { normalizeEmail } from '@/lib/normalize-email'
 import { notifyClientConsultationReceived, notifyProNewConsultation } from '@/lib/consultation-notify'
+import {
+  screenSubmission,
+  MAX_PER_EMAIL_PER_HOUR,
+  MAX_PER_PRO_PER_HOUR,
+} from '@/lib/consultation-guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,6 +46,24 @@ export async function POST(request: NextRequest) {
     }
     if (!messageBody || messageBody.length > BODY_MAX) {
       return NextResponse.json({ error: 'body_invalid' }, { status: 400 })
+    }
+
+    // CEO指示(2026-08-06): 受信許可のオプトイン。UIで必須にしているが、
+    // API直叩きを塞ぐためサーバー側でも必須にする。
+    if (body.consent !== true) {
+      return NextResponse.json({ error: 'consent_required' }, { status: 400 })
+    }
+
+    // ボット対策の第1層（DBを見ない範囲）
+    const verdict = screenSubmission({
+      honeypot: body.company,
+      renderedAt: body.rendered_at,
+      body: messageBody,
+    })
+    if (!verdict.ok) {
+      // ボット確定の場合は成功したように見せて捨てる（検知を悟らせない）
+      if (verdict.silent) return NextResponse.json({ ok: true, token: '' })
+      return NextResponse.json({ error: verdict.error }, { status: 400 })
     }
 
     const supabase = getSupabaseAdmin()
@@ -84,21 +107,64 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // ボット対策の第2層（件数の上限）。
+    // 第1層はクライアント申告に頼る部分があり偽装できるので、被害の量はここで抑える。
+    const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+
+    // ①同じメールアドレスがプロをまたいで乱射するのを止める
+    //   （メール中継として悪用された場合、宛先は攻撃者が指定した第三者になる）
+    const { count: emailCount } = await supabase
+      .from('consultations')
+      .select('id', { count: 'exact', head: true })
+      .eq('client_email', normalized)
+      .gte('created_at', hourAgo)
+    if ((emailCount || 0) >= MAX_PER_EMAIL_PER_HOUR) {
+      return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
+    }
+
+    // ②特定のプロを狙い撃ちされた場合の被害を抑える
+    const { count: proCount } = await supabase
+      .from('consultations')
+      .select('id', { count: 'exact', head: true })
+      .eq('pro_id', proId)
+      .gte('created_at', hourAgo)
+    if ((proCount || 0) >= MAX_PER_PRO_PER_HOUR) {
+      return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
+    }
+
     // 推測不能なトークン。UUID2本分（メールのリンクが唯一の鍵になるため短くしない）。
     const accessToken = `${crypto.randomUUID()}${crypto.randomUUID()}`.replace(/-/g, '')
 
     // INSERT は最終確認後に1回だけ（pending→後で更新パターンは作らない）
-    const { data: created, error: insertError } = await supabase
-      .from('consultations')
-      .insert({
-        pro_id: proId,
-        client_name: clientName,
-        client_email: normalized,
-        access_token: accessToken,
-        status: 'new',
-      })
-      .select('id, access_token')
-      .maybeSingle()
+    const record: Record<string, unknown> = {
+      pro_id: proId,
+      client_name: clientName,
+      client_email: normalized,
+      access_token: accessToken,
+      status: 'new',
+      // オプトインの証跡（migration 050）。未実行環境では下で外して再試行する。
+      consent_at: new Date().toISOString(),
+    }
+
+    let created: { id: string; access_token: string } | null = null
+    let insertError: { message?: string } | null = null
+    {
+      const res = await supabase.from('consultations').insert(record).select('id, access_token').maybeSingle()
+      created = res.data
+      insertError = res.error
+      if (insertError) {
+        // fail-soft: consent_at 未作成の環境ではキーを外して再試行する
+        // （gallery_image_urls 等と同じやり方。カラムが増える前でも相談は受けられるようにする）
+        const { consent_at: _omit, ...withoutConsent } = record
+        const retry = await supabase
+          .from('consultations')
+          .insert(withoutConsent)
+          .select('id, access_token')
+          .maybeSingle()
+        created = retry.data
+        insertError = retry.error
+      }
+    }
 
     if (insertError || !created) {
       console.error('[api/consultations POST] insert error:', insertError?.message)

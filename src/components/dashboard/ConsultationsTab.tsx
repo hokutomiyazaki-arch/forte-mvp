@@ -43,10 +43,12 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
   const [sendingId, setSendingId] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  // CEO指示(2026-08-06): アーカイブしたスレッドは既定で出さない。切り替えて見返せる。
+  const [showArchived, setShowArchived] = useState(false)
 
-  async function load() {
+  async function load(archived = showArchived) {
     try {
-      const res = await fetch('/api/pro/consultations', { cache: 'no-store' })
+      const res = await fetch(`/api/pro/consultations${archived ? '?archived=1' : ''}`, { cache: 'no-store' })
       if (!res.ok) {
         setList([])
         return
@@ -54,7 +56,8 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
       const json = await res.json()
       const items: Consultation[] = Array.isArray(json.consultations) ? json.consultations : []
       setList(items)
-      if (onUnreadChange) onUnreadChange(items.filter(c => c.status === 'new').length)
+      // アーカイブ表示中の件数でバッジを上書きしない（通常一覧のときだけ報告する）
+      if (!archived && onUnreadChange) onUnreadChange(items.filter(c => c.status === 'new').length)
     } catch {
       setList([])
     } finally {
@@ -99,16 +102,26 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
   }
 
   async function updateStatus(id: string, status: string) {
+    setError('')
     try {
-      await fetch(`/api/pro/consultations/${id}`, {
+      const res = await fetch(`/api/pro/consultations/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         body: JSON.stringify({ status }),
       })
+      if (!res.ok) {
+        // 'archived' が DB の CHECK 制約で弾かれるケースがある（migration 050 の確認手順）。
+        // 黙って失敗すると「押したのに消えない」になるので必ず出す。
+        setError(status === 'archived'
+          ? 'アーカイブできませんでした。時間をおいてお試しください。'
+          : '変更できませんでした。')
+        return
+      }
+      setOpenId(null)
       await load()
     } catch {
-      /* 状態変更の失敗は致命的でないため黙って落とす（再読込で復帰する） */
+      setError('変更できませんでした。')
     }
   }
 
@@ -116,11 +129,25 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
     return <p style={{ fontSize: 13, color: '#9CA3AF' }}>読み込み中…</p>
   }
 
+  const archiveToggle = (
+    <button
+      type="button"
+      onClick={() => { const next = !showArchived; setShowArchived(next); setOpenId(null); setLoading(true); load(next) }}
+      style={{
+        background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+        fontSize: 12, color: '#C4A35A', fontWeight: 600,
+      }}
+    >
+      {showArchived ? '← 受信箱に戻る' : 'アーカイブを見る'}
+    </button>
+  )
+
   if (list.length === 0) {
     return (
       <div style={{ background: '#fff', borderRadius: 14, padding: 28, textAlign: 'center', border: '1px solid #E5E7EB' }}>
+        <div style={{ textAlign: 'right', marginBottom: 8 }}>{archiveToggle}</div>
         <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.9 }}>
-          まだご相談は届いていません。
+          {showArchived ? 'アーカイブしたご相談はありません。' : 'まだご相談は届いていません。'}
         </p>
         <p style={{ fontSize: 12, color: '#9CA3AF', lineHeight: 1.9, marginTop: 10 }}>
           あなたのカードの「相談する」から、お客さんが日時を決めずに問い合わせできます。
@@ -139,9 +166,14 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
 
   return (
     <div style={{ paddingBottom: 40 }}>
-      <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.8, marginBottom: 16 }}>
-        カードの「相談する」から届いたご相談です。ここに返信を書くと、お客さんにメールで届きます。
-      </p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
+        <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.8, margin: 0 }}>
+          {showArchived
+            ? 'アーカイブしたご相談です。戻すと受信箱に再表示されます。'
+            : 'カードの「相談する」から届いたご相談です。ここに返信を書くと、お客さんにメールで届きます。'}
+        </p>
+        <div style={{ flexShrink: 0, paddingTop: 2 }}>{archiveToggle}</div>
+      </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {sorted.map(c => {
@@ -221,7 +253,7 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
                     })}
                   </div>
 
-                  {c.status !== 'closed' && (
+                  {c.status !== 'closed' && c.status !== 'archived' && (
                     <>
                       <textarea
                         value={draft}
@@ -266,10 +298,21 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
                           対応済みにする
                         </button>
                       </div>
+                      {/* CEO指示(2026-08-06): 一覧から隠す。削除ではないので後から見返せる。 */}
+                      <button
+                        type="button"
+                        onClick={() => updateStatus(c.id, 'archived')}
+                        style={{
+                          marginTop: 10, background: 'none', border: 'none', padding: 0,
+                          fontSize: 12, color: '#9CA3AF', cursor: 'pointer', textDecoration: 'underline',
+                        }}
+                      >
+                        アーカイブする（一覧から隠す）
+                      </button>
                     </>
                   )}
 
-                  {c.status === 'closed' && (
+                  {(c.status === 'closed' || c.status === 'archived') && (
                     <button
                       type="button"
                       onClick={() => updateStatus(c.id, 'open')}
@@ -278,7 +321,7 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
                         background: '#fff', color: '#6B7280', fontSize: 13, fontWeight: 600, cursor: 'pointer',
                       }}
                     >
-                      やりとりを再開する
+                      {c.status === 'archived' ? '受信箱に戻す' : 'やりとりを再開する'}
                     </button>
                   )}
                 </div>

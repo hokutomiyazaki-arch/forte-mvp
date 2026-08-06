@@ -7,7 +7,9 @@ export const dynamic = 'force-dynamic'
 
 const BODY_MAX = 2000
 const MESSAGE_LIMIT = 100
-const ALLOWED_STATUS = ['new', 'open', 'closed']
+// CEO指示(2026-08-06): アーカイブ＝ダッシュボードの一覧から隠す状態。
+// 新カラムを作らず status の値として持つ（migration 050 のメモ参照）。
+const ALLOWED_STATUS = ['new', 'open', 'closed', 'archived']
 
 /**
  * POST /api/pro/consultations/[id] — プロが返信する（§16-19）
@@ -52,8 +54,10 @@ export async function POST(
         .update({ status: payload.status, updated_at: new Date().toISOString() })
         .eq('id', consultation.id)
       if (error) {
+        // status に CHECK 制約が残っていて 'archived' を弾かれた場合もここに来る
+        // （migration 050 の確認手順を参照）。何が起きたか分かるようにコードを返す。
         console.error('[api/pro/consultations POST] status error:', error.message)
-        return NextResponse.json({ error: 'update_failed' }, { status: 500 })
+        return NextResponse.json({ error: 'update_failed', status_value: payload.status }, { status: 500 })
       }
       return NextResponse.json({ ok: true })
     }

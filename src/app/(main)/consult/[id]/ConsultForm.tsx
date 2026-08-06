@@ -36,6 +36,10 @@ export default function ConsultForm({ proId, proName, proPhotoUrl, proTitle, pro
   const [email, setEmail] = useState('')
   const [body, setBody] = useState('')
   const [agreed, setAgreed] = useState(false)
+  // ボット対策: 画面に出ない入力欄。人間は触れないので、埋まっていたらボット。
+  const [honeypot, setHoneypot] = useState('')
+  // ボット対策: 描画からの経過時間。速すぎる送信を弾く材料にする（申告値なので補助的）。
+  const [renderedAt] = useState(() => Date.now())
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const [doneToken, setDoneToken] = useState<string | null>(null)
@@ -50,6 +54,11 @@ export default function ConsultForm({ proId, proName, proPhotoUrl, proTitle, pro
       client_name: name.trim(),
       client_email: email.trim(),
       body: body.trim(),
+      // CEO指示: 受信許可のオプトイン
+      consent: agreed,
+      // ボット対策
+      company: honeypot,
+      rendered_at: renderedAt,
     }
     setSending(true)
     setError('')
@@ -72,6 +81,12 @@ export default function ConsultForm({ proId, proName, proPhotoUrl, proTitle, pro
             ? `${proName}さんは現在ご相談を受け付けていません。`
             : json.error === 'email_invalid'
               ? 'メールアドレスの形式をご確認ください。'
+            : json.error === 'too_many_links'
+              ? 'リンクが多すぎます。本文のURLを減らしてお試しください。'
+            : json.error === 'rate_limited'
+              ? '送信が集中しています。しばらく時間をおいてからお試しください。'
+            : json.error === 'consent_required'
+              ? '受信の許可にチェックを入れてください。'
               : json.error === 'pro_not_found'
                 ? 'この方は現在ご利用いただけません。'
                 : '送信できませんでした。時間をおいてお試しください。',
@@ -217,6 +232,21 @@ export default function ConsultForm({ proId, proName, proPhotoUrl, proTitle, pro
             </div>
           </div>
 
+          {/* ハニーポット（ボット対策）。人には見えない・タブでも止まらない・支援技術にも読ませない。
+              自動入力を避けるため autoComplete="off"。ここが埋まっていたら機械とみなす。 */}
+          <div aria-hidden="true" style={{ position: 'absolute', left: '-9999px', top: 0, height: 0, overflow: 'hidden' }}>
+            <label htmlFor="rp-company">会社名（入力しないでください）</label>
+            <input
+              id="rp-company"
+              name="company"
+              type="text"
+              tabIndex={-1}
+              autoComplete="off"
+              value={honeypot}
+              onChange={e => setHoneypot(e.target.value)}
+            />
+          </div>
+
           <label style={{
             display: 'flex', alignItems: 'flex-start', gap: 8,
             fontSize: 13, color: T.dark, cursor: 'pointer', marginBottom: 20, lineHeight: 1.7,
@@ -227,7 +257,15 @@ export default function ConsultForm({ proId, proName, proPhotoUrl, proTitle, pro
               onChange={e => setAgreed(e.target.checked)}
               style={{ width: 16, height: 16, marginTop: 3, flexShrink: 0 }}
             />
-            <span>お名前・メールアドレス・ご相談内容が{proName}さんに共有されることに同意します。</span>
+            {/* CEO指示(2026-08-06): 「プロに教えることへの同意」ではなく
+                「REAL PROOFからのメッセージ受信の許可」というオプトインにする。 */}
+            <span>
+              REAL PROOF からのメッセージ受信を許可します
+              <span style={{ display: 'block', color: T.faint, fontSize: 12, marginTop: 2 }}>
+                {proName}さんからのお返事のお知らせなどをメールでお送りします。
+                お名前・メールアドレス・ご相談内容は{proName}さんに共有されます。
+              </span>
+            </span>
           </label>
 
           {error && (

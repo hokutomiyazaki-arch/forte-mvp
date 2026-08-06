@@ -53,8 +53,9 @@ REAL PROOF に新しい機能が入りました。
 ▼ 相談タブ
 https://realproof.jp/dashboard?tab=consultations
 
-※ 相談ボタンは「連絡先メールアドレス」を設定している方のカードに表示されます。
-　 まだの方はプロフィール編集からご登録ください。
+※ 相談が届いたことは、LINE連携済みならLINEへ、そうでなければ
+　 連絡先メールアドレスへお知らせします。どちらも未設定の方は
+　 通知が届かないので、プロフィール編集からご登録ください。
 　 https://realproof.jp/dashboard?tab=profile&edit=true
 
 
