@@ -2865,16 +2865,29 @@ export default function DashboardPage() {
               {qrUrl ? (
                 <>
                   <img src={qrUrl} alt="QR Code" className="mx-auto mb-4" />
-                  <button
-                    onClick={async () => {
-                      await generateQR()
-                      setQrRefreshed(true)
-                      setTimeout(() => setQrRefreshed(false), 2000)
-                    }}
-                    className="text-sm text-[#9CA3AF] hover:text-[#C4A35A] transition-colors"
-                  >
-                    {qrRefreshed ? '更新しました ✓' : 'QRコードを更新する'}
-                  </button>
+                  {/* QRまわりの小操作。CEO指摘(2026-08-06)で「投票画面を確認する」をここへ移設。
+                      プロが「クライアントに見せる画面」を確認したい、が目的なので文言もそう書く。
+                      下の「オンラインの方はこちら」はクライアント向けの別ルートなので、
+                      区切り線の上下で種類を分けている（混ざらない）。 */}
+                  <div className="flex items-center justify-center gap-3 flex-wrap">
+                    <button
+                      onClick={async () => {
+                        await generateQR()
+                        setQrRefreshed(true)
+                        setTimeout(() => setQrRefreshed(false), 2000)
+                      }}
+                      className="text-sm text-[#9CA3AF] hover:text-[#C4A35A] transition-colors"
+                    >
+                      {qrRefreshed ? '更新しました ✓' : 'QRコードを更新する'}
+                    </button>
+                    <span className="text-[#E5E7EB]">|</span>
+                    <button
+                      onClick={() => window.open(`/vote/${pro.id}?preview=true`, '_blank')}
+                      className="text-sm text-[#C4A35A] hover:underline transition-colors"
+                    >
+                      お客さんに見える画面
+                    </button>
+                  </div>
                 </>
               ) : (
                 <button onClick={generateQR} className="px-6 py-3 bg-[#C4A35A] text-white rounded-lg hover:bg-[#b3944f] transition">
@@ -5407,14 +5420,9 @@ export default function DashboardPage() {
             </a>
           )}
         </div>
-        {pro && (
-          <button
-            onClick={() => window.open(`/vote/${pro.id}?preview=true`, '_blank')}
-            className="flex items-center justify-center gap-2 px-4 py-2 border border-[#C4A35A] text-[#C4A35A] rounded-lg hover:bg-[#C4A35A] hover:text-white transition-colors"
-          >
-            👁️ 投票画面を確認する
-          </button>
-        )}
+        {/* CEO指摘(2026-08-06): 「投票画面を確認する」はここではなくQRコードの下へ移した。
+            投票画面は「QRを読んだ先の画面」なので、QRの隣が本来の居場所。
+            下部にフルサイズのボタンを2つ並べると重く、文脈からも切れていた。 */}
       </div>
       </>
       )}
