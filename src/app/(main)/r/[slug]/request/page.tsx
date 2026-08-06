@@ -1,8 +1,8 @@
 /**
  * §2-4 予約リクエストページ(クライアント向け・/r/[slug]/request?pro=<proId>)
  *
- * - 対象プロが、この処方箋リストの候補(ピン+基準行・代理一段展開込み)に
- *   含まれることを検証してから表示する(それ以外は404)
+ * - 対象プロが、この処方箋リストの候補(ピン+基準行)に含まれることを検証してから表示する
+ *   (それ以外は404。§16-16で代理一段展開は撤去済み)
  * - 認証チェック・フォーム送信は client component(ReferralRequestForm)側で行う
  */
 
@@ -14,13 +14,12 @@ import ReferralRequestForm from '@/components/referral/ReferralRequestForm'
 
 export const dynamic = 'force-dynamic'
 
+// §16-16(CEO決定・2026-08-06)で撤去: 代理候補(c.delegate)の再帰探索。
+// 代理案内は停止中プロの公開カード(/card/[id])単体の経路に限定し、紹介リスト内では
+// 送り手が名指しで保証した候補(ピン+criteria)のみを対象とする。
 function findCandidate(candidates: ReferralCandidate[], proId: string): ReferralCandidate | null {
   for (const c of candidates) {
     if (c.pro.id === proId) return c
-    if (c.delegate) {
-      const found = findCandidate(c.delegate, proId)
-      if (found) return found
-    }
   }
   return null
 }

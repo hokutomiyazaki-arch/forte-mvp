@@ -212,16 +212,8 @@ function CandidateCard({
         </div>
       )}
 
-      {candidate.isPaused && candidate.delegate && candidate.delegate.length > 0 && (
-        <div style={{ marginTop: 4, marginBottom: 8 }}>
-          <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}>
-            現在受付停止中のため、代わりにご紹介できる先生です
-          </div>
-          {candidate.delegate.map((d) => (
-            <CandidateCard key={d.pro.id} candidate={d} aiSanitizeEnabled={aiSanitizeEnabled} slug={slug} />
-          ))}
-        </div>
-      )}
+      {/* §16-16(CEO決定・2026-08-06)で撤去: 停止中ピンの代理候補の一段展開表示。
+          代理案内は停止中プロの公開カード(/card/[id])単体の経路に限定する(referral-delegate-criteria.ts)。 */}
 
       {/* §2-2改訂(CEO決定): 受付中(open。NULL含む・fail-open)以外は予約ボタンを出さない。
           「選べたのに送信で409」という初回体験を作らない（🔴停止中は非表示・🟡は代理展開でカバー） */}
