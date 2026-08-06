@@ -6,8 +6,17 @@
 
 ## 🚨 絶対ルール（最優先）
 - **ブランチを作らない。常に main に直接コミット。** worktree も作らない。`git checkout -b` は使わない。
-- **CC は自動で commit / push しない（最優先・絶対）。** CC はファイルを編集するところまで。`git add` / `git commit` / `git push` は実行しない。commit と push はほくとが GitHub Desktop で行う。
+- **CC は自動で commit / push しない（PC・GitHub Desktop 運用時の既定）。** CC はファイルを編集するところまで。`git add` / `git commit` / `git push` は実行しない。commit と push はほくとが GitHub Desktop で行う。
   - CC は編集後に「どのファイルを変更したか」を報告するだけ。git 操作の代行が必要なときは、ほくとが明示的に指示した場合のみ。
+- **【恒久ルール・2026-08-06 CEO決定】外出中（スマホから起動した web セッション）は上記の例外。**
+  ほくとが GitHub Desktop を触れないため、CC が **commit / push / 承認済みSQLの実行まで代行する**（毎回確認を取らない）。
+  - SQL は「CEOが承認したもの」だけ。未承認のSQLは提示にとどめる。この線は外出中でも変えない。
+  - 破壊的操作（DROP / DELETE / UPDATE 等）は代行対象でも 5段階プロトコルと神山プロトコルをそのまま適用する。
+  - 1修正=1コミットは維持。コミットメッセージに何をどう直したかと真因を書く。
+  - **注意：web セッションは main に直接 push できずブランチ指定になる。** 作業は指定ブランチに乗るため、
+    main へ取り込む導線（PR か手元マージか）を毎回セッション末に報告すること。放置すると本番に出ない。
+  - **このセッションには Supabase / ブラウザ操作の手段が無い**（Chrome 拡張・MCP 未接続）。SQL実行の代行は
+    それらが使えるセッションに限る。使えない時は「実行できない」と明示し、SQLをチャットに直貼りする。
 - `npm run build` はしない → ほくと手動。型チェックのみ `npx tsc --noEmit`。
 - 各 🛑 STOP ポイントで CEO 承認待ち。DB 操作（Supabase SQL Editor）・本番検証はほくたが実施。
 
