@@ -85,6 +85,12 @@ export interface ProMenu {
   category_tags: string[]
   description: string | null
   display_order: number
+  /**
+   * §17-1(CEO決定 2026-08-06): このメニューで予約を受けるか。
+   * true のときだけ公開カードに「このメニューで予約する」を出す。
+   * 紹介予約の可否と同じフラグを使う（プロから見て「予約を受けるメニュー」は1つの概念のため）。
+   */
+  is_referral_bookable?: boolean | null
 }
 
 export interface CardData {
@@ -261,7 +267,8 @@ export async function getCardData(
     Promise.resolve({ data: null, error: null }),
     // 14. サービス・案内 (is_active = true のみ)
     supabase.from('pro_menus')
-      .select('id, name, price_text, category_tags, description, display_order')
+      // is_referral_bookable は migration 032 で作成済み（§17-1のメニュー予約導線で使う）
+      .select('id, name, price_text, category_tags, description, display_order, is_referral_bookable')
       .eq('professional_id', proId)
       .eq('is_active', true)
       .order('display_order', { ascending: true })

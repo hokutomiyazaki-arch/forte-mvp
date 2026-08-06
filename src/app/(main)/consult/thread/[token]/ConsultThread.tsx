@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { resolveBookingTarget, buildMenuBookingHref } from '@/lib/booking-mode'
 
 const T = {
   dark: '#1A1A2E',
@@ -34,6 +35,8 @@ interface ThreadData {
     booking_url: string | null
     /** §16-29: 予約の受付。false のときは予約導線を一切出さない。 */
     booking_enabled: boolean
+    /** §17-1: 予約の受け方（rp=REALPROOFで受ける / external=本人のサイト / null=未選択） */
+    booking_mode?: string | null
   } | null
   messages: Message[]
   /** §16-27-2: 最後のプロの返信より後に、クライアントが送った通数 */
@@ -197,6 +200,15 @@ export default function ConsultThread({ token }: { token: string }) {
 
   const proName = data.pro?.name || 'プロフェッショナル'
   const closed = data.consultation.status === 'closed'
+  // §17-1: 予約の遷移先はここで1回だけ決める（RPネイティブ or 本人のサイト）。
+  const bookingTarget = data.pro
+    ? resolveBookingTarget({
+        id: data.pro.id,
+        booking_url: data.pro.booking_url,
+        booking_enabled: data.pro.booking_enabled,
+        booking_mode: data.pro.booking_mode,
+      })
+    : null
 
   return (
     <div style={wrap}>
@@ -282,11 +294,12 @@ export default function ConsultThread({ token }: { token: string }) {
                         {m.menu.description}
                       </p>
                     )}
-                    {/* 提案後に予約を止めた場合、古い提案から予約に進めてしまわないようにする */}
+                    {/* 提案後に予約を止めた場合、古い提案から予約に進めてしまわないようにする。
+                        §17-1: メニューからの予約は必ずREALPROOFで受ける（メニューを外部サイトへ
+                        渡す手段が無いため）。選んだメニューを持ったまま予約フォームへ入る。 */}
                     {data.pro && data.pro.booking_enabled && (
                       <a
-                        href={data.pro.booking_url || `/card/${data.pro.id}`}
-                        {...(data.pro.booking_url ? { target: '_blank', rel: 'noopener' } : {})}
+                        href={buildMenuBookingHref(data.pro.id, m.menu.id)}
                         style={{
                           display: 'block', textAlign: 'center', marginTop: 12,
                           padding: '10px 16px', borderRadius: 10,
@@ -396,14 +409,14 @@ export default function ConsultThread({ token }: { token: string }) {
       {/* 予約導線（§16-26・CEO指示 2026-08-06）
           相談の途中で「じゃあ予約しよう」となった人を行き止まりにしないため、
           やりとりが終了していても**常に**出す。
-          ⚠️ 遷移先は暫定。将来この予約リンクは**内部の予約システム**に差し替える（CEOメモ）。
-          いまは プロの booking_url（外部）、未設定ならカードページ（予約・連絡先が載っている）。 */}
+          §17-1（2026-08-06）で内部の予約システムに差し替え済み。遷移先は resolveBookingTarget が
+          決める（RPで受けるプロは /book/[proId]、自分のサイトで受けるプロはそのURL）。 */}
       {/* CEO指示(2026-08-06): プロが予約を受け付けていないときは出さない。
           「予約する」を押させておいて受け付けていないのは、相談の場では特に不親切なため。 */}
-      {data.pro && data.pro.booking_enabled && (
+      {bookingTarget && bookingTarget.enabled && (
         <a
-          href={data.pro.booking_url || `/card/${data.pro.id}`}
-          {...(data.pro.booking_url ? { target: '_blank', rel: 'noopener' } : {})}
+          href={bookingTarget.href}
+          {...(bookingTarget.external ? { target: '_blank', rel: 'noopener' } : {})}
           style={{
             display: 'block', textAlign: 'center', marginTop: 16,
             padding: 14, borderRadius: 10,

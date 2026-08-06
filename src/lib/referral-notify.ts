@@ -237,15 +237,21 @@ export async function notifyReferralPinAdded(
 export async function notifyBookingRequested(
   target: ProNotifyTarget,
   clientNickname: string,
+  /**
+   * §17-1(CEO決定 2026-08-06): REALPROOFの直接予約は紹介元がいない。
+   * 「紹介予約」と書くと本人が心当たりのない通知になるため、直接予約では言い方を変える。
+   */
+  opts?: { direct?: boolean },
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
   const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
   const safeClientNickname = escapeHtml(clientNickname)
+  const kind = opts?.direct ? '予約' : '紹介予約'
   return sendProNotification(target, {
-    lineText: `紹介予約のリクエストが届いています(${clientNickname}さん)。48時間以内にダッシュボードからご確認ください。\n${dashboardUrl}`,
-    emailSubject: '紹介予約のリクエストが届いています',
+    lineText: `${kind}のリクエストが届いています(${clientNickname}さん)。48時間以内にダッシュボードからご確認ください。\n${dashboardUrl}`,
+    emailSubject: `${kind}のリクエストが届いています`,
     emailBodyHtml: emailShell(
-      '紹介予約リクエストのお知らせ',
-      `${safeClientNickname}さんから紹介予約のリクエストが届いています。<br><strong>48時間以内</strong>にダッシュボードからご確認ください。`,
+      `${kind}リクエストのお知らせ`,
+      `${safeClientNickname}さんから${kind}のリクエストが届いています。<br><strong>48時間以内</strong>にダッシュボードからご確認ください。`,
       'ダッシュボードを開く',
       dashboardUrl,
     ),

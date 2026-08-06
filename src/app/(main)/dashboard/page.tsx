@@ -159,6 +159,9 @@ export default function DashboardPage() {
     name: '', last_name: '', first_name: '', store_name: '',
     title: '', prefecture: '', area_description: '',
     bio: '', booking_url: '', photo_url: '', contact_email: '',
+    // §17-1(CEO決定 2026-08-06): 予約の受け方。'rp'=REALPROOFで受ける / 'external'=自分のサイト。
+    // 空文字=未選択（booking_urlがあれば自分のサイト、無ければREALPROOFとして扱われる）。
+    booking_mode: '',
     // Phase A2: アクセス情報
     address: '',
     nearest_station: '',
@@ -780,6 +783,8 @@ export default function DashboardPage() {
           prefecture: proData.prefecture || '',
           area_description: proData.area_description || '',
           bio: proData.bio || '', booking_url: proData.booking_url || '',
+          // §17-1: migration 056 未実行の環境では undefined（select('*')は既存カラムのみ返す）
+          booking_mode: proData.booking_mode || '',
           photo_url: proData.photo_url || '',
           contact_email: proData.contact_email || '',
           // Phase A2: アクセス情報
@@ -1337,6 +1342,8 @@ export default function DashboardPage() {
       prefecture: form.prefecture || null,
       area_description: form.area_description || null,
       bio: form.bio || null, booking_url: form.booking_url || null,
+      // §17-1: 未選択はnullのまま保存する（DEFAULTを付けない方針・解釈はbooking-mode.tsが持つ）
+      booking_mode: form.booking_mode || null,
       contact_email: form.contact_email || null,
       photo_url: form.photo_url || null,
       custom_result_fortes: validResultFortes,
@@ -1399,6 +1406,7 @@ export default function DashboardPage() {
       gallery_image_urls: '写真',
       intro_video_url: '紹介動画',
       character_gender: 'キャラクターの表示',
+      booking_mode: '予約の受け方',
     }
     if (saveError && upsertRecord && typeof upsertRecord === 'object') {
       const isSchemaErr = (saveError as any).code === '42703' || (saveError as any).code === 'PGRST204'
@@ -2163,6 +2171,56 @@ export default function DashboardPage() {
           onToggle={() => toggleProfileSection('contact')}
         >
         <div className="space-y-4">
+          {/* §17-1（CEO決定 2026-08-06）: 予約の受け方。
+              受け口が2本あると片方を見落とし、お客さんが来ているのに気づかない事故になるため、
+              どちらか一方に必ず倒す。未選択のときは今までの挙動（予約URLがあればそこへ）を保つ。
+              ※ メニューからの予約だけは常にREALPROOFで受ける（外部サイトにメニューを渡せないため）。 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">予約の受け方</label>
+            <p className="text-xs text-gray-500 mb-2 leading-relaxed">
+              公開カードの「予約する」を押したお客さんが、どこへ進むかを決めます。
+            </p>
+            <div className="space-y-2">
+              {[
+                {
+                  value: 'rp',
+                  label: 'REALPROOF で受け取る',
+                  note: 'お客さんが希望日時を送り、あなたが確定します。ダッシュボードに届き、メール・LINEでもお知らせします。お支払いはありません（当日、直接お受け取りください）。',
+                },
+                {
+                  value: 'external',
+                  label: '自分のサイトで受け取る',
+                  note: '下の「予約・連絡先URL」へご案内します。REALPROOF には予約が届きません。',
+                },
+              ].map(opt => (
+                <label
+                  key={opt.value}
+                  className={`flex items-start gap-2 p-3 rounded-lg border cursor-pointer ${
+                    (form.booking_mode || (form.booking_url ? 'external' : 'rp')) === opt.value
+                      ? 'border-[#C4A35A] bg-[#FDFBF6]'
+                      : 'border-gray-300'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="booking_mode"
+                    className="mt-1"
+                    checked={(form.booking_mode || (form.booking_url ? 'external' : 'rp')) === opt.value}
+                    onChange={() => setForm({ ...form, booking_mode: opt.value })}
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-gray-800">{opt.label}</span>
+                    <span className="block text-xs text-gray-500 mt-1 leading-relaxed">{opt.note}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            {form.booking_mode === 'external' && !form.booking_url.trim() && (
+              <p className="text-xs text-red-500 mt-2">
+                予約URLが未入力です。このままだと REALPROOF で受け取ります。
+              </p>
+            )}
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               予約・連絡先URL
@@ -5291,7 +5349,9 @@ export default function DashboardPage() {
                 borderBottom: referralSubtab === 'receive' ? '2px solid #C4A35A' : '2px solid transparent',
               }}
             >
-              紹介を受ける{referralRequestedCount > 0 ? ` (${referralRequestedCount})` : ''}
+              {/* §17-1(2026-08-06): REALPROOFの直接予約もここに届くようになったため
+                  「紹介を受ける」→「予約を受ける」。中身は同じ受信箱（紹介予約＋直接予約）。 */}
+              予約を受ける{referralRequestedCount > 0 ? ` (${referralRequestedCount})` : ''}
             </button>
             <button
               onClick={() => handleReferralSubtabClick('send')}
@@ -5373,9 +5433,9 @@ export default function DashboardPage() {
               referralTotalReceivedCount === 0 &&
               (!referralEnabled || (referralCompletedLoaded && referralCompletedCount === 0)) && (
                 <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>
-                  <div>まだ紹介リクエストはありません</div>
+                  <div>まだ予約リクエストはありません</div>
                   <div style={{ fontSize: 13, marginTop: 4 }}>
-                    あなたが紹介リストに掲載されると、クライアントからの予約リクエストがここに届きます
+                    公開カードの「予約する」や、他のプロの紹介リストから届いた予約リクエストがここに表示されます
                   </div>
                 </div>
             )}

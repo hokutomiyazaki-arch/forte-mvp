@@ -49,6 +49,21 @@ export async function GET(
       .eq('id', consultation.pro_id)
       .maybeSingle()
 
+    // §17-1: 予約の受け方（RPネイティブ / 本人のサイト）。migration 056 依存カラムのため、
+    // 上のselectには足さず別クエリ＋fail-softで読む（未作成カラムを明示selectすると42703で
+    // クエリ全体が落ち、やりとり画面が真っ白になる。同じ事故を2026-08-06に起こしている）。
+    let proBookingMode: string | null = null
+    try {
+      const { data: modeRow } = await supabase
+        .from('professionals')
+        .select('booking_mode')
+        .eq('id', consultation.pro_id)
+        .maybeSingle()
+      proBookingMode = (modeRow as { booking_mode?: string | null } | null)?.booking_mode ?? null
+    } catch {
+      // カラム未作成: 未選択として扱う（booking_url の有無で解釈される）
+    }
+
     const { data: messages } = await supabase
       .from('consultation_messages')
       // 教訓(2026-08-06・本番事故): 未作成カラムを .select() に明示すると PostgREST が
@@ -115,6 +130,8 @@ export async function GET(
             booking_url: pro.booking_url,
             // §16-29: 予約を止めているプロには予約導線を出さない（クライアント側で判定に使う）
             booking_enabled: (pro as any).booking_enabled !== false,
+            // §17-1: 予約の受け方。クライアント側で resolveBookingTarget に渡す。
+            booking_mode: proBookingMode,
           }
         : null,
       messages: rows.map((m: any) => ({

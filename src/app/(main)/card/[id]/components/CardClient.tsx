@@ -26,6 +26,7 @@ import { VoiceCommentCard } from '@/components/card/VoiceCommentCard'
 import { PersonalityPodium } from '@/components/card/PersonalityPodium'
 import type { VoiceComment, Supporter } from '@/components/card/types'
 import { computeReferralSignal, REFERRAL_SIGNAL_COLOR } from '@/lib/referral-accepting'
+import { resolveBookingTarget, buildMenuBookingHref } from '@/lib/booking-mode'
 import { DelegateCandidatesBlock } from '@/components/card/DelegateCandidatesBlock'
 import { GalleryCarousel } from '@/components/card/GalleryCarousel'
 import { YouTubeEmbed } from '@/components/card/YouTubeEmbed'
@@ -503,8 +504,19 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
   const top3 = sortedVotes.slice(0, 3)
   const rest = sortedVotes.slice(3)
 
-  // §15-4: sticky予約バーの表示条件(booking_urlまたはcontact_emailを持つプロのみ)
-  const hasStickyCta = !!(pro.booking_url || pro.contact_email)
+  // §17-1(CEO決定 2026-08-06): 予約の受け口は必ず1本。REALPROOFで受けるか、
+  // 本人のサイトで受けるかを resolveBookingTarget が決める（判定の単一情報源）。
+  const bookingTarget = resolveBookingTarget({
+    id,
+    booking_url: pro.booking_url,
+    booking_enabled: (pro as any).booking_enabled,
+    booking_mode: (pro as any).booking_mode,
+  })
+  const showBookingCta = bookingTarget.enabled
+
+  // §15-4: sticky予約バーの表示条件。§17-1でRPネイティブ予約ができるようになったため、
+  // booking_url を持たないプロにも予約導線が出る（＝バー自体も出す）。
+  const hasStickyCta = showBookingCta || !!pro.contact_email
 
   return (
     <div style={{ background: T.bg, minHeight: '100vh', maxWidth: 420, margin: '0 auto', padding: 16, fontFamily: T.font }}>
@@ -539,9 +551,11 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
                 オススメのプロ
               </a>
             )}
-            {/* §16-29: 予約の受付は booking_enabled が持つ。カラム未作成なら null＝受付中（fail-open）。 */}
-            {pro.booking_url && (pro as any).booking_enabled !== false && (
-              <a href={pro.booking_url} target="_blank" rel="noopener"
+            {/* §16-29 / §17-1: 予約の受付は booking_enabled が持つ（カラム未作成なら受付中）。
+                遷移先は resolveBookingTarget（RPネイティブ or 本人のサイト）。 */}
+            {showBookingCta && (
+              <a href={bookingTarget.href}
+                {...(bookingTarget.external ? { target: '_blank', rel: 'noopener' } : {})}
                 onClick={() => trackEvent(id, 'booking_click', shareSrc || undefined)}
                 style={{
                   display: 'inline-block', padding: '8px 12px', borderRadius: 8,
@@ -1344,6 +1358,25 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
                     {m.description && (
                       <p style={{ fontSize: 12, color: T.textSub, lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap' }}>{m.description}</p>
                     )}
+                    {/* §17-1(CEO決定 2026-08-06): メニューからも予約できるようにする。
+                        メニュー予約は**必ずREALPROOFで受ける**（外部サイトに「このメニューで」を
+                        渡す手段が無く、飛ばすと選んだメニューが消えるため）。
+                        出すのはプロが「このメニューで予約を受ける」をONにしたメニューだけ＝
+                        自分のサイトで受けたいプロは、このスイッチを切れば導線ごと出ない。 */}
+                    {m.is_referral_bookable && showBookingCta && (
+                      <a
+                        href={buildMenuBookingHref(id, m.id)}
+                        onClick={() => trackEvent(id, 'booking_click', shareSrc || undefined)}
+                        style={{
+                          display: 'block', textAlign: 'center', marginTop: 12,
+                          padding: '10px 16px', borderRadius: 10,
+                          background: T.dark, color: T.gold,
+                          fontSize: 13, fontWeight: 700, textDecoration: 'none',
+                        }}
+                      >
+                        このメニューで予約する
+                      </a>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1484,9 +1517,10 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
             オススメのプロを見る
           </a>
         )}
-        {/* §16-29: 同上 */}
-        {pro.booking_url && (pro as any).booking_enabled !== false && (
-          <a href={pro.booking_url} target="_blank" rel="noopener"
+        {/* §16-29 / §17-1: 同上 */}
+        {showBookingCta && (
+          <a href={bookingTarget.href}
+            {...(bookingTarget.external ? { target: '_blank', rel: 'noopener' } : {})}
             onClick={() => trackEvent(id, 'booking_click', shareSrc || undefined)}
             style={{
               display: 'block', textAlign: 'center', padding: 15, borderRadius: 14,
