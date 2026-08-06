@@ -214,7 +214,7 @@ export default function DashboardPage() {
   const [selectedProofIds, setSelectedProofIds] = useState<Set<string>>(new Set())
   const [customProofs, setCustomProofs] = useState<CustomProof[]>([])
   const [activeTab, setActiveTab] = useState('healing')
-  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'card' | 'org' | 'myorgs' | 'guide' | 'business-info' | 'badges' | 'referral'>('profile')
+  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'card' | 'org' | 'myorgs' | 'certs' | 'guide' | 'business-info' | 'badges' | 'referral'>('profile')
   const [openSections, setOpenSections] = useState<Set<string>>(new Set())
   // CEO指示(2026-08-06): プロフィール編集も項目ごとに畳めるようにする。
   // 既定は「基本情報」だけ開く(姓名・都道府県が必須のため、初見で入力欄が見えている状態を保つ)。
@@ -575,7 +575,7 @@ export default function DashboardPage() {
   const tabParam = searchParams.get('tab')
   useEffect(() => {
     if (!tabParam || loading) return
-    const validTabs = ['profile', 'proofs', 'rewards', 'voices', 'card', 'myorgs', 'org', 'guide', 'business-info', 'badges', 'referral']
+    const validTabs = ['profile', 'proofs', 'rewards', 'voices', 'card', 'myorgs', 'certs', 'org', 'guide', 'business-info', 'badges', 'referral']
     if (validTabs.includes(tabParam)) {
       setDashboardTab(tabParam as any)
       if (tabParam === 'myorgs' && selectedMemberOrgId) {
@@ -597,7 +597,7 @@ export default function DashboardPage() {
   // ハッシュスクロール（バッジクリックからの遷移用）
   useEffect(() => {
     const hash = window.location.hash.slice(1)
-    if (hash && dashboardTab === 'myorgs') {
+    if (hash && (dashboardTab === 'myorgs' || dashboardTab === 'certs')) {
       setTimeout(() => {
         const el = document.getElementById(hash)
         if (el) {
@@ -927,7 +927,7 @@ export default function DashboardPage() {
               setMemberOrgs(orgsData)
               setHasOrgMembership(true)
               setSelectedMemberOrgId(orgsData[0].id)
-              if (tabParam === 'myorgs') loadMemberResources(orgsData[0].id)
+              if (tabParam === 'myorgs' || tabParam === 'certs') loadMemberResources(orgsData[0].id)
 
               // 団体IGシェア オプトアウト状態を取得（行あり=紹介拒否=トグルOFF）
               try {
@@ -1144,6 +1144,16 @@ export default function DashboardPage() {
       }
     })
     return groups
+  }
+
+  /** 認定・資格タブ: バッジを押したら、その認定専用の配付資料グループを開いて位置まで運ぶ。
+   *  CEO指示(2026-08-06)「ダッシュボードのバッジは団体資料にアクセスできるボタン」。
+   *  資料はバッジ(credential_level_id)ごとにグループ化されており、グループのkey＝バッジidで一致する。 */
+  function openBadgeResources(badgeId: string) {
+    setMemberAccordionOpen(prev => ({ ...prev, [badgeId]: true }))
+    setTimeout(() => {
+      document.getElementById(badgeId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 50)
   }
 
   function handleMyOrgsTab() {
@@ -2437,6 +2447,11 @@ export default function DashboardPage() {
 
   const isSettingsTab = ['proofs', 'rewards', 'card', 'myorgs', 'org', 'guide', 'business-info', 'badges', 'referral'].includes(dashboardTab)
 
+  // 認定・資格タブ(2026-08-06・CEO決定): 所属団体も獲得バッジも無い人には出さない。
+  // 中身が空のタブを並べても押す理由が無く、ごちゃつきを増やすだけのため。
+  const hasCertsContent =
+    activeOrgs.length > 0 || credentialBadges.length > 0 || filterAndSortBadges(pro?.badges || []).length > 0
+
   function toggleSection(id: string) {
     setOpenSections(prev => {
       const next = new Set(prev)
@@ -2960,11 +2975,22 @@ export default function DashboardPage() {
       <div style={{ display: 'flex', overflowX: 'auto', gap: 0, marginBottom: 24, borderBottom: '1px solid #E5E7EB', scrollbarWidth: 'none' as any }}>
         {([
           { key: 'profile' as const, label: 'ホーム' },
+          // CEO決定(2026-08-06): 公開カードと同様に認定・資格を独立タブへ。
+          // ホームに重複して置いていた「所属・認定」「取得バッジ」をここへ集約し、
+          // バッジから団体の配付資料へ辿れるようにする（ダッシュボード固有の導線）。
+          // 所属も獲得バッジも無い人にはタブ自体を出さない（空タブを作らない）。
+          ...(hasCertsContent ? [{ key: 'certs' as const, label: '認定・資格' }] : []),
           { key: 'voices' as const, label: 'Voices' },
         ]).map(tab => (
           <button
             key={tab.key}
-            onClick={() => setDashboardTab(tab.key)}
+            onClick={() => {
+              setDashboardTab(tab.key)
+              // 認定・資格タブに入った時点で団体の配付資料を読む（未取得なら）
+              if (tab.key === 'certs' && selectedMemberOrgId && memberResources.length === 0) {
+                loadMemberResources(selectedMemberOrgId)
+              }
+            }}
             style={{
               flex: '0 0 auto',
               padding: '10px 14px',
@@ -3081,80 +3107,8 @@ export default function DashboardPage() {
         )
       })()}
 
-      {/* 所属・認定（org_membersベース） */}
-      {activeOrgs.length > 0 && (
-        <div className="bg-white rounded-xl p-5 shadow-sm mb-6">
-          <h3 className="text-sm font-bold text-[#1A1A2E] mb-3">所属・認定</h3>
-          <div className="space-y-3">
-            {activeOrgs.map(o => {
-              const typeIcon = o.org_type === 'store' ? '🏪' : o.org_type === 'credential' ? '🎓' : '📚'
-              const typeTag = o.org_type === 'store' ? '所属' : o.org_type === 'education' ? '修了' : '認定'
-              const tagBg = o.org_type === 'store' ? '#E8F4FD' : '#FFF8E7'
-              const tagColor = o.org_type === 'store' ? '#2B6CB0' : '#C4A35A'
-              return (
-                <div key={o.id} className="flex items-center py-2">
-                  <a
-                    href={`/org/${o.id}`}
-                    className="flex items-center gap-3 hover:opacity-70 transition"
-                  >
-                    {o.logo_url ? (
-                      <img src={o.logo_url} alt={o.org_name} loading="lazy" className="w-6 h-6 rounded-full object-cover" />
-                    ) : (
-                      <span className="text-lg">{typeIcon}</span>
-                    )}
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-[#1A1A2E]">{o.org_name}</span>
-                        <span style={{ fontSize: '11px', padding: '1px 6px', borderRadius: '4px', backgroundColor: tagBg, color: tagColor, fontWeight: 600 }}>
-                          {typeTag}
-                        </span>
-                      </div>
-                      {o.accepted_at && (
-                        <div className="text-xs text-gray-400">
-                          {new Date(o.accepted_at).toLocaleDateString('ja-JP')} {o.org_type === 'credential' ? 'から認定' : o.org_type === 'education' ? 'から修了' : 'から所属'}
-                        </div>
-                      )}
-                    </div>
-                  </a>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Badges */}
-      {(() => {
-        const displayBadges = filterAndSortBadges(pro?.badges || [])
-        const hasBadges = displayBadges.length > 0 || credentialBadges.length > 0
-        return hasBadges ? (
-          <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
-            <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">取得バッジ</h2>
-            <div className="flex flex-wrap justify-center gap-6">
-              {/* credential_levels経由のバッジ（新方式） */}
-              {credentialBadges.map((badge) => (
-                <a key={badge.id} href={`/dashboard?tab=myorgs#${badge.id}`} className="flex flex-col items-center hover:opacity-70 transition">
-                  {badge.image_url ? (
-                    <img src={badge.image_url} alt={badge.name} loading="lazy" className="w-16 h-16 rounded-xl object-cover" />
-                  ) : (
-                    <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-[#C4A35A] to-[#E8D5A0] flex items-center justify-center text-white text-lg font-bold">
-                      {badge.name.charAt(0)}
-                    </div>
-                  )}
-                  <span className="text-[10px] text-gray-400 mt-1">{badge.name}</span>
-                </a>
-              ))}
-              {/* pro.badges経由のバッジ（旧方式） */}
-              {displayBadges.map((badge, i) => (
-                <div key={i} className="flex flex-col items-center">
-                  <img src={badge.image_url} alt={badge.label} loading="lazy" className="w-16 h-16" />
-                  <span className="text-[10px] text-gray-400 mt-1">{badge.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null
-      })()}
+      {/* 所属・認定 / 取得バッジ は「認定・資格」タブへ移設(2026-08-06・CEO決定)。
+          ホームに置いたままだと専用タブと同じ情報が2箇所に出て、ごちゃつきの原因になっていた。 */}
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3 mb-3">
@@ -4994,8 +4948,109 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* ═══ Tab: 団体（メンバー用リソース閲覧） ═══ */}
-      {dashboardTab === 'myorgs' && hasOrgMembership && (<>
+      {/* ═══ Tab: 認定・資格 ═══
+          CEO決定(2026-08-06): 公開カードと同じく認定・資格を独立タブに。ホームにあった
+          「所属・認定」「取得バッジ」をここへ移設し、直下の団体リソースブロックと合わせて
+          「バッジ → その団体の配付資料」が1画面で繋がるようにする。 */}
+      {dashboardTab === 'certs' && (<>
+      {/* 所属・認定（org_membersベース） */}
+      {activeOrgs.length > 0 && (
+        <div className="bg-white rounded-xl p-5 shadow-sm mb-6">
+          <h3 className="text-sm font-bold text-[#1A1A2E] mb-3">所属・認定</h3>
+          <div className="space-y-3">
+            {activeOrgs.map(o => {
+              const typeIcon = o.org_type === 'store' ? '🏪' : o.org_type === 'credential' ? '🎓' : '📚'
+              const typeTag = o.org_type === 'store' ? '所属' : o.org_type === 'education' ? '修了' : '認定'
+              const tagBg = o.org_type === 'store' ? '#E8F4FD' : '#FFF8E7'
+              const tagColor = o.org_type === 'store' ? '#2B6CB0' : '#C4A35A'
+              return (
+                <div key={o.id} className="flex items-center py-2">
+                  <a
+                    href={`/org/${o.id}`}
+                    className="flex items-center gap-3 hover:opacity-70 transition"
+                  >
+                    {o.logo_url ? (
+                      <img src={o.logo_url} alt={o.org_name} loading="lazy" className="w-6 h-6 rounded-full object-cover" />
+                    ) : (
+                      <span className="text-lg">{typeIcon}</span>
+                    )}
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-[#1A1A2E]">{o.org_name}</span>
+                        <span style={{ fontSize: '11px', padding: '1px 6px', borderRadius: '4px', backgroundColor: tagBg, color: tagColor, fontWeight: 600 }}>
+                          {typeTag}
+                        </span>
+                      </div>
+                      {o.accepted_at && (
+                        <div className="text-xs text-gray-400">
+                          {new Date(o.accepted_at).toLocaleDateString('ja-JP')} {o.org_type === 'credential' ? 'から認定' : o.org_type === 'education' ? 'から修了' : 'から所属'}
+                        </div>
+                      )}
+                    </div>
+                  </a>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Badges */}
+      {(() => {
+        const displayBadges = filterAndSortBadges(pro?.badges || [])
+        const hasBadges = displayBadges.length > 0 || credentialBadges.length > 0
+        return hasBadges ? (
+          <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
+            <h2 className="text-lg font-bold text-[#1A1A2E] mb-1">取得バッジ</h2>
+            <p className="text-xs text-gray-500 mb-4">
+              バッジを押すと、その認定を持つ人だけが見られる団体の配付資料が開きます。
+            </p>
+            <div className="flex flex-wrap justify-center gap-6">
+              {/* credential_levels経由のバッジ（新方式） */}
+              {credentialBadges.map((badge) => (
+                <button
+                  key={badge.id}
+                  type="button"
+                  onClick={() => openBadgeResources(badge.id)}
+                  className="flex flex-col items-center hover:opacity-70 transition"
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                >
+                  {badge.image_url ? (
+                    <img src={badge.image_url} alt={badge.name} loading="lazy" className="w-16 h-16 rounded-xl object-cover" />
+                  ) : (
+                    <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-[#C4A35A] to-[#E8D5A0] flex items-center justify-center text-white text-lg font-bold">
+                      {badge.name.charAt(0)}
+                    </div>
+                  )}
+                  <span className="text-[10px] text-gray-400 mt-1">{badge.name}</span>
+                  {/* CEO指示: バッジが「団体の配付資料へのボタン」だと明示する。
+                      押せると分からないと誰も辿り着かないため、件数と矢印を必ず出す。 */}
+                  {(() => {
+                    const n = memberResources.filter(r => r.credential_level_id === badge.id).length
+                    return n > 0
+                      ? <span className="text-[10px] mt-1" style={{ color: '#C4A35A', fontWeight: 700 }}>配付資料 {n}件 →</span>
+                      : <span className="text-[10px] mt-1" style={{ color: '#9CA3AF' }}>配付資料なし</span>
+                  })()}
+                </button>
+              ))}
+              {/* pro.badges経由のバッジ（旧方式） */}
+              {displayBadges.map((badge, i) => (
+                <div key={i} className="flex flex-col items-center">
+                  <img src={badge.image_url} alt={badge.label} loading="lazy" className="w-16 h-16" />
+                  <span className="text-[10px] text-gray-400 mt-1">{badge.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null
+      })()}
+
+      </>)}
+
+      {/* ═══ Tab: 団体（メンバー用リソース閲覧） ═══
+          CEO決定(2026-08-06): 認定・資格タブからも同じ資料ブロックを見せる。
+          ?tab=myorgs の既存URLはそのまま生かす（クライアント(プロ未登録)もこのタブを開けるため）。 */}
+      {(dashboardTab === 'myorgs' || dashboardTab === 'certs') && hasOrgMembership && (<>
         {/* 複数団体の場合: セレクター */}
         {memberOrgs.length > 1 && (
           <div style={{ marginBottom: 16 }}>
@@ -5076,7 +5131,15 @@ export default function DashboardPage() {
           )
         })()}
 
-        {/* 共有資料セクション（バッジ別アコーディオン） */}
+        {/* 共有資料セクション（バッジ別アコーディオン）
+            CEO指示(2026-08-06): 何が見られるのかを明示する。バッジ画像だけでは
+            「押せる」「資料がある」と伝わらないため、見出しと説明文を必ず出す。 */}
+        <div style={{ marginBottom: 12 }}>
+          <h2 className="text-lg font-bold text-[#1A1A2E] mb-1">団体の配付資料</h2>
+          <p className="text-xs text-gray-500 leading-relaxed">
+            所属している団体から配られている資料です。あなたが持っている認定に応じて見られるものが変わります。
+          </p>
+        </div>
         {memberResourcesLoading ? (
           <div style={{ textAlign: 'center', padding: '40px 0' }}>
             <div className="animate-spin" style={{
