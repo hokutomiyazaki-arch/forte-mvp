@@ -27,8 +27,10 @@ const CLOSED_DAY_OPTIONS: { value: string; label: string }[] = [
   { value: 'sun', label: '日' },
 ]
 
-/** 「アクセス情報」ブロック側に属するエラーキー。これ以外は「外部リンク」ブロック側とみなす。 */
-const ACCESS_ERROR_KEYS = ['walk_minutes', 'service_formats', 'business_hours_end', 'google_maps_url']
+/** 「受付時間」ブロック側に属するエラーキー。 */
+const HOURS_ERROR_KEYS = ['business_hours_end']
+/** 「アクセス情報」ブロック側に属するエラーキー。上記2つ以外は「外部リンク」ブロック側とみなす。 */
+const ACCESS_ERROR_KEYS = ['walk_minutes', 'service_formats', 'google_maps_url']
 
 export interface AccessLinksFormPart {
   address: string
@@ -65,6 +67,7 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
   const [savedToast, setSavedToast] = useState(false)
 
   // CEO指示(2026-08-06): 項目ごとに畳めるように。既定は全て閉。
+  const [openHours, setOpenHours] = useState(false)
   const [openAccess, setOpenAccess] = useState(false)
   const [openLinks, setOpenLinks] = useState(false)
 
@@ -135,8 +138,9 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
     if (Object.keys(errs).length > 0) {
       // 畳んだままだとエラー文言が見えないので、該当するブロックを開いてから表示する
       const keys = Object.keys(errs)
+      if (keys.some(k => HOURS_ERROR_KEYS.includes(k))) setOpenHours(true)
       if (keys.some(k => ACCESS_ERROR_KEYS.includes(k))) setOpenAccess(true)
-      if (keys.some(k => !ACCESS_ERROR_KEYS.includes(k))) setOpenLinks(true)
+      if (keys.some(k => !HOURS_ERROR_KEYS.includes(k) && !ACCESS_ERROR_KEYS.includes(k))) setOpenLinks(true)
       setErrors(errs)
       return
     }
@@ -164,8 +168,79 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
   })
   const errorTextStyle = { color: '#E24B4A', fontSize: 12, marginTop: 4 }
 
+  /** 追加3(2026-08-05・CEO指示・構造化版): 受付時間(開始/終了時刻・定休日)。すべて任意。 */
+  const renderBusinessHours = () => (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 8 }}>
+        <div>
+          <label style={{ ...labelStyle, color: '#6B7280' }}>開始時刻</label>
+          <input
+            type="time"
+            value={accessLinks.business_hours_start}
+            step={1800}
+            onChange={e => setField('business_hours_start', e.target.value)}
+            style={inputStyle(false)}
+          />
+        </div>
+        <div>
+          <label style={{ ...labelStyle, color: '#6B7280' }}>終了時刻</label>
+          <input
+            type="time"
+            value={accessLinks.business_hours_end}
+            step={1800}
+            onChange={e => setField('business_hours_end', e.target.value)}
+            style={inputStyle(!!errors.business_hours_end)}
+          />
+          {errors.business_hours_end && <p style={errorTextStyle}>{errors.business_hours_end}</p>}
+        </div>
+      </div>
+      {/* 中4(レビュー指摘): 日をまたぐ深夜営業設定は現在非対応であることを明示する。 */}
+      <p style={{ fontSize: 13, color: '#9CA3AF', marginTop: -4, marginBottom: 10, lineHeight: 1.6 }}>
+        日をまたぐ設定(深夜営業)は現在非対応です。
+      </p>
+      <label style={{ ...labelStyle, color: '#6B7280' }}>定休日</label>
+      <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 8 }}>
+        {CLOSED_DAY_OPTIONS.map(opt => {
+          const checked = accessLinks.business_hours_closed_days.includes(opt.value)
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => toggleClosedDay(opt.value)}
+              style={{
+                fontSize: 13,
+                padding: '6px 12px',
+                background: checked ? '#C4A35A' : 'white',
+                color: checked ? '#1A1A2E' : '#6B7280',
+                border: `1px solid ${checked ? '#C4A35A' : '#E5E7EB'}`,
+                borderRadius: 6,
+                cursor: 'pointer',
+                fontWeight: checked ? 700 : 500,
+              }}
+            >
+              {opt.label}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+
   return (
     <>
+      {/* ── 受付時間 ──
+          CEO指摘(2026-08-06): 「受付時間はアクセス情報じゃない」。従来はアクセス情報ブロックの中に
+          置いていたが、営業している時間帯の話であってアクセス(場所への行き方)ではないため独立させた。
+          保存経路は従来どおりアクセス情報・外部リンクと同じ1回の保存にまとめている(同じフォーム状態のため)。 */}
+      <SettingsSection
+        title="受付時間"
+        description="営業している時間帯と定休日をカードページに表示します。すべて任意です。"
+        open={openHours}
+        onToggle={() => setOpenHours(v => !v)}
+      >
+        {renderBusinessHours()}
+      </SettingsSection>
+
       {/* ── アクセス情報 ── */}
       <SettingsSection
         title="アクセス情報"
@@ -255,63 +330,6 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
           })}
         </div>
         {errors.service_formats && <p style={errorTextStyle}>{errors.service_formats}</p>}
-      </div>
-
-      {/* 追加3(2026-08-05・CEO指示・構造化版): 受付時間(開始/終了時刻・定休日)。すべて任意。 */}
-      <div style={{ marginBottom: 16 }}>
-        <label style={labelStyle}>受付時間(任意)</label>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 8 }}>
-          <div>
-            <label style={{ ...labelStyle, color: '#6B7280' }}>開始時刻</label>
-            <input
-              type="time"
-              value={accessLinks.business_hours_start}
-              step={1800}
-              onChange={e => setField('business_hours_start', e.target.value)}
-              style={inputStyle(false)}
-            />
-          </div>
-          <div>
-            <label style={{ ...labelStyle, color: '#6B7280' }}>終了時刻</label>
-            <input
-              type="time"
-              value={accessLinks.business_hours_end}
-              step={1800}
-              onChange={e => setField('business_hours_end', e.target.value)}
-              style={inputStyle(!!errors.business_hours_end)}
-            />
-            {errors.business_hours_end && <p style={errorTextStyle}>{errors.business_hours_end}</p>}
-          </div>
-        </div>
-        {/* 中4(レビュー指摘): 日をまたぐ深夜営業設定は現在非対応であることを明示する。 */}
-        <p style={{ fontSize: 13, color: '#9CA3AF', marginTop: -4, marginBottom: 10, lineHeight: 1.6 }}>
-          日をまたぐ設定(深夜営業)は現在非対応です。
-        </p>
-        <label style={{ ...labelStyle, color: '#6B7280' }}>定休日</label>
-        <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 8 }}>
-          {CLOSED_DAY_OPTIONS.map(opt => {
-            const checked = accessLinks.business_hours_closed_days.includes(opt.value)
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => toggleClosedDay(opt.value)}
-                style={{
-                  fontSize: 13,
-                  padding: '6px 12px',
-                  background: checked ? '#C4A35A' : 'white',
-                  color: checked ? '#1A1A2E' : '#6B7280',
-                  border: `1px solid ${checked ? '#C4A35A' : '#E5E7EB'}`,
-                  borderRadius: 6,
-                  cursor: 'pointer',
-                  fontWeight: checked ? 700 : 500,
-                }}
-              >
-                {opt.label}
-              </button>
-            )
-          })}
-        </div>
       </div>
 
       <div style={{ marginBottom: 16 }}>
@@ -411,7 +429,7 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
 
       </SettingsSection>
 
-      {/* 保存はアクセス情報・外部リンクの両方を1回で書き込むため、アコーディオンの外に常時出す
+      {/* 保存は受付時間・アクセス情報・外部リンクを1回で書き込むため、アコーディオンの外に常時出す
           （入力値は親のフォーム状態なので、畳んでいるブロックの値もそのまま保存される） */}
       <button
         type="button"
@@ -430,7 +448,7 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
           marginBottom: 8,
         }}
       >
-        {saving ? '保存中…' : 'アクセス情報・外部リンクを保存'}
+        {saving ? '保存中…' : '受付時間・アクセス情報・外部リンクを保存'}
       </button>
 
       {savedToast && (
