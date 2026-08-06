@@ -635,6 +635,10 @@ export async function GET(request: Request) {
         // 色記号(🟢🟡🔴)を出さず、停止中のときだけ1行テキストで知らせる方針。referralSignalは
         // プロ向け専用(非プロにはnull)のため別途boolean1個だけ常に付与する(色/内部用語は漏らさない)。
         // isReferralFullyLaunched()でゲート(現在'all'以外の間は常にfalse)。
+        // Pick up（category='multi'）で「今週の急上昇」に該当した人かどうか。
+        // 見出し「今週の急上昇」が、後ろに繋げたフォールバック（おすすめ）にまで
+        // かかって見えるのを防ぐためにフロントへ渡す。multi以外では常にfalse。
+        isRising: false,
         referralClosedNotice: isReferralFullyLaunched()
           ? !isReferralReachable(
               computeReferralSignal(
@@ -679,13 +683,23 @@ export async function GET(request: Request) {
     // ソート（クエリなしの場合のみ適用）
     else if (category === 'multi') {
       // CEO指示(2026-08-06): Pick up既定表示は「今週の急上昇」= 直近7日間の確定済み
-      // proof投票(vote_type='proof'、継続記録は含めない)の件数が多い順。下限3件未達は
-      // ランキングに載せない。proofVotesは既に取得済み(status='confirmed'・対象proIds絞り)
-      // のため、追加クエリなしでJS集計する(votes全件スキャンの追加禁止・既存取得分を流用)。
+      // プルーフ記録の件数が多い順。下限3件未達はランキングに載せない。
+      // proofVotesは既に取得済み(status='confirmed'・対象proIds絞り)のため、
+      // 追加クエリなしでJS集計する(votes全件スキャンの追加禁止・既存取得分を流用)。
+      //
+      // 修正(2026-08-06・CEO報告「Pickupの表示が正しくない」):
+      //   ここだけ vote_type==='proof' に絞っており、**リピーターの記録(continuation)が
+      //   丸ごと落ちていた**。同じ週に同じ人数の記録が集まっても、常連さん中心のプロは
+      //   急上昇に載らないという歪みが出る。
+      //   「施術を受けた記録」= proof + continuation は同日にadminの日別集計でも直した定義で、
+      //   このファイル内の totalProofs / recentProofs / lastProofAt も既にその定義。
+      //   ここだけ違っていたので揃える（CLAUDE.md「vote_typeは4種」参照）。
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
       const rising7dCounts = new Map<string, number>()
       for (const vote of proofVotes || []) {
-        if (vote.vote_type !== 'proof') continue
+        // proofVotes は ['proof','continuation'] で取得済み。他のvote_typeは混ざらないが、
+        // 取得条件が変わっても壊れないよう明示的に絞る。
+        if (vote.vote_type !== 'proof' && vote.vote_type !== 'continuation') continue
         if (new Date(vote.created_at) < sevenDaysAgo) continue
         rising7dCounts.set(vote.professional_id, (rising7dCounts.get(vote.professional_id) || 0) + 1)
       }
@@ -694,6 +708,9 @@ export async function GET(request: Request) {
         .filter(p => (rising7dCounts.get(p.id) || 0) >= RISING_MIN_VOTES_7D)
         .sort((a, b) => (rising7dCounts.get(b.id) || 0) - (rising7dCounts.get(a.id) || 0))
       const risingIdSet = new Set(risingList.map(p => p.id))
+      // 見出し「今週の急上昇」がフォールバック分にまでかかって見えないよう、
+      // 該当者だけに印を付けてフロントに渡す（該当0名なら見出し自体を出さない）。
+      for (const p of risingList) p.isRising = true
 
       // フォールバック: 下限を満たすプロが少ない場合にランキングが空/薄くならないよう、
       // 既存の「おすすめ」ロジック(質フロア: 5proof以上・直近90日活動・シャッフル)を

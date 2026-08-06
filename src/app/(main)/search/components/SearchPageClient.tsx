@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { PREFECTURES } from '@/lib/prefectures'
 import { COLORS, FONTS } from '@/lib/design-tokens'
 import { TierBadge, getTierFromVotes } from '@/components/TierBadge'
@@ -95,6 +95,8 @@ interface SearchPro {
     interpersonal: { label: string; personality_label: string; votes: number } | null
     atmosphere: { label: string; personality_label: string; votes: number } | null
   } | null
+  /** Pick up で「今週の急上昇」に該当した人か（該当しない人は後ろのおすすめ枠） */
+  isRising?: boolean
   /** §2-2改訂: 4色インジケータ(🟢受付中/🟡代理案内/🔴停止中/⚪️未設定・プロ向け画面のみ) */
   referralSignal?: 'open' | 'delegate' | 'closed'
   /** CEO指摘対応(2026-08-06): クライアント向け検索カード用。色記号は出さず、受付停止時のみ1行テキストを出す
@@ -560,6 +562,18 @@ export default function SearchPageClient({
       ? professionals.filter((p) => isReferralReachable(p.referralSignal))
       : professionals
 
+  // Pick up（既定表示）の見出しと区切りの制御。
+  // 「今週の急上昇」は**実際に該当した人がいるときだけ**名乗る。該当者が0人の週は
+  // 一覧がフォールバック(おすすめ)だけになるため、見出しを出すと表示が嘘になる。
+  const isPickupDefaultView =
+    category === 'multi' && !debouncedQuery && !activeKeywordId &&
+    !(referralWriteEnabled && mineOnlyFilter) && !referralOnlyFilter
+  const showRisingHeading = isPickupDefaultView && displayedPros.some(p => p.isRising)
+  // フォールバックが始まる位置（ここで区切りを入れ、見出しの範囲を閉じる）
+  const fallbackStartIndex = showRisingHeading
+    ? displayedPros.findIndex(p => !p.isRising)
+    : -1
+
   // 🔴1レビュー指摘: 「♡ 気になる」タブON時は連携候補(private)を見ている文脈のため、
   // 追加先の選択肢からprivateリストを除外する(同じprivateリストへの再追加を構造的に防ぐ)。
   // ♡タブOFF時は従来通りprivateも選択肢に出す(「♡気になる」への保存導線)。
@@ -762,8 +776,14 @@ export default function SearchPageClient({
 
         {/* CEO指示(2026-08-06): Pick up既定表示は「今週の急上昇」順であることを明示する見出し
             (何の順で並んでいるか分からないとランダムと同じで価値が伝わらない・下限票数は内部運用のため出さない)。
-            検索/キーワード一致時や「♡気になる」表示中は並び順の説明が変わるため出さない。 */}
-        {category === 'multi' && !debouncedQuery && !activeKeywordId && !(referralWriteEnabled && mineOnlyFilter) && (
+            検索/キーワード一致時や「♡気になる」表示中は並び順の説明が変わるため出さない。
+
+            修正(2026-08-06・CEO報告「Pickupの表示が正しくない」):
+            該当者が下限に届かない週は一覧のほぼ全員がフォールバック(おすすめ)なのに、
+            この見出しだけは常に出ていたため「急上昇と書いてあるのに今週の記録が無い人が並ぶ」
+            状態になっていた。**該当者が1人もいない週は見出しを出さない**。
+            該当者がいる週も、フォールバックの手前に区切りを入れて見出しの範囲を閉じる。 */}
+        {showRisingHeading && (
           <div style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: T.dark }}>今週の急上昇</div>
             <div style={{ fontSize: 13, color: T.textMuted, marginTop: 2 }}>
@@ -840,12 +860,22 @@ export default function SearchPageClient({
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {displayedPros.map((p) => (
-                // 🟡5レビュー指摘: <a>内にbutton/selectをネストするのは不正HTML(iOS Safariで誤発火リスク)。
-                // カード全体を<div>でラップし、<a>はカード本体(従来のクリック領域)まで、
-                // 「紹介リストに追加」ボタン/選択パネルは<a>の外側の兄弟要素として配置する。
+            {displayedPros.map((p, index) => (
+              <React.Fragment key={p.id}>
+                {/* 「今週の急上昇」はここまで。以降は別の基準で並んでいるので、そう書く。
+                    区切りを入れないと、今週の記録が無い人まで急上昇として読まれてしまう。 */}
+                {index === fallbackStartIndex && (
+                  <div style={{ marginTop: 6, marginBottom: 2 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: T.dark }}>ほかにおすすめの方</div>
+                    <div style={{ fontSize: 13, color: T.textMuted, marginTop: 2 }}>
+                      これまでの実績と最近の活動から
+                    </div>
+                  </div>
+                )}
+                {/* 🟡5レビュー指摘: <a>内にbutton/selectをネストするのは不正HTML(iOS Safariで誤発火リスク)。
+                    カード全体を<div>でラップし、<a>はカード本体(従来のクリック領域)まで、
+                    「紹介リストに追加」ボタン/選択パネルは<a>の外側の兄弟要素として配置する。 */}
                 <div
-                  key={p.id}
                   style={{
                     background: T.cardBg,
                     border: `1px solid ${T.cardBorder}`, borderRadius: 14,
@@ -1128,6 +1158,7 @@ export default function SearchPageClient({
                   </div>
                 )}
                 </div>
+              </React.Fragment>
             ))}
           </div>
         )}
