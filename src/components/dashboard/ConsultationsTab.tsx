@@ -46,6 +46,9 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
   // §16-25(CEO指示 2026-08-06): 相談を受け付けるかのスイッチ。既定は受け付ける。
   const [accepting, setAccepting] = useState(true)
   const [savingAccepting, setSavingAccepting] = useState(false)
+  // §16-27-3: 提案できるメニュー（予約可能なメニューのみ）と、開いているピッカー
+  const [menus, setMenus] = useState<{ id: string; name: string; price_text: string }[]>([])
+  const [menuPickerId, setMenuPickerId] = useState<string | null>(null)
 
   async function load(archived = showArchived) {
     try {
@@ -58,6 +61,7 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
       const items: Consultation[] = Array.isArray(json.consultations) ? json.consultations : []
       setList(items)
       if (typeof json.accepting === 'boolean') setAccepting(json.accepting)
+      if (Array.isArray(json.menus)) setMenus(json.menus)
       // アーカイブ表示中の件数でバッジを上書きしない（通常一覧のときだけ報告する）
       if (!archived && onUnreadChange) onUnreadChange(items.filter(c => c.status === 'new').length)
     } catch {
@@ -125,6 +129,34 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
       setError('設定を保存できませんでした。')
     } finally {
       setSavingAccepting(false)
+    }
+  }
+
+  /** §16-27-3 相談→予約の接続。選んだメニューがカードとしてスレッドに入る。 */
+  async function proposeMenu(consultationId: string, menuId: string) {
+    if (sendingId) return
+    setSendingId(consultationId)
+    setError('')
+    setNotice('')
+    try {
+      const res = await fetch(`/api/pro/consultations/${consultationId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ menu_id: menuId }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(json.error === 'menu_not_found' ? 'このメニューは提案できません。' : '提案を送れませんでした。')
+        return
+      }
+      setMenuPickerId(null)
+      setNotice(json.delivered ? 'メニューを提案しました。' : 'メニューを提案しましたが、メールを送れませんでした。')
+      await load()
+    } catch {
+      setError('提案を送れませんでした。')
+    } finally {
+      setSendingId(null)
     }
   }
 
@@ -367,17 +399,61 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
                           対応済みにする
                         </button>
                       </div>
-                      {/* CEO指示(2026-08-06): 一覧から隠す。削除ではないので後から見返せる。 */}
-                      <button
-                        type="button"
-                        onClick={() => updateStatus(c.id, 'archived')}
-                        style={{
-                          marginTop: 10, background: 'none', border: 'none', padding: 0,
-                          fontSize: 12, color: '#9CA3AF', cursor: 'pointer', textDecoration: 'underline',
-                        }}
-                      >
-                        アーカイブする（一覧から隠す）
-                      </button>
+
+                      {/* §16-27-3 相談→予約の接続。相談で温まった人を、その場で予約に接続する。
+                          出せるのは「予約可能なメニュー」だけ（料金あり × 紹介予約を受け付ける）。
+                          0件のときはボタン自体を出さない（押しても選べないため）。 */}
+                      {menus.length > 0 && (
+                        menuPickerId === c.id ? (
+                          <div style={{
+                            marginTop: 12, background: '#fff', border: '1px solid #E5E7EB',
+                            borderRadius: 10, padding: 12,
+                          }}>
+                            <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 8 }}>
+                              提案するメニューを選んでください
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              {menus.map(menu => (
+                                <button
+                                  key={menu.id}
+                                  type="button"
+                                  onClick={() => proposeMenu(c.id, menu.id)}
+                                  disabled={sendingId === c.id}
+                                  style={{
+                                    textAlign: 'left', padding: '10px 12px', borderRadius: 8,
+                                    border: '1px solid #E5E7EB', background: '#fff', cursor: 'pointer',
+                                  }}
+                                >
+                                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1A2E' }}>{menu.name}</div>
+                                  <div style={{ fontSize: 12, color: '#C4A35A', marginTop: 2 }}>{menu.price_text}</div>
+                                </button>
+                              ))}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setMenuPickerId(null)}
+                              style={{
+                                marginTop: 10, background: 'none', border: 'none', padding: 0,
+                                fontSize: 12, color: '#9CA3AF', cursor: 'pointer',
+                              }}
+                            >
+                              やめる
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setMenuPickerId(c.id)}
+                            style={{
+                              width: '100%', marginTop: 8, padding: '12px 16px', borderRadius: 8,
+                              border: '1.5px solid #C4A35A', background: '#fff', color: '#C4A35A',
+                              fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                            }}
+                          >
+                            このメニューを提案する
+                          </button>
+                        )
+                      )}
                     </>
                   )}
 
@@ -391,6 +467,22 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
                       }}
                     >
                       {c.status === 'archived' ? '受信箱に戻す' : 'やりとりを再開する'}
+                    </button>
+                  )}
+
+                  {/* CEO報告(2026-08-06)「対応済みカードがアーカイブできない」の修正。
+                      返信ブロックの中に置いていたため、status='closed' で返信欄ごと
+                      隠れてボタンも消えていた。返信の可否と関係なく押せる位置へ出す。 */}
+                  {c.status !== 'archived' && (
+                    <button
+                      type="button"
+                      onClick={() => updateStatus(c.id, 'archived')}
+                      style={{
+                        display: 'block', marginTop: 12, background: 'none', border: 'none', padding: 0,
+                        fontSize: 12, color: '#9CA3AF', cursor: 'pointer', textDecoration: 'underline',
+                      }}
+                    >
+                      アーカイブする（一覧から隠す）
                     </button>
                   )}
                 </div>

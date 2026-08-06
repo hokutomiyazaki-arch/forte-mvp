@@ -60,8 +60,23 @@ export async function GET(request: Request) {
       .maybeSingle()
     const accepting = (settings as any)?.consultation_enabled !== false
 
+    // §16-27-3: 提案できるメニュー。「予約可能なメニュー」の既存定義に揃える
+    // （is_active × price_jpy > 0 × is_referral_bookable）。ここがズレると
+    // 提案できるのに予約できない、が起きる。
+    const { data: menus } = await supabase
+      .from('pro_menus')
+      .select('id, name, price_text, price_jpy, is_referral_bookable, is_active')
+      .eq('professional_id', ownPro.id)
+      .eq('is_active', true)
+      .order('display_order', { ascending: true })
+    const bookableMenus = (menus || [])
+      .filter((m: any) => m.is_referral_bookable === true && Number(m.price_jpy) > 0)
+      .map((m: any) => ({ id: m.id, name: m.name, price_text: m.price_text }))
+
     const list = threads || []
-    if (list.length === 0) return NextResponse.json({ consultations: [], accepting })
+    if (list.length === 0) {
+      return NextResponse.json({ consultations: [], accepting, menus: bookableMenus })
+    }
 
     // 本文は1クエリでまとめて取り、JS側でスレッドに割り当てる（N+1を作らない）
     const ids = list.map(t => t.id)
@@ -79,6 +94,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       accepting,
+      menus: bookableMenus,
       consultations: list.map(t => ({
         ...t,
         messages: byThread.get(t.id) || [],

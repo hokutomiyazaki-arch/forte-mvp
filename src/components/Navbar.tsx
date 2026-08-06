@@ -52,7 +52,7 @@ export default function Navbar() {
     discover: false,
     support: false,
   })
-  const { unreadCount, ownedOrg, hasOrgMembership, eligibleCertificationTier, referralEnabled } = useSharedData()
+  const { unreadCount, ownedOrg, hasOrgMembership, eligibleCertificationTier, referralEnabled, isFoundingMember } = useSharedData()
 
   const toggleMenuGroup = (group: string) => {
     setOpenMenuGroups(prev => ({ ...prev, [group]: !prev[group] }))
@@ -205,14 +205,34 @@ export default function Navbar() {
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       position: 'relative',
     }}>
-      {/* ロゴ */}
-      <a href="/" style={{ textDecoration: 'none' }}>
-        <span style={{
-          fontFamily: "'Inter', sans-serif",
-          fontSize: 16, fontWeight: 800,
-          color: '#FAFAF7', letterSpacing: '2px',
-        }}>REALPROOF</span>
-      </a>
+      {/* ロゴ ＋ ファウンダーバッジ
+          CEO指示(2026-08-06): バッジはダッシュボードの見出し行ではなくロゴの横へ。
+          タブやページを移動しても常に見えるうえ、上部がすっきりする。 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        <a href="/" style={{ textDecoration: 'none' }}>
+          <span style={{
+            fontFamily: "'Inter', sans-serif",
+            fontSize: 16, fontWeight: 800,
+            color: '#FAFAF7', letterSpacing: '2px',
+          }}>REALPROOF</span>
+        </a>
+        {isFoundingMember && (
+          <a
+            href="https://line.me/R/ti/g/2C5JXJyc68"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Founding Memberグループに参加"
+            style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/images/founding-member-badge.png"
+              alt="Founding Member"
+              style={{ width: 26, height: 26, objectFit: 'contain' }}
+            />
+          </a>
+        )}
+      </div>
 
       {/* 右側: UserButton + ハンバーガー */}
       <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>

@@ -7,6 +7,12 @@ export const dynamic = 'force-dynamic'
 const BODY_MAX = 2000
 /** 1スレッドの上限。無限に伸ばさない（メール往復のスレッドであってチャットではない）。 */
 const MESSAGE_LIMIT = 100
+/**
+ * §16-27-2 連投制限: プロが返信するまでにクライアントが送れる通数。
+ * 「返信が来ない→催促を重ねる→さらに返しづらくなる」の悪循環を止めるため。
+ * フロントだけで抑えるとAPI直叩きで抜けるので、ここでも必ず数える。
+ */
+const CLIENT_STREAK_LIMIT = 3
 
 /**
  * クライアント側のやりとり（§16-19）。access_token だけで開ける。
@@ -45,12 +51,35 @@ export async function GET(
 
     const { data: messages } = await supabase
       .from('consultation_messages')
-      .select('id, sender, body, created_at')
+      .select('id, sender, body, created_at, menu_id')
       .eq('consultation_id', consultation.id)
       .order('created_at', { ascending: true })
       .limit(MESSAGE_LIMIT)
 
+    const rows = messages || []
+
+    // §16-27-3: 提案されたメニューをカードとして描くための情報。
+    // menu_id カラムが未作成の環境では undefined になるだけ（fail-soft）。
+    const menuIds = Array.from(new Set(rows.map((m: any) => m.menu_id).filter(Boolean)))
+    const menuMap = new Map<string, any>()
+    if (menuIds.length > 0) {
+      const { data: menus } = await supabase
+        .from('pro_menus')
+        .select('id, name, price_text, description')
+        .in('id', menuIds)
+      for (const menu of menus || []) menuMap.set(menu.id, menu)
+    }
+
+    // §16-27-2: いま何通まで送れるかをフロントに渡す（サーバー側の判定と同じ数え方）。
+    let clientStreak = 0
+    for (let i = rows.length - 1; i >= 0; i--) {
+      if ((rows[i] as any).sender === 'pro') break
+      clientStreak++
+    }
+
     return NextResponse.json({
+      client_streak: clientStreak,
+      streak_limit: CLIENT_STREAK_LIMIT,
       consultation: {
         client_name: consultation.client_name,
         status: consultation.status,
@@ -59,7 +88,13 @@ export async function GET(
       // booking_url は公開カードにも出している情報なのでPIIではない。
       // §16-26: やりとり画面に常設する予約ボタンの遷移先に使う。
       pro: pro ? { id: pro.id, name: pro.name, photo_url: pro.photo_url, booking_url: pro.booking_url } : null,
-      messages: messages || [],
+      messages: rows.map((m: any) => ({
+        id: m.id,
+        sender: m.sender,
+        body: m.body,
+        created_at: m.created_at,
+        menu: m.menu_id ? menuMap.get(m.menu_id) || null : null,
+      })),
     })
   } catch (err) {
     console.error('[api/consultations/[token] GET] error:', err)
@@ -88,12 +123,27 @@ export async function POST(
       return NextResponse.json({ error: 'closed' }, { status: 409 })
     }
 
-    const { count } = await supabase
+    const { data: existing } = await supabase
       .from('consultation_messages')
-      .select('id', { count: 'exact', head: true })
+      .select('sender')
       .eq('consultation_id', consultation.id)
-    if ((count || 0) >= MESSAGE_LIMIT) {
+      .order('created_at', { ascending: true })
+      .limit(MESSAGE_LIMIT)
+
+    const rows = existing || []
+    if (rows.length >= MESSAGE_LIMIT) {
       return NextResponse.json({ error: 'limit_reached' }, { status: 409 })
+    }
+
+    // §16-27-2 連投制限: 最後のプロの返信より後のクライアント連投を数える。
+    // 新カラムを足さずに済む（メッセージの並びだけで決まる）。
+    let clientStreak = 0
+    for (let i = rows.length - 1; i >= 0; i--) {
+      if (rows[i].sender === 'pro') break
+      clientStreak++
+    }
+    if (clientStreak >= CLIENT_STREAK_LIMIT) {
+      return NextResponse.json({ error: 'awaiting_reply' }, { status: 429 })
     }
 
     const { error: msgError } = await supabase.from('consultation_messages').insert({

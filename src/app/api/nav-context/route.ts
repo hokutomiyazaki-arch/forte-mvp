@@ -20,6 +20,7 @@ export async function GET() {
     if (!userId) {
       return NextResponse.json({
         ownedOrg: null,
+        isFoundingMember: false,
         hasOrgMembership: false,
         eligibleCertificationTier: null,
         referralEnabled: false,
@@ -39,7 +40,8 @@ export async function GET() {
         .maybeSingle(),
       supabase
         .from('professionals')
-        .select('id')
+        // founding_member_status: ファウンダーバッジをヘッダー（ロゴ横）に出すため（CEO指示 2026-08-06）
+        .select('id, founding_member_status')
         .eq('user_id', userId)
         .maybeSingle(),
     ])
@@ -103,6 +105,7 @@ export async function GET() {
       hasOrgMembership,
       eligibleCertificationTier,
       referralEnabled: proResult.data ? isReferralEnabled(proResult.data.id) : false,
+      isFoundingMember: (proResult.data as any)?.founding_member_status === 'achieved',
     })
   } catch {
     return NextResponse.json({
@@ -110,6 +113,7 @@ export async function GET() {
       hasOrgMembership: false,
       eligibleCertificationTier: null,
       referralEnabled: false,
+      isFoundingMember: false,
     })
   }
 }

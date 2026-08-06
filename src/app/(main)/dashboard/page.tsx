@@ -2731,38 +2731,14 @@ export default function DashboardPage() {
       {/* 移動(2026-08-06・CEO指示): 代理案内の設定UI(旧DelegateCriteriaSettings直置き)は
           紹介タブ「紹介する」サブタブの先頭へ移動した(ReferralTab内でrenderする)。 */}
 
-      {/* CEO指示(2026-08-06): 主要タブ（ホーム/認定・資格/Voices/相談）の見出しは出さない。
-          どのタブにいるかはタブバー自体が示しているので「ダッシュボード」「Voices」の表記は
-          情報量がなく場所を取るだけだった。代わりに **タブを変えても常に**
-          ファウンダーバッジとアカウントのメールアドレスを出す。
-          設定画面だけは「1行目=タイトル / 2行目=左に← ホームに戻る / 3行目=設定本体」を維持し、
-          受付中トグルは設定の中では サービス設定 にだけ出す。 */}
+      {/* CEO指示(2026-08-06): 主要タブの見出し・メールアドレス・ファウンダーバッジを全て撤去。
+          - 見出し … どのタブにいるかはタブバー自体が示しているので情報量がない
+          - メール … ログイン中の顔がヘッダー右上に出ているので重複
+          - バッジ … ヘッダーのロゴ横へ移動した（Navbar.tsx）。ページを移動しても常に見える
+          残るのは受付中トグルだけ。設定画面は「1行目=タイトル / 2行目=← ホームに戻る」を維持。 */}
       {!isSettingsTab ? (
-        <div className="flex items-center justify-between mb-4" style={{ flexWrap: 'wrap' as const, gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-            {(pro as any)?.founding_member_status === 'achieved' && (
-              <a
-                href="https://line.me/R/ti/g/2C5JXJyc68"
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Founding Memberグループに参加"
-                style={{ flexShrink: 0 }}
-              >
-                <img
-                  src="/images/founding-member-badge.png"
-                  alt="Founding Member"
-                  style={{ width: 36, height: 36, objectFit: 'contain' }}
-                />
-              </a>
-            )}
-            {user?.email && (
-              <p className="text-sm text-gray-400 truncate max-w-[260px]" style={{ margin: 0 }}>
-                {user.email.startsWith('line_') && user.email.endsWith('@line.realproof.jp') ? 'LINE連携済み' : user.email}
-              </p>
-            )}
-          </div>
-          {/* 🔴1(再レビュー): allowlist内に加え、共有リストに掲載中の本人にも表示する(唯一のオプトアウト手段のため) */}
-          {pro && acceptingEditable && (
+        pro && acceptingEditable ? (
+          <div className="flex items-center justify-end mb-4">
             <AcceptingStatusWidget
               initialAcceptingStatus={pro.accepting_status ?? null}
               initialAcceptingNote={pro.accepting_note ?? null}
@@ -2773,8 +2749,8 @@ export default function DashboardPage() {
                 setPro(prev => prev ? { ...prev, accepting_status: status, accepting_note: note, delegate_list_id: delegateListId } : prev)
               }
             />
-          )}
-        </div>
+          </div>
+        ) : null
       ) : (
         <div className="mb-4">
           {/* 1行目: タイトル */}

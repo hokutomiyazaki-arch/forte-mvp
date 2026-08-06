@@ -19,12 +19,17 @@ interface Message {
   sender: string
   body: string
   created_at: string
+  /** §16-27-3: プロが提案したメニュー。null なら通常のメッセージ。 */
+  menu: { id: string; name: string; price_text: string; description: string | null } | null
 }
 
 interface ThreadData {
   consultation: { client_name: string; status: string; created_at: string }
   pro: { id: string; name: string; photo_url: string | null; booking_url: string | null } | null
   messages: Message[]
+  /** §16-27-2: 最後のプロの返信より後に、クライアントが送った通数 */
+  client_streak: number
+  streak_limit: number
 }
 
 function formatDate(iso: string): string {
@@ -41,6 +46,11 @@ export default function ConsultThread({ token }: { token: string }) {
   const [reply, setReply] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
+  // §16-27-4 通報
+  const [reportOpen, setReportOpen] = useState(false)
+  const [reportReason, setReportReason] = useState('')
+  const [reportSending, setReportSending] = useState(false)
+  const [reportDone, setReportDone] = useState(false)
 
   async function load() {
     try {
@@ -80,6 +90,8 @@ export default function ConsultThread({ token }: { token: string }) {
         setError(
           json.error === 'closed'
             ? 'このご相談は終了しています。'
+            : json.error === 'awaiting_reply'
+              ? '返信をお待ちください。'
             : json.error === 'limit_reached'
               ? 'このやりとりは上限に達しました。'
               : '送信できませんでした。時間をおいてお試しください。',
@@ -92,6 +104,30 @@ export default function ConsultThread({ token }: { token: string }) {
       setError('送信できませんでした。通信環境をご確認ください。')
     } finally {
       setSending(false)
+    }
+  }
+
+  async function sendReport() {
+    if (reportSending) return
+    setReportSending(true)
+    try {
+      const res = await fetch(`/api/consultations/${token}/report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ reason: reportReason.trim() }),
+      })
+      if (!res.ok) {
+        // 届いていないのに「受け付けました」と出さない
+        setError('通報を送信できませんでした。時間をおいてお試しください。')
+        return
+      }
+      setReportDone(true)
+      setReportOpen(false)
+    } catch {
+      setError('通報を送信できませんでした。')
+    } finally {
+      setReportSending(false)
     }
   }
 
@@ -147,6 +183,16 @@ export default function ConsultThread({ token }: { token: string }) {
         )}
       </div>
 
+      {/* §16-27-1 返信期待値の設定。
+          「返信が来ない → 不満」の連鎖を最初から断つ。スレッドの一番上に固定で置く。 */}
+      <div style={{
+        background: '#FFF8E7', border: `1px solid ${T.gold}40`, borderRadius: 12,
+        padding: '12px 14px', marginBottom: 20,
+        fontSize: 13, color: T.muted, lineHeight: 1.8,
+      }}>
+        返信は施術の合間になるため、お時間をいただくことがあります。
+      </div>
+
       {/* やりとり */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
         {data.messages.map(m => {
@@ -154,6 +200,40 @@ export default function ConsultThread({ token }: { token: string }) {
           return (
             <div key={m.id} style={{ display: 'flex', justifyContent: isPro ? 'flex-start' : 'flex-end' }}>
               <div style={{ maxWidth: '85%' }}>
+                {m.menu ? (
+                  /* §16-27-3 相談→予約の接続。提案されたメニューをカードで出し、
+                     その場で予約に進めるようにする。遷移先は §16-26 の予約ボタンと揃える
+                     （将来どちらも内部予約システムに差し替える）。 */
+                  <div style={{
+                    background: '#fff', border: `1.5px solid ${T.gold}`,
+                    borderRadius: 14, padding: 14,
+                  }}>
+                    <div style={{ fontSize: 11, color: T.gold, fontWeight: 700, marginBottom: 6 }}>
+                      おすすめのメニュー
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{m.menu.name}</div>
+                    <div style={{ fontSize: 13, color: T.gold, fontWeight: 600 }}>{m.menu.price_text}</div>
+                    {m.menu.description && (
+                      <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.7, marginTop: 8 }}>
+                        {m.menu.description}
+                      </p>
+                    )}
+                    {data.pro && (
+                      <a
+                        href={data.pro.booking_url || `/card/${data.pro.id}`}
+                        {...(data.pro.booking_url ? { target: '_blank', rel: 'noopener' } : {})}
+                        style={{
+                          display: 'block', textAlign: 'center', marginTop: 12,
+                          padding: '10px 16px', borderRadius: 10,
+                          background: T.dark, color: T.gold,
+                          fontSize: 14, fontWeight: 700, textDecoration: 'none',
+                        }}
+                      >
+                        このメニューで予約に進む
+                      </a>
+                    )}
+                  </div>
+                ) : (
                 <div style={{
                   background: isPro ? '#fff' : T.dark,
                   color: isPro ? T.dark : '#FAFAF7',
@@ -164,6 +244,7 @@ export default function ConsultThread({ token }: { token: string }) {
                 }}>
                   {m.body}
                 </div>
+                )}
                 <div style={{
                   fontSize: 11, color: T.faint, marginTop: 4,
                   textAlign: isPro ? 'left' : 'right',
@@ -181,6 +262,17 @@ export default function ConsultThread({ token }: { token: string }) {
         <p style={{ fontSize: 13, color: T.faint, textAlign: 'center', lineHeight: 1.8 }}>
           このご相談は終了しています。
         </p>
+      ) : data.client_streak >= data.streak_limit ? (
+        /* §16-27-2 連投制限。催促を重ねるほど返しづらくなるので、ここで一度止める。 */
+        <div style={{
+          background: '#fff', border: `1px solid ${T.border}`, borderRadius: 14,
+          padding: 20, textAlign: 'center',
+        }}>
+          <p style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>返信をお待ちください</p>
+          <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.8 }}>
+            {proName}さんからのお返事が届くと、また送れるようになります。
+          </p>
+        </div>
       ) : (
         <div style={{ background: '#fff', border: `1px solid ${T.border}`, borderRadius: 14, padding: 16 }}>
           <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
@@ -238,6 +330,71 @@ export default function ConsultThread({ token }: { token: string }) {
           予約する
         </a>
       )}
+
+      {/* §16-27-4 通報とプライバシー。
+          「常時見られている」息苦しさを避けつつ、記録が残る安心は担保する。
+          この文言はUIと規約の両方に出す（片方だけだと意味がない）。 */}
+      <div style={{ marginTop: 28, paddingTop: 20, borderTop: `1px solid ${T.border}` }}>
+        <p style={{ fontSize: 12, color: T.faint, lineHeight: 1.9, marginBottom: 10 }}>
+          通常、運営はチャットを閲覧しません。通報があった場合のみ確認します。
+        </p>
+
+        {reportDone ? (
+          <p style={{ fontSize: 12, color: '#2E7D32', lineHeight: 1.8 }}>
+            通報を受け付けました。運営が内容を確認します。
+          </p>
+        ) : reportOpen ? (
+          <div>
+            <textarea
+              value={reportReason}
+              maxLength={500}
+              onChange={e => setReportReason(e.target.value)}
+              rows={3}
+              placeholder="気になった点をお書きください（任意）"
+              style={{
+                width: '100%', padding: '10px 12px', fontSize: 14,
+                border: `1px solid ${T.border}`, borderRadius: 10,
+                boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.7,
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <button
+                type="button"
+                onClick={sendReport}
+                disabled={reportSending}
+                style={{
+                  flex: 1, padding: '10px 14px', borderRadius: 8, border: 'none',
+                  background: T.danger, color: '#fff', fontSize: 13, fontWeight: 700,
+                  cursor: reportSending ? 'default' : 'pointer', opacity: reportSending ? 0.6 : 1,
+                }}
+              >
+                {reportSending ? '送信中…' : '通報する'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setReportOpen(false); setReportReason('') }}
+                style={{
+                  padding: '10px 14px', borderRadius: 8, border: `1px solid ${T.border}`,
+                  background: '#fff', color: T.muted, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                やめる
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setReportOpen(true)}
+            style={{
+              background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+              fontSize: 12, color: T.faint, textDecoration: 'underline',
+            }}
+          >
+            このやりとりを通報する
+          </button>
+        )}
+      </div>
     </div>
   )
 }

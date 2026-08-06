@@ -79,7 +79,22 @@ export default function LegalPage() {
         <InfoTable rows={nfcCard} />
       </section>
 
-      <p className="text-xs text-gray-400 mt-6 text-center">最終更新日：2026年7月9日</p>
+      {/* §16-27-4（CEO指示 2026-08-06）: 相談チャットのプライバシー方針。
+          この文言はUIと規約の両方に出す。片方だけだと「書いてあるだけ」「言ってるだけ」になる。 */}
+      <section className="mt-10 mb-2">
+        <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">ご相談チャットの取り扱い</h2>
+        <p className="text-sm text-gray-600 leading-relaxed">
+          プロフェッショナルとお客様のご相談のやりとりについて、
+          <strong className="text-[#1A1A2E]">通常、運営はチャットを閲覧しません。
+          通報があった場合のみ確認します。</strong>
+          <br />
+          やりとりの内容は、トラブル発生時の確認のために記録として保存されます。
+          不適切なやりとりがあった場合は、各やりとりの画面下部にある「このやりとりを通報する」から
+          運営へお知らせください。
+        </p>
+      </section>
+
+      <p className="text-xs text-gray-400 mt-6 text-center">最終更新日：2026年8月6日</p>
     </div>
   )
 }

@@ -15,6 +15,7 @@ const ALLOWED_STATUS = ['new', 'open', 'closed', 'archived']
  * POST /api/pro/consultations/[id] — プロが返信する（§16-19）
  * body: { body }            返信を書き込む。クライアントへメールが飛ぶ
  * body: { status }          スレッドの状態だけ変える（対応済みにする等）
+ * body: { menu_id }         メニューを提案する（§16-27-3）。カードとしてスレッドに入る
  *
  * 「プロはダッシュボードで書くだけ、クライアントにはメールが届く」がこの機能の肝。
  * 送信結果は consultation_messages.delivered_at に残す（送れなかったことを後から追える）。
@@ -60,6 +61,73 @@ export async function POST(
         return NextResponse.json({ error: 'update_failed', status_value: payload.status }, { status: 500 })
       }
       return NextResponse.json({ ok: true })
+    }
+
+    // ── メニューの提案（§16-27-3 相談→予約の接続）──
+    // 相談で温まった人を、その場で予約に接続する。本文も必ず入れる
+    // （menu_id カラムが無い環境や、後からメニューが消えた場合でも会話が成立するように）。
+    if (typeof payload.menu_id === 'string' && payload.menu_id) {
+      const { data: menu } = await supabase
+        .from('pro_menus')
+        .select('id, name, price_text, professional_id, is_active')
+        .eq('id', payload.menu_id)
+        .maybeSingle()
+
+      // 他人のメニューを提案できないようにする
+      if (!menu || menu.professional_id !== ownPro.id || menu.is_active === false) {
+        return NextResponse.json({ error: 'menu_not_found' }, { status: 404 })
+      }
+
+      const text = `「${menu.name}」をご提案します（${menu.price_text}）`
+      const row: Record<string, unknown> = {
+        consultation_id: consultation.id,
+        sender: 'pro',
+        body: text,
+        menu_id: menu.id,
+      }
+
+      let insertedId: string | null = null
+      {
+        const res = await supabase.from('consultation_messages').insert(row).select('id').maybeSingle()
+        if (res.error) {
+          // fail-soft: menu_id 未作成の環境ではキーを外して普通のメッセージとして入れる
+          const { menu_id: _omit, ...withoutMenu } = row
+          const retry = await supabase.from('consultation_messages').insert(withoutMenu).select('id').maybeSingle()
+          if (retry.error || !retry.data) {
+            console.error('[api/pro/consultations POST] menu insert error:', retry.error?.message)
+            return NextResponse.json({ error: 'send_failed' }, { status: 500 })
+          }
+          insertedId = retry.data.id
+        } else {
+          insertedId = res.data?.id ?? null
+        }
+      }
+
+      await supabase
+        .from('consultations')
+        .update({ status: 'open', updated_at: new Date().toISOString() })
+        .eq('id', consultation.id)
+
+      let delivered = false
+      try {
+        delivered = await notifyClientProReplied({
+          clientEmail: consultation.client_email,
+          clientName: consultation.client_name || '',
+          proName: ownPro.name || '',
+          body: text,
+          token: consultation.access_token,
+        })
+      } catch (err) {
+        console.error('[api/pro/consultations POST] menu notify error:', err)
+      }
+      if (delivered && insertedId) {
+        await supabase
+          .from('consultation_messages')
+          .update({ delivered_at: new Date().toISOString() })
+          .eq('id', insertedId)
+      }
+
+      return NextResponse.json({ ok: true, delivered })
     }
 
     // ── 返信 ──
