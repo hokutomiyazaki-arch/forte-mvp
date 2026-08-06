@@ -632,54 +632,36 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
               {/* Phase A2: service_formats を優先しつつ、setup ウィザード経由の新規プロ(is_online_available のみ)も後方互換でカバー */}
               {(pro.service_formats?.includes('online') || pro.is_online_available) && <span style={{ marginLeft: 6, color: T.gold }}>● オンライン対応</span>}
             </div>
-            {/* §2-2改訂: 公開カードの3分岐（🟢受付中＋条件メモ／🟡代理案内あり／🔴は何も表示しない）。
-                先行テスト第3弾: NULL=openのfail-open化により、全体公開(all)前は本人未操作でも
-                🟢🟡が出てしまうため、referralFullyLaunchedでゲートする(🔴は元々何も出さない) */}
-            {referralFullyLaunched && (() => {
-              // §16-29: 訪問者にとっての「行き止まり」は**予約できないこと**なので、
-              // 代替リストの案内は予約の受付(booking_enabled)で判定する。
-              // 紹介の受付(accepting_status)はプロ同士のネットワーク用の軸で、別物。
-              const bookingClosed = (pro as any).booking_enabled === false
-              const signal = computeReferralSignal(bookingClosed ? 'closed' : 'open', !!cardData.delegateHasActiveMember)
-              if (signal === 'open') {
-                return (
-                  <div style={{ fontSize: 11, color: REFERRAL_SIGNAL_COLOR.open, marginTop: 4, lineHeight: 1.6 }}>
-                    新規のご予約を受付中
-                    {pro.accepting_note && (
-                      <span style={{ color: T.textMuted }}>（{pro.accepting_note}）</span>
-                    )}
+            {/* §16-29（CEO決定 2026-08-06）: 予約が止まっているときだけ出す。
+                - 判定軸は booking_enabled（訪問者にとっての行き止まりは「予約できないこと」）
+                - 受付中のときは**何も出さない**。大多数が受付中なので「受付中」の表示は
+                  情報量がなくノイズになる（検索カードで先に決めた方針と揃える）
+                - referralFullyLaunched のゲートを外した。これは紹介機能の段階公開のための
+                  ゲートで、予約の停止表示とは無関係。ゲートが残っていたため
+                  「予約OFFにしても代替リストが出ない」というCEO報告のバグになっていた。 */}
+            {(pro as any).booking_enabled === false && (() => {
+              const hasCandidates = !!(delegateCandidates && delegateCandidates.candidates.length > 0)
+              const isListSource = delegateCandidates?.source === 'list'
+              return (
+                <div style={{ marginTop: 4 }}>
+                  <div style={{ fontSize: 11, color: REFERRAL_SIGNAL_COLOR.delegate, lineHeight: 1.6 }}>
+                    {hasCandidates
+                      ? isListSource
+                        ? `${pro.name}さんは今ご予約を受け付けていません。信頼している先生をご案内します`
+                        : `${pro.name}さんは今ご予約を受け付けていません。同じ${delegateCandidates!.orgName}の先生をご案内します`
+                      : `${pro.name}さんは今ご予約を受け付けていません`}
                   </div>
-                )
-              }
-              if (signal === 'delegate') {
-                // §16-8+§16-14+§16-20: criteriaベースの代理案内候補が実在する場合のみ文言＋候補ブロックを
-                // 出す。0名(未算出含む・fail-soft)の場合は従来の汎用文言のみ(候補ブロックは出さない)。
-                // §16-20: source='org'は団体名入りの文言、source='list'は本人が選んだ先生という文言にする
-                // (団体の保証が無いため団体名は名乗らない)。
-                const hasCriteriaCandidates = !!(delegateCandidates && delegateCandidates.candidates.length > 0)
-                const isListSource = delegateCandidates?.source === 'list'
-                return (
-                  <div style={{ marginTop: 4 }}>
-                    <div style={{ fontSize: 11, color: REFERRAL_SIGNAL_COLOR.delegate, lineHeight: 1.6 }}>
-                      {hasCriteriaCandidates
-                        ? isListSource
-                          ? '現在は新規のご予約を受け付けていません。代わりに、私が信頼する先生をご案内できます'
-                          : `現在は新規のご予約を受け付けていません。代わりに、${delegateCandidates!.orgName}が認定したプロをご案内できます`
-                        : '現在は新規のご予約を受け付けていませんが、信頼できる先生をご案内できます'}
-                    </div>
-                    {hasCriteriaCandidates && (
-                      <DelegateCandidatesBlock
-                        source={delegateCandidates!.source}
-                        orgId={delegateCandidates!.orgId}
-                        orgName={delegateCandidates!.orgName}
-                        candidates={delegateCandidates!.candidates}
-                        excludeProId={id}
-                      />
-                    )}
-                  </div>
-                )
-              }
-              return null
+                  {hasCandidates && (
+                    <DelegateCandidatesBlock
+                      source={delegateCandidates!.source}
+                      orgId={delegateCandidates!.orgId}
+                      orgName={delegateCandidates!.orgName}
+                      candidates={delegateCandidates!.candidates}
+                      excludeProId={id}
+                    />
+                  )}
+                </div>
+              )
             })()}
             {pillOrgs.length > 0 && (
               <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>

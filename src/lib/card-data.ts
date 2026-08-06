@@ -277,6 +277,8 @@ export async function getCardData(
         id: string
         delegate_list_id?: string | null
         accepting_status?: string | null
+        // §16-29: 直接予約の受付。代理案内はこちらの軸で出す
+        booking_enabled?: boolean | null
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         delegate_criteria?: any
       }
@@ -293,10 +295,15 @@ export async function getCardData(
   const delegateCriteriaEnabled = !!(delegateCriteriaRaw && delegateCriteriaRaw.enabled === true)
   if (delegateCriteriaEnabled) delegateHasActiveMember = true
 
-  // §16-8+§16-14: 停止中(accepting_status==='closed')かつdelegate_criteria.enabledの場合のみ
-  // 代理案内候補を計算する。受付中のプロでは一切クエリしない(仕様通り)。
+  // §16-29（CEO決定 2026-08-06・判定軸の変更）: 代理案内は **予約が止まっているか**で出す。
+  // 訪問者にとっての行き止まりは「予約できないこと」であり、プロ同士の紹介ネットワークの
+  // 状態(accepting_status)ではないため。
+  // 旧: !isAcceptingOpen(accepting_status) だけを見ていたので、
+  //     「予約OFF・紹介ON」のときに候補が一切計算されず案内が出なかった（CEO報告のバグ）。
+  // 紹介が止まっている場合も従来どおり出す（どちらかが止まっていれば行き止まりになりうる）。
+  const bookingClosed = proRow?.booking_enabled === false
   let delegateCandidates: DelegateCandidatesResult | null = null
-  if (proRow && !isAcceptingOpen(proRow.accepting_status) && delegateCriteriaEnabled) {
+  if (proRow && (bookingClosed || !isAcceptingOpen(proRow.accepting_status)) && delegateCriteriaEnabled) {
     delegateCandidates = await getDelegateCandidates(supabase, {
       id: proRow.id,
       delegate_criteria: delegateCriteriaRaw,

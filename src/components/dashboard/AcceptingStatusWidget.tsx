@@ -66,8 +66,9 @@ interface Props {
 const SEGMENT_LABEL: Record<'closed' | 'open', string> = {
   // §16-29（CEO決定 2026-08-06）: このトグルは **予約の受付**（直接予約）。
   // 紹介予約の受付は紹介タブの別スイッチ（accepting_status）が持つ。
-  closed: '予約 停止中',
-  open: '予約 受付中',
+  // CEO指摘: 「予約」だけだと全部止まったように読める。RP上の予約だけだと分かる語にする。
+  closed: 'RP予約 停止中',
+  open: 'RP予約 受付中',
 }
 
 export default function AcceptingStatusWidget({
@@ -220,13 +221,15 @@ export default function AcceptingStatusWidget({
     if (target === 'closed') {
       // CEO指摘(2026-08-06): 何が止まって何が止まらないかを明記する。
       // 「受付停止」と言いながら予約ボタンが出たままなのは、書いておかないと必ず誤解される。
-      // §16-29: 何が止まって何が止まらないかを明記する。3軸あるので書かないと必ず誤解される。
+      // CEO指摘(2026-08-06):「予約が停止」と「REAL PROOF での予約を停止」は違う。
+      // プロは電話や既存の予約サイトでは受け続けているので、止まるのはRP上の導線だけ。
+      // ここを曖昧にすると「予約を止めた」と誤解して機会損失になる。
       const ok = window.confirm(
-        '予約の受付を停止しますか？\n\n'
-        + '・カードから予約ボタンが消えます\n'
-        + '・代替リストを設定していれば、代わりにその先生をご案内します\n'
-        + '・紹介の受付（紹介タブ）とご相談の受付（相談タブ）は別のスイッチです\n'
-        + '・条件メモ・案内先の設定はそのまま保持されます'
+        'REAL PROOF での予約受付を停止しますか？\n\n'
+        + '・あなたのカードから予約ボタンが消えます\n'
+        + '・電話や既存の予約サイトなど、REAL PROOF の外での予約は止まりません\n'
+        + '・案内先の先生を設定していれば、代わりにその先生をご案内します\n'
+        + '・紹介の受付（紹介タブ）とご相談の受付（相談タブ）は別のスイッチです'
       )
       if (!ok) return
     }
@@ -297,7 +300,7 @@ export default function AcceptingStatusWidget({
             color: bookingOpen ? '#1B5E20' : '#B00020',
           }}
         >
-          {bookingOpen ? SEGMENT_LABEL.open : (signal === 'delegate' ? '予約 停止中（案内中）' : SEGMENT_LABEL.closed)}
+          {bookingOpen ? SEGMENT_LABEL.open : (signal === 'delegate' ? 'RP予約 停止中（案内中）' : SEGMENT_LABEL.closed)}
         </span>
       </div>
       {toggleError && <div style={{ fontSize: 11, color: '#B00020' }}>更新に失敗しました</div>}
