@@ -73,9 +73,20 @@ export async function GET(request: Request) {
       .filter((m: any) => m.is_referral_bookable === true && Number(m.price_jpy) > 0)
       .map((m: any) => ({ id: m.id, name: m.name, price_text: m.price_text }))
 
+    // §16-35: 相談チャットから送れる紹介リスト。共有可能(private以外・slugあり)なものだけ。
+    const { data: ownLists } = await supabase
+      .from('referral_lists')
+      .select('id, title, visibility, slug')
+      .eq('owner_id', ownPro.id)
+      .neq('visibility', 'private')
+      .order('updated_at', { ascending: false })
+    const shareableLists = (ownLists || [])
+      .filter((l: any) => !!l.slug)
+      .map((l: any) => ({ id: l.id, title: l.title }))
+
     const list = threads || []
     if (list.length === 0) {
-      return NextResponse.json({ consultations: [], accepting, menus: bookableMenus })
+      return NextResponse.json({ consultations: [], accepting, menus: bookableMenus, lists: shareableLists })
     }
 
     // 本文は1クエリでまとめて取り、JS側でスレッドに割り当てる（N+1を作らない）
@@ -95,6 +106,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       accepting,
       menus: bookableMenus,
+      lists: shareableLists,
       consultations: list.map(t => ({
         ...t,
         messages: byThread.get(t.id) || [],

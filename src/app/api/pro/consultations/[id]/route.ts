@@ -17,6 +17,7 @@ const ALLOWED_STATUS = ['new', 'open', 'closed', 'archived']
  * body: { status }          スレッドの状態だけ変える（対応済みにする等）
  * body: { menu_id }         メニューを提案する（§16-27-3）。カードとしてスレッドに入る
  * body: { report_reason }   通報する（§16-27-4）。プロ側からも通報できる（お互い様の建て付け）
+ * body: { list_id }         紹介リストを送る（§16-35）。ワンクリックで紹介の実体を残す
  *
  * 「プロはダッシュボードで書くだけ、クライアントにはメールが届く」がこの機能の肝。
  * 送信結果は consultation_messages.delivered_at に残す（送れなかったことを後から追える）。
@@ -83,6 +84,73 @@ export async function POST(
         return NextResponse.json({ error: 'report_failed' }, { status: 500 })
       }
       return NextResponse.json({ ok: true })
+    }
+
+    // ── 紹介リストを送る（§16-35・CEO決定 2026-08-06）──
+    // 公開カードに一覧を出すのをやめた代わりの導線。
+    // 「◯◯さんが紹介した」という実体が残るのがこちらの価値（フロント掲載には無かったもの）。
+    if (typeof payload.list_id === 'string' && payload.list_id) {
+      const { data: list } = await supabase
+        .from('referral_lists')
+        .select('id, title, slug, visibility, owner_id')
+        .eq('id', payload.list_id)
+        .maybeSingle()
+
+      // 自分のリストで、かつ共有可能(privateでない=slugでURLが配れる)ものだけ
+      if (!list || list.owner_id !== ownPro.id || list.visibility === 'private' || !list.slug) {
+        return NextResponse.json({ error: 'list_not_found' }, { status: 404 })
+      }
+
+      const text = `「${list.title}」をお送りします。よろしければこちらの先生をご覧ください。`
+      const row: Record<string, unknown> = {
+        consultation_id: consultation.id,
+        sender: 'pro',
+        body: text,
+        list_id: list.id,
+      }
+
+      let insertedId: string | null = null
+      {
+        const res = await supabase.from('consultation_messages').insert(row).select('id').maybeSingle()
+        if (res.error) {
+          // fail-soft: list_id 未作成の環境ではキーを外して普通のメッセージとして入れる
+          const { list_id: _omit, ...withoutList } = row
+          const retry = await supabase.from('consultation_messages').insert(withoutList).select('id').maybeSingle()
+          if (retry.error || !retry.data) {
+            console.error('[api/pro/consultations POST] list insert error:', retry.error?.message)
+            return NextResponse.json({ error: 'send_failed' }, { status: 500 })
+          }
+          insertedId = retry.data.id
+        } else {
+          insertedId = res.data?.id ?? null
+        }
+      }
+
+      await supabase
+        .from('consultations')
+        .update({ status: 'open', updated_at: new Date().toISOString() })
+        .eq('id', consultation.id)
+
+      let delivered = false
+      try {
+        delivered = await notifyClientProReplied({
+          clientEmail: consultation.client_email,
+          clientName: consultation.client_name || '',
+          proName: ownPro.name || '',
+          body: text,
+          token: consultation.access_token,
+        })
+      } catch (err) {
+        console.error('[api/pro/consultations POST] list notify error:', err)
+      }
+      if (delivered && insertedId) {
+        await supabase
+          .from('consultation_messages')
+          .update({ delivered_at: new Date().toISOString() })
+          .eq('id', insertedId)
+      }
+
+      return NextResponse.json({ ok: true, delivered })
     }
 
     // ── メニューの提案（§16-27-3 相談→予約の接続）──

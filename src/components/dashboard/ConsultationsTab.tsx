@@ -49,6 +49,9 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
   // §16-27-3: 提案できるメニュー（予約可能なメニューのみ）と、開いているピッカー
   const [menus, setMenus] = useState<{ id: string; name: string; price_text: string }[]>([])
   const [menuPickerId, setMenuPickerId] = useState<string | null>(null)
+  // §16-35: 相談チャットから送れる紹介リスト。公開カードに一覧を出すのをやめた代わりの導線。
+  const [lists, setLists] = useState<{ id: string; title: string }[]>([])
+  const [listPickerId, setListPickerId] = useState<string | null>(null)
   // §16-27-4: 通報はプロ側からも（CEO指摘「お互いに必要」）。理由は必須にしてハードルを上げる。
   const [reportId, setReportId] = useState<string | null>(null)
   const [reportReason, setReportReason] = useState('')
@@ -66,6 +69,7 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
       setList(items)
       if (typeof json.accepting === 'boolean') setAccepting(json.accepting)
       if (Array.isArray(json.menus)) setMenus(json.menus)
+      if (Array.isArray(json.lists)) setLists(json.lists)
       // アーカイブ表示中の件数でバッジを上書きしない（通常一覧のときだけ報告する）
       if (!archived && onUnreadChange) onUnreadChange(items.filter(c => c.status === 'new').length)
     } catch {
@@ -159,6 +163,34 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
       await load()
     } catch {
       setError('提案を送れませんでした。')
+    } finally {
+      setSendingId(null)
+    }
+  }
+
+  /** §16-35 紹介リストを送る。ワンクリックで「◯◯さんが紹介した」実体を残す。 */
+  async function sendList(consultationId: string, listId: string) {
+    if (sendingId) return
+    setSendingId(consultationId)
+    setError('')
+    setNotice('')
+    try {
+      const res = await fetch(`/api/pro/consultations/${consultationId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ list_id: listId }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(json.error === 'list_not_found' ? 'このリストは送れません。' : 'リストを送れませんでした。')
+        return
+      }
+      setListPickerId(null)
+      setNotice(json.delivered ? '紹介リストを送りました。' : '紹介リストを送りましたが、メールを送れませんでした。')
+      await load()
+    } catch {
+      setError('リストを送れませんでした。')
     } finally {
       setSendingId(null)
     }
@@ -481,6 +513,62 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
                             }}
                           >
                             このメニューを提案する
+                          </button>
+                        )
+                      )}
+
+                      {/* §16-35 紹介リストを送る（CEO決定 2026-08-06）。
+                          公開カードに一覧を出すのをやめた代わりの導線。
+                          こちらは「◯◯さんが紹介した」という実体が残るので、ちゃんと紹介になる。
+                          共有可能なリストが無い人にはボタンを出さない（押しても選べないため）。 */}
+                      {lists.length > 0 && (
+                        listPickerId === c.id ? (
+                          <div style={{
+                            marginTop: 8, background: '#fff', border: '1px solid #E5E7EB',
+                            borderRadius: 10, padding: 12,
+                          }}>
+                            <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 8 }}>
+                              送る紹介リストを選んでください
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              {lists.map(l => (
+                                <button
+                                  key={l.id}
+                                  type="button"
+                                  onClick={() => sendList(c.id, l.id)}
+                                  disabled={sendingId === c.id}
+                                  style={{
+                                    textAlign: 'left', padding: '10px 12px', borderRadius: 8,
+                                    border: '1px solid #E5E7EB', background: '#fff', cursor: 'pointer',
+                                    fontSize: 13, fontWeight: 700, color: '#1A1A2E',
+                                  }}
+                                >
+                                  {l.title}
+                                </button>
+                              ))}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setListPickerId(null)}
+                              style={{
+                                marginTop: 10, background: 'none', border: 'none', padding: 0,
+                                fontSize: 12, color: '#9CA3AF', cursor: 'pointer',
+                              }}
+                            >
+                              やめる
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setListPickerId(c.id)}
+                            style={{
+                              width: '100%', marginTop: 8, padding: '12px 16px', borderRadius: 8,
+                              border: '1.5px solid #1A1A2E', background: '#fff', color: '#1A1A2E',
+                              fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                            }}
+                          >
+                            紹介リストを送る
                           </button>
                         )
                       )}

@@ -21,6 +21,8 @@ interface Message {
   created_at: string
   /** §16-27-3: プロが提案したメニュー。null なら通常のメッセージ。 */
   menu: { id: string; name: string; price_text: string; description: string | null } | null
+  /** §16-35: プロが送った紹介リスト。null なら通常のメッセージ。 */
+  list: { id: string; title: string; comment: string | null; slug: string } | null
 }
 
 interface ThreadData {
@@ -202,7 +204,35 @@ export default function ConsultThread({ token }: { token: string }) {
           return (
             <div key={m.id} style={{ display: 'flex', justifyContent: isPro ? 'flex-start' : 'flex-end' }}>
               <div style={{ maxWidth: '85%' }}>
-                {m.menu ? (
+                {m.list ? (
+                  /* §16-35 紹介リスト。公開カードに一覧を出すのをやめた代わりの導線。
+                     プロが「この人たちをどうぞ」と手渡す形なので、紹介の実体が残る。 */
+                  <div style={{
+                    background: '#fff', border: `1.5px solid ${T.dark}`,
+                    borderRadius: 14, padding: 14,
+                  }}>
+                    <div style={{ fontSize: 11, color: T.muted, fontWeight: 700, marginBottom: 6 }}>
+                      {proName}さんからのご紹介
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{m.list.title}</div>
+                    {m.list.comment && (
+                      <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.7, marginTop: 6 }}>
+                        {m.list.comment}
+                      </p>
+                    )}
+                    <a
+                      href={`/r/${m.list.slug}`}
+                      style={{
+                        display: 'block', textAlign: 'center', marginTop: 12,
+                        padding: '10px 16px', borderRadius: 10,
+                        background: T.dark, color: T.gold,
+                        fontSize: 14, fontWeight: 700, textDecoration: 'none',
+                      }}
+                    >
+                      紹介された先生を見る
+                    </a>
+                  </div>
+                ) : m.menu ? (
                   /* §16-27-3 相談→予約の接続。提案されたメニューをカードで出し、
                      その場で予約に進めるようにする。遷移先は §16-26 の予約ボタンと揃える
                      （将来どちらも内部予約システムに差し替える）。 */

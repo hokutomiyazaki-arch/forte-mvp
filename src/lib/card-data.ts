@@ -295,6 +295,20 @@ export async function getCardData(
   const delegateCriteriaEnabled = !!(delegateCriteriaRaw && delegateCriteriaRaw.enabled === true)
   if (delegateCriteriaEnabled) delegateHasActiveMember = true
 
+  // §16-34（CEO決定 2026-08-06・重要な方針転換）:
+  // 公開カードに候補一覧を出せるのは **団体オーナーだけ**に限定する。
+  // 理由: 誰でもフロントに一覧を出せると、クライアントはそこから勝手に選んでしまい
+  // **紹介が「誰の紹介でもない」ものになる**（紹介の実体も記録も残らず、紹介機能が死ぬ）。
+  // オーナー以外が人を回したい場合は、相談チャットから自分の紹介リストを送る（§16-35）。
+  // そちらは「◯◯さんが紹介した」という実体が残る。
+  const { data: ownedOrgRow } = await supabase
+    .from('organizations')
+    .select('id')
+    .eq('owner_id', (proResult.data as any)?.user_id || '')
+    .limit(1)
+    .maybeSingle()
+  const isOrgOwner = !!ownedOrgRow
+
   // §16-29（CEO決定 2026-08-06・判定軸の変更）: 代理案内は **予約が止まっているか**で出す。
   // 訪問者にとっての行き止まりは「予約できないこと」であり、プロ同士の紹介ネットワークの
   // 状態(accepting_status)ではないため。
@@ -303,7 +317,7 @@ export async function getCardData(
   // 紹介が止まっている場合も従来どおり出す（どちらかが止まっていれば行き止まりになりうる）。
   const bookingClosed = proRow?.booking_enabled === false
   let delegateCandidates: DelegateCandidatesResult | null = null
-  if (proRow && (bookingClosed || !isAcceptingOpen(proRow.accepting_status)) && delegateCriteriaEnabled) {
+  if (proRow && isOrgOwner && (bookingClosed || !isAcceptingOpen(proRow.accepting_status)) && delegateCriteriaEnabled) {
     delegateCandidates = await getDelegateCandidates(supabase, {
       id: proRow.id,
       delegate_criteria: delegateCriteriaRaw,

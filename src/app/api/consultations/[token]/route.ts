@@ -51,7 +51,7 @@ export async function GET(
 
     const { data: messages } = await supabase
       .from('consultation_messages')
-      .select('id, sender, body, created_at, menu_id')
+      .select('id, sender, body, created_at, menu_id, list_id')
       .eq('consultation_id', consultation.id)
       .order('created_at', { ascending: true })
       .limit(MESSAGE_LIMIT)
@@ -60,6 +60,17 @@ export async function GET(
 
     // §16-27-3: 提案されたメニューをカードとして描くための情報。
     // menu_id カラムが未作成の環境では undefined になるだけ（fail-soft）。
+    // §16-35: プロが送った紹介リスト。カードにして「見る」導線を出す。
+    const listIds = Array.from(new Set(rows.map((m: any) => m.list_id).filter(Boolean)))
+    const listMap = new Map<string, any>()
+    if (listIds.length > 0) {
+      const { data: lists } = await supabase
+        .from('referral_lists')
+        .select('id, title, comment, slug')
+        .in('id', listIds)
+      for (const l of lists || []) listMap.set(l.id, l)
+    }
+
     const menuIds = Array.from(new Set(rows.map((m: any) => m.menu_id).filter(Boolean)))
     const menuMap = new Map<string, any>()
     if (menuIds.length > 0) {
@@ -94,6 +105,7 @@ export async function GET(
         body: m.body,
         created_at: m.created_at,
         menu: m.menu_id ? menuMap.get(m.menu_id) || null : null,
+        list: m.list_id ? listMap.get(m.list_id) || null : null,
       })),
     })
   } catch (err) {
