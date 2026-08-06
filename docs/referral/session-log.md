@@ -529,3 +529,10 @@
 ### 記録: 決済テストは完走済み（CEO確認・2026-08-06）
 - CEO報告「決済テストはすでに何回も通した。Stripeはテスト環境」。CCが手順書§Fで前提としていた「一度も完走していない」（CEOの指示文中の記述に基づく）は誤りとして訂正。決済の配管（確定→決済案内→支払い→成立）は動作確認済みとして扱う。
 - ただし REFERRAL_STRIPE_WEBHOOK_SECRET 未設定の件は未解消（payment-returnのフォールバックで通っていた可能性が高い）。本番化時に要登録。
+
+### 実装: 返金・争議の検知で送金を自動停止 — 2026-08-06（CEO最優先指示・5e351e2）
+- 前回報告した「完了後の返金で送金が止まらない」穴を閉塞。**REFERRAL_STRIPE_WEBHOOK_SECRET 未設定でも動く方式**を選択：送金実行の直前にStripeへ1回問い合わせ（PaymentIntent→latest_charge の refunded/amount_refunded/disputed）、検知したら送金せず referral_payouts を cancelled・payment_status を refunded に更新。webhookハンドラ（charge.refunded / charge.dispute.created）も副軸として追加（シークレット登録後に有効）。
+- DDL不要（payment_status/payouts.status はいずれもCHECK制約なしの運用管理値・'refunded'/'cancelled' は既存機能で使用済みの値）。冪等はnoteのマーカー＋CAS更新で担保。既存の二重送金防止は非接触。
+- 送金済み後の返金は自動回収せず note とCRITICALログのみ（回収手段がないため・運用が気づけるように）。
+- 【CEO決定】代理経由は自作リストも含め**報酬なしで統一**。ただし受け手の予約リストに「◯◯さんからの紹介リスト経由」と経路を表示する（§16-21）。実装時は経路を明示カラム（booking_source等）で持ち、暗黙判定に頼らない。
+- 【重要な前提更新・CEO明言】**X-day（一般公開日）はとっくに過ぎている**。「X-day前に対応」と記録した項目は全て今すぐ着手対象として扱う（/api/storage の権限穴・検索の35,000プロ規模破綻など）。メモリ [[referral-launch-checklist]] にも反映済み。
