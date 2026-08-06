@@ -23,7 +23,7 @@ interface Message {
 
 interface ThreadData {
   consultation: { client_name: string; status: string; created_at: string }
-  pro: { id: string; name: string; photo_url: string | null } | null
+  pro: { id: string; name: string; photo_url: string | null; booking_url: string | null } | null
   messages: Message[]
 }
 
@@ -217,6 +217,26 @@ export default function ConsultThread({ token }: { token: string }) {
             {sending ? '送信中…' : '送る'}
           </button>
         </div>
+      )}
+
+      {/* 予約導線（§16-26・CEO指示 2026-08-06）
+          相談の途中で「じゃあ予約しよう」となった人を行き止まりにしないため、
+          やりとりが終了していても**常に**出す。
+          ⚠️ 遷移先は暫定。将来この予約リンクは**内部の予約システム**に差し替える（CEOメモ）。
+          いまは プロの booking_url（外部）、未設定ならカードページ（予約・連絡先が載っている）。 */}
+      {data.pro && (
+        <a
+          href={data.pro.booking_url || `/card/${data.pro.id}`}
+          {...(data.pro.booking_url ? { target: '_blank', rel: 'noopener' } : {})}
+          style={{
+            display: 'block', textAlign: 'center', marginTop: 16,
+            padding: 14, borderRadius: 10,
+            background: 'transparent', border: `1.5px solid ${T.dark}`, color: T.dark,
+            fontSize: 15, fontWeight: 700, textDecoration: 'none',
+          }}
+        >
+          予約する
+        </a>
       )}
     </div>
   )
