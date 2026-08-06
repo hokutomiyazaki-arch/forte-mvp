@@ -20,10 +20,21 @@
 export type ReferralSignal = 'open' | 'delegate' | 'closed'
 
 /**
- * fail-open判定: 'closed' のときだけ false。NULL/undefined/想定外の値は全て true(受付中)。
+ * §16-18（CEO決定・2026-08-06）: 「紹介からの予約は受け付けない」副オプション。
+ * 新規カラムを追加せず、DB CHECK制約に既にある未使用の 'conditional' 値を
+ * 「直接のみ受付＝紹介は停止」の意味として割り当てる（DDL不要）。
+ * このファイルの isAcceptingOpen / computeReferralSignal は「紹介として reachableか」の
+ * 判定に一元的に使われる（ピン追加・紹介予約・検索の🟢フィルタ・代理案内の点灯判定 等）ため、
+ * 'conditional' は 'closed' と同じ扱いにする。直接予約は未実装のため、直接予約向けの
+ * 判定はここでは分岐を用意しない（実装時にこの関数とは別の判定を追加する）。
+ */
+
+/**
+ * fail-open判定: 'closed' または 'conditional'(紹介のみ停止)のときだけ false。
+ * NULL/undefined/想定外の値は全て true(受付中)。
  */
 export function isAcceptingOpen(status: string | null | undefined): boolean {
-  return status !== 'closed'
+  return status !== 'closed' && status !== 'conditional'
 }
 
 /**
@@ -48,12 +59,16 @@ export function isReferralReachable(signal: ReferralSignal | null | undefined): 
  *
  * 先行テスト第3弾: ⚪️未設定を廃止したため、status が null/undefined の場合も 'open' を返す
  * (isAcceptingOpen と同じfail-open判定に統一)。
+ *
+ * §16-18: 'conditional'(紹介のみ停止・直接は継続)は紹介ネットワークの観点では 'closed' と
+ * 区別しない(他のプロ・訪問者から見て「紹介できるか」は同じNo)。有効な代理案内があれば🟡、
+ * 無ければ🔴。4色目は増やさない(CEO指示)。
  */
 export function computeReferralSignal(
   status: string | null | undefined,
   hasValidDelegate: boolean
 ): ReferralSignal {
-  if (status === 'closed') return hasValidDelegate ? 'delegate' : 'closed'
+  if (status === 'closed' || status === 'conditional') return hasValidDelegate ? 'delegate' : 'closed'
   return 'open'
 }
 

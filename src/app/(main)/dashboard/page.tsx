@@ -2589,9 +2589,10 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* §16-8+§16-14: 代理案内の設定UI。founder/instructor限定(delegateEligibleOrgsが0件なら
-          コンポーネント自体が何も描画しない)。 */}
-      {pro && acceptingEditable && delegateEligibleOrgs.length > 0 && (
+      {/* §16-8+§16-14+§16-20: 代理案内の設定UI。団体自動抽出(founder/instructor限定)に加え、
+          §16-20で「自分のリストから」を全プロに開放したため、delegateEligibleOrgsが0件でも
+          レンダーする(コンポーネント側が選ぶものが無い時のみ自己非表示する)。 */}
+      {pro && acceptingEditable && referralEnabled && (
         <DelegateCriteriaSettings
           orgs={delegateEligibleOrgs.map(o => ({ organizationId: o.organizationId, organizationName: o.organizationName, role: o.role }))}
           initialCriteria={pro.delegate_criteria ?? null}
@@ -5070,6 +5071,12 @@ export default function DashboardPage() {
               subtab={referralSubtab}
               onCompletedCountChange={handleReferralCompletedStatus}
               onSentStatusChange={handleReferralSentStatus}
+              acceptingStatus={pro.accepting_status ?? null}
+              acceptingNote={pro.accepting_note ?? null}
+              delegateCriteria={pro.delegate_criteria ?? null}
+              onDelegateCriteriaUpdated={(criteria) =>
+                setPro(prev => prev ? { ...prev, delegate_criteria: criteria } : prev)
+              }
             />
           )}
           {!referralEnabled && (referralSubtab === 'send' || referralSubtab === 'cases') && (

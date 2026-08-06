@@ -117,6 +117,24 @@ export async function DELETE(
       return NextResponse.json({ error: 'failed_to_delete' }, { status: 500 })
     }
 
+    // §16-20: professionals.delegate_criteria(jsonb)がこのリストをmode='list'で指している場合、
+    // FK制約は無いためエラーにはならないが、削除後は「代理案内ON+存在しないリスト」の空約束が
+    // 残ってしまう(getDelegateCandidates側はfail-softでnullを返すが、本人はONのまま気づけない)。
+    // delegate_criteria.list_idが一致する本人だけをJSで特定し、無効化する。
+    const { data: pointingPros } = await supabase
+      .from('professionals')
+      .select('id, delegate_criteria')
+      .eq('delegate_criteria->>list_id', params.list_id)
+    for (const p of (pointingPros || []) as Array<{ id: string; delegate_criteria: unknown }>) {
+      const { error: criteriaUnlinkError } = await supabase
+        .from('professionals')
+        .update({ delegate_criteria: { enabled: false, mode: 'list', list_id: null, min_support_records: null } })
+        .eq('id', p.id)
+      if (criteriaUnlinkError) {
+        console.error('[api/referral/lists/[list_id]] DELETE delegate_criteria unlink error:', criteriaUnlinkError)
+      }
+    }
+
     const { error } = await supabase
       .from('referral_lists')
       .delete()

@@ -10,6 +10,9 @@
  * 「他のお悩みで探す」検索窓を置く(上に置くと質問ゼロの利点が消えるため)。検索範囲は
  * この団体(orgId)の受付中の認定者に限定する(全プロ検索にしない・専用API /api/referral/delegate-search)。
  *
+ * §16-20: 案内元が自作リスト(source='list')の場合は団体スコープが無いため、この検索窓自体を
+ * 出さない(全プロ検索にすると「本人が選んだ」という保証が消えるため。orgId/orgNameはnull)。
+ *
  * §16-12: 代理経由は決済なし・報酬なしのリクエスト制。既存の紹介予約API
  * (POST /api/referral/bookings)は referral_lists の list_id 必須で criteria単体の
  * この経路にはまだ対応していないため、本フェーズは「プロフィールを見る」リンクのみに留める
@@ -23,8 +26,10 @@ import type { DelegateCandidatePro } from '@/lib/referral-delegate-criteria'
 const T = { ...COLORS, font: FONTS.main }
 
 interface Props {
-  orgId: string
-  orgName: string
+  /** §16-20: 'org'=団体からの自動抽出／'list'=本人の自作リスト。検索窓の出し分けに使う。 */
+  source: 'org' | 'list'
+  orgId: string | null
+  orgName: string | null
   candidates: DelegateCandidatePro[]
   /** 停止中プロ本人(このカードの主)。検索結果から誤って自分自身を出さないため除外する */
   excludeProId: string
@@ -76,7 +81,7 @@ function CandidateRow({ c }: { c: DelegateCandidatePro }) {
   )
 }
 
-export function DelegateCandidatesBlock({ orgId, orgName, candidates, excludeProId }: Props) {
+export function DelegateCandidatesBlock({ source, orgId, orgName, candidates, excludeProId }: Props) {
   // §16-14: 地域は任意のプルダウン(初期は絞り込みなし)。再フェッチせずクライアント側フィルタのみ。
   const [areaFilter, setAreaFilter] = useState('')
 
@@ -90,7 +95,9 @@ export function DelegateCandidatesBlock({ orgId, orgName, candidates, excludePro
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     const q = searchQuery.trim()
-    if (!q) {
+    // §16-20: source='list'は団体スコープが無いため検索窓自体を出さない(JSX側でも非表示)が、
+    // 依存配列がプリミティブのみのため念のためここでもorgId無しなら実行しない(fail-safe)。
+    if (!q || !orgId) {
       setSearchResults([])
       setSearching(false)
       setSearched(false)
@@ -166,46 +173,52 @@ export function DelegateCandidatesBlock({ orgId, orgName, candidates, excludePro
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {filtered.map((c) => <CandidateRow key={c.proId} c={c} />)}
       </div>
-      <div style={{ fontSize: 10, color: T.textMuted, marginTop: 6, fontFamily: T.font }}>
-        {orgName}の受付中の先生をご案内しています
-      </div>
-
-      {/* §16-15: 候補リストの「下」に置く検索窓(主役は自動抽出。ラベルは小さく) */}
-      <div style={{ marginTop: 14 }}>
-        <div style={{ fontSize: 11, color: T.textMuted, marginBottom: 4, fontFamily: T.font }}>
-          他のお悩みで探す
+      {/* §16-20: source='org'のときだけ団体名の帰属表示(自作リストには団体の保証が無い) */}
+      {source === 'org' && orgName && (
+        <div style={{ fontSize: 10, color: T.textMuted, marginTop: 6, fontFamily: T.font }}>
+          {orgName}の受付中の先生をご案内しています
         </div>
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder={`${orgName}の受付中の認定者を検索`}
-          style={{
-            width: '100%',
-            fontSize: 12,
-            color: T.text,
-            background: '#fff',
-            border: `1px solid ${T.cardBorder}`,
-            borderRadius: 8,
-            padding: '8px 10px',
-            fontFamily: T.font,
-            boxSizing: 'border-box' as const,
-          }}
-        />
-        {searching && (
-          <div style={{ fontSize: 11, color: T.textMuted, marginTop: 6, fontFamily: T.font }}>検索中…</div>
-        )}
-        {!searching && searched && searchResults.length === 0 && (
-          <div style={{ fontSize: 11, color: T.textMuted, marginTop: 6, fontFamily: T.font }}>
-            該当する認定者が見つかりませんでした
+      )}
+
+      {/* §16-15+§16-20: 「他のお悩みで探す」検索窓は団体スコープ(source='org')のときだけ出す。
+          自作リスト(source='list')は全プロ検索にすると「本人が選んだ」保証が消えるため出さない。 */}
+      {source === 'org' && orgId && orgName && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ fontSize: 11, color: T.textMuted, marginBottom: 4, fontFamily: T.font }}>
+            他のお悩みで探す
           </div>
-        )}
-        {!searching && searchResults.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
-            {searchResults.map((c) => <CandidateRow key={c.proId} c={c} />)}
-          </div>
-        )}
-      </div>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={`${orgName}の受付中の認定者を検索`}
+            style={{
+              width: '100%',
+              fontSize: 12,
+              color: T.text,
+              background: '#fff',
+              border: `1px solid ${T.cardBorder}`,
+              borderRadius: 8,
+              padding: '8px 10px',
+              fontFamily: T.font,
+              boxSizing: 'border-box' as const,
+            }}
+          />
+          {searching && (
+            <div style={{ fontSize: 11, color: T.textMuted, marginTop: 6, fontFamily: T.font }}>検索中…</div>
+          )}
+          {!searching && searched && searchResults.length === 0 && (
+            <div style={{ fontSize: 11, color: T.textMuted, marginTop: 6, fontFamily: T.font }}>
+              該当する認定者が見つかりませんでした
+            </div>
+          )}
+          {!searching && searchResults.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+              {searchResults.map((c) => <CandidateRow key={c.proId} c={c} />)}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

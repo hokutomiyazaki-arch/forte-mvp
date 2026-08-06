@@ -108,6 +108,16 @@ const SHARE_ORIGIN = 'https://realproof.jp'
 // §3-0-2(第3弾): 「追加」操作の中で新しいリストを作る選択を表す番兵値(実在するlist idと衝突しない固定文字列)
 const NEW_LIST_SENTINEL = '__new_list__'
 
+/** §16-20: delegate_criteriaの型(referral-delegate-criteria.tsのDelegateCriteriaと同じ形)。
+ * ReferralTab側は保存操作(mode='list'固定)のみ行うため、ここでは独自に最小限の型を持つ。 */
+interface DelegateCriteria {
+  enabled: boolean
+  mode?: 'org' | 'list'
+  org_id?: string | null
+  list_id?: string | null
+  min_support_records: number | null
+}
+
 interface Props {
   proId: string
   /** CEO指示(2026-08-04・IA再変更): サブタブ「受ける/する/紹介した案件」の3つのうちどれを
@@ -120,9 +130,24 @@ interface Props {
   /** CEO指示(2026-08-04・IA再変更): 「紹介した案件」タブの件数バッジ(進行中=requested/confirmed)・
    * 空状態判定用に、送り手側の集計を親へ通知する。 */
   onSentStatusChange?: (info: { activeCount: number; totalCount: number; loaded: boolean }) => void
+  /** §16-20: 各リストカードの「代理案内に使う」チェックボックスの保存に使う。PATCH
+   * /api/referral/accepting は accepting_status が常に必須のため現在値を同送する。 */
+  acceptingStatus?: 'open' | 'closed' | 'conditional' | null
+  acceptingNote?: string | null
+  delegateCriteria?: DelegateCriteria | null
+  onDelegateCriteriaUpdated?: (criteria: DelegateCriteria) => void
 }
 
-export default function ReferralTab({ proId, subtab, onCompletedCountChange, onSentStatusChange }: Props) {
+export default function ReferralTab({
+  proId,
+  subtab,
+  onCompletedCountChange,
+  onSentStatusChange,
+  acceptingStatus,
+  acceptingNote,
+  delegateCriteria,
+  onDelegateCriteriaUpdated,
+}: Props) {
   // リスト一覧
   const [lists, setLists] = useState<ReferralList[]>([])
   const [listsLoading, setListsLoading] = useState(true)
@@ -200,6 +225,43 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null)
   // CEO指摘(先行テスト・UI修正②): クライアントに共有するURLをQRコード表示するモーダル(listId単位)
   const [qrModalListId, setQrModalListId] = useState<string | null>(null)
+
+  // §16-20: 各リストカードの「代理案内に使う」チェックボックス。delegate_criteria.list_idは
+  // 単数のため、ONにすると自然に他のリストのチェックはOFFになる(排他はサーバー側の値そのもの)。
+  const [delegateListSaving, setDelegateListSaving] = useState(false)
+  const [delegateListError, setDelegateListError] = useState<string | null>(null)
+
+  async function toggleDelegateList(listId: string, checked: boolean) {
+    setDelegateListSaving(true)
+    setDelegateListError(null)
+    try {
+      const criteria = {
+        enabled: checked,
+        mode: 'list' as const,
+        list_id: checked ? listId : null,
+        min_support_records: null,
+      }
+      const res = await fetch('/api/referral/accepting', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({
+          accepting_status: acceptingStatus ?? 'open',
+          accepting_note: acceptingNote ?? null,
+          delegate_criteria: criteria,
+        }),
+      })
+      if (res.ok) {
+        onDelegateCriteriaUpdated?.(criteria)
+      } else {
+        setDelegateListError('保存に失敗しました')
+      }
+    } catch {
+      setDelegateListError('保存に失敗しました')
+    } finally {
+      setDelegateListSaving(false)
+    }
+  }
 
   // §2-9: RP外のプロを招待するフォーム（リストごとに名前入力・発行済みURLを保持）
   const [inviteName, setInviteName] = useState<Record<string, string>>({})
@@ -1085,6 +1147,29 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
             削除
           </button>
         </div>
+
+        {/* §16-20: 「代理案内に使う」。共有リスト(private以外)のみ・選べるのは1リストのみ
+            (delegate_criteria.list_idが単数のため、ONにすると他のリストは自然にOFFになる)。 */}
+        {!isPrivate && (
+          <div style={{ marginBottom: 10 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#1A1A2E', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={delegateCriteria?.enabled === true && delegateCriteria?.mode === 'list' && delegateCriteria?.list_id === list.id}
+                disabled={delegateListSaving}
+                onChange={(e) => toggleDelegateList(list.id, e.target.checked)}
+                style={{ width: 14, height: 14 }}
+              />
+              代理案内に使う
+            </label>
+            <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2, lineHeight: 1.6 }}>
+              あなたが停止中の間、公開カードに来た訪問者をこのリストの受付中の先生へご案内します
+            </div>
+            {delegateListError && (
+              <div style={{ fontSize: 11, color: '#B00020', marginTop: 2 }}>{delegateListError}</div>
+            )}
+          </div>
+        )}
 
         {/* ピン一覧 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>

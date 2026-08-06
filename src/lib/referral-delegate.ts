@@ -44,11 +44,12 @@ export async function getValidDelegateListIds(
 
   const proIds = Array.from(new Set(rows.map((r) => r.pro_id)))
   // §2-2改訂(先行テスト第3弾・fail-open): NULL(未設定)も受付中として扱う。closedのみ除外。
+  // §16-18追記: 'conditional'(紹介のみ停止)もisAcceptingOpenと同じ判定基準で除外する。
   const { data: openPros, error: prosError } = await supabase
     .from('professionals')
     .select('id')
     .in('id', proIds)
-    .or('accepting_status.is.null,accepting_status.neq.closed')
+    .or('accepting_status.is.null,and(accepting_status.neq.closed,accepting_status.neq.conditional)')
     .is('deactivated_at', null)
 
   if (prosError) {

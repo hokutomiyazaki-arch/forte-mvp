@@ -45,15 +45,23 @@ export interface Professional {
   deactivated_at: string | null
   created_at: string
   updated_at: string
-  // リフェラル §2-2: 受け入れステータス（先行テストのフィードバックにより2値+3色表示に再設計。
-  // DB CHECK制約は 'open'|'conditional'|'closed' のままだが実データ0件のためアプリは2値のみ扱う）
-  accepting_status?: 'open' | 'closed' | null
+  // リフェラル §2-2: 受け入れステータス（先行テストのフィードバックにより2値+3色表示に再設計）。
+  // §16-18(CEO決定・2026-08-06): 'conditional'は「紹介からの予約は受け付けない」副オプションON時の
+  // 値(直接は継続・紹介のみ停止)。新規カラムを追加せずDB CHECK制約の既存未使用値を割り当てた。
+  accepting_status?: 'open' | 'closed' | 'conditional' | null
   accepting_note?: string | null
   accepting_updated_at?: string | null
   delegate_list_id?: string | null
-  // §16-8+§16-14: 停止中プロの公開カードで案内する代理候補の抽出設定(migration 047未実行の
-  // 環境ではundefined・fail-soft)。強みは自動算出のため保存しない。
-  delegate_criteria?: { enabled: boolean; org_id: string | null; min_support_records: number | null } | null
+  // §16-8+§16-14+§16-20: 停止中プロの公開カードで案内する代理候補の抽出設定(migration 047未実行の
+  // 環境ではundefined・fail-soft)。mode='org'は団体自動抽出(強みは自動算出のため保存しない)、
+  // mode='list'は自作リストから固定の顔ぶれ(§16-20)。mode未指定は既存データの後方互換として'org'扱い。
+  delegate_criteria?: {
+    enabled: boolean
+    mode?: 'org' | 'list'
+    org_id?: string | null
+    list_id?: string | null
+    min_support_records: number | null
+  } | null
   // §15-3(2026-08-05: サービス・案内タブから自己紹介ブロック直下へ移設・CEO指示): 写真(最大6枚)・
   // 紹介動画(YouTube)。カラム未作成環境ではundefined(fail-soft)。
   gallery_image_urls?: string[] | null

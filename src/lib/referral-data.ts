@@ -359,6 +359,7 @@ export async function getDistinctSupporterCounts(
  *     指定時のみ votes をページネーション走査して算出する（軽量パス維持のため未指定時はこのクエリ自体を実行しない）
  * §2-2改訂(先行テスト第3弾・fail-open): accepting_status='closed' のプロのみ常に静かに除外する
  * (NULLはopenとして含める。accepting_onlyの値に関わらず)。
+ * §16-18追記: 'conditional'(紹介のみ停止)も同様に除外する(isAcceptingOpenと同じ判定に揃える)。
  */
 async function findCriteriaMatches(
   supabase: SupabaseAdmin,
@@ -368,11 +369,12 @@ async function findCriteriaMatches(
 ): Promise<string[]> {
   // §2-2改訂: 2値化により「常に除外」と「accepting_onlyのみ絞る」が同一条件になったため、
   // ベースクエリで一度だけ「closedでない」を条件にする(accepting_onlyの値に関わらず結果は変わらない)。
+  // §16-18: 'conditional'(紹介のみ停止)もここで除外する(isAcceptingOpenと同じ判定基準)。
   let query = supabase
     .from('professionals')
     .select('id')
     .is('deactivated_at', null)
-    .or('accepting_status.is.null,accepting_status.neq.closed')
+    .or('accepting_status.is.null,and(accepting_status.neq.closed,accepting_status.neq.conditional)')
 
   if (criteria.area?.prefecture) {
     query = query.eq('prefecture', criteria.area.prefecture)

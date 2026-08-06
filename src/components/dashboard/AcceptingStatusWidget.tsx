@@ -46,10 +46,11 @@ interface OwnList {
 }
 
 interface Props {
-  initialAcceptingStatus: 'open' | 'closed' | null
+  // §16-18(CEO決定・2026-08-06): 'conditional'は副オプション「紹介からの予約は受け付けない」ON時の値
+  initialAcceptingStatus: 'open' | 'closed' | 'conditional' | null
   initialAcceptingNote: string | null
   initialDelegateListId: string | null
-  onUpdated: (status: 'open' | 'closed', note: string | null, delegateListId: string | null) => void
+  onUpdated: (status: 'open' | 'closed' | 'conditional', note: string | null, delegateListId: string | null) => void
   /** 軽微指摘: allowlist外プロ(referralEnabled=false)では代理リスト機能(🟡)がまだ実行不能なため、
    * 🟡セグメントをdisabledにし誘導文を差し替える。既存呼び出しを壊さないようオプショナル+デフォルトtrue。 */
   canManageLists?: boolean
@@ -76,7 +77,9 @@ export default function AcceptingStatusWidget({
 }: Props) {
   // 先行テスト第3弾: DB上のNULLはそのまま保持するが、表示・分岐は effectiveStatus (下記) で
   // 'open' に丸める(PATCH送信時のみ明示値を送るため、stateそのものはnull保持で問題ない)。
-  const [status, setStatus] = useState<'open' | 'closed' | null>(initialAcceptingStatus)
+  // §16-18: 'conditional'(紹介のみ停止)もスライダー上は'open'側として丸める(メインの2値トグル自体は
+  // 変更しない・下の副オプションで区別する)。
+  const [status, setStatus] = useState<'open' | 'closed' | 'conditional' | null>(initialAcceptingStatus)
   const [note, setNote] = useState(initialAcceptingNote || '')
   // 🟡6レビュー指摘: 最後に保存された値を保持し、onBlurで未変更ならPATCHを送らない
   // (NULLユーザーがtextareaにフォーカスしただけで accepting_status='open' が明示値として書かれる事故防止)
@@ -104,7 +107,10 @@ export default function AcceptingStatusWidget({
   }, [])
 
   // 先行テスト第3弾: NULL(未設定)は'open'として扱う(fail-open)。UI分岐は全てこの値を使う。
-  const effectiveStatus: 'open' | 'closed' = status ?? 'open'
+  // §16-18: 'conditional'もスライダーの見た目は'open'側(メインの2値トグルは不変。副オプションで区別)。
+  const effectiveStatus: 'open' | 'closed' = status === 'closed' ? 'closed' : 'open'
+  // §16-18: 副オプション「紹介からの予約は受け付けない」の現在値
+  const referralPaused = status === 'conditional'
 
   // 自分の共有可能なリスト(private以外)を一覧取得しておく。🟡選択時の有効判定に必要なため
   // 現在のステータスに関わらず一度だけ読み込む。
@@ -139,7 +145,7 @@ export default function AcceptingStatusWidget({
   const signal = computeReferralSignal(status, hasValidDelegate)
 
   // 明示的なPATCH。delegateListId を渡した時のみ delegate_list_id を更新する(未指定なら現状維持)。
-  async function commitStatus(next: 'open' | 'closed', delegateOpt?: string | null) {
+  async function commitStatus(next: 'open' | 'closed' | 'conditional', delegateOpt?: string | null) {
     if (toggling) return
     setToggling(true)
     setToggleError(false)
@@ -204,6 +210,13 @@ export default function AcceptingStatusWidget({
     }
   }
 
+  // §16-18(CEO決定・2026-08-06): 副オプション「紹介からの予約は受け付けない」。
+  // ON→accepting_status='conditional'(直接は継続・紹介のみ停止)、OFF→'open'に戻す。
+  // メインのスライダーはこのUIから見た目上変化しない(effectiveStatusが'open'に丸めているため)。
+  async function toggleReferralPaused(checked: boolean) {
+    await commitStatus(checked ? 'conditional' : 'open')
+  }
+
   // §2-2: 保存ボタン押下時のみPATCHを送る(onBlur自動保存は廃止)。
   // NULL(未設定)ユーザーが触っただけで accepting_status が確定する事故を防ぐため、
   // 未変更なら通信せず編集モードを閉じるだけにする(dirtyチェックは維持)。
@@ -215,15 +228,19 @@ export default function AcceptingStatusWidget({
     setSavingNote(true)
     setNoteError(false)
     try {
+      // §16-18: effectiveStatusは表示用に'conditional'を'open'へ丸めた値のため、PATCHには
+      // 実際のstatus(conditionalならconditionalのまま)を送る。丸めた値を送ると
+      // 条件メモの保存だけで「紹介からの予約は受け付けない」が解除されてしまう事故になる。
+      const statusToSend = status ?? 'open'
       const res = await fetch('/api/referral/accepting', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
-        body: JSON.stringify({ accepting_status: effectiveStatus, accepting_note: note }),
+        body: JSON.stringify({ accepting_status: statusToSend, accepting_note: note }),
       })
       if (res.ok) {
         setSavedNote(note)
-        onUpdated(effectiveStatus, note || null, delegateListId)
+        onUpdated(statusToSend, note || null, delegateListId)
         setNoteEditing(false)
         setJustSaved(true)
         if (justSavedTimeoutRef.current) clearTimeout(justSavedTimeoutRef.current)
@@ -284,6 +301,31 @@ export default function AcceptingStatusWidget({
         ))}
       </div>
       {toggleError && <div style={{ fontSize: 11, color: '#B00020' }}>更新に失敗しました</div>}
+
+      {/* §16-18(CEO決定・2026-08-06): 副オプション「紹介からの予約は受け付けない」。
+          メインが🟢(受付中)の間だけ意味を持つ(🔴の間は既に紹介・直接とも停止済みのため出さない)。
+          ONの間はaccepting_status='conditional'として保存する(新規カラムは追加しない)。 */}
+      {effectiveStatus === 'open' && (
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#1A1A2E', cursor: toggling ? 'default' : 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={referralPaused}
+            disabled={toggling}
+            onChange={(e) => toggleReferralPaused(e.target.checked)}
+            style={{ width: 14, height: 14 }}
+          />
+          紹介からの予約は受け付けない
+        </label>
+      )}
+
+      {/* §16-18: 'conditional'かつ有効な代理案内が無い間(signal==='closed')は、メインのスライダーが
+          🟢のまま見えるため「紹介は止まっている」ことを明示するキャプションを別途出す
+          (下のsignal==='delegate'ブロックがあればそちらが優先的に案内先を伝える)。 */}
+      {referralPaused && signal !== 'delegate' && (
+        <div style={{ fontSize: 11, color: '#8A6D00', lineHeight: 1.6 }}>
+          紹介からの予約は停止中です（直接のご相談は受け付けています）
+        </div>
+      )}
 
       {/* §16-7改訂: 現在🟡(closed+有効な代理あり)状態のとき、🔴側を押すと案内(delegate_list_id)が
           消えると誤解されないよう補足する。commitStatusはdelegate_list_idに触れない実装のため、

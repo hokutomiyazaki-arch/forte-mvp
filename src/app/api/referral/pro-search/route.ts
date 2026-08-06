@@ -58,9 +58,12 @@ export async function GET(request: NextRequest) {
     // 1名以上」に厳格化したため、ここで拾った delegate_list_id 設定済みだが無効(空/全員停止中)な
     // 候補は下のisReferralReachableによる最終絞りで正しく除外される(有効性はwithSignalで判定)。
     // 先行テスト第3弾(fail-open): accepting_status IS NULL も受付中として含める。
+    // §16-18追記: 'conditional'(紹介のみ停止)はここでも広めの候補に含めない(最終絞りは
+    // isReferralReachable/computeReferralSignalで行うため必須ではないが、DB側の粗い絞りも
+    // 判定基準を揃えておく)。
     if (referralOnly) {
       dbQuery = dbQuery.or(
-        'accepting_status.is.null,accepting_status.neq.closed,delegate_list_id.not.is.null'
+        'accepting_status.is.null,and(accepting_status.neq.closed,accepting_status.neq.conditional),delegate_list_id.not.is.null'
       )
     }
 

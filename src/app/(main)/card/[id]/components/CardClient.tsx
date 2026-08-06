@@ -643,18 +643,24 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
                 )
               }
               if (signal === 'delegate') {
-                // §16-8+§16-14: criteriaベースの代理案内候補が実在する場合のみ団体名入りの文言＋
-                // 候補ブロックを出す。0名(未算出含む・fail-soft)の場合は従来の汎用文言のみ(候補ブロックは出さない)。
+                // §16-8+§16-14+§16-20: criteriaベースの代理案内候補が実在する場合のみ文言＋候補ブロックを
+                // 出す。0名(未算出含む・fail-soft)の場合は従来の汎用文言のみ(候補ブロックは出さない)。
+                // §16-20: source='org'は団体名入りの文言、source='list'は本人が選んだ先生という文言にする
+                // (団体の保証が無いため団体名は名乗らない)。
                 const hasCriteriaCandidates = !!(delegateCandidates && delegateCandidates.candidates.length > 0)
+                const isListSource = delegateCandidates?.source === 'list'
                 return (
                   <div style={{ marginTop: 4 }}>
                     <div style={{ fontSize: 11, color: REFERRAL_SIGNAL_COLOR.delegate, lineHeight: 1.6 }}>
                       {hasCriteriaCandidates
-                        ? `現在は新規のご紹介を受け付けていません。代わりに、${delegateCandidates!.orgName}が認定したプロをご案内できます`
+                        ? isListSource
+                          ? '現在は新規のご紹介を受け付けていません。代わりに、私が信頼する先生をご案内できます'
+                          : `現在は新規のご紹介を受け付けていません。代わりに、${delegateCandidates!.orgName}が認定したプロをご案内できます`
                         : '現在は新規のご紹介を受け付けていませんが、信頼できる先生をご案内できます'}
                     </div>
                     {hasCriteriaCandidates && (
                       <DelegateCandidatesBlock
+                        source={delegateCandidates!.source}
                         orgId={delegateCandidates!.orgId}
                         orgName={delegateCandidates!.orgName}
                         candidates={delegateCandidates!.candidates}
