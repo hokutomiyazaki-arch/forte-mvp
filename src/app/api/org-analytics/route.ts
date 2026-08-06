@@ -144,12 +144,16 @@ export async function GET(request: NextRequest) {
         .select('id, tab, strength_label'),
 
       // 最新コメント
+      // 修正(2026-08-06・CEO指示): 未確認票のコメントまで出していた。公開カードのVoices
+      // (card-data.ts)は status='confirmed' で絞っており、そこに揃える。削除済みも除外。
       supabase
         .from('votes')
         .select('comment, created_at, professional_id')
         .in('professional_id', memberProIds)
+        .eq('status', 'confirmed')
         .not('comment', 'is', null)
         .neq('comment', '')
+        .neq('comment', '[deleted]')
         .order('created_at', { ascending: false })
         .limit(20),
 

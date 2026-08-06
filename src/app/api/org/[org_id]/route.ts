@@ -62,8 +62,15 @@ export async function GET(
     // votes_last_30_days は org_aggregate 側が `COUNT(v.id) FILTER(...)`（DISTINCT無し）で
     // LEFT JOIN しているため、同一プロが団体内で複数バッジ(=org_membersに複数active行、
     // 例: advance/master/TBU同時保持)を持つと二重・三重カウントされ得る(JS側は
-    // professionalIds が重複排除済みSetなので1回だけ数える)。数値を変えないため、
-    // ここだけは従来どおりJSで計算する。
+    // professionalIds が重複排除済みSetなので1回だけ数える)。そのためここはJSで計算する。
+    // ※ migration 049 でVIEW側にもDISTINCTを入れたので将来はVIEWに寄せられるが、
+    //   置き換えは数値の出どころを変える変更なので別タスクにする。
+    //
+    // 修正(2026-08-06・CEO指示): 「プルーフ数」の定義を /api/vote-count に揃える。
+    // 従来は status も vote_type も絞らない生カウントで、未確認票・期待票(hopeful)・
+    // 人柄のみ(personality_only)まで数えていた。continuation(2回目以降=リピーターの記録)は
+    // 施術を受けた記録なので必ず含める(同日のadmin集計事故と同じ穴を作らない)。
+    const PROOF_VOTE_TYPES = ['proof', 'continuation']
     let recentVotes = 0
     if (professionalIds.length > 0) {
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
@@ -71,6 +78,8 @@ export async function GET(
         .from('votes')
         .select('id', { count: 'exact', head: true })
         .in('professional_id', professionalIds)
+        .eq('status', 'confirmed')
+        .in('vote_type', PROOF_VOTE_TYPES)
         .gte('created_at', thirtyDaysAgo)
       recentVotes = count || 0
     }
@@ -96,6 +105,8 @@ export async function GET(
     // 共通ヘルパー(IN句100件チャンク+range()ページネーション)で全件取得する。
     let votesMap = new Map<string, number>()
     if (professionalIds.length > 0) {
+      // 修正(2026-08-06・CEO指示): メンバー別の投票数も「プルーフ数」の新定義に揃える
+      // （confirmed かつ proof/continuation。上の recentVotes と同じ条件）。
       const votesPerPro = await selectInChunks<{ id: string; professional_id: string }>(
         professionalIds,
         (chunkIds, from, to) =>
@@ -103,6 +114,8 @@ export async function GET(
             .from('votes')
             .select('id, professional_id')
             .in('professional_id', chunkIds)
+            .eq('status', 'confirmed')
+            .in('vote_type', PROOF_VOTE_TYPES)
             .order('id', { ascending: true })
             .range(from, to)
       )
@@ -308,12 +321,18 @@ export async function GET(
     // 最新コメント取得（professional_idベースで直接、org_members JOINなし）
     let recentComments: any[] = []
     if (professionalIds.length > 0) {
+      // 修正(2026-08-06・CEO指示): 未確認票のコメントまで出していた。
+      // 公開カードのVoices(card-data.ts)は status='confirmed' で絞っており、
+      // 「団体ダッシュボードには出るのに他には出ない」ズレの原因になっていた。
+      // 削除済みコメントの除外も公開カードに揃える。
       const { data: commentsRaw } = await supabase
         .from('votes')
         .select('comment, professional_id, created_at')
         .in('professional_id', professionalIds)
+        .eq('status', 'confirmed')
         .not('comment', 'is', null)
         .neq('comment', '')
+        .neq('comment', '[deleted]')
         .order('created_at', { ascending: false })
         .limit(4)
 
