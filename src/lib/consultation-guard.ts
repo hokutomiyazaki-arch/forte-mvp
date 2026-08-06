@@ -25,12 +25,19 @@ export const MAX_PER_EMAIL_PER_HOUR = 5
 /** 1人のプロが1時間に受け取る相談数の上限。特定のプロを狙った攻撃の被害を抑える。 */
 export const MAX_PER_PRO_PER_HOUR = 20
 
-export type GuardVerdict =
-  | { ok: true }
+/**
+ * 判定結果。
+ * ⚠️ 判別可能ユニオン（{ok:true} | {ok:false,...}）にはしない。
+ *    このプロジェクトは tsconfig が `strict: false`（strictNullChecks なし）のため
+ *    `if (!verdict.ok)` で絞り込みが効かず、ビルドが落ちる。
+ */
+export interface GuardVerdict {
+  ok: boolean
   /** ボット確定。攻撃者に検知を悟らせないため、呼び出し側は 200 を返して黙って捨てる。 */
-  | { ok: false; silent: true }
-  /** 人間かもしれないので理由を返す。 */
-  | { ok: false; silent: false; error: string }
+  silent?: boolean
+  /** 人間かもしれない場合に返す理由コード。 */
+  error?: string
+}
 
 interface GuardInput {
   /** ハニーポット。画面に出ない入力欄で、埋まっていたらボット。 */
