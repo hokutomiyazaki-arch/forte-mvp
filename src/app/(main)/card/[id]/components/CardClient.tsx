@@ -26,6 +26,7 @@ import { VoiceCommentCard } from '@/components/card/VoiceCommentCard'
 import { PersonalityPodium } from '@/components/card/PersonalityPodium'
 import type { VoiceComment, Supporter } from '@/components/card/types'
 import { computeReferralSignal, REFERRAL_SIGNAL_COLOR } from '@/lib/referral-accepting'
+import { DelegateCandidatesBlock } from '@/components/card/DelegateCandidatesBlock'
 import { GalleryCarousel } from '@/components/card/GalleryCarousel'
 import { YouTubeEmbed } from '@/components/card/YouTubeEmbed'
 import { resolveCharacterImageUrl } from '@/lib/character-image'
@@ -238,6 +239,8 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
   const hasMenus = menus.length > 0
   // §2-5 育成プルーフ: 主宰(founder)/指導者(instructor)本人ページのみ非nullで渡ってくる(fail-soft・card-data.ts参照)
   const growthCards = cardData.growthCards || null
+  // §16-8+§16-14: 停止中プロの公開カードのみ非nullで渡ってくる(fail-soft・card-data.ts参照)
+  const delegateCandidates = cardData.delegateCandidates || null
   // その団体だけは既存ピルでなく役割行(団体名＋役割バッジ＋認定者数＋団体ページを見る→)で表示するため、
   // 下のピル一覧からは除外する(役割は排他ではないため他団体のピルは維持)。
   const growthOrgIds = new Set((growthCards || []).map(g => g.organizationId))
@@ -640,12 +643,19 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
                 )
               }
               if (signal === 'delegate') {
+                // §16-8+§16-14: criteriaベースの代理案内候補が実在する場合のみ団体名入りの文言＋
+                // 候補ブロックを出す。0名(未算出含む・fail-soft)の場合は従来の汎用文言のみ(候補ブロックは出さない)。
+                const hasCriteriaCandidates = !!(delegateCandidates && delegateCandidates.candidates.length > 0)
                 return (
-                  <div style={{ fontSize: 11, color: REFERRAL_SIGNAL_COLOR.delegate, marginTop: 4, lineHeight: 1.6 }}>
-                    現在は新規のご紹介を受け付けていませんが、信頼できる先生をご案内できます
-                    {/* TODO(§16-8・代理リスト再設計): ここに絞り込み2問(地域／お困りごと)＋
-                        最大4名の候補ブロックを差し込む。criteria(org_id/area/themes/accepting_only/
-                        min_support_records)ベースで動的選抜。本フェーズ(B-3)では文言維持のみ。 */}
+                  <div style={{ marginTop: 4 }}>
+                    <div style={{ fontSize: 11, color: REFERRAL_SIGNAL_COLOR.delegate, lineHeight: 1.6 }}>
+                      {hasCriteriaCandidates
+                        ? `現在は新規のご紹介を受け付けていません。代わりに、${delegateCandidates!.orgName}が認定したプロをご案内できます`
+                        : '現在は新規のご紹介を受け付けていませんが、信頼できる先生をご案内できます'}
+                    </div>
+                    {hasCriteriaCandidates && (
+                      <DelegateCandidatesBlock orgName={delegateCandidates!.orgName} candidates={delegateCandidates!.candidates} />
+                    )}
                   </div>
                 )
               }

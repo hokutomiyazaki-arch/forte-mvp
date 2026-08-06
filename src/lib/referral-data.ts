@@ -305,7 +305,11 @@ export interface Criteria {
  * 表示側(findCriteriaMatchesの並び順)・検証側(verifyReceiverAllowedInList)の
  * 両方から呼び、二重実装しない。
  */
-async function getDistinctSupporterCounts(
+/**
+ * export化(§16-14): src/lib/referral-delegate-criteria.ts の停止中プロ公開カード向け
+ * 代理案内(min_support_records判定)からも共有する。二重実装を避けるため元の実装は変更しない。
+ */
+export async function getDistinctSupporterCounts(
   supabase: SupabaseAdmin,
   proIds: string[]
 ): Promise<Record<string, number>> {

@@ -3,6 +3,7 @@ import { auth, currentUser } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { isReferralEnabled } from '@/lib/feature-flags'
 import { isPinnedOnSharedList } from '@/lib/referral-auth'
+import { getFounderInstructorOrgs } from '@/lib/org-role'
 
 export const dynamic = 'force-dynamic'
 
@@ -229,6 +230,10 @@ export async function GET() {
     ])
 
     if (isDev) console.log('[Dashboard API] Phase 2 done:', Date.now() - startTime, 'ms')
+
+    // §16-8+§16-14: 代理案内の設定UIはfounder(団体オーナー)/instructor限定で表示する。
+    // 既存のPromise.allのarityを崩さないよう、個別クエリとして追加する(fail-soft: エラー時は[])。
+    const delegateEligibleOrgs = await getFounderInstructorOrgs(supabase, proId, userId)
 
     // ────────────────────────────────────────
     // votes データ整形: 総数 + コメント付きを抽出 + voter_pro / voter_vote_count 付与
@@ -467,6 +472,8 @@ export async function GET() {
       acceptingEditable: isReferralEnabled(proId) || pinnedOnSharedList,
       // メニュー未設定プロの予約穴の閉塞(2026-08-05・CEO指示): 受付中バナーの表示ゲート用
       hasBookableReferralMenu: (bookableMenuCountResult.count || 0) > 0,
+      // §16-8+§16-14: 代理案内の設定UI(founder/instructor限定)の表示ゲート・団体選択の選択肢用
+      delegateEligibleOrgs,
     })
   } catch (err: any) {
     console.error('[api/dashboard] error:', err)

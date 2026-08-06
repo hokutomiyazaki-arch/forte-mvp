@@ -29,6 +29,7 @@ import BusinessInfoTab from '@/components/dashboard/BusinessInfoTab'
 import MediaSection from '@/components/dashboard/MediaSection'
 import ReferralTab from '@/components/dashboard/ReferralTab'
 import AcceptingStatusWidget from '@/components/dashboard/AcceptingStatusWidget'
+import DelegateCriteriaSettings from '@/components/dashboard/DelegateCriteriaSettings'
 import ReferralBookingReceivedCard from '@/components/dashboard/ReferralBookingReceivedCard'
 import ReferralActionBanner from '@/components/dashboard/ReferralActionBanner'
 import { createClient as createSupabaseClient } from '@/lib/supabase'
@@ -412,6 +413,11 @@ export default function DashboardPage() {
   // メニュー未設定プロの予約穴の閉塞(2026-08-05・CEO指示): 予約可能な有料メニューが1件でもあるか
   // (受付中バナーの表示ゲート用)
   const [hasBookableReferralMenu, setHasBookableReferralMenu] = useState(false)
+  // §16-8+§16-14: 代理案内の設定UI(founder/instructor限定)。自分がfounder/instructorを
+  // 務める団体の一覧(0件なら設定UI自体を出さない)。
+  const [delegateEligibleOrgs, setDelegateEligibleOrgs] = useState<
+    Array<{ organizationId: string; organizationName: string; organizationType: string | null; role: 'founder' | 'instructor' }>
+  >([])
 
   // CEO指示(2026-08-04・IA再変更): 紹介タブのサブタブを「受ける/する/紹介した案件」の3つに。
   // requestedが1件以上あれば「受ける」、なければlocalStorageの前回選択、初回は「する」がデフォルト。
@@ -695,6 +701,8 @@ export default function DashboardPage() {
         setAcceptingEditable(!!data.acceptingEditable)
         // メニュー未設定プロの予約穴の閉塞: 予約可能な有料メニューが1件でもあるか
         setHasBookableReferralMenu(!!data.hasBookableReferralMenu)
+        // §16-8+§16-14: 代理案内の設定UI(founder/instructor限定)
+        setDelegateEligibleOrgs(Array.isArray(data.delegateEligibleOrgs) ? data.delegateEligibleOrgs : [])
 
         setForm({
           name: proData.name || '',
@@ -2577,6 +2585,20 @@ export default function DashboardPage() {
           hasBookableMenu={hasBookableReferralMenu}
           onUpdated={(status, note, delegateListId) =>
             setPro(prev => prev ? { ...prev, accepting_status: status, accepting_note: note, delegate_list_id: delegateListId } : prev)
+          }
+        />
+      )}
+
+      {/* §16-8+§16-14: 代理案内の設定UI。founder/instructor限定(delegateEligibleOrgsが0件なら
+          コンポーネント自体が何も描画しない)。 */}
+      {pro && acceptingEditable && delegateEligibleOrgs.length > 0 && (
+        <DelegateCriteriaSettings
+          orgs={delegateEligibleOrgs.map(o => ({ organizationId: o.organizationId, organizationName: o.organizationName, role: o.role }))}
+          initialCriteria={pro.delegate_criteria ?? null}
+          currentAcceptingStatus={pro.accepting_status ?? null}
+          currentAcceptingNote={pro.accepting_note ?? null}
+          onUpdated={(criteria) =>
+            setPro(prev => prev ? { ...prev, delegate_criteria: criteria } : prev)
           }
         />
       )}

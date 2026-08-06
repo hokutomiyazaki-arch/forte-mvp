@@ -51,6 +51,9 @@ export interface Professional {
   accepting_note?: string | null
   accepting_updated_at?: string | null
   delegate_list_id?: string | null
+  // §16-8+§16-14: 停止中プロの公開カードで案内する代理候補の抽出設定(migration 047未実行の
+  // 環境ではundefined・fail-soft)。強みは自動算出のため保存しない。
+  delegate_criteria?: { enabled: boolean; org_id: string | null; min_support_records: number | null } | null
   // §15-3(2026-08-05: サービス・案内タブから自己紹介ブロック直下へ移設・CEO指示): 写真(最大6枚)・
   // 紹介動画(YouTube)。カラム未作成環境ではundefined(fail-soft)。
   gallery_image_urls?: string[] | null

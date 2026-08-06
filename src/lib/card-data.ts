@@ -14,6 +14,9 @@
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { getValidDelegateListIds } from '@/lib/referral-delegate'
 import { isOrgCardEnabled } from '@/lib/feature-flags'
+import { getFounderInstructorOrgs } from '@/lib/org-role'
+import { getDelegateCandidates, type DelegateCandidatesResult } from '@/lib/referral-delegate-criteria'
+import { isAcceptingOpen } from '@/lib/referral-accepting'
 
 // ─── 内部型 ───
 interface VoteWithVoterPro {
@@ -118,7 +121,8 @@ export interface CardData {
   uniqueVoters?: number
   /** 常連(新定義): 同一プロへconfirmed票3票以上 かつ 初回投票から最新投票まで90日以上（既存getVoterLevelとは別計算） */
   regular90Count?: number
-  /** §2-2改訂: pro.delegate_list_id が「有効な代理リスト」(承諾済み+受付中のメンバーが1名以上)かどうか。
+  /** §2-2改訂: pro.delegate_list_id が「有効な代理リスト」(承諾済み+受付中のメンバーが1名以上)か、
+   * または§16-14の delegate_criteria.enabled が true かどうか(いずれかでtrue・OR判定)。
    * 未設定(null)の場合は常にfalse。公開カードの3分岐(computeReferralSignal)に渡す。 */
   delegateHasActiveMember?: boolean
   /** §2-5 育成プルーフ: このプロが主宰(founder)/講師(instructor)を務める団体の役割情報。
@@ -126,6 +130,9 @@ export interface CardData {
    * CEO方針転換(2026-08-05): 新規セクションは作らず、既存の所属団体ピルを役割で出し分ける
    * ための最小情報(団体名/役割/認定者数のみ)。実績件数・直近30日・強みTOP5は個人ページに出さない。 */
   growthCards: GrowthCardOrg[] | null
+  /** §16-8+§16-14: 停止中プロの公開カードのみに出す代理案内候補(最大4名)。受付中の場合・
+   * 候補0名の場合・delegate_criteria未設定/未作成環境ではnull(fail-soft)。 */
+  delegateCandidates: DelegateCandidatesResult | null
 }
 
 /** §2-5 育成プルーフ: 個人ページの役割行に表示する団体1件分の情報 */
@@ -153,45 +160,12 @@ async function getGrowthCards(
 ): Promise<GrowthCardOrg[] | null> {
   if (!isOrgCardEnabled()) return null
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const byOrg = new Map<string, { organization: any; role: 'founder' | 'instructor' }>()
-
-    // (a) founder: organizations.owner_id が自分のClerk user_idと一致する団体を自動判定
-    if (proUserId) {
-      const { data: ownedOrgs } = await supabase
-        .from('organizations')
-        .select('id, name, type')
-        .eq('owner_id', proUserId)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      for (const org of (ownedOrgs || []) as any[]) {
-        if (!org?.id) continue
-        byOrg.set(org.id, { organization: org, role: 'founder' })
-      }
-    }
-
-    // (b) instructor: org_members.growth_role='instructor' の手動指定を維持
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: roleRows } = await (supabase as any)
-      .from('org_members')
-      .select('organization_id, growth_role, organizations(id, name, type)')
-      .eq('professional_id', proId)
-      .eq('status', 'active')
-      .is('removed_at', null)
-      .eq('growth_role', 'instructor')
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    for (const row of (roleRows || []) as any[]) {
-      const org = row.organizations
-      if (!org?.id) continue
-      // founder が既にあれば instructor で上書きしない(founder優先・重複表示防止)
-      if (byOrg.has(org.id)) continue
-      byOrg.set(org.id, { organization: org, role: 'instructor' })
-    }
-
-    if (byOrg.size === 0) return null
+    // founder/instructor判定は共通ヘルパーに切り出し済み(§16-8の代理設定UIとも共有・二重実装しない)
+    const orgRoles = await getFounderInstructorOrgs(supabase, proId, proUserId)
+    if (orgRoles.length === 0) return null
 
     const cards: GrowthCardOrg[] = []
-    for (const [organizationId, { organization: org, role }] of Array.from(byOrg.entries())) {
+    for (const { organizationId, organizationName, organizationType, role } of orgRoles) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: summary } = await (supabase as any)
         .from('org_growth_summary')
@@ -202,8 +176,8 @@ async function getGrowthCards(
 
       cards.push({
         organizationId,
-        organizationName: org.name,
-        organizationType: org.type ?? null,
+        organizationName,
+        organizationType,
         role,
         memberCount: summary.member_count || 0,
       })
@@ -298,10 +272,35 @@ export async function getCardData(
   // 承諾済み+受付中のメンバーが1名以上いなければ無効（既存 Promise.all のarityは崩さず後段の
   // 個別クエリとして追加する）。
   let delegateHasActiveMember = false
-  const delegateListId = (proResult.data as { delegate_list_id?: string | null } | null)?.delegate_list_id
+  const proRow = proResult.data as
+    | {
+        id: string
+        delegate_list_id?: string | null
+        accepting_status?: string | null
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        delegate_criteria?: any
+      }
+    | null
+  const delegateListId = proRow?.delegate_list_id
   if (delegateListId) {
     const validSet = await getValidDelegateListIds(supabase, [delegateListId])
     delegateHasActiveMember = validSet.has(delegateListId)
+  }
+  // §16-8+§16-14: delegate_criteria.enabledもOR判定に加える(選ぶものではなく自動点灯・§16-7)。
+  // 「criteriaで1名以上ヒットするか」まで計算するとコストが高いため、判定コストの軽い
+  // enabledフラグ自体を🟡点灯の代用にする(判断はCC実装報告に明記)。
+  const delegateCriteriaRaw = proRow?.delegate_criteria
+  const delegateCriteriaEnabled = !!(delegateCriteriaRaw && delegateCriteriaRaw.enabled === true)
+  if (delegateCriteriaEnabled) delegateHasActiveMember = true
+
+  // §16-8+§16-14: 停止中(accepting_status==='closed')かつdelegate_criteria.enabledの場合のみ
+  // 代理案内候補を計算する。受付中のプロでは一切クエリしない(仕様通り)。
+  let delegateCandidates: DelegateCandidatesResult | null = null
+  if (proRow && !isAcceptingOpen(proRow.accepting_status) && delegateCriteriaEnabled) {
+    delegateCandidates = await getDelegateCandidates(supabase, {
+      id: proRow.id,
+      delegate_criteria: delegateCriteriaRaw,
+    })
   }
 
   // ♡状態（CEO決定: A案+♡プロ専用化。単一情報源はbookmarksからprivate(気になるプロ)リストへ移行。
@@ -611,5 +610,6 @@ export async function getCardData(
     regular90Count,
     delegateHasActiveMember,
     growthCards,
+    delegateCandidates,
   }
 }
