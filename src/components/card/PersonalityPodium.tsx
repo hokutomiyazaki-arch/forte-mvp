@@ -79,13 +79,19 @@ export function PersonalityPodium({ items, proName }: Props) {
     const pct = total > 0 ? Math.round((item.votes / total) * 100) : 0
     const tier = getPersonalityTierStyle(item.votes)
     const isFirst = rank === 0
-    const imgSize = isFirst ? 130 : 100
+    // 円サイズはビューポート相対(clamp)にして、狭い画面(360px幅など)でも
+    // 3カラム合計がカード幅からはみ出さないようにする(切り取りではなくサイズを収める)
+    const imgSize = isFirst ? 'clamp(80px, 25vw, 100px)' : 'clamp(64px, 20vw, 80px)'
     const medal = rank === 0 ? '🥇' : rank === 1 ? '🥈' : '🥉'
+    const labelFontSize = isFirst ? 14 : 13 // 13px以上を維持
+    // メダル+ラベル行は「行数に関わらず高さ固定」にして、ラベルが2行に折り返しても
+    // 円の縦位置が他のカラムとズレないようにする(2行分の高さを常に確保)
+    const labelRowHeight = isFirst ? 38 : 36
     return (
-      <div key={item.id} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 6 }}>
+      <div key={item.id} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 6 }}>
         {item.image_url && (
           <div style={{
-            width: imgSize, height: imgSize, borderRadius: '50%',
+            width: imgSize, height: imgSize, borderRadius: '50%', boxSizing: 'border-box',
             border: tier.ring === 'transparent' ? '2px solid transparent' : `3px solid ${tier.ring}`,
             boxShadow: tier.glow,
             background: '#FAF8F3', overflow: 'hidden', position: 'relative',
@@ -98,9 +104,19 @@ export function PersonalityPodium({ items, proName }: Props) {
             )}
           </div>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-          <span style={{ fontSize: isFirst ? 16 : 13 }}>{medal}</span>
-          <span style={{ fontSize: isFirst ? 14 : 12, fontWeight: 700, color: T.text }}>{item.label}</span>
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 4,
+          width: '100%', height: labelRowHeight, overflow: 'hidden',
+        }}>
+          <span style={{ fontSize: isFirst ? 16 : 13, flexShrink: 0, lineHeight: 1.25 }}>{medal}</span>
+          <span style={{
+            fontSize: labelFontSize, fontWeight: 700, color: T.text, lineHeight: 1.25,
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical' as const,
+            overflow: 'hidden',
+            wordBreak: 'break-word' as const,
+          }}>{item.label}</span>
         </div>
         <span style={{ fontSize: 11, color: T.textMuted, fontFamily: T.fontMono }}>{item.votes}票 ({pct}%)</span>
       </div>
@@ -115,7 +131,7 @@ export function PersonalityPodium({ items, proName }: Props) {
       <div style={{ textAlign: 'center', fontSize: 11, color: T.textMuted, marginBottom: 14 }}>
         お客さんが抱いた印象トップ3
       </div>
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 8, width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
         {order.map(renderChar)}
       </div>
       {top3[0].description && (
