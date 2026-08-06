@@ -87,10 +87,14 @@ export async function POST(
       return NextResponse.json({ ok: true })
     }
 
-    // ── 送信の取り消し（§16-36・CEO指示 2026-08-06）──
+    // ── 送信の取り消し（§16-36・CEO決定 2026-08-06 改訂）──
     // 「ワンタップでリストが送られてしまうのでミスが多くなりそう」への対応。
+    // CEO決定:「相手の画面からも消えるけど、システムには残る」。
+    //   取り消しの目的は相手に送ったものを引っ込めることで、誰かを捕まえることではない。
+    //   自分でヤバいと思って取り消してくれるなら運営が間に入る手間が減る。
+    //   ただし、いざというとき（通報）に確認できるよう行は残す＝論理削除（withdrawn_at）。
     // ⚠️ メールは既に出ているので**送信自体は取り消せない**。取り消せるのは
-    //    やりとり画面からの削除だけ。UI側でその旨を明示すること。
+    //    やりとり画面からの表示だけ。UI側でその旨を明示すること。
     if (typeof payload.undo_message_id === 'string' && payload.undo_message_id) {
       const { data: msg } = await supabase
         .from('consultation_messages')
@@ -105,11 +109,18 @@ export async function POST(
 
       const { error } = await supabase
         .from('consultation_messages')
-        .delete()
+        .update({ withdrawn_at: new Date().toISOString() })
         .eq('id', msg.id)
       if (error) {
+        // fail-soft: migration 055 未実行の環境では withdrawn_at が無い。
+        // 「取り消せません」で終わらせると誤送信が残り続けるほうが害が大きいので、
+        // その場合だけ従来どおり物理削除する（CEO「物理削除でok」）。
         console.error('[api/pro/consultations POST] undo error:', error.message)
-        return NextResponse.json({ error: 'undo_failed' }, { status: 500 })
+        const fallback = await supabase.from('consultation_messages').delete().eq('id', msg.id)
+        if (fallback.error) {
+          console.error('[api/pro/consultations POST] undo delete error:', fallback.error.message)
+          return NextResponse.json({ error: 'undo_failed' }, { status: 500 })
+        }
       }
       return NextResponse.json({ ok: true })
     }

@@ -60,6 +60,8 @@ export default function ConsultThread({ token }: { token: string }) {
   const [reportReason, setReportReason] = useState('')
   const [reportSending, setReportSending] = useState(false)
   const [reportDone, setReportDone] = useState(false)
+  // §16-36: 送信の取り消し（クライアント側）。プロ側と同じ扱いにする。
+  const [undoingId, setUndoingId] = useState<string | null>(null)
 
   async function load() {
     try {
@@ -113,6 +115,35 @@ export default function ConsultThread({ token }: { token: string }) {
       setError('送信できませんでした。通信環境をご確認ください。')
     } finally {
       setSending(false)
+    }
+  }
+
+  /**
+   * §16-36 送信の取り消し（CEO決定 2026-08-06）
+   * 消えるのは**やりとり画面の表示だけ**。既に届いているメールは取り消せないので、
+   * 確認ダイアログでそこを必ず言い切る（「取り消した＝相手は見ていない」と誤解させない）。
+   */
+  async function undoMessage(messageId: string) {
+    if (undoingId) return
+    if (!window.confirm('この送信を取り消しますか？\n\nやりとり画面からは消えますが、相手に届いたメールは取り消せません。')) return
+    setUndoingId(messageId)
+    setError('')
+    try {
+      const res = await fetch(`/api/consultations/${token}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ undo_message_id: messageId }),
+      })
+      if (!res.ok) {
+        setError('取り消せませんでした。時間をおいてお試しください。')
+        return
+      }
+      await load()
+    } catch {
+      setError('取り消せませんでした。通信環境をご確認ください。')
+    } finally {
+      setUndoingId(null)
     }
   }
 
@@ -284,6 +315,23 @@ export default function ConsultThread({ token }: { token: string }) {
                   textAlign: isPro ? 'left' : 'right',
                 }}>
                   {isPro ? proName : 'あなた'}・{formatDate(m.created_at)}
+                  {/* §16-36: 誤送信の取り消し。自分の発言だけ。 */}
+                  {!isPro && (
+                    <>
+                      {' '}
+                      <button
+                        type="button"
+                        onClick={() => undoMessage(m.id)}
+                        disabled={undoingId === m.id}
+                        style={{
+                          background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                          fontSize: 11, color: T.faint, textDecoration: 'underline',
+                        }}
+                      >
+                        取り消す
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

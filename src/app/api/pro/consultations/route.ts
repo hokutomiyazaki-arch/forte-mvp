@@ -93,14 +93,26 @@ export async function GET(request: Request) {
     const ids = list.map(t => t.id)
     const { data: messages } = await supabase
       .from('consultation_messages')
-      .select('id, consultation_id, sender, body, created_at')
+      // 教訓(2026-08-06・本番事故): 未作成カラムを .select() に明示すると PostgREST が
+      // 42703 で落ち、メッセージが1件も返らなくなる。任意カラム（withdrawn_at 等）は
+      // * で取って後段で読む。migration の実行順に依存させない。
+      .select('*')
       .in('consultation_id', ids)
       .order('created_at', { ascending: true })
 
     const byThread = new Map<string, any[]>()
     for (const m of messages || []) {
+      // §16-36: 取り消されたメッセージは**どちらの画面にも出さない**（CEO決定 2026-08-06）。
+      // 行は残すが表示はしない。migration 055 未実行なら undefined なので素通りする。
+      if (m.withdrawn_at) continue
       if (!byThread.has(m.consultation_id)) byThread.set(m.consultation_id, [])
-      byThread.get(m.consultation_id)!.push(m)
+      byThread.get(m.consultation_id)!.push({
+        id: m.id,
+        consultation_id: m.consultation_id,
+        sender: m.sender,
+        body: m.body,
+        created_at: m.created_at,
+      })
     }
 
     return NextResponse.json({
