@@ -1,21 +1,29 @@
 'use client'
 
 /**
- * §2-2改訂（先行テスト第3弾・CEO最終確認）: 受け入れステータスは
- * ダッシュボード見出しの直上に、背景なしの「3段スライダー」として置く。
- * 🔴停止中 ⇔ 🟡代理リストで案内 ⇔ 🟢受付中 の3ポジションから直接選べるが、
- * DBは open/closed の2値のまま変えない：
+ * §16-7改訂（2026-08-05・CEO決定）: 🟡代理リストは紹介リスト内の入れ子としては一旦撤回し、
+ * §16-8で「停止中プロの公開カード」側にcriteriaベースで再設計する（置き場所を変えて復活）。
+ * これに伴い、この受け入れステータスウィジェットは **操作は2値、表示は3色** に整理する。
+ *
+ * - スライダーは 🔴停止中 ⇔ 🟢受付中 の2値トグルのみ（🟡は選択肢から外す。
+ *   §16-8のcriteriaベース設定はここでは行わず、別UIで実装する）
  *   - 🟢選択 → PATCH accepting_status='open'
- *   - 🔴選択 → PATCH accepting_status='closed' + delegate_list_id=null
- *     （代理が有効だとシグナルが🟡になってしまうため、🔴を直接選ぶ場合は
- *     delegate_list_idを明示的にnullへ落として確実に🔴にする）
- *   - 🟡選択 → 複合操作。既に「有効な代理リスト」(is_valid_delegate)が選択済みなら
- *     accepting_status='closed'のみPATCH（delegate_list_id維持）。
- *     有効な代理リストが無い/未選択の場合は🟡を確定させず、代理リスト選択UIを開いて誘導する
- *     （空約束の防止・CEO決定）
+ *   - 🔴選択 → PATCH accepting_status='closed'
+ *     （旧実装はここでdelegate_list_idを明示的にnullへ落としていたが、スライダーと代理設定は
+ *     分離する方針のため廃止した。誤操作で🟡状態のdelegate_list_idが消える事故を防ぐ。
+ *     delegate_list_idの解除は§16-8の専用設定UIで行う想定）
+ * - 🟡は「代理設定がONの間、自動で点灯する表示インジケータ」（選ぶものではない）。
+ *   現在の点灯条件（closedかつ有効な代理リストあり）は§16-8まで現状維持し、表示ロジックは
+ *   壊さない（isValidDelegate判定・computeReferralSignal・getValidDelegateListIdsは不変）。
+ *   既に🟡状態のプロがこのトグルを見た時に「🔴側を押すと案内が消える」という誤解を避けるため、
+ *   トグル直下に「停止中（認定者を案内中）」の補足を表示する。
  *
  * NULL（未設定）はノブ🟢位置として表示するが、PATCHは送らない
  * （fail-open。ユーザーが操作して初めて明示値を送る）。
+ *
+ * 代理リスト選択UI(yellowSetupMode等)はコードとしては削除せず残す（§16-8で
+ * criteriaベースの別UIに作り替えるため。selectSegmentは今後'delegate'を渡されないため
+ * 実質不活性）。
  *
  * 3色インジケータの導出は src/lib/referral-accepting.ts の computeReferralSignal に集約。
  */
@@ -24,6 +32,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   computeReferralSignal,
   REFERRAL_SIGNAL_DOT,
+  REFERRAL_SIGNAL_LABEL,
   type ReferralSignal,
 } from '@/lib/referral-accepting'
 
@@ -49,11 +58,11 @@ interface Props {
   hasBookableMenu?: boolean
 }
 
-const SEGMENTS: ReferralSignal[] = ['closed', 'delegate', 'open']
-const SEGMENT_INDEX: Record<ReferralSignal, number> = { closed: 0, delegate: 1, open: 2 }
-const SEGMENT_LABEL: Record<ReferralSignal, string> = {
+// §16-7改訂: スライダーの選択肢は🔴⇄🟢の2値のみ（🟡は表示専用インジケータ・選択肢から除外）
+const SEGMENTS: Array<'closed' | 'open'> = ['closed', 'open']
+const SEGMENT_INDEX: Record<'closed' | 'open', number> = { closed: 0, open: 1 }
+const SEGMENT_LABEL: Record<'closed' | 'open', string> = {
   closed: '停止中',
-  delegate: '代理案内',
   open: '受付中',
 }
 
@@ -161,7 +170,8 @@ export default function AcceptingStatusWidget({
     }
   }
 
-  // 3段スライダーの選択ハンドラ
+  // §16-7改訂: 2値スライダーの選択ハンドラ。UIからは'closed'|'open'のみ渡される
+  // (型はReferralSignalのまま維持し、§16-8まで'delegate'分岐のコードを残す)。
   async function selectSegment(target: ReferralSignal) {
     if (toggling) return
     // R6レビュー指摘: スライダー操作時は条件メモの未保存下書きを破棄する(編集途中の文言が
@@ -174,13 +184,16 @@ export default function AcceptingStatusWidget({
       return
     }
     if (target === 'closed') {
-      // 🔴を直接選ぶ場合、代理が有効だと🟡表示になってしまうため delegate_list_id を明示的に外す
+      // §16-7改訂: スライダーと代理設定を分離するため、ここではdelegate_list_idに触れない
+      // (旧実装はnullで明示的にクリアしていたが、既に🟡状態のプロが誤って🔴を押すと
+      // delegate_list_idが消える事故になるため廃止。解除は§16-8の専用設定UIで行う)
       setYellowSetupMode(false)
-      await commitStatus('closed', null)
+      await commitStatus('closed')
       return
     }
-    // target === 'delegate'（🟡）
-    // 軽微指摘: allowlist外(canManageLists=false)では代理リスト機能はまだ実行不能なため確定させない
+    // target === 'delegate'（🟡）: §16-7改訂によりUIから選択肢自体を外したため、
+    // このUIからは到達しない（selectSegmentへは'closed'|'open'のみが渡される）。
+    // §16-8でcriteriaベースの別設定UIに作り替えるまでコードは残す。
     if (!canManageLists) return
     if (delegateListId && validLists.some((l) => l.id === delegateListId)) {
       // 既に有効な代理リストが選択済み → そのままclosedにする
@@ -233,7 +246,7 @@ export default function AcceptingStatusWidget({
 
   return (
     <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {/* 3段スライダー本体（セグメント型トグル。ノブ位置=現在のシグナル） */}
+      {/* §16-7改訂: 2段スライダー本体（🔴⇄🟢の2値トグル。ノブ位置=effectiveStatus） */}
       <div
         style={{
           position: 'relative', display: 'flex', background: '#F3F4F6', borderRadius: 999,
@@ -243,8 +256,8 @@ export default function AcceptingStatusWidget({
         <div
           aria-hidden
           style={{
-            position: 'absolute', top: 3, bottom: 3, left: `calc(${SEGMENT_INDEX[signal] * (100 / 3)}% + 2px)`,
-            width: 'calc(33.333% - 4px)', background: '#fff', borderRadius: 999,
+            position: 'absolute', top: 3, bottom: 3, left: `calc(${SEGMENT_INDEX[effectiveStatus] * 50}% + 2px)`,
+            width: 'calc(50% - 4px)', background: '#fff', borderRadius: 999,
             boxShadow: '0 1px 3px rgba(0,0,0,0.15)', transition: 'left 0.2s ease', zIndex: 0,
           }}
         />
@@ -252,29 +265,39 @@ export default function AcceptingStatusWidget({
           <button
             key={seg}
             onClick={() => selectSegment(seg)}
-            disabled={toggling || (seg === 'delegate' && !canManageLists)}
+            disabled={toggling}
             style={{
               position: 'relative', zIndex: 1, flex: 1, padding: '8px 4px', border: 'none',
-              background: 'transparent', fontSize: 12, fontWeight: signal === seg ? 700 : 500,
-              color: signal === seg ? '#1A1A2E' : '#9CA3AF',
-              cursor: (toggling || (seg === 'delegate' && !canManageLists)) ? 'default' : 'pointer',
+              background: 'transparent', fontSize: 12, fontWeight: effectiveStatus === seg ? 700 : 500,
+              color: effectiveStatus === seg ? '#1A1A2E' : '#9CA3AF',
+              cursor: toggling ? 'default' : 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-              opacity: (toggling || (seg === 'delegate' && !canManageLists)) ? 0.6 : 1,
+              opacity: toggling ? 0.6 : 1,
             }}
           >
-            <span style={{ fontSize: 13 }}>{REFERRAL_SIGNAL_DOT[seg]}</span>
+            {/* §16-7改訂: closedボタンのドットは実際のシグナル(🔴/🟡)を反映する。
+                現在🟡(closed+有効な代理あり)なら誤って「案内が消える」と誤解しないよう
+                🔴ではなく🟡を表示する。openは常に🟢固定 */}
+            <span style={{ fontSize: 13 }}>{seg === 'closed' ? REFERRAL_SIGNAL_DOT[signal === 'delegate' ? 'delegate' : 'closed'] : REFERRAL_SIGNAL_DOT.open}</span>
             <span>{SEGMENT_LABEL[seg]}</span>
           </button>
         ))}
       </div>
       {toggleError && <div style={{ fontSize: 11, color: '#B00020' }}>更新に失敗しました</div>}
 
-      {/* 軽微指摘: allowlist外プロは🟡(代理リスト)が実行不能なため、誘導文の代わりにこちらを表示 */}
-      {!canManageLists && signal !== 'delegate' && (
-        <div style={{ fontSize: 11, color: '#9CA3AF' }}>代理リスト機能は順次開放中です</div>
+      {/* §16-7改訂: 現在🟡(closed+有効な代理あり)状態のとき、🔴側を押すと案内(delegate_list_id)が
+          消えると誤解されないよう補足する。commitStatusはdelegate_list_idに触れない実装のため、
+          実際には🔴を押しても案内は消えない(誤操作事故は起きない)が、状態を正しく伝える。 */}
+      {signal === 'delegate' && (
+        <div style={{ fontSize: 11, color: '#8A6D00', lineHeight: 1.6 }}>
+          {REFERRAL_SIGNAL_LABEL.delegate}
+          {selectedDelegateList ? `（案内先: ${selectedDelegateList.title}）` : ''}
+        </div>
       )}
 
-      {/* §2-2改訂: 🟡を選ぼうとしたが有効な代理リストが無い/未選択の場合の誘導UI */}
+      {/* §2-2改訂: 🟡を選ぼうとしたが有効な代理リストが無い/未選択の場合の誘導UI
+          §16-7改訂: selectSegmentへ'delegate'が渡らなくなったためyellowSetupModeは常にfalseで
+          到達しない。§16-8のcriteriaベース再設計まではコードのみ残す(削除しない)。 */}
       {canManageLists && yellowSetupMode && (
         <div style={{ fontSize: 11, color: '#6B7280', lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: 6 }}>
           {!listsLoaded ? (
@@ -311,31 +334,14 @@ export default function AcceptingStatusWidget({
       )}
 
       {/* §2-2改訂: delegateListIdは設定済みだが有効な代理メンバーがいないため🔴になっている場合、
-          本人が原因を理解できるよう説明を1行添える(空約束の防止・CEO決定) */}
+          本人が原因を理解できるよう説明を1行添える(空約束の防止・CEO決定)。
+          §16-7改訂: UI表示から内部用語「代理リスト」を除去した文言に更新。
+          §16-7改訂: 現在の代理リストの変更UI(select)はスライダーから分離する方針のため削除。
+          delegate_list_idの変更は§16-8の専用設定UIで行う想定(このcaptionと上部の案内先表示で
+          読み取り専用の状態確認のみ提供する)。 */}
       {!yellowSetupMode && signal === 'closed' && listsLoaded && delegateListId && !hasValidDelegate && (
         <div style={{ fontSize: 11, color: '#9CA3AF', lineHeight: 1.6 }}>
-          代理リストが現在有効でないため、停止中と表示されます（承諾済みで受付中のメンバーがいない、またはリストが共有可能な状態ではありません）
-        </div>
-      )}
-
-      {/* 🟡確定済み: 現在の代理リストの変更UI */}
-      {!yellowSetupMode && signal === 'delegate' && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const }}>
-          <span style={{ fontSize: 11, color: '#9CA3AF' }}>案内先: {selectedDelegateList?.title}</span>
-          {validLists.length > 1 && (
-            <select
-              value={delegateListId || ''}
-              onChange={(e) => {
-                if (e.target.value) commitStatus('closed', e.target.value)
-              }}
-              disabled={toggling}
-              style={{ padding: '6px 8px', borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 12, color: '#1A1A2E' }}
-            >
-              {validLists.map((l) => (
-                <option key={l.id} value={l.id}>{l.title}</option>
-              ))}
-            </select>
-          )}
+          認定者への案内が現在無効なため、停止中と表示されます（承諾済みで受付中のメンバーがいない、またはリストが共有可能な状態ではありません）
         </div>
       )}
 

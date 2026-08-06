@@ -27,12 +27,14 @@ export function isAcceptingOpen(status: string | null | undefined): boolean {
 }
 
 /**
- * レビュー指摘: 「紹介につながる人か」の判定(open/delegateはtrue・closedのみfalse)を
- * SearchPageClient のクライアント側フィルタ・pro-search・searchの各所で直書きしていたのを
- * ここに集約する共通述語。
+ * §16-7改訂（2026-08-05・CEO決定）: 「紹介につながる人か」＝ピン追加・フィルタ対象は🟢のみ。
+ * 🟡(delegate)は「本人のカード単体の行き止まりを救う」表示専用の指標であり、紹介リストの
+ * 候補になる（=ピンできる/フィルタで拾える）ことは意味しない。🟡本人は受け入れられないため
+ * リストに載せてもクライアントが詰まる。SearchPageClient のクライアント側フィルタ・
+ * pro-search・items(ピン追加)の各所で使う共通述語。
  */
 export function isReferralReachable(signal: ReferralSignal | null | undefined): boolean {
-  return signal === 'open' || signal === 'delegate'
+  return signal === 'open'
 }
 
 /**
@@ -67,8 +69,9 @@ export const REFERRAL_SIGNAL_DOT: Record<ReferralSignal, string> = {
   closed: '🔴',
 }
 
+// §16-7改訂: 内部用語「代理リスト」をUI表示から除去し、3色定義の文言に統一する。
 export const REFERRAL_SIGNAL_LABEL: Record<ReferralSignal, string> = {
   open: '受付中',
-  delegate: '停止中（代理リストで案内中）',
-  closed: '停止中',
+  delegate: '停止中（認定者を案内中）',
+  closed: '停止中（案内なし）',
 }

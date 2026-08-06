@@ -643,6 +643,9 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
                 return (
                   <div style={{ fontSize: 11, color: REFERRAL_SIGNAL_COLOR.delegate, marginTop: 4, lineHeight: 1.6 }}>
                     現在は新規のご紹介を受け付けていませんが、信頼できる先生をご案内できます
+                    {/* TODO(§16-8・代理リスト再設計): ここに絞り込み2問(地域／お困りごと)＋
+                        最大4名の候補ブロックを差し込む。criteria(org_id/area/themes/accepting_only/
+                        min_support_records)ベースで動的選抜。本フェーズ(B-3)では文言維持のみ。 */}
                   </div>
                 )
               }

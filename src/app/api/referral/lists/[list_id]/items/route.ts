@@ -23,7 +23,9 @@ async function getOwnedList(supabase: ReturnType<typeof getSupabaseAdmin>, listI
  * body: { pro_id, note? }
  * ピン指名を追加する。1リスト最大3名。§3-0改訂(先行テスト第3弾): 承諾ゲートは無く、
  * consent_status='approved'で即時掲載(private=連携候補は'pending'固定・🟡7参照)。
- * 対象が🔴(closed・有効な代理なし)、またはallowlist期間中に対象外のプロの場合は400でブロックする
+ * §16-7改訂(2026-08-05・CEO決定): ピン追加できるのは🟢(open)のみ。🟡(delegate)も🔴(closed)も
+ * 追加不可(🟡本人も紹介を受けられないためリストに載せるとクライアントが詰まる)。
+ * またallowlist期間中に対象外のプロの場合は400でブロックする
  * (連携候補=privateリストは両方とも対象外)。掲載後、対象プロへ通知を送る（通知失敗はピン追加の成否に影響しない）。
  */
 export async function POST(
@@ -90,17 +92,18 @@ export async function POST(
       return NextResponse.json({ error: 'target_not_in_program' }, { status: 400 })
     }
 
-    // §3-0改訂(先行テスト第3弾): 掲載は即時（承諾ゲート撤廃）だが、相手が🔴(closed かつ
-    // 有効な代理なし)の場合はピン追加自体をブロックする。既に停止中の人に「いやならオフに」の
-    // 通知を送っても意味を持たないため。連携候補(private・§3-1第1層)は責任を伴わないブックマーク
-    // のため対象外(従来通り通知もなし)。
+    // §16-7改訂(2026-08-05・CEO決定): 掲載は即時（承諾ゲート撤廃）だが、相手が🟢(open)以外
+    // ―つまり🟡(delegate)も🔴(closed)も―の場合はピン追加自体をブロックする。🟡本人も紹介を
+    // 受けられないため、リストに載せるとクライアントが詰まる(🟡の役割は自分のカード単体の
+    // 訪問者を認定者へ流すことであり、紹介リストの候補になることではない)。
+    // 連携候補(private・§3-1第1層)は責任を伴わないブックマークのため対象外(従来通り通知もなし)。
     if (!isPrivateList) {
       const validDelegateListIds = await getValidDelegateListIds(supabase, [targetPro.delegate_list_id])
       const targetSignal = computeReferralSignal(
         targetPro.accepting_status,
         !!targetPro.delegate_list_id && validDelegateListIds.has(targetPro.delegate_list_id)
       )
-      if (targetSignal === 'closed') {
+      if (targetSignal !== 'open') {
         return NextResponse.json({ error: 'target_not_accepting' }, { status: 400 })
       }
     }
