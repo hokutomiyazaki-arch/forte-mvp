@@ -83,6 +83,12 @@ interface Props {
   savingAccessLinks: boolean
   /** 軽微5(レビュー指摘): fail-soft再試行(business_hours列未作成)発火時の非ブロッキング注記。 */
   accessLinksSaveNote?: string
+  /** 移動(2026-08-06・CEO指摘): ダッシュボード上部にあった「条件を追記する」メモをこのタブへ移動。
+   * PATCH /api/referral/accepting は accepting_status が必須のため、保存時にこの値をそのまま
+   * 一緒に送る(受付ステータス自体は変更しない・巻き込まない)。 */
+  initialAcceptingStatus?: 'open' | 'closed' | 'conditional' | null
+  initialAcceptingNote?: string | null
+  onAcceptingNoteUpdated?: (note: string | null) => void
 }
 
 interface FormState {
@@ -114,12 +120,64 @@ export default function BusinessInfoTab({
   onSaveAccessLinks,
   savingAccessLinks,
   accessLinksSaveNote,
+  initialAcceptingStatus,
+  initialAcceptingNote,
+  onAcceptingNoteUpdated,
 }: Props) {
   const [professionType, setProfessionType] = useState<ProfessionType | null>(initialProfessionType)
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [menus, setMenus] = useState<Menu[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
+
+  // 移動(2026-08-06・CEO指摘): 受付条件メモの編集state。ダッシュボード上部にあった
+  // AcceptingStatusWidget内の「条件を追記する」をこちらへ移した。
+  const [acceptingNoteDraft, setAcceptingNoteDraft] = useState(initialAcceptingNote || '')
+  const [savedAcceptingNote, setSavedAcceptingNote] = useState(initialAcceptingNote || '')
+  const [savingAcceptingNote, setSavingAcceptingNote] = useState(false)
+  const [acceptingNoteError, setAcceptingNoteError] = useState('')
+  const [acceptingNoteSaved, setAcceptingNoteSaved] = useState(false)
+
+  // 外部(ダッシュボード上部のトグル等)からaccepting_noteが変わった場合に追従する(依存はプリミティブのみ)
+  useEffect(() => {
+    setAcceptingNoteDraft(initialAcceptingNote || '')
+    setSavedAcceptingNote(initialAcceptingNote || '')
+  }, [initialAcceptingNote])
+
+  async function saveAcceptingNote() {
+    const trimmed = acceptingNoteDraft.trim().slice(0, 200)
+    if (trimmed === savedAcceptingNote) return
+    setSavingAcceptingNote(true)
+    setAcceptingNoteError('')
+    try {
+      // 受付ステータス自体は変更しない: 現在の値(initialAcceptingStatus)をそのまま送る
+      // (このAPIはaccepting_statusが必須のため、渡さないと更新できない・巻き込み変更を避けるため
+      // 常に現在値をそのまま渡す)。
+      const res = await fetch('/api/referral/accepting', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({
+          accepting_status: initialAcceptingStatus ?? 'open',
+          accepting_note: trimmed,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setAcceptingNoteError(json.error === 'note_too_long' ? '200文字以内で入力してください' : '保存に失敗しました')
+        return
+      }
+      setSavedAcceptingNote(trimmed)
+      setAcceptingNoteDraft(trimmed)
+      if (onAcceptingNoteUpdated) onAcceptingNoteUpdated(trimmed || null)
+      setAcceptingNoteSaved(true)
+      setTimeout(() => setAcceptingNoteSaved(false), 2500)
+    } catch {
+      setAcceptingNoteError('保存に失敗しました')
+    } finally {
+      setSavingAcceptingNote(false)
+    }
+  }
 
   const [editing, setEditing] = useState<FormState | null>(null)
   const [saving, setSaving] = useState(false)
@@ -311,7 +369,7 @@ export default function BusinessInfoTab({
 
   return (
     <div style={{ paddingBottom: 40 }}>
-      <h2 style={{ fontSize: 18, fontWeight: 500, color: '#1A1A2E', marginBottom: 8 }}>サービス・案内</h2>
+      {/* §CEO指摘対応(2026-08-06): 見出し「サービス・案内」は上部の動的見出しと重複するため削除 */}
       <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, marginBottom: 24 }}>
         提供メニューの料金・サービス内容を登録できます。
         登録するとあなたのカードページに「メニュー」タブが追加され、お客さんが見られるようになります。
@@ -353,6 +411,60 @@ export default function BusinessInfoTab({
           >
             変更
           </button>
+        )}
+      </div>
+
+      {/* 移動(2026-08-06・CEO指摘): 受付条件メモ。ダッシュボード上部の受付スイッチ横にあった
+          「条件を追記する」テキストエリアをここへ移動。保存経路(PATCH /api/referral/accepting)は
+          既存のまま・accepting_statusは巻き込まず現在値を維持したまま送る。 */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 11, color: '#9CA3AF', letterSpacing: 1, marginBottom: 4 }}>
+          受付条件のメモ（任意）
+        </div>
+        <p style={{ fontSize: 12, color: '#9CA3AF', lineHeight: 1.6, marginBottom: 8 }}>
+          紹介リストや公開カードで、受付中の横に表示されます。
+        </p>
+        <textarea
+          value={acceptingNoteDraft}
+          onChange={e => setAcceptingNoteDraft(e.target.value.slice(0, 200))}
+          placeholder="例: めまい・ふらつきのケースのみ／土曜のみ対応可"
+          rows={2}
+          style={{
+            width: '100%',
+            padding: '10px 12px',
+            fontSize: 14,
+            border: '1px solid #E5E7EB',
+            borderRadius: 6,
+            boxSizing: 'border-box' as const,
+            resize: 'vertical' as const,
+            fontFamily: 'inherit',
+          }}
+        />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
+          <div style={{ fontSize: 11, color: '#9CA3AF' }}>{acceptingNoteDraft.length} / 200</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {acceptingNoteSaved && <span style={{ fontSize: 12, color: '#2E7D32' }}>保存しました</span>}
+            <button
+              type="button"
+              onClick={saveAcceptingNote}
+              disabled={savingAcceptingNote || acceptingNoteDraft.trim() === savedAcceptingNote}
+              style={{
+                fontSize: 12,
+                padding: '6px 14px',
+                borderRadius: 6,
+                border: 'none',
+                background: '#1A1A2E',
+                color: '#fff',
+                cursor: savingAcceptingNote ? 'default' : 'pointer',
+                opacity: savingAcceptingNote || acceptingNoteDraft.trim() === savedAcceptingNote ? 0.5 : 1,
+              }}
+            >
+              {savingAcceptingNote ? '保存中...' : '保存する'}
+            </button>
+          </div>
+        </div>
+        {acceptingNoteError && (
+          <div style={{ fontSize: 11, color: '#E24B4A', marginTop: 4 }}>{acceptingNoteError}</div>
         )}
       </div>
 

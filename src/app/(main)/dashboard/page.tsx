@@ -95,6 +95,22 @@ interface CustomProof {
 const CATEGORY_LABELS = TAB_DISPLAY_NAMES
 const CATEGORY_KEYS = TAB_ORDER
 
+// 見出し動的化（CEOスクショ指摘・2026-08-06）: dashboardTabごとの見出し文字列。
+// 'profile' はホーム扱いのため別途「ダッシュボード」を表示する（このマップには含めない）。
+// 各値は元々そのタブ内にあった見出しと同じ文字列にしてあるため、タブ側の見出しは重複削除している。
+const DASHBOARD_TAB_HEADING: Record<string, string> = {
+  voices: 'Voices',
+  card: 'プルーフカード',
+  proofs: '強み設定',
+  badges: '獲得バッジ',
+  rewards: 'リワード設定',
+  org: '団体管理',
+  guide: 'はじめかたガイド',
+  'business-info': 'サービス・案内',
+  myorgs: '所属団体',
+  referral: '紹介',
+}
+
 export default function DashboardPage() {
   const { signOut } = useClerk()
   const [user, setUser] = useState<any>(null)
@@ -2607,32 +2623,57 @@ export default function DashboardPage() {
       {/* 移動(2026-08-06・CEO指示): 代理案内の設定UI(旧DelegateCriteriaSettings直置き)は
           紹介タブ「紹介する」サブタブの先頭へ移動した(ReferralTab内でrenderする)。 */}
 
-      {/* §CEO指摘対応(2026-08-06): 受け入れステータスの2値トグル+条件メモは、ダッシュボード最上部に
-          横幅いっぱいで常時表示していたため見出しより上を占有していた(CEOスクショ指摘)。
-          「ダッシュボード」見出し＋ファウンダーバッジの右横スペースへ移動し、上部を1行詰める。 */}
+      {/* §CEO指摘対応(2026-08-06): 上部の見出し二重表示(「ダッシュボード」固定＋各タブ内の見出し)を解消。
+          タブごとに見出しを動的化し、実質ページ移動しているように見せる(実際のルーティングは変えない・
+          単一ファイル内のタブ切替のまま)。ホーム('profile')のみ「ダッシュボード」＋ファウンダーバッジ＋
+          メールアドレスを表示。他タブは「(←戻る) タブ名」の1行に集約し、旧: QR枠の下に別行で出していた
+          「← ホームに戻る」ボタンをこの行に統合する。受け入れステータストグルは右側に維持(全タブ共通)。 */}
       <div className="flex items-start justify-between mb-4" style={{ flexWrap: 'wrap' as const, gap: 12 }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <h1 className="text-2xl font-bold text-[#1A1A2E]">ダッシュボード</h1>
-            {(pro as any)?.founding_member_status === 'achieved' && (
-              <a
-                href="https://line.me/R/ti/g/2C5JXJyc68"
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Founding Memberグループに参加"
-              >
-                <img
-                  src="/images/founding-member-badge.png"
-                  alt="Founding Member"
-                  style={{ width: 40, height: 40, objectFit: 'contain' }}
-                />
-              </a>
-            )}
-          </div>
-          {user?.email && (
-            <p className="text-sm text-gray-400 mt-1 truncate max-w-[260px]">
-              {user.email.startsWith('line_') && user.email.endsWith('@line.realproof.jp') ? 'LINE連携済み' : user.email}
-            </p>
+          {dashboardTab === 'profile' ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <h1 className="text-2xl font-bold text-[#1A1A2E]">ダッシュボード</h1>
+                {(pro as any)?.founding_member_status === 'achieved' && (
+                  <a
+                    href="https://line.me/R/ti/g/2C5JXJyc68"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Founding Memberグループに参加"
+                  >
+                    <img
+                      src="/images/founding-member-badge.png"
+                      alt="Founding Member"
+                      style={{ width: 40, height: 40, objectFit: 'contain' }}
+                    />
+                  </a>
+                )}
+              </div>
+              {user?.email && (
+                <p className="text-sm text-gray-400 mt-1 truncate max-w-[260px]">
+                  {user.email.startsWith('line_') && user.email.endsWith('@line.realproof.jp') ? 'LINE連携済み' : user.email}
+                </p>
+              )}
+            </>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' as const }}>
+              {isSettingsTab && (
+                <button
+                  onClick={() => {
+                    if (!pro) {
+                      window.location.href = '/'
+                    } else {
+                      setDashboardTab('profile')
+                      window.history.replaceState(null, '', '/dashboard')
+                    }
+                  }}
+                  style={{ fontSize: 13, color: '#C4A35A', background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0 }}
+                >
+                  ← ホームに戻る
+                </button>
+              )}
+              <h1 className="text-lg font-bold text-[#1A1A2E]">{DASHBOARD_TAB_HEADING[dashboardTab] || ''}</h1>
+            </div>
           )}
         </div>
         {/* 🔴1(再レビュー): allowlist内に加え、共有リストに掲載中の本人にも表示する(唯一のオプトアウト手段のため) */}
@@ -2808,22 +2849,7 @@ export default function DashboardPage() {
       )}
 
 
-      {/* ← ホームに戻る（設定モード時） */}
-      {isSettingsTab && (
-        <button
-          onClick={() => {
-            if (!pro) {
-              window.location.href = '/'
-            } else {
-              setDashboardTab('profile')
-              window.history.replaceState(null, '', '/dashboard')
-            }
-          }}
-          className="flex items-center gap-2 text-sm text-[#C4A35A] hover:text-[#b3923f] mb-4 transition-colors"
-        >
-          ← ホームに戻る
-        </button>
-      )}
+      {/* §CEO指摘対応(2026-08-06): 「← ホームに戻る」は見出し行(上部)へ統合したためここでは表示しない */}
 
       {/* ダッシュボードタブ */}
       {!isSettingsTab && (
@@ -3294,7 +3320,7 @@ export default function DashboardPage() {
       {/* ═══ Tab: カード管理 ═══ */}
       {dashboardTab === 'card' && (<>
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
-        <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">プルーフカード</h2>
+        {/* §CEO指摘対応(2026-08-06): 見出し「プルーフカード」は上部の動的見出しと重複するため削除 */}
         <p className="text-sm text-[#9CA3AF] mb-4">
           カード裏面のIDを入力すると、お客さんがカードにスマホをかざすだけで投票ページに飛べるようになります。
         </p>
@@ -3422,7 +3448,7 @@ export default function DashboardPage() {
 
       {/* 強み設定 */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
-        <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">強み設定</h2>
+        {/* §CEO指摘対応(2026-08-06): 見出し「強み設定」は上部の動的見出しと重複するため削除 */}
         <p className="text-sm text-[#9CA3AF] mb-4">
           お客さんがあなたに投票する時に表示される項目です。9つ選んでください。
         </p>
@@ -3661,9 +3687,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* 獲得バッジ */}
+      {/* 獲得バッジ（§CEO指摘対応(2026-08-06): 見出しは上部の動的見出しと重複するため削除） */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
-        <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">獲得バッジ</h2>
         <p className="text-sm text-[#9CA3AF] mb-4">
           SPECIALIST 以上の認定バッジを画像でダウンロードしたり、サイトに埋め込むHTMLをコピーできます。
         </p>
@@ -3811,9 +3836,8 @@ export default function DashboardPage() {
       {/* ═══ Tab: リワード設定 ═══ */}
       {dashboardTab === 'rewards' && (<>
 
-      {/* リワード設定 */}
+      {/* リワード設定（§CEO指摘対応(2026-08-06): 見出しは上部の動的見出しと重複するため削除） */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
-        <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">リワード設定</h2>
         <p className="text-sm text-[#9CA3AF] mb-4">
           投票してくれたお客さんに見せる「お礼」です。任意ですが、設定すると投票率が上がります。
         </p>
@@ -4431,7 +4455,7 @@ export default function DashboardPage() {
       {/* ═══ Tab: はじめかたガイド ═══ */}
       {dashboardTab === 'guide' && (
       <div style={{ paddingBottom: 40 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 500, color: '#1A1A2E', marginBottom: 24 }}>はじめかたガイド</h2>
+        {/* §CEO指摘対応(2026-08-06): 見出し「はじめかたガイド」は上部の動的見出しと重複するため削除 */}
 
         {/* ────── STEP 1 ────── */}
         <div style={{ marginBottom: 8 }}>
@@ -4860,6 +4884,9 @@ export default function DashboardPage() {
           onSaveAccessLinks={() => doSaveLogic()}
           savingAccessLinks={saving}
           accessLinksSaveNote={businessHoursSaveNote}
+          initialAcceptingStatus={pro.accepting_status ?? null}
+          initialAcceptingNote={pro.accepting_note ?? null}
+          onAcceptingNoteUpdated={(nextNote) => setPro(prev => prev ? { ...prev, accepting_note: nextNote } : prev)}
         />
       )}
 

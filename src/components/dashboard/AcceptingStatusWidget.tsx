@@ -28,10 +28,9 @@
  * 3色インジケータの導出は src/lib/referral-accepting.ts の computeReferralSignal に集約。
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   computeReferralSignal,
-  REFERRAL_SIGNAL_DOT,
   REFERRAL_SIGNAL_LABEL,
   type ReferralSignal,
 } from '@/lib/referral-accepting'
@@ -79,31 +78,17 @@ export default function AcceptingStatusWidget({
   // §16-18: 'conditional'(紹介のみ停止)もスライダー上は'open'側として丸める(メインの2値トグル自体は
   // 変更しない・下の副オプションで区別する)。
   const [status, setStatus] = useState<'open' | 'closed' | 'conditional' | null>(initialAcceptingStatus)
-  const [note, setNote] = useState(initialAcceptingNote || '')
-  // 🟡6レビュー指摘: 最後に保存された値を保持し、onBlurで未変更ならPATCHを送らない
-  // (NULLユーザーがtextareaにフォーカスしただけで accepting_status='open' が明示値として書かれる事故防止)
+  // 移動(2026-08-06・CEO指示): 条件メモの編集はサービス・案内タブへ移した。ここでは保存済みの
+  // 値(savedNote)のみ保持し、accepting_status切替時にPATCHへ載せて既存メモを消さないようにする。
   const [savedNote, setSavedNote] = useState(initialAcceptingNote || '')
   const [delegateListId, setDelegateListId] = useState<string | null>(initialDelegateListId || null)
   const [toggling, setToggling] = useState(false)
-  const [savingNote, setSavingNote] = useState(false)
   const [lists, setLists] = useState<OwnList[]>([])
   const [listsLoaded, setListsLoaded] = useState(false)
   // レビュー指摘: 保存失敗時に一言のエラーメッセージを表示する(既存のインライン表示流儀に合わせる)
   const [toggleError, setToggleError] = useState(false)
-  const [noteError, setNoteError] = useState(false)
   // 🟡を選ぼうとしたが有効な代理リストが未選択/存在しない場合、確定させず選択UIを開く
   const [yellowSetupMode, setYellowSetupMode] = useState(false)
-  // §2-2: 条件メモは表示モード⇔編集モード。既定は表示モード。
-  const [noteEditing, setNoteEditing] = useState(false)
-  const [justSaved, setJustSaved] = useState(false)
-  const justSavedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // 「保存しました」フィードバックのタイマーをアンマウント時にクリーンアップ
-  useEffect(() => {
-    return () => {
-      if (justSavedTimeoutRef.current) clearTimeout(justSavedTimeoutRef.current)
-    }
-  }, [])
 
   // 移動(2026-08-06・CEO指示): 「紹介からの予約は受け付けない」の操作先が紹介タブ側へ移った
   // ことで、accepting_status がこのウィジェットの外(親のsetPro経由)から変わりうる。
@@ -112,6 +97,13 @@ export default function AcceptingStatusWidget({
   useEffect(() => {
     setStatus(initialAcceptingStatus)
   }, [initialAcceptingStatus])
+
+  // 移動(2026-08-06・CEO指示): 条件メモの編集はサービス・案内タブ(BusinessInfoTab)へ移した。
+  // このウィジェットはメモを保存済み値の読み取り専用表示のみ行うため、親(dashboard/page.tsx)側で
+  // BusinessInfoTab経由の保存後にsetProが更新されたら追従させる(依存はプリミティブのみ)。
+  useEffect(() => {
+    setSavedNote(initialAcceptingNote || '')
+  }, [initialAcceptingNote])
 
   // 先行テスト第3弾: NULL(未設定)は'open'として扱う(fail-open)。UI分岐は全てこの値を使う。
   // §16-18: 'conditional'もスライダーの見た目は'open'側(メインの2値トグルは不変)。
@@ -185,10 +177,6 @@ export default function AcceptingStatusWidget({
   // (型はReferralSignalのまま維持し、§16-8まで'delegate'分岐のコードを残す)。
   async function selectSegment(target: ReferralSignal) {
     if (toggling) return
-    // R6レビュー指摘: スライダー操作時は条件メモの未保存下書きを破棄する(編集途中の文言が
-    // 後続操作で意図せず確定・公開されるのを防ぐ)
-    setNote(savedNote)
-    setNoteEditing(false)
     if (target === 'open') {
       setYellowSetupMode(false)
       await commitStatus('open')
@@ -227,73 +215,47 @@ export default function AcceptingStatusWidget({
     await selectSegment(target)
   }
 
-  // §2-2: 保存ボタン押下時のみPATCHを送る(onBlur自動保存は廃止)。
-  // NULL(未設定)ユーザーが触っただけで accepting_status が確定する事故を防ぐため、
-  // 未変更なら通信せず編集モードを閉じるだけにする(dirtyチェックは維持)。
-  async function saveNote() {
-    if (note === savedNote) {
-      setNoteEditing(false)
-      return
-    }
-    setSavingNote(true)
-    setNoteError(false)
-    try {
-      // §16-18: effectiveStatusは表示用に'conditional'を'open'へ丸めた値のため、PATCHには
-      // 実際のstatus(conditionalならconditionalのまま)を送る。丸めた値を送ると
-      // 条件メモの保存だけで「紹介からの予約は受け付けない」が解除されてしまう事故になる。
-      const statusToSend = status ?? 'open'
-      const res = await fetch('/api/referral/accepting', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        cache: 'no-store',
-        body: JSON.stringify({ accepting_status: statusToSend, accepting_note: note }),
-      })
-      if (res.ok) {
-        setSavedNote(note)
-        onUpdated(statusToSend, note || null, delegateListId)
-        setNoteEditing(false)
-        setJustSaved(true)
-        if (justSavedTimeoutRef.current) clearTimeout(justSavedTimeoutRef.current)
-        justSavedTimeoutRef.current = setTimeout(() => setJustSaved(false), 2500)
-      } else {
-        setNoteError(true)
-      }
-    } catch {
-      setNoteError(true)
-    } finally {
-      setSavingNote(false)
-    }
-  }
-
-  function cancelNoteEdit() {
-    setNote(savedNote)
-    setNoteError(false)
-    setNoteEditing(false)
-  }
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, maxWidth: 240 }}>
-      {/* §CEO指摘対応(2026-08-06): ダッシュボード見出し行の右横に収まる単一ピル。
-          緑(受付中)/赤(停止中)のどちらか一方だけを表示し、タップで反転する。
-          停止中の間のドットは実際のシグナル(🔴/🟡)を反映する(§16-7改訂の意図を維持)。 */}
-      <button
-        onClick={handleCompactToggle}
-        disabled={toggling}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' as const,
-          padding: '4px 10px', borderRadius: 999, border: 'none',
-          background: effectiveStatus === 'open' ? '#E8F5E9' : '#FDECEA',
-          color: effectiveStatus === 'open' ? '#1B5E20' : '#B00020',
-          fontSize: 12, fontWeight: 700,
-          cursor: toggling ? 'default' : 'pointer',
-          opacity: toggling ? 0.6 : 1,
-        }}
-      >
-        <span style={{ fontSize: 13 }}>
-          {effectiveStatus === 'open' ? REFERRAL_SIGNAL_DOT.open : REFERRAL_SIGNAL_DOT[signal === 'delegate' ? 'delegate' : 'closed']}
+      {/* §CEO指摘対応(2026-08-06): 従来の角丸ピル(🟢受付中)は「バッジ」に見えて押せると分からない
+          という指摘のため、iOS風のトグルスイッチ(丸いつまみが左右にスライド)へ変更。
+          ON(緑・右)=受付中、OFF(グレー/赤・左)=停止中。ラベルは横に添える。停止中で有効な代理案内が
+          ある間は「停止中（案内中）」と表示し、4色目のインジケータは作らない(OFF表現のまま)。
+          タップ挙動(停止のみ確認・再開は即時)はhandleCompactToggleのまま変更しない。 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button
+          onClick={handleCompactToggle}
+          disabled={toggling}
+          role="switch"
+          aria-checked={effectiveStatus === 'open'}
+          aria-label="紹介の受付状態"
+          style={{
+            position: 'relative', width: 40, height: 22, borderRadius: 999,
+            border: 'none', padding: 0, flexShrink: 0,
+            background: effectiveStatus === 'open' ? '#06C755' : (signal === 'delegate' ? '#D9A400' : '#D1D5DB'),
+            cursor: toggling ? 'default' : 'pointer',
+            opacity: toggling ? 0.6 : 1,
+            transition: 'background-color 0.15s ease',
+          }}
+        >
+          <span
+            style={{
+              position: 'absolute', top: 2, left: effectiveStatus === 'open' ? 20 : 2,
+              width: 18, height: 18, borderRadius: '50%', background: '#fff',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.35)',
+              transition: 'left 0.15s ease',
+            }}
+          />
+        </button>
+        <span
+          style={{
+            fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' as const,
+            color: effectiveStatus === 'open' ? '#1B5E20' : '#B00020',
+          }}
+        >
+          {effectiveStatus === 'open' ? SEGMENT_LABEL.open : (signal === 'delegate' ? '停止中（案内中）' : SEGMENT_LABEL.closed)}
         </span>
-        <span>{SEGMENT_LABEL[effectiveStatus]}</span>
-      </button>
+      </div>
       {toggleError && <div style={{ fontSize: 11, color: '#B00020' }}>更新に失敗しました</div>}
 
       {/* 移動(2026-08-06・CEO指示): 「紹介からの予約は受け付けない」チェックボックス(旧§16-18)は
@@ -383,80 +345,20 @@ export default function AcceptingStatusWidget({
         </div>
       )}
 
-      {/* 受付中のときのみ条件メモを表示・編集できる。§2-2: 既定は表示モード、
-          タップで編集モードに入り保存ボタンで確定して表示モードへ戻る。
-          バグ修正(2026-08-06・CEO指摘): status==='conditional'(紹介のみ停止)は
-          computeReferralSignal で 'closed'/'delegate' に畳まれ signal==='open' にならないため、
-          このブロック自体(表示・編集UI)ごと消えていた。conditionalのときこそ「直接のご相談は
-          受け付けています」等を書きたい場面のため、status==='conditional' も表示対象に含める。
-          保存済みのaccepting_noteはDB側で保持されたままだった(消えていたのは表示条件のみ)。 */}
-      {!yellowSetupMode && (signal === 'open' || status === 'conditional') && (
-        <div>
-          {noteEditing ? (
-            <div>
-              <textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value.slice(0, 200))}
-                placeholder="条件メモ（例: めまい・ふらつきのケースのみ／土曜のみ対応可）"
-                autoFocus
-                style={{
-                  width: '100%', minHeight: 50, padding: '8px 10px', borderRadius: 8,
-                  border: '1px solid #E5E7EB', fontSize: 12, boxSizing: 'border-box' as const,
-                  resize: 'vertical' as const,
-                }}
-              />
-              <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                <button
-                  onClick={saveNote}
-                  disabled={savingNote}
-                  style={{
-                    fontSize: 12, padding: '6px 14px', borderRadius: 8, border: 'none',
-                    background: '#1A1A2E', color: '#fff', cursor: savingNote ? 'default' : 'pointer',
-                    opacity: savingNote ? 0.6 : 1,
-                  }}
-                >
-                  {savingNote ? '保存中...' : '保存する'}
-                </button>
-                <button
-                  onClick={cancelNoteEdit}
-                  disabled={savingNote}
-                  style={{
-                    fontSize: 12, padding: '6px 14px', borderRadius: 8, border: '1px solid #E5E7EB',
-                    background: '#fff', color: '#6B7280', cursor: savingNote ? 'default' : 'pointer',
-                  }}
-                >
-                  キャンセル
-                </button>
-              </div>
-              {noteError && <div style={{ fontSize: 11, color: '#B00020', marginTop: 4 }}>保存に失敗しました</div>}
-            </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' as const, minWidth: 0, width: '100%' }}>
-              {savedNote ? (
-                <button
-                  onClick={() => setNoteEditing(true)}
-                  style={{
-                    fontSize: 12, color: '#1A1A2E', background: 'none', border: 'none', padding: 0,
-                    cursor: 'pointer', textAlign: 'right' as const, display: 'block', width: '100%',
-                    whiteSpace: 'normal' as const, wordBreak: 'break-word' as const,
-                  }}
-                >
-                  {savedNote}
-                </button>
-              ) : (
-                <button
-                  onClick={() => setNoteEditing(true)}
-                  style={{
-                    fontSize: 12, color: '#6B7280', background: 'none', border: 'none', padding: 0,
-                    cursor: 'pointer', textDecoration: 'underline',
-                  }}
-                >
-                  条件を追記する
-                </button>
-              )}
-              {justSaved && <span style={{ fontSize: 11, color: '#2E7D32' }}>保存しました</span>}
-            </div>
-          )}
+      {/* §CEO指摘対応(2026-08-06): 条件メモの編集UI(テキストエリア＋「条件を追記する」リンク)は
+          ダッシュボード上部から撤去し、サービス・案内タブ(BusinessInfoTab)へ移動した。
+          ここには編集導線を置かず、保存済みのメモがある場合のみ1行の読み取り専用表示だけ残す
+          (受付中/紹介のみ停止のときに表示。1行を超えないようellipsisで省略)。 */}
+      {savedNote && (signal === 'open' || status === 'conditional') && (
+        <div
+          style={{
+            fontSize: 12, color: '#6B7280', textAlign: 'right' as const,
+            maxWidth: 240, width: '100%',
+            whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis',
+          }}
+          title={savedNote}
+        >
+          {savedNote}
         </div>
       )}
     </div>
