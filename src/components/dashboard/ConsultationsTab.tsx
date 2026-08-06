@@ -45,6 +45,9 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
   const [notice, setNotice] = useState('')
   // CEO指示(2026-08-06): アーカイブしたスレッドは既定で出さない。切り替えて見返せる。
   const [showArchived, setShowArchived] = useState(false)
+  // §16-25(CEO指示 2026-08-06): 相談を受け付けるかのスイッチ。既定は受け付ける。
+  const [accepting, setAccepting] = useState(true)
+  const [savingAccepting, setSavingAccepting] = useState(false)
 
   async function load(archived = showArchived) {
     try {
@@ -56,6 +59,7 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
       const json = await res.json()
       const items: Consultation[] = Array.isArray(json.consultations) ? json.consultations : []
       setList(items)
+      if (typeof json.accepting === 'boolean') setAccepting(json.accepting)
       // アーカイブ表示中の件数でバッジを上書きしない（通常一覧のときだけ報告する）
       if (!archived && onUnreadChange) onUnreadChange(items.filter(c => c.status === 'new').length)
     } catch {
@@ -101,6 +105,31 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
     }
   }
 
+  async function toggleAccepting(next: boolean) {
+    if (savingAccepting) return
+    setSavingAccepting(true)
+    setError('')
+    // 楽観更新はしない。保存できたことを確認してから反映する
+    // （migration 051 未実行だと保存できず、スイッチだけ動いて見える事故を避ける）。
+    try {
+      const res = await fetch('/api/pro/consultations', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ accepting: next }),
+      })
+      if (!res.ok) {
+        setError('設定を保存できませんでした。時間をおいてお試しください。')
+        return
+      }
+      setAccepting(next)
+    } catch {
+      setError('設定を保存できませんでした。')
+    } finally {
+      setSavingAccepting(false)
+    }
+  }
+
   async function updateStatus(id: string, status: string) {
     setError('')
     try {
@@ -129,6 +158,44 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
     return <p style={{ fontSize: 13, color: '#9CA3AF' }}>読み込み中…</p>
   }
 
+  const acceptingSwitch = (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+      background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12,
+      padding: '14px 16px', marginBottom: 16,
+    }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E' }}>
+          {accepting ? 'ご相談を受け付けています' : 'ご相談を停止しています'}
+        </div>
+        <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4, lineHeight: 1.6 }}>
+          {accepting
+            ? 'カードに「相談する」が表示されます。'
+            : 'カードから「相談する」が消えます。予約の受付はそのままです。'}
+        </div>
+      </div>
+      <div
+        role="switch"
+        aria-checked={accepting}
+        aria-label="相談の受付"
+        onClick={() => toggleAccepting(!accepting)}
+        style={{
+          width: 48, height: 28, borderRadius: 14, flexShrink: 0,
+          background: accepting ? '#C4A35A' : '#D1D5DB',
+          position: 'relative', transition: 'background 0.2s',
+          cursor: savingAccepting ? 'default' : 'pointer',
+          opacity: savingAccepting ? 0.6 : 1,
+        }}
+      >
+        <div style={{
+          width: 22, height: 22, borderRadius: '50%', background: '#fff',
+          position: 'absolute', top: 3, left: accepting ? 23 : 3,
+          transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+        }} />
+      </div>
+    </div>
+  )
+
   const archiveToggle = (
     <button
       type="button"
@@ -144,6 +211,9 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
 
   if (list.length === 0) {
     return (
+      <div>
+      {acceptingSwitch}
+      {error && <p style={{ fontSize: 12, color: '#E24B4A', marginBottom: 10 }}>{error}</p>}
       <div style={{ background: '#fff', borderRadius: 14, padding: 28, textAlign: 'center', border: '1px solid #E5E7EB' }}>
         <div style={{ textAlign: 'right', marginBottom: 8 }}>{archiveToggle}</div>
         <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.9 }}>
@@ -153,6 +223,7 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
           あなたのカードの「相談する」から、お客さんが日時を決めずに問い合わせできます。
           届いたらここに表示され、メールかLINEでもお知らせします。
         </p>
+      </div>
       </div>
     )
   }
@@ -166,6 +237,7 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
 
   return (
     <div style={{ paddingBottom: 40 }}>
+      {acceptingSwitch}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
         <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.8, margin: 0 }}>
           {showArchived

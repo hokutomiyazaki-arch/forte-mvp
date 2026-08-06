@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { getOwnPro } from '@/lib/referral-auth'
 
@@ -50,8 +50,17 @@ export async function GET(request: Request) {
       .order('updated_at', { ascending: false })
       .limit(THREAD_LIMIT)
 
+    // 相談の受付スイッチの現在値（§16-25）。カラム未作成なら null が返るので
+    // その場合は「受け付ける」として扱う（fail-soft）。
+    const { data: settings } = await supabase
+      .from('professionals')
+      .select('consultation_enabled')
+      .eq('id', ownPro.id)
+      .maybeSingle()
+    const accepting = (settings as any)?.consultation_enabled !== false
+
     const list = threads || []
-    if (list.length === 0) return NextResponse.json({ consultations: [] })
+    if (list.length === 0) return NextResponse.json({ consultations: [], accepting })
 
     // 本文は1クエリでまとめて取り、JS側でスレッドに割り当てる（N+1を作らない）
     const ids = list.map(t => t.id)
@@ -68,6 +77,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({
+      accepting,
       consultations: list.map(t => ({
         ...t,
         messages: byThread.get(t.id) || [],
@@ -75,6 +85,43 @@ export async function GET(request: Request) {
     })
   } catch (err) {
     console.error('[api/pro/consultations GET] error:', err)
+    return NextResponse.json({ error: 'internal' }, { status: 500 })
+  }
+}
+
+/**
+ * PATCH /api/pro/consultations — 相談の受付スイッチ（§16-25）
+ * body: { accepting: boolean }
+ *
+ * 既存の accepting_status とは別軸。「予約は受けたいが相談はしたくない」を表せるようにする。
+ * 巻き込み防止のため accepting_status には一切触らない。
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    const ownPro = await getOwnPro()
+    if (!ownPro) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+
+    const payload = await request.json().catch(() => null)
+    if (!payload || typeof payload.accepting !== 'boolean') {
+      return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+    }
+
+    const supabase = getSupabaseAdmin()
+    const { error } = await supabase
+      .from('professionals')
+      .update({ consultation_enabled: payload.accepting })
+      .eq('id', ownPro.id)
+
+    if (error) {
+      // migration 051 未実行だとここに来る（カラムが無い）。
+      // 黙って成功にするとスイッチが戻って見えるので、必ず失敗として返す。
+      console.error('[api/pro/consultations PATCH] error:', error.message)
+      return NextResponse.json({ error: 'update_failed' }, { status: 500 })
+    }
+
+    return NextResponse.json({ ok: true, accepting: payload.accepting })
+  } catch (err) {
+    console.error('[api/pro/consultations PATCH] error:', err)
     return NextResponse.json({ error: 'internal' }, { status: 500 })
   }
 }

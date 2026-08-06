@@ -538,7 +538,9 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
                 予約する
               </a>
             )}
-            {/* §16-19: 相談はRP内フォーム。contact_email の有無で出し分けない（CEO指示 2026-08-06）*/}
+            {/* §16-19: 相談はRP内フォーム。contact_email の有無で出し分けない（CEO指示 2026-08-06）。
+                §16-25: プロが相談を止めている場合だけ出さない（カラム未作成＝null は出す）。 */}
+            {(pro as any).consultation_enabled !== false && (
             <a href={`/consult/${id}`}
                 onClick={() => trackEvent(id, 'consultation_click', shareSrc || undefined)}
                 style={{
@@ -548,6 +550,7 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
                 }}>
                 相談する
               </a>
+            )}
           </div>
         </div>
       )}
@@ -1504,7 +1507,8 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
             予約する
           </a>
         )}
-        {/* §16-19: 同上 */}
+        {/* §16-19 / §16-25: 同上 */}
+        {(pro as any).consultation_enabled !== false && (
         <a href={`/consult/${id}`}
             onClick={() => trackEvent(id, 'consultation_click', shareSrc || undefined)}
             style={{
@@ -1514,6 +1518,7 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
             }}>
             このプロに相談する
           </a>
+        )}
         <div style={{
           background: T.cardBg, border: `1px solid ${T.cardBorder}`, borderRadius: 14,
           padding: '12px 16px', fontSize: 11, color: T.textMuted, textAlign: 'center',

@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     // 相手プロの実在確認。退会済み(deactivated_at)は受け付けない。
     const { data: pro } = await supabase
       .from('professionals')
-      .select('id, name, contact_email, line_messaging_user_id, accepting_status')
+      .select('id, name, contact_email, line_messaging_user_id, accepting_status, consultation_enabled')
       .eq('id', proId)
       .is('deactivated_at', null)
       .maybeSingle()
@@ -81,6 +81,12 @@ export async function POST(request: NextRequest) {
     // 受付停止(closed)は相談も受けない。'conditional' は「紹介予約のみ停止・直接の相談は継続」
     // （§16-18）なので受け付ける。
     if (pro.accepting_status === 'closed') {
+      return NextResponse.json({ error: 'not_accepting' }, { status: 409 })
+    }
+
+    // §16-25: 相談だけを止めるスイッチ。カラム未作成なら null が返るので
+    // その場合は「受け付ける」として扱う（fail-soft）。
+    if ((pro as any).consultation_enabled === false) {
       return NextResponse.json({ error: 'not_accepting' }, { status: 409 })
     }
 

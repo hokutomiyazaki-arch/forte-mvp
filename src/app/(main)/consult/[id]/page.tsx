@@ -30,7 +30,7 @@ export default async function ConsultPage({ params }: { params: { id: string } }
   const supabase = getSupabaseAdmin()
   const { data: pro } = await supabase
     .from('professionals')
-    .select('id, name, photo_url, title, store_name, accepting_status')
+    .select('id, name, photo_url, title, store_name, accepting_status, consultation_enabled')
     .eq('id', params.id)
     .is('deactivated_at', null)
     .maybeSingle()
@@ -46,7 +46,8 @@ export default async function ConsultPage({ params }: { params: { id: string } }
       proStoreName={pro.store_name || null}
       // 受付停止(closed)のときはフォームを出さない。'conditional' は紹介予約のみ停止で
       // 直接の相談は継続する値なので受け付ける（§16-18）。
-      accepting={pro.accepting_status !== 'closed'}
+      // さらに §16-25 の「相談だけ止める」スイッチも見る（カラム未作成なら null＝受け付ける）。
+      accepting={pro.accepting_status !== 'closed' && (pro as any).consultation_enabled !== false}
     />
   )
 }
