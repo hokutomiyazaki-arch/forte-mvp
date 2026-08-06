@@ -12,6 +12,7 @@ next-env.d.ts
 .claude/*
 !.claude/rp-reference.md
 !.claude/SETUP-README.md
+!.claude/MCP-SETUP.md
 !.claude/agents/
 !.claude/agents/*.md
 
