@@ -5,7 +5,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import BookingThread from '@/components/dashboard/BookingThread'
 import ReferralCompletedList from '@/components/dashboard/ReferralCompletedList'
 import { computeReferralSignal, REFERRAL_SIGNAL_DOT } from '@/lib/referral-accepting'
-import { estimateReferralPayoutReflectionText } from '@/lib/referral-format'
+import { estimateReferralPayoutReflectionText, estimateReferralPayoutHoldExpiryText } from '@/lib/referral-format'
 
 interface PinPro {
   id: string
@@ -1983,6 +1983,16 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
               {payout && (
                 <div style={{ fontSize: 12, color: '#8A6D1F', marginTop: 4, fontWeight: 600 }}>
                   紹介報酬 ¥{payout.amount_jpy.toLocaleString()} {payout.status === 'paid' ? '支払い済み' : '確定'}
+                  {/* E-2(CEO決定・2026-08-06): 完了→保留7日→送金に変更。送金待ち(pending)の間は
+                      予定日を明示する(created_at=分配行の作成時刻=完了確定時)。 */}
+                  {payout.status === 'pending' && (() => {
+                    const holdExpiryText = estimateReferralPayoutHoldExpiryText(payout.created_at)
+                    return holdExpiryText ? (
+                      <span style={{ color: '#9CA3AF', fontWeight: 400, marginLeft: 6 }}>
+                        ({holdExpiryText} 送金予定)
+                      </span>
+                    ) : null
+                  })()}
                 </div>
               )}
               <BookingThread

@@ -541,3 +541,26 @@ export function estimateReferralPayoutReflectionText(paidAtIso: string | null | 
   if (!estimated || estimated.getTime() < Date.now()) return null
   return formatMonthDay(estimated)
 }
+
+/**
+ * E-2(CEO決定・2026-08-06): 紹介報酬の自動送金は「完了→即送金」から「完了→保留N日→送金」に変更した。
+ * 完了後のクレーム・返金要求に対する回収手段がないための保留期間。DBマイグレーションは行わず、
+ * referral_payouts.created_at(=完了確定時に作成される分配行の作成時刻)からの経過日数で判定する
+ * (cron/expire-referral-bookings の pending 再試行ブロックが、このN日を過ぎたpending行のみを送金対象にする)。
+ */
+export const PAYOUT_HOLD_DAYS = 7
+
+/**
+ * referral_payouts.created_at(分配行の作成時刻=完了確定時)から PAYOUT_HOLD_DAYS 日後の
+ * 送金予定日を「M/D」形式で返す(送り手向け「◯月◯日 送金予定」表示用)。無効な入力はnull。
+ * すでに保留期間を過ぎている(=送金待ち中/cronの次回実行待ち)場合も、送金予定日はそのまま返す
+ * (過去日付になっても「そろそろ送金される」という情報として表示価値がある。paid_at反映予定
+ * (estimateReferralPayoutReflectionText)とは異なり、ここでは過去日フィルタは行わない)。
+ */
+export function estimateReferralPayoutHoldExpiryText(createdAtIso: string | null | undefined): string | null {
+  if (!createdAtIso) return null
+  const createdMs = new Date(createdAtIso).getTime()
+  if (Number.isNaN(createdMs)) return null
+  const expiryMs = createdMs + PAYOUT_HOLD_DAYS * 24 * 60 * 60 * 1000
+  return formatMonthDay(new Date(expiryMs))
+}

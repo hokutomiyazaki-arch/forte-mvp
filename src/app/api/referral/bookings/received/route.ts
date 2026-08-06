@@ -33,7 +33,6 @@ import {
   issueFeePaymentLinkAndNotify,
   refundReferralBookingFee,
   expireReferralCheckoutSession,
-  executeReferralPayoutTransfer,
 } from '@/lib/referral-payment'
 // ステージ4(送り手分配・2026-08-04・CEO決定): Stripeに触らない独立ファイル(referral-payment.tsとは
 // チャンクグラフを分ける)。完了確定時に送り手分配行(referral_payouts)を1回だけ作成する。
@@ -456,27 +455,20 @@ export async function PATCH(request: NextRequest) {
       }
 
       // ステージ4(送り手分配・CEO決定): 完了確定の直後に分配行を作成する(fail-soft・失敗しても完了処理自体は成功扱い)。
-      let payoutIdForTransfer: string | null = null
       // CEO指示(2026-08-05): 完了通知に報酬額を載せるため保持する(分配対象外はnullのまま)。
       let payoutAmountJpyForNotify: number | null = null
       try {
         const payoutResult = await createReferralPayoutIfEligible(bookingId)
-        payoutIdForTransfer = payoutResult.payoutId
         payoutAmountJpyForNotify = payoutResult.amountJpy
       } catch (payoutErr) {
         console.error('[api/referral/bookings/received] complete payout create error:', payoutErr)
       }
 
-      // ステージ4「自動送金」(CEO承認済み・2026-08-05): 分配行の作成/既存確認の直後に送金を試みる
-      // (fail-soft・完了処理を絶対に壊さない。口座未登録はexecuteReferralPayoutTransfer内でno_accountと
-      // してスキップされpendingのまま残る=cronの再試行ブロックが拾い直す)。
-      if (payoutIdForTransfer) {
-        try {
-          await executeReferralPayoutTransfer(payoutIdForTransfer)
-        } catch (transferErr) {
-          console.error('[api/referral/bookings/received] complete payout transfer error:', transferErr)
-        }
-      }
+      // E-2(CEO決定・2026-08-06): 「完了→即送金」から「完了→保留7日(PAYOUT_HOLD_DAYS)→送金」に変更。
+      // 完了後のクレーム・返金要求に対する回収手段がないための保留期間。分配行(referral_payouts)は
+      // 上記の通りpending状態で作成するのみで、この場でexecuteReferralPayoutTransferは呼ばない。
+      // 実際の送金は cron/expire-referral-bookings の pending 再試行ブロックが、
+      // referral_payouts.created_atから7日以上経過した行のみを拾って実行する。
 
       // ライフサイクル改善(タスクD): 完了時、送り手プロへ通知する(失敗しても完了処理自体は成功扱い)。
       try {
