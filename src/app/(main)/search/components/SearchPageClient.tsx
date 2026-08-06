@@ -96,6 +96,9 @@ interface SearchPro {
   } | null
   /** §2-2改訂: 4色インジケータ(🟢受付中/🟡代理案内/🔴停止中/⚪️未設定・プロ向け画面のみ) */
   referralSignal?: 'open' | 'delegate' | 'closed'
+  /** CEO指摘対応(2026-08-06): クライアント向け検索カード用。色記号は出さず、受付停止時のみ1行テキストを出す
+   * ためのboolean(isReferralFullyLaunched()でゲート済み・現在は常にfalse)。 */
+  referralClosedNotice?: boolean
 }
 
 interface OwnReferralList {
@@ -883,6 +886,15 @@ export default function SearchPageClient({
                           <span style={{ marginLeft: 6 }}>{REFERRAL_SIGNAL_DOT[p.referralSignal]}</span>
                         )}
                       </div>
+                      {/* CEO指摘対応(2026-08-06・§3): クライアント向け検索カードのみ・受付中(🟢)は
+                          何も表示せず、停止中のときだけ控えめな1行テキストで知らせる(色記号は使わない・
+                          §16-7でクライアント向け公開カードは色を出さず文章で伝える方針に揃える)。
+                          プロ向け画面(showReferralSignals)は既存の🟢🟡🔴ドット表示のみで変更しない。 */}
+                      {!showReferralSignals && p.referralClosedNotice && (
+                        <div style={{ fontSize: 13, color: T.textMuted, marginTop: 3 }}>
+                          現在ご紹介を受け付けていません
+                        </div>
+                      )}
                     </div>
                   </div>
 

@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { isSearchPrivate } from '@/lib/feature-flags'
+import { isSearchPrivate, isReferralFullyLaunched } from '@/lib/feature-flags'
 import { getViewerIsPro, getViewerIsProStrict } from '@/lib/viewer-role'
-import { computeReferralSignal } from '@/lib/referral-accepting'
+import { computeReferralSignal, isReferralReachable } from '@/lib/referral-accepting'
 import { getValidDelegateListIds } from '@/lib/referral-delegate'
 import { selectInChunks } from '@/lib/supabase-batch'
 
@@ -627,6 +627,18 @@ export async function GET(request: Request) {
               !!pro.delegate_list_id && validDelegateListIds.has(pro.delegate_list_id)
             )
           : null,
+        // CEO指摘対応(2026-08-06・§3検索カードの受付状態表示): クライアント向け検索カードは
+        // 色記号(🟢🟡🔴)を出さず、停止中のときだけ1行テキストで知らせる方針。referralSignalは
+        // プロ向け専用(非プロにはnull)のため別途boolean1個だけ常に付与する(色/内部用語は漏らさない)。
+        // isReferralFullyLaunched()でゲート(現在'all'以外の間は常にfalse)。
+        referralClosedNotice: isReferralFullyLaunched()
+          ? !isReferralReachable(
+              computeReferralSignal(
+                pro.accepting_status,
+                !!pro.delegate_list_id && validDelegateListIds.has(pro.delegate_list_id)
+              )
+            )
+          : false,
       }
     }).filter((p): p is NonNullable<typeof p> => p !== null)
 
