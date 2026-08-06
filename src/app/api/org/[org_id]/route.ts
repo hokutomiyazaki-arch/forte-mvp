@@ -38,7 +38,11 @@ export async function GET(
 
     const allOrgMembers = orgMembersData || []
 
-    // org_aggregate VIEWの代わりに直接計算（Vercelキャッシュ問題回避）
+    // 2026-03-11のVercelキャッシュ問題(LESSONS.md B-1)の対策は cache:'no-store' + force-dynamic
+    // (このファイル冒頭・5行目/17-18行目)であり、VIEW回避は不要だった。013_org_views.sql の
+    // org_aggregate は active_member_count/total_org_votes をいずれも COUNT(DISTINCT ...) で
+    // 定義しているため、直下のJS計算(Set重複排除 + .in()count)と数学的に同一の値を返す。
+    // 二重実装を解消するためVIEW経由に統一する(2026-08)。
     const { data: memberCountData } = await supabase
       .from('org_members')
       .select('professional_id')
@@ -49,28 +53,31 @@ export async function GET(
     const uniqueProIds = new Set((memberCountData || []).map((m: any) => m.professional_id))
     const professionalIds = Array.from(uniqueProIds)
 
-    let totalVotes = 0
+    const { data: orgAggregateData } = await supabase
+      .from('org_aggregate')
+      .select('active_member_count, total_org_votes')
+      .eq('organization_id', orgId)
+      .maybeSingle()
+
+    // votes_last_30_days は org_aggregate 側が `COUNT(v.id) FILTER(...)`（DISTINCT無し）で
+    // LEFT JOIN しているため、同一プロが団体内で複数バッジ(=org_membersに複数active行、
+    // 例: advance/master/TBU同時保持)を持つと二重・三重カウントされ得る(JS側は
+    // professionalIds が重複排除済みSetなので1回だけ数える)。数値を変えないため、
+    // ここだけは従来どおりJSで計算する。
     let recentVotes = 0
     if (professionalIds.length > 0) {
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-      const [totalResult, recentResult] = await Promise.all([
-        supabase
-          .from('votes')
-          .select('id', { count: 'exact', head: true })
-          .in('professional_id', professionalIds),
-        supabase
-          .from('votes')
-          .select('id', { count: 'exact', head: true })
-          .in('professional_id', professionalIds)
-          .gte('created_at', thirtyDaysAgo),
-      ])
-      totalVotes = totalResult.count || 0
-      recentVotes = recentResult.count || 0
+      const { count } = await supabase
+        .from('votes')
+        .select('id', { count: 'exact', head: true })
+        .in('professional_id', professionalIds)
+        .gte('created_at', thirtyDaysAgo)
+      recentVotes = count || 0
     }
 
     const aggregate = {
-      active_member_count: uniqueProIds.size,
-      total_org_votes: totalVotes,
+      active_member_count: orgAggregateData?.active_member_count ?? uniqueProIds.size,
+      total_org_votes: orgAggregateData?.total_org_votes ?? 0,
       votes_last_30_days: recentVotes,
     }
 
@@ -79,7 +86,12 @@ export async function GET(
       new Map(allOrgMembers.map((m: any) => [m.professional_id, m])).values()
     )
 
-    // org_proof_summary VIEWの代わりにvotesテーブルから直接集計（Vercelキャッシュ問題回避）
+    // 2026-03-11のVercelキャッシュ問題(LESSONS.md B-1)の対策は cache:'no-store' + force-dynamic
+    // であり、VIEW回避は不要だった。ここは org_proof_summary VIEWへの統一を検討したが、
+    // 同VIEWの total_votes は `COUNT(v.id)`(DISTINCT無し)を GROUP BY (organization_id, professional_id)
+    // で集計しており、同一プロが団体内で複数バッジ(=org_membersに複数active行)を持つ場合は
+    // LEFT JOINが行を複製し二重・三重カウントされる(下の重複排除ロジックが存在する理由と同じ事象)。
+    // 数値を変えないためVIEWには寄せず、votesテーブルから直接集計する現行実装を維持する。
     // 真因対応(2026-08): .range() が無く、団体の総投票数が1000行を超えると無音truncateしていた。
     // 共通ヘルパー(IN句100件チャンク+range()ページネーション)で全件取得する。
     let votesMap = new Map<string, number>()
@@ -174,6 +186,16 @@ export async function GET(
       // normalized_email は DISTINCT 人数カウント専用（集計後に破棄。レスポンスには含めない）。
       // 真因対応(2026-08): 同上。.range() が無く1000行超で無音truncateしていたため、
       // 共通ヘルパー(IN句100件チャンク+range()ページネーション)で全件取得する。
+      // バグ修正(2026-08・CEO承認): status='confirmed' の絞り込みを追加。個人カード側が使う
+      // vote_summary VIEW(028_continuation_votes.sql)は vote_type='proof' AND
+      // selected_proof_ids IS NOT NULL AND status='confirmed' で集計しており、この絞り込みが
+      // 無いと未確認(pending)票まで数えてしまい、同じ人の数字が団体ページと個人カードで食い違う。
+      // vote_summary VIEWへの完全な置き換え(JOIN)も検討したが、vote_summary は
+      // COUNT(DISTINCT normalized_email) のため normalized_email が NULL の投票(LINE/電話番号登録者)を
+      // 0人扱いで切り捨てる。一方この下のロジックは normalized_email が無い票を v.id フォールバックで
+      // 1人として個別カウントする設計(直下のコメント参照)であり、両者の挙動は異なる。今回の承認スコープは
+      // confirmed絞り込みのみのため、null-email挙動を変えないよう置き換えは行わず、この生集計に
+      // status='confirmed' を追加するに留める。
       const votesWithProofs = await selectInChunks<{
         id: string
         professional_id: string
@@ -187,6 +209,7 @@ export async function GET(
             .select('id, professional_id, selected_proof_ids, normalized_email')
             .in('professional_id', chunkIds)
             .eq('vote_type', 'proof')
+            .eq('status', 'confirmed')
             .not('selected_proof_ids', 'is', null)
             .order('id', { ascending: true })
             .range(from, to)

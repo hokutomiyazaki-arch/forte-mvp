@@ -125,6 +125,18 @@ const supabase = createClient(url, key, {
 export const dynamic = 'force-dynamic'
 ```
 
+**⚠️ 尾を引いた誤解（2026-08-06に判明）**: この事故のあと、団体ページAPI（`/api/org/[org_id]`）が
+集計VIEW（`org_proof_summary`/`org_aggregate`）の使用をやめ、JSでの再集計に置き換えられ、
+コードに「VIEWの代わりに直接計算（Vercelキャッシュ問題回避）」というコメントが残された。
+**しかしこの因果は誤り。** 上記の修正2点（`cache:'no-store'` と `force-dynamic`）が対策の本体で、
+VIEWの使用は事故と無関係だった（同じVIEWを使う `org-analytics` / `org-dashboard` では
+何も起きていない）。VIEWを避けた結果、代わりに**Supabaseの1000行キャップによる無音truncate**
+という別のバグを生み、後日パッチが必要になった。Postgres側で GROUP BY 集計していれば
+そもそも起きなかった種類の問題。
+
+**教訓**: 障害対応で「ついでに変えた」ことを原因と混同しない。コメントに書く因果は、
+実際に検証した1点だけにする。原因が曖昧なまま構造を変えると、別の破綻を呼び込む。
+
 ### B-2. ハードリフレッシュ Step 0 ルール
 
 **何が起きたか（2026-04-04）**: 太田ゆりかさんから「バッジが表示されない」報告。30分かけてDB・API調査 → 結局 **Cmd+Shift+R で解決**（ブラウザキャッシュ）。最初にやれば1分で済んだ。
