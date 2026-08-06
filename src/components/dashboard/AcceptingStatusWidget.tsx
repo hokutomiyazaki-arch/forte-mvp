@@ -59,9 +59,8 @@ interface Props {
   hasBookableMenu?: boolean
 }
 
-// §16-7改訂: スライダーの選択肢は🔴⇄🟢の2値のみ（🟡は表示専用インジケータ・選択肢から除外）
-const SEGMENTS: Array<'closed' | 'open'> = ['closed', 'open']
-const SEGMENT_INDEX: Record<'closed' | 'open', number> = { closed: 0, open: 1 }
+// §CEO指摘対応(2026-08-06): ダッシュボード見出し行への移動に伴い、2段セグメント表示を廃止し
+// 現在の状態のみを示す単一ピル(タップで反転)に変更する。値の意味・遷移先(open/closed)は不変。
 const SEGMENT_LABEL: Record<'closed' | 'open', string> = {
   closed: '停止中',
   open: '受付中',
@@ -216,6 +215,18 @@ export default function AcceptingStatusWidget({
     }
   }
 
+  // §CEO指摘対応(2026-08-06): ピル1個をタップで反転させる。受付停止(open→closed)は
+  // 他院・紹介ネットワークからの見え方が変わる操作のため確認を挟む。再開(closed→open)は即時。
+  async function handleCompactToggle() {
+    if (toggling) return
+    const target: 'open' | 'closed' = effectiveStatus === 'open' ? 'closed' : 'open'
+    if (target === 'closed') {
+      const ok = window.confirm('紹介の受付を停止しますか？（条件メモ・案内先の設定はそのまま保持されます）')
+      if (!ok) return
+    }
+    await selectSegment(target)
+  }
+
   // §2-2: 保存ボタン押下時のみPATCHを送る(onBlur自動保存は廃止)。
   // NULL(未設定)ユーザーが触っただけで accepting_status が確定する事故を防ぐため、
   // 未変更なら通信せず編集モードを閉じるだけにする(dirtyチェックは維持)。
@@ -261,44 +272,28 @@ export default function AcceptingStatusWidget({
   }
 
   return (
-    <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {/* §16-7改訂: 2段スライダー本体（🔴⇄🟢の2値トグル。ノブ位置=effectiveStatus） */}
-      <div
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, maxWidth: 240 }}>
+      {/* §CEO指摘対応(2026-08-06): ダッシュボード見出し行の右横に収まる単一ピル。
+          緑(受付中)/赤(停止中)のどちらか一方だけを表示し、タップで反転する。
+          停止中の間のドットは実際のシグナル(🔴/🟡)を反映する(§16-7改訂の意図を維持)。 */}
+      <button
+        onClick={handleCompactToggle}
+        disabled={toggling}
         style={{
-          position: 'relative', display: 'flex', background: '#F3F4F6', borderRadius: 999,
-          padding: 3,
+          display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' as const,
+          padding: '4px 10px', borderRadius: 999, border: 'none',
+          background: effectiveStatus === 'open' ? '#E8F5E9' : '#FDECEA',
+          color: effectiveStatus === 'open' ? '#1B5E20' : '#B00020',
+          fontSize: 12, fontWeight: 700,
+          cursor: toggling ? 'default' : 'pointer',
+          opacity: toggling ? 0.6 : 1,
         }}
       >
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute', top: 3, bottom: 3, left: `calc(${SEGMENT_INDEX[effectiveStatus] * 50}% + 2px)`,
-            width: 'calc(50% - 4px)', background: '#fff', borderRadius: 999,
-            boxShadow: '0 1px 3px rgba(0,0,0,0.15)', transition: 'left 0.2s ease', zIndex: 0,
-          }}
-        />
-        {SEGMENTS.map((seg) => (
-          <button
-            key={seg}
-            onClick={() => selectSegment(seg)}
-            disabled={toggling}
-            style={{
-              position: 'relative', zIndex: 1, flex: 1, padding: '8px 4px', border: 'none',
-              background: 'transparent', fontSize: 12, fontWeight: effectiveStatus === seg ? 700 : 500,
-              color: effectiveStatus === seg ? '#1A1A2E' : '#9CA3AF',
-              cursor: toggling ? 'default' : 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-              opacity: toggling ? 0.6 : 1,
-            }}
-          >
-            {/* §16-7改訂: closedボタンのドットは実際のシグナル(🔴/🟡)を反映する。
-                現在🟡(closed+有効な代理あり)なら誤って「案内が消える」と誤解しないよう
-                🔴ではなく🟡を表示する。openは常に🟢固定 */}
-            <span style={{ fontSize: 13 }}>{seg === 'closed' ? REFERRAL_SIGNAL_DOT[signal === 'delegate' ? 'delegate' : 'closed'] : REFERRAL_SIGNAL_DOT.open}</span>
-            <span>{SEGMENT_LABEL[seg]}</span>
-          </button>
-        ))}
-      </div>
+        <span style={{ fontSize: 13 }}>
+          {effectiveStatus === 'open' ? REFERRAL_SIGNAL_DOT.open : REFERRAL_SIGNAL_DOT[signal === 'delegate' ? 'delegate' : 'closed']}
+        </span>
+        <span>{SEGMENT_LABEL[effectiveStatus]}</span>
+      </button>
       {toggleError && <div style={{ fontSize: 11, color: '#B00020' }}>更新に失敗しました</div>}
 
       {/* 移動(2026-08-06・CEO指示): 「紹介からの予約は受け付けない」チェックボックス(旧§16-18)は
@@ -309,7 +304,7 @@ export default function AcceptingStatusWidget({
           消えると誤解されないよう補足する。commitStatusはdelegate_list_idに触れない実装のため、
           実際には🔴を押しても案内は消えない(誤操作事故は起きない)が、状態を正しく伝える。 */}
       {signal === 'delegate' && (
-        <div style={{ fontSize: 11, color: '#8A6D00', lineHeight: 1.6 }}>
+        <div style={{ fontSize: 11, color: '#8A6D00', lineHeight: 1.6, textAlign: 'right' as const }}>
           {REFERRAL_SIGNAL_LABEL.delegate}
           {selectedDelegateList ? `（案内先: ${selectedDelegateList.title}）` : ''}
         </div>
@@ -389,8 +384,13 @@ export default function AcceptingStatusWidget({
       )}
 
       {/* 受付中のときのみ条件メモを表示・編集できる。§2-2: 既定は表示モード、
-          タップで編集モードに入り保存ボタンで確定して表示モードへ戻る。 */}
-      {!yellowSetupMode && signal === 'open' && (
+          タップで編集モードに入り保存ボタンで確定して表示モードへ戻る。
+          バグ修正(2026-08-06・CEO指摘): status==='conditional'(紹介のみ停止)は
+          computeReferralSignal で 'closed'/'delegate' に畳まれ signal==='open' にならないため、
+          このブロック自体(表示・編集UI)ごと消えていた。conditionalのときこそ「直接のご相談は
+          受け付けています」等を書きたい場面のため、status==='conditional' も表示対象に含める。
+          保存済みのaccepting_noteはDB側で保持されたままだった(消えていたのは表示条件のみ)。 */}
+      {!yellowSetupMode && (signal === 'open' || status === 'conditional') && (
         <div>
           {noteEditing ? (
             <div>
@@ -431,13 +431,14 @@ export default function AcceptingStatusWidget({
               {noteError && <div style={{ fontSize: 11, color: '#B00020', marginTop: 4 }}>保存に失敗しました</div>}
             </div>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' as const, minWidth: 0, width: '100%' }}>
               {savedNote ? (
                 <button
                   onClick={() => setNoteEditing(true)}
                   style={{
                     fontSize: 12, color: '#1A1A2E', background: 'none', border: 'none', padding: 0,
-                    cursor: 'pointer', textAlign: 'left' as const,
+                    cursor: 'pointer', textAlign: 'right' as const, display: 'block', width: '100%',
+                    whiteSpace: 'normal' as const, wordBreak: 'break-word' as const,
                   }}
                 >
                   {savedNote}
