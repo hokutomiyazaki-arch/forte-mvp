@@ -50,6 +50,8 @@ export interface DelegateCandidatePro {
 }
 
 export interface DelegateCandidatesResult {
+  /** §16-15: 「他のお悩みで探す」検索窓の検索範囲(団体内限定)をフロントに渡すために追加 */
+  orgId: string
   orgName: string
   candidates: DelegateCandidatePro[]
 }
@@ -256,7 +258,7 @@ export async function getDelegateCandidates(
 
     if (candidates.length === 0) return null
 
-    return { orgName: org.name, candidates }
+    return { orgId: org.id, orgName: org.name, candidates }
   } catch (e) {
     // fail-soft(§16-14): delegate_criteria等未作成の本番でもカードページ全体を落とさない
     console.error('getDelegateCandidates error (fail-soft, returning null):', e)

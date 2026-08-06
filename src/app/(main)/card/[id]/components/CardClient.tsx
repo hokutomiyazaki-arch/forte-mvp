@@ -654,7 +654,12 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
                         : '現在は新規のご紹介を受け付けていませんが、信頼できる先生をご案内できます'}
                     </div>
                     {hasCriteriaCandidates && (
-                      <DelegateCandidatesBlock orgName={delegateCandidates!.orgName} candidates={delegateCandidates!.candidates} />
+                      <DelegateCandidatesBlock
+                        orgId={delegateCandidates!.orgId}
+                        orgName={delegateCandidates!.orgName}
+                        candidates={delegateCandidates!.candidates}
+                        excludeProId={id}
+                      />
                     )}
                   </div>
                 )
