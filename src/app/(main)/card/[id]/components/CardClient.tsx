@@ -527,7 +527,10 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
             {pro.name}
           </div>
           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-            {pro.booking_url && (
+            {/* §16-29（CEO決定 2026-08-06）: 予約の受付は booking_enabled が持つ。
+                OFF のときは予約ボタンを出さない（代わりの案内は下の代替リストが担う）。
+                カラム未作成なら null＝受付中として扱う（fail-open）。 */}
+            {pro.booking_url && (pro as any).booking_enabled !== false && (
               <a href={pro.booking_url} target="_blank" rel="noopener"
                 onClick={() => trackEvent(id, 'booking_click', shareSrc || undefined)}
                 style={{
@@ -633,11 +636,15 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
                 先行テスト第3弾: NULL=openのfail-open化により、全体公開(all)前は本人未操作でも
                 🟢🟡が出てしまうため、referralFullyLaunchedでゲートする(🔴は元々何も出さない) */}
             {referralFullyLaunched && (() => {
-              const signal = computeReferralSignal(pro.accepting_status, !!cardData.delegateHasActiveMember)
+              // §16-29: 訪問者にとっての「行き止まり」は**予約できないこと**なので、
+              // 代替リストの案内は予約の受付(booking_enabled)で判定する。
+              // 紹介の受付(accepting_status)はプロ同士のネットワーク用の軸で、別物。
+              const bookingClosed = (pro as any).booking_enabled === false
+              const signal = computeReferralSignal(bookingClosed ? 'closed' : 'open', !!cardData.delegateHasActiveMember)
               if (signal === 'open') {
                 return (
                   <div style={{ fontSize: 11, color: REFERRAL_SIGNAL_COLOR.open, marginTop: 4, lineHeight: 1.6 }}>
-                    新規のご紹介を受付中
+                    新規のご予約を受付中
                     {pro.accepting_note && (
                       <span style={{ color: T.textMuted }}>（{pro.accepting_note}）</span>
                     )}
@@ -656,9 +663,9 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
                     <div style={{ fontSize: 11, color: REFERRAL_SIGNAL_COLOR.delegate, lineHeight: 1.6 }}>
                       {hasCriteriaCandidates
                         ? isListSource
-                          ? '現在は新規のご紹介を受け付けていません。代わりに、私が信頼する先生をご案内できます'
-                          : `現在は新規のご紹介を受け付けていません。代わりに、${delegateCandidates!.orgName}が認定したプロをご案内できます`
-                        : '現在は新規のご紹介を受け付けていませんが、信頼できる先生をご案内できます'}
+                          ? '現在は新規のご予約を受け付けていません。代わりに、私が信頼する先生をご案内できます'
+                          : `現在は新規のご予約を受け付けていません。代わりに、${delegateCandidates!.orgName}が認定したプロをご案内できます`
+                        : '現在は新規のご予約を受け付けていませんが、信頼できる先生をご案内できます'}
                     </div>
                     {hasCriteriaCandidates && (
                       <DelegateCandidatesBlock
@@ -1496,7 +1503,8 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
 
       {/* ═══ CTA ═══ */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-        {pro.booking_url && (
+        {/* §16-29: 同上 */}
+        {pro.booking_url && (pro as any).booking_enabled !== false && (
           <a href={pro.booking_url} target="_blank" rel="noopener"
             onClick={() => trackEvent(id, 'booking_click', shareSrc || undefined)}
             style={{

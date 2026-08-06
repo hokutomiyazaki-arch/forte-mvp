@@ -109,6 +109,7 @@ const DASHBOARD_TAB_HEADING: Record<string, string> = {
   org: '団体管理',
   guide: 'はじめかたガイド',
   'business-info': 'サービス・案内',
+  photos: '顔写真の公開設定',
   myorgs: '所属団体',
   referral: '紹介',
 }
@@ -215,7 +216,7 @@ export default function DashboardPage() {
   const [selectedProofIds, setSelectedProofIds] = useState<Set<string>>(new Set())
   const [customProofs, setCustomProofs] = useState<CustomProof[]>([])
   const [activeTab, setActiveTab] = useState('healing')
-  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'card' | 'org' | 'myorgs' | 'certs' | 'consultations' | 'guide' | 'business-info' | 'badges' | 'referral'>('profile')
+  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'card' | 'org' | 'myorgs' | 'certs' | 'consultations' | 'photos' | 'guide' | 'business-info' | 'badges' | 'referral'>('profile')
   const [openSections, setOpenSections] = useState<Set<string>>(new Set())
   // CEO指示(2026-08-06): プロフィール編集も項目ごとに畳めるようにする。
   // 既定は「基本情報」だけ開く(姓名・都道府県が必須のため、初見で入力欄が見えている状態を保つ)。
@@ -246,6 +247,10 @@ export default function DashboardPage() {
   // /api/dashboard/voices からダッシュボード専用整形済みデータを受け取る。
   // 公開ページとは異なり display_mode は無視、auth_method ベースで client 表示を判定。
   const [voiceComments, setVoiceComments] = useState<DashboardVoice[]>([])
+  // CEO指摘(2026-08-06): Voices が増えると下の設定が埋もれる。20件ずつ出す。
+  // 追加クエリは不要（全件は既に取得済みなので表示件数を切るだけ）。
+  const VOICES_PAGE_SIZE = 20
+  const [voicesShown, setVoicesShown] = useState(VOICES_PAGE_SIZE)
   // 公開中の顔写真 (display_mode IN ('photo','pro_link'))。コメント有無に依らず取得。
   // /api/dashboard/photos から取得。個人情報 (メアド/電話/userId) は含まない。
   // type='client': クライアント顔写真 / type='pro': プロからの認定 (pro_link、proCardHref あり)。
@@ -531,11 +536,15 @@ export default function DashboardPage() {
 
   // 移動(2026-08-06・CEO指示): 旧AcceptingStatusWidget内にあった「紹介からの予約は受け付けない」
   // (accepting_status 'open'⇔'conditional')。closed中はPATCHしない(呼び出し元でdisabledにする)。
-  async function handleToggleReferralPaused(checked: boolean) {
+  /** §16-29（CEO決定 2026-08-06）: 紹介予約の受付スイッチ。
+   *  直接予約は booking_enabled が別軸で持つようになったので、
+   *  ここは accepting_status を open/closed で切り替えるだけでよくなった
+   *  （旧: 'conditional' で「紹介のみ停止」を表していたが、2軸化により役目を終えた）。 */
+  async function handleToggleReferralAccepting(accepting: boolean) {
     if (!pro || referralPauseSaving) return
     setReferralPauseSaving(true)
     setReferralPauseError(false)
-    const next: 'open' | 'conditional' = checked ? 'conditional' : 'open'
+    const next: 'open' | 'closed' = accepting ? 'open' : 'closed'
     try {
       const res = await fetch('/api/referral/accepting', {
         method: 'PATCH',
@@ -578,7 +587,7 @@ export default function DashboardPage() {
   const tabParam = searchParams.get('tab')
   useEffect(() => {
     if (!tabParam || loading) return
-    const validTabs = ['profile', 'proofs', 'rewards', 'voices', 'card', 'myorgs', 'certs', 'consultations', 'org', 'guide', 'business-info', 'badges', 'referral']
+    const validTabs = ['profile', 'proofs', 'rewards', 'voices', 'card', 'myorgs', 'certs', 'consultations', 'photos', 'org', 'guide', 'business-info', 'badges', 'referral']
     if (validTabs.includes(tabParam)) {
       setDashboardTab(tabParam as any)
       if (tabParam === 'myorgs' && selectedMemberOrgId) {
@@ -2460,7 +2469,7 @@ export default function DashboardPage() {
 
   const daysSinceRegistration = getDaysSinceRegistration()
 
-  const isSettingsTab = ['proofs', 'rewards', 'card', 'myorgs', 'org', 'guide', 'business-info', 'badges', 'referral'].includes(dashboardTab)
+  const isSettingsTab = ['proofs', 'rewards', 'card', 'myorgs', 'org', 'guide', 'business-info', 'badges', 'referral', 'photos'].includes(dashboardTab)
 
   // 認定・資格タブ(2026-08-06・CEO決定): 所属団体も獲得バッジも無い人には出さない。
   // 中身が空のタブを並べても押す理由が無く、ごちゃつきを増やすだけのため。
@@ -2743,6 +2752,7 @@ export default function DashboardPage() {
               initialAcceptingStatus={pro.accepting_status ?? null}
               initialAcceptingNote={pro.accepting_note ?? null}
               initialDelegateListId={pro.delegate_list_id ?? null}
+              initialBookingEnabled={(pro as any).booking_enabled ?? null}
               canManageLists={referralEnabled}
               hasBookableMenu={hasBookableReferralMenu}
               onUpdated={(status, note, delegateListId) =>
@@ -2778,6 +2788,7 @@ export default function DashboardPage() {
                 initialAcceptingStatus={pro.accepting_status ?? null}
                 initialAcceptingNote={pro.accepting_note ?? null}
                 initialDelegateListId={pro.delegate_list_id ?? null}
+              initialBookingEnabled={(pro as any).booking_enabled ?? null}
                 canManageLists={referralEnabled}
                 hasBookableMenu={hasBookableReferralMenu}
                 onUpdated={(status, note, delegateListId) =>
@@ -4148,6 +4159,26 @@ export default function DashboardPage() {
         お客さんが投票時に書いてくれたコメントです。タップしてSNSでシェアできます。
       </p>
 
+      {/* CEO指摘(2026-08-06): 顔写真の公開設定が Voices の下に埋もれて見つけられない。
+          設定なので別画面へ出し、ここには**一番上に**1行リンクだけ置く。
+          件数を出すのは、開かなくても何人分公開しているか分かるようにするため。 */}
+      <button
+        type="button"
+        onClick={() => { setDashboardTab('photos'); window.history.replaceState(null, '', '/dashboard?tab=photos') }}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          gap: 12, padding: '12px 16px', marginBottom: 16,
+          background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12,
+          cursor: 'pointer', textAlign: 'left',
+        }}
+      >
+        <span style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E' }}>
+          公開中の顔写真
+          <span style={{ color: '#9CA3AF', fontWeight: 400, marginLeft: 6 }}>{publishedPhotos.length}件</span>
+        </span>
+        <span style={{ color: '#C4A35A', fontSize: 14, flexShrink: 0 }}>›</span>
+      </button>
+
       {/* シェア説明バナー */}
       <div className="mb-6 flex items-start gap-3 rounded-lg border-l-4 border-[#C4A35A] bg-[#1A1A2E] px-4 py-3">
         <svg className="mt-0.5 h-4 w-4 shrink-0 text-[#C4A35A]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -4172,7 +4203,7 @@ export default function DashboardPage() {
         </h2>
         {voiceComments.length > 0 ? (
           <div className="space-y-3">
-            {voiceComments.map(c => {
+            {voiceComments.slice(0, voicesShown).map(c => {
               const isExpanded = expandedVoice === c.id
               const isSelectingPhrase = phraseSelecting === c.id
               const selectedPhraseId = selectedPhrases[c.id]
@@ -4272,9 +4303,28 @@ export default function DashboardPage() {
             <p className="text-gray-400 text-xs mt-1">クライアントからコメント付き投票が届くとここに表示されます。</p>
           </div>
         )}
+        {/* CEO指摘(2026-08-06): 全件を一気に描画していたので20件ずつに。
+            番号ページではなく「もっと見る」にしたのは、Voices は新しい順に眺めて
+            シェアする使い方が主で、ページを行き来する動機が薄いため。 */}
+        {voiceComments.length > voicesShown && (
+          <button
+            type="button"
+            onClick={() => setVoicesShown(v => v + VOICES_PAGE_SIZE)}
+            style={{
+              width: '100%', marginTop: 16, padding: '12px 16px', borderRadius: 10,
+              border: '1px solid #E5E7EB', background: '#fff', color: '#1A1A2E',
+              fontSize: 14, fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            もっと見る（残り{voiceComments.length - voicesShown}件）
+          </button>
+        )}
       </div>
 
-      {/* 公開中の顔写真 — display_mode='photo' の票をコメント有無に依らず一覧表示 */}
+      </>)}
+
+      {/* ═══ Tab: 顔写真の公開設定（§CEO指示 2026-08-06） ═══ */}
+      {dashboardTab === 'photos' && (<>
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
         <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">
           <span style={{ fontSize: 10, fontWeight: 700, color: '#A0A0A0', letterSpacing: 2, textTransform: 'uppercase' as const, fontFamily: "'Inter', sans-serif", display: 'block', marginBottom: 4 }}>
@@ -4331,7 +4381,10 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+      </>)}
 
+      {/* Voice のモーダル2種はタブに属さない（自前の state で開閉するため）。
+          顔写真タブを分けた際にこの中へ入ってしまうとVoicesから開けなくなるので、外に出す。 */}
       {/* Phase 3: Voice 返信モーダル */}
       {replyModalVote && (
         <VoiceReplyModal
@@ -4384,8 +4437,6 @@ export default function DashboardPage() {
           }}
         />
       )}
-
-      </>)}
 
       {/* ═══ Tab: 団体管理 ═══ */}
       {dashboardTab === 'org' && ownedOrg && (<>
@@ -5256,37 +5307,49 @@ export default function DashboardPage() {
           {/* 紹介を受ける: 新しいリクエスト・確定している紹介予約・支払い期限切れキャンセルカード
               (常時マウント・非表示時はCSSで隠す=サブタブ切替での再フェッチを避ける) */}
           <div style={{ display: referralSubtab === 'receive' ? 'block' : 'none' }}>
-            {/* 移動(2026-08-06・CEO指示): 「紹介からの予約は受け付けない」をダッシュボード最上部の
-                AcceptingStatusWidgetから、受け手側の設定であるこのサブタブの先頭へ移動。
-                現在🔴停止中は既に紹介・直接とも停止済みでこの操作自体が意味を持たないため、
-                チェックボックスは無効化し理由の説明を出す(非表示にはしない)。 */}
+            {/* §16-29（CEO決定 2026-08-06）: 紹介予約の受付スイッチ。
+                直接予約は booking_enabled（ホームのトグル）が別軸で持つようになったため、
+                ここは「紹介予約を受けるか」だけを決める独立したスイッチになった。
+                チェックボックス（＝否定形の「受け付けない」）は分かりにくいのでスイッチに変更。
+                これで「直接は止めて紹介だけ受ける」も表現できる。 */}
             {pro && acceptingEditable && (
-              <div style={{ marginBottom: 16, padding: '10px 12px', background: '#F9FAFB', borderRadius: 10, border: '1px solid #E5E7EB' }}>
-                <label
+              <div style={{
+                marginBottom: 16, padding: '14px 16px', background: '#fff',
+                borderRadius: 12, border: '1px solid #E5E7EB',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+              }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E' }}>
+                    {pro.accepting_status === 'closed' ? '紹介予約を停止しています' : '紹介予約を受け付けています'}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4, lineHeight: 1.6 }}>
+                    {pro.accepting_status === 'closed'
+                      ? '他のプロの紹介リストからの予約が止まります。直接の予約・ご相談は別のスイッチです。'
+                      : '他のプロの紹介リストに載り、そこからの予約を受け取れます。'}
+                  </div>
+                  {referralPauseError && (
+                    <div style={{ fontSize: 12, color: '#B00020', marginTop: 4 }}>更新に失敗しました</div>
+                  )}
+                </div>
+                <div
+                  role="switch"
+                  aria-checked={pro.accepting_status !== 'closed'}
+                  aria-label="紹介予約の受付"
+                  onClick={() => handleToggleReferralAccepting(pro.accepting_status === 'closed')}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#1A1A2E',
-                    cursor: pro.accepting_status === 'closed' || referralPauseSaving ? 'default' : 'pointer',
+                    width: 48, height: 28, borderRadius: 14, flexShrink: 0,
+                    background: pro.accepting_status !== 'closed' ? '#06C755' : '#D1D5DB',
+                    position: 'relative', transition: 'background 0.2s',
+                    cursor: referralPauseSaving ? 'default' : 'pointer',
+                    opacity: referralPauseSaving ? 0.6 : 1,
                   }}
                 >
-                  <input
-                    type="checkbox"
-                    checked={pro.accepting_status === 'closed' ? true : pro.accepting_status === 'conditional'}
-                    disabled={pro.accepting_status === 'closed' || referralPauseSaving}
-                    onChange={(e) => handleToggleReferralPaused(e.target.checked)}
-                    style={{ width: 14, height: 14 }}
-                  />
-                  紹介からの予約は受け付けない
-                </label>
-                <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4, lineHeight: 1.6 }}>
-                  {pro.accepting_status === 'closed'
-                    ? '現在停止中のため、紹介からの予約もすべて停止しています'
-                    : pro.accepting_status === 'conditional'
-                      ? '紹介からの予約は停止中です（直接のご相談は受け付けています）'
-                      : 'オンにすると、紹介経由の予約のみ一時停止できます（直接のご相談は継続できます）'}
+                  <div style={{
+                    width: 22, height: 22, borderRadius: '50%', background: '#fff',
+                    position: 'absolute', top: 3, left: pro.accepting_status !== 'closed' ? 23 : 3,
+                    transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                  }} />
                 </div>
-                {referralPauseError && (
-                  <div style={{ fontSize: 12, color: '#B00020', marginTop: 4 }}>更新に失敗しました</div>
-                )}
               </div>
             )}
             <ReferralBookingReceivedCard proId={pro.id} onStatusChange={handleReferralReceivedStatus} />

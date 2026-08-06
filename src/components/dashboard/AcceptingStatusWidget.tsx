@@ -45,6 +45,9 @@ interface OwnList {
 }
 
 interface Props {
+  /** §16-29（CEO決定 2026-08-06）: 直接予約の受付。このトグルが制御する本体。
+   *  未指定/null は「受け付ける」(fail-open・カラム未作成の環境を含む)。 */
+  initialBookingEnabled?: boolean | null
   // §16-18(CEO決定・2026-08-06): 'conditional'は副オプション「紹介からの予約は受け付けない」ON時の値
   initialAcceptingStatus: 'open' | 'closed' | 'conditional' | null
   initialAcceptingNote: string | null
@@ -61,17 +64,17 @@ interface Props {
 // §CEO指摘対応(2026-08-06): ダッシュボード見出し行への移動に伴い、2段セグメント表示を廃止し
 // 現在の状態のみを示す単一ピル(タップで反転)に変更する。値の意味・遷移先(open/closed)は不変。
 const SEGMENT_LABEL: Record<'closed' | 'open', string> = {
-  // CEO指摘(2026-08-06)「受付中がなんの受付中かわからない」への対応。
-  // このトグルが実際に制御しているのは **紹介の受付**（紹介ネットワーク上で reachable か）。
-  // 予約ボタン(booking_url)はこのトグルでは消えない。ラベルに「紹介」を明記して誤解を断つ。
-  closed: '紹介 停止中',
-  open: '紹介 受付中',
+  // §16-29（CEO決定 2026-08-06）: このトグルは **予約の受付**（直接予約）。
+  // 紹介予約の受付は紹介タブの別スイッチ（accepting_status）が持つ。
+  closed: '予約 停止中',
+  open: '予約 受付中',
 }
 
 export default function AcceptingStatusWidget({
   initialAcceptingStatus,
   initialAcceptingNote,
   initialDelegateListId,
+  initialBookingEnabled,
   onUpdated,
   canManageLists = true,
   hasBookableMenu = true,
@@ -111,6 +114,9 @@ export default function AcceptingStatusWidget({
   // 先行テスト第3弾: NULL(未設定)は'open'として扱う(fail-open)。UI分岐は全てこの値を使う。
   // §16-18: 'conditional'もスライダーの見た目は'open'側(メインの2値トグルは不変)。
   const effectiveStatus: 'open' | 'closed' = status === 'closed' ? 'closed' : 'open'
+  // §16-29: このトグルが制御するのは **直接予約の受付**。null/undefined は受付中（fail-open）。
+  const [bookingEnabled, setBookingEnabled] = useState<boolean>(initialBookingEnabled !== false)
+  const bookingOpen = bookingEnabled
 
   // 自分の共有可能なリスト(private以外)を一覧取得しておく。🟡選択時の有効判定に必要なため
   // 現在のステータスに関わらず一度だけ読み込む。
@@ -210,19 +216,47 @@ export default function AcceptingStatusWidget({
   // 他院・紹介ネットワークからの見え方が変わる操作のため確認を挟む。再開(closed→open)は即時。
   async function handleCompactToggle() {
     if (toggling) return
-    const target: 'open' | 'closed' = effectiveStatus === 'open' ? 'closed' : 'open'
+    const target: 'open' | 'closed' = bookingOpen ? 'closed' : 'open'
     if (target === 'closed') {
       // CEO指摘(2026-08-06): 何が止まって何が止まらないかを明記する。
       // 「受付停止」と言いながら予約ボタンが出たままなのは、書いておかないと必ず誤解される。
+      // §16-29: 何が止まって何が止まらないかを明記する。3軸あるので書かないと必ず誤解される。
       const ok = window.confirm(
-        '紹介の受付を停止しますか？\n\n'
-        + '・他のプロからの紹介と、お客様からのご相談が止まります\n'
-        + '・予約ボタン（あなたの予約サイトへのリンク）は表示されたままです\n'
+        '予約の受付を停止しますか？\n\n'
+        + '・カードから予約ボタンが消えます\n'
+        + '・代替リストを設定していれば、代わりにその先生をご案内します\n'
+        + '・紹介の受付（紹介タブ）とご相談の受付（相談タブ）は別のスイッチです\n'
         + '・条件メモ・案内先の設定はそのまま保持されます'
       )
       if (!ok) return
     }
-    await selectSegment(target)
+    await commitBooking(target === 'open')
+  }
+
+  /** §16-29: 直接予約の受付だけを更新する。accepting_status には触れない（巻き込み防止）。 */
+  async function commitBooking(next: boolean) {
+    if (toggling) return
+    setToggling(true)
+    setToggleError(false)
+    try {
+      const res = await fetch('/api/referral/accepting', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        // accepting_status はAPIの必須項目なので現在値をそのまま送る（変更しない）
+        body: JSON.stringify({ accepting_status: status ?? 'open', accepting_note: savedNote, booking_enabled: next }),
+      })
+      if (res.ok) {
+        setBookingEnabled(next)
+      } else {
+        // migration 053 未実行だとここに来る。黙って動かすとスイッチだけ動いて見える。
+        setToggleError(true)
+      }
+    } catch {
+      setToggleError(true)
+    } finally {
+      setToggling(false)
+    }
   }
 
   return (
@@ -237,12 +271,12 @@ export default function AcceptingStatusWidget({
           onClick={handleCompactToggle}
           disabled={toggling}
           role="switch"
-          aria-checked={effectiveStatus === 'open'}
-          aria-label="紹介の受付状態"
+          aria-checked={bookingOpen}
+          aria-label="予約の受付状態"
           style={{
             position: 'relative', width: 40, height: 22, borderRadius: 999,
             border: 'none', padding: 0, flexShrink: 0,
-            background: effectiveStatus === 'open' ? '#06C755' : (signal === 'delegate' ? '#D9A400' : '#D1D5DB'),
+            background: bookingOpen ? '#06C755' : (signal === 'delegate' ? '#D9A400' : '#D1D5DB'),
             cursor: toggling ? 'default' : 'pointer',
             opacity: toggling ? 0.6 : 1,
             transition: 'background-color 0.15s ease',
@@ -250,7 +284,7 @@ export default function AcceptingStatusWidget({
         >
           <span
             style={{
-              position: 'absolute', top: 2, left: effectiveStatus === 'open' ? 20 : 2,
+              position: 'absolute', top: 2, left: bookingOpen ? 20 : 2,
               width: 18, height: 18, borderRadius: '50%', background: '#fff',
               boxShadow: '0 1px 2px rgba(0,0,0,0.35)',
               transition: 'left 0.15s ease',
@@ -260,10 +294,10 @@ export default function AcceptingStatusWidget({
         <span
           style={{
             fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' as const,
-            color: effectiveStatus === 'open' ? '#1B5E20' : '#B00020',
+            color: bookingOpen ? '#1B5E20' : '#B00020',
           }}
         >
-          {effectiveStatus === 'open' ? SEGMENT_LABEL.open : (signal === 'delegate' ? '紹介 停止中（案内中）' : SEGMENT_LABEL.closed)}
+          {bookingOpen ? SEGMENT_LABEL.open : (signal === 'delegate' ? '予約 停止中（案内中）' : SEGMENT_LABEL.closed)}
         </span>
       </div>
       {toggleError && <div style={{ fontSize: 11, color: '#B00020' }}>更新に失敗しました</div>}

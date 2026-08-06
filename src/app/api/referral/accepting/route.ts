@@ -15,7 +15,9 @@ const ALLOWED_STATUS = ['open', 'closed', 'conditional']
 
 /**
  * PATCH /api/referral/accepting
- * body: { accepting_status, accepting_note?, delegate_list_id?, delegate_criteria? }
+ * body: { accepting_status, accepting_note?, delegate_list_id?, delegate_criteria?, booking_enabled? }
+ *   - booking_enabled: §16-29（CEO決定 2026-08-06）。**直接予約**の受付。紹介予約(accepting_status)
+ *     とは独立した軸。bodyに含まれる場合のみ更新する（巻き込み防止）。
  *   - accepting_status: 'open' | 'closed' | 'conditional'（必須）。'conditional'は§16-18の
  *     副オプション「紹介からの予約は受け付けない」ON時の値(直接は継続・紹介のみ停止。
  *     新規カラムは追加せずDB CHECK制約の既存未使用値を割り当てる)
@@ -150,6 +152,15 @@ export async function PATCH(request: NextRequest) {
       } else {
         return NextResponse.json({ error: 'invalid_delegate_criteria' }, { status: 400 })
       }
+    }
+
+    // §16-29（CEO決定 2026-08-06）: 直接予約の受付。紹介予約(accepting_status)とは独立した軸。
+    // bodyに含まれる場合のみ更新する（他の操作で巻き込まない）。
+    if ('booking_enabled' in body) {
+      if (typeof body.booking_enabled !== 'boolean') {
+        return NextResponse.json({ error: 'invalid_booking_enabled' }, { status: 400 })
+      }
+      update.booking_enabled = body.booking_enabled
     }
 
     // 教訓(デプロイ順序 DB先→コード後): .select() に delegate_criteria を明示指定すると、
