@@ -108,7 +108,9 @@ export default function ConsultThread({ token }: { token: string }) {
   }
 
   async function sendReport() {
-    if (reportSending) return
+    // CEO指示(2026-08-06): 理由を必須にしてハードルを上げる。
+    // ワンタップで送れると軽い気持ちの通報が増え、運営が読む価値のない通報で埋まる。
+    if (reportSending || reportReason.trim().length < 10) return
     setReportSending(true)
     try {
       const res = await fetch(`/api/consultations/${token}/report`, {
@@ -350,7 +352,7 @@ export default function ConsultThread({ token }: { token: string }) {
               maxLength={500}
               onChange={e => setReportReason(e.target.value)}
               rows={3}
-              placeholder="気になった点をお書きください（任意）"
+              placeholder="どのような点が問題でしたか（10文字以上）"
               style={{
                 width: '100%', padding: '10px 12px', fontSize: 14,
                 border: `1px solid ${T.border}`, borderRadius: 10,
@@ -361,11 +363,14 @@ export default function ConsultThread({ token }: { token: string }) {
               <button
                 type="button"
                 onClick={sendReport}
-                disabled={reportSending}
+                disabled={reportSending || reportReason.trim().length < 10}
                 style={{
                   flex: 1, padding: '10px 14px', borderRadius: 8, border: 'none',
-                  background: T.danger, color: '#fff', fontSize: 13, fontWeight: 700,
-                  cursor: reportSending ? 'default' : 'pointer', opacity: reportSending ? 0.6 : 1,
+                  background: reportReason.trim().length >= 10 ? T.danger : T.border,
+                  color: reportReason.trim().length >= 10 ? '#fff' : T.faint,
+                  fontSize: 13, fontWeight: 700,
+                  cursor: reportSending || reportReason.trim().length < 10 ? 'default' : 'pointer',
+                  opacity: reportSending ? 0.6 : 1,
                 }}
               >
                 {reportSending ? '送信中…' : '通報する'}
@@ -388,10 +393,10 @@ export default function ConsultThread({ token }: { token: string }) {
             onClick={() => setReportOpen(true)}
             style={{
               background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-              fontSize: 12, color: T.faint, textDecoration: 'underline',
+              fontSize: 11, color: T.faint, textDecoration: 'underline',
             }}
           >
-            このやりとりを通報する
+            通報する
           </button>
         )}
       </div>

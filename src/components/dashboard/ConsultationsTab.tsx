@@ -49,6 +49,10 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
   // §16-27-3: 提案できるメニュー（予約可能なメニューのみ）と、開いているピッカー
   const [menus, setMenus] = useState<{ id: string; name: string; price_text: string }[]>([])
   const [menuPickerId, setMenuPickerId] = useState<string | null>(null)
+  // §16-27-4: 通報はプロ側からも（CEO指摘「お互いに必要」）。理由は必須にしてハードルを上げる。
+  const [reportId, setReportId] = useState<string | null>(null)
+  const [reportReason, setReportReason] = useState('')
+  const [reportedIds, setReportedIds] = useState<Record<string, boolean>>({})
 
   async function load(archived = showArchived) {
     try {
@@ -155,6 +159,32 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
       await load()
     } catch {
       setError('提案を送れませんでした。')
+    } finally {
+      setSendingId(null)
+    }
+  }
+
+  async function sendReport(consultationId: string) {
+    if (reportReason.trim().length < 10 || sendingId) return
+    setSendingId(consultationId)
+    setError('')
+    try {
+      const res = await fetch(`/api/pro/consultations/${consultationId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ report_reason: reportReason.trim() }),
+      })
+      if (!res.ok) {
+        // 届いていないのに「受け付けました」と出さない
+        setError('通報を送信できませんでした。時間をおいてお試しください。')
+        return
+      }
+      setReportedIds(prev => ({ ...prev, [consultationId]: true }))
+      setReportId(null)
+      setReportReason('')
+    } catch {
+      setError('通報を送信できませんでした。')
     } finally {
       setSendingId(null)
     }
@@ -485,6 +515,70 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
                       アーカイブする（一覧から隠す）
                     </button>
                   )}
+
+                  {/* §16-27-4 通報（プロ側）。小さく置く。理由は必須。
+                      「通常、運営はチャットを閲覧しません。通報があった場合のみ確認します」を
+                      ここにも書く（UIと規約の両方に出す方針）。 */}
+                  <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #E5E7EB' }}>
+                    <p style={{ fontSize: 11, color: '#9CA3AF', lineHeight: 1.8, marginBottom: 6 }}>
+                      通常、運営はチャットを閲覧しません。通報があった場合のみ確認します。
+                    </p>
+                    {reportedIds[c.id] ? (
+                      <p style={{ fontSize: 11, color: '#2E7D32' }}>通報を受け付けました。</p>
+                    ) : reportId === c.id ? (
+                      <div>
+                        <textarea
+                          value={reportReason}
+                          maxLength={500}
+                          onChange={e => setReportReason(e.target.value)}
+                          rows={3}
+                          placeholder="どのような点が問題でしたか（10文字以上）"
+                          style={{
+                            width: '100%', padding: '8px 10px', fontSize: 13,
+                            border: '1px solid #E5E7EB', borderRadius: 8, boxSizing: 'border-box',
+                            resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.7, background: '#fff',
+                          }}
+                        />
+                        <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                          <button
+                            type="button"
+                            onClick={() => sendReport(c.id)}
+                            disabled={reportReason.trim().length < 10 || sendingId === c.id}
+                            style={{
+                              padding: '8px 14px', borderRadius: 8, border: 'none',
+                              background: reportReason.trim().length >= 10 ? '#E24B4A' : '#E5E7EB',
+                              color: reportReason.trim().length >= 10 ? '#fff' : '#9CA3AF',
+                              fontSize: 12, fontWeight: 700,
+                              cursor: reportReason.trim().length >= 10 ? 'pointer' : 'default',
+                            }}
+                          >
+                            通報する
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setReportId(null); setReportReason('') }}
+                            style={{
+                              padding: '8px 14px', borderRadius: 8, border: '1px solid #E5E7EB',
+                              background: '#fff', color: '#6B7280', fontSize: 12, cursor: 'pointer',
+                            }}
+                          >
+                            やめる
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => { setReportId(c.id); setReportReason('') }}
+                        style={{
+                          background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                          fontSize: 11, color: '#9CA3AF', textDecoration: 'underline',
+                        }}
+                      >
+                        通報する
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

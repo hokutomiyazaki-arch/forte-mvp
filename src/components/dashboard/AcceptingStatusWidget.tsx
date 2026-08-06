@@ -61,8 +61,11 @@ interface Props {
 // §CEO指摘対応(2026-08-06): ダッシュボード見出し行への移動に伴い、2段セグメント表示を廃止し
 // 現在の状態のみを示す単一ピル(タップで反転)に変更する。値の意味・遷移先(open/closed)は不変。
 const SEGMENT_LABEL: Record<'closed' | 'open', string> = {
-  closed: '停止中',
-  open: '受付中',
+  // CEO指摘(2026-08-06)「受付中がなんの受付中かわからない」への対応。
+  // このトグルが実際に制御しているのは **紹介の受付**（紹介ネットワーク上で reachable か）。
+  // 予約ボタン(booking_url)はこのトグルでは消えない。ラベルに「紹介」を明記して誤解を断つ。
+  closed: '紹介 停止中',
+  open: '紹介 受付中',
 }
 
 export default function AcceptingStatusWidget({
@@ -209,7 +212,14 @@ export default function AcceptingStatusWidget({
     if (toggling) return
     const target: 'open' | 'closed' = effectiveStatus === 'open' ? 'closed' : 'open'
     if (target === 'closed') {
-      const ok = window.confirm('紹介の受付を停止しますか？（条件メモ・案内先の設定はそのまま保持されます）')
+      // CEO指摘(2026-08-06): 何が止まって何が止まらないかを明記する。
+      // 「受付停止」と言いながら予約ボタンが出たままなのは、書いておかないと必ず誤解される。
+      const ok = window.confirm(
+        '紹介の受付を停止しますか？\n\n'
+        + '・他のプロからの紹介と、お客様からのご相談が止まります\n'
+        + '・予約ボタン（あなたの予約サイトへのリンク）は表示されたままです\n'
+        + '・条件メモ・案内先の設定はそのまま保持されます'
+      )
       if (!ok) return
     }
     await selectSegment(target)
@@ -253,7 +263,7 @@ export default function AcceptingStatusWidget({
             color: effectiveStatus === 'open' ? '#1B5E20' : '#B00020',
           }}
         >
-          {effectiveStatus === 'open' ? SEGMENT_LABEL.open : (signal === 'delegate' ? '停止中（案内中）' : SEGMENT_LABEL.closed)}
+          {effectiveStatus === 'open' ? SEGMENT_LABEL.open : (signal === 'delegate' ? '紹介 停止中（案内中）' : SEGMENT_LABEL.closed)}
         </span>
       </div>
       {toggleError && <div style={{ fontSize: 11, color: '#B00020' }}>更新に失敗しました</div>}

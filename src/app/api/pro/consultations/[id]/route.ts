@@ -16,6 +16,7 @@ const ALLOWED_STATUS = ['new', 'open', 'closed', 'archived']
  * body: { body }            返信を書き込む。クライアントへメールが飛ぶ
  * body: { status }          スレッドの状態だけ変える（対応済みにする等）
  * body: { menu_id }         メニューを提案する（§16-27-3）。カードとしてスレッドに入る
+ * body: { report_reason }   通報する（§16-27-4）。プロ側からも通報できる（お互い様の建て付け）
  *
  * 「プロはダッシュボードで書くだけ、クライアントにはメールが届く」がこの機能の肝。
  * 送信結果は consultation_messages.delivered_at に残す（送れなかったことを後から追える）。
@@ -59,6 +60,27 @@ export async function POST(
         // （migration 050 の確認手順を参照）。何が起きたか分かるようにコードを返す。
         console.error('[api/pro/consultations POST] status error:', error.message)
         return NextResponse.json({ error: 'update_failed', status_value: payload.status }, { status: 500 })
+      }
+      return NextResponse.json({ ok: true })
+    }
+
+    // ── 通報（§16-27-4）──
+    // CEO指摘(2026-08-06)「通報はプロもお互いに必要だよね？」。
+    // 理由は必須（10文字以上）。ワンタップで送れると軽い通報が増え、運営が読む価値がなくなる。
+    if (typeof payload.report_reason === 'string') {
+      const reason = payload.report_reason.trim().slice(0, 500)
+      if (reason.length < 10) {
+        return NextResponse.json({ error: 'reason_required' }, { status: 400 })
+      }
+      const { error } = await supabase.from('consultation_reports').insert({
+        consultation_id: consultation.id,
+        reporter: 'pro',
+        reason,
+      })
+      if (error) {
+        // migration 052 未実行だとここに来る。届いていないのに成功と出さない。
+        console.error('[api/pro/consultations POST] report error:', error.message)
+        return NextResponse.json({ error: 'report_failed' }, { status: 500 })
       }
       return NextResponse.json({ ok: true })
     }

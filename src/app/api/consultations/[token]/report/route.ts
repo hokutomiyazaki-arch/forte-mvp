@@ -4,6 +4,8 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 export const dynamic = 'force-dynamic'
 
 const REASON_MAX = 500
+/** CEO指示(2026-08-06): 理由を必須にしてハードルを上げる。API直叩きでも通さない。 */
+const REASON_MIN = 10
 
 /**
  * POST /api/consultations/[token]/report — 通報（§16-27-4）
@@ -25,6 +27,10 @@ export async function POST(
       ? payload.reason.trim().slice(0, REASON_MAX)
       : ''
 
+    if (reason.length < REASON_MIN) {
+      return NextResponse.json({ error: 'reason_required' }, { status: 400 })
+    }
+
     const supabase = getSupabaseAdmin()
     const { data: consultation } = await supabase
       .from('consultations')
@@ -37,7 +43,7 @@ export async function POST(
     const { error } = await supabase.from('consultation_reports').insert({
       consultation_id: consultation.id,
       reporter: 'client',
-      reason: reason || null,
+      reason,
     })
 
     if (error) {
