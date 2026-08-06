@@ -17,6 +17,8 @@ import type { ReactNode } from 'react'
  */
 interface Props {
   title: string
+  /** 見出しの右に付ける小さな目印（New など・任意） */
+  titleBadge?: ReactNode
   /** 見出しの下に出る補足（任意） */
   description?: string
   open: boolean
@@ -26,7 +28,7 @@ interface Props {
   children: ReactNode
 }
 
-export default function SettingsSection({ title, description, open, onToggle, meta, children }: Props) {
+export default function SettingsSection({ title, titleBadge, description, open, onToggle, meta, children }: Props) {
   return (
     <div
       style={{
@@ -55,7 +57,10 @@ export default function SettingsSection({ title, description, open, onToggle, me
         }}
       >
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>{title}</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>
+            {title}
+            {titleBadge}
+          </div>
           {description && (
             <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2, lineHeight: 1.5 }}>{description}</div>
           )}
