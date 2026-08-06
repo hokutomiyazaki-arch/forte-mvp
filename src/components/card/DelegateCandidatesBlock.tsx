@@ -35,10 +35,16 @@ interface Props {
   excludeProId: string
 }
 
-function CandidateRow({ c }: { c: DelegateCandidatePro }) {
+function CandidateRow({ c, highlight }: { c: DelegateCandidatePro; highlight?: string }) {
+  // CEO指示(2026-08-06): 検索ワードがコメントにヒットした人は、そのVoiceまで飛ばす。
+  // 既存の検索ハイライト(?tab=voices&highlight=)をそのまま使う（プロを探すと同じ挙動）。
+  // 名前・肩書き・強みでのヒットはVoiceに該当箇所が無いのでカード先頭のまま。
+  const href = highlight && c.matchedVoice
+    ? `/card/${c.proId}?tab=voices&highlight=${encodeURIComponent(highlight)}`
+    : `/card/${c.proId}`
   return (
     <a
-      href={`/card/${c.proId}`}
+      href={href}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -224,7 +230,7 @@ export function DelegateCandidatesBlock({ source, orgId, orgName, candidates, ex
           )}
           {!searching && searchResults.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
-              {searchResults.map((c) => <CandidateRow key={c.proId} c={c} />)}
+              {searchResults.map((c) => <CandidateRow key={c.proId} c={c} highlight={searchQuery.trim()} />)}
             </div>
           )}
         </div>

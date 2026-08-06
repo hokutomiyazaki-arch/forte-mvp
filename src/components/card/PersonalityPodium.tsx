@@ -90,17 +90,28 @@ export function PersonalityPodium({ items, proName }: Props) {
     return (
       <div key={item.id} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 6 }}>
         {item.image_url && (
-          <div style={{
-            width: imgSize, height: imgSize, borderRadius: '50%', boxSizing: 'border-box',
-            border: tier.ring === 'transparent' ? '2px solid transparent' : `3px solid ${tier.ring}`,
-            boxShadow: tier.glow,
-            background: '#FAF8F3', overflow: 'hidden', position: 'relative',
-            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-          }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={item.image_url} alt={item.label} style={{ width: '92%', height: '92%', objectFit: 'contain' }} />
+          /* CEO報告(2026-08-06)「ダイヤとか★が見えてない」の修正。
+             バッジを円の内側（overflow:hidden + border-radius:50%）に置いていたため、
+             円からはみ出した部分＝バッジのほぼ全体が切り取られていた
+             （角の欠片だけが小さな三角形として見えていた）。
+             クリップされないラッパーを1枚かぶせ、バッジはそちらに載せる。 */
+          <div style={{ position: 'relative', width: imgSize, height: imgSize, flexShrink: 0 }}>
+            <div style={{
+              width: '100%', height: '100%', borderRadius: '50%', boxSizing: 'border-box',
+              border: tier.ring === 'transparent' ? '2px solid transparent' : `3px solid ${tier.ring}`,
+              boxShadow: tier.glow,
+              background: '#FAF8F3', overflow: 'hidden',
+              display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+            }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={item.image_url} alt={item.label} style={{ width: '92%', height: '92%', objectFit: 'contain' }} />
+            </div>
             {tier.badge && (
-              <span style={{ position: 'absolute', top: -2, right: -2, fontSize: isFirst ? 18 : 15 }}>{tier.badge}</span>
+              <span style={{
+                position: 'absolute', top: -4, right: -4,
+                fontSize: isFirst ? 18 : 15, lineHeight: 1,
+                filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.25))',
+              }}>{tier.badge}</span>
             )}
           </div>
         )}
