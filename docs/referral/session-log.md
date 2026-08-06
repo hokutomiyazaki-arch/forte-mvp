@@ -520,3 +520,8 @@
 - 【CC判断・報告済み】代理候補カードは当面「プロフィールを見る」リンクのみ。§16-12の決済なしリクエスト制は既存予約APIがlist_id必須のため、テスト完走前に既存フローへ手を入れるのを避けた。
 - 【事実相違の報告】CEOの「自分のカードが満枠で行き止まり」という認識に対し、DB上の accepting_status は 'open'。また公開カードの受付バッジが出ないのは FEATURE_REFERRAL_LISTS が 'all' でないため（allowlist運用中は仕様どおり非表示）。
 - 【発見・未対応】**REFERRAL_STRIPE_WEBHOOK_SECRET がVercelに未設定**。決済完了のwebhook検証ができず、payment-returnのフォールバック頼み（決済後に戻り画面まで到達すれば反映される）。テスト手順書に記載。
+
+### 実装: 自動送金を「完了→保留7日→送金」に変更 — 2026-08-06（CEO指示・E-2・3cb7d51）
+- 完了時は分配台帳（pending）作成のみに変更し、即時送金の呼び出しを2箇所（received/route.ts の手動complete・cron の24h自動完了）から削除。cron の pending 再試行に `created_at < now-7日` フィルタを追加（PAYOUT_HOLD_DAYS=7・**DBマイグレーション不要**）。送り手の「紹介した案件」に「(◯月◯日 送金予定)」を表示。
+- 二重送金防止の多層防御・starvation対策・status='paid' の既存レコードには非接触。
+- 【重要な既知ギャップ・報告済み】**完了後のキャンセル/返金をDBに自動反映する処理は存在しない**（cancel_by_receiver は confirmed のみ対象・webhookに charge.refunded ハンドラなし）。完了後にStripeで手動返金しても referral_payouts が pending のままなら7日後にcronが送金してしまう。今回の7日保留は「手動で cancelled に落とす時間を7日確保する」形であり、自動反映の実装は別タスク（指示範囲外のため未実施）。
