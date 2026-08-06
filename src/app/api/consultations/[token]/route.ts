@@ -45,7 +45,7 @@ export async function GET(
 
     const { data: pro } = await supabase
       .from('professionals')
-      .select('id, name, photo_url, booking_url')
+      .select('id, name, photo_url, booking_url, booking_enabled')
       .eq('id', consultation.pro_id)
       .maybeSingle()
 
@@ -102,7 +102,16 @@ export async function GET(
       },
       // booking_url は公開カードにも出している情報なのでPIIではない。
       // §16-26: やりとり画面に常設する予約ボタンの遷移先に使う。
-      pro: pro ? { id: pro.id, name: pro.name, photo_url: pro.photo_url, booking_url: pro.booking_url } : null,
+      pro: pro
+        ? {
+            id: pro.id,
+            name: pro.name,
+            photo_url: pro.photo_url,
+            booking_url: pro.booking_url,
+            // §16-29: 予約を止めているプロには予約導線を出さない（クライアント側で判定に使う）
+            booking_enabled: (pro as any).booking_enabled !== false,
+          }
+        : null,
       messages: rows.map((m: any) => ({
         id: m.id,
         sender: m.sender,

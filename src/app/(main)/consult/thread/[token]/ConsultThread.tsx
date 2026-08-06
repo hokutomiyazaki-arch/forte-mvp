@@ -27,7 +27,14 @@ interface Message {
 
 interface ThreadData {
   consultation: { client_name: string; status: string; created_at: string }
-  pro: { id: string; name: string; photo_url: string | null; booking_url: string | null } | null
+  pro: {
+    id: string
+    name: string
+    photo_url: string | null
+    booking_url: string | null
+    /** §16-29: 予約の受付。false のときは予約導線を一切出さない。 */
+    booking_enabled: boolean
+  } | null
   messages: Message[]
   /** §16-27-2: 最後のプロの返信より後に、クライアントが送った通数 */
   client_streak: number
@@ -244,7 +251,8 @@ export default function ConsultThread({ token }: { token: string }) {
                         {m.menu.description}
                       </p>
                     )}
-                    {data.pro && (
+                    {/* 提案後に予約を止めた場合、古い提案から予約に進めてしまわないようにする */}
+                    {data.pro && data.pro.booking_enabled && (
                       <a
                         href={data.pro.booking_url || `/card/${data.pro.id}`}
                         {...(data.pro.booking_url ? { target: '_blank', rel: 'noopener' } : {})}
@@ -342,7 +350,9 @@ export default function ConsultThread({ token }: { token: string }) {
           やりとりが終了していても**常に**出す。
           ⚠️ 遷移先は暫定。将来この予約リンクは**内部の予約システム**に差し替える（CEOメモ）。
           いまは プロの booking_url（外部）、未設定ならカードページ（予約・連絡先が載っている）。 */}
-      {data.pro && (
+      {/* CEO指示(2026-08-06): プロが予約を受け付けていないときは出さない。
+          「予約する」を押させておいて受け付けていないのは、相談の場では特に不親切なため。 */}
+      {data.pro && data.pro.booking_enabled && (
         <a
           href={data.pro.booking_url || `/card/${data.pro.id}`}
           {...(data.pro.booking_url ? { target: '_blank', rel: 'noopener' } : {})}
