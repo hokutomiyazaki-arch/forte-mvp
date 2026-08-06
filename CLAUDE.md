@@ -75,7 +75,9 @@
 - [ ] カテゴリ表示名は DB でなく **`src/lib/constants.ts` の `TAB_DISPLAY_NAMES`**。
 - [ ] 効果カテゴリは**9種**（治療・回復/体の機能改善/ボディメイク/パフォーマンス/マインド/発見・気づき/指導力/ビューティー/栄養・生活）・**85項目**。
       **「最大9選択」はプロ側プロフィール設定（`professionals.selected_proofs`）の上限**。投票者が1回の投票で選べる強み項目は**最大3件**（`vote/[id]/page.tsx` の `MAX_PROOF=3`）。混同注意。
-- [ ] `vote_type` は `hopeful` / `proof` / `personality_only` の3種。
+- [ ] `vote_type` は **4種**：`hopeful` / `proof` / `personality_only` / **`continuation`**（2回目以降＝リピーターの記録）。
+      **「施術を受けた記録」＝`proof` + `continuation`**（`/api/vote-count` が正）。`vote_type='proof'` だけで絞ると
+      **リピーターの記録が丸ごと落ちる**（2026-08-06 admin 日別プルーフ獲得者の事故）。
 
 ## D. 外部連携（LINE / Email / mailto）
 - [ ] LINE 内蔵ブラウザは callback が2回発火 → 冪等性／中断リカバリ。

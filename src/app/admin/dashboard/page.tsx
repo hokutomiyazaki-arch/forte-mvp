@@ -397,7 +397,7 @@ function monthDayFromDateKey(key: string): string {
 async function fetchVotesSince(
   supabase: any,
   sinceIso: string,
-  filters?: { status?: string; voteType?: string }
+  filters?: { status?: string; voteTypes?: string[] }
 ) {
   const all: any[] = []
   let from = 0
@@ -408,7 +408,7 @@ async function fetchVotesSince(
       .select('created_at, professional_id')
       .gte('created_at', sinceIso)
     if (filters?.status) q = q.eq('status', filters.status)
-    if (filters?.voteType) q = q.eq('vote_type', filters.voteType)
+    if (filters?.voteTypes) q = q.in('vote_type', filters.voteTypes)
     const { data, error } = await q.order('id', { ascending: true }).range(from, from + pageSize - 1)
     if (error) return { data: all, error }
     if (!data || data.length === 0) break
@@ -576,7 +576,18 @@ async function fetchDashboardData() {
     // 日別トレンド (30日) — 1000件キャップを避けるためページネーション取得
     fetchVotesSince(supabase, thirtyDaysAgo.toISOString()),
     // 日別プルーフ獲得者 (14日) — JOINなし（proResから名前引き）・ページネーション取得
-    fetchVotesSince(supabase, fourteenDaysAgo.toISOString(), { status: 'confirmed', voteType: 'proof' }),
+    //
+    // 修正(2026-08-06・CEO報告「表示されてない人がいる」):
+    // 従来は vote_type='proof' だけを数えていたため、**リピーター（2回目以降）の記録が
+    // まるごと落ちていた**。投票画面で「2回目以降」を選ぶと vote_type は 'continuation' に
+    // なる（vote/[id]/page.tsx の determineVoteType）。そのためリピーターの多いプロは
+    // 何票入っても表に出ず、出るのは初回票のある日だけ＝各行が常に1、という見え方になっていた。
+    // 「施術を受けた記録」の正はクライアント向けの /api/vote-count と同じ
+    // ['proof','continuation']（hopeful=期待票 / personality_only=人柄のみ は施術記録ではないので除外）。
+    fetchVotesSince(supabase, fourteenDaysAgo.toISOString(), {
+      status: 'confirmed',
+      voteTypes: ['proof', 'continuation'],
+    }),
     // チャネル別: votes.channel
     supabase.from('votes').select('channel').eq('status', 'confirmed'),
     // シェア分析: シェア経由の予約/相談（tracking_events.source 別・全件ページネーション）
