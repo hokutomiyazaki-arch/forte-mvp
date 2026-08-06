@@ -13,7 +13,10 @@ export const dynamic = 'force-dynamic'
  *
  * 検索範囲は org_id で指定した団体の受付中(open)メンバーに限定する
  * （全プロ検索にすると「◯◯が認定したプロ」という保証が消えるため・§16-15）。
- * 検索対象は名前・肩書き・強み項目のラベル(部分一致・ilike)。
+ * 検索対象は名前・肩書き・強み項目のラベル・**クライアントの声(コメント本文)**。
+ * CEO指示(2026-08-06): 「プロを探す」の検索ボックスと同じ挙動にする(＝voice検索)。
+ * 違いは団体(org_id)で範囲を絞っている点だけ。/api/search と同じく、
+ * ヒットしたコメントは前後20字の抜粋を返してUIに出す(何がヒットしたか見せる)。
  * PII非送出: professionals公開項目(name/title/photo_url/prefecture)のみ返す。normalized_email等は含めない。
  * 160名規模でも全件送出しない: qが空の間・org内マッチが無い間は空配列を返す(全件フェッチしない)。
  */
@@ -35,6 +38,10 @@ interface ResultPro {
   prefecture: string | null
   matchedProofLabels: string[]
   lastProofAt: string | null
+  /** voice検索でヒットしたコメントの抜粋(前後20字)。ヒットしていなければ null。 */
+  matchedVoice: string | null
+  /** ヒットしたコメントの件数。 */
+  matchedVoiceCount: number
 }
 
 const RESULT_LIMIT = 20
@@ -126,7 +133,48 @@ export async function GET(request: NextRequest) {
     }
     const proofMatchedIds = Array.from(matchLabelsByMember.keys())
 
-    const matchedIds = Array.from(new Set([...nameMatchedIds, ...proofMatchedIds]))
+    // ③ クライアントの声(コメント本文)の部分一致。CEO指示(2026-08-06)で追加。
+    //    /api/search と同じ「voice検索」。ilikeではなくJS側でincludesするのは、
+    //    抜粋(前後20字)を作るのに本文が要るため。件数は団体メンバーに絞られている。
+    const voiceMatchByMember = new Map<string, string>()
+    const voiceCountByMember = new Map<string, number>()
+    {
+      const PAGE_C = 1000
+      let from = 0
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { data, error } = await supabase
+          .from('votes')
+          .select('id, professional_id, comment')
+          .in('professional_id', openMemberIds)
+          .eq('status', 'confirmed')
+          .not('comment', 'is', null)
+          .neq('comment', '')
+          .neq('comment', '[deleted]')
+          .order('id', { ascending: true })
+          .range(from, from + PAGE_C - 1)
+        if (error) break
+        const rows = (data || []) as Array<{ professional_id: string; comment: string }>
+        for (const row of rows) {
+          if (!row.comment || !row.comment.includes(q)) continue
+          voiceCountByMember.set(row.professional_id, (voiceCountByMember.get(row.professional_id) || 0) + 1)
+          if (!voiceMatchByMember.has(row.professional_id)) {
+            const idx = row.comment.indexOf(q)
+            const start = Math.max(0, idx - 20)
+            const end = Math.min(row.comment.length, idx + q.length + 20)
+            voiceMatchByMember.set(
+              row.professional_id,
+              `${start > 0 ? '…' : ''}${row.comment.slice(start, end)}${end < row.comment.length ? '…' : ''}`,
+            )
+          }
+        }
+        if (rows.length < PAGE_C) break
+        from += PAGE_C
+      }
+    }
+    const voiceMatchedIds = Array.from(voiceMatchByMember.keys())
+
+    const matchedIds = Array.from(new Set([...nameMatchedIds, ...proofMatchedIds, ...voiceMatchedIds]))
     if (matchedIds.length === 0) {
       return NextResponse.json({ professionals: [] })
     }
@@ -171,6 +219,9 @@ export async function GET(request: NextRequest) {
           prefecture: pro.prefecture,
           matchedProofLabels: matchLabelsByMember.get(id) || [],
           lastProofAt: lastProofByMember.get(id) || null,
+          // voice検索のヒット。UI側で「〜という声があります」として出す
+          matchedVoice: voiceMatchByMember.get(id) || null,
+          matchedVoiceCount: voiceCountByMember.get(id) || 0,
         }
       })
       .filter((c): c is ResultPro => !!c)

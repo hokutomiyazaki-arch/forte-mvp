@@ -68,6 +68,16 @@ function CandidateRow({ c }: { c: DelegateCandidatePro }) {
         {c.title && (
           <div style={{ fontSize: 11, color: T.gold, fontFamily: T.font }}>{c.title}</div>
         )}
+        {/* CEO指示(2026-08-06): 「プロを探す」と同じくヒットした声を見せる。
+            何がヒットしたのか分からないと、並んでいる理由が伝わらないため。 */}
+        {c.matchedVoice && (
+          <div style={{ fontSize: 11, color: T.text, marginTop: 3, lineHeight: 1.6 }}>
+            「{c.matchedVoice}」
+            {(c.matchedVoiceCount || 0) > 1 && (
+              <span style={{ color: T.textMuted }}> 他{(c.matchedVoiceCount || 0) - 1}件</span>
+            )}
+          </div>
+        )}
         {c.matchedProofLabels.length > 0 && (
           <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2, fontFamily: T.font }}>
             {c.matchedProofLabels.slice(0, 2).join('・')}
@@ -185,13 +195,13 @@ export function DelegateCandidatesBlock({ source, orgId, orgName, candidates, ex
       {source === 'org' && orgId && orgName && (
         <div style={{ marginTop: 14 }}>
           <div style={{ fontSize: 11, color: T.textMuted, marginBottom: 4, fontFamily: T.font }}>
-            他のお悩みで探す
+            お客さんの声から探す
           </div>
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={`${orgName}の受付中の認定者を検索`}
+            placeholder={`例: 肩こり／${orgName}の声から探す`}
             style={{
               width: '100%',
               fontSize: 12,

@@ -62,6 +62,10 @@ export interface DelegateCandidatePro {
    * mode='list'では「一致」の概念が無いため常に空配列。 */
   matchedProofLabels: string[]
   lastProofAt: string | null
+  /** voice検索(コメント本文)でヒットした抜粋。検索結果でのみ入る（一覧では null）。 */
+  matchedVoice?: string | null
+  /** ヒットしたコメントの件数。 */
+  matchedVoiceCount?: number
 }
 
 export interface DelegateCandidatesResult {
