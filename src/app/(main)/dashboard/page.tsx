@@ -2604,26 +2604,13 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* §2-2改訂: 受け入れステータスをダッシュボード見出しの直上に常時表示（先行テスト第3弾・背景なしの3段スライダー） */}
-      {/* 🔴1(再レビュー): allowlist内に加え、共有リストに掲載中の本人にも表示する(唯一のオプトアウト手段のため) */}
-      {pro && acceptingEditable && (
-        <AcceptingStatusWidget
-          initialAcceptingStatus={pro.accepting_status ?? null}
-          initialAcceptingNote={pro.accepting_note ?? null}
-          initialDelegateListId={pro.delegate_list_id ?? null}
-          canManageLists={referralEnabled}
-          hasBookableMenu={hasBookableReferralMenu}
-          onUpdated={(status, note, delegateListId) =>
-            setPro(prev => prev ? { ...prev, accepting_status: status, accepting_note: note, delegate_list_id: delegateListId } : prev)
-          }
-        />
-      )}
-
       {/* 移動(2026-08-06・CEO指示): 代理案内の設定UI(旧DelegateCriteriaSettings直置き)は
-          紹介タブ「紹介する」サブタブの先頭へ移動した(ReferralTab内でrenderする)。
-          ダッシュボード最上部は受付トグル+条件メモの2要素のみに戻す。 */}
+          紹介タブ「紹介する」サブタブの先頭へ移動した(ReferralTab内でrenderする)。 */}
 
-      <div className="flex items-center justify-between mb-4">
+      {/* §CEO指摘対応(2026-08-06): 受け入れステータスの2値トグル+条件メモは、ダッシュボード最上部に
+          横幅いっぱいで常時表示していたため見出しより上を占有していた(CEOスクショ指摘)。
+          「ダッシュボード」見出し＋ファウンダーバッジの右横スペースへ移動し、上部を1行詰める。 */}
+      <div className="flex items-start justify-between mb-4" style={{ flexWrap: 'wrap' as const, gap: 12 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <h1 className="text-2xl font-bold text-[#1A1A2E]">ダッシュボード</h1>
@@ -2648,6 +2635,19 @@ export default function DashboardPage() {
             </p>
           )}
         </div>
+        {/* 🔴1(再レビュー): allowlist内に加え、共有リストに掲載中の本人にも表示する(唯一のオプトアウト手段のため) */}
+        {pro && acceptingEditable && (
+          <AcceptingStatusWidget
+            initialAcceptingStatus={pro.accepting_status ?? null}
+            initialAcceptingNote={pro.accepting_note ?? null}
+            initialDelegateListId={pro.delegate_list_id ?? null}
+            canManageLists={referralEnabled}
+            hasBookableMenu={hasBookableReferralMenu}
+            onUpdated={(status, note, delegateListId) =>
+              setPro(prev => prev ? { ...prev, accepting_status: status, accepting_note: note, delegate_list_id: delegateListId } : prev)
+            }
+          />
+        )}
       </div>
 
       {/* 姓名未設定バナー */}
