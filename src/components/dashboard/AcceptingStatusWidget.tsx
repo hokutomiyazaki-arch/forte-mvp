@@ -66,9 +66,11 @@ interface Props {
 const SEGMENT_LABEL: Record<'closed' | 'open', string> = {
   // §16-29（CEO決定 2026-08-06）: このトグルは **予約の受付**（直接予約）。
   // 紹介予約の受付は紹介タブの別スイッチ（accepting_status）が持つ。
-  // CEO指摘: 「予約」だけだと全部止まったように読める。RP上の予約だけだと分かる語にする。
-  closed: 'RP予約 停止中',
-  open: 'RP予約 受付中',
+  // CEO指摘(2026-08-06): ラベルは「予約 受付中/停止中」でよい。
+  // 「RP」は何の略か伝わらないうえ、RP上の予約だけが止まることは
+  // 停止時の確認ダイアログで明記しているので、そちらで足りる。
+  closed: '予約 停止中',
+  open: '予約 受付中',
 }
 
 export default function AcceptingStatusWidget({
@@ -300,7 +302,7 @@ export default function AcceptingStatusWidget({
             color: bookingOpen ? '#1B5E20' : '#B00020',
           }}
         >
-          {bookingOpen ? SEGMENT_LABEL.open : (signal === 'delegate' ? 'RP予約 停止中（案内中）' : SEGMENT_LABEL.closed)}
+          {bookingOpen ? SEGMENT_LABEL.open : (signal === 'delegate' ? '予約 停止中（案内中）' : SEGMENT_LABEL.closed)}
         </span>
       </div>
       {toggleError && <div style={{ fontSize: 11, color: '#B00020' }}>更新に失敗しました</div>}

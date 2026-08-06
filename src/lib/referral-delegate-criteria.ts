@@ -217,14 +217,18 @@ export async function getDelegateCandidates(
       .from('vote_summary')
       .select('proof_id, vote_count')
       .eq('professional_id', pausedPro.id)
+    // CEO質問(2026-08-06)「団体トップがプルーフを集めてない場合どうする？」への対応。
+    // 旧: 本人の評価済み強みが0件なら return null → **案内そのものが消えていた**。
+    // 案内の目的は訪問者を行き止まりにしないことなので、強みの一致は「あれば加点」であって
+    // 前提ではない。強みが無い場合は絞り込みをやめ、同じ団体の受付中の先生をそのまま案内する。
+    // ※ 文言は matchedProofLabels が空になることで自動的に「同じ団体の先生」に落ちる
+    //   （持っていない根拠を語らない＝嘘をつかない）。
     const ownRows = (ownSummary || []) as Array<{ proof_id: string; vote_count: number }>
-    if (ownRows.length === 0) return null
 
     const topProofIds = [...ownRows]
       .sort((a, b) => (b.vote_count || 0) - (a.vote_count || 0))
       .slice(0, TOP_STRENGTHS_LIMIT)
       .map((r) => r.proof_id)
-    if (topProofIds.length === 0) return null
 
     // proof_items: label・tab(9分類)。TOP3項目のラベル + 同カテゴリ判定に全件必要
     const { data: proofItems } = await supabase.from('proof_items').select('id, label, tab')
@@ -241,7 +245,7 @@ export async function getDelegateCandidates(
       topLabelByProofId.set(pid, item.label)
       if (item.tab) topTabs.add(item.tab)
     }
-    if (topLabelByProofId.size === 0) return null
+    // 強みが取れなくても団体の先生は案内する（上記CEO質問への対応）。ここでは打ち切らない。
 
     // 同じ団体のメンバー(本人除く)。まずorg_membersで絞る(N+1対策・votes全件走査を避ける)
     const { data: memberRows } = await supabase

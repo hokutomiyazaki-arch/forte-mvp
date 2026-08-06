@@ -527,9 +527,19 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
             {pro.name}
           </div>
           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-            {/* §16-29（CEO決定 2026-08-06）: 予約の受付は booking_enabled が持つ。
-                OFF のときは予約ボタンを出さない（代わりの案内は下の代替リストが担う）。
-                カラム未作成なら null＝受付中として扱う（fail-open）。 */}
+            {/* §16-32: 予約OFF のときは予約ボタンの代わりに「オススメのプロ」を出す。
+                候補が1名以上いるときだけ（押した先が空だと行き止まりになるため）。 */}
+            {(pro as any).booking_enabled === false && delegateCandidates && delegateCandidates.candidates.length > 0 && (
+              <a href={`/recommended/${id}`}
+                style={{
+                  display: 'inline-block', padding: '8px 12px', borderRadius: 8,
+                  background: T.dark, color: T.gold, fontWeight: 700, fontSize: 12,
+                  textDecoration: 'none', whiteSpace: 'nowrap',
+                }}>
+                オススメのプロ
+              </a>
+            )}
+            {/* §16-29: 予約の受付は booking_enabled が持つ。カラム未作成なら null＝受付中（fail-open）。 */}
             {pro.booking_url && (pro as any).booking_enabled !== false && (
               <a href={pro.booking_url} target="_blank" rel="noopener"
                 onClick={() => trackEvent(id, 'booking_click', shareSrc || undefined)}
@@ -632,37 +642,15 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
               {/* Phase A2: service_formats を優先しつつ、setup ウィザード経由の新規プロ(is_online_available のみ)も後方互換でカバー */}
               {(pro.service_formats?.includes('online') || pro.is_online_available) && <span style={{ marginLeft: 6, color: T.gold }}>● オンライン対応</span>}
             </div>
-            {/* §16-29（CEO決定 2026-08-06）: 予約が止まっているときだけ出す。
-                - 判定軸は booking_enabled（訪問者にとっての行き止まりは「予約できないこと」）
-                - 受付中のときは**何も出さない**。大多数が受付中なので「受付中」の表示は
-                  情報量がなくノイズになる（検索カードで先に決めた方針と揃える）
-                - referralFullyLaunched のゲートを外した。これは紹介機能の段階公開のための
-                  ゲートで、予約の停止表示とは無関係。ゲートが残っていたため
-                  「予約OFFにしても代替リストが出ない」というCEO報告のバグになっていた。 */}
-            {(pro as any).booking_enabled === false && (() => {
-              const hasCandidates = !!(delegateCandidates && delegateCandidates.candidates.length > 0)
-              const isListSource = delegateCandidates?.source === 'list'
-              return (
-                <div style={{ marginTop: 4 }}>
-                  <div style={{ fontSize: 11, color: REFERRAL_SIGNAL_COLOR.delegate, lineHeight: 1.6 }}>
-                    {hasCandidates
-                      ? isListSource
-                        ? `${pro.name}さんは今ご予約を受け付けていません。信頼している先生をご案内します`
-                        : `${pro.name}さんは今ご予約を受け付けていません。同じ${delegateCandidates!.orgName}の先生をご案内します`
-                      : `${pro.name}さんは今ご予約を受け付けていません`}
-                  </div>
-                  {hasCandidates && (
-                    <DelegateCandidatesBlock
-                      source={delegateCandidates!.source}
-                      orgId={delegateCandidates!.orgId}
-                      orgName={delegateCandidates!.orgName}
-                      candidates={delegateCandidates!.candidates}
-                      excludeProId={id}
-                    />
-                  )}
-                </div>
-              )
-            })()}
+            {/* §16-32（CEO決定 2026-08-06）: 予約が止まっているときだけ1行出す。
+                候補リストは**カードに載せない**。ヘッダーの狭い枠に押し込んだ結果、
+                縦書きに潰れて完全に壊れていた（CEO報告）。一覧は専用ページへ出す。
+                文言も1行に短縮（「同じ◯◯の先生をご案内します」は長すぎるとのCEO指摘）。 */}
+            {(pro as any).booking_enabled === false && (
+              <div style={{ fontSize: 11, color: REFERRAL_SIGNAL_COLOR.delegate, marginTop: 4, lineHeight: 1.6 }}>
+                {pro.name}さんは今ご予約を受け付けていません
+              </div>
+            )}
             {pillOrgs.length > 0 && (
               <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {pillOrgs.map(o => (
@@ -1485,6 +1473,17 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
 
       {/* ═══ CTA ═══ */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+        {/* §16-32: 同上（予約OFF時の代替導線） */}
+        {(pro as any).booking_enabled === false && delegateCandidates && delegateCandidates.candidates.length > 0 && (
+          <a href={`/recommended/${id}`}
+            style={{
+              display: 'block', textAlign: 'center', padding: 15, borderRadius: 14,
+              background: T.dark, color: T.gold, fontWeight: 700, fontSize: 14,
+              textDecoration: 'none', fontFamily: T.font,
+            }}>
+            オススメのプロを見る
+          </a>
+        )}
         {/* §16-29: 同上 */}
         {pro.booking_url && (pro as any).booking_enabled !== false && (
           <a href={pro.booking_url} target="_blank" rel="noopener"
