@@ -60,7 +60,10 @@ export async function GET(
       .order('created_at', { ascending: true })
       .limit(MESSAGE_LIMIT)
 
-    const rows = messages || []
+    const allRows = messages || []
+    // §16-36: 取り消されたメッセージは**どちらの画面にも出さない**（CEO決定 2026-08-06）。
+    // 行は残すが表示はしない。migration 055 未実行なら undefined なので素通りする。
+    const rows = allRows.filter((m: any) => !m.withdrawn_at)
 
     // §16-27-3: 提案されたメニューをカードとして描くための情報。
     // menu_id カラムが未作成の環境では undefined になるだけ（fail-soft）。
@@ -86,9 +89,11 @@ export async function GET(
     }
 
     // §16-27-2: いま何通まで送れるかをフロントに渡す（サーバー側の判定と同じ数え方）。
+    // ⚠️ 数えるのは取り消し前の全件(allRows)。取り消した分を数え直すと
+    //    「3通送る→取り消す→また3通送れる」で連投制限を抜けられてしまう。
     let clientStreak = 0
-    for (let i = rows.length - 1; i >= 0; i--) {
-      if ((rows[i] as any).sender === 'pro') break
+    for (let i = allRows.length - 1; i >= 0; i--) {
+      if ((allRows[i] as any).sender === 'pro') break
       clientStreak++
     }
 
@@ -137,13 +142,50 @@ export async function POST(
     if (!token) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
     const payload = await request.json().catch(() => null)
-    const body = payload && typeof payload.body === 'string' ? payload.body.trim() : ''
+    if (!payload) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+
+    const { supabase, consultation } = await loadByToken(token)
+    if (!consultation) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+
+    // ── 送信の取り消し（§16-36・CEO決定 2026-08-06）──
+    // プロ側と同じ扱いをクライアントにも用意する（誤送信は相談する側にも起きる）。
+    // 「相手の画面からも消えるけど、システムには残る」＝論理削除。
+    // ⚠️ メールは既に出ているので送信自体は取り消せない。UI側で必ずそう書くこと。
+    // スレッドが closed でも取り消せる（誤送信を残し続けるほうが害が大きい）。
+    if (typeof payload.undo_message_id === 'string' && payload.undo_message_id) {
+      const { data: msg } = await supabase
+        .from('consultation_messages')
+        .select('id, consultation_id, sender')
+        .eq('id', payload.undo_message_id)
+        .maybeSingle()
+
+      // このスレッドの、自分(client)の発言だけ
+      if (!msg || msg.consultation_id !== consultation.id || msg.sender !== 'client') {
+        return NextResponse.json({ error: 'message_not_found' }, { status: 404 })
+      }
+
+      const { error } = await supabase
+        .from('consultation_messages')
+        .update({ withdrawn_at: new Date().toISOString() })
+        .eq('id', msg.id)
+      if (error) {
+        // fail-soft: migration 055 未実行の環境では withdrawn_at が無い。
+        // 取り消せないまま残るほうが害が大きいので物理削除で通す（CEO「物理削除でok」）。
+        console.error('[api/consultations/[token] POST] undo error:', error.message)
+        const fallback = await supabase.from('consultation_messages').delete().eq('id', msg.id)
+        if (fallback.error) {
+          console.error('[api/consultations/[token] POST] undo delete error:', fallback.error.message)
+          return NextResponse.json({ error: 'undo_failed' }, { status: 500 })
+        }
+      }
+      return NextResponse.json({ ok: true })
+    }
+
+    const body = typeof payload.body === 'string' ? payload.body.trim() : ''
     if (!body || body.length > BODY_MAX) {
       return NextResponse.json({ error: 'body_invalid' }, { status: 400 })
     }
 
-    const { supabase, consultation } = await loadByToken(token)
-    if (!consultation) return NextResponse.json({ error: 'not_found' }, { status: 404 })
     if (consultation.status === 'closed') {
       return NextResponse.json({ error: 'closed' }, { status: 409 })
     }
@@ -162,6 +204,8 @@ export async function POST(
 
     // §16-27-2 連投制限: 最後のプロの返信より後のクライアント連投を数える。
     // 新カラムを足さずに済む（メッセージの並びだけで決まる）。
+    // 取り消し済み(§16-36)も**数に入れたまま**にする。除くと
+    // 「3通送る→取り消す→また3通送れる」で制限を抜けられる。
     let clientStreak = 0
     for (let i = rows.length - 1; i >= 0; i--) {
       if (rows[i].sender === 'pro') break
