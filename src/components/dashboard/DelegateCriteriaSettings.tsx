@@ -141,7 +141,9 @@ export default function DelegateCriteriaSettings({
             </select>
           </div>
           <div>
-            <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 4 }}>実績下限（任意・案内する認定者の最低支持人数）</div>
+            {/* §16-17(CEO決定・2026-08-06): 判定は実人数(DISTINCT normalized_email)であり票数ではない。
+                ラベルも票数を連想させる表記(「◯プルーフ以上」等)を使わず実人数表記に統一する。 */}
+            <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 4 }}>◯人以上から支持されている認定者のみ表示（任意）</div>
             <input
               type="number"
               min={0}
