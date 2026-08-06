@@ -187,15 +187,9 @@ export default function ConsultThread({ token }: { token: string }) {
         )}
       </div>
 
-      {/* §16-27-1 返信期待値の設定。
-          「返信が来ない → 不満」の連鎖を最初から断つ。スレッドの一番上に固定で置く。 */}
-      <div style={{
-        background: '#FFF8E7', border: `1px solid ${T.gold}40`, borderRadius: 12,
-        padding: '12px 14px', marginBottom: 20,
-        fontSize: 13, color: T.muted, lineHeight: 1.8,
-      }}>
-        返信は施術の合間になるため、お時間をいただくことがあります。
-      </div>
+      {/* §16-27-1（返信期待値の固定文言）は撤去（CEO判断 2026-08-06）。
+          理由: 「施術の合間」と限らない業種がいる／相談者はそもそも即返信を期待していない。
+          元の狙い（返信が来ない→不満の連鎖を断つ）は §16-27-2 の連投制限が担う。 */}
 
       {/* やりとり */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>

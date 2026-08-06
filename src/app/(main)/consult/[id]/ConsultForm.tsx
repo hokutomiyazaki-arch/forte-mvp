@@ -125,13 +125,6 @@ export default function ConsultForm({ proId, proName, proPhotoUrl, proTitle, pro
             {proName}さんにお伝えしました。<br />
             お返事が届いたらメールでお知らせします。
           </p>
-          {/* §16-27-1 返信期待値の設定。ここで先に言っておくと、待つ時間が不安にならない。 */}
-          <p style={{
-            fontSize: 13, color: T.muted, lineHeight: 1.8, marginTop: 16,
-            background: '#FFF8E7', borderRadius: 10, padding: '12px 14px',
-          }}>
-            返信は施術の合間になるため、お時間をいただくことがあります。
-          </p>
           <p style={{ fontSize: 13, color: T.faint, lineHeight: 1.8, marginTop: 16 }}>
             受付のメールをお送りしています。届いていない場合は迷惑メールフォルダをご確認ください。
           </p>

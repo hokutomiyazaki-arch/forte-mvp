@@ -196,6 +196,33 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
     }
   }
 
+  /** §16-36 送信の取り消し。メールは既に出ているのでやりとり画面から消すだけ。 */
+  async function undoMessage(consultationId: string, messageId: string) {
+    if (sendingId) return
+    if (!window.confirm('この送信を取り消しますか？\n\nやりとり画面からは消えますが、お客さんに届いたメールは取り消せません。')) return
+    setSendingId(consultationId)
+    setError('')
+    setNotice('')
+    try {
+      const res = await fetch(`/api/pro/consultations/${consultationId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ undo_message_id: messageId }),
+      })
+      if (!res.ok) {
+        setError('取り消せませんでした。')
+        return
+      }
+      setNotice('送信を取り消しました。')
+      await load()
+    } catch {
+      setError('取り消せませんでした。')
+    } finally {
+      setSendingId(null)
+    }
+  }
+
   async function sendReport(consultationId: string) {
     if (reportReason.trim().length < 10 || sendingId) return
     setSendingId(consultationId)
@@ -405,6 +432,23 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
                             </div>
                             <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 3, textAlign: mine ? 'right' : 'left' }}>
                               {mine ? 'あなた' : c.client_name}・{formatDate(m.created_at)}
+                              {/* §16-36: 誤送信の取り消し。自分の発言だけ。 */}
+                              {mine && c.status !== 'archived' && (
+                                <>
+                                  {' '}
+                                  <button
+                                    type="button"
+                                    onClick={() => undoMessage(c.id, m.id)}
+                                    disabled={sendingId === c.id}
+                                    style={{
+                                      background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                                      fontSize: 10, color: '#9CA3AF', textDecoration: 'underline',
+                                    }}
+                                  >
+                                    取り消す
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </div>
                         </div>

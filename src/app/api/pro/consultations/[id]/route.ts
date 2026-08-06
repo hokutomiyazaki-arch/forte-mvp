@@ -18,6 +18,7 @@ const ALLOWED_STATUS = ['new', 'open', 'closed', 'archived']
  * body: { menu_id }         メニューを提案する（§16-27-3）。カードとしてスレッドに入る
  * body: { report_reason }   通報する（§16-27-4）。プロ側からも通報できる（お互い様の建て付け）
  * body: { list_id }         紹介リストを送る（§16-35）。ワンクリックで紹介の実体を残す
+ * body: { undo_message_id } 送信を取り消す（§16-36）。自分(sender='pro')の発言のみ
  *
  * 「プロはダッシュボードで書くだけ、クライアントにはメールが届く」がこの機能の肝。
  * 送信結果は consultation_messages.delivered_at に残す（送れなかったことを後から追える）。
@@ -86,6 +87,33 @@ export async function POST(
       return NextResponse.json({ ok: true })
     }
 
+    // ── 送信の取り消し（§16-36・CEO指示 2026-08-06）──
+    // 「ワンタップでリストが送られてしまうのでミスが多くなりそう」への対応。
+    // ⚠️ メールは既に出ているので**送信自体は取り消せない**。取り消せるのは
+    //    やりとり画面からの削除だけ。UI側でその旨を明示すること。
+    if (typeof payload.undo_message_id === 'string' && payload.undo_message_id) {
+      const { data: msg } = await supabase
+        .from('consultation_messages')
+        .select('id, consultation_id, sender')
+        .eq('id', payload.undo_message_id)
+        .maybeSingle()
+
+      // 自分のスレッドの、自分(pro)の発言だけ
+      if (!msg || msg.consultation_id !== consultation.id || msg.sender !== 'pro') {
+        return NextResponse.json({ error: 'message_not_found' }, { status: 404 })
+      }
+
+      const { error } = await supabase
+        .from('consultation_messages')
+        .delete()
+        .eq('id', msg.id)
+      if (error) {
+        console.error('[api/pro/consultations POST] undo error:', error.message)
+        return NextResponse.json({ error: 'undo_failed' }, { status: 500 })
+      }
+      return NextResponse.json({ ok: true })
+    }
+
     // ── 紹介リストを送る（§16-35・CEO決定 2026-08-06）──
     // 公開カードに一覧を出すのをやめた代わりの導線。
     // 「◯◯さんが紹介した」という実体が残るのがこちらの価値（フロント掲載には無かったもの）。
@@ -101,7 +129,10 @@ export async function POST(
         return NextResponse.json({ error: 'list_not_found' }, { status: 404 })
       }
 
-      const text = `「${list.title}」をお送りします。よろしければこちらの先生をご覧ください。`
+      // CEO指示(2026-08-06):「リストを送るときは余計なメッセージはつけずにリンクだけ」。
+      // body はカード描画に使わないが、list_id カラムが無い環境や
+      // リストが後から消された場合の**最低限の代替表示**として題名だけ入れる。
+      const text = list.title
       const row: Record<string, unknown> = {
         consultation_id: consultation.id,
         sender: 'pro',

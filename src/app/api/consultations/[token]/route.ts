@@ -51,7 +51,11 @@ export async function GET(
 
     const { data: messages } = await supabase
       .from('consultation_messages')
-      .select('id, sender, body, created_at, menu_id, list_id')
+      // 教訓(2026-08-06・本番事故): 未作成カラムを .select() に明示すると PostgREST が
+      // 42703 で落ち、**メッセージが1件も返らなくなる**（クライアント側が真っ白になった）。
+      // migration の実行順に依存させないため、ここは * にして任意カラムは後段で読む。
+      // 同じ事故が card-data.ts の delegate_criteria でも起きている（LESSONS参照）。
+      .select('*')
       .eq('consultation_id', consultation.id)
       .order('created_at', { ascending: true })
       .limit(MESSAGE_LIMIT)
