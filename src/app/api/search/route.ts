@@ -29,6 +29,10 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
+// CEO指示(2026-08-06・Pick up既定表示): 直近7日の確定済みproof投票が何件から
+// 「急上昇」に載せるかの下限(内部運用値・UIには出さない)
+const RISING_MIN_VOTES_7D = 3
+
 // カテゴリタブ → DBのtab値のマッピング
 const CATEGORY_TAB_MAP: Record<string, string[]> = {
   healing: ['healing'],
@@ -674,14 +678,36 @@ export async function GET(request: Request) {
 
     // ソート（クエリなしの場合のみ適用）
     else if (category === 'multi') {
-      // 質フロア: 5proof以上 & 直近90日にproof活動があるプロのみ
+      // CEO指示(2026-08-06): Pick up既定表示は「今週の急上昇」= 直近7日間の確定済み
+      // proof投票(vote_type='proof'、継続記録は含めない)の件数が多い順。下限3件未達は
+      // ランキングに載せない。proofVotesは既に取得済み(status='confirmed'・対象proIds絞り)
+      // のため、追加クエリなしでJS集計する(votes全件スキャンの追加禁止・既存取得分を流用)。
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+      const rising7dCounts = new Map<string, number>()
+      for (const vote of proofVotes || []) {
+        if (vote.vote_type !== 'proof') continue
+        if (new Date(vote.created_at) < sevenDaysAgo) continue
+        rising7dCounts.set(vote.professional_id, (rising7dCounts.get(vote.professional_id) || 0) + 1)
+      }
+
+      const risingList = result
+        .filter(p => (rising7dCounts.get(p.id) || 0) >= RISING_MIN_VOTES_7D)
+        .sort((a, b) => (rising7dCounts.get(b.id) || 0) - (rising7dCounts.get(a.id) || 0))
+      const risingIdSet = new Set(risingList.map(p => p.id))
+
+      // フォールバック: 下限を満たすプロが少ない場合にランキングが空/薄くならないよう、
+      // 既存の「おすすめ」ロジック(質フロア: 5proof以上・直近90日活動・シャッフル)を
+      // 急上昇と重複しない分だけ後ろに繋げる。
       const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
-      result = result.filter(p =>
-        p.totalProofs >= 5 &&
-        p.lastProofAt && new Date(p.lastProofAt) >= ninetyDaysAgo
+      const fallback = shuffle(
+        result.filter(p =>
+          !risingIdSet.has(p.id) &&
+          p.totalProofs >= 5 &&
+          p.lastProofAt && new Date(p.lastProofAt) >= ninetyDaysAgo
+        )
       )
-      // リロードごとにランダムシャッフル（毎リクエストで並びが変わる）
-      result = shuffle(result)
+
+      result = [...risingList, ...fallback]
     }
     else if (category === 'none') {
       // 従来の複合スコア降順を維持（現状のロジックをそのまま残す）

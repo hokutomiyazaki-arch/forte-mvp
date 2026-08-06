@@ -10,7 +10,7 @@ import { REFERRAL_SIGNAL_DOT, isReferralReachable, computeReferralSignal } from 
 const T = { ...COLORS, font: FONTS.main, fontSerif: FONTS.serif }
 
 const CATEGORIES = [
-  { id: 'multi',       label: '✨ おすすめ' },
+  { id: 'multi',       label: '✨ Pick up' },
   { id: 'healing',     label: '痛みや不調を改善したい' },
   { id: 'body',        label: '機能的な体を手に入れたい' },
   { id: 'bodymake',    label: 'ボディメイクしたい' },
@@ -22,8 +22,9 @@ const CATEGORIES = [
   { id: 'skill',       label: '技術指導を受けたい' },
 ]
 
+// CEO指示(2026-08-06): 「今月急上昇」はPick up(トップタブ)の既定表示に移設したため、
+// 並び替えチップからは削除。先頭は「この分野のプロ」にする。
 const SUB_CATEGORIES = [
-  { id: 'rising',     label: '🔥 今月急上昇' },
   { id: 'specialist', label: '⭐ この分野のプロ' },
   { id: 'repeater',   label: '🔄 リピーターが多い' },
   { id: 'new_client', label: '🌊 新規に強い' },
@@ -187,7 +188,8 @@ export default function SearchPageClient({
   referralWriteEnabled = false,
 }: Props) {
   const [category, setCategory] = useState('multi')
-  const [subCategory, setSubCategory] = useState('rising')
+  // CEO指示(2026-08-06): 「今月急上昇」チップを廃止したため、既定選択は先頭チップの「この分野のプロ」に揃える
+  const [subCategory, setSubCategory] = useState('specialist')
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [selectedPrefecture, setSelectedPrefecture] = useState('')
@@ -576,9 +578,6 @@ export default function SearchPageClient({
     if (referralWriteEnabled && mineOnlyFilter) {
       return 'まだ気になるプロがいません。カードの「＋ 紹介リストに追加」から気になるプロに追加できます'
     }
-    if (subCategory === 'rising') {
-      return '今月はまだ集計中です。「この分野のプロ」を見てみましょう'
-    }
     return '該当するプロが見つかりませんでした'
   }
 
@@ -758,6 +757,18 @@ export default function SearchPageClient({
                 {sub.label}
               </button>
             ))}
+          </div>
+        )}
+
+        {/* CEO指示(2026-08-06): Pick up既定表示は「今週の急上昇」順であることを明示する見出し
+            (何の順で並んでいるか分からないとランダムと同じで価値が伝わらない・下限票数は内部運用のため出さない)。
+            検索/キーワード一致時や「♡気になる」表示中は並び順の説明が変わるため出さない。 */}
+        {category === 'multi' && !debouncedQuery && !activeKeywordId && !(referralWriteEnabled && mineOnlyFilter) && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: T.dark }}>今週の急上昇</div>
+            <div style={{ fontSize: 13, color: T.textMuted, marginTop: 2 }}>
+              直近7日で新しくプルーフが集まった方
+            </div>
           </div>
         )}
 
