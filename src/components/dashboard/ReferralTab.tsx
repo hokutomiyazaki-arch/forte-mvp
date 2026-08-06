@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import BookingThread from '@/components/dashboard/BookingThread'
 import ReferralCompletedList from '@/components/dashboard/ReferralCompletedList'
+import DelegateCriteriaSettings from '@/components/dashboard/DelegateCriteriaSettings'
 import { computeReferralSignal, REFERRAL_SIGNAL_DOT } from '@/lib/referral-accepting'
 import { estimateReferralPayoutReflectionText, estimateReferralPayoutHoldExpiryText } from '@/lib/referral-format'
 
@@ -136,6 +137,9 @@ interface Props {
   acceptingNote?: string | null
   delegateCriteria?: DelegateCriteria | null
   onDelegateCriteriaUpdated?: (criteria: DelegateCriteria) => void
+  /** 移動(2026-08-06・CEO指示): 代理案内ボックス(DelegateCriteriaSettings)をダッシュボード最上部
+   * から「紹介する」サブタブ先頭へ移動したため、そこで使う団体一覧をここで受け取る。 */
+  delegateEligibleOrgs?: Array<{ organizationId: string; organizationName: string; role: 'founder' | 'instructor' }>
 }
 
 export default function ReferralTab({
@@ -147,6 +151,7 @@ export default function ReferralTab({
   acceptingNote,
   delegateCriteria,
   onDelegateCriteriaUpdated,
+  delegateEligibleOrgs,
 }: Props) {
   // リスト一覧
   const [lists, setLists] = useState<ReferralList[]>([])
@@ -2098,6 +2103,16 @@ export default function ReferralTab({
           CEO指示(2026-08-04・IA再変更): 成立した紹介は「紹介した案件」タブへ移動・
           気になるプロの移設案内は削除(恒久表示の撤回)。 */}
       <div style={{ display: subtab === 'send' ? 'flex' : 'none', flexDirection: 'column', gap: 24 }}>
+      {/* 移動(2026-08-06・CEO指示): 代理案内ボックス(旧ダッシュボード最上部)をこのサブタブの
+          先頭(リスト一覧より上)へ移動。停止中の間、公開カード訪問者を他の先生へ案内する送り手側の設定。 */}
+      <DelegateCriteriaSettings
+        orgs={delegateEligibleOrgs || []}
+        initialCriteria={delegateCriteria ?? null}
+        currentAcceptingStatus={acceptingStatus ?? null}
+        currentAcceptingNote={acceptingNote ?? null}
+        onUpdated={(criteria) => onDelegateCriteriaUpdated?.(criteria)}
+      />
+
       {/* ① 新規作成 */}
       {createListCard}
 

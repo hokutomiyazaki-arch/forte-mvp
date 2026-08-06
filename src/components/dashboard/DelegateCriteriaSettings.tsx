@@ -64,6 +64,30 @@ export default function DelegateCriteriaSettings({
   const [error, setError] = useState(false)
   const [saved, setSaved] = useState(false)
 
+  // 移動(2026-08-06・CEO指示): このボックスを「紹介する」サブタブの先頭へ移動し、各リストカードの
+  // 「代理案内に使う」チェックボックス(ReferralTab内・同じdelegate_criteriaを操作)と同じ画面に
+  // 並ぶようになったため、外部からの変更(=initialCriteriaプロップの変化)にこの内部stateを
+  // 追従させる同期を追加する(依存はプリミティブのみ)。
+  const firstOrgId = orgs[0]?.organizationId || ''
+  useEffect(() => {
+    setEnabled(!!initialCriteria?.enabled)
+    setMode(!hasOrgs ? 'list' : initialCriteria?.mode === 'list' ? 'list' : 'org')
+    setOrgId(initialCriteria?.org_id || firstOrgId)
+    setListId(initialCriteria?.list_id || '')
+    setMinSupport(
+      typeof initialCriteria?.min_support_records === 'number' ? String(initialCriteria.min_support_records) : ''
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    initialCriteria?.enabled,
+    initialCriteria?.mode,
+    initialCriteria?.org_id,
+    initialCriteria?.list_id,
+    initialCriteria?.min_support_records,
+    hasOrgs,
+    firstOrgId,
+  ])
+
   // §16-20: 「自分のリストから」の選択肢用に自分の共有(private以外)リストを取得する
   // (AcceptingStatusWidget.tsxの既存の同種フェッチパターンを踏襲)。
   const [ownLists, setOwnLists] = useState<OwnShareableList[]>([])

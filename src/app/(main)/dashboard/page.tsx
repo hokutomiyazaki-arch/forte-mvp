@@ -29,7 +29,6 @@ import BusinessInfoTab from '@/components/dashboard/BusinessInfoTab'
 import MediaSection from '@/components/dashboard/MediaSection'
 import ReferralTab from '@/components/dashboard/ReferralTab'
 import AcceptingStatusWidget from '@/components/dashboard/AcceptingStatusWidget'
-import DelegateCriteriaSettings from '@/components/dashboard/DelegateCriteriaSettings'
 import ReferralBookingReceivedCard from '@/components/dashboard/ReferralBookingReceivedCard'
 import ReferralActionBanner from '@/components/dashboard/ReferralActionBanner'
 import { createClient as createSupabaseClient } from '@/lib/supabase'
@@ -413,6 +412,11 @@ export default function DashboardPage() {
   // メニュー未設定プロの予約穴の閉塞(2026-08-05・CEO指示): 予約可能な有料メニューが1件でもあるか
   // (受付中バナーの表示ゲート用)
   const [hasBookableReferralMenu, setHasBookableReferralMenu] = useState(false)
+  // 移動(2026-08-06・CEO指示): 「紹介からの予約は受け付けない」チェックボックスをダッシュボード
+  // 最上部(AcceptingStatusWidget)から紹介タブ「紹介を受ける」サブタブの先頭へ移動。
+  // 保存中/保存失敗の表示はここで持ち、pro.accepting_status自体は既存のsetPro(prev)パターンで更新する。
+  const [referralPauseSaving, setReferralPauseSaving] = useState(false)
+  const [referralPauseError, setReferralPauseError] = useState(false)
   // §16-8+§16-14: 代理案内の設定UI(founder/instructor限定)。自分がfounder/instructorを
   // 務める団体の一覧(0件なら設定UI自体を出さない)。
   const [delegateEligibleOrgs, setDelegateEligibleOrgs] = useState<
@@ -495,6 +499,32 @@ export default function DashboardPage() {
     setReferralSentActiveCount(info.activeCount)
     setReferralSentTotalCount(info.totalCount)
     setReferralSentLoaded(true)
+  }
+
+  // 移動(2026-08-06・CEO指示): 旧AcceptingStatusWidget内にあった「紹介からの予約は受け付けない」
+  // (accepting_status 'open'⇔'conditional')。closed中はPATCHしない(呼び出し元でdisabledにする)。
+  async function handleToggleReferralPaused(checked: boolean) {
+    if (!pro || referralPauseSaving) return
+    setReferralPauseSaving(true)
+    setReferralPauseError(false)
+    const next: 'open' | 'conditional' = checked ? 'conditional' : 'open'
+    try {
+      const res = await fetch('/api/referral/accepting', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ accepting_status: next, accepting_note: pro.accepting_note ?? null }),
+      })
+      if (res.ok) {
+        setPro(prev => prev ? { ...prev, accepting_status: next } : prev)
+      } else {
+        setReferralPauseError(true)
+      }
+    } catch {
+      setReferralPauseError(true)
+    } finally {
+      setReferralPauseSaving(false)
+    }
   }
 
   // メンバー用: 所属団体のリソース state
@@ -2589,20 +2619,9 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* §16-8+§16-14+§16-20: 代理案内の設定UI。団体自動抽出(founder/instructor限定)に加え、
-          §16-20で「自分のリストから」を全プロに開放したため、delegateEligibleOrgsが0件でも
-          レンダーする(コンポーネント側が選ぶものが無い時のみ自己非表示する)。 */}
-      {pro && acceptingEditable && referralEnabled && (
-        <DelegateCriteriaSettings
-          orgs={delegateEligibleOrgs.map(o => ({ organizationId: o.organizationId, organizationName: o.organizationName, role: o.role }))}
-          initialCriteria={pro.delegate_criteria ?? null}
-          currentAcceptingStatus={pro.accepting_status ?? null}
-          currentAcceptingNote={pro.accepting_note ?? null}
-          onUpdated={(criteria) =>
-            setPro(prev => prev ? { ...prev, delegate_criteria: criteria } : prev)
-          }
-        />
-      )}
+      {/* 移動(2026-08-06・CEO指示): 代理案内の設定UI(旧DelegateCriteriaSettings直置き)は
+          紹介タブ「紹介する」サブタブの先頭へ移動した(ReferralTab内でrenderする)。
+          ダッシュボード最上部は受付トグル+条件メモの2要素のみに戻す。 */}
 
       <div className="flex items-center justify-between mb-4">
         <div>
@@ -5047,6 +5066,39 @@ export default function DashboardPage() {
           {/* 紹介を受ける: 新しいリクエスト・確定している紹介予約・支払い期限切れキャンセルカード
               (常時マウント・非表示時はCSSで隠す=サブタブ切替での再フェッチを避ける) */}
           <div style={{ display: referralSubtab === 'receive' ? 'block' : 'none' }}>
+            {/* 移動(2026-08-06・CEO指示): 「紹介からの予約は受け付けない」をダッシュボード最上部の
+                AcceptingStatusWidgetから、受け手側の設定であるこのサブタブの先頭へ移動。
+                現在🔴停止中は既に紹介・直接とも停止済みでこの操作自体が意味を持たないため、
+                チェックボックスは無効化し理由の説明を出す(非表示にはしない)。 */}
+            {pro && acceptingEditable && (
+              <div style={{ marginBottom: 16, padding: '10px 12px', background: '#F9FAFB', borderRadius: 10, border: '1px solid #E5E7EB' }}>
+                <label
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#1A1A2E',
+                    cursor: pro.accepting_status === 'closed' || referralPauseSaving ? 'default' : 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={pro.accepting_status === 'closed' ? true : pro.accepting_status === 'conditional'}
+                    disabled={pro.accepting_status === 'closed' || referralPauseSaving}
+                    onChange={(e) => handleToggleReferralPaused(e.target.checked)}
+                    style={{ width: 14, height: 14 }}
+                  />
+                  紹介からの予約は受け付けない
+                </label>
+                <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4, lineHeight: 1.6 }}>
+                  {pro.accepting_status === 'closed'
+                    ? '現在停止中のため、紹介からの予約もすべて停止しています'
+                    : pro.accepting_status === 'conditional'
+                      ? '紹介からの予約は停止中です（直接のご相談は受け付けています）'
+                      : 'オンにすると、紹介経由の予約のみ一時停止できます（直接のご相談は継続できます）'}
+                </div>
+                {referralPauseError && (
+                  <div style={{ fontSize: 12, color: '#B00020', marginTop: 4 }}>更新に失敗しました</div>
+                )}
+              </div>
+            )}
             <ReferralBookingReceivedCard proId={pro.id} onStatusChange={handleReferralReceivedStatus} />
             {/* 「完了した紹介」はreferralEnabled時のみ(単一マウントのReferralTab内部で表示・件数管理)。
                 レビュー指摘(軽微7): received/completedの到着順によるフラッシュ防止のため、
@@ -5074,6 +5126,7 @@ export default function DashboardPage() {
               acceptingStatus={pro.accepting_status ?? null}
               acceptingNote={pro.accepting_note ?? null}
               delegateCriteria={pro.delegate_criteria ?? null}
+              delegateEligibleOrgs={delegateEligibleOrgs.map(o => ({ organizationId: o.organizationId, organizationName: o.organizationName, role: o.role }))}
               onDelegateCriteriaUpdated={(criteria) =>
                 setPro(prev => prev ? { ...prev, delegate_criteria: criteria } : prev)
               }
