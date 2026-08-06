@@ -107,6 +107,11 @@ interface BookingItem {
   created_at: string
   client_nickname: string
   sender_pro: { id: string; name: string } | null
+  /**
+   * §17-1(CEO決定 2026-08-06): 'direct'=REALPROOFの直接予約(紹介元なし・予約金なし)。
+   * null=従来の紹介予約。文言（紹介予約 / 予約）の出し分けだけに使う。
+   */
+  source?: string | null
   /** §2-4ステージ3(決済確認後の連絡先開示・CEO決定): 開示条件を満たす場合のみAPIから入る。 */
   client_contact: { name: string | null; phone: string | null; email: string | null } | null
 }
@@ -200,6 +205,15 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
   // locationOpenId/rescheduleOpenId/cancelOpenId(既存state・ロジック不変)で判定する。
   const [opsMenuOpenId, setOpsMenuOpenId] = useState<string | null>(null)
 
+  /**
+   * §17-1(CEO決定 2026-08-06): この予約がREALPROOFの直接予約か。
+   * 確認ダイアログの文言だけに使う（紹介元がいないのに「紹介予約」と書くと意味が通らない）。
+   * ハンドラはbookingIdしか受け取らないため、state から引く。
+   */
+  function isDirectBooking(bookingId: string): boolean {
+    return items.some((i) => i.id === bookingId && i.source === 'direct')
+  }
+
   useEffect(() => {
     fetch('/api/referral/bookings/received', { cache: 'no-store' })
       .then((res) => (res.ok ? res.json() : null))
@@ -256,7 +270,9 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
   }
 
   async function decline(bookingId: string) {
-    if (!window.confirm('この紹介予約のリクエストを辞退しますか？')) return
+    if (!window.confirm(isDirectBooking(bookingId)
+      ? 'このご予約のリクエストを辞退しますか？'
+      : 'この紹介予約のリクエストを辞退しますか？')) return
     setProcessingId(bookingId)
     try {
       const res = await fetch('/api/referral/bookings/received', {
@@ -325,7 +341,9 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
 
   /** §2-4-7(決済なし版)/中11: 成立・完了の記録。通知なし(Phase 2で扱う)。 */
   async function complete(bookingId: string) {
-    if (!window.confirm('この紹介セッションを完了しますか？')) return
+    if (!window.confirm(isDirectBooking(bookingId)
+      ? 'このセッションを完了しますか？'
+      : 'この紹介セッションを完了しますか？')) return
     setProcessingId(bookingId)
     try {
       const res = await fetch('/api/referral/bookings/received', {
@@ -448,8 +466,10 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
    * CEO決定(2026-08-04・追加): reasonで確認文言を分岐する(clientはセッション開始72時間前ルールに言及)。
    */
   async function cancelByReceiver(bookingId: string, reason: 'pro' | 'client') {
-    const confirmMessage =
-      reason === 'client'
+    const direct = isDirectBooking(bookingId)
+    const confirmMessage = direct
+      ? 'このご予約をキャンセルします。クライアントへ通知が送られます。この操作は取り消せません。よろしいですか？'
+      : reason === 'client'
         ? 'クライアントの希望による紹介予約のキャンセルとして処理します。返金の有無はセッション開始72時間前ルールで自動判定されます。この操作は取り消せません。よろしいですか？'
         : 'この紹介予約をキャンセルします。クライアントへ通知が送られ、お支払い済みの予約金は全額返金されます。この操作は取り消せません。よろしいですか？'
     if (!window.confirm(confirmMessage)) {
@@ -551,6 +571,12 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
             <div style={{ fontSize: 17, fontWeight: 800, color: '#1A1A2E', lineHeight: 1.4, marginBottom: item.sender_pro?.name ? 0 : 8 }}>
               {item.client_nickname}さん
             </div>
+            {/* §17-1: どこから来た予約かを1行で（紹介元がいない直接予約と見分けがつくように） */}
+            {item.source === 'direct' && (
+              <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2, marginBottom: 8 }}>
+                REALPROOFからのご予約
+              </div>
+            )}
             {item.sender_pro?.name && (
               <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2, marginBottom: 8 }}>
                 紹介元: {item.sender_pro.name}さん
@@ -771,7 +797,9 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
             item.payment_status !== 'awaiting' && confirmedSlotIso
               ? buildGoogleCalendarUrl({
                   startIso: confirmedSlotIso,
-                  title: `${item.client_nickname}さんとの紹介予約(REAL PROOF)`,
+                  title: item.source === 'direct'
+                    ? `${item.client_nickname}さんとのご予約(REAL PROOF)`
+                    : `${item.client_nickname}さんとの紹介予約(REAL PROOF)`,
                   location: receiverAddress || undefined,
                 })
               : null
@@ -837,6 +865,11 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
             <div style={{ fontSize: 17, fontWeight: 800, color: '#1A1A2E', lineHeight: 1.4 }}>
               {item.client_nickname}さん
             </div>
+            {item.source === 'direct' && (
+              <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>
+                REALPROOFからのご予約
+              </div>
+            )}
             {item.sender_pro?.name && (
               <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>
                 紹介元: {item.sender_pro.name}さん
@@ -978,7 +1011,7 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                 opacity: processingId === item.id || item.payment_status === 'awaiting' ? 0.6 : 1,
               }}
             >
-              紹介セッションを完了する
+              {item.source === 'direct' ? 'セッションを完了する' : '紹介セッションを完了する'}
             </button>
             {/* レビュー指摘(軽微5): cronの実条件(確定日時+24h・awaiting除外・reschedule未回答の間は
                 対象外)と一致させる。文言も「確定日時から24時間」に修正。 */}

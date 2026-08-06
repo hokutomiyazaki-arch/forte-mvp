@@ -108,6 +108,8 @@ interface BookingRow {
   stripe_checkout_session_id: string | null
   /** タスク②(2026-08-04・CEO指示): プロ都合キャンセル時の返金照合に使う(migration 032で作成済み)。 */
   stripe_payment_intent_id: string | null
+  /** §17-1: 'direct'=REALPROOFの直接予約(紹介元なし・予約金なし)。null=従来の紹介予約。 */
+  source?: string | null
   expires_at: string | null
   confirmed_at: string | null
   completed_at: string | null
@@ -288,9 +290,34 @@ export async function GET() {
       console.error('[api/referral/bookings/received] handover_note fetch error (fail-soft):', handoverErr)
     }
 
+    // §17-1(2026-08-06): 直接予約かどうか。migration 056 未実行の環境でも一覧が壊れないよう、
+    // 本体のselectには足さず別クエリで取る（未作成カラムをselectに書くとPostgRESTが42703で落ち、
+    // 予約が1件も返らなくなる。handover_note と同じ作法）。
+    const sourceMap: Record<string, string | null> = {}
+    try {
+      const bookingIdsForSource = [...((bookings || []) as any[]), ...completedBookings].map((b) => b.id)
+      if (bookingIdsForSource.length > 0) {
+        const { data: sourceRows, error: sourceError } = await supabase
+          .from('referral_bookings')
+          .select('id, source')
+          .in('id', bookingIdsForSource)
+        if (sourceError) {
+          console.error('[api/referral/bookings/received] source fetch error (fail-soft):', sourceError)
+        } else {
+          for (const row of (sourceRows || []) as Array<{ id: string; source: string | null }>) {
+            sourceMap[row.id] = row.source
+          }
+        }
+      }
+    } catch (sourceErr) {
+      console.error('[api/referral/bookings/received] source fetch error (fail-soft):', sourceErr)
+    }
+
     const result = ((bookings || []) as any[]).map((b) => ({
       id: b.id,
       list_id: b.list_id,
+      // §17-1: 'direct' なら受け手UIの文言を「紹介予約」から「予約」に切り替える
+      source: sourceMap[b.id] || null,
       menu_id: b.menu_id,
       menu_name: b.pro_menus?.name || null,
       theme_tags: b.theme_tags,
@@ -316,6 +343,7 @@ export async function GET() {
     const completedResult = completedBookings.map((b: any) => ({
       id: b.id,
       list_id: b.list_id,
+      source: sourceMap[b.id] || null,
       menu_id: b.menu_id,
       menu_name: b.pro_menus?.name || null,
       theme_tags: b.theme_tags,
@@ -426,6 +454,21 @@ export async function PATCH(request: NextRequest) {
     const booking = bookingData as unknown as BookingRow | null
     if (!booking || booking.receiver_pro_id !== ownPro.id) {
       return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    }
+
+    // §17-1(2026-08-06): 直接予約かどうか。クライアント宛メールの言い方を変えるためだけに使う
+    // （紹介元がいないのに「紹介予約が確定しました」と書くと意味が通らない）。
+    // 未作成カラムを上のselectに足すと42703で予約操作ごと落ちるため、別クエリ＋fail-softで取る。
+    let isDirectBooking = false
+    try {
+      const { data: sourceRow } = await supabase
+        .from('referral_bookings')
+        .select('source')
+        .eq('id', bookingId)
+        .maybeSingle()
+      isDirectBooking = (sourceRow as { source?: string | null } | null)?.source === 'direct'
+    } catch (sourceErr) {
+      console.error('[api/referral/bookings/received] source fetch error (fail-soft):', sourceErr)
     }
 
     if (action === 'complete') {
@@ -878,9 +921,11 @@ export async function PATCH(request: NextRequest) {
             '今回はご希望に添えませんでした',
             emailShell(
               'ご相談について',
-              `${escapeHtml(ownPro.name)}さんへのご相談は、今回はご希望に添えませんでした。<br>他の先生もご紹介できますので、よろしければご覧ください。`,
-              '他の先生への相談はこちら',
-              listUrl
+              isDirectBooking
+                ? `${escapeHtml(ownPro.name)}さんへのご予約は、今回はご希望に添えませんでした。<br>日時を変えてのお申し込みはいつでも承っています。`
+                : `${escapeHtml(ownPro.name)}さんへのご相談は、今回はご希望に添えませんでした。<br>他の先生もご紹介できますので、よろしければご覧ください。`,
+              isDirectBooking ? 'プロフィールを見る' : '他の先生への相談はこちら',
+              isDirectBooking ? `${APP_URL}/card/${ownPro.id}` : listUrl
             )
           )
         }
@@ -1081,7 +1126,9 @@ export async function PATCH(request: NextRequest) {
             const calendarUrl = slotIsoForCalendar
               ? buildGoogleCalendarUrl({
                   startIso: slotIsoForCalendar,
-                  title: `${ownPro.name}さんとの紹介予約(REAL PROOF)`,
+                  title: isDirectBooking
+                    ? `${ownPro.name}さんとのご予約(REAL PROOF)`
+                    : `${ownPro.name}さんとの紹介予約(REAL PROOF)`,
                   location: receiverAccessInfo?.address || undefined,
                 })
               : null
@@ -1097,9 +1144,12 @@ export async function PATCH(request: NextRequest) {
           }
           await notifyClientByEmail(
             { userId: clientUserId, email: booking.client_email },
-            `${ownPro.name}さんとのご紹介予約が確定しました`,
+            // §17-1: 直接予約は紹介元がいないので「ご紹介予約」と書かない
+            isDirectBooking
+              ? `${ownPro.name}さんとのご予約が確定しました`
+              : `${ownPro.name}さんとのご紹介予約が確定しました`,
             emailShell(
-              'ご相談確定のお知らせ',
+              isDirectBooking ? 'ご予約確定のお知らせ' : 'ご相談確定のお知らせ',
               `${confirmedSlotText ? `${confirmedSlotText} に確定しました。` : 'ご相談の日時が確定しました。'}<br>担当: ${safeOwnProName}さん${senderQuote}${accessHtml}${calendarHtml}${changeNoteHtml}${referralListFooterHtml(listUrl)}`
             )
           )

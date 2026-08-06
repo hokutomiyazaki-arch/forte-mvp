@@ -44,8 +44,19 @@ interface BookableMenu {
 }
 
 interface Props {
-  slug: string
-  listId: string
+  /** 紹介リストのslug（表示には使っていないが、呼び出し元の文脈を残すため受け取る）。直接予約では null */
+  slug: string | null
+  /** 直接予約(variant='direct')では紹介元リストが無いので null */
+  listId: string | null
+  /**
+   * §17-1(CEO決定 2026-08-06): REALPROOFの直接予約でも同じフォームを使う。
+   * 別フォームを作らない理由は、日時ピッカー・進行順・警告表示がまったく同じで、
+   * コピーすると必ず片方だけ直る状態になるため（CLAUDE.md §G）。
+   * 違いは「送信先API」「予約金の説明を出さない」「同意文」の3点だけ。
+   */
+  variant?: 'referral' | 'direct'
+  /** メニューから来た場合の初期選択（?menu=...） */
+  initialMenuId?: string | null
   receiverPro: {
     id: string
     name: string
@@ -86,13 +97,21 @@ const labelStyle = {
   marginBottom: 6,
 }
 
-export default function ReferralRequestForm({ slug, listId, receiverPro, menus }: Props) {
+export default function ReferralRequestForm({
+  slug,
+  listId,
+  receiverPro,
+  menus,
+  variant = 'referral',
+  initialMenuId = null,
+}: Props) {
   const { isLoaded, user } = useUser()
+  const isDirect = variant === 'direct'
 
   const [clientName, setClientName] = useState('')
   const [clientPhone, setClientPhone] = useState('')
   const [clientEmail, setClientEmail] = useState('')
-  const [menuId, setMenuId] = useState('')
+  const [menuId, setMenuId] = useState(initialMenuId || '')
   const [slot1, setSlot1] = useState('')
   const [slot2, setSlot2] = useState('')
   const [slot3, setSlot3] = useState('')
@@ -209,13 +228,13 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
     }
     setSubmitting(true)
     try {
-      const res = await fetch('/api/referral/bookings', {
+      // §17-1: 直接予約は紹介元(list)が無く、予約金も通らない別APIへ送る。
+      const res = await fetch(isDirect ? '/api/bookings' : '/api/referral/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         body: JSON.stringify({
-          list_id: listId,
-          receiver_pro_id: receiverPro.id,
+          ...(isDirect ? { pro_id: receiverPro.id } : { list_id: listId, receiver_pro_id: receiverPro.id }),
           menu_id: menuId || null,
           // 追加1(2026-08-05・CEO指示): 送信時にも30分刻みへスナップする(onChangeで既に揃っているはず
           // だが、二重の安全網としてここでも正規化する)。
@@ -237,9 +256,22 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
       } else {
         const data = await res.json().catch(() => ({}))
         if (data.error === 'already_requested') {
-          setErrorMsg('この先生への相談リクエストは既に送信済みです。確定のご連絡をお待ちください。')
-        } else if (data.error === 'receiver_not_accepting') {
-          setErrorMsg('現在この先生は新規のご相談を受け付けていません。')
+          setErrorMsg(
+            isDirect
+              ? 'この先生へのご予約リクエストは既に送信済みです。確定のご連絡をお待ちください。'
+              : 'この先生への相談リクエストは既に送信済みです。確定のご連絡をお待ちください。',
+          )
+        } else if (data.error === 'receiver_not_accepting' || data.error === 'not_accepting') {
+          setErrorMsg(
+            isDirect
+              ? '現在この先生はご予約を受け付けていません。'
+              : '現在この先生は新規のご相談を受け付けていません。',
+          )
+        } else if (data.error === 'external_booking') {
+          // 送信直前にプロが「自分のサイトで受ける」に切り替えた場合の保険
+          setErrorMsg('この先生のご予約は、先生ご自身のサイトで受け付けています。プロフィールからお進みください。')
+        } else if (data.error === 'invalid_menu') {
+          setErrorMsg('このメニューは現在ご予約いただけません。別のメニューをお選びください。')
         } else if (data.error === 'contact_required') {
           setErrorMsg('お名前・電話番号・メールアドレスをご確認ください。')
         } else if (data.error === 'too_many_requests') {
@@ -302,7 +334,9 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
   }
 
   // レビュー指摘: fail safeを徹底するため「'closed'かどうか」ではなく「'open'かどうか」で判定する(isAcceptingOpenに統一)
-  if (!isAcceptingOpen(receiverPro.acceptingStatus)) {
+  // §17-1: 直接予約の受付可否は accepting_status(=紹介の受付) ではなく booking_enabled で決まる。
+  // 判定はページ側(/book/[proId])で済ませてあるので、ここでは紹介予約のときだけ見る。
+  if (!isDirect && !isAcceptingOpen(receiverPro.acceptingStatus)) {
     return (
       <div style={{ maxWidth: 480, margin: '0 auto', padding: '16px', background: T.bg, minHeight: '100vh' }}>
         <div style={{ textAlign: 'center', marginBottom: 20, marginTop: 20 }}>
@@ -343,15 +377,29 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
           <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#E8E4DC', flexShrink: 0 }} />
         )}
         <div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: T.dark }}>{receiverPro.name}さんへのご相談</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: T.dark }}>
+            {receiverPro.name}さんへの{isDirect ? 'ご予約' : 'ご相談'}
+          </div>
           {receiverPro.title && <div style={{ fontSize: 12, color: T.textSub }}>{receiverPro.title}</div>}
         </div>
       </div>
 
       <p style={{ fontSize: 12, color: T.textSub, lineHeight: 1.7, marginBottom: 16 }}>
-        決済・会員登録は不要です。プロが日時を確定した後、担当の先生から直接ご連絡します。
-        <br />
-        プロが日時を確定すると、予約金のお支払いご案内がメールで届きます(お支払いで紹介予約成立・総額は変わりません)。
+        {isDirect ? (
+          <>
+            {/* §17-1: 直接予約は予約金なし（CEO決定）。お金の話をここに書かない。 */}
+            会員登録もお支払いも不要です。ご希望の日時を送ると、{receiverPro.name}さんが確定して
+            メールでお知らせします。
+            <br />
+            この時点ではまだ確定ではありません（先生の確定をもって予約成立です）。
+          </>
+        ) : (
+          <>
+            決済・会員登録は不要です。プロが日時を確定した後、担当の先生から直接ご連絡します。
+            <br />
+            プロが日時を確定すると、予約金のお支払いご案内がメールで届きます(お支払いで紹介予約成立・総額は変わりません)。
+          </>
+        )}
       </p>
 
       <div
@@ -375,14 +423,23 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
               <option value="">選択してください</option>
               {menus.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.name}(¥{m.price_jpy.toLocaleString()})
+                  {m.name}
+                  {m.price_jpy > 0 ? `(¥${m.price_jpy.toLocaleString()})` : ''}
                 </option>
               ))}
             </select>
-            {/* §2-4ステージ3(§0-6静かに・CEO決定): 予約フィー方式の総額不変を軽く明示 */}
-            <p style={{ fontSize: 11, color: T.textMuted, marginTop: 6, lineHeight: 1.6 }}>
-              オンラインでのお支払いは予約金のみ。総額は変わりません。
-            </p>
+            {/* §2-4ステージ3(§0-6静かに・CEO決定): 予約フィー方式の総額不変を軽く明示。
+                §17-1: 直接予約はオンライン決済が無いので、この一文自体を出さない。 */}
+            {!isDirect && (
+              <p style={{ fontSize: 11, color: T.textMuted, marginTop: 6, lineHeight: 1.6 }}>
+                オンラインでのお支払いは予約金のみ。総額は変わりません。
+              </p>
+            )}
+            {isDirect && (
+              <p style={{ fontSize: 11, color: T.textMuted, marginTop: 6, lineHeight: 1.6 }}>
+                お支払いは当日、{receiverPro.name}さんへ直接お願いします。
+              </p>
+            )}
           </div>
         )}
 
@@ -516,8 +573,18 @@ export default function ReferralRequestForm({ slug, listId, receiverPro, menus }
                 style={{ marginTop: 2 }}
               />
               <span>
-                お名前・ご希望日時・ご相談のテーマが、紹介元と紹介先の先生に共有されることに同意します。
-                お名前・電話番号・メールアドレスは、日程確定のご連絡と、確定後に担当の先生への共有のために保存されます。
+                {isDirect ? (
+                  <>
+                    お名前・ご希望日時・ご相談のテーマが{receiverPro.name}さんに共有されることに同意します。
+                    お名前・電話番号・メールアドレスは、日程確定のご連絡と、確定後に{receiverPro.name}さんへ
+                    お伝えするために保存されます。
+                  </>
+                ) : (
+                  <>
+                    お名前・ご希望日時・ご相談のテーマが、紹介元と紹介先の先生に共有されることに同意します。
+                    お名前・電話番号・メールアドレスは、日程確定のご連絡と、確定後に担当の先生への共有のために保存されます。
+                  </>
+                )}
               </span>
             </label>
 
