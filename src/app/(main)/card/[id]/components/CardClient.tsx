@@ -539,7 +539,7 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
               </a>
             )}
             {pro.contact_email && (
-              <a href={(() => { const subject = encodeURIComponent(`REAL PROOFを見て相談：${pro.name}さん`); const body = encodeURIComponent(`${pro.name}さん\n\nREAL PROOFであなたのプロフィールを拝見し、ご相談したくご連絡しました。\n\n`); return `mailto:${pro.contact_email}?subject=${subject}&body=${body}` })()}
+              <a href={`/consult/${id}`}
                 onClick={() => trackEvent(id, 'consultation_click', shareSrc || undefined)}
                 style={{
                   display: 'inline-block', padding: '8px 12px', borderRadius: 8,
@@ -1506,7 +1506,7 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
           </a>
         )}
         {pro.contact_email && (
-          <a href={(() => { const subject = encodeURIComponent(`REAL PROOFを見て相談：${pro.name}さん`); const body = encodeURIComponent(`${pro.name}さん\n\nREAL PROOFであなたのプロフィールを拝見し、ご相談したくご連絡しました。\n\n`); return `mailto:${pro.contact_email}?subject=${subject}&body=${body}` })()}
+          <a href={`/consult/${id}`}
             onClick={() => trackEvent(id, 'consultation_click', shareSrc || undefined)}
             style={{
               display: 'block', textAlign: 'center', padding: 14, borderRadius: 14,

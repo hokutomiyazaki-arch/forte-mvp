@@ -30,6 +30,7 @@ import MediaSection from '@/components/dashboard/MediaSection'
 import ReferralTab from '@/components/dashboard/ReferralTab'
 import AcceptingStatusWidget from '@/components/dashboard/AcceptingStatusWidget'
 import SettingsSection from '@/components/dashboard/SettingsSection'
+import ConsultationsTab from '@/components/dashboard/ConsultationsTab'
 import ReferralBookingReceivedCard from '@/components/dashboard/ReferralBookingReceivedCard'
 import ReferralActionBanner from '@/components/dashboard/ReferralActionBanner'
 import { createClient as createSupabaseClient } from '@/lib/supabase'
@@ -214,11 +215,13 @@ export default function DashboardPage() {
   const [selectedProofIds, setSelectedProofIds] = useState<Set<string>>(new Set())
   const [customProofs, setCustomProofs] = useState<CustomProof[]>([])
   const [activeTab, setActiveTab] = useState('healing')
-  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'card' | 'org' | 'myorgs' | 'certs' | 'guide' | 'business-info' | 'badges' | 'referral'>('profile')
+  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'card' | 'org' | 'myorgs' | 'certs' | 'consultations' | 'guide' | 'business-info' | 'badges' | 'referral'>('profile')
   const [openSections, setOpenSections] = useState<Set<string>>(new Set())
   // CEO指示(2026-08-06): プロフィール編集も項目ごとに畳めるようにする。
   // 既定は「基本情報」だけ開く(姓名・都道府県が必須のため、初見で入力欄が見えている状態を保つ)。
   const [openProfileSections, setOpenProfileSections] = useState<Record<string, boolean>>({ basic: true })
+  // §16-19 相談フォーム: タブに出す未返信件数（ConsultationsTab から報告される）
+  const [unreadConsultations, setUnreadConsultations] = useState(0)
   const toggleProfileSection = (id: string) =>
     setOpenProfileSections(prev => ({ ...prev, [id]: !prev[id] }))
   /** 保存エラー時に、該当ブロックが畳まれていてもエラー箇所が見えるように開く。 */
@@ -575,7 +578,7 @@ export default function DashboardPage() {
   const tabParam = searchParams.get('tab')
   useEffect(() => {
     if (!tabParam || loading) return
-    const validTabs = ['profile', 'proofs', 'rewards', 'voices', 'card', 'myorgs', 'certs', 'org', 'guide', 'business-info', 'badges', 'referral']
+    const validTabs = ['profile', 'proofs', 'rewards', 'voices', 'card', 'myorgs', 'certs', 'consultations', 'org', 'guide', 'business-info', 'badges', 'referral']
     if (validTabs.includes(tabParam)) {
       setDashboardTab(tabParam as any)
       if (tabParam === 'myorgs' && selectedMemberOrgId) {
@@ -917,6 +920,18 @@ export default function DashboardPage() {
         if (data.activeOrgs) setActiveOrgs(data.activeOrgs)
         if (data.credentialBadges) setCredentialBadges(data.credentialBadges)
         if (data.ownedOrg) setOwnedOrg(data.ownedOrg)
+
+        // §16-19 相談フォーム: タブの未返信バッジ用に件数だけ先に取る（本文は引かない）。
+        // 失敗しても他の表示に影響させない。
+        try {
+          const consultRes = await fetch('/api/pro/consultations?countOnly=1', { cache: 'no-store' })
+          if (consultRes.ok) {
+            const consultData = await consultRes.json()
+            setUnreadConsultations(Number(consultData?.unread) || 0)
+          }
+        } catch {
+          /* バッジが出ないだけなので握りつぶす */
+        }
 
         // メンバー用: 所属団体一覧を取得
         try {
@@ -2981,6 +2996,9 @@ export default function DashboardPage() {
           // 所属も獲得バッジも無い人にはタブ自体を出さない（空タブを作らない）。
           ...(hasCertsContent ? [{ key: 'certs' as const, label: '認定・資格' }] : []),
           { key: 'voices' as const, label: 'Voices' },
+          // §16-19 相談フォーム: 届いた相談の受信箱。空でもタブは出す
+          // （届く前に「そういう窓口がある」と分からないと、カード側の導線も理解されないため）。
+          { key: 'consultations' as const, label: '相談' },
         ]).map(tab => (
           <button
             key={tab.key}
@@ -3008,6 +3026,13 @@ export default function DashboardPage() {
             }}
           >
             {tab.label}
+            {tab.key === 'consultations' && unreadConsultations > 0 && (
+              <span style={{
+                marginLeft: 6, fontSize: 10, fontWeight: 700,
+                background: '#C4A35A', color: '#1A1A2E',
+                padding: '1px 6px', borderRadius: 10,
+              }}>{unreadConsultations}</span>
+            )}
           </button>
         ))}
       </div>
@@ -4946,6 +4971,13 @@ export default function DashboardPage() {
           initialAcceptingNote={pro.accepting_note ?? null}
           onAcceptingNoteUpdated={(nextNote) => setPro(prev => prev ? { ...prev, accepting_note: nextNote } : prev)}
         />
+      )}
+
+      {/* ═══ Tab: 相談（§16-19） ═══
+          カードの「相談する」から届いた問い合わせの受信箱。ここに返信を書くと
+          クライアントにメールが届く（クライアントはメール、プロはダッシュボード）。 */}
+      {dashboardTab === 'consultations' && pro && (
+        <ConsultationsTab onUnreadChange={setUnreadConsultations} />
       )}
 
       {/* ═══ Tab: 認定・資格 ═══
