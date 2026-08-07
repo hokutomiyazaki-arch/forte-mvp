@@ -558,7 +558,18 @@ export default function ReferralTab({
       if (res.ok) {
         setLists((prev) => prev.filter((l) => l.id !== listId))
       } else {
-        window.alert('リストの削除に失敗しました')
+        // CEO報告(2026-08-06)「リスト削除できない。なぜ？」: 理由が分からないまま
+        // 「失敗しました」だけ出していたため原因に辿り着けなかった。何が起きたかを出す。
+        const data = await res.json().catch(() => ({}))
+        window.alert(
+          data.error === 'still_referenced'
+            ? 'このリストはまだ他のデータから参照されているため削除できません。サポートへご連絡ください。'
+            : data.error === 'forbidden'
+              ? '紹介機能が有効になっていないため削除できません。'
+              : data.error === 'not_found'
+                ? 'このリストは見つかりませんでした（既に削除された可能性があります）。'
+                : `リストの削除に失敗しました${data.code ? `（${data.code}）` : ''}`,
+        )
       }
     } catch {
       window.alert('リストの削除に失敗しました')
