@@ -229,6 +229,33 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
   }
 
   /**
+   * §17-6 予約のお客さんと REAL PROOF の中でやりとりする（CEO指示 2026-08-06）。
+   * 既存の相談スレッドがあれば再利用し、無ければ作って相談タブへ送る。
+   */
+  async function openClientThread(bookingId: string) {
+    if (processingId) return
+    setProcessingId(bookingId)
+    try {
+      const res = await fetch(`/api/pro/bookings/${bookingId}/thread`, { method: 'POST', cache: 'no-store' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        window.alert(
+          data.error === 'no_client_email'
+            ? 'このお客さまのメールアドレスが記録されていないため、メッセージを送れません。お電話でご連絡ください。'
+            : 'メッセージ画面を開けませんでした',
+        )
+        return
+      }
+      // 相談タブへ。スレッド自体は相談タブの一覧に並ぶ（同じ人との会話は1本にまとまる）。
+      window.location.href = '/dashboard?tab=consultations'
+    } catch {
+      window.alert('メッセージ画面を開けませんでした')
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
+  /**
    * §17-4 電話で決めた日時で確定する（CEO指示 2026-08-06）。
    * お客さんの同意をシステムが確認できない確定なので、押す前に必ず警告を出す。
    */
@@ -1011,8 +1038,10 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
 
             {/* 1. クライアント名(+紹介元)。CEO追加指示(2026-08-04): 「〜との紹介予約が確定しています」は
                 左上ステータスpillと重複するため削除。名前を大きく太く・紹介元を1行で表記する。 */}
+            {/* CEO指摘(2026-08-06): 直接予約のニックネームは「ご相談者」固定のため、
+                本人が入力したお名前が画面に出ていなかった。開示条件を満たしていれば実名を出す。 */}
             <div style={{ fontSize: 17, fontWeight: 800, color: '#1A1A2E', lineHeight: 1.4 }}>
-              {item.client_nickname}さん
+              {item.client_contact?.name || item.client_nickname}さん
             </div>
             {item.source === 'direct' && (
               <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>
@@ -1029,6 +1058,25 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
             {item.sender_pro?.name && (
               <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>
                 紹介元: {item.sender_pro.name}さん
+              </div>
+            )}
+
+            {/* CEO指摘(2026-08-06)「クライアントが入力した相談内容が表示されない」:
+                要対応カードには出していたが、確定済みカードに引き継いでいなかった。
+                当日に向けて一番読みたい情報なので、確定後こそ出す。 */}
+            {(item.theme_tags?.[0] || item.preferred_slots?.note || item.menu_name) && (
+              <div style={{ marginTop: 8 }}>
+                {item.menu_name && (
+                  <div style={{ fontSize: 13, color: '#555', marginBottom: 2 }}>メニュー: {item.menu_name}</div>
+                )}
+                {item.theme_tags?.[0] && (
+                  <div style={{ fontSize: 13, color: '#555', marginBottom: 2 }}>テーマ: {item.theme_tags[0]}</div>
+                )}
+                {item.preferred_slots?.note && (
+                  <div style={{ fontSize: 13, color: '#555', whiteSpace: 'pre-wrap' as const }}>
+                    ご相談内容: {item.preferred_slots.note}
+                  </div>
+                )}
               </div>
             )}
 
@@ -1136,17 +1184,28 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                     </a>
                   </div>
                 )}
-                {item.client_contact.email && (
-                  <div style={{ fontSize: 13, color: '#1A1A2E' }}>
-                    メール:{' '}
-                    <a href={`mailto:${encodeURIComponent(item.client_contact.email)}`} style={{ color: '#1A6B3C' }}>
-                      {item.client_contact.email}
-                    </a>
-                  </div>
-                )}
+                {/* §17-6(CEO指示 2026-08-06): メールアドレスは表示しない。
+                    出した瞬間にやりとりが REAL PROOF の外へ出て、記録も通報の受け口も
+                    次の紹介への接続も消える（§16-30「リードはこっちで握る」）。
+                    代わりに相談チャットへ寄せる。既にある往復・通報・送信取り消しがそのまま使える。
+                    電話は残す: 当日の連絡と、メールが死んでいる場合の唯一の手段のため。 */}
                 <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>
-                  日程の調整・当日のご連絡はこちらへ直接どうぞ
+                  当日のご連絡はお電話で。メッセージは REAL PROOF の中でやりとりできます。
                 </div>
+                <button
+                  type="button"
+                  onClick={() => openClientThread(item.id)}
+                  disabled={processingId === item.id}
+                  style={{
+                    width: '100%', marginTop: 8, padding: '10px 12px', borderRadius: 8,
+                    border: '1.5px solid #1A1A2E', background: '#fff', color: '#1A1A2E',
+                    fontSize: 13, fontWeight: 700,
+                    cursor: processingId === item.id ? 'default' : 'pointer',
+                    opacity: processingId === item.id ? 0.6 : 1,
+                  }}
+                >
+                  メッセージを送る
+                </button>
               </div>
             )}
 
@@ -1182,15 +1241,19 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
               </p>
             )}
 
-            {/* 案件スレッド・引き継ぎメモ(開閉は既存のまま) */}
-            <BookingThread
-              bookingId={item.id}
-              ownProId={proId}
-              isSender={false}
-              initialHandoverNote={item.handover_note}
-              partnerRoleLabel={item.sender_pro ? '紹介元' : undefined}
-              partnerName={item.sender_pro?.name}
-            />
+            {/* 案件スレッド・引き継ぎメモ(開閉は既存のまま)
+                §17-6(CEO指摘 2026-08-06): 直接予約には出さない。どちらも「紹介元のプロ」と
+                やりとりするための道具で、紹介元がいない予約では相手が存在しない。 */}
+            {item.source !== 'direct' && (
+              <BookingThread
+                bookingId={item.id}
+                ownProId={proId}
+                isSender={false}
+                initialHandoverNote={item.handover_note}
+                partnerRoleLabel={item.sender_pro ? '紹介元' : undefined}
+                partnerName={item.sender_pro?.name}
+              />
+            )}
 
             {/* 例外操作: 「変更・キャンセルなどの操作 ▼」に集約。一度に1つのことだけ画面に出す原則
                 (フォームを開いたらそのフォームだけ表示・戻るで一覧に戻れる)。
