@@ -1,7 +1,11 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useAuth } from '@clerk/nextjs'
 import LinkedText from '@/components/LinkedText'
+// §17-28: 相談タブは画面を開いたまま時間が経ちやすい。Clerkのセッションが切れた最初の1回で
+// 401になるため、黙って1回だけ再送する（§17-18 と同じ・Voiceにしか入れていなかった）。
+import { fetchWithSessionRetry, SESSION_EXPIRED_MESSAGE } from '@/lib/fetch-with-session-retry'
 
 const BODY_MAX = 2000
 
@@ -108,6 +112,9 @@ export default function ConsultationsTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // §17-28: 401時にセッションを取り直すために使う（通常時は何もしない）
+  const { getToken } = useAuth()
+
   async function sendReply(id: string) {
     const snapshot = draft.trim()
     if (!snapshot || sendingId) return
@@ -115,14 +122,19 @@ export default function ConsultationsTab({
     setError('')
     setNotice('')
     try {
-      const res = await fetch(`/api/pro/consultations/${id}`, {
+      const res = await fetchWithSessionRetry(`/api/pro/consultations/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         body: JSON.stringify({ body: snapshot }),
-      })
+      }, getToken)
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
+        // §17-28: 再送しても401なら本当にログインが切れている。入力は消さない。
+        if (res.status === 401) {
+          setError(SESSION_EXPIRED_MESSAGE)
+          return
+        }
         setError(json.error === 'limit_reached' ? 'このやりとりは上限に達しました。' : '送信できませんでした。')
         return
       }
@@ -146,12 +158,12 @@ export default function ConsultationsTab({
     // 楽観更新はしない。保存できたことを確認してから反映する
     // （migration 051 未実行だと保存できず、スイッチだけ動いて見える事故を避ける）。
     try {
-      const res = await fetch('/api/pro/consultations', {
+      const res = await fetchWithSessionRetry('/api/pro/consultations', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         body: JSON.stringify({ accepting: next }),
-      })
+      }, getToken)
       if (!res.ok) {
         setError('設定を保存できませんでした。時間をおいてお試しください。')
         return
@@ -171,12 +183,12 @@ export default function ConsultationsTab({
     setError('')
     setNotice('')
     try {
-      const res = await fetch(`/api/pro/consultations/${consultationId}`, {
+      const res = await fetchWithSessionRetry(`/api/pro/consultations/${consultationId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         body: JSON.stringify({ menu_id: menuId }),
-      })
+      }, getToken)
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
         setError(json.error === 'menu_not_found' ? 'このメニューは提案できません。' : '提案を送れませんでした。')
@@ -199,12 +211,12 @@ export default function ConsultationsTab({
     setError('')
     setNotice('')
     try {
-      const res = await fetch(`/api/pro/consultations/${consultationId}`, {
+      const res = await fetchWithSessionRetry(`/api/pro/consultations/${consultationId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         body: JSON.stringify({ list_id: listId }),
-      })
+      }, getToken)
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
         setError(json.error === 'list_not_found' ? 'このリストは送れません。' : 'リストを送れませんでした。')
@@ -228,12 +240,12 @@ export default function ConsultationsTab({
     setError('')
     setNotice('')
     try {
-      const res = await fetch(`/api/pro/consultations/${consultationId}`, {
+      const res = await fetchWithSessionRetry(`/api/pro/consultations/${consultationId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         body: JSON.stringify({ undo_message_id: messageId }),
-      })
+      }, getToken)
       if (!res.ok) {
         setError('取り消せませんでした。')
         return
@@ -259,12 +271,12 @@ export default function ConsultationsTab({
     setError('')
     setNotice('')
     try {
-      const res = await fetch(`/api/pro/consultations/${consultationId}`, {
+      const res = await fetchWithSessionRetry(`/api/pro/consultations/${consultationId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         body: JSON.stringify({ delete_thread: true }),
-      })
+      }, getToken)
       if (!res.ok) {
         setError('削除できませんでした。時間をおいてお試しください。')
         return
@@ -284,12 +296,12 @@ export default function ConsultationsTab({
     setSendingId(consultationId)
     setError('')
     try {
-      const res = await fetch(`/api/pro/consultations/${consultationId}`, {
+      const res = await fetchWithSessionRetry(`/api/pro/consultations/${consultationId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         body: JSON.stringify({ report_reason: reportReason.trim() }),
-      })
+      }, getToken)
       if (!res.ok) {
         // 届いていないのに「受け付けました」と出さない
         setError('通報を送信できませんでした。時間をおいてお試しください。')
@@ -308,12 +320,12 @@ export default function ConsultationsTab({
   async function updateStatus(id: string, status: string) {
     setError('')
     try {
-      const res = await fetch(`/api/pro/consultations/${id}`, {
+      const res = await fetchWithSessionRetry(`/api/pro/consultations/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         body: JSON.stringify({ status }),
-      })
+      }, getToken)
       if (!res.ok) {
         // 'archived' が DB の CHECK 制約で弾かれるケースがある（migration 050 の確認手順）。
         // 黙って失敗すると「押したのに消えない」になるので必ず出す。
@@ -571,7 +583,20 @@ export default function ConsultationsTab({
                       返信はここに書けばメールが飛ぶので、プロ側がアドレスを持つ必要がない。
                       APIレスポンスからも外してある。 */}
 
-                  {c.status !== 'closed' && c.status !== 'archived' && (
+                  {/* §17-28(CEO質問 2026-08-07「他に相談に適用してない同じ問題修正はない？」):
+                      §17-22 で予約側の「メッセージを送る」を消したのと**まったく同じ問題**が
+                      ここに残っていた。すぐ上の赤ブロックで「返信しても届きません」と言いながら、
+                      その真下に返信欄と「返信する」ボタンを出していた。
+                      押せるだけ無駄で、しかも「送れた」と誤解させる。
+                      メールが死んでいる間は畳んで、削除／アーカイブだけ残す。 */}
+                  {c.email_failed && c.status !== 'closed' && c.status !== 'archived' && (
+                    <div style={{ fontSize: 12, color: '#9CA3AF', lineHeight: 1.7 }}>
+                      お客さまに届く手段が無いため、返信欄は表示していません。
+                      上の「このやりとりを削除する」で片付けられます。
+                    </div>
+                  )}
+
+                  {!c.email_failed && c.status !== 'closed' && c.status !== 'archived' && (
                     <>
                       <textarea
                         value={draft}

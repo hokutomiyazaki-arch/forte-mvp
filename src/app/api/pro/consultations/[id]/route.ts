@@ -341,6 +341,24 @@ export async function POST(
         .from('consultation_messages')
         .update({ delivered_at: new Date().toISOString() })
         .eq('id', inserted.id)
+    } else {
+      // §17-28(CEO質問 2026-08-07「他に相談に適用してない同じ問題修正はない？」):
+      //   §17-27 でクライアント発の相談には「送れなかったら印を立てる」を入れたが、
+      //   **プロの返信が送れなかった場合**は握りつぶしていた。
+      //   delivered_at が null なだけでは画面に何も出ないので、プロは
+      //   「返信した」と思ったまま、相手に一生届かない。ここでも印を立てる。
+      //   email_failed_at は migration 058 依存のため fail-soft。
+      try {
+        const { error: markError } = await supabase
+          .from('consultations')
+          .update({ email_failed_at: new Date().toISOString() })
+          .eq('id', consultation.id)
+        if (markError) {
+          console.error('[api/pro/consultations POST] email_failed mark error (fail-soft):', markError.message)
+        }
+      } catch (markErr) {
+        console.error('[api/pro/consultations POST] email_failed mark error (fail-soft):', markErr)
+      }
     }
 
     return NextResponse.json({ ok: true, delivered })
