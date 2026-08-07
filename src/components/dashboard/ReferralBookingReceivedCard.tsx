@@ -1581,10 +1581,17 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                     : '当日のご連絡はお電話で。メッセージは REAL PROOF の中でやりとりできます。'}
                 </div>
                 {/* §17-9(CEO指摘 2026-08-06): メールが届いていないクライアントはチャットも使えない
-                    （やりとりの通知もメールで飛ぶため）。押せるだけ無駄なので出さない。 */}
-                {(!item.preferred_slots?.receipt_email_failed ||
-              item.payment_status === 'paid' ||
-              item.payment_status === 'awaiting') && (
+                    （やりとりの通知もメールで飛ぶため）。押せるだけ無駄なので出さない。
+
+                    §17-22(CEO指摘 2026-08-07・不具合): ここに payment_status の例外が紛れていた。
+                    「予約金が絡むときは逃げ道を残す」は**下の操作メニュー**に必要な例外で、
+                    このボタンには関係が無かった（チャットの通知はメールなので、支払い状況が
+                    どうであれ相手には届かない＝押せるだけ無駄なボタンが出ていた）。
+                    例外を持ち回すときは、その理由がその場所にも当てはまるかを必ず確かめる。
+
+                    SMSが通っていても（contact_recovered_by_sms_at）ここは出さない。
+                    SMSで送るのは予約状況のリンクだけで、チャットの通知経路はメールのままのため。 */}
+                {!item.preferred_slots?.receipt_email_failed && (
                 <button
                   type="button"
                   onClick={() => openClientThread(item.id)}
