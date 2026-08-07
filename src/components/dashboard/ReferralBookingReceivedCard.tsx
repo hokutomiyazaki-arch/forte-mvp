@@ -219,6 +219,9 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
   // 「メールが届かないお客さん」への逃げ道なので、開閉と入力値だけを持つ(bookingIdごと)。
   const [phoneConfirmOpenId, setPhoneConfirmOpenId] = useState<string | null>(null)
   const [phoneConfirmInputs, setPhoneConfirmInputs] = useState<Record<string, string>>({})
+  // §17-10(CEO指示 2026-08-06): 電話で確認した正しいメールアドレスに直して送り直す。
+  const [emailFixOpenId, setEmailFixOpenId] = useState<string | null>(null)
+  const [emailFixInputs, setEmailFixInputs] = useState<Record<string, string>>({})
 
   /**
    * §17-1(CEO決定 2026-08-06): この予約がREALPROOFの直接予約か。
@@ -227,6 +230,55 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
    */
   function isDirectBooking(bookingId: string): boolean {
     return items.some((i) => i.id === bookingId && i.source === 'direct')
+  }
+
+  /**
+   * §17-10 メールアドレスを直して送り直す（CEO指示 2026-08-06）。
+   * 紹介予約では予約金の支払い案内が届かないと予約自体が成立しない。
+   * 電話で正しいアドレスを聞いてから直してもらう前提のUI。
+   */
+  async function fixClientEmail(bookingId: string) {
+    const value = (emailFixInputs[bookingId] || '').trim()
+    if (!value || processingId) return
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+      window.alert('メールアドレスの形式をご確認ください')
+      return
+    }
+    if (!window.confirm(
+      `${value}\n\nこのメールアドレスに変更して、ご案内を送り直します。\n` +
+      'お客さまにお電話で確認したアドレスであることをご確認ください。'
+    )) return
+
+    setProcessingId(bookingId)
+    try {
+      const res = await fetch('/api/referral/bookings/received', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ booking_id: bookingId, action: 'fix_client_email', client_email: value }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        window.alert(
+          data.error === 'email_invalid'
+            ? 'メールアドレスの形式をご確認ください'
+            : data.error === 'email_unchanged'
+              ? '同じメールアドレスです'
+              : '変更できませんでした',
+        )
+        return
+      }
+      window.alert(
+        data.resent
+          ? 'メールアドレスを変更し、ご案内を送り直しました。'
+          : 'メールアドレスは変更しましたが、メールを送れませんでした。アドレスをもう一度ご確認ください。',
+      )
+      window.location.reload()
+    } catch {
+      window.alert('変更できませんでした')
+    } finally {
+      setProcessingId(null)
+    }
   }
 
   /**
@@ -754,6 +806,66 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                     )}
                   </div>
                 )}
+                {/* §17-10(CEO指示 2026-08-06): 電話で確認した正しいアドレスに直して送り直す。
+                    紹介予約では予約金の支払い案内が届かないと予約が成立しないため、
+                    「電話で確認 → ここで直す」を1か所にまとめる。 */}
+                {emailFixOpenId === item.id ? (
+                  <div style={{ marginTop: 10, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, padding: '10px 12px' }}>
+                    <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.7, marginBottom: 8 }}>
+                      お電話で確認した正しいメールアドレスを入力してください。
+                      保存すると、このアドレスへご案内を送り直します。
+                    </div>
+                    <input
+                      type="email"
+                      inputMode="email"
+                      value={emailFixInputs[item.id] || ''}
+                      onChange={(e) => setEmailFixInputs((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                      placeholder="example@mail.com"
+                      style={{
+                        width: '100%', padding: '10px 12px', fontSize: 14,
+                        border: '1px solid #E5E7EB', borderRadius: 8, boxSizing: 'border-box',
+                      }}
+                    />
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      <button
+                        type="button"
+                        onClick={() => fixClientEmail(item.id)}
+                        disabled={processingId === item.id || !(emailFixInputs[item.id] || '').trim()}
+                        style={{
+                          flex: 1, padding: '10px 12px', borderRadius: 8, border: 'none',
+                          background: (emailFixInputs[item.id] || '').trim() ? '#1A1A2E' : '#E5E7EB',
+                          color: (emailFixInputs[item.id] || '').trim() ? '#fff' : '#9CA3AF',
+                          fontSize: 13, fontWeight: 700,
+                          cursor: processingId === item.id ? 'default' : 'pointer',
+                        }}
+                      >
+                        保存して送り直す
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEmailFixOpenId(null)}
+                        style={{
+                          padding: '10px 12px', borderRadius: 8, border: '1px solid #E5E7EB',
+                          background: '#fff', color: '#6B7280', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                        }}
+                      >
+                        やめる
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setEmailFixOpenId(item.id)}
+                    style={{
+                      width: '100%', marginTop: 8, padding: '10px 14px', borderRadius: 8,
+                      border: '1px solid #B00020', background: '#fff', color: '#B00020',
+                      fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                    }}
+                  >
+                    メールアドレスを直す
+                  </button>
+                )}
                 {item.payment_status !== 'paid' && item.payment_status !== 'awaiting' && (
                   <button
                     type="button"
@@ -1192,6 +1304,67 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                 >
                   お電話で決めた日時に直す
                 </button>
+                {/* §17-10(CEO指示 2026-08-06): 電話で確認した正しいアドレスに直して送り直す。
+                    紹介予約では予約金の支払い案内が届かないと予約が成立しないため、
+                    「電話で確認 → ここで直す」を1か所にまとめる。 */}
+                {emailFixOpenId === item.id ? (
+                  <div style={{ marginTop: 10, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, padding: '10px 12px' }}>
+                    <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.7, marginBottom: 8 }}>
+                      お電話で確認した正しいメールアドレスを入力してください。
+                      保存すると、このアドレスへご案内を送り直します。
+                    </div>
+                    <input
+                      type="email"
+                      inputMode="email"
+                      value={emailFixInputs[item.id] || ''}
+                      onChange={(e) => setEmailFixInputs((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                      placeholder="example@mail.com"
+                      style={{
+                        width: '100%', padding: '10px 12px', fontSize: 14,
+                        border: '1px solid #E5E7EB', borderRadius: 8, boxSizing: 'border-box',
+                      }}
+                    />
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      <button
+                        type="button"
+                        onClick={() => fixClientEmail(item.id)}
+                        disabled={processingId === item.id || !(emailFixInputs[item.id] || '').trim()}
+                        style={{
+                          flex: 1, padding: '10px 12px', borderRadius: 8, border: 'none',
+                          background: (emailFixInputs[item.id] || '').trim() ? '#1A1A2E' : '#E5E7EB',
+                          color: (emailFixInputs[item.id] || '').trim() ? '#fff' : '#9CA3AF',
+                          fontSize: 13, fontWeight: 700,
+                          cursor: processingId === item.id ? 'default' : 'pointer',
+                        }}
+                      >
+                        保存して送り直す
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEmailFixOpenId(null)}
+                        style={{
+                          padding: '10px 12px', borderRadius: 8, border: '1px solid #E5E7EB',
+                          background: '#fff', color: '#6B7280', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                        }}
+                      >
+                        やめる
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setEmailFixOpenId(item.id)}
+                    style={{
+                      width: '100%', marginTop: 8, padding: '10px 14px', borderRadius: 8,
+                      border: '1px solid #B00020', background: '#fff', color: '#B00020',
+                      fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                    }}
+                  >
+                    メールアドレスを直す
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => discardBooking(item.id)}
