@@ -109,11 +109,33 @@ export async function isKnownUndeliverableEmail(
       console.error('[booking-email-fix] isKnownUndeliverableEmail error (fail-soft):', error.message)
       return false
     }
-    return ((data || []) as Array<{ preferred_slots: Record<string, unknown> | null }>).some(
+    const failedInBookings = ((data || []) as Array<{ preferred_slots: Record<string, unknown> | null }>).some(
       (row) => !!row.preferred_slots?.receipt_email_failed,
     )
+    if (failedInBookings) return true
   } catch (err) {
     console.error('[booking-email-fix] isKnownUndeliverableEmail error (fail-soft):', err)
+    return false
+  }
+
+  // §17-27: 相談スレッド側の記録も見る。予約を経ずに相談だけ送った人は
+  // referral_bookings に行が無いため、こちらを見ないと「初めて」と誤判定する。
+  // email_failed_at は migration 058 依存なので、別クエリ＋fail-soft で読む
+  // （未作成カラムを明示selectすると PostgREST が 42703 で落ちる）。
+  try {
+    const { data, error } = await supabase
+      .from('consultations')
+      .select('id, email_failed_at')
+      .eq('client_email', target)
+      .not('email_failed_at', 'is', null)
+      .limit(1)
+    if (error) {
+      console.error('[booking-email-fix] consultations check error (fail-soft):', error.message)
+      return false
+    }
+    return (data || []).length > 0
+  } catch (err) {
+    console.error('[booking-email-fix] consultations check error (fail-soft):', err)
     return false
   }
 }
