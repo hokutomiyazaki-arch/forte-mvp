@@ -135,14 +135,39 @@ export async function DELETE(
       }
     }
 
+    // CEO報告(2026-08-06)「リスト削除できない」の真因:
+    //   referral_bookings.list_id が referral_lists(id) を **ON DELETE 指定なし** で参照している
+    //   （migration 032）。そのリスト経由の予約が1件でもあると 23503 で DELETE が丸ごと失敗し、
+    //   画面には「リストの削除に失敗しました」としか出なかった。
+    //   delegate_list_id（上でnull化済み）と同じ処置を、予約側にも先に行う。
+    //
+    //   紹介の実体（誰が誰に紹介したか）は referral_bookings.sender_pro_id に残るので、
+    //   list_id を外しても記録は失われない。リスト自体が消える以上、参照を残す方法は無い。
+    //   ※ referral_list_items / referral_invites は ON DELETE CASCADE、
+    //     consultation_messages.list_id は ON DELETE SET NULL のため対処不要。
+    const { error: bookingUnlinkError } = await supabase
+      .from('referral_bookings')
+      .update({ list_id: null })
+      .eq('list_id', params.list_id)
+
+    if (bookingUnlinkError) {
+      console.error('[api/referral/lists/[list_id]] DELETE booking unlink error:', bookingUnlinkError)
+      return NextResponse.json({ error: 'failed_to_delete' }, { status: 500 })
+    }
+
     const { error } = await supabase
       .from('referral_lists')
       .delete()
       .eq('id', params.list_id)
 
     if (error) {
-      console.error('[api/referral/lists/[list_id]] DELETE error:', error)
-      return NextResponse.json({ error: 'failed_to_delete' }, { status: 500 })
+      // 何が邪魔したか分からないまま「失敗しました」で終わらせない（今回の再発防止）。
+      // 23503 = 他のテーブルからまだ参照されている。コードを返して画面に出す。
+      console.error('[api/referral/lists/[list_id]] DELETE error:', error.code, error.message, error.details)
+      return NextResponse.json(
+        { error: (error as any).code === '23503' ? 'still_referenced' : 'failed_to_delete', code: (error as any).code || null },
+        { status: 500 },
+      )
     }
 
     return NextResponse.json({ success: true })
