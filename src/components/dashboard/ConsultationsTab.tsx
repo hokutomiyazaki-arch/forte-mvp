@@ -18,6 +18,12 @@ interface Consultation {
   created_at: string
   updated_at: string
   messages: Message[]
+  /**
+   * §17-8(CEO指示 2026-08-06): このお客さまへのメールがバウンスした。
+   * 相談はメールしか預かっていないので、届かない＝クライアントが戻る手段を失っている。
+   * 返信を書いても永久に届かないため、その事実を出して畳めるようにする。
+   */
+  email_failed?: boolean
 }
 
 function formatDate(iso: string): string {
@@ -240,6 +246,38 @@ export default function ConsultationsTab({
     }
   }
 
+  /** §17-8 メールが届かないやりとりを丸ごと消す（CEO指示 2026-08-06） */
+  async function deleteThread(consultationId: string) {
+    if (sendingId) return
+    if (!window.confirm(
+      'このやりとりを削除しますか？\n\n' +
+      'お客さまにメールが届いていないため、返信しても届きません。\n' +
+      'この操作は取り消せません。'
+    )) return
+    setSendingId(consultationId)
+    setError('')
+    setNotice('')
+    try {
+      const res = await fetch(`/api/pro/consultations/${consultationId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ delete_thread: true }),
+      })
+      if (!res.ok) {
+        setError('削除できませんでした。時間をおいてお試しください。')
+        return
+      }
+      setOpenId(null)
+      setNotice('やりとりを削除しました。')
+      await load()
+    } catch {
+      setError('削除できませんでした。')
+    } finally {
+      setSendingId(null)
+    }
+  }
+
   async function sendReport(consultationId: string) {
     if (reportReason.trim().length < 10 || sendingId) return
     setSendingId(consultationId)
@@ -414,6 +452,13 @@ export default function ConsultationsTab({
                     {c.status === 'closed' && (
                       <span style={{ fontSize: 10, color: '#9CA3AF' }}>対応済み</span>
                     )}
+                    {/* §17-8: 開かなくても分かるようにする（返信を書く前に気づけること） */}
+                    {c.email_failed && (
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
+                        background: '#FFF3F3', color: '#B00020', border: '1px solid #F0BDBD',
+                      }}>メール届かず</span>
+                    )}
                   </div>
                   {last && !isOpen && (
                     <div style={{
@@ -432,6 +477,37 @@ export default function ConsultationsTab({
 
               {isOpen && (
                 <div style={{ background: '#F9FAFB', borderTop: '1px solid #E5E7EB', padding: 16 }}>
+                  {/* §17-8(CEO指示 2026-08-06): メールが届かないやりとりは、その事実をここに出す。
+                      相談はメールしか預かっていないので、クライアントは戻る手段を失っている
+                      （予約と違って電話番号が無い）。返信を書かせても無駄なので、畳める形にする。 */}
+                  {c.email_failed && (
+                    <div style={{
+                      background: '#FFF3F3', border: '1px solid #F0BDBD', borderRadius: 10,
+                      padding: '12px 14px', marginBottom: 16,
+                    }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#B00020', marginBottom: 4 }}>
+                        このお客さまにメールが届いていません
+                      </div>
+                      <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.7, marginBottom: 10 }}>
+                        メールアドレスの入力間違いの可能性があります。
+                        お客さまはこのやりとりを開くことができないため、返信しても届きません。
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => deleteThread(c.id)}
+                        disabled={sendingId === c.id}
+                        style={{
+                          padding: '8px 14px', borderRadius: 8, border: 'none',
+                          background: '#E24B4A', color: '#fff', fontSize: 12, fontWeight: 700,
+                          cursor: sendingId === c.id ? 'default' : 'pointer',
+                          opacity: sendingId === c.id ? 0.6 : 1,
+                        }}
+                      >
+                        このやりとりを削除する
+                      </button>
+                    </div>
+                  )}
+
                   {/* §17-6: 予約から始めたスレッドは空の状態で並ぶ。何をすればよいか書いておく
                       （空欄だけ出されても、送れるのかどうか分からない）。 */}
                   {c.messages.length === 0 && (

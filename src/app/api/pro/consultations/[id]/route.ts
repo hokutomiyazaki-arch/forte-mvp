@@ -19,6 +19,7 @@ const ALLOWED_STATUS = ['new', 'open', 'closed', 'archived']
  * body: { report_reason }   通報する（§16-27-4）。プロ側からも通報できる（お互い様の建て付け）
  * body: { list_id }         紹介リストを送る（§16-35）。ワンクリックで紹介の実体を残す
  * body: { undo_message_id } 送信を取り消す（§16-36）。自分(sender='pro')の発言のみ
+ * body: { delete_thread }    やりとりごと削除する（§17-8）。メールが届かないスレッドの後始末
  *
  * 「プロはダッシュボードで書くだけ、クライアントにはメールが届く」がこの機能の肝。
  * 送信結果は consultation_messages.delivered_at に残す（送れなかったことを後から追える）。
@@ -46,6 +47,34 @@ export async function POST(
 
     if (!consultation || consultation.pro_id !== ownPro.id) {
       return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    }
+
+    // ── やりとりごと削除（§17-8・CEO指示 2026-08-06）──
+    // 「クライアントが返信手段がないとなにも無いので、ワンクリックでチャットを消去できるように」
+    // 相談はメールしか預かっていない。バウンスしたスレッドはクライアントが戻る手段を失っており、
+    // 返信を書いても永久に届かない。アーカイブ（見えなくするだけ）ではなく消せるようにする。
+    // §16-36（メッセージの取り消し）と違い、こちらは**行ごと消す**。
+    //   理由: 取り消しは「相手に届いたものを引っ込める」＝相手が存在するが、
+    //   ここは相手に何も届いていないスレッドの後始末で、残しても誰の役にも立たない。
+    if (payload.delete_thread === true) {
+      // 明示的に消す（consultation_messages は ON DELETE CASCADE だが、順序を書いて意図を残す）
+      const { error: msgError } = await supabase
+        .from('consultation_messages')
+        .delete()
+        .eq('consultation_id', consultation.id)
+      if (msgError) {
+        console.error('[api/pro/consultations POST] delete messages error:', msgError.message)
+        return NextResponse.json({ error: 'delete_failed' }, { status: 500 })
+      }
+      const { error: threadError } = await supabase
+        .from('consultations')
+        .delete()
+        .eq('id', consultation.id)
+      if (threadError) {
+        console.error('[api/pro/consultations POST] delete thread error:', threadError.message)
+        return NextResponse.json({ error: 'delete_failed' }, { status: 500 })
+      }
+      return NextResponse.json({ ok: true, deleted: true })
     }
 
     // ── 状態変更のみ ──
