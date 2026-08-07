@@ -53,6 +53,22 @@ function verifySvixSignature(params: {
   return false
 }
 
+/**
+ * GET /api/webhooks/resend — 動作確認用（秘密情報は出さない）
+ *
+ * CEO報告(2026-08-06)「webhookもsecretも設定したのに表示されない」の切り分け用。
+ * ブラウザでこのURLを開くと、いま動いているビルドが
+ *   ①このルートを持っているか ②RESEND_WEBHOOK_SECRET を読めているか
+ * が1画面で分かる。値そのものは返さない（先頭数文字も出さない）。
+ */
+export async function GET() {
+  return NextResponse.json({
+    ok: true,
+    route: 'resend-webhook',
+    secret_configured: !!process.env.RESEND_WEBHOOK_SECRET,
+  })
+}
+
 export async function POST(request: NextRequest) {
   try {
     const secret = process.env.RESEND_WEBHOOK_SECRET
@@ -76,13 +92,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'stale' }, { status: 400 })
     }
     if (!verifySvixSignature({ secret, id, timestamp, signatureHeader: signature, body: raw })) {
+      // 401 は Resend 側の配信ログに残る。原因の当たりを付けられるよう、
+      // 秘密そのものは出さずに形だけログする（whsec_ 付け忘れ・別プロジェクトの鍵など）。
+      console.error(
+        '[api/webhooks/resend] signature mismatch',
+        `secret_len=${secret.length}`,
+        `has_prefix=${secret.startsWith('whsec_')}`,
+        `sig_parts=${signature.split(' ').length}`,
+      )
       return NextResponse.json({ error: 'bad_signature' }, { status: 401 })
     }
 
     const payload = JSON.parse(raw) as { type?: string; data?: { to?: string[] | string } }
     // 届かなかったこと（bounced）だけを扱う。delivered/opened 等は無視する。
     if (payload.type !== 'email.bounced') {
-      return NextResponse.json({ ok: true, ignored: true })
+      console.log('[api/webhooks/resend] ignored event:', payload.type)
+      return NextResponse.json({ ok: true, ignored: true, type: payload.type || null })
     }
 
     const rawTo = payload.data?.to
@@ -90,7 +115,8 @@ export async function POST(request: NextRequest) {
       .map((a) => normalizeEmail(a))
       .filter(Boolean)
     if (addresses.length === 0) {
-      return NextResponse.json({ ok: true, ignored: true })
+      console.error('[api/webhooks/resend] bounced but no recipient in payload')
+      return NextResponse.json({ ok: true, ignored: true, reason: 'no_recipient' })
     }
 
     const supabase = getSupabaseAdmin()
