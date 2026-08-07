@@ -246,8 +246,12 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
         )
         return
       }
-      // 相談タブへ。スレッド自体は相談タブの一覧に並ぶ（同じ人との会話は1本にまとまる）。
-      window.location.href = '/dashboard?tab=consultations'
+      // §17-6(CEO指摘): 相談タブに飛ばすだけでは、どのスレッドを開けばよいか分からず書けない。
+      // 開くスレッドを名指しで渡す（新規に作った空のスレッドでも、開いてすぐ書ける）。
+      const threadId = data?.consultation_id
+      window.location.href = threadId
+        ? `/dashboard?tab=consultations&open=${encodeURIComponent(threadId)}`
+        : '/dashboard?tab=consultations'
     } catch {
       window.alert('メッセージ画面を開けませんでした')
     } finally {

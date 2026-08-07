@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 const BODY_MAX = 2000
 
@@ -33,7 +33,17 @@ function formatDate(iso: string): string {
  * 「プロはダッシュボードで返信を書き込むだけ。クライアントにはメールが届く」がこの機能の肝。
  * 未返信（status='new'）を上に出し、1件ずつ開いて返信する。
  */
-export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: (n: number) => void }) {
+export default function ConsultationsTab({
+  onUnreadChange,
+  initialOpenId,
+}: {
+  onUnreadChange?: (n: number) => void
+  /**
+   * §17-6(CEO指摘 2026-08-06): 予約カードの「メッセージを送る」から飛んできたとき、
+   * どのスレッドを開けばよいか分からないと書けない。開くスレッドを名指しで受け取る。
+   */
+  initialOpenId?: string | null
+}) {
   const [list, setList] = useState<Consultation[]>([])
   const [loading, setLoading] = useState(true)
   const [openId, setOpenId] = useState<string | null>(null)
@@ -56,6 +66,8 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
   const [reportId, setReportId] = useState<string | null>(null)
   const [reportReason, setReportReason] = useState('')
   const [reportedIds, setReportedIds] = useState<Record<string, boolean>>({})
+  // 初回の自動展開は1回だけ（再取得のたびに開き直すと、閉じた人の操作を奪う）
+  const openedInitialRef = useRef(false)
 
   async function load(archived = showArchived) {
     try {
@@ -67,6 +79,11 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
       const json = await res.json()
       const items: Consultation[] = Array.isArray(json.consultations) ? json.consultations : []
       setList(items)
+      // §17-6: 名指しで開くよう言われたスレッドがあれば開く（一覧に居るときだけ・1回だけ）。
+      if (initialOpenId && !openedInitialRef.current && items.some(c => c.id === initialOpenId)) {
+        openedInitialRef.current = true
+        setOpenId(initialOpenId)
+      }
       if (typeof json.accepting === 'boolean') setAccepting(json.accepting)
       if (Array.isArray(json.menus)) setMenus(json.menus)
       if (Array.isArray(json.lists)) setLists(json.lists)
@@ -415,6 +432,22 @@ export default function ConsultationsTab({ onUnreadChange }: { onUnreadChange?: 
 
               {isOpen && (
                 <div style={{ background: '#F9FAFB', borderTop: '1px solid #E5E7EB', padding: 16 }}>
+                  {/* §17-6: 予約から始めたスレッドは空の状態で並ぶ。何をすればよいか書いておく
+                      （空欄だけ出されても、送れるのかどうか分からない）。 */}
+                  {c.messages.length === 0 && (
+                    <div style={{
+                      background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10,
+                      padding: '12px 14px', marginBottom: 16,
+                    }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>
+                        まだメッセージはありません
+                      </div>
+                      <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.7 }}>
+                        最初の1通を書くと、お客さんにメールでお知らせが届きます。
+                        お客さんはメール内のリンクからそのまま返信できます。
+                      </div>
+                    </div>
+                  )}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
                     {c.messages.map(m => {
                       const mine = m.sender === 'pro'

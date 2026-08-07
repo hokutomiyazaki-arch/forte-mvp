@@ -586,6 +586,8 @@ export default function DashboardPage() {
 
   // URLパラメータによるタブ切替
   const tabParam = searchParams.get('tab')
+  // §17-6: 相談タブで最初に開くスレッド（予約カードの「メッセージを送る」から渡ってくる）
+  const consultationOpenParam = searchParams.get('open')
   useEffect(() => {
     if (!tabParam || loading) return
     const validTabs = ['profile', 'proofs', 'rewards', 'voices', 'card', 'myorgs', 'certs', 'consultations', 'photos', 'org', 'guide', 'business-info', 'badges', 'referral', 'bookings']
@@ -5036,8 +5038,10 @@ export default function DashboardPage() {
       {/* ═══ Tab: 相談（§16-19） ═══
           カードの「相談する」から届いた問い合わせの受信箱。ここに返信を書くと
           クライアントにメールが届く（クライアントはメール、プロはダッシュボード）。 */}
+      {/* §17-6: 予約カードの「メッセージを送る」から ?open=<id> で飛んでくる。
+          どのスレッドを開くか名指しで渡さないと、飛ばされた側は書けない。 */}
       {dashboardTab === 'consultations' && pro && (
-        <ConsultationsTab onUnreadChange={setUnreadConsultations} />
+        <ConsultationsTab onUnreadChange={setUnreadConsultations} initialOpenId={consultationOpenParam} />
       )}
 
       {/* ═══ Tab: 認定・資格 ═══
