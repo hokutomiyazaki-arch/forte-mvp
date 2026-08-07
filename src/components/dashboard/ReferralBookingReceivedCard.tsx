@@ -15,6 +15,8 @@ import BookingThread from '@/components/dashboard/BookingThread'
 // カード化(2026-08-05・CEO指示): クライアント向けフォームと同じSlotCardGroup(第1〜第3希望の
 // 独立カード+段階的追加)を共有する(datetime-local廃止・Android実機でのstep無視崩壊対策)。
 import SlotCardGroup from '@/components/referral/SlotCardGroup'
+// §17-4: 電話で決めた日時を1枠だけ選ぶのに使う（希望日時3枠のカード群と同じピッカー）。
+import SlotPicker from '@/components/referral/SlotPicker'
 
 /** 日時ピッカー設計最終版: プロ側counter/reschedule共通の時刻選択肢(06:00〜23:30の全域)。 */
 const PRO_SLOT_TIME_OPTIONS = buildHalfHourTimeOptions('06:00', '24:00')
@@ -100,6 +102,8 @@ interface BookingItem {
      * この場合は電話で連絡してもらう（電話番号は予約フォームの必須項目）。
      */
     receipt_email_failed?: boolean | null
+    /** §17-4: 電話で口頭で決めた日時をプロが確定した時刻（お客さん側の同意記録が無い確定） */
+    confirmed_by_phone_at?: string | null
   } | null
   status: 'requested' | 'confirmed'
   price_jpy: number
@@ -210,6 +214,10 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
   // 'closed'=非表示(トリガーのみ) / 'menu'=3項目の選択メニュー / フォーム自体は既存の
   // locationOpenId/rescheduleOpenId/cancelOpenId(既存state・ロジック不変)で判定する。
   const [opsMenuOpenId, setOpsMenuOpenId] = useState<string | null>(null)
+  // §17-4(CEO指示 2026-08-06): 電話で口頭で決まった予約をプロ側から確定する。
+  // 「メールが届かないお客さん」への逃げ道なので、開閉と入力値だけを持つ(bookingIdごと)。
+  const [phoneConfirmOpenId, setPhoneConfirmOpenId] = useState<string | null>(null)
+  const [phoneConfirmInputs, setPhoneConfirmInputs] = useState<Record<string, string>>({})
 
   /**
    * §17-1(CEO決定 2026-08-06): この予約がREALPROOFの直接予約か。
@@ -218,6 +226,51 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
    */
   function isDirectBooking(bookingId: string): boolean {
     return items.some((i) => i.id === bookingId && i.source === 'direct')
+  }
+
+  /**
+   * §17-4 電話で決めた日時で確定する（CEO指示 2026-08-06）。
+   * お客さんの同意をシステムが確認できない確定なので、押す前に必ず警告を出す。
+   */
+  async function confirmByPhone(bookingId: string) {
+    const value = phoneConfirmInputs[bookingId] || ''
+    if (!value || processingId) return
+    if (!window.confirm(
+      'お電話でお客さまと日時を決めた場合のみ、この操作を行ってください。\n\n' +
+      '・お客さまの画面上の同意なしに、この日時で確定します\n' +
+      '・確認メールは送りますが、メールアドレスが間違っている場合は届きません\n' +
+      '・日時の取り違えがあっても、REAL PROOF では確認できません\n\n' +
+      'この内容で確定しますか？'
+    )) return
+
+    setProcessingId(bookingId)
+    try {
+      const res = await fetch('/api/referral/bookings/received', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ booking_id: bookingId, action: 'confirm_offline', confirmed_slot: value }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        window.alert(
+          data.error === 'payment_required'
+            ? 'この予約は予約金のお支払いが必要なため、電話での確定はできません。通常の確定をご利用ください。'
+            : data.error === 'invalid_slots'
+              ? '日時をご確認ください（過去の日時は指定できません）。'
+              : '確定に失敗しました'
+        )
+        return
+      }
+      setPhoneConfirmOpenId(null)
+      setPhoneConfirmInputs((prev) => ({ ...prev, [bookingId]: '' }))
+      // 既存の confirm() と同じ扱い（確定したカードは一覧から外す）。
+      setItems((prev) => prev.filter((i) => i.id !== bookingId))
+    } catch {
+      window.alert('確定に失敗しました')
+    } finally {
+      setProcessingId(null)
+    }
   }
 
   useEffect(() => {
@@ -710,6 +763,80 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                   </button>
                 </div>
 
+                {/* §17-4(CEO指示 2026-08-06): 電話で口頭で決まったら、プロ側から確定できるようにする。
+                    §17-3の④（受付メールが届かなかった場合の逃げ道）と対になる機能。
+                    押した先で必ず警告を出す（お客さんの同意をシステムが確認できない確定のため）。 */}
+                {phoneConfirmOpenId === item.id ? (
+                  <div style={{ marginTop: 6, marginBottom: 8, padding: '10px 12px', background: '#fff', borderRadius: 8, border: '1px solid #F0BDBD' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#B00020', marginBottom: 4 }}>
+                      お電話で決めた日時で確定する
+                    </div>
+                    <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.7, marginBottom: 8 }}>
+                      お客さまと直接お話しして日時が決まっている場合のみお使いください。
+                      お客さまの希望日時になくてもかまいません。
+                    </div>
+                    <SlotPicker
+                      value={phoneConfirmInputs[item.id] || ''}
+                      timeOptions={PRO_SLOT_TIME_OPTIONS}
+                      onChange={(next) => setPhoneConfirmInputs((prev) => ({ ...prev, [item.id]: next }))}
+                    />
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      <button
+                        onClick={() => confirmByPhone(item.id)}
+                        disabled={processingId === item.id || !phoneConfirmInputs[item.id]}
+                        style={{
+                          flex: 1,
+                          padding: '8px 12px',
+                          borderRadius: 8,
+                          border: 'none',
+                          background: phoneConfirmInputs[item.id] ? '#1A1A2E' : '#E5E7EB',
+                          color: phoneConfirmInputs[item.id] ? '#fff' : '#9CA3AF',
+                          fontSize: 13,
+                          fontWeight: 600,
+                          cursor: processingId === item.id || !phoneConfirmInputs[item.id] ? 'default' : 'pointer',
+                          opacity: processingId === item.id ? 0.6 : 1,
+                        }}
+                      >
+                        この日時で確定する
+                      </button>
+                      <button
+                        onClick={() => setPhoneConfirmOpenId(null)}
+                        style={{
+                          padding: '8px 12px',
+                          borderRadius: 8,
+                          border: '1px solid #D1D5DB',
+                          background: '#fff',
+                          color: '#6B7280',
+                          fontSize: 13,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        キャンセル
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => { setPhoneConfirmOpenId(item.id); setCounterOpenId(null) }}
+                    style={{
+                      width: '100%',
+                      padding: '6px 12px',
+                      marginBottom: 4,
+                      borderRadius: 8,
+                      border: 'none',
+                      background: 'transparent',
+                      color: item.preferred_slots?.receipt_email_failed ? '#B00020' : '#6B7280',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      textDecoration: 'underline',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    お電話で決めた日時で確定する
+                  </button>
+                )}
+
                 {!isCounterOpen ? (
                   <button
                     onClick={() => setCounterOpenId(item.id)}
@@ -890,6 +1017,13 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
             {item.source === 'direct' && (
               <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>
                 REALPROOFからのご予約
+              </div>
+            )}
+            {/* §17-4: 電話で確定した予約は、お客さん側に確定の記録が残っていない可能性がある。
+                当日の行き違いを防ぐため、プロの画面に必ず出す。 */}
+            {item.preferred_slots?.confirmed_by_phone_at && (
+              <div style={{ fontSize: 13, color: '#B00020', marginTop: 2 }}>
+                お電話で確定した予約です
               </div>
             )}
             {item.sender_pro?.name && (
