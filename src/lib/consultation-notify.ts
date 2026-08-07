@@ -15,6 +15,8 @@
  */
 
 import { sendLinePushText } from '@/lib/line-push'
+// §17-14: linkify は import ゼロの純関数モジュール（チャンクグラフに何も足さない・CLAUDE.md §G）
+import { linkifyToHtml } from '@/lib/linkify'
 
 // 外部に配るURLは origin ではなくハードコード（preview デプロイのURLが顧客に届くのを防ぐ）
 const APP_URL = 'https://realproof.jp'
@@ -136,6 +138,10 @@ ${WRAP_END}`
  * クライアントへ「プロから返信が届きました」。
  * 【§16-19の狙い①】この本文の下に、後から「クライアントがプロを紹介する機能」の案内を足せる。
  * いまは REAL PROOF の説明を一行だけ置いている（機能ができたらここを差し替える）。
+ *
+ * §17-14: 本文中のURLはメールでもリンクにする。クライアントは相談スレッドを開かず
+ * メールだけ見ることがあり、ここが素のテキストだと「リンクを送ったのに開けない」が起きる。
+ * プロ宛の通知(80文字プレビュー)は途中で切れてリンクが壊れるため linkify しない。
  */
 export async function notifyClientProReplied(params: {
   clientEmail: string
@@ -149,7 +155,7 @@ export async function notifyClientProReplied(params: {
 <p>${escapeHtml(params.clientName)} 様</p>
 <p>${escapeHtml(params.proName)} さんからお返事が届きました。</p>
 <div style="background:#F9FAFB;border-radius:8px;padding:16px;margin:16px 0">
-  <p style="margin:0">${nl2br(escapeHtml(params.body))}</p>
+  <p style="margin:0">${nl2br(linkifyToHtml(params.body, escapeHtml))}</p>
 </div>
 <p style="margin:24px 0">
   <a href="${url}" style="background:#1A1A2E;color:#C4A35A;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold">続けてやりとりする</a>
