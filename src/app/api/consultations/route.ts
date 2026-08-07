@@ -16,6 +16,8 @@ const EMAIL_MAX = 254
 
 /** 同一メール×同一プロの連投を止める窓（分）。フォーム二度押し・いたずら対策。 */
 const COOLDOWN_MINUTES = 5
+/** 1スレッドあたりのメッセージ上限（既存の /api/consultations/[token] と揃える）。 */
+const MESSAGE_LIMIT = 100
 
 /**
  * POST /api/consultations  （§16-19・認証不要の公開エンドポイント）
@@ -117,11 +119,49 @@ export async function POST(request: NextRequest) {
         (r) => normalizeEmail(r.client_email) === normalized,
       ) || null
 
+    // §17-21(CEO報告 2026-08-06・本番不具合)「他のプロに送った相談チャットが表示されない」:
+    //   ここで 429 を返して既存スレッドへリダイレクトしていたため、
+    //   **いま入力した本文がどこにも保存されずに消えていた**。
+    //   お客さんから見れば「送信した」のに、飛ばされた先のスレッドには自分の文章が無い。
+    //   §16-27 の連投制限の狙いは「スレッドを増やさない」ことであって、
+    //   「本文を捨てる」ことではなかった。**既存スレッドに追記する**のが正しい。
     if (recent) {
-      return NextResponse.json(
-        { error: 'too_soon', token: recent.access_token },
-        { status: 429 },
-      )
+      const { count: recentMsgCount } = await supabase
+        .from('consultation_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('consultation_id', recent.id)
+      if ((recentMsgCount || 0) >= MESSAGE_LIMIT) {
+        return NextResponse.json({ error: 'limit_reached', token: recent.access_token }, { status: 409 })
+      }
+
+      const { error: appendError } = await supabase.from('consultation_messages').insert({
+        consultation_id: recent.id,
+        sender: 'client',
+        body: messageBody,
+      })
+      if (appendError) {
+        console.error('[api/consultations POST] append error:', appendError.message)
+        return NextResponse.json({ error: 'create_failed' }, { status: 500 })
+      }
+      // プロ側の受信箱で未返信として立ち上げ直す（新規スレッドと同じ扱いにする）
+      await supabase
+        .from('consultations')
+        .update({ status: 'new', updated_at: new Date().toISOString() })
+        .eq('id', recent.id)
+
+      try {
+        await notifyProNewConsultation({
+          proName: pro.name || '',
+          contactEmail: pro.contact_email ?? null,
+          lineUserId: (pro as any).line_messaging_user_id ?? null,
+          clientName,
+          body: messageBody,
+        })
+      } catch (err) {
+        console.error('[api/consultations POST] pro notify error (append):', err)
+      }
+
+      return NextResponse.json({ ok: true, token: recent.access_token, appended: true })
     }
 
     // ボット対策の第2層（件数の上限）。
