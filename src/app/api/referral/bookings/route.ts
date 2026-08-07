@@ -297,10 +297,15 @@ export async function POST(request: NextRequest) {
     }
 
     // タスクC: 送信直後の受付メール(クライアント向け)。失敗しても予約リクエスト自体は成功扱い。
+    // §17-3④/§17-9(CEO報告 2026-08-06「紹介予約でのメール間違いが反映されてない」):
+    //   直接予約(/api/bookings)にだけ入れていた「受付メールが送れなかった印」を、
+    //   紹介予約にも入れる。紹介予約では決済リンクのメールも届かなくなるため、
+    //   気づけないと予約が支払い待ちのまま自動キャンセルされて終わる。
+    let receiptSent = false
     try {
       const listUrl = list.slug ? `${APP_URL}/r/${list.slug}` : APP_URL
       if (userId || clientEmail) {
-        await notifyBookingReceivedToClient(
+        const receipt = await notifyBookingReceivedToClient(
           { userId, email: clientEmail },
           receiverPro.name,
           listUrl,
@@ -316,12 +321,32 @@ export async function POST(request: NextRequest) {
             note,
           }
         )
+        receiptSent = receipt.sent
       }
     } catch (notifyErr) {
       console.error('[api/referral/bookings] receipt notify error:', notifyErr)
     }
 
-    return NextResponse.json({ booking })
+    if (!receiptSent) {
+      // 受け手プロのカードに「お客さんに受付メールが届いていません」を出すための印。
+      // 新カラムは作らず preferred_slots に持つ（既存のマーカーと同じ作法）。
+      try {
+        await supabase
+          .from('referral_bookings')
+          .update({
+            preferred_slots: {
+              slots: [slot1, slot2, slot3],
+              note: note || null,
+              receipt_email_failed: true,
+            },
+          })
+          .eq('id', booking.id)
+      } catch (markErr) {
+        console.error('[api/referral/bookings] receipt failure mark error:', markErr)
+      }
+    }
+
+    return NextResponse.json({ booking, receipt_sent: receiptSent })
   } catch (err: any) {
     console.error('[api/referral/bookings] POST error:', err)
     return NextResponse.json({ error: err.message || 'internal_error' }, { status: 500 })
