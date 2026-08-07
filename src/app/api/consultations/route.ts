@@ -199,8 +199,12 @@ export async function POST(request: NextRequest) {
     } catch (err) {
       console.error('[api/consultations POST] pro notify error:', err)
     }
+    // §17-3(CEO指摘 2026-08-06): メールアドレスの打ち間違い対策は相談フォームにも要る。
+    // 受付メールを送れたかを返し、完了画面でその場で伝える
+    // （黙って成功にすると、お客さんは「送れた」と思ったまま何も届かない）。
+    let receiptSent = false
     try {
-      await notifyClientConsultationReceived({
+      receiptSent = await notifyClientConsultationReceived({
         clientEmail: clientEmailRaw,
         clientName,
         proName: pro.name || '',
@@ -210,7 +214,7 @@ export async function POST(request: NextRequest) {
       console.error('[api/consultations POST] client notify error:', err)
     }
 
-    return NextResponse.json({ ok: true, token: created.access_token })
+    return NextResponse.json({ ok: true, token: created.access_token, receipt_sent: receiptSent })
   } catch (err) {
     console.error('[api/consultations POST] error:', err)
     return NextResponse.json({ error: 'internal' }, { status: 500 })

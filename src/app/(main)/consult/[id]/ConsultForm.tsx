@@ -1,6 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+// §17-3(CEO指摘 2026-08-06): メールの打ち間違いは「お客さんには何も届かないのに
+// プロには届いている」を生む。予約フォームと同じ対策を相談フォームにも入れる。
+import { suggestEmailFix } from '@/lib/email-typo'
 
 const T = {
   dark: '#1A1A2E',
@@ -43,8 +46,12 @@ export default function ConsultForm({ proId, proName, proPhotoUrl, proTitle, pro
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const [doneToken, setDoneToken] = useState<string | null>(null)
+  /** 受付メールを送れたか。false のときは完了画面でアドレスの確認を促す */
+  const [receiptSent, setReceiptSent] = useState(true)
 
   const canSubmit = !!name.trim() && !!email.trim() && !!body.trim() && agreed && !sending
+  // ドメインの打ち間違い（gmial.com など）を入力時に指摘する。純関数なので毎レンダー計算でよい。
+  const emailSuggestion = suggestEmailFix(email)
 
   async function submit() {
     if (!canSubmit) return
@@ -93,6 +100,7 @@ export default function ConsultForm({ proId, proName, proPhotoUrl, proTitle, pro
         )
         return
       }
+      setReceiptSent(json.receipt_sent !== false)
       setDoneToken(json.token || '')
     } catch {
       setError('送信できませんでした。通信環境をご確認ください。')
@@ -125,9 +133,27 @@ export default function ConsultForm({ proId, proName, proPhotoUrl, proTitle, pro
             {proName}さんにお伝えしました。<br />
             お返事が届いたらメールでお知らせします。
           </p>
-          <p style={{ fontSize: 13, color: T.faint, lineHeight: 1.8, marginTop: 16 }}>
-            受付のメールをお送りしています。届いていない場合は迷惑メールフォルダをご確認ください。
-          </p>
+          {receiptSent ? (
+            <p style={{ fontSize: 13, color: T.faint, lineHeight: 1.8, marginTop: 16 }}>
+              <strong style={{ color: T.dark }}>{email.trim()}</strong> 宛に受付のメールをお送りしました。
+              <br />
+              届いていない場合は、迷惑メールフォルダとアドレスの打ち間違いをご確認ください。
+            </p>
+          ) : (
+            <div style={{
+              marginTop: 16, background: '#FFF3F3', border: '1px solid #F0BDBD',
+              borderRadius: 10, padding: '12px 14px', textAlign: 'left',
+            }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: T.danger, marginBottom: 4 }}>
+                受付メールをお送りできませんでした
+              </div>
+              <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.7, margin: 0 }}>
+                入力されたメールアドレスをご確認ください。ご相談自体は{proName}さんに届いています。
+                <br />
+                このページは閉じずに、下のボタンからやりとりをご確認いただけます。
+              </p>
+            </div>
+          )}
           {doneToken && (
             <a
               href={`/consult/thread/${doneToken}`}
@@ -215,6 +241,20 @@ export default function ConsultForm({ proId, proName, proPhotoUrl, proTitle, pro
             <p style={{ fontSize: 12, color: T.faint, marginTop: 6, lineHeight: 1.6 }}>
               お返事の受け取りに使います。{proName}さんにお伝えします。
             </p>
+            {emailSuggestion && (
+              <button
+                type="button"
+                onClick={() => setEmail(emailSuggestion)}
+                style={{
+                  marginTop: 8, width: '100%', textAlign: 'left',
+                  padding: '10px 12px', borderRadius: 8,
+                  background: '#FFF8E1', border: '1px solid #F0D98C',
+                  fontSize: 13, color: '#8A6D00', lineHeight: 1.6, cursor: 'pointer',
+                }}
+              >
+                もしかして <strong>{emailSuggestion}</strong> ですか？（タップで直せます）
+              </button>
+            )}
           </div>
 
           <div style={{ marginBottom: 16 }}>
@@ -267,6 +307,22 @@ export default function ConsultForm({ proId, proName, proPhotoUrl, proTitle, pro
               </span>
             </span>
           </label>
+
+          {/* 送信前にもう一度、届け先を本人に読ませる。打ち間違いに気づける最後の場所。 */}
+          {!!email.trim() && (
+            <div style={{
+              background: '#fff', border: `1px solid ${T.border}`,
+              borderRadius: 8, padding: '10px 12px', marginBottom: 12,
+            }}>
+              <div style={{ fontSize: 11, color: T.faint, marginBottom: 2 }}>お返事の届け先</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: T.dark, wordBreak: 'break-all' }}>
+                {email.trim()}
+              </div>
+              <div style={{ fontSize: 11, color: T.faint, marginTop: 4, lineHeight: 1.6 }}>
+                間違いがないかご確認ください。届かないと、お返事をお伝えできません。
+              </div>
+            </div>
+          )}
 
           {error && (
             <p style={{ fontSize: 13, color: T.danger, marginBottom: 12, lineHeight: 1.7 }}>{error}</p>
