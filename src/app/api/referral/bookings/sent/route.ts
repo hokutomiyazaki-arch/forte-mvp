@@ -82,6 +82,7 @@ export async function GET() {
         status: b.status,
         failedAt: b.preferred_slots?.receipt_email_failed_at || null,
         createdAt: b.created_at,
+        contactRecoveredBySms: !!b.preferred_slots?.contact_recovered_by_sms_at,
       })
       return {
         id: b.id,
@@ -174,6 +175,7 @@ export async function PATCH(request: NextRequest) {
         status: b.status,
         failedAt: b.preferred_slots?.receipt_email_failed_at || null,
         createdAt: b.created_at,
+        contactRecoveredBySms: !!b.preferred_slots?.contact_recovered_by_sms_at,
       }) !== 'sender'
     ) {
       // 24時間を過ぎて受け手に移っている。両側から別のアドレスを入れられる状態を作らない。
