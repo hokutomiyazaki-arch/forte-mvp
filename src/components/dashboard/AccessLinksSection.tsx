@@ -296,7 +296,7 @@ export default function AccessLinksSection({ accessLinks, onAccessLinksChange, o
           {
             value: 'rp',
             label: 'REALPROOF で受け取る',
-            note: 'お客さんが希望日時を送り、あなたが確定します。ダッシュボードの「予約を受ける」に届き、メール・LINEでもお知らせします。手数料はありません（お代は当日、直接お受け取りください）。',
+            note: 'お客さんが希望日時を送り、あなたが確定します。メニューの「予約」に届き、メール・LINEでもお知らせします。手数料はありません（お代は当日、直接お受け取りください）。',
           },
           {
             value: 'external',
