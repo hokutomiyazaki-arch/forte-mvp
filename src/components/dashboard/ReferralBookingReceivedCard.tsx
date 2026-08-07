@@ -102,6 +102,8 @@ interface BookingItem {
      * この場合は電話で連絡してもらう（電話番号は予約フォームの必須項目）。
      */
     receipt_email_failed?: boolean | null
+    /** §17-16: 印が立った時刻。誰が直すか(送り手→受け手のフォールバック)の判定に使う。 */
+    receipt_email_failed_at?: string | null
     /** §17-4: 電話で口頭で決めた日時をプロが確定した時刻（お客さん側の同意記録が無い確定） */
     confirmed_by_phone_at?: string | null
   } | null
@@ -125,6 +127,13 @@ interface BookingItem {
   /** §2-4ステージ3(決済確認後の連絡先開示・CEO決定): 開示条件を満たす場合のみAPIから入る。 */
   /** §17-6: メールアドレスは返ってこない（表示もしない）。§17-9: メール未達なら確定前でも入る。 */
   client_contact: { name: string | null; phone: string | null } | null
+  /**
+   * §17-16(CEO指示 2026-08-06): メールが届かなかったとき、いま直す担当が誰か。
+   * 'sender' = 紹介元が対応中（受け手の画面には状況だけ出し、操作は出さない）
+   * 'receiver' = 自分（直接予約、または紹介元が24時間動かなかった場合）
+   * null = メールは届いている（この一連のUIは出さない）
+   */
+  email_fix_owner?: 'sender' | 'receiver' | null
 }
 
 /**
@@ -778,8 +787,18 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                 <div style={{ fontSize: 13, fontWeight: 700, color: '#B00020', marginBottom: 2 }}>
                   お客さんに受付メールが届いていません
                 </div>
+                {/* §17-16(CEO指示 2026-08-06): 紹介予約はまず**紹介元**が直す。
+                    紹介元はそのお客さまを紹介した本人なので、電話するのに無理がない。
+                    受け手には会ったこともない他人へ電話させない。ここでは状況だけ出す。 */}
+                {item.email_fix_owner === 'sender' ? (
+                  <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.7 }}>
+                    紹介元の{item.sender_pro?.name ? `${item.sender_pro.name}さん` : '先生'}が、
+                    お客さまに確認しています。連絡がつき次第、ご案内が届きます。
+                  </div>
+                ) : (
+                  <>
                 <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.7 }}>
-                  メールアドレスの入力間違いの可能性があります。お電話でご連絡をお願いします。
+                  お電話でご連絡をお願いします。
                 </div>
                 {/* §17-9(CEO指摘 2026-08-06): 「プロが確定しないと電話番号が出ない」は、
                     メールが死んでいる予約では詰みになる。確定前でもここだけ連絡先を出す。 */}
@@ -880,6 +899,8 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                   >
                     この予約を削除する
                   </button>
+                )}
+                  </>
                 )}
               </div>
             )}
@@ -1266,19 +1287,21 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                 <div style={{ fontSize: 13, fontWeight: 700, color: '#B00020', marginBottom: 2 }}>
                   お客さんにメールが届いていません
                 </div>
-                <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.7 }}>
-                  確定のお知らせも届いていません。お電話でご連絡をお願いします。
-                  日時の変更もお客さまには通知できないため、お電話で決めてからこちらで直してください。
-                </div>
-                {/* CEO質問(2026-08-06)「予約金がある場合は？」への対応。
-                    予約金が動いている予約は、削除（通知なし・返金判定なし）に流してはいけない。
-                    返金の判定が入る通常のキャンセルへ誘導し、そのメニューも隠さない。 */}
-                {(item.payment_status === 'paid' || item.payment_status === 'awaiting') && (
-                  <div style={{ fontSize: 12, color: '#B26A00', lineHeight: 1.7, marginTop: 6 }}>
-                    この予約は予約金のお支払いが絡みます。取りやめる場合は、下の
-                    「変更・キャンセルなどの操作」からキャンセルしてください（返金の判定が入ります）。
+                {/* §17-16(CEO指示 2026-08-06): 紹介予約はまず**紹介元**が直す。
+                    紹介元はそのお客さまを紹介した本人なので、電話するのに無理がない。
+                    受け手には会ったこともない他人へ電話させない。ここでは状況だけ出す。 */}
+                {item.email_fix_owner === 'sender' ? (
+                  <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.7 }}>
+                    紹介元の{item.sender_pro?.name ? `${item.sender_pro.name}さん` : '先生'}が、
+                    お客さまに確認しています。連絡がつき次第、ご案内が届きます。
                   </div>
-                )}
+                ) : (
+                  <>
+                {/* CEO指摘(2026-08-06)「文章が長いから、なにすればいいのかわからん」:
+                    説明を1行にして、やること（電話）をボタンで見せる。 */}
+                <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.7 }}>
+                  お電話でご連絡をお願いします。
+                </div>
                 {/* 主役は発信。日時直しは次点、削除は最後の手段（CEO指摘 2026-08-06）。 */}
                 {item.client_contact?.phone && (
                   <a
@@ -1403,6 +1426,16 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                       この日時に直す
                     </button>
                   </div>
+                )}
+                {/* CEO質問(2026-08-06)「予約金がある場合は？」への対応。
+                    予約金が動いている予約は削除（通知なし・返金判定なし）に流してはいけないので、
+                    返金の判定が入る通常のキャンセルへ誘導する。長い説明は最後に小さく置く。 */}
+                {(item.payment_status === 'paid' || item.payment_status === 'awaiting') && (
+                  <div style={{ fontSize: 11, color: '#B26A00', lineHeight: 1.7, marginTop: 8 }}>
+                    取りやめる場合は「変更・キャンセルなどの操作」から（返金の判定が入ります）。
+                  </div>
+                )}
+                  </>
                 )}
               </div>
             )}

@@ -68,6 +68,12 @@ interface SentBooking {
   created_at: string
   client_nickname: string
   receiver_pro: { id: string; name: string } | null
+  /** §17-16(CEO指示 2026-08-06): クライアントにメールが届かなかった案件。 */
+  receipt_email_failed?: boolean | null
+  /** 'sender'=いま直すのは自分（紹介元）。24時間で 'receiver' に移る。 */
+  email_fix_owner?: 'sender' | 'receiver' | null
+  /** メールが死んでいて、かつ自分が直す担当のときだけAPIから入る（お名前・電話番号のみ）。 */
+  client_contact?: { name: string | null; phone: string | null } | null
 }
 
 /** ステージ4(送り手分配・CEO決定): /api/referral/payouts が返す分配行(PIIなし・client_nicknameのみ)。 */
@@ -323,15 +329,65 @@ export default function ReferralTab({
       .finally(() => setListsLoading(false))
   }, [])
 
-  useEffect(() => {
-    fetch('/api/referral/bookings/sent', { cache: 'no-store' })
+  // §17-16: メールアドレスを直したあとに一覧を取り直せるよう、fetchを関数に出す。
+  // 依存は持たせない（useEffectの依存配列はプリミティブのみ・CLAUDE.md）。
+  function loadSentBookings() {
+    return fetch('/api/referral/bookings/sent', { cache: 'no-store' })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.bookings) setSentBookings(data.bookings)
       })
       .catch(() => {})
       .finally(() => setSentLoading(false))
+  }
+
+  useEffect(() => {
+    loadSentBookings()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // §17-16(CEO指示 2026-08-06): 紹介したお客さまにメールが届かなかったとき、
+  // 電話して正しいアドレスを聞き、ここで直すのは紹介元（自分）の仕事。
+  const [emailFixOpenId, setEmailFixOpenId] = useState<string | null>(null)
+  const [emailFixInputs, setEmailFixInputs] = useState<Record<string, string>>({})
+  const [emailFixSaving, setEmailFixSaving] = useState<string | null>(null)
+  const [emailFixError, setEmailFixError] = useState<Record<string, string>>({})
+
+  async function fixSentClientEmail(bookingId: string) {
+    const nextEmail = (emailFixInputs[bookingId] || '').trim()
+    if (!nextEmail) return
+    setEmailFixSaving(bookingId)
+    setEmailFixError((prev) => ({ ...prev, [bookingId]: '' }))
+    try {
+      const res = await fetch('/api/referral/bookings/sent', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ booking_id: bookingId, action: 'fix_client_email', client_email: nextEmail }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        const message =
+          data?.error === 'email_invalid'
+            ? 'メールアドレスの形式が正しくありません'
+            : data?.error === 'email_unchanged'
+              ? '同じアドレスです。お客さまにもう一度ご確認ください'
+              : data?.error === 'receiver_is_fixing'
+                ? '担当の先生の対応に切り替わりました。この画面からは直せません'
+                : '保存できませんでした。時間をおいてお試しください'
+        setEmailFixError((prev) => ({ ...prev, [bookingId]: message }))
+        return
+      }
+      setEmailFixOpenId(null)
+      setEmailFixInputs((prev) => ({ ...prev, [bookingId]: '' }))
+      await loadSentBookings()
+      if (data?.resent === false) {
+        window.alert('保存しましたが、ご案内メールの送信に失敗しました。時間をおいてもう一度ご確認ください。')
+      }
+    } finally {
+      setEmailFixSaving(null)
+    }
+  }
 
   // ステージ4(送り手分配・CEO決定): 分配台帳(referral_payouts)は別APIで取得する(fail-soft・
   // migration 039未実行の環境では空配列/0円が返るだけで、このタブの他表示を壊さない)。
@@ -2183,6 +2239,103 @@ export default function ReferralTab({
                 <span style={{ marginLeft: 8, fontSize: 13, color: '#9CA3AF' }}>{SENT_STATUS_LABEL[b.status]}</span>
               </div>
               {b.menu_name && <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>メニュー: {b.menu_name}</div>}
+
+              {/* §17-16(CEO指示 2026-08-06): 「クライアントに電話してメールアドレスを修整して
+                  入力してもらってください。というメールとクライアント電話番号が、受けてではなく、
+                  送り元のプロに行くようにしたら？」
+                  紹介元は自分が紹介した相手なので、電話するのに無理がない。ここで完結させる。 */}
+              {b.receipt_email_failed && b.email_fix_owner === 'sender' && (
+                <div style={{
+                  background: '#FFF3F3', border: '1px solid #F0BDBD', borderRadius: 8,
+                  padding: '10px 12px', marginTop: 8,
+                }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#B00020', marginBottom: 2 }}>
+                    お客さまにメールが届いていません
+                  </div>
+                  <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.7 }}>
+                    お電話で正しいメールアドレスを聞いて、下で直してください。
+                  </div>
+                  {b.client_contact?.name && (
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1A2E', marginTop: 10 }}>
+                      {b.client_contact.name}さん
+                    </div>
+                  )}
+                  {b.client_contact?.phone && (
+                    <a
+                      href={`tel:${encodeURIComponent(b.client_contact.phone)}`}
+                      style={{
+                        display: 'block', textAlign: 'center', marginTop: 6,
+                        padding: '12px 16px', borderRadius: 10,
+                        background: '#B00020', color: '#fff', fontSize: 15, fontWeight: 700,
+                        textDecoration: 'none',
+                      }}
+                    >
+                      電話をかける {b.client_contact.phone}
+                    </a>
+                  )}
+                  {emailFixOpenId === b.id ? (
+                    <div style={{ marginTop: 10, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, padding: '10px 12px' }}>
+                      <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.7, marginBottom: 8 }}>
+                        お電話で確認した正しいメールアドレスを入力してください。
+                        保存すると、このアドレスへご案内を送り直します。
+                      </div>
+                      <input
+                        type="email"
+                        inputMode="email"
+                        value={emailFixInputs[b.id] || ''}
+                        onChange={(e) => setEmailFixInputs((prev) => ({ ...prev, [b.id]: e.target.value }))}
+                        placeholder="example@mail.com"
+                        style={{
+                          width: '100%', padding: '10px 12px', fontSize: 14,
+                          border: '1px solid #E5E7EB', borderRadius: 8, boxSizing: 'border-box' as const,
+                        }}
+                      />
+                      {emailFixError[b.id] && (
+                        <div style={{ fontSize: 12, color: '#B00020', marginTop: 6 }}>{emailFixError[b.id]}</div>
+                      )}
+                      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                        <button
+                          type="button"
+                          onClick={() => fixSentClientEmail(b.id)}
+                          disabled={emailFixSaving === b.id || !(emailFixInputs[b.id] || '').trim()}
+                          style={{
+                            flex: 1, padding: '10px 12px', borderRadius: 8, border: 'none',
+                            background: (emailFixInputs[b.id] || '').trim() ? '#1A1A2E' : '#E5E7EB',
+                            color: (emailFixInputs[b.id] || '').trim() ? '#fff' : '#9CA3AF',
+                            fontSize: 13, fontWeight: 700,
+                            cursor: emailFixSaving === b.id ? 'default' : 'pointer',
+                          }}
+                        >
+                          {emailFixSaving === b.id ? '送っています…' : '保存して送り直す'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEmailFixOpenId(null)}
+                          style={{
+                            padding: '10px 12px', borderRadius: 8, border: '1px solid #E5E7EB',
+                            background: '#fff', color: '#6B7280', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                          }}
+                        >
+                          やめる
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setEmailFixOpenId(b.id)}
+                      style={{
+                        width: '100%', marginTop: 8, padding: '10px 14px', borderRadius: 8,
+                        border: '1px solid #B00020', background: '#fff', color: '#B00020',
+                        fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                      }}
+                    >
+                      メールアドレスを直す
+                    </button>
+                  )}
+                </div>
+              )}
+
               {payout && (
                 <div style={{ fontSize: 12, color: '#8A6D1F', marginTop: 4, fontWeight: 600 }}>
                   紹介報酬 ¥{payout.amount_jpy.toLocaleString()} {payout.status === 'paid' ? '支払い済み' : '確定'}

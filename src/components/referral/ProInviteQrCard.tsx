@@ -28,7 +28,8 @@ export default function ProInviteQrCard({ proId }: Props) {
   const [copied, setCopied] = useState(false)
   const [shown, setShown] = useState(false)
   const inviteUrl = `${SHARE_ORIGIN}/invite/pro/${proId}`
-  const shareText = `REALPROOFという、クライアントからの評価が実績として記録に残るサービスです。\nよければプロフィールを作ってもらえませんか → ${inviteUrl}`
+  // §17-17: 送る相手は「REAL PROOFをまだ知らない先生」。何のサービスかを先に書く。
+  const shareText = `REAL PROOFという、クライアントからの評価がそのまま実績として記録に残るサービスがあります。\n登録は無料です。よければプロフィールを作ってみませんか → ${inviteUrl}`
 
   function copyUrl() {
     navigator.clipboard?.writeText(shareText).then(() => {
@@ -52,12 +53,19 @@ export default function ProInviteQrCard({ proId }: Props) {
 
   return (
     <div className="bg-white rounded-xl p-6 shadow-sm mb-6 text-center">
-      <h2 className="text-lg font-bold text-[#1A1A2E] mb-1">プロを誘うQRコード</h2>
-      <p className="text-xs text-[#C4A35A] font-semibold mb-3">同業の先生に見せるQRです</p>
+      {/* §17-17(CEO指摘 2026-08-06): 「新しい先生にも見せようと思う文言にして欲しい。むしろそれがメイン。
+          現状だと登録済みのプロだけの機能に見える」
+          → 主役は**REAL PROOFをまだ知らない先生を誘うこと**。「気になるプロに入る」は
+          未登録の人には意味が通らない用語なので、先に出さない（下に小さく置く）。 */}
+      <h2 className="text-lg font-bold text-[#1A1A2E] mb-1">先生をREAL PROOFに誘う</h2>
+      <p className="text-xs text-[#C4A35A] font-semibold mb-3">まだ登録していない先生に見せるQRです</p>
       <p className="text-sm text-gray-500 mb-4">
-        読み取って登録すると、お互いの「気になるプロ」に入ります。
+        読み取ると、その場で登録できます（無料）。
         <br />
-        紹介リストに載せるかは、あとから選べます。
+        クライアントからの評価が、その先生の実績として残ります。
+      </p>
+      <p className="text-xs text-gray-400 mb-4">
+        登録した先生はあなたの「気になるプロ」に入ります。紹介リストに載せるかは、あとから選べます。
       </p>
 
       {shown ? (
