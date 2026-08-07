@@ -2811,7 +2811,7 @@ export default function DashboardPage() {
             >
               ← ホームに戻る
             </button>
-            {pro && acceptingEditable && dashboardTab === 'business-info' && (
+            {pro && acceptingEditable && (dashboardTab === 'business-info' || dashboardTab === 'bookings') && (
               <AcceptingStatusWidget
                 initialAcceptingStatus={pro.accepting_status ?? null}
                 initialAcceptingNote={pro.accepting_note ?? null}
@@ -5327,6 +5327,51 @@ export default function DashboardPage() {
             予約の受け方・メニューを設定する →
           </a>
 
+          {/* §17-5(CEO判断 2026-08-06): 予約の受付はここに集約する。
+              上のヘッダー行に「直接予約の受付」トグル、ここに「紹介からの予約の受付」。
+              1画面で両方止められるようにするため（今までは画面をまたいで散らばっていた）。 */}
+          {pro && acceptingEditable && (
+            <div style={{
+              marginBottom: 16, padding: '14px 16px', background: '#fff',
+              borderRadius: 12, border: '1px solid #E5E7EB',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+            }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E' }}>
+                  {pro.accepting_status === 'closed' ? '紹介予約を停止しています' : '紹介予約を受け付けています'}
+                </div>
+                <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4, lineHeight: 1.6 }}>
+                  {pro.accepting_status === 'closed'
+                    ? '他のプロの紹介リストからの予約が止まります。直接の予約・ご相談は別のスイッチです。'
+                    : '他のプロの紹介リストに載り、そこからの予約を受け取れます。'}
+                </div>
+                {referralPauseError && (
+                  <div style={{ fontSize: 12, color: '#B00020', marginTop: 4 }}>更新に失敗しました</div>
+                )}
+              </div>
+              <div
+                role="switch"
+                aria-checked={pro.accepting_status !== 'closed'}
+                aria-label="紹介予約の受付"
+                onClick={() => handleToggleReferralAccepting(pro.accepting_status === 'closed')}
+                style={{
+                  width: 48, height: 28, borderRadius: 14, flexShrink: 0,
+                  background: pro.accepting_status !== 'closed' ? '#06C755' : '#D1D5DB',
+                  position: 'relative', transition: 'background 0.2s',
+                  cursor: referralPauseSaving ? 'default' : 'pointer',
+                  opacity: referralPauseSaving ? 0.6 : 1,
+                }}
+              >
+                <div style={{
+                  width: 22, height: 22, borderRadius: '50%', background: '#fff',
+                  position: 'absolute', top: 3, left: pro.accepting_status !== 'closed' ? 23 : 3,
+                  transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                }} />
+              </div>
+            </div>
+          )}
+
+
           <ReferralBookingReceivedCard proId={pro.id} onStatusChange={handleReferralReceivedStatus} />
 
           {referralReceivedLoaded && referralTotalReceivedCount === 0 && (
@@ -5373,49 +5418,17 @@ export default function DashboardPage() {
             </button>
           </div>
 
-          {/* §16-29（CEO決定 2026-08-06）: 紹介予約の受付スイッチ。
-              「他のプロの紹介リストに載るか」を決めるもので、紹介する側の設定ではないが
-              紹介の文脈に属するためこのタブに残す（直接予約の受付はホームのトグル）。 */}
-          {pro && acceptingEditable && (
-            <div style={{
-              marginBottom: 16, padding: '14px 16px', background: '#fff',
-              borderRadius: 12, border: '1px solid #E5E7EB',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-            }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E' }}>
-                  {pro.accepting_status === 'closed' ? '紹介予約を停止しています' : '紹介予約を受け付けています'}
-                </div>
-                <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4, lineHeight: 1.6 }}>
-                  {pro.accepting_status === 'closed'
-                    ? '他のプロの紹介リストからの予約が止まります。直接の予約・ご相談は別のスイッチです。'
-                    : '他のプロの紹介リストに載り、そこからの予約を受け取れます。'}
-                </div>
-                {referralPauseError && (
-                  <div style={{ fontSize: 12, color: '#B00020', marginTop: 4 }}>更新に失敗しました</div>
-                )}
-              </div>
-              <div
-                role="switch"
-                aria-checked={pro.accepting_status !== 'closed'}
-                aria-label="紹介予約の受付"
-                onClick={() => handleToggleReferralAccepting(pro.accepting_status === 'closed')}
-                style={{
-                  width: 48, height: 28, borderRadius: 14, flexShrink: 0,
-                  background: pro.accepting_status !== 'closed' ? '#06C755' : '#D1D5DB',
-                  position: 'relative', transition: 'background 0.2s',
-                  cursor: referralPauseSaving ? 'default' : 'pointer',
-                  opacity: referralPauseSaving ? 0.6 : 1,
-                }}
-              >
-                <div style={{
-                  width: 22, height: 22, borderRadius: '50%', background: '#fff',
-                  position: 'absolute', top: 3, left: pro.accepting_status !== 'closed' ? 23 : 3,
-                  transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                }} />
-              </div>
-            </div>
-          )}
+          {/* §17-5(CEO判断 2026-08-06): 紹介予約の受付スイッチは「予約」タブへ移動した。
+              受け取るかどうかの設定であって、紹介する仕事ではないため（§17-2と同じ理屈）。
+              受付スイッチが画面をまたいで散らばると「今日は止めたい」人が探し回ることになる。
+              ここには行き先だけ1行残す（今まで触っていた人が迷子にならないように）。 */}
+          <p style={{ fontSize: 12, color: '#9CA3AF', lineHeight: 1.7, marginBottom: 16 }}>
+            紹介からの予約を受けるかどうかは{' '}
+            <a href="/dashboard?tab=bookings" style={{ color: '#C4A35A', fontWeight: 700, textDecoration: 'none' }}>
+              予約タブ
+            </a>
+            {' '}で設定できます。
+          </p>
 
           {/* 紹介する(紹介リスト管理)・紹介した案件(送り手側の成立予約)。いずれも単一マウントの
               ReferralTab(referralEnabled時のみ)。表示はsubtabに応じて内部でCSS切替。 */}

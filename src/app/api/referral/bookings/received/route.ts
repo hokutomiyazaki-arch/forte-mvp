@@ -83,6 +83,12 @@ interface PreferredSlots {
    * (confirmed_slot_isoは他ラウンドでも残るため、単独では2周目以降の判別に使えない)。
    */
   reschedule_kept_current_at?: string | null
+  /**
+   * §17-4(CEO指示 2026-08-06): 電話で口頭で決めた予約をプロが確定した時刻。
+   * 「お客さんの同意をシステムが確認できていない確定」であることの記録
+   * （メールアドレスの打ち間違いでお客さんに何も届かない場合の逃げ道）。
+   */
+  confirmed_by_phone_at?: string | null
 }
 
 /**
@@ -422,6 +428,7 @@ export async function PATCH(request: NextRequest) {
     if (
       !bookingId ||
       (action !== 'confirm' &&
+        action !== 'confirm_offline' &&
         action !== 'decline' &&
         action !== 'complete' &&
         action !== 'counter' &&
@@ -936,6 +943,86 @@ export async function PATCH(request: NextRequest) {
       // CEO指示(2026-08-05): 送り手プロ宛の辞退通知は削減(クリティカルな結果のみに絞る)。
 
       return NextResponse.json({ success: true, status: 'cancelled' })
+    }
+
+    // §17-4(CEO指示 2026-08-06): 電話で口頭で決まった予約を、プロ側から確定する。
+    // 「メールアドレスの打ち間違いでお客さんに何も届かない」場合の逃げ道（§17-3の④）。
+    // 通常の confirm と違い、お客さんが出した3つの希望日時に縛られない
+    // （電話で話した結果、別の日時になることのほうが多い）。
+    //
+    // ⚠️ これは「お客さんの同意をシステムが確認できない確定」なので、
+    //    ① UI側で必ず警告を出してから呼ぶこと
+    //    ② 誰がいつ電話で確定したかを preferred_slots.confirmed_by_phone_at に残す
+    //    ③ 予約金の決済が必要な紹介予約では使わせない（支払いを飛ばして成立させないため）
+    if (action === 'confirm_offline') {
+      const rawSlot = typeof body.confirmed_slot === 'string' ? body.confirmed_slot : null
+      const confirmedSlotIso = parseSlot(snapToHalfHourUp(rawSlot))
+      if (!confirmedSlotIso) {
+        return NextResponse.json({ error: 'invalid_slots' }, { status: 400 })
+      }
+      if (new Date(confirmedSlotIso).getTime() <= Date.now()) {
+        return NextResponse.json({ error: 'invalid_slots' }, { status: 400 })
+      }
+
+      // 予約金が必要な予約（紹介予約でオンライン決済が有効なもの）はこの経路を通さない。
+      const feeTotalBpsForOffline = booking.fee_total_bps ?? REFERRAL_FEE_TOTAL_BPS
+      const feeAmountJpyForOffline =
+        booking.price_jpy > 0 ? Math.floor((booking.price_jpy * feeTotalBpsForOffline) / 10000) : 0
+      if (
+        paymentEnabled &&
+        booking.payment_status === 'unpaid' &&
+        booking.price_jpy > 0 &&
+        feeAmountJpyForOffline >= REFERRAL_MIN_FEE_JPY
+      ) {
+        return NextResponse.json({ error: 'payment_required' }, { status: 409 })
+      }
+
+      const updatedSlotsForOffline: PreferredSlots = {
+        ...(booking.preferred_slots || {}),
+        // resolveConfirmedSlotIso が最優先で見るキー。以後の日時変更・カレンダー・
+        // キャンセル判定はすべてこの値を使う。
+        confirmed_slot_iso: confirmedSlotIso,
+        confirmed_by_phone_at: new Date().toISOString(),
+      }
+
+      const { data: offlineRows, error: offlineError } = await supabase
+        .from('referral_bookings')
+        .update({ status: 'confirmed', confirmed_at: new Date().toISOString(), preferred_slots: updatedSlotsForOffline })
+        .eq('id', bookingId)
+        .eq('status', 'requested')
+        .select('id')
+
+      if (offlineError) {
+        console.error('[api/referral/bookings/received] PATCH confirm_offline error:', offlineError)
+        return NextResponse.json({ error: 'failed_to_update' }, { status: 500 })
+      }
+      if (!offlineRows || offlineRows.length === 0) {
+        return NextResponse.json({ error: 'not_pending' }, { status: 409 })
+      }
+
+      // お客さんへも一応送る（届かない前提の経路だが、届くなら送っておく方がよい）。
+      // 失敗しても確定自体は成立させる。
+      let delivered = false
+      try {
+        if (clientUserId || booking.client_email) {
+          const slotText = formatSlotWithWeekday(confirmedSlotIso)
+          const result = await notifyClientByEmail(
+            { userId: clientUserId, email: booking.client_email },
+            `${ownPro.name}さんとのご予約が確定しました`,
+            emailShell(
+              'ご予約確定のお知らせ',
+              `${slotText ? `${escapeHtml(slotText)} に確定しました。` : 'ご予約の日時が確定しました。'}<br>` +
+                `担当: ${escapeHtml(ownPro.name)}さん<br><br>` +
+                'お電話でお伺いした内容で確定しています。相違がある場合は、お手数ですが担当までご連絡ください。'
+            )
+          )
+          delivered = result.sent
+        }
+      } catch (notifyErr) {
+        console.error('[api/referral/bookings/received] confirm_offline notify error:', notifyErr)
+      }
+
+      return NextResponse.json({ success: true, status: 'confirmed', delivered })
     }
 
     if (action === 'counter') {
