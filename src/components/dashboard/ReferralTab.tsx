@@ -124,10 +124,11 @@ interface Props {
   proId: string
   /** CEO指示(2026-08-04・IA再変更): サブタブ「受ける/する/紹介した案件」の3つのうちどれを
    * 表示するか。lists/sentBookingsのfetchは1回だけ(既存のまま)行い、表示はCSSで切り替える
-   * (subtab切替時の再フェッチ・二重マウントを避ける)。 */
-  subtab: 'receive' | 'send' | 'cases'
+   * (subtab切替時の再フェッチ・二重マウントを避ける)。
+   * §17-15(CEO指示 2026-08-06): 'payout'（報酬）を追加。 */
+  subtab: 'receive' | 'send' | 'cases' | 'payout'
   /** §17-11(CEO指示 2026-08-06): サブタブ行をこのコンポーネント内へ移した（報酬を上に出すため） */
-  onSubtabChange?: (t: 'send' | 'cases') => void
+  onSubtabChange?: (t: 'send' | 'cases' | 'payout') => void
   /** 「紹介を受ける」タブの空状態判定用に、完了した紹介(受け手側)の件数と読み込み完了フラグを
    * 親へ通知する(レビュー指摘・軽微7: loadedを渡し到着順による空状態フラッシュを防ぐ)。 */
   onCompletedCountChange?: (count: number, loaded: boolean) => void
@@ -1914,9 +1915,76 @@ export default function ReferralTab({
 
   return (
     <div>
-      {/* CEO指示(2026-08-06): 報酬ボックスはサブタブの上に常に表示する。
-          「紹介した案件」を開かないと報酬が見えないのは、いちばん見たい数字が隠れている状態。 */}
+      {/* §17-15(CEO指示 2026-08-06): 「プロを誘うQRはタブの上に移動」。
+          誘う相手は紹介リストにも気になるプロにも入りうるので、これは「紹介する」だけの
+          仕事ではない。サブタブより上＝この画面全体の操作、という置き方に揃える。 */}
+      <ProInviteQrCard proId={proId} />
+
+      {/* §17-15(CEO指示 2026-08-06): 報酬ボックスは「報酬」サブタブへ移動した。
+          ただし §17-11 で上に出した理由（いちばん見たい数字が隠れる）は今も生きているので、
+          **受け取り待ちの金額があるときだけ**1行だけ残す。0円のときは何も出さない
+          （常時出すと、ほとんどの日はただの飾りになる）。 */}
+      {sentPayoutsLoaded && sentPayoutsPendingTotalJpy > 0 && subtab !== 'payout' && (
+        <button
+          onClick={() => onSubtabChange?.('payout')}
+          style={{
+            display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between',
+            gap: 8, marginBottom: 12, padding: '10px 14px', borderRadius: 10,
+            background: '#FAF7EF', border: '1.5px solid #EAD9A6', cursor: 'pointer',
+            textAlign: 'left' as const, boxSizing: 'border-box' as const,
+          }}
+        >
+          <span style={{ fontSize: 13, color: '#6B7280' }}>確定済みの報酬</span>
+          <span style={{ fontSize: 16, fontWeight: 800, color: '#1A1A2E' }}>
+            ¥{sentPayoutsPendingTotalJpy.toLocaleString()} <span style={{ fontSize: 12, color: '#C4A35A', fontWeight: 700 }}>›</span>
+          </span>
+        </button>
+      )}
+
+
+      {/* サブタブ行（元は dashboard/page.tsx 側にあった）。
+          §17-15: 3つ目に「報酬」を追加し、報酬ボックスの中身をそこへ移した。 */}
+      <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 2, marginBottom: 16, borderBottom: '1px solid #E5E7EB' }}>
+        <button
+          onClick={() => onSubtabChange?.('send')}
+          style={{
+            padding: '10px 10px', border: 'none', background: 'none', cursor: 'pointer',
+            fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' as const,
+            color: subtab !== 'cases' && subtab !== 'payout' ? '#1A1A2E' : '#9CA3AF',
+            borderBottom: subtab !== 'cases' && subtab !== 'payout' ? '2px solid #C4A35A' : '2px solid transparent',
+          }}
+        >
+          紹介する
+        </button>
+        <button
+          onClick={() => onSubtabChange?.('cases')}
+          style={{
+            padding: '10px 10px', border: 'none', background: 'none', cursor: 'pointer',
+            fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' as const,
+            color: subtab === 'cases' ? '#1A1A2E' : '#9CA3AF',
+            borderBottom: subtab === 'cases' ? '2px solid #C4A35A' : '2px solid transparent',
+          }}
+        >
+          紹介した案件{sentActiveCount > 0 ? ` (${sentActiveCount})` : ''}
+        </button>
+        {/* §17-15(CEO指示 2026-08-06): 報酬まわり（残高・受け取り口座・お支払い履歴）を1つの
+            サブタブに集約する。CEOの仮称は「支払い」だったが、プロから見ると**受け取る**お金なので
+            「支払い」だと自分が払うように読める。ここでは「報酬」にしている（変えるなら1行）。 */}
+        <button
+          onClick={() => onSubtabChange?.('payout')}
+          style={{
+            padding: '10px 10px', border: 'none', background: 'none', cursor: 'pointer',
+            fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' as const,
+            color: subtab === 'payout' ? '#1A1A2E' : '#9CA3AF',
+            borderBottom: subtab === 'payout' ? '2px solid #C4A35A' : '2px solid transparent',
+          }}
+        >
+          報酬
+        </button>
+      </div>
+
       {/* ステージ4(送り手分配・CEO決定): 報酬サマリーカード。0件時は説明のみ表示する。 */}
+      <div style={{ display: subtab === 'payout' ? 'block' : 'none' }}>
       {sentPayoutsLoaded && (
         <div style={{ background: '#FAF7EF', borderRadius: 14, padding: '14px 16px', border: '1.5px solid #EAD9A6' }}>
           {sentPayoutsPendingTotalJpy === 0 && sentPayoutsPaidTotalJpy === 0 ? (
@@ -2087,32 +2155,6 @@ export default function ReferralTab({
           </div>
         </div>
       )}
-
-      {/* CEO指示(2026-08-06): 報酬ボックスの下にサブタブ。
-          （元は dashboard/page.tsx 側にあったが、報酬をタブより上に出すためこちらへ移動） */}
-      <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 2, marginBottom: 16, borderBottom: '1px solid #E5E7EB' }}>
-        <button
-          onClick={() => onSubtabChange?.('send')}
-          style={{
-            padding: '10px 10px', border: 'none', background: 'none', cursor: 'pointer',
-            fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' as const,
-            color: subtab !== 'cases' ? '#1A1A2E' : '#9CA3AF',
-            borderBottom: subtab !== 'cases' ? '2px solid #C4A35A' : '2px solid transparent',
-          }}
-        >
-          紹介する
-        </button>
-        <button
-          onClick={() => onSubtabChange?.('cases')}
-          style={{
-            padding: '10px 10px', border: 'none', background: 'none', cursor: 'pointer',
-            fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' as const,
-            color: subtab === 'cases' ? '#1A1A2E' : '#9CA3AF',
-            borderBottom: subtab === 'cases' ? '2px solid #C4A35A' : '2px solid transparent',
-          }}
-        >
-          紹介した案件{sentActiveCount > 0 ? ` (${sentActiveCount})` : ''}
-        </button>
       </div>
 
       {/* UI再構成(2026-08-04・CEO承認済み): 「紹介を受ける」サブタブ側 = 完了した紹介(受け手側)。
@@ -2174,11 +2216,6 @@ export default function ReferralTab({
           CEO指示(2026-08-04・IA再変更): 成立した紹介は「紹介した案件」タブへ移動・
           気になるプロの移設案内は削除(恒久表示の撤回)。 */}
       <div style={{ display: subtab === 'send' ? 'flex' : 'none', flexDirection: 'column', gap: 24 }}>
-      {/* §17-13(CEO指示 2026-08-06): プロを誘うQRを「紹介する」の先頭に常設する。
-          リスト単位の招待(1人1回のトークン)と違い、これは何人にでも見せられる1枚で、
-          読んだ先生は「気になるプロ」にだけ入る(公開の紹介リストは勝手に増えない)。 */}
-      <ProInviteQrCard proId={proId} />
-
       {/* 移動(2026-08-06・CEO指示): 代理案内ボックス(旧ダッシュボード最上部)をこのサブタブの
           先頭(リスト一覧より上)へ移動。停止中の間、公開カード訪問者を他の先生へ案内する送り手側の設定。 */}
       <DelegateCriteriaSettings

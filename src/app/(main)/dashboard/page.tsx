@@ -465,7 +465,8 @@ export default function DashboardPage() {
 
   // CEO指示(2026-08-04・IA再変更): 紹介タブのサブタブを「受ける/する/紹介した案件」の3つに。
   // requestedが1件以上あれば「受ける」、なければlocalStorageの前回選択、初回は「する」がデフォルト。
-  const [referralSubtab, setReferralSubtab] = useState<'receive' | 'send' | 'cases'>('send')
+  // §17-15(CEO指示 2026-08-06): 報酬まわりを独立サブタブ('payout')にした。
+  const [referralSubtab, setReferralSubtab] = useState<'receive' | 'send' | 'cases' | 'payout'>('send')
   const [referralSentActiveCount, setReferralSentActiveCount] = useState(0)
   const [referralSentTotalCount, setReferralSentTotalCount] = useState(0)
   const [referralSentLoaded, setReferralSentLoaded] = useState(false)
@@ -500,10 +501,10 @@ export default function DashboardPage() {
     try {
       stored = window.localStorage.getItem('rp_referral_subtab')
     } catch {}
-    setReferralSubtab(stored === 'cases' ? 'cases' : 'send')
+    setReferralSubtab(stored === 'cases' ? 'cases' : stored === 'payout' ? 'payout' : 'send')
   }
 
-  function handleReferralSubtabClick(tab: 'receive' | 'send' | 'cases') {
+  function handleReferralSubtabClick(tab: 'receive' | 'send' | 'cases' | 'payout') {
     // レビュー指摘(中2): fetch完了前にユーザーが手動でサブタブを選んだ場合、後から届く
     // 自動判定(handleReferralReceivedStatus)がその選択を引き戻さないよう、ここで初期化済み
     // フラグを立てる。
@@ -5433,7 +5434,7 @@ export default function DashboardPage() {
           {referralEnabled && pro && (
             <ReferralTab
               proId={pro.id}
-              subtab={referralSubtab === 'cases' ? 'cases' : 'send'}
+              subtab={referralSubtab === 'cases' ? 'cases' : referralSubtab === 'payout' ? 'payout' : 'send'}
               onSubtabChange={handleReferralSubtabClick}
               onCompletedCountChange={handleReferralCompletedStatus}
               onSentStatusChange={handleReferralSentStatus}
