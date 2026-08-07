@@ -113,6 +113,9 @@ const DASHBOARD_TAB_HEADING: Record<string, string> = {
   photos: '顔写真の公開設定',
   myorgs: '所属団体',
   referral: '紹介',
+  // §17-2(CEO判断 2026-08-06): 予約は「受け取る仕事」、紹介は「送り出す仕事」。
+  // 別の仕事なのでメニューを分ける。受信箱は1つのまま（直接予約＋紹介予約）。
+  bookings: '予約',
 }
 
 export default function DashboardPage() {
@@ -220,7 +223,7 @@ export default function DashboardPage() {
   const [selectedProofIds, setSelectedProofIds] = useState<Set<string>>(new Set())
   const [customProofs, setCustomProofs] = useState<CustomProof[]>([])
   const [activeTab, setActiveTab] = useState('healing')
-  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'card' | 'org' | 'myorgs' | 'certs' | 'consultations' | 'photos' | 'guide' | 'business-info' | 'badges' | 'referral'>('profile')
+  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'card' | 'org' | 'myorgs' | 'certs' | 'consultations' | 'photos' | 'guide' | 'business-info' | 'badges' | 'referral' | 'bookings'>('profile')
   const [openSections, setOpenSections] = useState<Set<string>>(new Set())
   // CEO指示(2026-08-06): プロフィール編集も項目ごとに畳めるようにする。
   // 既定は「基本情報」だけ開く(姓名・都道府県が必須のため、初見で入力欄が見えている状態を保つ)。
@@ -490,20 +493,14 @@ export default function DashboardPage() {
     setReferralReceivedLoaded(true)
     if (referralSubtabInitRef.current) return
     referralSubtabInitRef.current = true
-    // レビュー指摘(重大1・案①): requestedだけで判定すると、requested=0でもconfirmed等が
-    // ある場合や、そもそも非allowlistプロ(「する」タブが先行公開中の案内のみ)の場合に
-    // 'send'着地してしまい、確定済み予約カードが1タップ隠れてしまう。
-    // referralEnabledがfalse(するタブに実質コンテンツが無い)、またはtotalCount(requested+
-    // confirmed+支払い期限切れキャンセル)が1件以上あるときは常に「受ける」を初期表示にする。
-    if (!referralEnabled || info.totalCount >= 1) {
-      setReferralSubtab('receive')
-      return
-    }
+    // §17-2(2026-08-06): 受信箱は「予約」タブへ独立したので、紹介タブで 'receive' に
+    // 着地させる意味がなくなった（旧: 予約が1件でもあれば受信箱を初期表示にしていた）。
+    // 紹介タブは常に「紹介する」から始める。前回 'receive' を保存している人も 'send' に倒す。
     let stored: string | null = null
     try {
       stored = window.localStorage.getItem('rp_referral_subtab')
     } catch {}
-    setReferralSubtab(stored === 'receive' || stored === 'send' || stored === 'cases' ? stored : 'send')
+    setReferralSubtab(stored === 'cases' ? 'cases' : 'send')
   }
 
   function handleReferralSubtabClick(tab: 'receive' | 'send' | 'cases') {
@@ -591,7 +588,7 @@ export default function DashboardPage() {
   const tabParam = searchParams.get('tab')
   useEffect(() => {
     if (!tabParam || loading) return
-    const validTabs = ['profile', 'proofs', 'rewards', 'voices', 'card', 'myorgs', 'certs', 'consultations', 'photos', 'org', 'guide', 'business-info', 'badges', 'referral']
+    const validTabs = ['profile', 'proofs', 'rewards', 'voices', 'card', 'myorgs', 'certs', 'consultations', 'photos', 'org', 'guide', 'business-info', 'badges', 'referral', 'bookings']
     if (validTabs.includes(tabParam)) {
       setDashboardTab(tabParam as any)
       if (tabParam === 'myorgs' && selectedMemberOrgId) {
@@ -604,9 +601,11 @@ export default function DashboardPage() {
   // 初期サブタブを固定する(localStorage・requested件数による自動判定より優先)。依存はプリミティブのみ。
   const referralSubParam = searchParams.get('sub')
   useEffect(() => {
+    // §17-2: 'receive'(受信箱)は「予約」タブへ独立したため、紹介タブでは受け取らない。
+    // 古いリンク・古い通知メールが ?sub=receive で来た場合は 'send' に倒す（404にしない）。
     if (referralSubParam === 'send' || referralSubParam === 'receive' || referralSubParam === 'cases') {
       referralSubtabInitRef.current = true
-      setReferralSubtab(referralSubParam)
+      setReferralSubtab(referralSubParam === 'receive' ? 'send' : referralSubParam)
     }
   }, [referralSubParam])
 
@@ -2498,7 +2497,7 @@ export default function DashboardPage() {
 
   const daysSinceRegistration = getDaysSinceRegistration()
 
-  const isSettingsTab = ['proofs', 'rewards', 'card', 'myorgs', 'org', 'guide', 'business-info', 'badges', 'referral', 'photos'].includes(dashboardTab)
+  const isSettingsTab = ['proofs', 'rewards', 'card', 'myorgs', 'org', 'guide', 'business-info', 'badges', 'referral', 'bookings', 'photos'].includes(dashboardTab)
 
   // 認定・資格タブ(2026-08-06・CEO決定): 所属団体も獲得バッジも無い人には出さない。
   // 中身が空のタブを並べても押す理由が無く、ごちゃつきを増やすだけのため。
@@ -2521,7 +2520,7 @@ export default function DashboardPage() {
       {/* CEO指示(2026-08-04): やりとりカードの全文をトップに常駐させない。件数付きの
           1行リンクのみ表示し、操作は紹介タブ内(ReferralBookingReceivedCard)で行う。
           紹介タブ表示中はリンク先に既にいるため出さない(CEO指摘) */}
-      {pro && dashboardTab !== 'referral' && <ReferralActionBanner />}
+      {pro && dashboardTab !== 'referral' && dashboardTab !== 'bookings' && <ReferralActionBanner />}
 
       {/* LINE 週次レポートバナー */}
       {!isSettingsTab && lineBannerState === 'show_banner' && process.env.NEXT_PUBLIC_LINE_FRIEND_URL && (
@@ -5307,35 +5306,56 @@ export default function DashboardPage() {
         )}
       </>)}
 
+      {/* ═══ Tab: 予約（受信箱）═══
+          §17-2(CEO判断 2026-08-06): 直接予約が入った時点で「紹介タブの中に通常予約がある」のが
+          おかしくなった。予約は毎日の受け取り仕事、紹介はときどきの送り出しの仕事で、別の仕事。
+          分けても受け口は1つのまま（直接予約＋紹介予約が同じ受信箱に届く）。
+          紹介元がある予約はカードに「紹介元: ◯◯さん」が出るので、紹介の存在感は消えない。 */}
+      {dashboardTab === 'bookings' && pro && (
+        <div style={{ marginBottom: 16 }}>
+          <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.8, marginBottom: 12 }}>
+            公開カードの「予約する」や、他のプロの紹介リストから届いた予約です。
+            希望日時から1つ選ぶと確定し、お客さんへ自動でお知らせが届きます。
+          </p>
+          <a
+            href="/dashboard?tab=business-info"
+            style={{
+              display: 'inline-block', marginBottom: 16,
+              fontSize: 12, color: '#C4A35A', fontWeight: 700, textDecoration: 'none',
+            }}
+          >
+            予約の受け方・メニューを設定する →
+          </a>
+
+          <ReferralBookingReceivedCard proId={pro.id} onStatusChange={handleReferralReceivedStatus} />
+
+          {referralReceivedLoaded && referralTotalReceivedCount === 0 && (
+            <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>
+              <div>まだ予約リクエストはありません</div>
+              <div style={{ fontSize: 13, marginTop: 4 }}>
+                公開カードの「予約する」や、他のプロの紹介リストから届いた予約リクエストがここに表示されます
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ═══ Tab: 紹介（§0 アローリスト方式・リスト管理はreferralEnabledでゲート） ═══ */}
-      {/* CEO指示(2026-08-04・IA再変更): 役割別サブタブを「紹介を受ける／紹介する／紹介した案件」の
-          3つに変更(前回の2タブ判断を撤回)。受け手機能はallowlist外プロにも必要(受け手は
-          非ゲートが仕様)なため、ReferralBookingReceivedCardはreferralEnabledでゲートしない
-          (既存仕様のまま)。 */}
+      {/* CEO指示(2026-08-04・IA再変更): 役割別サブタブを3つに変更。
+          §17-2(2026-08-06): そのうち「予約を受ける」は予約タブへ独立させ、ここは
+          **紹介する側の仕事だけ**にした（紹介リストを作る・送る・紹介した案件を追う）。
+          CEOの懸念「紹介が目立たなくなる」への答えでもある: 受信箱を先頭に置いていた今までの方が
+          紹介の本丸が2番目に隠れていた。 */}
       {dashboardTab === 'referral' && pro && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 2, marginBottom: 16, borderBottom: '1px solid #E5E7EB' }}>
-            <button
-              onClick={() => handleReferralSubtabClick('receive')}
-              style={{
-                padding: '10px 10px', border: 'none', background: 'none', cursor: 'pointer',
-                fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' as const,
-                color: referralSubtab === 'receive' ? '#1A1A2E' : '#9CA3AF',
-                borderBottom: referralSubtab === 'receive' ? '2px solid #C4A35A' : '2px solid transparent',
-              }}
-            >
-              {/* §17-1(2026-08-06): REALPROOFの直接予約もここに届くようになったため
-                  「紹介を受ける」→「予約を受ける」。中身は同じ受信箱（紹介予約＋直接予約）。 */}
-              予約を受ける{referralRequestedCount > 0 ? ` (${referralRequestedCount})` : ''}
-              <NewBadge />
-            </button>
             <button
               onClick={() => handleReferralSubtabClick('send')}
               style={{
                 padding: '10px 10px', border: 'none', background: 'none', cursor: 'pointer',
                 fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' as const,
-                color: referralSubtab === 'send' ? '#1A1A2E' : '#9CA3AF',
-                borderBottom: referralSubtab === 'send' ? '2px solid #C4A35A' : '2px solid transparent',
+                color: referralSubtab !== 'cases' ? '#1A1A2E' : '#9CA3AF',
+                borderBottom: referralSubtab !== 'cases' ? '2px solid #C4A35A' : '2px solid transparent',
               }}
             >
               紹介する
@@ -5353,76 +5373,56 @@ export default function DashboardPage() {
             </button>
           </div>
 
-          {/* 紹介を受ける: 新しいリクエスト・確定している紹介予約・支払い期限切れキャンセルカード
-              (常時マウント・非表示時はCSSで隠す=サブタブ切替での再フェッチを避ける) */}
-          <div style={{ display: referralSubtab === 'receive' ? 'block' : 'none' }}>
-            {/* §16-29（CEO決定 2026-08-06）: 紹介予約の受付スイッチ。
-                直接予約は booking_enabled（ホームのトグル）が別軸で持つようになったため、
-                ここは「紹介予約を受けるか」だけを決める独立したスイッチになった。
-                チェックボックス（＝否定形の「受け付けない」）は分かりにくいのでスイッチに変更。
-                これで「直接は止めて紹介だけ受ける」も表現できる。 */}
-            {pro && acceptingEditable && (
-              <div style={{
-                marginBottom: 16, padding: '14px 16px', background: '#fff',
-                borderRadius: 12, border: '1px solid #E5E7EB',
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-              }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E' }}>
-                    {pro.accepting_status === 'closed' ? '紹介予約を停止しています' : '紹介予約を受け付けています'}
-                  </div>
-                  <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4, lineHeight: 1.6 }}>
-                    {pro.accepting_status === 'closed'
-                      ? '他のプロの紹介リストからの予約が止まります。直接の予約・ご相談は別のスイッチです。'
-                      : '他のプロの紹介リストに載り、そこからの予約を受け取れます。'}
-                  </div>
-                  {referralPauseError && (
-                    <div style={{ fontSize: 12, color: '#B00020', marginTop: 4 }}>更新に失敗しました</div>
-                  )}
+          {/* §16-29（CEO決定 2026-08-06）: 紹介予約の受付スイッチ。
+              「他のプロの紹介リストに載るか」を決めるもので、紹介する側の設定ではないが
+              紹介の文脈に属するためこのタブに残す（直接予約の受付はホームのトグル）。 */}
+          {pro && acceptingEditable && (
+            <div style={{
+              marginBottom: 16, padding: '14px 16px', background: '#fff',
+              borderRadius: 12, border: '1px solid #E5E7EB',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+            }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E' }}>
+                  {pro.accepting_status === 'closed' ? '紹介予約を停止しています' : '紹介予約を受け付けています'}
                 </div>
-                <div
-                  role="switch"
-                  aria-checked={pro.accepting_status !== 'closed'}
-                  aria-label="紹介予約の受付"
-                  onClick={() => handleToggleReferralAccepting(pro.accepting_status === 'closed')}
-                  style={{
-                    width: 48, height: 28, borderRadius: 14, flexShrink: 0,
-                    background: pro.accepting_status !== 'closed' ? '#06C755' : '#D1D5DB',
-                    position: 'relative', transition: 'background 0.2s',
-                    cursor: referralPauseSaving ? 'default' : 'pointer',
-                    opacity: referralPauseSaving ? 0.6 : 1,
-                  }}
-                >
-                  <div style={{
-                    width: 22, height: 22, borderRadius: '50%', background: '#fff',
-                    position: 'absolute', top: 3, left: pro.accepting_status !== 'closed' ? 23 : 3,
-                    transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                  }} />
+                <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4, lineHeight: 1.6 }}>
+                  {pro.accepting_status === 'closed'
+                    ? '他のプロの紹介リストからの予約が止まります。直接の予約・ご相談は別のスイッチです。'
+                    : '他のプロの紹介リストに載り、そこからの予約を受け取れます。'}
                 </div>
+                {referralPauseError && (
+                  <div style={{ fontSize: 12, color: '#B00020', marginTop: 4 }}>更新に失敗しました</div>
+                )}
               </div>
-            )}
-            <ReferralBookingReceivedCard proId={pro.id} onStatusChange={handleReferralReceivedStatus} />
-            {/* 「完了した紹介」はreferralEnabled時のみ(単一マウントのReferralTab内部で表示・件数管理)。
-                レビュー指摘(軽微7): received/completedの到着順によるフラッシュ防止のため、
-                referralEnabled時はcompleted側もloadedになってから空状態を判定する。 */}
-            {referralReceivedLoaded &&
-              referralTotalReceivedCount === 0 &&
-              (!referralEnabled || (referralCompletedLoaded && referralCompletedCount === 0)) && (
-                <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>
-                  <div>まだ予約リクエストはありません</div>
-                  <div style={{ fontSize: 13, marginTop: 4 }}>
-                    公開カードの「予約する」や、他のプロの紹介リストから届いた予約リクエストがここに表示されます
-                  </div>
-                </div>
-            )}
-          </div>
+              <div
+                role="switch"
+                aria-checked={pro.accepting_status !== 'closed'}
+                aria-label="紹介予約の受付"
+                onClick={() => handleToggleReferralAccepting(pro.accepting_status === 'closed')}
+                style={{
+                  width: 48, height: 28, borderRadius: 14, flexShrink: 0,
+                  background: pro.accepting_status !== 'closed' ? '#06C755' : '#D1D5DB',
+                  position: 'relative', transition: 'background 0.2s',
+                  cursor: referralPauseSaving ? 'default' : 'pointer',
+                  opacity: referralPauseSaving ? 0.6 : 1,
+                }}
+              >
+                <div style={{
+                  width: 22, height: 22, borderRadius: '50%', background: '#fff',
+                  position: 'absolute', top: 3, left: pro.accepting_status !== 'closed' ? 23 : 3,
+                  transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                }} />
+              </div>
+            </div>
+          )}
 
           {/* 紹介する(紹介リスト管理)・紹介した案件(送り手側の成立予約)。いずれも単一マウントの
               ReferralTab(referralEnabled時のみ)。表示はsubtabに応じて内部でCSS切替。 */}
           {referralEnabled && pro && (
             <ReferralTab
               proId={pro.id}
-              subtab={referralSubtab}
+              subtab={referralSubtab === 'cases' ? 'cases' : 'send'}
               onCompletedCountChange={handleReferralCompletedStatus}
               onSentStatusChange={handleReferralSentStatus}
               acceptingStatus={pro.accepting_status ?? null}
@@ -5434,7 +5434,7 @@ export default function DashboardPage() {
               }
             />
           )}
-          {!referralEnabled && (referralSubtab === 'send' || referralSubtab === 'cases') && (
+          {!referralEnabled && (
             <div style={{ textAlign: 'center', padding: '40px 20px', color: '#9CA3AF', fontSize: 13 }}>
               リスト作成などの紹介機能は現在先行公開中です
             </div>

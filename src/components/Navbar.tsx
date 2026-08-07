@@ -75,11 +75,14 @@ export default function Navbar() {
           {isPro && (
             <a href="/dashboard" onClick={closeMenu} style={{ ...menuLinkStyle, color: '#C4A35A', fontWeight: 700 }}>ダッシュボード</a>
           )}
-          {/* CEO指示(2026-08-03): 紹介はコアメニューのためトップレベルへ昇格(設定グループから移動)
-              §17-1(CEO指示 2026-08-06): 予約が届くようになったので New を付ける。
-              NewBadge は期限を過ぎると自分で消える（出しっぱなしにしない）。 */}
+          {/* §17-2(CEO判断 2026-08-06): 予約（受け取る仕事）と紹介（送り出す仕事）を分ける。
+              予約は referralEnabled でゲートしない（受け手は先行公開の対象外でも予約を受けられる）。 */}
+          {isPro && (
+            <a href="/dashboard?tab=bookings" onClick={closeMenu} style={menuLinkStyle}>予約<NewBadge /></a>
+          )}
+          {/* CEO指示(2026-08-03): 紹介はコアメニューのためトップレベルへ昇格(設定グループから移動) */}
           {isPro && referralEnabled && (
-            <a href="/dashboard?tab=referral" onClick={closeMenu} style={menuLinkStyle}>紹介<NewBadge /></a>
+            <a href="/dashboard?tab=referral" onClick={closeMenu} style={menuLinkStyle}>紹介</a>
           )}
           {/* CEO指示(2026-08-03): 「獲得バッジ」→「証明書発行」に改名し、認定申請も中に入れるグループに */}
           {isPro && (

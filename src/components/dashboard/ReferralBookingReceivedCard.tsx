@@ -94,6 +94,12 @@ interface BookingItem {
     cancelled_by_receiver_at?: string | null
     /** レビュー指摘(軽微1): 直近ラウンドで「現在の日時を希望する」が選ばれた場合のみ立つマーカー。 */
     reschedule_kept_current_at?: string | null
+    /**
+     * CEO指摘(2026-08-06): 受付メールがクライアントへ送れなかった印。
+     * メールアドレスの打ち間違いだと、お客さんには何も届かないのにプロには予約が入る。
+     * この場合は電話で連絡してもらう（電話番号は予約フォームの必須項目）。
+     */
+    receipt_email_failed?: boolean | null
   } | null
   status: 'requested' | 'confirmed'
   price_jpy: number
@@ -580,6 +586,22 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
             {item.sender_pro?.name && (
               <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2, marginBottom: 8 }}>
                 紹介元: {item.sender_pro.name}さん
+              </div>
+            )}
+            {/* CEO指摘(2026-08-06): メールアドレスの打ち間違いだと、お客さんには何も届かないのに
+                予約だけが入る。届いていないことをプロに伝え、電話に切り替えてもらう
+                （電話番号は予約フォームの必須項目なので、連絡手段は必ず1つ残っている）。 */}
+            {item.preferred_slots?.receipt_email_failed && (
+              <div style={{
+                background: '#FFF3F3', border: '1px solid #F0BDBD', borderRadius: 8,
+                padding: '10px 12px', marginBottom: 8,
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#B00020', marginBottom: 2 }}>
+                  お客さんに受付メールが届いていません
+                </div>
+                <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.7 }}>
+                  メールアドレスの入力間違いの可能性があります。確定したら、お電話でもご連絡ください。
+                </div>
               </div>
             )}
             {theme && <div style={{ fontSize: 13, color: '#555', marginBottom: 4 }}>テーマ: {theme}</div>}

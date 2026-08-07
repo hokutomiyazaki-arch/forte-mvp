@@ -234,6 +234,8 @@ export async function notifyReferralPinAdded(
 /**
  * §2-4: 予約リクエストが届いたことを受け手プロへ通知する。
  */
+// §17-2(2026-08-06): 受け手プロ宛の予約通知のリンク先は「予約」タブ(?tab=bookings)。
+// 受信箱が紹介タブから独立したため、?tab=referral のままだと予約が無い画面に着地する。
 export async function notifyBookingRequested(
   target: ProNotifyTarget,
   clientNickname: string,
@@ -243,7 +245,7 @@ export async function notifyBookingRequested(
    */
   opts?: { direct?: boolean },
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const dashboardUrl = `${APP_URL}/dashboard?tab=bookings`
   const safeClientNickname = escapeHtml(clientNickname)
   const kind = opts?.direct ? '予約' : '紹介予約'
   return sendProNotification(target, {
@@ -302,7 +304,7 @@ export async function notifyBookingPaymentCompletedToReceiver(
     feeAmountJpy?: number | null
   },
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const dashboardUrl = `${APP_URL}/dashboard?tab=bookings`
   const safeClientNickname = escapeHtml(clientNickname)
   const reminder = opts?.remindMissingLocationInfo
     ? 'プロフィールに場所情報が未設定のため、クライアントへ当日の場所をお伝えください。'
@@ -584,7 +586,7 @@ export async function notifyCounterAcceptedToReceiver(
   confirmedSlotText: string | null,
   opts?: { awaitingPayment?: boolean },
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const dashboardUrl = `${APP_URL}/dashboard?tab=bookings`
   const safeClientNickname = escapeHtml(clientNickname)
   const slotPart = confirmedSlotText ? `${confirmedSlotText} で確定` : '日時を選択'
   const paymentNote = opts?.awaitingPayment
@@ -792,7 +794,7 @@ export async function notifyRescheduleConfirmedToReceiver(
   clientNickname: string,
   newSlotText: string | null,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const dashboardUrl = `${APP_URL}/dashboard?tab=bookings`
   const safeClientNickname = escapeHtml(clientNickname)
   const slotPart = newSlotText ? `${newSlotText} に変更` : '新しい日時に変更'
   return sendProNotification(target, {
@@ -817,7 +819,7 @@ export async function notifyRescheduleKeptCurrentToReceiver(
   clientNickname: string,
   currentSlotText: string | null = null,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const dashboardUrl = `${APP_URL}/dashboard?tab=bookings`
   const safeClientNickname = escapeHtml(clientNickname)
   const slotPart = currentSlotText ? `(${currentSlotText})` : ''
   const safeSlotPart = currentSlotText ? `(${escapeHtml(currentSlotText)})` : ''
