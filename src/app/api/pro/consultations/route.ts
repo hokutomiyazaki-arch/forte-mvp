@@ -51,6 +51,29 @@ export async function GET(request: Request) {
       .order('updated_at', { ascending: false })
       .limit(THREAD_LIMIT)
 
+    // §17-8: メールがバウンスしたスレッド（クライアントが戻る手段を失っている）。
+    // migration 058 依存カラムのため、本体のselectには足さず別クエリ＋fail-softで読む
+    // （未作成カラムを明示selectするとPostgRESTが42703で落ち、相談が1件も返らなくなる）。
+    const emailFailedIds = new Set<string>()
+    try {
+      const ids = (threads || []).map((t: any) => t.id)
+      if (ids.length > 0) {
+        const { data: failedRows, error: failedError } = await supabase
+          .from('consultations')
+          .select('id, email_failed_at')
+          .in('id', ids)
+        if (failedError) {
+          console.error('[api/pro/consultations] email_failed_at fetch error (fail-soft):', failedError.message)
+        } else {
+          for (const row of (failedRows || []) as Array<{ id: string; email_failed_at: string | null }>) {
+            if (row.email_failed_at) emailFailedIds.add(row.id)
+          }
+        }
+      }
+    } catch (failedErr) {
+      console.error('[api/pro/consultations] email_failed_at fetch error (fail-soft):', failedErr)
+    }
+
     // 相談の受付スイッチの現在値（§16-25）。カラム未作成なら null が返るので
     // その場合は「受け付ける」として扱う（fail-soft）。
     const { data: settings } = await supabase
@@ -121,6 +144,8 @@ export async function GET(request: Request) {
       lists: shareableLists,
       consultations: list.map(t => ({
         ...t,
+        // §17-8: メールが届かないスレッド。クライアントは戻る手段を失っている。
+        email_failed: emailFailedIds.has(t.id),
         messages: byThread.get(t.id) || [],
       })),
     })

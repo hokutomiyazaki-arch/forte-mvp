@@ -116,8 +116,30 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log(`[api/webhooks/resend] bounced: marked ${rows?.length || 0} booking(s)`)
-    return NextResponse.json({ ok: true, marked: rows?.length || 0 })
+    // §17-8: 相談チャットにも同じ印を立てる。
+    // 相談は**メールしか預かっていない**ので、届かない＝クライアントが戻る手段が一切ない。
+    // 予約より重い（予約には電話番号がある）。migration 058 未実行なら黙って何もしない。
+    let markedConsultations = 0
+    try {
+      const { data: consultations, error: consultError } = await supabase
+        .from('consultations')
+        .update({ email_failed_at: new Date().toISOString() })
+        .in('client_email', addresses)
+        .neq('status', 'closed')
+        .select('id')
+      if (consultError) {
+        console.error('[api/webhooks/resend] consultation mark error (fail-soft):', consultError.message)
+      } else {
+        markedConsultations = consultations?.length || 0
+      }
+    } catch (consultErr) {
+      console.error('[api/webhooks/resend] consultation mark error (fail-soft):', consultErr)
+    }
+
+    console.log(
+      `[api/webhooks/resend] bounced: marked ${rows?.length || 0} booking(s), ${markedConsultations} consultation(s)`,
+    )
+    return NextResponse.json({ ok: true, marked: rows?.length || 0, marked_consultations: markedConsultations })
   } catch (err) {
     console.error('[api/webhooks/resend] error:', err)
     // 500 を返すと Resend が再送し続けるので、こちらの不具合は 200 で飲む（ログで追う）
