@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { getOwnPro } from '@/lib/referral-auth'
+// §17-16: import ゼロの純関数モジュール（チャンクグラフに何も足さない・CLAUDE.md §G）
+import { resolveEmailFixOwner } from '@/lib/booking-email-fix'
 import {
   notifyBookingConfirmedToSender,
   notifyBookingCompletedToSender,
@@ -93,6 +95,8 @@ interface PreferredSlots {
   confirmed_by_phone_at?: string | null
   /** §17-3④/§17-7: 受付メールがクライアントに届かなかった印（送信失敗 or バウンス） */
   receipt_email_failed?: boolean | null
+  /** §17-16: 印が立った時刻。誰が直すか(送り手→受け手のフォールバック)の判定に使う。 */
+  receipt_email_failed_at?: string | null
   /** §17-9: メールが届かないため、プロが片付けた（クライアントへは通知していない） */
   discarded_undeliverable_at?: string | null
 }
@@ -149,10 +153,22 @@ function canDiscloseContact(booking: {
    * 「プロが確定しないと電話番号が出ない」ままだと、確定の連絡も取れないのに確定を迫られる。
    * メールが死んでいる＝連絡手段が電話しかないので、確定前(requested)でも開示する。
    * 開示するのは**お名前と電話番号だけ**（メールアドレスは §17-6 で一切返さない）。
+   *
+   * §17-16(CEO報告 2026-08-06・不具合修正): 「電話番号が表示されてない」。
+   * 例外を requested にだけ効かせていたため、**confirmed かつ予約金が未払い(awaiting)**の
+   * 予約は下の payment_status 判定で落ちて番号が出ず、
+   * 「お電話でご連絡をお願いします」と書いてあるのに電話できない画面になっていた。
+   * メールが死んでいる時点で連絡手段は電話しか無いので、進行中(requested/confirmed)なら
+   * 支払い状態によらず開示する。※逃げ道を塞ぐ非表示は、塞いだ先に道があるかを必ず確認する。
    */
   receiptEmailFailed?: boolean
 }): boolean {
-  if (booking.receiptEmailFailed && booking.status === 'requested') return true
+  if (
+    booking.receiptEmailFailed &&
+    (booking.status === 'requested' || booking.status === 'confirmed')
+  ) {
+    return true
+  }
   if (booking.status !== 'confirmed' && booking.status !== 'completed') return false
   const ps = booking.payment_status
   return ps === 'paid' || ps === 'not_required' || ps === null || ps === undefined
@@ -366,6 +382,15 @@ export async function GET() {
       })
         ? { name: b.client_name || null, phone: b.client_phone || null }
         : null,
+      // §17-16(CEO指示 2026-08-06): メールを直す仕事の持ち主。'sender' の間、受け手の画面には
+      // 「紹介元が確認中です」しか出さない（受け手に他人の客へ電話させない）。
+      email_fix_owner: resolveEmailFixOwner({
+        hasSender: !!b.sender_pro_id,
+        receiptEmailFailed: !!b.preferred_slots?.receipt_email_failed,
+        status: b.status,
+        failedAt: b.preferred_slots?.receipt_email_failed_at || null,
+        createdAt: b.created_at,
+      }),
     }))
 
     const completedResult = completedBookings.map((b: any) => ({
@@ -470,7 +495,8 @@ export async function PATCH(request: NextRequest) {
     // price_jpy/payment_status/fee_total_bps/メニュー名も取得する。
     // payment_status/fee_total_bpsはmigration 036依存のためフラグゲート付きで選択する。
     const baseConfirmSelect =
-      'id, list_id, sender_pro_id, receiver_pro_id, client_id, client_email, status, price_jpy, expires_at, preferred_slots, clients(id, user_id, nickname), referral_lists(id, slug, comment), pro_menus(name)'
+      // §17-16: created_at はメール修正の持ち主判定(送り手→受け手のフォールバック)に使う。
+      'id, list_id, sender_pro_id, receiver_pro_id, client_id, client_email, status, price_jpy, expires_at, created_at, preferred_slots, clients(id, user_id, nickname), referral_lists(id, slug, comment), pro_menus(name)'
     // タスク②(2026-08-04・CEO指示): cancel_by_receiver用にstripe_checkout_session_id/
     // stripe_payment_intent_idも取得する(いずれもmigration 036依存カラムと同じpaymentEnabledゲート内)。
     const confirmSelect = paymentEnabled
@@ -935,6 +961,20 @@ export async function PATCH(request: NextRequest) {
       }
       if (booking.status !== 'requested' && booking.status !== 'confirmed') {
         return NextResponse.json({ error: 'not_pending' }, { status: 409 })
+      }
+      // §17-16(CEO指示 2026-08-06): 紹介予約は、まず**紹介元**が直す。預けている間は
+      // 受け手からは直せない（両側から同時に別のアドレスを入れられる状態を作らない）。
+      // 24時間で受け手に落ちてくる（送り手が動かないまま予約が死ぬのを防ぐ）。
+      if (
+        resolveEmailFixOwner({
+          hasSender: !!booking.sender_pro_id,
+          receiptEmailFailed: true,
+          status: booking.status,
+          failedAt: booking.preferred_slots?.receipt_email_failed_at || null,
+          createdAt: booking.created_at,
+        }) === 'sender'
+      ) {
+        return NextResponse.json({ error: 'sender_is_fixing' }, { status: 409 })
       }
 
       const nextEmail =

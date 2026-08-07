@@ -81,18 +81,25 @@ export default async function ProInvitePage({
         }}
       >
         {/* このQRは「施術者・指導者の方」に向けたもの。クライアント向けの紹介リストQRと
-            間違えて読まれても、ここで違いが分かるように最初に書く。 */}
+            間違えて読まれても、ここで違いが分かるように最初に書く。
+            §17-17(CEO指摘 2026-08-06): 読むのは**REAL PROOFを知らない先生**。
+            サービスの説明と「無料」を先に出し、内部用語（気になるプロ）は最後に小さく置く。 */}
         <div style={{ fontSize: 12, color: T.textSub, marginBottom: 8 }}>
           施術者・指導者の方へ／{pro.name}先生からのご招待
         </div>
+        <p style={{ fontSize: 15, color: T.text, lineHeight: 1.9, marginBottom: 12, fontWeight: 700 }}>
+          受けた人の言葉が、そのまま実績として残る。
+        </p>
         <p style={{ fontSize: 14, color: T.text, lineHeight: 1.9, marginBottom: 16 }}>
-          REALPROOFという、クライアントからの評価が実績として記録に残るサービスです。
+          REAL PROOF は、実際にセッションを受けたクライアントだけが記録を残せるサービスです。
+          いただいた評価は消えない実績としてあなたのページに積み上がり、
+          それを見た方からのご予約やご相談につながります。
           <br />
-          よければプロフィールを作ってもらえませんか。
+          <strong>登録は無料です。</strong>
         </p>
         <p style={{ fontSize: 13, color: T.textSub, lineHeight: 1.8, marginBottom: 4 }}>
-          下のボタンから登録すると、<strong>{pro.name}先生とお互いの「気になるプロ」に入ります</strong>。
-          紹介を受け取れるようになります。
+          下のボタンから、プロフィールを作るところまで進めます。
+          登録すると{pro.name}先生とつながり、紹介を受け取れるようになります。
         </p>
 
         <ProInviteAcceptPanel proId={pro.id} proName={pro.name} />

@@ -958,4 +958,40 @@ export async function notifyProInviteRegistered(
   })
 }
 
+/**
+ * §17-16(CEO指示 2026-08-06): クライアントのメールが届かなかったことを、**紹介元（送り手）**へ通知する。
+ *
+ * CEO:「クライアントに電話してメールアドレスを修整して入力してもらってください。という
+ *       メールとクライアント電話番号が、受けてではなく、送り元のプロに行くようにしたら？」
+ *
+ * 電話番号は通知本文には**入れない**。番号はダッシュボードのカードに出す（開示ゲートは
+ * /api/referral/bookings/sent の canDiscloseToSender が唯一の入口）。
+ * メール・LINEは転送・スクショで簡単に外へ出るため、PIIは画面の内側に置く。
+ */
+export async function notifyBookingEmailFailedToSender(
+  target: ProNotifyTarget,
+  clientNickname: string,
+  receiverProName: string | null,
+): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const safeClient = escapeHtml(clientNickname)
+  const receiverText = receiverProName ? `${receiverProName}さんへの` : ''
+  const safeReceiverText = receiverProName ? `${escapeHtml(receiverProName)}さんへの` : ''
+  return sendProNotification(target, {
+    lineText:
+      `${clientNickname}さんの${receiverText}ご予約で、メールが届いていません。\n` +
+      `お電話で正しいメールアドレスを確認して、「紹介した案件」から直してください。\n` +
+      `お客さまの電話番号はその画面に出ています。\n${dashboardUrl}`,
+    emailSubject: `【要対応】${clientNickname}さんにメールが届いていません`,
+    emailBodyHtml: emailShell(
+      'ご紹介したお客さまにメールが届いていません',
+      `${safeClient}さんの${safeReceiverText}ご予約で、ご案内のメールが届きませんでした。<br>` +
+        `お手数ですが、<strong>お電話で正しいメールアドレスをご確認のうえ、「紹介した案件」から直してください。</strong><br>` +
+        `お客さまの電話番号はその画面に表示されています。`,
+      '紹介した案件を開く',
+      dashboardUrl,
+    ),
+  })
+}
+
 export { emailShell }

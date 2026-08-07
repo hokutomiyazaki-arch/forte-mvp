@@ -1,7 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useAuth } from '@clerk/nextjs'
 import type { VoiceReply } from './card/types'
+// §17-18: 久しぶりの操作でセッションが切れていると最初の1回だけ401になる。黙って1回だけ再送する。
+import { fetchWithSessionRetry, SESSION_EXPIRED_MESSAGE } from '@/lib/fetch-with-session-retry'
 
 const REPLY_MAX = 200
 
@@ -85,6 +88,9 @@ export default function VoiceReplyModal({
   const showPhoto =
     vote.display_mode === 'photo' && !!vote.client_photo_url
 
+  // §17-18: 401時にセッションを取り直すために使う（通常時は何もしない）
+  const { getToken } = useAuth()
+
   const handleSave = async () => {
     if (!canSave) return
     setError(null)
@@ -96,14 +102,22 @@ export default function VoiceReplyModal({
       const body = isPatch
         ? { reply_id: existingReply!.id, reply_text: replyText }
         : { vote_id: vote.id, reply_text: replyText }
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        cache: 'no-store',
-        body: JSON.stringify(body),
-      })
+      const res = await fetchWithSessionRetry(
+        url,
+        {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+        getToken,
+      )
       const data = await res.json().catch(() => null)
       if (!res.ok) {
+        // §17-18: 再送しても401なら本当にログインが切れている。英語の "Unauthorized" は出さない。
+        if (res.status === 401) {
+          setError(SESSION_EXPIRED_MESSAGE)
+          return
+        }
         const code = data?.code as string | undefined
         const msg = mapErrorCode(code) || data?.error || '保存に失敗しました。'
         setError(msg)
@@ -125,14 +139,21 @@ export default function VoiceReplyModal({
     setError(null)
     setDeleting(true)
     try {
-      const res = await fetch('/api/dashboard/reply', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        cache: 'no-store',
-        body: JSON.stringify({ reply_id: existingReply.id }),
-      })
+      const res = await fetchWithSessionRetry(
+        '/api/dashboard/reply',
+        {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reply_id: existingReply.id }),
+        },
+        getToken,
+      )
       const data = await res.json().catch(() => null)
       if (!res.ok) {
+        if (res.status === 401) {
+          setError(SESSION_EXPIRED_MESSAGE)
+          return
+        }
         const code = data?.code as string | undefined
         const msg = mapErrorCode(code) || data?.error || '削除に失敗しました。'
         setError(msg)

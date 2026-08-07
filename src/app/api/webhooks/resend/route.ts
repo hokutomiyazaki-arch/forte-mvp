@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { normalizeEmail } from '@/lib/normalize-email'
+import { notifyBookingEmailFailedToSender } from '@/lib/referral-notify'
 
 export const dynamic = 'force-dynamic'
 
@@ -125,20 +126,74 @@ export async function POST(request: NextRequest) {
     // （今から連絡が要るものだけを対象にする）。
     const { data: rows } = await supabase
       .from('referral_bookings')
-      .select('id, preferred_slots')
+      .select('id, sender_pro_id, receiver_pro_id, preferred_slots, clients(nickname)')
       .in('client_email', addresses)
       .in('status', ['requested', 'confirmed'])
       .order('created_at', { ascending: false })
       .limit(20)
 
-    for (const row of (rows || []) as Array<{ id: string; preferred_slots: Record<string, unknown> | null }>) {
-      const next = { ...(row.preferred_slots || {}), receipt_email_failed: true }
+    type MarkRow = {
+      id: string
+      sender_pro_id: string | null
+      receiver_pro_id: string | null
+      preferred_slots: Record<string, unknown> | null
+      clients: { nickname: string | null } | null
+    }
+    // §17-16: 新しく印が立った予約だけを通知対象にする（bounceは同じ宛先で何度も来るので、
+    // 毎回通知すると送り手のLINEが埋まる）。
+    const newlyFailed: MarkRow[] = []
+
+    for (const row of (rows || []) as unknown as MarkRow[]) {
+      const alreadyFailed = !!row.preferred_slots?.receipt_email_failed
+      const next = {
+        ...(row.preferred_slots || {}),
+        receipt_email_failed: true,
+        // §17-16: 印が立った時刻。「まず送り手が直す・24時間で受け手に移る」の起点になる。
+        receipt_email_failed_at: alreadyFailed
+          ? (row.preferred_slots?.receipt_email_failed_at as string | undefined) || new Date().toISOString()
+          : new Date().toISOString(),
+      }
       const { error } = await supabase
         .from('referral_bookings')
         .update({ preferred_slots: next })
         .eq('id', row.id)
       if (error) {
         console.error('[api/webhooks/resend] mark error:', row.id, error.message)
+        continue
+      }
+      if (!alreadyFailed) newlyFailed.push(row)
+    }
+
+    // §17-16(CEO指示 2026-08-06): 直す仕事は**紹介元（送り手）**のもの。
+    // 送り手はそのクライアントを自分で紹介した本人なので、電話するのに無理がない。
+    // 受け手には出さない（会ったこともない他人へ電話させない・まだ1円も受け取っていない）。
+    // 直接予約(送り手なし)はこの通知の対象外＝従来どおり受け手が自分で直す。
+    for (const row of newlyFailed) {
+      if (!row.sender_pro_id) continue
+      try {
+        const [{ data: senderPro }, { data: receiverPro }] = await Promise.all([
+          supabase
+            .from('professionals')
+            .select('name, contact_email, line_messaging_user_id')
+            .eq('id', row.sender_pro_id)
+            .maybeSingle(),
+          row.receiver_pro_id
+            ? supabase.from('professionals').select('name').eq('id', row.receiver_pro_id).maybeSingle()
+            : Promise.resolve({ data: null } as { data: { name: string } | null }),
+        ])
+        if (!senderPro) continue
+        await notifyBookingEmailFailedToSender(
+          {
+            name: (senderPro as any).name,
+            contact_email: (senderPro as any).contact_email,
+            line_messaging_user_id: (senderPro as any).line_messaging_user_id,
+          },
+          row.clients?.nickname || 'クライアント',
+          (receiverPro as any)?.name || null,
+        )
+      } catch (notifyErr) {
+        // 通知の失敗で webhook を落とさない（落とすと Resend が再送し続ける）
+        console.error('[api/webhooks/resend] sender notify error (fail-soft):', row.id, notifyErr)
       }
     }
 
