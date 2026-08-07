@@ -79,8 +79,14 @@ export default function ConsultForm({ proId, proName, proPhotoUrl, proTitle, pro
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
         if (res.status === 429 && json.token) {
-          // 直前に同じ相談を送っている。新しいスレッドを作らず既存のやりとりへ送る。
+          // §17-21: サーバー側が既存スレッドへ追記するようになったため、通常ここには来ない。
+          // 古いビルドが残っている場合の保険として残す（本文が消える経路はサーバーで塞いだ）。
           window.location.href = `/consult/thread/${json.token}`
+          return
+        }
+        if (res.status === 409 && json.error === 'limit_reached' && json.token) {
+          setError('このやりとりは上限に達しています。下のリンクから続きをご確認ください。')
+          setDoneToken(json.token)
           return
         }
         setError(
