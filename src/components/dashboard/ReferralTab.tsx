@@ -125,6 +125,8 @@ interface Props {
    * 表示するか。lists/sentBookingsのfetchは1回だけ(既存のまま)行い、表示はCSSで切り替える
    * (subtab切替時の再フェッチ・二重マウントを避ける)。 */
   subtab: 'receive' | 'send' | 'cases'
+  /** §17-11(CEO指示 2026-08-06): サブタブ行をこのコンポーネント内へ移した（報酬を上に出すため） */
+  onSubtabChange?: (t: 'send' | 'cases') => void
   /** 「紹介を受ける」タブの空状態判定用に、完了した紹介(受け手側)の件数と読み込み完了フラグを
    * 親へ通知する(レビュー指摘・軽微7: loadedを渡し到着順による空状態フラッシュを防ぐ)。 */
   onCompletedCountChange?: (count: number, loaded: boolean) => void
@@ -145,6 +147,7 @@ interface Props {
 export default function ReferralTab({
   proId,
   subtab,
+  onSubtabChange,
   onCompletedCountChange,
   onSentStatusChange,
   acceptingStatus,
@@ -357,7 +360,9 @@ export default function ReferralTab({
   // cases になった時だけ1回fetchするようrefで制御する(依存はsubtab文字列のみ)。
   const connectStatusFetchedRef = useRef(false)
   useEffect(() => {
-    if (subtab !== 'cases' || connectStatusFetchedRef.current) return
+    // CEO指示(2026-08-06): 報酬ボックスをサブタブの上に常時表示するようにしたため、
+    // 「紹介した案件を開いた時だけ取得する」ゲートを外す（開く前から表示に使うため）。
+    if (connectStatusFetchedRef.current) return
     connectStatusFetchedRef.current = true
     fetch('/api/referral/connect/status', { cache: 'no-store' })
       .then((res) => {
@@ -1883,6 +1888,207 @@ export default function ReferralTab({
 
   return (
     <div>
+      {/* CEO指示(2026-08-06): 報酬ボックスはサブタブの上に常に表示する。
+          「紹介した案件」を開かないと報酬が見えないのは、いちばん見たい数字が隠れている状態。 */}
+      {/* ステージ4(送り手分配・CEO決定): 報酬サマリーカード。0件時は説明のみ表示する。 */}
+      {sentPayoutsLoaded && (
+        <div style={{ background: '#FAF7EF', borderRadius: 14, padding: '14px 16px', border: '1.5px solid #EAD9A6' }}>
+          {sentPayoutsPendingTotalJpy === 0 && sentPayoutsPaidTotalJpy === 0 ? (
+            <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6 }}>
+              紹介報酬はセッション完了時に確定します(セッション価格の30%・予約金のお支払いが完了した案件が対象)。
+            </div>
+          ) : (
+            // 報酬表示の再設計(CEO指示・2026-08-05): 報酬サマリーを主役化する。「確定済みの報酬」
+            // (未払い)を大きく(13pxラベル+22px/800の金額)、「支払い済み累計」はその下に少し
+            // 小さめ(16px/700)で表示する。
+            <div style={{ color: '#1A1A2E' }}>
+              <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.4 }}>確定済みの報酬</div>
+              <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.3, marginTop: 2 }}>
+                ¥{sentPayoutsPendingTotalJpy.toLocaleString()}
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#6B7280', marginTop: 8 }}>
+                支払い済み累計 ¥{sentPayoutsPaidTotalJpy.toLocaleString()}
+              </div>
+            </div>
+          )}
+          {/* ステージ4「Stripe Connect 口座登録導線」(CEO承認済み・2026-08-04) */}
+          {/* レビュー指摘(軽微8): connectStatusがnull(未確定・403等でロード完了したが値が
+              無い場合)は何も表示せず、空の区切り線だけが出る状態を防ぐ */}
+          {connectStatusLoaded && connectStatus !== null && (
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #EAD9A6' }}>
+              {connectStatus === 'enabled' ? (
+                <div>
+                  <div style={{ fontSize: 13, color: '#2F7A4D', fontWeight: 600 }}>受け取り口座: 登録済み</div>
+                  {/* 口座管理導線(2026-08-05・CEO指示): 控えめなリンク。Stripe Expressのホスト型
+                      ダッシュボードで口座変更・送金履歴の確認ができる。 */}
+                  <button
+                    onClick={handleConnectManage}
+                    disabled={connectManaging}
+                    style={{
+                      background: 'none', border: 'none', padding: 0, marginTop: 6,
+                      color: '#6B7280', fontSize: 13, textDecoration: 'underline',
+                      cursor: connectManaging ? 'default' : 'pointer',
+                    }}
+                  >
+                    {connectManaging ? '開いています...' : '口座情報を管理する'}
+                  </button>
+                  <div style={{ fontSize: 13, color: '#9CA3AF', marginTop: 2, lineHeight: 1.6 }}>
+                    Stripeの管理画面で口座の変更や送金履歴の確認ができます
+                  </div>
+                </div>
+              ) : connectStatus === 'not_ready' ? (
+                <div style={{ fontSize: 12, color: '#9CA3AF' }}>口座登録機能は準備中です</div>
+              ) : connectStatus === 'reviewing' ? (
+                // レビュー指摘(軽微7): 本人確認は提出済みだがStripe側の審査中。再開ボタンは
+                // 出さない(送り手が押しても状態が変わらないため)。
+                <div>
+                  <div style={{ fontSize: 12, color: '#B45309' }}>口座情報を審査中です(1〜2営業日)</div>
+                  {/* 口座管理導線(2026-08-05・CEO指示): 審査中でも既存アカウントの管理画面は開ける。 */}
+                  <button
+                    onClick={handleConnectManage}
+                    disabled={connectManaging}
+                    style={{
+                      background: 'none', border: 'none', padding: 0, marginTop: 6,
+                      color: '#6B7280', fontSize: 13, textDecoration: 'underline',
+                      cursor: connectManaging ? 'default' : 'pointer',
+                    }}
+                  >
+                    {connectManaging ? '開いています...' : '口座情報を管理する'}
+                  </button>
+                  <div style={{ fontSize: 13, color: '#9CA3AF', marginTop: 2, lineHeight: 1.6 }}>
+                    Stripeの管理画面で口座の変更や送金履歴の確認ができます
+                  </div>
+                </div>
+              ) : connectStatus === 'pending' ? (
+                <div>
+                  <button
+                    onClick={handleConnectOnboard}
+                    disabled={connectOnboarding}
+                    style={{
+                      padding: '8px 14px', borderRadius: 8, border: 'none',
+                      background: '#1A1A2E', color: '#fff', fontSize: 12, fontWeight: 600,
+                      cursor: connectOnboarding ? 'default' : 'pointer', opacity: connectOnboarding ? 0.6 : 1,
+                    }}
+                  >
+                    口座登録を再開する
+                  </button>
+                  <div style={{ fontSize: 12, color: '#B45309', marginTop: 4 }}>登録が完了していません</div>
+                </div>
+              ) : connectStatus === 'none' ? (
+                <div>
+                  <button
+                    onClick={handleConnectOnboard}
+                    disabled={connectOnboarding}
+                    style={{
+                      padding: '8px 14px', borderRadius: 8, border: 'none',
+                      background: '#1A1A2E', color: '#fff', fontSize: 12, fontWeight: 600,
+                      cursor: connectOnboarding ? 'default' : 'pointer', opacity: connectOnboarding ? 0.6 : 1,
+                    }}
+                  >
+                    報酬のお受け取り口座を登録する
+                  </button>
+                  <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4, lineHeight: 1.6 }}>
+                    Stripeの安全な画面で本人確認と口座登録を行います(REAL PROOFはカード・口座情報を保持しません)
+                  </div>
+                </div>
+              ) : null}
+              {connectError && (
+                <div style={{ fontSize: 12, color: '#DC2626', marginTop: 4 }}>{connectError}</div>
+              )}
+            </div>
+          )}
+
+          <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 6, lineHeight: 1.6 }}>
+            {connectStatus === 'enabled'
+              ? '報酬はセッション完了後、自動でお受け取り口座へ送金されます(反映まで数日)。'
+              : 'お支払いは月次でのお振込です。口座の自動受け取り(Stripe)は準備中です。'}
+          </div>
+
+          {/* CEO指示(2026-08-05): 「お支払い履歴」は独立した白カードではなく、この報酬サマリーカード
+              (金色系ボーダー)の中に区切り線で続ける形に統合する(金色カード=お金関連・白カード=案件、
+              という視覚分離のため)。中身(支払日・◯◯さんの紹介・金額・反映予定・10件+もっと見る・
+              0件時文言)は既存のまま変更しない。 */}
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #EAD9A6' }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', marginBottom: 8 }}>お支払い履歴</div>
+            {paidPayoutsSorted.length === 0 ? (
+              <div style={{ fontSize: 13, color: '#9CA3AF' }}>まだお支払いはありません</div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {visiblePaidPayouts.map((p) => {
+                    const reflectionText = estimateReferralPayoutReflectionText(p.paid_at)
+                    return (
+                      <div
+                        key={p.id}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'flex-start',
+                          fontSize: 13,
+                          borderBottom: '1px solid #F3F4F6',
+                          paddingBottom: 8,
+                        }}
+                      >
+                        <div style={{ color: '#1A1A2E', lineHeight: 1.6 }}>
+                          <div>{formatPayoutDate(p.paid_at)}</div>
+                          <div style={{ color: '#6B7280' }}>{p.client_nickname || 'クライアント'}さんの紹介</div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontWeight: 700, color: '#1A1A2E' }}>¥{p.amount_jpy.toLocaleString()}</div>
+                          {reflectionText && (
+                            <div style={{ fontSize: 13, color: '#9CA3AF', marginTop: 2 }}>
+                              口座への反映予定: {reflectionText}頃(目安)
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                {paidPayoutsSorted.length > PAYOUT_HISTORY_PREVIEW_COUNT && (
+                  <button
+                    onClick={() => setPayoutHistoryExpanded((v) => !v)}
+                    style={{
+                      marginTop: 10, fontSize: 13, color: '#6B7280', background: 'none', border: 'none',
+                      textDecoration: 'underline', cursor: 'pointer', padding: 0,
+                    }}
+                  >
+                    {payoutHistoryExpanded ? '閉じる' : 'もっと見る'}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* CEO指示(2026-08-06): 報酬ボックスの下にサブタブ。
+          （元は dashboard/page.tsx 側にあったが、報酬をタブより上に出すためこちらへ移動） */}
+      <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 2, marginBottom: 16, borderBottom: '1px solid #E5E7EB' }}>
+        <button
+          onClick={() => onSubtabChange?.('send')}
+          style={{
+            padding: '10px 10px', border: 'none', background: 'none', cursor: 'pointer',
+            fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' as const,
+            color: subtab !== 'cases' ? '#1A1A2E' : '#9CA3AF',
+            borderBottom: subtab !== 'cases' ? '2px solid #C4A35A' : '2px solid transparent',
+          }}
+        >
+          紹介する
+        </button>
+        <button
+          onClick={() => onSubtabChange?.('cases')}
+          style={{
+            padding: '10px 10px', border: 'none', background: 'none', cursor: 'pointer',
+            fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' as const,
+            color: subtab === 'cases' ? '#1A1A2E' : '#9CA3AF',
+            borderBottom: subtab === 'cases' ? '2px solid #C4A35A' : '2px solid transparent',
+          }}
+        >
+          紹介した案件{sentActiveCount > 0 ? ` (${sentActiveCount})` : ''}
+        </button>
+      </div>
+
       {/* UI再構成(2026-08-04・CEO承認済み): 「紹介を受ける」サブタブ側 = 完了した紹介(受け手側)。
           単一マウントのまま表示のみCSSで切り替える(subtab切替での再フェッチを避ける)。 */}
       <div style={{ display: subtab === 'receive' ? 'block' : 'none' }}>
@@ -1892,178 +2098,6 @@ export default function ReferralTab({
       {/* CEO指示(2026-08-04・IA再変更): 「紹介した案件」サブタブ = 成立した紹介(送り手側の
           予約一覧・担当プロとのやりとりスレッド)。旧「紹介する」タブから独立した3番目のタブ。 */}
       <div style={{ display: subtab === 'cases' ? 'flex' : 'none', flexDirection: 'column', gap: 12 }}>
-        {/* ステージ4(送り手分配・CEO決定): 報酬サマリーカード。0件時は説明のみ表示する。 */}
-        {sentPayoutsLoaded && (
-          <div style={{ background: '#FAF7EF', borderRadius: 14, padding: '14px 16px', border: '1.5px solid #EAD9A6' }}>
-            {sentPayoutsPendingTotalJpy === 0 && sentPayoutsPaidTotalJpy === 0 ? (
-              <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6 }}>
-                紹介報酬はセッション完了時に確定します(セッション価格の30%・予約金のお支払いが完了した案件が対象)。
-              </div>
-            ) : (
-              // 報酬表示の再設計(CEO指示・2026-08-05): 報酬サマリーを主役化する。「確定済みの報酬」
-              // (未払い)を大きく(13pxラベル+22px/800の金額)、「支払い済み累計」はその下に少し
-              // 小さめ(16px/700)で表示する。
-              <div style={{ color: '#1A1A2E' }}>
-                <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.4 }}>確定済みの報酬</div>
-                <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.3, marginTop: 2 }}>
-                  ¥{sentPayoutsPendingTotalJpy.toLocaleString()}
-                </div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: '#6B7280', marginTop: 8 }}>
-                  支払い済み累計 ¥{sentPayoutsPaidTotalJpy.toLocaleString()}
-                </div>
-              </div>
-            )}
-            {/* ステージ4「Stripe Connect 口座登録導線」(CEO承認済み・2026-08-04) */}
-            {/* レビュー指摘(軽微8): connectStatusがnull(未確定・403等でロード完了したが値が
-                無い場合)は何も表示せず、空の区切り線だけが出る状態を防ぐ */}
-            {connectStatusLoaded && connectStatus !== null && (
-              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #EAD9A6' }}>
-                {connectStatus === 'enabled' ? (
-                  <div>
-                    <div style={{ fontSize: 13, color: '#2F7A4D', fontWeight: 600 }}>受け取り口座: 登録済み</div>
-                    {/* 口座管理導線(2026-08-05・CEO指示): 控えめなリンク。Stripe Expressのホスト型
-                        ダッシュボードで口座変更・送金履歴の確認ができる。 */}
-                    <button
-                      onClick={handleConnectManage}
-                      disabled={connectManaging}
-                      style={{
-                        background: 'none', border: 'none', padding: 0, marginTop: 6,
-                        color: '#6B7280', fontSize: 13, textDecoration: 'underline',
-                        cursor: connectManaging ? 'default' : 'pointer',
-                      }}
-                    >
-                      {connectManaging ? '開いています...' : '口座情報を管理する'}
-                    </button>
-                    <div style={{ fontSize: 13, color: '#9CA3AF', marginTop: 2, lineHeight: 1.6 }}>
-                      Stripeの管理画面で口座の変更や送金履歴の確認ができます
-                    </div>
-                  </div>
-                ) : connectStatus === 'not_ready' ? (
-                  <div style={{ fontSize: 12, color: '#9CA3AF' }}>口座登録機能は準備中です</div>
-                ) : connectStatus === 'reviewing' ? (
-                  // レビュー指摘(軽微7): 本人確認は提出済みだがStripe側の審査中。再開ボタンは
-                  // 出さない(送り手が押しても状態が変わらないため)。
-                  <div>
-                    <div style={{ fontSize: 12, color: '#B45309' }}>口座情報を審査中です(1〜2営業日)</div>
-                    {/* 口座管理導線(2026-08-05・CEO指示): 審査中でも既存アカウントの管理画面は開ける。 */}
-                    <button
-                      onClick={handleConnectManage}
-                      disabled={connectManaging}
-                      style={{
-                        background: 'none', border: 'none', padding: 0, marginTop: 6,
-                        color: '#6B7280', fontSize: 13, textDecoration: 'underline',
-                        cursor: connectManaging ? 'default' : 'pointer',
-                      }}
-                    >
-                      {connectManaging ? '開いています...' : '口座情報を管理する'}
-                    </button>
-                    <div style={{ fontSize: 13, color: '#9CA3AF', marginTop: 2, lineHeight: 1.6 }}>
-                      Stripeの管理画面で口座の変更や送金履歴の確認ができます
-                    </div>
-                  </div>
-                ) : connectStatus === 'pending' ? (
-                  <div>
-                    <button
-                      onClick={handleConnectOnboard}
-                      disabled={connectOnboarding}
-                      style={{
-                        padding: '8px 14px', borderRadius: 8, border: 'none',
-                        background: '#1A1A2E', color: '#fff', fontSize: 12, fontWeight: 600,
-                        cursor: connectOnboarding ? 'default' : 'pointer', opacity: connectOnboarding ? 0.6 : 1,
-                      }}
-                    >
-                      口座登録を再開する
-                    </button>
-                    <div style={{ fontSize: 12, color: '#B45309', marginTop: 4 }}>登録が完了していません</div>
-                  </div>
-                ) : connectStatus === 'none' ? (
-                  <div>
-                    <button
-                      onClick={handleConnectOnboard}
-                      disabled={connectOnboarding}
-                      style={{
-                        padding: '8px 14px', borderRadius: 8, border: 'none',
-                        background: '#1A1A2E', color: '#fff', fontSize: 12, fontWeight: 600,
-                        cursor: connectOnboarding ? 'default' : 'pointer', opacity: connectOnboarding ? 0.6 : 1,
-                      }}
-                    >
-                      報酬のお受け取り口座を登録する
-                    </button>
-                    <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4, lineHeight: 1.6 }}>
-                      Stripeの安全な画面で本人確認と口座登録を行います(REAL PROOFはカード・口座情報を保持しません)
-                    </div>
-                  </div>
-                ) : null}
-                {connectError && (
-                  <div style={{ fontSize: 12, color: '#DC2626', marginTop: 4 }}>{connectError}</div>
-                )}
-              </div>
-            )}
-
-            <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 6, lineHeight: 1.6 }}>
-              {connectStatus === 'enabled'
-                ? '報酬はセッション完了後、自動でお受け取り口座へ送金されます(反映まで数日)。'
-                : 'お支払いは月次でのお振込です。口座の自動受け取り(Stripe)は準備中です。'}
-            </div>
-
-            {/* CEO指示(2026-08-05): 「お支払い履歴」は独立した白カードではなく、この報酬サマリーカード
-                (金色系ボーダー)の中に区切り線で続ける形に統合する(金色カード=お金関連・白カード=案件、
-                という視覚分離のため)。中身(支払日・◯◯さんの紹介・金額・反映予定・10件+もっと見る・
-                0件時文言)は既存のまま変更しない。 */}
-            <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #EAD9A6' }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', marginBottom: 8 }}>お支払い履歴</div>
-              {paidPayoutsSorted.length === 0 ? (
-                <div style={{ fontSize: 13, color: '#9CA3AF' }}>まだお支払いはありません</div>
-              ) : (
-                <>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {visiblePaidPayouts.map((p) => {
-                      const reflectionText = estimateReferralPayoutReflectionText(p.paid_at)
-                      return (
-                        <div
-                          key={p.id}
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'flex-start',
-                            fontSize: 13,
-                            borderBottom: '1px solid #F3F4F6',
-                            paddingBottom: 8,
-                          }}
-                        >
-                          <div style={{ color: '#1A1A2E', lineHeight: 1.6 }}>
-                            <div>{formatPayoutDate(p.paid_at)}</div>
-                            <div style={{ color: '#6B7280' }}>{p.client_nickname || 'クライアント'}さんの紹介</div>
-                          </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontWeight: 700, color: '#1A1A2E' }}>¥{p.amount_jpy.toLocaleString()}</div>
-                            {reflectionText && (
-                              <div style={{ fontSize: 13, color: '#9CA3AF', marginTop: 2 }}>
-                                口座への反映予定: {reflectionText}頃(目安)
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                  {paidPayoutsSorted.length > PAYOUT_HISTORY_PREVIEW_COUNT && (
-                    <button
-                      onClick={() => setPayoutHistoryExpanded((v) => !v)}
-                      style={{
-                        marginTop: 10, fontSize: 13, color: '#6B7280', background: 'none', border: 'none',
-                        textDecoration: 'underline', cursor: 'pointer', padding: 0,
-                      }}
-                    >
-                      {payoutHistoryExpanded ? '閉じる' : 'もっと見る'}
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
         {sentLoading ? (
           <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>読み込み中...</div>
         ) : sentBookings.length === 0 ? (

@@ -5403,31 +5403,6 @@ export default function DashboardPage() {
           紹介の本丸が2番目に隠れていた。 */}
       {dashboardTab === 'referral' && pro && (
         <div style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 2, marginBottom: 16, borderBottom: '1px solid #E5E7EB' }}>
-            <button
-              onClick={() => handleReferralSubtabClick('send')}
-              style={{
-                padding: '10px 10px', border: 'none', background: 'none', cursor: 'pointer',
-                fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' as const,
-                color: referralSubtab !== 'cases' ? '#1A1A2E' : '#9CA3AF',
-                borderBottom: referralSubtab !== 'cases' ? '2px solid #C4A35A' : '2px solid transparent',
-              }}
-            >
-              紹介する
-            </button>
-            <button
-              onClick={() => handleReferralSubtabClick('cases')}
-              style={{
-                padding: '10px 10px', border: 'none', background: 'none', cursor: 'pointer',
-                fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' as const,
-                color: referralSubtab === 'cases' ? '#1A1A2E' : '#9CA3AF',
-                borderBottom: referralSubtab === 'cases' ? '2px solid #C4A35A' : '2px solid transparent',
-              }}
-            >
-              紹介した案件{referralSentActiveCount > 0 ? ` (${referralSentActiveCount})` : ''}
-            </button>
-          </div>
-
           {/* CEO報告(2026-08-06): 既に送信済みの通知メールは紹介タブを指している。
               そこから来た人が「予約が無い」と迷わないよう、行き先を先頭に出す。 */}
           <a
@@ -5459,6 +5434,7 @@ export default function DashboardPage() {
             <ReferralTab
               proId={pro.id}
               subtab={referralSubtab === 'cases' ? 'cases' : 'send'}
+              onSubtabChange={handleReferralSubtabClick}
               onCompletedCountChange={handleReferralCompletedStatus}
               onSentStatusChange={handleReferralSentStatus}
               acceptingStatus={pro.accepting_status ?? null}
