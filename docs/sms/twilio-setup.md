@@ -50,6 +50,37 @@ Project ＞ Settings ＞ Environment Variables に上の3つを入れる。
 **入れただけでは反映されない。再デプロイが要る。**
 
 ### 5. 動作確認
+
+**① 設定が読めているかを、送らずに確かめる**
+ブラウザで https://realproof.jp/api/pro/sms-test を開く。
+
+```json
+{"ok":true,"enabled":true,"account_sid_configured":true,
+ "auth_token_configured":true,"from_configured":true,"from_looks_like_number":true}
+```
+
+`enabled: false` なら3つのどれかが入っていないか、**再デプロイがまだ**。
+どれが欠けているかは各項目で分かる（値そのものは返さない）。
+`from_looks_like_number: false` は送信者名（Alphanumeric Sender ID）を入れた場合は正常。
+番号のつもりで入れたのに false なら `+81`/`+1` の付け忘れ。
+
+**② 自分の携帯に1通テストする**
+プロとしてログインした状態で、`/api/pro/sms-test` に POST する。
+スマホなら、ダッシュボードを開いたタブで開発者ツールが使えないので、
+**PCのブラウザでログイン → コンソールで下を実行**するのが早い。
+
+```js
+await fetch('/api/pro/sms-test', { method: 'POST' }).then(r => r.json())
+```
+
+- 送信先は**プロフィールに登録済みの自分の電話番号に固定**されている
+  （宛先を指定できるようにすると、ログインさえすれば任意の番号へ我々の課金でSMSを
+  送れる踏み台になるため。テストのために穴は開けない）
+- `no_phone_on_profile` → プロフィールに電話番号が入っていない
+- `phone_not_mobile` → 固定電話・桁数違い。SMSは携帯(070/080/090)にしか届かない
+- `send_failed` → Twilio側で弾かれた。Console の Monitor ＞ Logs ＞ Messaging にエラーが出る
+
+**③ 本番の流れを通す**
 間違ったメールアドレスで予約を1件入れる → バウンス webhook が動く →
 入力した携帯にSMSが届き、**プロ側には「電話してください」が出ない**ことを確認する。
 
