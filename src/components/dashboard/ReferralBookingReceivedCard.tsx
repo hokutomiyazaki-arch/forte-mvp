@@ -123,7 +123,8 @@ interface BookingItem {
    */
   source?: string | null
   /** §2-4ステージ3(決済確認後の連絡先開示・CEO決定): 開示条件を満たす場合のみAPIから入る。 */
-  client_contact: { name: string | null; phone: string | null; email: string | null } | null
+  /** §17-6: メールアドレスは返ってこない（表示もしない）。§17-9: メール未達なら確定前でも入る。 */
+  client_contact: { name: string | null; phone: string | null } | null
 }
 
 /**
@@ -229,6 +230,42 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
   }
 
   /**
+   * §17-9 メールが届かない予約を片付ける（CEO指示 2026-08-06）。
+   * クライアントへは通知しない（届かないので送っても意味がなく、bounceを増やすだけ）。
+   */
+  async function discardBooking(bookingId: string) {
+    if (processingId) return
+    if (!window.confirm(
+      'この予約を削除しますか？\n\n' +
+      'お客さまにメールが届いていないため、削除のお知らせも送れません。\n' +
+      'お電話で先にご連絡ください。この操作は取り消せません。'
+    )) return
+    setProcessingId(bookingId)
+    try {
+      const res = await fetch('/api/referral/bookings/received', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ booking_id: bookingId, action: 'discard' }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        window.alert(
+          data.error === 'payment_pending'
+            ? 'この予約はお支払いが絡むため、通常のキャンセルをご利用ください。'
+            : '削除できませんでした',
+        )
+        return
+      }
+      setItems((prev) => prev.filter((i) => i.id !== bookingId))
+    } catch {
+      window.alert('削除できませんでした')
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
+  /**
    * §17-6 予約のお客さんと REAL PROOF の中でやりとりする（CEO指示 2026-08-06）。
    * 既存の相談スレッドがあれば再利用し、無ければ作って相談タブへ送る。
    */
@@ -295,8 +332,14 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
       }
       setPhoneConfirmOpenId(null)
       setPhoneConfirmInputs((prev) => ({ ...prev, [bookingId]: '' }))
-      // 既存の confirm() と同じ扱い（確定したカードは一覧から外す）。
-      setItems((prev) => prev.filter((i) => i.id !== bookingId))
+      // §17-9: 確定済みの日時差し替えではカードを消さない（そのまま画面に残す）。
+      // 要対応 → 確定 のときだけ、既存の confirm() と同じく一覧から外す。
+      const wasConfirmed = items.some((i) => i.id === bookingId && i.status === 'confirmed')
+      if (wasConfirmed) {
+        window.location.reload()
+      } else {
+        setItems((prev) => prev.filter((i) => i.id !== bookingId))
+      }
     } catch {
       window.alert('確定に失敗しました')
     } finally {
@@ -686,6 +729,37 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                 <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.7 }}>
                   メールアドレスの入力間違いの可能性があります。お電話でご連絡をお願いします。
                 </div>
+                {/* §17-9(CEO指摘 2026-08-06): 「プロが確定しないと電話番号が出ない」は、
+                    メールが死んでいる予約では詰みになる。確定前でもここだけ連絡先を出す。 */}
+                {item.client_contact && (
+                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #F0BDBD' }}>
+                    {item.client_contact.name && (
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1A2E' }}>
+                        {item.client_contact.name}さん
+                      </div>
+                    )}
+                    {item.client_contact.phone && (
+                      <div style={{ fontSize: 15, fontWeight: 700, marginTop: 2 }}>
+                        <a href={`tel:${encodeURIComponent(item.client_contact.phone)}`} style={{ color: '#B00020' }}>
+                          {item.client_contact.phone}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => discardBooking(item.id)}
+                  disabled={processingId === item.id}
+                  style={{
+                    marginTop: 10, padding: '8px 14px', borderRadius: 8, border: 'none',
+                    background: '#E24B4A', color: '#fff', fontSize: 12, fontWeight: 700,
+                    cursor: processingId === item.id ? 'default' : 'pointer',
+                    opacity: processingId === item.id ? 0.6 : 1,
+                  }}
+                >
+                  この予約を削除する
+                </button>
               </div>
             )}
             {theme && <div style={{ fontSize: 13, color: '#555', marginBottom: 4 }}>テーマ: {theme}</div>}
@@ -1059,6 +1133,73 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                 お電話で確定した予約です
               </div>
             )}
+            {/* §17-9(CEO指示 2026-08-06): メールが届いていない確定済み予約。
+                確定のお知らせも日時変更の提案も届かないので、プロ側で完結できるようにする。 */}
+            {item.preferred_slots?.receipt_email_failed && (
+              <div style={{
+                background: '#FFF3F3', border: '1px solid #F0BDBD', borderRadius: 8,
+                padding: '10px 12px', marginTop: 8,
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#B00020', marginBottom: 2 }}>
+                  お客さんにメールが届いていません
+                </div>
+                <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.7 }}>
+                  確定のお知らせも届いていません。お電話でご連絡をお願いします。
+                  日時の変更もお客さまには通知できないため、お電話で決めてからこちらで直してください。
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 8, marginTop: 10 }}>
+                  <button
+                    type="button"
+                    onClick={() => { setPhoneConfirmOpenId(phoneConfirmOpenId === item.id ? null : item.id) }}
+                    style={{
+                      padding: '8px 14px', borderRadius: 8, border: '1px solid #B00020',
+                      background: '#fff', color: '#B00020', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                    }}
+                  >
+                    日時を直す
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => discardBooking(item.id)}
+                    disabled={processingId === item.id}
+                    style={{
+                      padding: '8px 14px', borderRadius: 8, border: 'none',
+                      background: '#E24B4A', color: '#fff', fontSize: 12, fontWeight: 700,
+                      cursor: processingId === item.id ? 'default' : 'pointer',
+                      opacity: processingId === item.id ? 0.6 : 1,
+                    }}
+                  >
+                    この予約を削除する
+                  </button>
+                </div>
+                {phoneConfirmOpenId === item.id && (
+                  <div style={{ marginTop: 10, background: '#fff', borderRadius: 8, padding: '10px 12px', border: '1px solid #E5E7EB' }}>
+                    <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 8, lineHeight: 1.7 }}>
+                      お電話で決めた日時に差し替えます（お客さまへの通知は送られません）。
+                    </div>
+                    <SlotPicker
+                      value={phoneConfirmInputs[item.id] || ''}
+                      timeOptions={PRO_SLOT_TIME_OPTIONS}
+                      onChange={(next) => setPhoneConfirmInputs((prev) => ({ ...prev, [item.id]: next }))}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => confirmByPhone(item.id)}
+                      disabled={processingId === item.id || !phoneConfirmInputs[item.id]}
+                      style={{
+                        width: '100%', marginTop: 8, padding: '8px 12px', borderRadius: 8, border: 'none',
+                        background: phoneConfirmInputs[item.id] ? '#1A1A2E' : '#E5E7EB',
+                        color: phoneConfirmInputs[item.id] ? '#fff' : '#9CA3AF',
+                        fontSize: 13, fontWeight: 700,
+                        cursor: processingId === item.id || !phoneConfirmInputs[item.id] ? 'default' : 'pointer',
+                      }}
+                    >
+                      この日時に直す
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
             {item.sender_pro?.name && (
               <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>
                 紹介元: {item.sender_pro.name}さん
@@ -1194,8 +1335,13 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                     代わりに相談チャットへ寄せる。既にある往復・通報・送信取り消しがそのまま使える。
                     電話は残す: 当日の連絡と、メールが死んでいる場合の唯一の手段のため。 */}
                 <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>
-                  当日のご連絡はお電話で。メッセージは REAL PROOF の中でやりとりできます。
+                  {item.preferred_slots?.receipt_email_failed
+                    ? 'メールが届いていないため、ご連絡はお電話のみになります。'
+                    : '当日のご連絡はお電話で。メッセージは REAL PROOF の中でやりとりできます。'}
                 </div>
+                {/* §17-9(CEO指摘 2026-08-06): メールが届いていないクライアントはチャットも使えない
+                    （やりとりの通知もメールで飛ぶため）。押せるだけ無駄なので出さない。 */}
+                {!item.preferred_slots?.receipt_email_failed && (
                 <button
                   type="button"
                   onClick={() => openClientThread(item.id)}
@@ -1210,6 +1356,7 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                 >
                   メッセージを送る
                 </button>
+                )}
               </div>
             )}
 
