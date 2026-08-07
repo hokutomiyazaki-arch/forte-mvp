@@ -66,3 +66,54 @@ export function resolveEmailFixOwner(input: EmailFixOwnerInput): EmailFixOwner |
   const elapsedHours = (now - startedMs) / (1000 * 60 * 60)
   return elapsedHours < EMAIL_FIX_SENDER_WINDOW_HOURS ? 'sender' : 'receiver'
 }
+
+/**
+ * §17-25(CEO報告 2026-08-07・本番不具合): 「hokutomiyaaaki312@gmail.com だと、メール不達が
+ * 効いていない。他の間違いメールだとちゃんと出るのに。なぜ？」
+ *
+ * 真因: **Resend の抑制リスト（suppression list）**。
+ *   一度ハードバウンスしたアドレスは Resend 側に記録され、次からは**実際に送信されない**。
+ *   送らないのだから `email.bounced` の webhook も飛んでこない。
+ *   結果、「初めて使う打ち間違い」は印が立ち、「前にも使った打ち間違い」は**立たない**。
+ *   実データ:
+ *     14:19 hokutomiyki312@…（初出）   → 送信 → バウンス → 4秒後に印が立った
+ *     14:17 hokutomiyaaaki312@…（再利用）→ 抑制されて送られず → webhookも来ず → 印なし
+ *     10:19 hokutomiyaaaki312@…（初出）→ 印が立っている（同じアドレスの1回目）
+ *
+ * これはテスト特有の話ではない。実際にも
+ * 「アドレスを間違えたお客さんが、直さずにもう一度予約する」で普通に起きる。
+ * しかも**2回目以降のほうが放置されやすい**（プロ側に何も出ないため）。
+ *
+ * 対処: webhook（相手からの通知）だけに頼らず、**こちらが既に知っている事実**を使う。
+ *   同じアドレス宛で過去に未達だった予約が1件でもあれば、新しい予約は作成時点で未達として扱う。
+ *   新しいテーブルは作らない（既存の preferred_slots のマーカーを読むだけ）。
+ *
+ * supabase クライアントは型だけ構造的に受ける（このファイルに import を持たせないため）。
+ */
+export async function isKnownUndeliverableEmail(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  email: string | null | undefined,
+): Promise<boolean> {
+  const target = (email || '').trim().toLowerCase()
+  if (!target) return false
+  try {
+    const { data, error } = await supabase
+      .from('referral_bookings')
+      .select('id, preferred_slots')
+      .eq('client_email', target)
+      .order('created_at', { ascending: false })
+      .limit(20)
+    if (error) {
+      // 判定に失敗したら「知らない」として扱う（予約自体は通す。fail-soft）
+      console.error('[booking-email-fix] isKnownUndeliverableEmail error (fail-soft):', error.message)
+      return false
+    }
+    return ((data || []) as Array<{ preferred_slots: Record<string, unknown> | null }>).some(
+      (row) => !!row.preferred_slots?.receipt_email_failed,
+    )
+  } catch (err) {
+    console.error('[booking-email-fix] isKnownUndeliverableEmail error (fail-soft):', err)
+    return false
+  }
+}

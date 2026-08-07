@@ -5,6 +5,8 @@ import { ensureOwnClient, createGuestClient } from '@/lib/referral-auth'
 import { notifyBookingRequested, notifyBookingReceivedToClient } from '@/lib/referral-notify'
 import { parseSlot, snapToHalfHourUp } from '@/lib/referral-format'
 import { normalizeBookingMode } from '@/lib/booking-mode'
+// §17-25: import ゼロの純関数モジュール（チャンクグラフに何も足さない・CLAUDE.md §G）
+import { isKnownUndeliverableEmail } from '@/lib/booking-email-fix'
 
 const APP_URL = 'https://realproof.jp'
 
@@ -163,13 +165,25 @@ export async function POST(request: NextRequest) {
 
     const expiresAt = new Date(Date.now() + BOOKING_EXPIRES_HOURS * 60 * 60 * 1000).toISOString()
 
+    // §17-25: 過去に同じアドレスで未達だったなら、作成時点で未達として扱う。
+    // Resend は一度ハードバウンスしたアドレスを抑制し、次からは送信もバウンス通知もしないため、
+    // webhook を待っていても印が永久に立たない（同じ打ち間違いの2回目以降が丸ごと抜ける）。
+    const knownBadEmail = await isKnownUndeliverableEmail(supabase, clientEmail)
+
     const row: Record<string, unknown> = {
       // 紹介元なし。list_id / sender_pro_id は null のまま（受け手側UIは null を許容済み）。
       receiver_pro_id: proId,
       client_id: ownClient.id,
       menu_id: menuId,
       theme_tags: theme ? [theme] : null,
-      preferred_slots: { slots: [slot1, slot2, slot3], note: note || null },
+      preferred_slots: {
+        slots: [slot1, slot2, slot3],
+        note: note || null,
+        // §17-25: 既知の不達アドレス。プロ側にすぐ「お電話でご連絡を」が出る。
+        ...(knownBadEmail
+          ? { receipt_email_failed: true, receipt_email_failed_at: new Date().toISOString() }
+          : {}),
+      },
       status: 'requested',
       price_jpy: priceJpy,
       // 予約金なし。紹介フィーの計算に使われないよう 0 を明示する
