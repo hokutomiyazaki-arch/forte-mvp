@@ -33,6 +33,9 @@ export function useProStatus() {
       .then(res => res.json())
       .then(data => {
         setIsPro(data.isPro === true)
+        // §17-13(2026-08-06): これまで proId は常に null のままだった(返す側に無かった)。
+        // /api/user/role が proId を返すようになったのでここで埋める。
+        setProId(typeof data.proId === 'string' ? data.proId : null)
       })
       .catch(() => setIsPro(false))
   }, [authLoaded, !!clerkUser]) // eslint-disable-line react-hooks/exhaustive-deps
