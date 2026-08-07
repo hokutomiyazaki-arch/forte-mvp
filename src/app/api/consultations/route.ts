@@ -90,21 +90,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'not_accepting' }, { status: 409 })
     }
 
-    // 検索・重複チェックは normalized_email 側で行う（voter_email は表示用、の既存方針に合わせる）
+    // 検索・重複チェックは normalized 側で行う（voter_email は表示用、の既存方針に合わせる）。
+    // §17-20(CEO報告 2026-08-06・本番不具合): ただし **保存・送信は本人が入力したアドレス**。
+    //   normalizeEmail() は Gmail のドットと、全ドメインの "+タグ" を落とす照合キーであって、
+    //   宛先ではない。ここに正規化後の値を保存していたため、
+    //   `foo+test@example.com` 宛の相談メールが `foo@example.com`（別のメールボックス）へ飛び、
+    //   クライアントには永久に届かなかった。CLAUDE.md「検索・重複チェックは normalized_email、
+    //   voter_email は表示用」の線を、このテーブルだけ踏み越えていた。
+    const clientEmail = clientEmailRaw.toLowerCase()
     const normalized = normalizeEmail(clientEmailRaw)
 
     // 連投防止: 同じ人が同じプロへ短時間に複数スレッドを立てるのを止める。
     // 既存スレッドがある場合はそこへ追記してもらう導線（フロントで token を返す）。
+    // §17-20: 保存値が生アドレスになったので、突き合わせは JS 側で正規化して行う
+    //   （`+タグ` 違いを同一人物として扱う、という元の意図はそのまま維持する）。
     const since = new Date(Date.now() - COOLDOWN_MINUTES * 60 * 1000).toISOString()
-    const { data: recent } = await supabase
+    const { data: recentRows } = await supabase
       .from('consultations')
-      .select('id, access_token, created_at')
+      .select('id, access_token, created_at, client_email')
       .eq('pro_id', proId)
-      .eq('client_email', normalized)
       .gte('created_at', since)
       .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+      .limit(50)
+    const recent =
+      ((recentRows || []) as Array<{ id: string; access_token: string; client_email: string | null }>).find(
+        (r) => normalizeEmail(r.client_email) === normalized,
+      ) || null
 
     if (recent) {
       return NextResponse.json(
@@ -119,11 +130,16 @@ export async function POST(request: NextRequest) {
 
     // ①同じメールアドレスがプロをまたいで乱射するのを止める
     //   （メール中継として悪用された場合、宛先は攻撃者が指定した第三者になる）
-    const { count: emailCount } = await supabase
+    // §17-20: 同上。直近1時間ぶんだけ引いて JS で正規化突き合わせする
+    //   （件数が増えたら consultations に normalized_email 列を足してインデックスを張る）。
+    const { data: hourRows } = await supabase
       .from('consultations')
-      .select('id', { count: 'exact', head: true })
-      .eq('client_email', normalized)
+      .select('client_email')
       .gte('created_at', hourAgo)
+      .limit(1000)
+    const emailCount = ((hourRows || []) as Array<{ client_email: string | null }>).filter(
+      (r) => normalizeEmail(r.client_email) === normalized,
+    ).length
     if ((emailCount || 0) >= MAX_PER_EMAIL_PER_HOUR) {
       return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
     }
@@ -145,7 +161,8 @@ export async function POST(request: NextRequest) {
     const record: Record<string, unknown> = {
       pro_id: proId,
       client_name: clientName,
-      client_email: normalized,
+      // §17-20: 送信先になる値。正規化前の（本人が入力した）アドレスを保存する。
+      client_email: clientEmail,
       access_token: accessToken,
       status: 'new',
       // オプトインの証跡（migration 050）。未実行環境では下で外して再試行する。
