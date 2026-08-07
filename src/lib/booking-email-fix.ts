@@ -33,6 +33,12 @@ export interface EmailFixOwnerInput {
   status: string
   /** 印が立った時刻(ISO)。webhook が記録する。古い行には無いので createdAt で代用する。 */
   failedAt?: string | null
+  /**
+   * §17-19(CEO指示 2026-08-06): 「これを登録したら、既存のプロに電話させる流れも削除したい」
+   * SMSで本人に直接届いた予約は、プロが電話する必要が無い。ここで null を返し、
+   * 送り手・受け手どちらの画面にも対応ブロックを出さない。
+   */
+  contactRecoveredBySms?: boolean
   createdAt?: string | null
   /** テスト用。既定は現在時刻。 */
   nowMs?: number
@@ -46,6 +52,8 @@ export interface EmailFixOwnerInput {
  */
 export function resolveEmailFixOwner(input: EmailFixOwnerInput): EmailFixOwner | null {
   if (!input.receiptEmailFailed) return null
+  // §17-19: SMSで本人に届いている＝人が電話する理由が無い。
+  if (input.contactRecoveredBySms) return null
   if (input.status !== 'requested' && input.status !== 'confirmed') return null
   if (!input.hasSender) return 'receiver'
 

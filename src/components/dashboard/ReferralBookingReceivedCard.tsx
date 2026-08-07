@@ -104,6 +104,8 @@ interface BookingItem {
     receipt_email_failed?: boolean | null
     /** §17-16: 印が立った時刻。誰が直すか(送り手→受け手のフォールバック)の判定に使う。 */
     receipt_email_failed_at?: string | null
+    /** §17-19: SMSで本人に届いた印。立っている間はプロ側の対応ブロックを出さない。 */
+    contact_recovered_by_sms_at?: string | null
     /** §17-4: 電話で口頭で決めた日時をプロが確定した時刻（お客さん側の同意記録が無い確定） */
     confirmed_by_phone_at?: string | null
   } | null
@@ -779,7 +781,7 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
             {/* CEO指摘(2026-08-06): メールアドレスの打ち間違いだと、お客さんには何も届かないのに
                 予約だけが入る。届いていないことをプロに伝え、電話に切り替えてもらう
                 （電話番号は予約フォームの必須項目なので、連絡手段は必ず1つ残っている）。 */}
-            {item.preferred_slots?.receipt_email_failed && (
+            {item.preferred_slots?.receipt_email_failed && item.email_fix_owner && (
               <div style={{
                 background: '#FFF3F3', border: '1px solid #F0BDBD', borderRadius: 8,
                 padding: '10px 12px', marginBottom: 8,
@@ -1279,7 +1281,7 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
             )}
             {/* §17-9(CEO指示 2026-08-06): メールが届いていない確定済み予約。
                 確定のお知らせも日時変更の提案も届かないので、プロ側で完結できるようにする。 */}
-            {item.preferred_slots?.receipt_email_failed && (
+            {item.preferred_slots?.receipt_email_failed && item.email_fix_owner && (
               <div style={{
                 background: '#FFF3F3', border: '1px solid #F0BDBD', borderRadius: 8,
                 padding: '10px 12px', marginTop: 8,

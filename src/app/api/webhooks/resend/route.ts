@@ -3,8 +3,13 @@ import crypto from 'crypto'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { normalizeEmail } from '@/lib/normalize-email'
 import { notifyBookingEmailFailedToSender } from '@/lib/referral-notify'
+// §17-19: 未設定の間は sendSms が何もしない（既存の挙動は変わらない）
+import { sendSms } from '@/lib/sms'
 
 export const dynamic = 'force-dynamic'
+
+// 外部に配るURLは origin ではなくハードコード（preview デプロイのURLが顧客に届くのを防ぐ）
+const APP_URL = 'https://realproof.jp'
 
 /**
  * POST /api/webhooks/resend — メールが「送れたのに届かなかった」ことを受け取る
@@ -126,7 +131,7 @@ export async function POST(request: NextRequest) {
     // （今から連絡が要るものだけを対象にする）。
     const { data: rows } = await supabase
       .from('referral_bookings')
-      .select('id, sender_pro_id, receiver_pro_id, preferred_slots, clients(nickname)')
+      .select('id, sender_pro_id, receiver_pro_id, client_phone, preferred_slots, clients(nickname)')
       .in('client_email', addresses)
       .in('status', ['requested', 'confirmed'])
       .order('created_at', { ascending: false })
@@ -136,6 +141,7 @@ export async function POST(request: NextRequest) {
       id: string
       sender_pro_id: string | null
       receiver_pro_id: string | null
+      client_phone: string | null
       preferred_slots: Record<string, unknown> | null
       clients: { nickname: string | null } | null
     }
@@ -164,11 +170,51 @@ export async function POST(request: NextRequest) {
       if (!alreadyFailed) newlyFailed.push(row)
     }
 
-    // §17-16(CEO指示 2026-08-06): 直す仕事は**紹介元（送り手）**のもの。
-    // 送り手はそのクライアントを自分で紹介した本人なので、電話するのに無理がない。
-    // 受け手には出さない（会ったこともない他人へ電話させない・まだ1円も受け取っていない）。
+    // §17-19(CEO指示 2026-08-06): 「これを登録したら、既存のプロに電話させる流れも削除したい」
+    //
+    // メールが死んでも、電話番号は予約フォームの必須項目なので必ず残っている。
+    // まずSMSで本人に直接リンクを送る。**送れたらそこで終わり**で、
+    // §17-16 の人力フロー（送り手が電話してアドレスを聞く）は一切出さない。
+    // 人が電話するのは「SMSも届かなかった＝電話番号まで間違っている」ときだけになる。
+    //
+    // TWILIO_* が未設定の間は sendSms が必ず false を返すので、従来どおり人力フローに落ちる。
+    const smsRecovered = new Set<string>()
+    const markedAt = new Date().toISOString()
+    for (const row of newlyFailed) {
+      const result = await sendSms(
+        row.client_phone,
+        `【REAL PROOF】ご登録のメールアドレスにご案内が届きませんでした。` +
+          `お手数ですが、こちらからご予約の状況をご確認ください。\n${APP_URL}/booking/${row.id}`,
+      )
+      if (!result.sent) continue
+      smsRecovered.add(row.id)
+      const { error } = await supabase
+        .from('referral_bookings')
+        .update({
+          preferred_slots: {
+            ...(row.preferred_slots || {}),
+            receipt_email_failed: true,
+            // 直前のループで書いた値を落とさない（row.preferred_slots は更新前のスナップショット）
+            receipt_email_failed_at:
+              (row.preferred_slots?.receipt_email_failed_at as string | undefined) || markedAt,
+            // これが立っている間、プロ側にはメール未達の対応ブロックを出さない（§17-19）。
+            contact_recovered_by_sms_at: markedAt,
+          },
+        })
+        .eq('id', row.id)
+      if (error) {
+        // 印が書けなかった場合はプロ側の人力フローを残す（黙って誰も気づかない状態を作らない）
+        console.error('[api/webhooks/resend] sms mark error:', row.id, error.message)
+        smsRecovered.delete(row.id)
+      }
+    }
+
+    // §17-16(CEO指示 2026-08-06): SMSで届かなかったときだけ、人が動く。
+    // 直す仕事は**紹介元（送り手）**のもの。送り手はそのクライアントを自分で紹介した本人なので、
+    // 電話するのに無理がない。受け手には出さない（会ったこともない他人へ電話させない）。
     // 直接予約(送り手なし)はこの通知の対象外＝従来どおり受け手が自分で直す。
     for (const row of newlyFailed) {
+      if (smsRecovered.has(row.id)) continue
       if (!row.sender_pro_id) continue
       try {
         const [{ data: senderPro }, { data: receiverPro }] = await Promise.all([

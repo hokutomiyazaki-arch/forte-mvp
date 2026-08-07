@@ -97,6 +97,8 @@ interface PreferredSlots {
   receipt_email_failed?: boolean | null
   /** §17-16: 印が立った時刻。誰が直すか(送り手→受け手のフォールバック)の判定に使う。 */
   receipt_email_failed_at?: string | null
+  /** §17-19: SMSで本人に届いた印。立っている間はプロ側の対応ブロックを出さない。 */
+  contact_recovered_by_sms_at?: string | null
   /** §17-9: メールが届かないため、プロが片付けた（クライアントへは通知していない） */
   discarded_undeliverable_at?: string | null
 }
@@ -390,6 +392,7 @@ export async function GET() {
         status: b.status,
         failedAt: b.preferred_slots?.receipt_email_failed_at || null,
         createdAt: b.created_at,
+        contactRecoveredBySms: !!b.preferred_slots?.contact_recovered_by_sms_at,
       }),
     }))
 
@@ -972,6 +975,7 @@ export async function PATCH(request: NextRequest) {
           status: booking.status,
           failedAt: booking.preferred_slots?.receipt_email_failed_at || null,
           createdAt: booking.created_at,
+          contactRecoveredBySms: !!booking.preferred_slots?.contact_recovered_by_sms_at,
         }) === 'sender'
       ) {
         return NextResponse.json({ error: 'sender_is_fixing' }, { status: 409 })
