@@ -754,19 +754,21 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                     )}
                   </div>
                 )}
-                <button
-                  type="button"
-                  onClick={() => discardBooking(item.id)}
-                  disabled={processingId === item.id}
-                  style={{
-                    display: 'block', margin: '10px auto 0', padding: 0,
-                    background: 'none', border: 'none',
-                    color: '#9CA3AF', fontSize: 11, textDecoration: 'underline',
-                    cursor: processingId === item.id ? 'default' : 'pointer',
-                  }}
-                >
-                  この予約を削除する
-                </button>
+                {item.payment_status !== 'paid' && item.payment_status !== 'awaiting' && (
+                  <button
+                    type="button"
+                    onClick={() => discardBooking(item.id)}
+                    disabled={processingId === item.id}
+                    style={{
+                      display: 'block', margin: '10px auto 0', padding: 0,
+                      background: 'none', border: 'none',
+                      color: '#9CA3AF', fontSize: 11, textDecoration: 'underline',
+                      cursor: processingId === item.id ? 'default' : 'pointer',
+                    }}
+                  >
+                    この予約を削除する
+                  </button>
+                )}
               </div>
             )}
             {theme && <div style={{ fontSize: 13, color: '#555', marginBottom: 4 }}>テーマ: {theme}</div>}
@@ -1156,6 +1158,15 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                   確定のお知らせも届いていません。お電話でご連絡をお願いします。
                   日時の変更もお客さまには通知できないため、お電話で決めてからこちらで直してください。
                 </div>
+                {/* CEO質問(2026-08-06)「予約金がある場合は？」への対応。
+                    予約金が動いている予約は、削除（通知なし・返金判定なし）に流してはいけない。
+                    返金の判定が入る通常のキャンセルへ誘導し、そのメニューも隠さない。 */}
+                {(item.payment_status === 'paid' || item.payment_status === 'awaiting') && (
+                  <div style={{ fontSize: 12, color: '#B26A00', lineHeight: 1.7, marginTop: 6 }}>
+                    この予約は予約金のお支払いが絡みます。取りやめる場合は、下の
+                    「変更・キャンセルなどの操作」からキャンセルしてください（返金の判定が入ります）。
+                  </div>
+                )}
                 {/* 主役は発信。日時直しは次点、削除は最後の手段（CEO指摘 2026-08-06）。 */}
                 {item.client_contact?.phone && (
                   <a
@@ -1363,7 +1374,9 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                 </div>
                 {/* §17-9(CEO指摘 2026-08-06): メールが届いていないクライアントはチャットも使えない
                     （やりとりの通知もメールで飛ぶため）。押せるだけ無駄なので出さない。 */}
-                {!item.preferred_slots?.receipt_email_failed && (
+                {(!item.preferred_slots?.receipt_email_failed ||
+              item.payment_status === 'paid' ||
+              item.payment_status === 'awaiting') && (
                 <button
                   type="button"
                   onClick={() => openClientThread(item.id)}
