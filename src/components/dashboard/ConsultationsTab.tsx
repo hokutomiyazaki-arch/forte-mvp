@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import LinkedText from '@/components/LinkedText'
 
 const BODY_MAX = 2000
 
@@ -537,7 +538,8 @@ export default function ConsultationsTab({
                               borderRadius: 12, padding: '10px 12px',
                               fontSize: 13, lineHeight: 1.8, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                             }}>
-                              {m.body}
+                              {/* §17-14: URLはリンクにする。自分の吹き出しは濃色地なので色を変える */}
+                              <LinkedText text={m.body} variant={mine ? 'onDark' : 'onLight'} />
                             </div>
                             <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 3, textAlign: mine ? 'right' : 'left' }}>
                               {mine ? 'あなた' : c.client_name}・{formatDate(m.created_at)}

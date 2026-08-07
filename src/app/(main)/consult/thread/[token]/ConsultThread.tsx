@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { resolveBookingTarget, buildMenuBookingHref } from '@/lib/booking-mode'
+import LinkedText from '@/components/LinkedText'
 
 const T = {
   dark: '#1A1A2E',
@@ -320,7 +321,8 @@ export default function ConsultThread({ token }: { token: string }) {
                   fontSize: 14, lineHeight: 1.8, whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
                 }}>
-                  {m.body}
+                  {/* §17-14: URLはリンクにする。自分(クライアント)の吹き出しは濃色地 */}
+                  <LinkedText text={m.body} variant={isPro ? 'onLight' : 'onDark'} />
                 </div>
                 )}
                 <div style={{
