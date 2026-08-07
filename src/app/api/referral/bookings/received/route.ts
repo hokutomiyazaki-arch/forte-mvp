@@ -16,6 +16,8 @@ import {
   notifyLocationToClient,
   notifyBookingCancelledByReceiverToClient,
   notifyBookingCancelledByReceiverToSender,
+  // §17-10: メールアドレスを直したときの受付メール再送に使う
+  notifyBookingReceivedToClient,
 } from '@/lib/referral-notify'
 import {
   formatSlot,
@@ -450,6 +452,7 @@ export async function PATCH(request: NextRequest) {
       (action !== 'confirm' &&
         action !== 'confirm_offline' &&
         action !== 'discard' &&
+        action !== 'fix_client_email' &&
         action !== 'decline' &&
         action !== 'complete' &&
         action !== 'counter' &&
@@ -915,6 +918,120 @@ export async function PATCH(request: NextRequest) {
       }
 
       return NextResponse.json({ success: true, status: 'cancelled' })
+    }
+
+    // §17-10(CEO指示 2026-08-06): メールアドレスを直して送り直す。
+    //   「紹介予約の場合は、正しいメールアドレスを確認して入力させないと、
+    //     クライアントに予約金の支払いメールを送れない。プロには電話でメールを確認させて。
+    //     そんでメールアドレス修正のボックスをだす。」
+    //
+    // 開けている条件を厳しくしている理由: これは**他人の連絡先を書き換える操作**で、
+    //   悪用すれば予約を別人のアドレスに付け替えられる。そこで
+    //   ①受け手プロ本人 ②メールが届いていないと分かっている予約 ③進行中(requested/confirmed)
+    //   の3つが揃ったときだけ通す。旧アドレスは行内に記録して、後から追えるようにする。
+    if (action === 'fix_client_email') {
+      if (!booking.preferred_slots?.receipt_email_failed) {
+        return NextResponse.json({ error: 'not_allowed' }, { status: 409 })
+      }
+      if (booking.status !== 'requested' && booking.status !== 'confirmed') {
+        return NextResponse.json({ error: 'not_pending' }, { status: 409 })
+      }
+
+      const nextEmail =
+        typeof body.client_email === 'string' ? body.client_email.trim().slice(0, 254).toLowerCase() : ''
+      if (!nextEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
+        return NextResponse.json({ error: 'email_invalid' }, { status: 400 })
+      }
+      if (nextEmail === (booking.client_email || '').toLowerCase()) {
+        return NextResponse.json({ error: 'email_unchanged' }, { status: 400 })
+      }
+
+      const { data: fixedRows, error: fixError } = await supabase
+        .from('referral_bookings')
+        .update({
+          client_email: nextEmail,
+          preferred_slots: {
+            ...(booking.preferred_slots || {}),
+            // 直したので未達フラグは下ろす。届かなければ webhook がまた立てる。
+            receipt_email_failed: false,
+            client_email_fixed_at: new Date().toISOString(),
+            client_email_before_fix: booking.client_email || null,
+          },
+        })
+        .eq('id', bookingId)
+        .in('status', ['requested', 'confirmed'])
+        .select('id')
+
+      if (fixError) {
+        console.error('[api/referral/bookings/received] PATCH fix_client_email error:', fixError)
+        return NextResponse.json({ error: 'failed_to_update' }, { status: 500 })
+      }
+      if (!fixedRows || fixedRows.length === 0) {
+        return NextResponse.json({ error: 'not_pending' }, { status: 409 })
+      }
+
+      // 直したアドレスへ、いま必要なメールを送り直す。
+      const slugForFix = booking.referral_lists?.slug || ''
+      const listUrlForFix = slugForFix ? `${APP_URL}/r/${slugForFix}` : APP_URL
+      const clientUserIdForFix = booking.clients?.user_id || ''
+      const feeTotalBpsForFix = booking.fee_total_bps ?? REFERRAL_FEE_TOTAL_BPS
+      const feeAmountJpyForFix =
+        booking.price_jpy > 0 ? Math.floor((booking.price_jpy * feeTotalBpsForFix) / 10000) : 0
+      const needsFeePayment =
+        paymentEnabled &&
+        booking.status === 'confirmed' &&
+        (booking.payment_status === 'awaiting' || booking.payment_status === 'unpaid') &&
+        booking.price_jpy > 0 &&
+        feeAmountJpyForFix >= REFERRAL_MIN_FEE_JPY
+
+      let resent = false
+      try {
+        if (needsFeePayment) {
+          // 予約金の支払い案内を出し直す（これが送れないと予約が成立しないため最優先）
+          const confirmedSlotTextForFix = formatSlotWithWeekday(resolveConfirmedSlotIso(booking.preferred_slots))
+          const result = await issueFeePaymentLinkAndNotify({
+            bookingId: booking.id,
+            priceJpy: booking.price_jpy,
+            feeAmountJpy: feeAmountJpyForFix,
+            menuName: booking.pro_menus?.name || null,
+            clientEmail: nextEmail,
+            clientUserId: clientUserIdForFix || null,
+            receiverProName: ownPro.name,
+            confirmedSlotText: confirmedSlotTextForFix,
+            successUrl: `${listUrlForFix}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+            cancelUrl: `${APP_URL}/booking/${booking.id}?payment=canceled`,
+            listUrl: listUrlForFix,
+          })
+          resent = result.success
+        } else {
+          // 確定前なら受付メールを、確定済み（予約金なし）なら確定のお知らせを送り直す。
+          if (booking.status === 'requested') {
+            const receipt = await notifyBookingReceivedToClient(
+              { userId: clientUserIdForFix, email: nextEmail },
+              ownPro.name,
+              listUrlForFix,
+              { paymentFlowActive: paymentEnabled && booking.payment_status === 'unpaid' },
+            )
+            resent = receipt.sent
+          } else {
+            const slotText = formatSlotWithWeekday(resolveConfirmedSlotIso(booking.preferred_slots))
+            const result = await notifyClientByEmail(
+              { userId: clientUserIdForFix, email: nextEmail },
+              `${ownPro.name}さんとのご予約が確定しました`,
+              emailShell(
+                'ご予約確定のお知らせ',
+                `${slotText ? `${escapeHtml(slotText)} に確定しています。` : 'ご予約の日時が確定しています。'}<br>` +
+                  `担当: ${escapeHtml(ownPro.name)}さん`,
+              ),
+            )
+            resent = result.sent
+          }
+        }
+      } catch (resendErr) {
+        console.error('[api/referral/bookings/received] fix_client_email resend error:', resendErr)
+      }
+
+      return NextResponse.json({ success: true, resent })
     }
 
     // §17-9(CEO指示 2026-08-06): メールが届いていない予約は、プロ側で片付けられるようにする。
