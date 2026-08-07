@@ -731,19 +731,26 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                 </div>
                 {/* §17-9(CEO指摘 2026-08-06): 「プロが確定しないと電話番号が出ない」は、
                     メールが死んでいる予約では詰みになる。確定前でもここだけ連絡先を出す。 */}
+                {/* CEO指摘(2026-08-06)「電話させるのが最初だから」: ここでの主役は発信。
+                    削除は最後の手段なので、小さなテキストリンクに落とす。 */}
                 {item.client_contact && (
-                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #F0BDBD' }}>
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #F0BDBD' }}>
                     {item.client_contact.name && (
-                      <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1A2E' }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1A2E', marginBottom: 6 }}>
                         {item.client_contact.name}さん
                       </div>
                     )}
                     {item.client_contact.phone && (
-                      <div style={{ fontSize: 15, fontWeight: 700, marginTop: 2 }}>
-                        <a href={`tel:${encodeURIComponent(item.client_contact.phone)}`} style={{ color: '#B00020' }}>
-                          {item.client_contact.phone}
-                        </a>
-                      </div>
+                      <a
+                        href={`tel:${encodeURIComponent(item.client_contact.phone)}`}
+                        style={{
+                          display: 'block', textAlign: 'center', padding: '12px 16px', borderRadius: 10,
+                          background: '#B00020', color: '#fff', fontSize: 15, fontWeight: 700,
+                          textDecoration: 'none',
+                        }}
+                      >
+                        電話をかける {item.client_contact.phone}
+                      </a>
                     )}
                   </div>
                 )}
@@ -752,10 +759,10 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                   onClick={() => discardBooking(item.id)}
                   disabled={processingId === item.id}
                   style={{
-                    marginTop: 10, padding: '8px 14px', borderRadius: 8, border: 'none',
-                    background: '#E24B4A', color: '#fff', fontSize: 12, fontWeight: 700,
+                    display: 'block', margin: '10px auto 0', padding: 0,
+                    background: 'none', border: 'none',
+                    color: '#9CA3AF', fontSize: 11, textDecoration: 'underline',
                     cursor: processingId === item.id ? 'default' : 'pointer',
-                    opacity: processingId === item.id ? 0.6 : 1,
                   }}
                 >
                   この予約を削除する
@@ -942,7 +949,9 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                   </button>
                 )}
 
-                {!isCounterOpen ? (
+                {/* CEO指摘(2026-08-06): メールが届かない相手には提案そのものが届かない。
+                    出しても機能しないので隠す（電話で決めて「お電話で決めた日時で確定する」を使う）。 */}
+                {item.preferred_slots?.receipt_email_failed ? null : !isCounterOpen ? (
                   <button
                     onClick={() => setCounterOpenId(item.id)}
                     style={{
@@ -1147,31 +1156,44 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                   確定のお知らせも届いていません。お電話でご連絡をお願いします。
                   日時の変更もお客さまには通知できないため、お電話で決めてからこちらで直してください。
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 8, marginTop: 10 }}>
-                  <button
-                    type="button"
-                    onClick={() => { setPhoneConfirmOpenId(phoneConfirmOpenId === item.id ? null : item.id) }}
+                {/* 主役は発信。日時直しは次点、削除は最後の手段（CEO指摘 2026-08-06）。 */}
+                {item.client_contact?.phone && (
+                  <a
+                    href={`tel:${encodeURIComponent(item.client_contact.phone)}`}
                     style={{
-                      padding: '8px 14px', borderRadius: 8, border: '1px solid #B00020',
-                      background: '#fff', color: '#B00020', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                      display: 'block', textAlign: 'center', marginTop: 10,
+                      padding: '12px 16px', borderRadius: 10,
+                      background: '#B00020', color: '#fff', fontSize: 15, fontWeight: 700,
+                      textDecoration: 'none',
                     }}
                   >
-                    日時を直す
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => discardBooking(item.id)}
-                    disabled={processingId === item.id}
-                    style={{
-                      padding: '8px 14px', borderRadius: 8, border: 'none',
-                      background: '#E24B4A', color: '#fff', fontSize: 12, fontWeight: 700,
-                      cursor: processingId === item.id ? 'default' : 'pointer',
-                      opacity: processingId === item.id ? 0.6 : 1,
-                    }}
-                  >
-                    この予約を削除する
-                  </button>
-                </div>
+                    電話をかける {item.client_contact.phone}
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => { setPhoneConfirmOpenId(phoneConfirmOpenId === item.id ? null : item.id) }}
+                  style={{
+                    width: '100%', marginTop: 8, padding: '10px 14px', borderRadius: 8,
+                    border: '1px solid #B00020', background: '#fff', color: '#B00020',
+                    fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                  }}
+                >
+                  お電話で決めた日時に直す
+                </button>
+                <button
+                  type="button"
+                  onClick={() => discardBooking(item.id)}
+                  disabled={processingId === item.id}
+                  style={{
+                    display: 'block', margin: '10px auto 0', padding: 0,
+                    background: 'none', border: 'none',
+                    color: '#9CA3AF', fontSize: 11, textDecoration: 'underline',
+                    cursor: processingId === item.id ? 'default' : 'pointer',
+                  }}
+                >
+                  この予約を削除する
+                </button>
                 {phoneConfirmOpenId === item.id && (
                   <div style={{ marginTop: 10, background: '#fff', borderRadius: 8, padding: '10px 12px', border: '1px solid #E5E7EB' }}>
                     <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 8, lineHeight: 1.7 }}>
@@ -1410,6 +1432,11 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                 (フォームを開いたらそのフォームだけ表示・戻るで一覧に戻れる)。
                 機能・API呼び出し・ガード条件は既存のまま(locationOpenId/rescheduleOpenId/cancelOpenId
                 及び各handlerを変更していない)。 */}
+            {/* CEO指摘(2026-08-06)「通常の日時変更操作も出さないで。これも機能しないから」:
+                この中身（当日の場所を送る／日時変更を提案する／キャンセル）はすべて
+                クライアントへのメール送信が前提。メールが届かない相手には1つも機能しない。
+                代わりに上の赤いブロック（電話 → 日時を直す → 削除）で完結させる。 */}
+            {!item.preferred_slots?.receipt_email_failed && (
             <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px dashed #E5E7EB' }}>
               {!isMenuOpen && !isFormOpen && (
                 <button
@@ -1731,6 +1758,7 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                 </div>
               )}
             </div>
+            )}
           </div>
           )
         })}
