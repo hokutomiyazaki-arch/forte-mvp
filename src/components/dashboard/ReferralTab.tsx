@@ -233,6 +233,8 @@ export default function ReferralTab({
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null)
   // CEO指摘(先行テスト・UI修正②): クライアントに共有するURLをQRコード表示するモーダル(listId単位)
   const [qrModalListId, setQrModalListId] = useState<string | null>(null)
+  // §17-12(CEO指示 2026-08-06): 招待は「QR発行かシェア」で渡す。テキストのコピーが主役ではない。
+  const [inviteQrUrl, setInviteQrUrl] = useState<string | null>(null)
 
   // §16-20: 各リストカードの「代理案内に使う」チェックボックス。delegate_criteria.list_idは
   // 単数のため、ONにすると自然に他のリストのチェックはOFFになる(排他はサーバー側の値そのもの)。
@@ -971,9 +973,17 @@ export default function ReferralTab({
   async function shareInviteText(listId: string) {
     const text = inviteShareText[listId] || issuedInviteUrl[listId]
     if (!text) return
-    try {
-      await (navigator as { share: (data: { text: string }) => Promise<void> }).share({ text })
-    } catch {}
+    // §17-12: ボタンは常に出す。ネイティブ共有が使えない端末（PCブラウザ・一部の
+    // アプリ内ブラウザ）ではコピーに倒す。押しても何も起きない状態を作らない。
+    if (canNativeShare) {
+      try {
+        await (navigator as { share: (data: { text: string }) => Promise<void> }).share({ text })
+        return
+      } catch {
+        return
+      }
+    }
+    copyInviteShareText(listId)
   }
 
   function copyInviteShareText(listId: string) {
@@ -1574,23 +1584,33 @@ export default function ReferralTab({
                           boxSizing: 'border-box' as const, resize: 'vertical' as const, lineHeight: 1.6,
                         }}
                       />
+                      {/* §17-12(CEO指示 2026-08-06): 「QR発行か、シェアにして」。
+                          目の前にいる先生にはQRを見せる、離れている先生にはシェアで送る。
+                          テキストのコピーは残すが主役から外す（貼り先を自分で探す手間が要るため）。 */}
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
-                        {canNativeShare && (
-                          <button
-                            onClick={() => shareInviteText(list.id)}
-                            style={{
-                              padding: '8px 14px', borderRadius: 8, border: 'none',
-                              background: '#1A1A2E', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                            }}
-                          >
-                            共有する（LINE・メール等）
-                          </button>
-                        )}
+                        <button
+                          onClick={() => setInviteQrUrl(issuedInviteUrl[list.id] || null)}
+                          style={{
+                            padding: '8px 14px', borderRadius: 8, border: 'none',
+                            background: '#1A1A2E', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                          }}
+                        >
+                          QRコードを見せる
+                        </button>
+                        <button
+                          onClick={() => shareInviteText(list.id)}
+                          style={{
+                            padding: '8px 14px', borderRadius: 8, border: '1px solid #1A1A2E',
+                            background: '#fff', color: '#1A1A2E', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                          }}
+                        >
+                          シェアする
+                        </button>
                         <button
                           onClick={() => copyInviteShareText(list.id)}
                           style={{
                             padding: '8px 14px', borderRadius: 8, border: '1px solid #E5E7EB',
-                            background: '#fff', color: '#1A1A2E', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                            background: '#fff', color: '#6B7280', fontSize: 12, fontWeight: 600, cursor: 'pointer',
                           }}
                         >
                           {copiedSlug === `invite:${list.id}` ? 'コピーしました' : 'テキストをコピー'}
@@ -2171,6 +2191,48 @@ export default function ReferralTab({
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {publicLists.map((list) => renderListCard(list, false))}
+        </div>
+      )}
+
+      {/* §17-12(CEO指示 2026-08-06): 招待URLのQR。目の前の先生に見せて読んでもらう。
+          読んだ先で「新規登録」すると、自動でこのリストに載る（既存の招待フローのまま）。 */}
+      {inviteQrUrl && (
+        <div
+          onClick={() => setInviteQrUrl(null)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 16,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#fff', borderRadius: 16, padding: 24, maxWidth: 320, width: '100%',
+              textAlign: 'center' as const, boxSizing: 'border-box' as const,
+            }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>
+              先生に読み取ってもらってください
+            </div>
+            <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 12, lineHeight: 1.6 }}>
+              登録が完了すると、自動でこのリストに載ります
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+              <QRCodeSVG value={inviteQrUrl} size={200} />
+            </div>
+            <div style={{ fontSize: 12, color: '#9CA3AF', wordBreak: 'break-all' as const, marginBottom: 16 }}>
+              {inviteQrUrl}
+            </div>
+            <button
+              onClick={() => setInviteQrUrl(null)}
+              style={{
+                width: '100%', padding: '10px', borderRadius: 8, border: 'none',
+                background: '#1A1A2E', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              閉じる
+            </button>
+          </div>
         </div>
       )}
 
