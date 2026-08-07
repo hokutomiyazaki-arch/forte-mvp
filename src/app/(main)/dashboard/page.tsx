@@ -603,11 +603,17 @@ export default function DashboardPage() {
   // 初期サブタブを固定する(localStorage・requested件数による自動判定より優先)。依存はプリミティブのみ。
   const referralSubParam = searchParams.get('sub')
   useEffect(() => {
-    // §17-2: 'receive'(受信箱)は「予約」タブへ独立したため、紹介タブでは受け取らない。
-    // 古いリンク・古い通知メールが ?sub=receive で来た場合は 'send' に倒す（404にしない）。
-    if (referralSubParam === 'send' || referralSubParam === 'receive' || referralSubParam === 'cases') {
+    // §17-2: 'receive'(受信箱)は「予約」タブへ独立した。
+    // 既に送信済みの通知メールが ?tab=referral&sub=receive を含んでいるため、
+    // それを開いた人が「予約が無い画面」に着地しないよう、予約タブへ送る。
+    if (referralSubParam === 'receive') {
       referralSubtabInitRef.current = true
-      setReferralSubtab(referralSubParam === 'receive' ? 'send' : referralSubParam)
+      setDashboardTab('bookings')
+      return
+    }
+    if (referralSubParam === 'send' || referralSubParam === 'cases') {
+      referralSubtabInitRef.current = true
+      setReferralSubtab(referralSubParam)
     }
   }, [referralSubParam])
 
@@ -5421,6 +5427,19 @@ export default function DashboardPage() {
               紹介した案件{referralSentActiveCount > 0 ? ` (${referralSentActiveCount})` : ''}
             </button>
           </div>
+
+          {/* CEO報告(2026-08-06): 既に送信済みの通知メールは紹介タブを指している。
+              そこから来た人が「予約が無い」と迷わないよう、行き先を先頭に出す。 */}
+          <a
+            href="/dashboard?tab=bookings"
+            style={{
+              display: 'block', marginBottom: 12, padding: '10px 14px', borderRadius: 10,
+              background: '#F0F7FF', border: '1px solid #B8D4F0',
+              fontSize: 13, fontWeight: 700, color: '#1A1A2E', textDecoration: 'none',
+            }}
+          >
+            届いた予約は「予約」タブにあります →
+          </a>
 
           {/* §17-5(CEO判断 2026-08-06): 紹介予約の受付スイッチは「予約」タブへ移動した。
               受け取るかどうかの設定であって、紹介する仕事ではないため（§17-2と同じ理屈）。
