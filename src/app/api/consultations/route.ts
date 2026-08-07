@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { normalizeEmail } from '@/lib/normalize-email'
+// §17-27: import ゼロの純関数モジュール（チャンクグラフに何も足さない・CLAUDE.md §G）
+import { isKnownUndeliverableEmail } from '@/lib/booking-email-fix'
 import { notifyClientConsultationReceived, notifyProNewConsultation } from '@/lib/consultation-notify'
 import {
   screenSubmission,
@@ -143,11 +145,17 @@ export async function POST(request: NextRequest) {
         console.error('[api/consultations POST] append error:', appendError.message)
         return NextResponse.json({ error: 'create_failed' }, { status: 500 })
       }
-      // プロ側の受信箱で未返信として立ち上げ直す（新規スレッドと同じ扱いにする）
-      await supabase
+      // プロ側の受信箱で未返信として立ち上げ直す（新規スレッドと同じ扱いにする）。
+      // §17-26: ここが失敗すると、**アーカイブ済みのスレッドに追記した場合に
+      //   プロの一覧へ出てこない**（GET が status='archived' を除外するため）。
+      //   本文だけ入って誰にも見えない状態になるので、失敗を握りつぶさない。
+      const { error: reopenError } = await supabase
         .from('consultations')
         .update({ status: 'new', updated_at: new Date().toISOString() })
         .eq('id', recent.id)
+      if (reopenError) {
+        console.error('[api/consultations POST] reopen error:', recent.id, reopenError.message)
+      }
 
       // §17-26: 通知の成否を握りつぶさない。プロに届いたかどうかは、
       //   「送ったのに反応が無い」を切り分ける唯一の手がかりになる。
@@ -183,6 +191,18 @@ export async function POST(request: NextRequest) {
         })
       } catch (err) {
         console.error('[api/consultations POST] client notify error (append):', err)
+      }
+
+      // §17-27: 追記でも同じ判定をする（印が消えたまま残らないように）。
+      if (!receiptSentOnAppend) {
+        try {
+          await supabase
+            .from('consultations')
+            .update({ email_failed_at: new Date().toISOString() })
+            .eq('id', recent.id)
+        } catch (markErr) {
+          console.error('[api/consultations POST] email_failed mark error (append, fail-soft):', markErr)
+        }
       }
 
       return NextResponse.json({
@@ -223,6 +243,12 @@ export async function POST(request: NextRequest) {
     if ((proCount || 0) >= MAX_PER_PRO_PER_HOUR) {
       return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
     }
+
+    // §17-27(CEO報告 2026-08-07): 相談側にも「メールが届いていない」の印を立てる。
+    //   予約側(§17-25)と同じ穴が残っていた。Resend は一度ハードバウンスしたアドレスを
+    //   抑制し、次からは送信もバウンス通知もしないため、webhook を待っていても
+    //   **2回目以降は永久に印が立たない**。既に知っている事実で先回りする。
+    const knownBadEmail = await isKnownUndeliverableEmail(supabase, clientEmail)
 
     // 推測不能なトークン。UUID2本分（メールのリンクが唯一の鍵になるため短くしない）。
     const accessToken = `${crypto.randomUUID()}${crypto.randomUUID()}`.replace(/-/g, '')
@@ -314,6 +340,23 @@ export async function POST(request: NextRequest) {
       })
     } catch (err) {
       console.error('[api/consultations POST] client notify error:', err)
+    }
+
+    // §17-27: 「元から分かっている不達」または「受付メールの送信自体が失敗」なら、
+    //   バウンス通知を待たずにこの場で印を立てる。プロの相談カードに「メール届かず」が出る。
+    //   email_failed_at は migration 058 依存のため fail-soft（未作成でも相談は成立させる）。
+    if (knownBadEmail || !receiptSent) {
+      try {
+        const { error: markError } = await supabase
+          .from('consultations')
+          .update({ email_failed_at: new Date().toISOString() })
+          .eq('id', created.id)
+        if (markError) {
+          console.error('[api/consultations POST] email_failed mark error (fail-soft):', markError.message)
+        }
+      } catch (markErr) {
+        console.error('[api/consultations POST] email_failed mark error (fail-soft):', markErr)
+      }
     }
 
     return NextResponse.json({
