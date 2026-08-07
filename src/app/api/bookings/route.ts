@@ -232,8 +232,18 @@ export async function POST(request: NextRequest) {
     }
 
     // クライアントへ受付メール（届いていないと不安になるため必ず出す）
+    //
+    // CEO指摘(2026-08-06):「クライアントがe-mailを誤って入力していたらどうする？
+    //   クライアントはなんも通知なくて、プロには予約が入ってる、が起こりうる。」
+    //   → 送信できたかを receipt_sent で返し、フロントの完了画面でその場で伝える。
+    //   → 送信できなかったことはプロにも渡す（確定後に電話へ切り替えてもらうため。
+    //      電話番号はこのフォームの必須項目なので、連絡手段は必ず1つ残っている）。
+    //   ※ 形式が正しいまま宛先が存在しない場合(gmial.com 等)はここでは成功になる。
+    //      その層は入力時のドメイン候補表示(src/lib/email-typo.ts)と、完了画面の
+    //      「この宛先に送りました」の読み上げで潰す。
+    let receiptSent = false
     try {
-      await notifyBookingReceivedToClient(
+      const receipt = await notifyBookingReceivedToClient(
         { userId, email: clientEmail },
         pro.name,
         `${APP_URL}/card/${proId}`,
@@ -249,11 +259,34 @@ export async function POST(request: NextRequest) {
           note,
         },
       )
+      receiptSent = receipt.sent
     } catch (notifyErr) {
       console.error('[api/bookings] client receipt notify error:', notifyErr)
     }
 
-    return NextResponse.json({ booking: { id: booking.id, status: booking.status, expires_at: booking.expires_at } })
+    if (!receiptSent) {
+      // 受け手プロの画面に「メールが届いていない」を出すための印。
+      // 新カラムを足さず preferred_slots に持つ（既存のマーカーと同じ作法）。
+      try {
+        await supabase
+          .from('referral_bookings')
+          .update({
+            preferred_slots: {
+              slots: [slot1, slot2, slot3],
+              note: note || null,
+              receipt_email_failed: true,
+            },
+          })
+          .eq('id', booking.id)
+      } catch (markErr) {
+        console.error('[api/bookings] receipt failure mark error:', markErr)
+      }
+    }
+
+    return NextResponse.json({
+      booking: { id: booking.id, status: booking.status, expires_at: booking.expires_at },
+      receipt_sent: receiptSent,
+    })
   } catch (err: any) {
     console.error('[api/bookings] POST error:', err)
     return NextResponse.json({ error: 'internal_error' }, { status: 500 })
