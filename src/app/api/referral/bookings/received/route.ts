@@ -89,6 +89,10 @@ interface PreferredSlots {
    * （メールアドレスの打ち間違いでお客さんに何も届かない場合の逃げ道）。
    */
   confirmed_by_phone_at?: string | null
+  /** §17-3④/§17-7: 受付メールがクライアントに届かなかった印（送信失敗 or バウンス） */
+  receipt_email_failed?: boolean | null
+  /** §17-9: メールが届かないため、プロが片付けた（クライアントへは通知していない） */
+  discarded_undeliverable_at?: string | null
 }
 
 /**
@@ -135,7 +139,18 @@ interface BookingRow {
  * 開示しない(status条件で既に弾かれる)。
  * ★ この関数がPIIの唯一のゲートになる。開示条件を変更する場合は必ずレビューを通すこと。
  */
-function canDiscloseContact(booking: { status: string; payment_status?: string | null }): boolean {
+function canDiscloseContact(booking: {
+  status: string
+  payment_status?: string | null
+  /**
+   * §17-9(CEO指摘 2026-08-06): 受付メールが届いていない予約は例外。
+   * 「プロが確定しないと電話番号が出ない」ままだと、確定の連絡も取れないのに確定を迫られる。
+   * メールが死んでいる＝連絡手段が電話しかないので、確定前(requested)でも開示する。
+   * 開示するのは**お名前と電話番号だけ**（メールアドレスは §17-6 で一切返さない）。
+   */
+  receiptEmailFailed?: boolean
+}): boolean {
+  if (booking.receiptEmailFailed && booking.status === 'requested') return true
   if (booking.status !== 'confirmed' && booking.status !== 'completed') return false
   const ps = booking.payment_status
   return ps === 'paid' || ps === 'not_required' || ps === null || ps === undefined
@@ -341,8 +356,13 @@ export async function GET() {
       client_nickname: b.clients?.nickname || 'クライアント',
       sender_pro: b.sender_pro_id ? sendersMap[b.sender_pro_id] || null : null,
       // §2-4ステージ3(CEO決定): 決済確認後(canDiscloseContact参照)のみ連絡先を開示する。
-      client_contact: canDiscloseContact({ status: b.status, payment_status: paymentEnabled ? b.payment_status : undefined })
-        ? { name: b.client_name || null, phone: b.client_phone || null, email: b.client_email || null }
+      // §17-6: メールアドレスは返さない（画面に出さないだけでなくレスポンスからも外す）。
+      client_contact: canDiscloseContact({
+        status: b.status,
+        payment_status: paymentEnabled ? b.payment_status : undefined,
+        receiptEmailFailed: !!b.preferred_slots?.receipt_email_failed,
+      })
+        ? { name: b.client_name || null, phone: b.client_phone || null }
         : null,
     }))
 
@@ -364,7 +384,7 @@ export async function GET() {
       // タスク①: completed一覧も同条件で開示する(completedはpaid/not_requiredのはずだが、
       // 念のためcanDiscloseContactを必ず通す)。
       client_contact: canDiscloseContact({ status: b.status, payment_status: paymentEnabled ? b.payment_status : undefined })
-        ? { name: b.client_name || null, phone: b.client_phone || null, email: b.client_email || null }
+        ? { name: b.client_name || null, phone: b.client_phone || null }
         : null,
     }))
 
@@ -429,6 +449,7 @@ export async function PATCH(request: NextRequest) {
       !bookingId ||
       (action !== 'confirm' &&
         action !== 'confirm_offline' &&
+        action !== 'discard' &&
         action !== 'decline' &&
         action !== 'complete' &&
         action !== 'counter' &&
@@ -896,6 +917,142 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: true, status: 'cancelled' })
     }
 
+    // §17-9(CEO指示 2026-08-06): メールが届いていない予約は、プロ側で片付けられるようにする。
+    // 「その場合に限り、予約の削除、確定日付の変更などプロ側で出来るようにすべき」。
+    // 通常のキャンセル(cancel_by_receiver)と分けている理由:
+    //   ①クライアントへ通知しない（届かないので送っても意味がなく、bounceを増やすだけ）
+    //   ②返金・キャンセル都合の判定を通さない（予約金が動いていない前提でのみ許可する）
+    // 行は消さずキャンセル扱いにする。予約は金額・完了・自動完了cronが絡むため、
+    // 相談スレッド(§17-8)のような行ごとの削除はしない。
+    if (action === 'discard') {
+      if (!booking.preferred_slots?.receipt_email_failed) {
+        return NextResponse.json({ error: 'not_allowed' }, { status: 409 })
+      }
+      if (booking.status !== 'requested' && booking.status !== 'confirmed') {
+        return NextResponse.json({ error: 'not_pending' }, { status: 409 })
+      }
+      // 予約金が動いている予約はこの経路を通さない（返金の判断が要るため通常のキャンセルへ）
+      if (paymentEnabled && (booking.payment_status === 'paid' || booking.payment_status === 'awaiting')) {
+        return NextResponse.json({ error: 'payment_pending' }, { status: 409 })
+      }
+
+      const { data: discardRows, error: discardError } = await supabase
+        .from('referral_bookings')
+        .update({
+          status: 'cancelled',
+          receiver_dismissed_at: new Date().toISOString(),
+          preferred_slots: {
+            ...(booking.preferred_slots || {}),
+            cancelled_by_receiver_at: new Date().toISOString(),
+            discarded_undeliverable_at: new Date().toISOString(),
+          },
+        })
+        .eq('id', bookingId)
+        .in('status', ['requested', 'confirmed'])
+        .select('id')
+
+      if (discardError) {
+        console.error('[api/referral/bookings/received] PATCH discard error:', discardError)
+        return NextResponse.json({ error: 'failed_to_update' }, { status: 500 })
+      }
+      if (!discardRows || discardRows.length === 0) {
+        return NextResponse.json({ error: 'not_pending' }, { status: 409 })
+      }
+      // クライアントへは通知しない（メールが届かないことが分かっているため）
+      return NextResponse.json({ success: true, status: 'cancelled' })
+    }
+
+    // §17-4(CEO指示 2026-08-06): 電話で口頭で決まった予約を、プロ側から確定する。
+    // 「メールアドレスの打ち間違いでお客さんに何も届かない」場合の逃げ道（§17-3の④）。
+    // 通常の confirm と違い、お客さんが出した3つの希望日時に縛られない
+    // （電話で話した結果、別の日時になることのほうが多い）。
+    //
+    // ⚠️ これは「お客さんの同意をシステムが確認できない確定」なので、
+    //    ① UI側で必ず警告を出してから呼ぶこと
+    //    ② 誰がいつ電話で確定したかを preferred_slots.confirmed_by_phone_at に残す
+    //    ③ 予約金の決済が必要な紹介予約では使わせない（支払いを飛ばして成立させないため）
+    if (action === 'confirm_offline') {
+      // §17-9(CEO指摘 2026-08-06): メールが届いていない予約は、確定後の日時変更も
+      // 通常の「提案 → クライアントが承諾」が成立しない（提案が届かない）。
+      // この場合に限り、確定済みでも**その場で日時を差し替える**ことを許す。
+      const receiptFailedForOffline = !!booking.preferred_slots?.receipt_email_failed
+      const isSlotFix = booking.status === 'confirmed' && receiptFailedForOffline
+      if (booking.status !== 'requested' && !isSlotFix) {
+        return NextResponse.json({ error: 'not_pending' }, { status: 409 })
+      }
+      const rawSlot = typeof body.confirmed_slot === 'string' ? body.confirmed_slot : null
+      const confirmedSlotIso = parseSlot(snapToHalfHourUp(rawSlot))
+      if (!confirmedSlotIso) {
+        return NextResponse.json({ error: 'invalid_slots' }, { status: 400 })
+      }
+      if (new Date(confirmedSlotIso).getTime() <= Date.now()) {
+        return NextResponse.json({ error: 'invalid_slots' }, { status: 400 })
+      }
+
+      // 予約金が必要な予約（紹介予約でオンライン決済が有効なもの）はこの経路を通さない。
+      const feeTotalBpsForOffline = booking.fee_total_bps ?? REFERRAL_FEE_TOTAL_BPS
+      const feeAmountJpyForOffline =
+        booking.price_jpy > 0 ? Math.floor((booking.price_jpy * feeTotalBpsForOffline) / 10000) : 0
+      if (
+        paymentEnabled &&
+        booking.payment_status === 'unpaid' &&
+        booking.price_jpy > 0 &&
+        feeAmountJpyForOffline >= REFERRAL_MIN_FEE_JPY
+      ) {
+        return NextResponse.json({ error: 'payment_required' }, { status: 409 })
+      }
+
+      const updatedSlotsForOffline: PreferredSlots = {
+        ...(booking.preferred_slots || {}),
+        // resolveConfirmedSlotIso が最優先で見るキー。以後の日時変更・カレンダー・
+        // キャンセル判定はすべてこの値を使う。
+        confirmed_slot_iso: confirmedSlotIso,
+        confirmed_by_phone_at: new Date().toISOString(),
+      }
+
+      const { data: offlineRows, error: offlineError } = await supabase
+        .from('referral_bookings')
+        .update({ status: 'confirmed', confirmed_at: new Date().toISOString(), preferred_slots: updatedSlotsForOffline })
+        .eq('id', bookingId)
+        .eq('status', isSlotFix ? 'confirmed' : 'requested')
+        .select('id')
+
+      if (offlineError) {
+        console.error('[api/referral/bookings/received] PATCH confirm_offline error:', offlineError)
+        return NextResponse.json({ error: 'failed_to_update' }, { status: 500 })
+      }
+      if (!offlineRows || offlineRows.length === 0) {
+        return NextResponse.json({ error: 'not_pending' }, { status: 409 })
+      }
+
+      // お客さんへも一応送る（届かない前提の経路だが、届くなら送っておく方がよい）。
+      // 失敗しても確定自体は成立させる。
+      let delivered = false
+      try {
+        // このブロックは requested ゲートより前に置いてあるため、下で定義される
+        // clientUserId をここでは使えない。必要な値だけその場で解決する。
+        const clientUserIdForOffline = booking.clients?.user_id || ''
+        if (clientUserIdForOffline || booking.client_email) {
+          const slotText = formatSlotWithWeekday(confirmedSlotIso)
+          const result = await notifyClientByEmail(
+            { userId: clientUserIdForOffline, email: booking.client_email },
+            `${ownPro.name}さんとのご予約が確定しました`,
+            emailShell(
+              'ご予約確定のお知らせ',
+              `${slotText ? `${escapeHtml(slotText)} に確定しました。` : 'ご予約の日時が確定しました。'}<br>` +
+                `担当: ${escapeHtml(ownPro.name)}さん<br><br>` +
+                'お電話でお伺いした内容で確定しています。相違がある場合は、お手数ですが担当までご連絡ください。'
+            )
+          )
+          delivered = result.sent
+        }
+      } catch (notifyErr) {
+        console.error('[api/referral/bookings/received] confirm_offline notify error:', notifyErr)
+      }
+
+      return NextResponse.json({ success: true, status: 'confirmed', delivered })
+    }
+
     if (booking.status !== 'requested') {
       return NextResponse.json({ error: 'not_pending' }, { status: 409 })
     }
@@ -943,86 +1100,6 @@ export async function PATCH(request: NextRequest) {
       // CEO指示(2026-08-05): 送り手プロ宛の辞退通知は削減(クリティカルな結果のみに絞る)。
 
       return NextResponse.json({ success: true, status: 'cancelled' })
-    }
-
-    // §17-4(CEO指示 2026-08-06): 電話で口頭で決まった予約を、プロ側から確定する。
-    // 「メールアドレスの打ち間違いでお客さんに何も届かない」場合の逃げ道（§17-3の④）。
-    // 通常の confirm と違い、お客さんが出した3つの希望日時に縛られない
-    // （電話で話した結果、別の日時になることのほうが多い）。
-    //
-    // ⚠️ これは「お客さんの同意をシステムが確認できない確定」なので、
-    //    ① UI側で必ず警告を出してから呼ぶこと
-    //    ② 誰がいつ電話で確定したかを preferred_slots.confirmed_by_phone_at に残す
-    //    ③ 予約金の決済が必要な紹介予約では使わせない（支払いを飛ばして成立させないため）
-    if (action === 'confirm_offline') {
-      const rawSlot = typeof body.confirmed_slot === 'string' ? body.confirmed_slot : null
-      const confirmedSlotIso = parseSlot(snapToHalfHourUp(rawSlot))
-      if (!confirmedSlotIso) {
-        return NextResponse.json({ error: 'invalid_slots' }, { status: 400 })
-      }
-      if (new Date(confirmedSlotIso).getTime() <= Date.now()) {
-        return NextResponse.json({ error: 'invalid_slots' }, { status: 400 })
-      }
-
-      // 予約金が必要な予約（紹介予約でオンライン決済が有効なもの）はこの経路を通さない。
-      const feeTotalBpsForOffline = booking.fee_total_bps ?? REFERRAL_FEE_TOTAL_BPS
-      const feeAmountJpyForOffline =
-        booking.price_jpy > 0 ? Math.floor((booking.price_jpy * feeTotalBpsForOffline) / 10000) : 0
-      if (
-        paymentEnabled &&
-        booking.payment_status === 'unpaid' &&
-        booking.price_jpy > 0 &&
-        feeAmountJpyForOffline >= REFERRAL_MIN_FEE_JPY
-      ) {
-        return NextResponse.json({ error: 'payment_required' }, { status: 409 })
-      }
-
-      const updatedSlotsForOffline: PreferredSlots = {
-        ...(booking.preferred_slots || {}),
-        // resolveConfirmedSlotIso が最優先で見るキー。以後の日時変更・カレンダー・
-        // キャンセル判定はすべてこの値を使う。
-        confirmed_slot_iso: confirmedSlotIso,
-        confirmed_by_phone_at: new Date().toISOString(),
-      }
-
-      const { data: offlineRows, error: offlineError } = await supabase
-        .from('referral_bookings')
-        .update({ status: 'confirmed', confirmed_at: new Date().toISOString(), preferred_slots: updatedSlotsForOffline })
-        .eq('id', bookingId)
-        .eq('status', 'requested')
-        .select('id')
-
-      if (offlineError) {
-        console.error('[api/referral/bookings/received] PATCH confirm_offline error:', offlineError)
-        return NextResponse.json({ error: 'failed_to_update' }, { status: 500 })
-      }
-      if (!offlineRows || offlineRows.length === 0) {
-        return NextResponse.json({ error: 'not_pending' }, { status: 409 })
-      }
-
-      // お客さんへも一応送る（届かない前提の経路だが、届くなら送っておく方がよい）。
-      // 失敗しても確定自体は成立させる。
-      let delivered = false
-      try {
-        if (clientUserId || booking.client_email) {
-          const slotText = formatSlotWithWeekday(confirmedSlotIso)
-          const result = await notifyClientByEmail(
-            { userId: clientUserId, email: booking.client_email },
-            `${ownPro.name}さんとのご予約が確定しました`,
-            emailShell(
-              'ご予約確定のお知らせ',
-              `${slotText ? `${escapeHtml(slotText)} に確定しました。` : 'ご予約の日時が確定しました。'}<br>` +
-                `担当: ${escapeHtml(ownPro.name)}さん<br><br>` +
-                'お電話でお伺いした内容で確定しています。相違がある場合は、お手数ですが担当までご連絡ください。'
-            )
-          )
-          delivered = result.sent
-        }
-      } catch (notifyErr) {
-        console.error('[api/referral/bookings/received] confirm_offline notify error:', notifyErr)
-      }
-
-      return NextResponse.json({ success: true, status: 'confirmed', delivered })
     }
 
     if (action === 'counter') {
