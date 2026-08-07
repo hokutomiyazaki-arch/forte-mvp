@@ -1,5 +1,6 @@
 import Navbar from '@/components/Navbar'
 import AnnouncementBanner from '@/components/AnnouncementBanner'
+import ReleaseNoticeBanner from '@/components/ReleaseNoticeBanner'
 import { SharedDataProvider } from '@/contexts/SharedDataContext'
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
@@ -7,6 +8,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     <SharedDataProvider>
       <Navbar />
       <AnnouncementBanner />
+      {/* §17-23: リリース告知。admin配信のお知らせと**同じ位置**（Navbar直下・<main>の外）に
+          敷く。ページ本文の中に置くと帯の幅も余白も変わり、別物に見える。 */}
+      <ReleaseNoticeBanner />
       <main className="max-w-5xl mx-auto px-4 py-8">
         {children}
       </main>

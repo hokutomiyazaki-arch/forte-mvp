@@ -24,7 +24,6 @@ import { validateBookingUrl, validateSocialHandle } from '@/lib/validation'
 import { getProVoteCount } from '@/lib/vote-count'
 import BookingUrlBanner from '@/components/BookingUrlBanner'
 import CharacterGenderBanner from '@/components/CharacterGenderBanner'
-import ReleaseNoticeBanner from '@/components/ReleaseNoticeBanner'
 import ShareButton from '@/components/ShareButton'
 import BusinessInfoTab from '@/components/dashboard/BusinessInfoTab'
 import MediaSection from '@/components/dashboard/MediaSection'
@@ -2868,10 +2867,6 @@ export default function DashboardPage() {
             onOpenProfileEdit={openProfileEdit}
           />
         )}
-
-      {/* リリース告知（CEO指摘 2026-08-07「admin dashboard 使わなくても作れるようにしたでしょ」）。
-          コード側で出す。UNTIL を過ぎると自動で消え、✕ で閉じたら二度と出ない。 */}
-      {!isSettingsTab && <ReleaseNoticeBanner />}
 
       {/* 2026-08-05: タイプ分析キャラクター性別出し分けの告知バナー(CEO指示)。
           character_gender が未選択(null)のプロにのみ表示。保存すれば(neutral含む)自動的に消える */}

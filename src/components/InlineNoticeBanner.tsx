@@ -50,6 +50,13 @@ export interface InlineNoticeBannerProps {
   onAction?: () => void
   /** 別ページへ移動する場合だけ使う */
   href?: string
+  /**
+   * §17-23(CEO指摘 2026-08-07「バナーを出す位置がちがう」):
+   * レイアウト直下（Navbarのすぐ下・<main>の外）に敷くときは true。
+   * admin配信のお知らせ(AnnouncementBanner)と同じく、余白を持たない全幅の帯になる。
+   * ページの中に置くときは false（既定）で、下だけ空ける。
+   */
+  flush?: boolean
 }
 
 export default function InlineNoticeBanner({
@@ -60,6 +67,7 @@ export default function InlineNoticeBanner({
   actionLabel,
   onAction,
   href,
+  flush = false,
 }: InlineNoticeBannerProps) {
   // 初期値の計算で localStorage を読む（描画後にチラッと出てから消えるのを防ぐ）。
   // SSR では window が無いので false 相当（= 表示）になり、クライアントで再評価される。
@@ -96,11 +104,10 @@ export default function InlineNoticeBanner({
       )
     ) : null
 
-  // 配信お知らせは画面上端に敷かれるため余白を持たない。こちらはページの中に置くので、
-  // 下だけ空ける（見た目そのものは同じ帯）。
-  return (
-    <div style={{ marginBottom: 16 }}>
-      <NoticeBannerShell type={type} title={title} body={body} onDismiss={handleDismiss} action={action} />
-    </div>
+  // 配信お知らせは画面上端に敷かれるため余白を持たない。ページの中に置く場合だけ下を空ける
+  // （見た目そのものは同じ帯）。flush=true はレイアウト直下＝配信お知らせと完全に同じ扱い。
+  const shell = (
+    <NoticeBannerShell type={type} title={title} body={body} onDismiss={handleDismiss} action={action} />
   )
+  return flush ? shell : <div style={{ marginBottom: 16 }}>{shell}</div>
 }
