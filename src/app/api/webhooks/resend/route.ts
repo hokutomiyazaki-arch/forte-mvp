@@ -117,9 +117,18 @@ export async function POST(request: NextRequest) {
     }
 
     const rawTo = payload.data?.to
-    const addresses = (Array.isArray(rawTo) ? rawTo : rawTo ? [rawTo] : [])
-      .map((a) => normalizeEmail(a))
+    // §17-20(2026-08-06・本番不具合): 照合は**生アドレスと正規化後の両方**で行う。
+    //   referral_bookings.client_email は入力されたままの生アドレスを保存している。
+    //   ここで normalizeEmail() だけに畳んで .in() で突き合わせていたため、
+    //   `foo+test@example.com` にバウンスが来ても `foo@example.com` を探しに行き、
+    //   **予約に「届いていない」印が立たなかった**（プロ側に何も出なかった）。
+    //   相談側は逆に正規化後の値を保存していた行が残っているので、両方入れて拾う。
+    const toList = (Array.isArray(rawTo) ? rawTo : rawTo ? [rawTo] : [])
+      .map((a) => (typeof a === 'string' ? a.trim().toLowerCase() : ''))
       .filter(Boolean)
+    const addresses = Array.from(
+      new Set([...toList, ...toList.map((a) => normalizeEmail(a))].filter(Boolean)),
+    )
     if (addresses.length === 0) {
       console.error('[api/webhooks/resend] bounced but no recipient in payload')
       return NextResponse.json({ ok: true, ignored: true, reason: 'no_recipient' })

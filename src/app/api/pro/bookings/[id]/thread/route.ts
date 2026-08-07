@@ -50,17 +50,26 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: 'no_client_email' }, { status: 409 })
     }
 
+    // §17-20(CEO報告 2026-08-06・本番不具合): 保存・送信するのは**予約フォームに入力された
+    //   そのままのアドレス**。normalizeEmail() は Gmail のドットと全ドメインの "+タグ" を落とす
+    //   照合キーであって宛先ではない。ここに正規化後の値を入れていたため、
+    //   `foo+test@example.com` の予約から立てたスレッドのメールが `foo@example.com`
+    //   （別のメールボックス）へ飛び、クライアントには永久に届かなかった。
+    const clientEmail = (booking.client_email || '').trim().toLowerCase()
     const normalized = normalizeEmail(booking.client_email)
 
-    // 既存スレッドの再利用（アーカイブ済みも拾う。同じ人との会話は1本にまとめる方がよい）
-    const { data: existing } = await supabase
+    // 既存スレッドの再利用（アーカイブ済みも拾う。同じ人との会話は1本にまとめる方がよい）。
+    // §17-20: 突き合わせは JS 側で正規化して行う（保存値は生アドレスのため）。
+    const { data: candidates } = await supabase
       .from('consultations')
-      .select('id, access_token, status')
+      .select('id, access_token, status, client_email, created_at')
       .eq('pro_id', ownPro.id)
-      .eq('client_email', normalized)
       .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+      .limit(200)
+    const existing =
+      ((candidates || []) as Array<{ id: string; status: string; client_email: string | null }>).find(
+        (c) => normalizeEmail(c.client_email) === normalized,
+      ) || null
 
     if (existing) {
       // アーカイブされていたら受信箱へ戻す（プロが今まさに使おうとしているため）
@@ -77,7 +86,8 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     const record: Record<string, unknown> = {
       pro_id: ownPro.id,
       client_name: booking.client_name || 'お客さま',
-      client_email: normalized,
+      // §17-20: 送信先になる値。正規化前の（クライアントが入力した）アドレスを保存する。
+      client_email: clientEmail,
       access_token: accessToken,
       // 'new' は「プロが未返信」の意味なので使わない。プロ側から始めるスレッドは 'open'。
       status: 'open',
