@@ -4,6 +4,7 @@
  * .maybeSingle() 必須・deactivated_at は null のみ有効。
  */
 
+import crypto from 'crypto'
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 
@@ -83,6 +84,94 @@ export async function isPinnedOnSharedList(
     return !!opts?.failOpenOnError
   }
   return (count || 0) > 0
+}
+
+/**
+ * 「気になるプロ」= 所有者の最古の private リスト。無ければ作る。
+ *
+ * §17-13(CEO指示 2026-08-06)でプロ招待QRからも同じ置き場所に入れる必要が出たため、
+ * /api/referral/interested にあった実装をここへ移して単一情報源にした
+ * （置き場所の判定が2箇所にあると、片方だけ直して「♡の判定と入る先がズレる」が起きる）。
+ * 判定条件（owner_id × visibility='private' × created_at,id 昇順の1件目）は移設前と同じ。
+ *
+ * 新しい lib を作らず既存の referral-auth に置くのは、API ルートへの新規 import が
+ * Webpack のチャンクグラフを変える既知のリスク(CLAUDE.md §G)を避けるため
+ * （呼ぶ側は既に referral-auth を import している）。
+ */
+export async function getOrCreateInterestedList(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  ownProId: string
+): Promise<string | null> {
+  const { data: existing } = await supabase
+    .from('referral_lists')
+    .select('id')
+    .eq('owner_id', ownProId)
+    .eq('visibility', 'private')
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  if (existing) return existing.id
+
+  const slug = crypto.randomUUID().replace(/-/g, '').slice(0, 12)
+  const { data: created, error } = await supabase
+    .from('referral_lists')
+    .insert({
+      owner_id: ownProId,
+      title: '気になるプロ',
+      visibility: 'private',
+      slug,
+    })
+    .select('id')
+    .maybeSingle()
+
+  if (error) {
+    console.error('[referral-auth] getOrCreateInterestedList create error:', error)
+    return null
+  }
+  return created?.id || null
+}
+
+/**
+ * 「気になるプロ」に1人ピンする（冪等）。
+ * 戻り値 added=false は「既に入っていた」= 通知を出してはいけないケース。
+ * private リストなので consent_status='pending'（公開・通知を発生させない）で入れる — §3-1。
+ */
+export async function pinToInterestedList(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  ownProId: string,
+  targetProId: string
+): Promise<{ added: boolean; listId: string | null; failed: boolean }> {
+  const listId = await getOrCreateInterestedList(supabase, ownProId)
+  if (!listId) return { added: false, listId: null, failed: true }
+
+  const { data: existingItem } = await supabase
+    .from('referral_list_items')
+    .select('id')
+    .eq('list_id', listId)
+    .eq('pro_id', targetProId)
+    .maybeSingle()
+
+  if (existingItem) return { added: false, listId, failed: false }
+
+  const { count } = await supabase
+    .from('referral_list_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('list_id', listId)
+
+  const { error } = await supabase.from('referral_list_items').insert({
+    list_id: listId,
+    pro_id: targetProId,
+    sort_order: count || 0,
+    consent_status: 'pending',
+  })
+
+  if (error) {
+    console.error('[referral-auth] pinToInterestedList insert error:', error)
+    return { added: false, listId, failed: true }
+  }
+  return { added: true, listId, failed: false }
 }
 
 export interface OwnClient {

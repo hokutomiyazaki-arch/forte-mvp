@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useProStatus } from '@/lib/useProStatus'
 import BookmarkedProsSection from '@/components/referral/BookmarkedProsSection'
+import ProInviteQrCard from '@/components/referral/ProInviteQrCard'
 
 export default function BookmarksPage() {
   // CEO指示(2026-08-04・IA再変更): 「気になるプロ」(非公開referral_list、
@@ -11,7 +12,7 @@ export default function BookmarksPage() {
   // CEO指示(タスク2): 旧bookmarksテーブル由来の表示ブロック(旧「以前のブックマーク」)は
   // プロ向け画面からUI上完全に削除する(データ・API・テーブルは変更しない)。非プロ
   // (クライアント)は旧ブックマークを従来どおり利用できるため、!isPro の場合のみ表示する。
-  const { isPro } = useProStatus()
+  const { isPro, proId } = useProStatus()
   const [bookmarkedPros, setBookmarkedPros] = useState<any[]>([])
   const [bookmarkCount, setBookmarkCount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -54,6 +55,10 @@ export default function BookmarksPage() {
       {/* プロ: 「気になるプロ」(見出しもBookmarkedProsSection内)のみ。ページ側はisProゲート
           だけ(403・401・ロード中はコンポーネントがreturn nullするため、allowlist外プロには
           BookmarkedProsSection自体が無かった状態と完全に同一の画面になる)。 */}
+      {/* §17-13(CEO指示 2026-08-06): 「ついでに気になるプロのトップにも同じQRを置いておいて」。
+          このQRから登録した先生は、ここ(気になるプロ)に入る。入る場所の真上に置く。 */}
+      {isPro && proId && <ProInviteQrCard proId={proId} />}
+
       {isPro && <BookmarkedProsSection />}
 
       {/* 非プロ(クライアント): 旧bookmarksテーブル由来の一覧を従来どおり表示する。 */}

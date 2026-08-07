@@ -931,4 +931,31 @@ export async function notifyInviteRegistered(
   })
 }
 
+/**
+ * §17-13(CEO指示 2026-08-06): プロ招待QR（トップに常設・1枚を何人にでも見せられる）から
+ * 登録が完了したことを、QRの持ち主へ通知する。
+ *
+ * このQRからの登録は**紹介リストには入れない**（誰が読むか分からないQRで公開リストが
+ * 勝手に増えるのを防ぐ）。入るのは非公開の「気になるプロ」だけなので、
+ * 「紹介リストに入れましょう」という**次の一手**をここで必ず言う。
+ * 言わないと、登録された側は「気になるプロに黙って溜まるだけ」で誰にも気づかれない。
+ */
+export async function notifyProInviteRegistered(
+  target: ProNotifyTarget,
+  registeredProName: string,
+): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const safeRegisteredProName = escapeHtml(registeredProName)
+  return sendProNotification(target, {
+    lineText: `${registeredProName}さんがあなたのQRからREAL PROOFに登録しました。\n「気になるプロ」に入っています。紹介リストに入れましょう。\n${dashboardUrl}`,
+    emailSubject: `${registeredProName}さんが登録しました`,
+    emailBodyHtml: emailShell(
+      'QRからの登録のお知らせ',
+      `${safeRegisteredProName}さんが、あなたのQRコードからREAL PROOFに登録しました。<br>いまは非公開の「気になるプロ」に入っています。紹介リストに入れましょう。`,
+      '紹介リストを開く',
+      dashboardUrl,
+    ),
+  })
+}
+
 export { emailShell }

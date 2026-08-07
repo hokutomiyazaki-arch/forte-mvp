@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import crypto from 'crypto'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { getOwnPro } from '@/lib/referral-auth'
+import { getOwnPro, pinToInterestedList } from '@/lib/referral-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,40 +22,8 @@ export const dynamic = 'force-dynamic'
  * 共有リスト(link/public)のピンには触れない。
  */
 
-async function getOrCreateInterestedList(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  ownProId: string
-): Promise<string | null> {
-  const { data: existing } = await supabase
-    .from('referral_lists')
-    .select('id')
-    .eq('owner_id', ownProId)
-    .eq('visibility', 'private')
-    .order('created_at', { ascending: true })
-    .order('id', { ascending: true })
-    .limit(1)
-    .maybeSingle()
-
-  if (existing) return existing.id
-
-  const slug = crypto.randomUUID().replace(/-/g, '').slice(0, 12)
-  const { data: created, error } = await supabase
-    .from('referral_lists')
-    .insert({
-      owner_id: ownProId,
-      title: '気になるプロ',
-      visibility: 'private',
-      slug,
-    })
-    .select('id')
-    .maybeSingle()
-
-  if (error) {
-    console.error('[api/referral/interested] list create error:', error)
-    return null
-  }
-  return created?.id || null
-}
+// §17-13(2026-08-06): 「気になるプロ」の取得/作成とピンは referral-auth.ts へ移した
+// （プロ招待QRの登録処理と同じ置き場所を使うため。判定が2箇所にあるとズレる）。
 
 export async function POST(request: NextRequest) {
   try {
@@ -86,39 +53,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'target_pro_not_found' }, { status: 404 })
     }
 
-    const listId = await getOrCreateInterestedList(supabase, ownPro.id)
+    // 冪等: 既に入っていれば成功扱い(UNIQUE(list_id,pro_id)への衝突を避ける)
+    const { listId, failed } = await pinToInterestedList(supabase, ownPro.id, proId)
     if (!listId) {
       return NextResponse.json({ error: 'failed_to_create_list' }, { status: 500 })
     }
-
-    // 冪等: 既に入っていれば成功扱い(UNIQUE(list_id,pro_id)への衝突を避ける)
-    const { data: existingItem } = await supabase
-      .from('referral_list_items')
-      .select('id')
-      .eq('list_id', listId)
-      .eq('pro_id', proId)
-      .maybeSingle()
-
-    if (existingItem) {
-      return NextResponse.json({ success: true })
-    }
-
-    const { count } = await supabase
-      .from('referral_list_items')
-      .select('id', { count: 'exact', head: true })
-      .eq('list_id', listId)
-
-    const { error } = await supabase
-      .from('referral_list_items')
-      .insert({
-        list_id: listId,
-        pro_id: proId,
-        sort_order: count || 0,
-        consent_status: 'pending',
-      })
-
-    if (error) {
-      console.error('[api/referral/interested] POST insert error:', error)
+    if (failed) {
       return NextResponse.json({ error: 'failed_to_create' }, { status: 500 })
     }
 

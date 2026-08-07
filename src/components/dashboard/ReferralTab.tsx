@@ -5,6 +5,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import BookingThread from '@/components/dashboard/BookingThread'
 import ReferralCompletedList from '@/components/dashboard/ReferralCompletedList'
 import DelegateCriteriaSettings from '@/components/dashboard/DelegateCriteriaSettings'
+import ProInviteQrCard from '@/components/referral/ProInviteQrCard'
 import { computeReferralSignal, REFERRAL_SIGNAL_DOT } from '@/lib/referral-accepting'
 import { estimateReferralPayoutReflectionText, estimateReferralPayoutHoldExpiryText } from '@/lib/referral-format'
 
@@ -1635,6 +1636,20 @@ export default function ReferralTab({
             <div style={{ fontSize: 13, color: '#9CA3AF', marginBottom: 6 }}>
               クライアントに共有（紹介ページが開きます）
             </div>
+            {/* §17-13(CEO指示 2026-08-06): 「クライアントにリストシェアするQRボタンは目立つように
+                して。トップのqrと勘違いしないように。」
+                同じ画面に3種類のQR（プルーフ用・プロを誘う・このリスト）が並ぶので、
+                ①誰に見せるQRかをボタンの文字に必ず入れる ②これだけ塗りにして他と見分ける。 */}
+            <button
+              onClick={() => setQrModalListId(list.id)}
+              style={{
+                width: '100%', padding: '12px', borderRadius: 10, border: 'none',
+                background: '#1A1A2E', color: '#fff', fontSize: 14, fontWeight: 700,
+                cursor: 'pointer', marginBottom: 8,
+              }}
+            >
+              クライアントに見せるQR（このリスト）
+            </button>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
               {/* CEO指示(先行テスト第3弾): 送り手がクライアントと同じ見え方を確認できるプレビュー */}
               <a
@@ -1649,15 +1664,6 @@ export default function ReferralTab({
               >
                 プレビュー
               </a>
-              <button
-                onClick={() => setQrModalListId(list.id)}
-                style={{
-                  padding: '8px 12px', borderRadius: 8, border: '1px solid #E5E7EB',
-                  background: '#fff', color: '#1A1A2E', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                }}
-              >
-                QRコードを表示
-              </button>
               {canNativeShare && (
                 <button
                   onClick={() => shareListUrl(list.slug)}
@@ -2168,6 +2174,11 @@ export default function ReferralTab({
           CEO指示(2026-08-04・IA再変更): 成立した紹介は「紹介した案件」タブへ移動・
           気になるプロの移設案内は削除(恒久表示の撤回)。 */}
       <div style={{ display: subtab === 'send' ? 'flex' : 'none', flexDirection: 'column', gap: 24 }}>
+      {/* §17-13(CEO指示 2026-08-06): プロを誘うQRを「紹介する」の先頭に常設する。
+          リスト単位の招待(1人1回のトークン)と違い、これは何人にでも見せられる1枚で、
+          読んだ先生は「気になるプロ」にだけ入る(公開の紹介リストは勝手に増えない)。 */}
+      <ProInviteQrCard proId={proId} />
+
       {/* 移動(2026-08-06・CEO指示): 代理案内ボックス(旧ダッシュボード最上部)をこのサブタブの
           先頭(リスト一覧より上)へ移動。停止中の間、公開カード訪問者を他の先生へ案内する送り手側の設定。 */}
       <DelegateCriteriaSettings
@@ -2256,7 +2267,13 @@ export default function ReferralTab({
                 textAlign: 'center' as const, boxSizing: 'border-box' as const,
               }}
             >
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1A2E', marginBottom: 12 }}>{qrList.title}</div>
+              {/* §17-13: 3種類のQRが並ぶので、開いた画面でも「誰に見せるQRか」を先に書く。 */}
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>
+                クライアントに見せてください
+              </div>
+              <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 12 }}>
+                {qrList.title}の紹介ページが開きます
+              </div>
               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
                 <QRCodeSVG value={qrUrl} size={200} />
               </div>
