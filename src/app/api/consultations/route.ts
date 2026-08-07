@@ -149,19 +149,49 @@ export async function POST(request: NextRequest) {
         .update({ status: 'new', updated_at: new Date().toISOString() })
         .eq('id', recent.id)
 
+      // §17-26: 通知の成否を握りつぶさない。プロに届いたかどうかは、
+      //   「送ったのに反応が無い」を切り分ける唯一の手がかりになる。
+      let proNotifiedOnAppend = false
       try {
-        await notifyProNewConsultation({
+        const result = await notifyProNewConsultation({
           proName: pro.name || '',
           contactEmail: pro.contact_email ?? null,
           lineUserId: (pro as any).line_messaging_user_id ?? null,
           clientName,
           body: messageBody,
         })
+        proNotifiedOnAppend = result.sent
       } catch (err) {
         console.error('[api/consultations POST] pro notify error (append):', err)
       }
+      if (!proNotifiedOnAppend) {
+        console.error('[api/consultations POST] pro notify NOT sent (append). pro_id=', proId)
+      }
 
-      return NextResponse.json({ ok: true, token: recent.access_token, appended: true })
+      // §17-26(CEO報告 2026-08-07・不具合): 追記のときも受付メールを送る。
+      //   §17-21 で追記に切り替えたとき、ここのクライアント宛メールを付け忘れた。
+      //   レスポンスに receipt_sent が無いとフロントは既定で true と解釈するため、
+      //   **1通も送っていないのに「受付のメールをお送りしました」と表示していた**。
+      //   間違ったアドレスで送った人が、それに気づけない状態になっていた。
+      let receiptSentOnAppend = false
+      try {
+        receiptSentOnAppend = await notifyClientConsultationReceived({
+          clientEmail,
+          clientName,
+          proName: pro.name || '',
+          token: recent.access_token,
+        })
+      } catch (err) {
+        console.error('[api/consultations POST] client notify error (append):', err)
+      }
+
+      return NextResponse.json({
+        ok: true,
+        token: recent.access_token,
+        appended: true,
+        receipt_sent: receiptSentOnAppend,
+        pro_notified: proNotifiedOnAppend,
+      })
     }
 
     // ボット対策の第2層（件数の上限）。
@@ -244,17 +274,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'create_failed' }, { status: 500 })
     }
 
-    // 通知の失敗は相談の保存を巻き戻さない（本文はもう入っている）
+    // 通知の失敗は相談の保存を巻き戻さない（本文はもう入っている）。
+    // §17-26: ただし成否は握りつぶさず、返して・ログに残す。
+    let proNotified = false
     try {
-      await notifyProNewConsultation({
+      const result = await notifyProNewConsultation({
         proName: pro.name || '',
         contactEmail: pro.contact_email ?? null,
         lineUserId: (pro as any).line_messaging_user_id ?? null,
         clientName,
         body: messageBody,
       })
+      proNotified = result.sent
     } catch (err) {
       console.error('[api/consultations POST] pro notify error:', err)
+    }
+    if (!proNotified) {
+      // プロに届いていない＝相談が誰にも気づかれない。原因の当たりを付けられるようにする
+      // （LINE未連携かつ contact_email 未設定、Resendの抑制、APIキー未設定 など）。
+      console.error(
+        '[api/consultations POST] pro notify NOT sent. pro_id=',
+        proId,
+        'has_line=',
+        !!(pro as any).line_messaging_user_id,
+        'has_email=',
+        !!pro.contact_email,
+      )
     }
     // §17-3(CEO指摘 2026-08-06): メールアドレスの打ち間違い対策は相談フォームにも要る。
     // 受付メールを送れたかを返し、完了画面でその場で伝える
@@ -271,7 +316,12 @@ export async function POST(request: NextRequest) {
       console.error('[api/consultations POST] client notify error:', err)
     }
 
-    return NextResponse.json({ ok: true, token: created.access_token, receipt_sent: receiptSent })
+    return NextResponse.json({
+      ok: true,
+      token: created.access_token,
+      receipt_sent: receiptSent,
+      pro_notified: proNotified,
+    })
   } catch (err) {
     console.error('[api/consultations POST] error:', err)
     return NextResponse.json({ error: 'internal' }, { status: 500 })
