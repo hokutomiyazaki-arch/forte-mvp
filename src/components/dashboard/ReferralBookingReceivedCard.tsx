@@ -600,7 +600,7 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                   お客さんに受付メールが届いていません
                 </div>
                 <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.7 }}>
-                  メールアドレスの入力間違いの可能性があります。確定したら、お電話でもご連絡ください。
+                  メールアドレスの入力間違いの可能性があります。お電話でご連絡をお願いします。
                 </div>
               </div>
             )}

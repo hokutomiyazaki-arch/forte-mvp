@@ -80,9 +80,10 @@ export default function Navbar() {
           {isPro && (
             <a href="/dashboard?tab=bookings" onClick={closeMenu} style={menuLinkStyle}>予約<NewBadge /></a>
           )}
-          {/* CEO指示(2026-08-03): 紹介はコアメニューのためトップレベルへ昇格(設定グループから移動) */}
+          {/* CEO指示(2026-08-03): 紹介はコアメニューのためトップレベルへ昇格(設定グループから移動)
+              §17-2(2026-08-06): 予約と紹介を分けたので、紹介側にも New を付ける（CEO指示「両方にNewを」）。 */}
           {isPro && referralEnabled && (
-            <a href="/dashboard?tab=referral" onClick={closeMenu} style={menuLinkStyle}>紹介</a>
+            <a href="/dashboard?tab=referral" onClick={closeMenu} style={menuLinkStyle}>紹介<NewBadge /></a>
           )}
           {/* CEO指示(2026-08-03): 「獲得バッジ」→「証明書発行」に改名し、認定申請も中に入れるグループに */}
           {isPro && (
