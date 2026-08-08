@@ -125,6 +125,20 @@ export async function POST(request: NextRequest, { params }: { params: { booking
       // から現在の確定日時を解決する。
       const currentSlotIsoForKeep = resolveConfirmedSlotIso(booking.preferred_slots)
       const currentSlotTextForKeep = formatSlotWithWeekday(currentSlotIsoForKeep)
+      // CEO報告(2026-08-08): 直予約に「予約金は全額返金」の文言を出さないため source を判定する。
+      // received/route.ts と同じ作法: 本体SELECTに source を足すと migration 056 未実行環境で
+      // 42703 になり操作全体が落ちるため、別クエリ + fail-soft(失敗時は紹介予約扱い)で取得する。
+      let isDirectBooking = false
+      try {
+        const { data: sourceRow } = await supabase
+          .from('referral_bookings')
+          .select('source')
+          .eq('id', bookingId)
+          .maybeSingle()
+        isDirectBooking = (sourceRow as { source?: string | null } | null)?.source === 'direct'
+      } catch {
+        // fail-soft: source が取れなければ従来どおり紹介予約の文言
+      }
       try {
         if (receiverPro) {
           await notifyRescheduleKeptCurrentToReceiver(
@@ -134,7 +148,8 @@ export async function POST(request: NextRequest, { params }: { params: { booking
               line_messaging_user_id: receiverPro.line_messaging_user_id,
             },
             clientNickname,
-            currentSlotTextForKeep
+            currentSlotTextForKeep,
+            isDirectBooking
           )
         }
       } catch (notifyErr) {

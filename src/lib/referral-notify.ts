@@ -812,23 +812,27 @@ export async function notifyRescheduleConfirmedToReceiver(
 /**
  * タスクB(2026-08-04・CEO指示・意味合い変更): クライアントが「候補では難しいため現在の日時を
  * 希望する」を選んだ際、受け手プロへ通知する。どうしても都合がつかない場合の代替導線として、
- * ダッシュボードからのキャンセル(予約金は全額返金)を案内する。
+ * ダッシュボードからのキャンセル(紹介予約のみ「予約金は全額返金」)を案内する。
+ * CEO報告(2026-08-08): 直予約(source='direct')には予約金が存在しないため、isDirect=true の
+ * ときは返金の括弧書きを出さない。
  */
 export async function notifyRescheduleKeptCurrentToReceiver(
   target: ProNotifyTarget,
   clientNickname: string,
   currentSlotText: string | null = null,
+  isDirect: boolean = false,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
   const dashboardUrl = `${APP_URL}/dashboard?tab=bookings`
   const safeClientNickname = escapeHtml(clientNickname)
   const slotPart = currentSlotText ? `(${currentSlotText})` : ''
   const safeSlotPart = currentSlotText ? `(${escapeHtml(currentSlotText)})` : ''
+  const cancelPart = isDirect ? 'キャンセル' : 'キャンセル(予約金は全額返金されます)'
   return sendProNotification(target, {
-    lineText: `${clientNickname}さんは現在の日時${slotPart}を希望しています。どうしてもご都合がつかない場合は、ダッシュボードからキャンセル(予約金は全額返金されます)をご検討ください。\n${dashboardUrl}`,
+    lineText: `${clientNickname}さんは現在の日時${slotPart}を希望しています。どうしてもご都合がつかない場合は、ダッシュボードから${cancelPart}をご検討ください。\n${dashboardUrl}`,
     emailSubject: 'クライアントは現在の日時を希望しています',
     emailBodyHtml: emailShell(
       '日時変更のお知らせ',
-      `${safeClientNickname}さんは現在の日時${safeSlotPart}を希望しています。<br>どうしてもご都合がつかない場合は、ダッシュボードからキャンセル(予約金は全額返金されます)をご検討ください。`,
+      `${safeClientNickname}さんは現在の日時${safeSlotPart}を希望しています。<br>どうしてもご都合がつかない場合は、ダッシュボードから${cancelPart}をご検討ください。`,
       'ダッシュボードを開く',
       dashboardUrl,
     ),
