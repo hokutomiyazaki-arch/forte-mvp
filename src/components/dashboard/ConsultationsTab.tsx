@@ -42,7 +42,7 @@ function formatDate(iso: string): string {
  * 相談タブ（§16-19・プロ側）
  *
  * 「プロはダッシュボードで返信を書き込むだけ。クライアントにはメールが届く」がこの機能の肝。
- * 未返信（status='new'）を上に出し、1件ずつ開いて返信する。
+ * 未対応(new)→対応中(open)→対応済み(closed)の順に並べ、1件ずつ開いて返信する（CEO指示 2026-08-08）。
  */
 export default function ConsultationsTab({
   onUnreadChange,
@@ -415,10 +415,12 @@ export default function ConsultationsTab({
     )
   }
 
-  // 未返信を上に。同じ状態なら新しい順。
+  // CEO指示(2026-08-08): 未対応(new)→対応中(open)→対応済み(closed)の順に上から並べる。
+  // 同じ状態なら新しい順。archivedはアーカイブ表示側にしか出ないため実質同率(最後尾)。
+  const STATUS_SORT_RANK: Record<string, number> = { new: 0, open: 1, closed: 2 }
   const sorted = [...list].sort((a, b) => {
-    const an = a.status === 'new' ? 0 : 1
-    const bn = b.status === 'new' ? 0 : 1
+    const an = STATUS_SORT_RANK[a.status] ?? 3
+    const bn = STATUS_SORT_RANK[b.status] ?? 3
     return an - bn || b.updated_at.localeCompare(a.updated_at)
   })
 
@@ -456,14 +458,20 @@ export default function ConsultationsTab({
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E' }}>{c.client_name}</span>
-                    {isNew && (
+                    {/* CEO指示(2026-08-08): 未対応/対応中/対応済みのラベルを常に表示(§0-6: 13px以上・絵文字なし)。
+                        旧「未返信」(new)・グレー文字「対応済み」(closed)を3状態の統一バッジに置き換え。 */}
+                    {(c.status === 'new' || c.status === 'open' || c.status === 'closed') && (
                       <span style={{
-                        fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
-                        background: '#C4A35A', color: '#1A1A2E',
-                      }}>未返信</span>
-                    )}
-                    {c.status === 'closed' && (
-                      <span style={{ fontSize: 10, color: '#9CA3AF' }}>対応済み</span>
+                        fontSize: 13, fontWeight: 700, padding: '2px 10px', borderRadius: 999,
+                        flexShrink: 0,
+                        ...(c.status === 'new'
+                          ? { background: '#C4A35A', color: '#1A1A2E' }
+                          : c.status === 'open'
+                            ? { background: '#DBEAFE', color: '#1D4ED8' }
+                            : { background: '#F1F5F9', color: '#64748B' }),
+                      }}>
+                        {c.status === 'new' ? '未対応' : c.status === 'open' ? '対応中' : '対応済み'}
+                      </span>
                     )}
                     {/* §17-8: 開かなくても分かるようにする（返信を書く前に気づけること） */}
                     {c.email_failed && (
