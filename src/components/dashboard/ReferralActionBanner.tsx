@@ -14,6 +14,10 @@ export default function ReferralActionBanner() {
   // 新規APIは作らず、ReferralTabが使う既存の /api/referral/bookings/sent を再利用し、
   // 返ってきた一覧をrequested/confirmedでフィルタしてcountを取るだけにする(重いクエリを増やさない)。
   const [sentActiveCount, setSentActiveCount] = useState(0)
+  // CEO指示(2026-08-08)「送り手でクライアントのメールが間違ってる時にはもっと警告で知らせる」:
+  // 自分が直す担当(email_fix_owner='sender')のメール未達案件があれば、最上部に赤い警告を出す。
+  const [mailFailedCaseId, setMailFailedCaseId] = useState<string | null>(null)
+  const [mailFailedCount, setMailFailedCount] = useState(0)
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
@@ -31,62 +35,96 @@ export default function ReferralActionBanner() {
         setConfirmedCount(rows.filter((b) => b.status === 'confirmed').length)
       }
       if (sentData?.bookings) {
-        const rows = sentData.bookings as Array<{ status: string }>
+        const rows = sentData.bookings as Array<{
+          id: string
+          status: string
+          receipt_email_failed?: boolean | null
+          email_fix_owner?: 'sender' | 'receiver' | null
+        }>
         setSentActiveCount(rows.filter((b) => b.status === 'requested' || b.status === 'confirmed').length)
+        const failed = rows.filter((b) => b.receipt_email_failed && b.email_fix_owner === 'sender')
+        setMailFailedCount(failed.length)
+        setMailFailedCaseId(failed[0]?.id || null)
       }
       setLoaded(true)
     })
   }, [])
 
-  if (!loaded || (requestedCount === 0 && confirmedCount === 0 && sentActiveCount === 0)) return null
+  if (!loaded || (requestedCount === 0 && confirmedCount === 0 && sentActiveCount === 0 && mailFailedCount === 0)) return null
 
   // レビュー方針: 受け手側の文言が既にある場合はそれを優先し、送り手側は「・」で併記する
   // (2行に分けない・既存文言はsentActiveCount===0の場合は変更しない)。
   // CEO指摘(2026-08-06): §17-1でREALPROOFの直接予約もこの受信箱に届くようになったため、
   // 「紹介予約」と言い切れなくなった。受け手側の文言は「予約」に統一する
   // （送り手側＝自分が紹介した案件は今まで通り「紹介した案件」と呼ぶ。こちらは紹介のままで正しい）。
-  // CEO指摘(2026-08-08)「紹介した案件の通知リンクが予約ページにとぶ」:
-  // 受け手側と送り手側を1本のリンクにまとめると、片方(紹介した案件)に飛べなかった。
-  // それぞれ自分の行き先を持つ行に分ける(受け手側→予約タブ・送り手側→紹介した案件サブタブ)。
-  const rows: Array<{ label: string; href: string; emphasized: boolean }> = []
+  // CEO指摘(2026-08-08)「紹介した案件の通知リンクが予約ページにとぶ」→リンク分割
+  // →CEO指摘(同日)「上に2つあると邪魔。重い」→ **1つの箱**の中に行として並べる形に再修正。
+  // それぞれの行が自分の行き先を持つ(受け手側→予約タブ・送り手側→紹介した案件サブタブ)。
+  const rows: Array<{ label: string; href: string }> = []
   if (requestedCount > 0 || confirmedCount > 0) {
     rows.push({
       label:
         requestedCount > 0
-          ? `新しい予約リクエストが${requestedCount}件あります`
-          : `対応中の予約が${confirmedCount}件あります`,
+          ? `新しい予約リクエストが${requestedCount}件`
+          : `対応中の予約が${confirmedCount}件`,
       href: '/dashboard?tab=bookings',
-      emphasized: requestedCount > 0,
     })
   }
   if (sentActiveCount > 0) {
     rows.push({
-      label: `あなたが紹介した案件が${sentActiveCount}件進行中です`,
+      label: `紹介した案件が${sentActiveCount}件進行中`,
       href: '/dashboard?tab=referral&sub=cases',
-      emphasized: false,
     })
   }
+  const emphasized = requestedCount > 0
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-      {rows.map((row) => (
+    <div style={{ marginBottom: 16 }}>
+      {/* CEO指示(2026-08-08): メール未達(自分が直す担当)は静かな一覧に混ぜず、赤い警告で最上部に出す */}
+      {mailFailedCount > 0 && (
         <a
-          key={row.href}
-          href={row.href}
+          href={
+            mailFailedCaseId
+              ? `/dashboard?tab=referral&sub=cases&case=${encodeURIComponent(mailFailedCaseId)}`
+              : '/dashboard?tab=referral&sub=cases'
+          }
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '10px 14px', borderRadius: 10,
-            background: row.emphasized ? '#F0F7FF' : '#FAFAFA',
-            border: `1px solid ${row.emphasized ? '#B8D4F0' : '#E5E7EB'}`,
+            padding: '12px 14px', marginBottom: 8, borderRadius: 10,
+            background: '#FFF3F3', border: '1.5px solid #E5A0A0',
             textDecoration: 'none',
           }}
         >
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E' }}>{row.label}</span>
-          <span style={{ fontSize: 12, color: '#C4A35A', fontWeight: 700, flexShrink: 0, marginLeft: 8 }}>
-            確認する →
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#B00020' }}>
+            紹介したお客さまにメールが届いていません（{mailFailedCount}件）。お電話での確認が必要です
+          </span>
+          <span style={{ fontSize: 12, color: '#B00020', fontWeight: 700, flexShrink: 0, marginLeft: 8 }}>
+            対応する →
           </span>
         </a>
-      ))}
+      )}
+      {rows.length > 0 && (
+        <div style={{ background: '#FAFAFA', border: `1px solid ${emphasized ? '#B8D4F0' : '#E5E7EB'}`, borderRadius: 10 }}>
+          {rows.map((row, i) => (
+            <a
+              key={row.href}
+              href={row.href}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '9px 14px', textDecoration: 'none',
+                borderTop: i > 0 ? '1px solid #EEEEEE' : 'none',
+                background: i === 0 && emphasized ? '#F0F7FF' : 'transparent',
+                borderRadius: i === 0 ? '10px 10px 0 0' : rows.length - 1 === i ? '0 0 10px 10px' : 0,
+              }}
+            >
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E' }}>{row.label}</span>
+              <span style={{ fontSize: 12, color: '#C4A35A', fontWeight: 700, flexShrink: 0, marginLeft: 8 }}>
+                確認する →
+              </span>
+            </a>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
