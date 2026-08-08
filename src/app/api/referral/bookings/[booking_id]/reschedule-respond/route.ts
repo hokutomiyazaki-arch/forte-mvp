@@ -149,7 +149,8 @@ export async function POST(request: NextRequest, { params }: { params: { booking
             },
             clientNickname,
             currentSlotTextForKeep,
-            isDirectBooking
+            isDirectBooking,
+            bookingId
           )
         }
       } catch (notifyErr) {
@@ -173,7 +174,8 @@ export async function POST(request: NextRequest, { params }: { params: { booking
             line_messaging_user_id: receiverPro.line_messaging_user_id,
           },
           clientNickname,
-          newSlotText
+          newSlotText,
+          bookingId
         )
       }
     } catch (notifyErr) {

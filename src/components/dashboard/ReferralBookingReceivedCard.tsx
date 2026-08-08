@@ -162,6 +162,9 @@ interface Props {
    * 総件数(requested+confirmed+支払い期限切れキャンセル)・読み込み完了フラグを親へ通知する。
    * データ取得ロジック自体は変更しない(既存fetchの結果を集計して通知するだけ)。 */
   onStatusChange?: (info: { requestedCount: number; totalCount: number; loaded: boolean }) => void
+  /** §17-31(CEO指示 2026-08-08): 通知メールの ?booking=<id> から渡ってくる。一覧の読み込み完了後、
+   * 該当カードへ自動スクロールし数秒ハイライトする(見つからなければ何もしない)。 */
+  highlightBookingId?: string | null
 }
 
 /**
@@ -193,7 +196,7 @@ function StatusPill({ label, bg, color }: { label: string; bg: string; color: st
  * ★ isReferralEnabled ではゲートしない(受け手は先行アクセス外でもリクエストを受けられる必要がある)。
  * ダッシュボード上部に、タブに依存せず常時表示する。
  */
-export default function ReferralBookingReceivedCard({ proId, onStatusChange }: Props) {
+export default function ReferralBookingReceivedCard({ proId, onStatusChange, highlightBookingId }: Props) {
   const [items, setItems] = useState<BookingItem[]>([])
   const [cancelledUnpaidItems, setCancelledUnpaidItems] = useState<CancelledUnpaidItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -422,6 +425,26 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
+
+  // §17-31(CEO指示 2026-08-08): 通知メールからの着地時、該当カードへ自動スクロール＋一時ハイライト。
+  // 一覧の読み込み完了(loading=false)を待ってから、描画反映のsetTimeout(300ms)後にDOMを探す
+  // (card/[id]の #vote- ディープリンクと同じ流儀)。カードが無い(完了・削除済み等)場合は何もしない。
+  // 依存はプリミティブのみ(highlightBookingId: string|null, loading: boolean)。
+  const [flashBookingId, setFlashBookingId] = useState<string | null>(null)
+  useEffect(() => {
+    if (!highlightBookingId || loading) return
+    const scrollTimer = setTimeout(() => {
+      const el = document.getElementById(`booking-card-${highlightBookingId}`)
+      if (!el) return
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      setFlashBookingId(highlightBookingId)
+    }, 300)
+    const clearTimer = setTimeout(() => setFlashBookingId(null), 3800)
+    return () => {
+      clearTimeout(scrollTimer)
+      clearTimeout(clearTimer)
+    }
+  }, [highlightBookingId, loading])
 
   const requestedItems = items.filter((i) => i.status === 'requested')
   const confirmedItems = items.filter((i) => i.status === 'confirmed')
@@ -751,12 +774,14 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
         return (
           <div
             key={item.id}
+            id={`booking-card-${item.id}`}
             style={{
               background: '#F0F7FF',
               // CEO追加指示(2026-08-04): カード枠の視認性強化。requestedカードはラベルと同系の
               // オレンジ寄りにして「要対応」が一目で分かるようにする。
-              border: '1.5px solid #E8A874',
-              boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+              border: flashBookingId === item.id ? '1.5px solid #C4A35A' : '1.5px solid #E8A874',
+              boxShadow: flashBookingId === item.id ? '0 0 0 4px rgba(196,163,90,0.35)' : '0 1px 4px rgba(0,0,0,0.08)',
+              transition: 'border-color 0.5s, box-shadow 0.5s',
               borderRadius: 12,
               padding: '14px 16px',
             }}
@@ -1212,6 +1237,7 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
             return (
               <div
                 key={item.id}
+                id={`booking-card-${item.id}`}
                 style={{
                   background: '#F5F5F5',
                   border: '1.5px solid #C5CBD3',
@@ -1242,10 +1268,12 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
           return (
           <div
             key={item.id}
+            id={`booking-card-${item.id}`}
             style={{
               background: '#F9FFF9',
-              border: '1.5px solid #8FCB9F',
-              boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+              border: flashBookingId === item.id ? '1.5px solid #C4A35A' : '1.5px solid #8FCB9F',
+              boxShadow: flashBookingId === item.id ? '0 0 0 4px rgba(196,163,90,0.35)' : '0 1px 4px rgba(0,0,0,0.08)',
+              transition: 'border-color 0.5s, box-shadow 0.5s',
               borderRadius: 12,
               padding: '14px 16px',
             }}
@@ -2000,10 +2028,12 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
         return (
           <div
             key={item.id}
+            id={`booking-card-${item.id}`}
             style={{
               background: '#F5F5F5',
-              border: '1.5px solid #C5CBD3',
-              boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+              border: flashBookingId === item.id ? '1.5px solid #C4A35A' : '1.5px solid #C5CBD3',
+              boxShadow: flashBookingId === item.id ? '0 0 0 4px rgba(196,163,90,0.35)' : '0 1px 4px rgba(0,0,0,0.08)',
+              transition: 'border-color 0.5s, box-shadow 0.5s',
               borderRadius: 12,
               padding: '14px 16px',
             }}

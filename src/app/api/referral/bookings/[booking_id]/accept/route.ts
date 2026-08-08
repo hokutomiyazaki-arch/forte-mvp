@@ -149,7 +149,7 @@ export async function POST(request: NextRequest, { params }: { params: { booking
           },
           clientNickname,
           confirmedSlotText,
-          { awaitingPayment: !!checkoutUrl },
+          { awaitingPayment: !!checkoutUrl, bookingId },
         )
       }
     } catch (notifyErr) {

@@ -305,6 +305,7 @@ export async function POST(request: NextRequest) {
           line_messaging_user_id: receiverPro.line_messaging_user_id,
         },
         ownClient.nickname || 'クライアント',
+        { bookingId: booking.id },
       )
     } catch (notifyErr) {
       console.error('[api/referral/bookings] notify error:', notifyErr)

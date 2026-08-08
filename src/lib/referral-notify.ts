@@ -26,6 +26,17 @@ import { formatSlotWithWeekday } from '@/lib/referral-format'
 const APP_URL = 'https://realproof.jp'
 
 /**
+ * CEO指示(2026-08-08): 受け手プロ宛メール/LINEのダッシュボードリンクに booking_id を付け、
+ * 着地時に該当予約カードへ自動スクロール＋ハイライトできるようにする(§17-31)。
+ * bookingId 未指定の既存呼び出しは従来どおり ?tab=bookings のみ(後方互換)。
+ */
+function buildBookingsDashboardUrl(bookingId?: string | null): string {
+  return bookingId
+    ? `${APP_URL}/dashboard?tab=bookings&booking=${encodeURIComponent(bookingId)}`
+    : `${APP_URL}/dashboard?tab=bookings`
+}
+
+/**
  * メールHTML本文に埋め込むユーザー由来文字列(プロ名・クライアントニックネーム・
  * リストのcomment等)は必ずこれを通す(中3レビュー指摘: HTMLインジェクション対策)。
  * LINEテキストはHTML解釈されないため対象外。
@@ -243,9 +254,9 @@ export async function notifyBookingRequested(
    * §17-1(CEO決定 2026-08-06): REALPROOFの直接予約は紹介元がいない。
    * 「紹介予約」と書くと本人が心当たりのない通知になるため、直接予約では言い方を変える。
    */
-  opts?: { direct?: boolean },
+  opts?: { direct?: boolean; bookingId?: string | null },
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=bookings`
+  const dashboardUrl = buildBookingsDashboardUrl(opts?.bookingId)
   const safeClientNickname = escapeHtml(clientNickname)
   const kind = opts?.direct ? '予約' : '紹介予約'
   return sendProNotification(target, {
@@ -302,9 +313,10 @@ export async function notifyBookingPaymentCompletedToReceiver(
      */
     priceJpy?: number | null
     feeAmountJpy?: number | null
+    bookingId?: string | null
   },
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=bookings`
+  const dashboardUrl = buildBookingsDashboardUrl(opts?.bookingId)
   const safeClientNickname = escapeHtml(clientNickname)
   const reminder = opts?.remindMissingLocationInfo
     ? 'プロフィールに場所情報が未設定のため、クライアントへ当日の場所をお伝えください。'
@@ -584,9 +596,9 @@ export async function notifyCounterAcceptedToReceiver(
   target: ProNotifyTarget,
   clientNickname: string,
   confirmedSlotText: string | null,
-  opts?: { awaitingPayment?: boolean },
+  opts?: { awaitingPayment?: boolean; bookingId?: string | null },
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=bookings`
+  const dashboardUrl = buildBookingsDashboardUrl(opts?.bookingId)
   const safeClientNickname = escapeHtml(clientNickname)
   const slotPart = confirmedSlotText ? `${confirmedSlotText} で確定` : '日時を選択'
   const paymentNote = opts?.awaitingPayment
@@ -793,8 +805,9 @@ export async function notifyRescheduleConfirmedToReceiver(
   target: ProNotifyTarget,
   clientNickname: string,
   newSlotText: string | null,
+  bookingId: string | null = null,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=bookings`
+  const dashboardUrl = buildBookingsDashboardUrl(bookingId)
   const safeClientNickname = escapeHtml(clientNickname)
   const slotPart = newSlotText ? `${newSlotText} に変更` : '新しい日時に変更'
   return sendProNotification(target, {
@@ -821,8 +834,9 @@ export async function notifyRescheduleKeptCurrentToReceiver(
   clientNickname: string,
   currentSlotText: string | null = null,
   isDirect: boolean = false,
+  bookingId: string | null = null,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=bookings`
+  const dashboardUrl = buildBookingsDashboardUrl(bookingId)
   const safeClientNickname = escapeHtml(clientNickname)
   const slotPart = currentSlotText ? `(${currentSlotText})` : ''
   const safeSlotPart = currentSlotText ? `(${escapeHtml(currentSlotText)})` : ''

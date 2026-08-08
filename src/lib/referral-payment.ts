@@ -801,6 +801,7 @@ export async function applyReferralCheckoutSession(
           remindMissingLocationInfo: !hasProLocationInfo(receiverPro),
           priceJpy: booking.price_jpy,
           feeAmountJpy: feeAmountJpyForNotify,
+          bookingId,
         }
       )
     }

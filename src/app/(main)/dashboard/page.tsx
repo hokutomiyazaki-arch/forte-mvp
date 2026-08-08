@@ -631,6 +631,22 @@ export default function DashboardPage() {
     }
   }, [dashboardTab, memberResources])
 
+  // §17-31(CEO指示 2026-08-08): 予約通知メールの ?tab=bookings&booking=<id> で着地したとき、
+  // 該当予約カードへ自動スクロール＋一時ハイライトする。読み取り後は edit=true と同じ流儀で
+  // URLから即除去する(リロードで再スクロールさせない)。実際のスクロール処理はカード一覧の
+  // データ取得完了を知っている ReferralBookingReceivedCard 側が行う。
+  const bookingHighlightParam = searchParams.get('booking')
+  const [highlightBookingId, setHighlightBookingId] = useState<string | null>(null)
+  const bookingHighlightConsumedRef = useRef(false)
+  useEffect(() => {
+    if (!bookingHighlightParam || bookingHighlightConsumedRef.current) return
+    bookingHighlightConsumedRef.current = true
+    setHighlightBookingId(bookingHighlightParam)
+    const url = new URL(window.location.href)
+    url.searchParams.delete('booking')
+    window.history.replaceState(null, '', url.toString())
+  }, [bookingHighlightParam])
+
   // プロフィール編集直接オープン（マウント後1回のみ）
   // deps にオブジェクト pro を入れると、保存時の setPro(savedData) で参照が変わり
   // このエフェクトが再実行 → edit=true が URL に残っているため編集フォームが
@@ -5383,7 +5399,11 @@ export default function DashboardPage() {
           )}
 
 
-          <ReferralBookingReceivedCard proId={pro.id} onStatusChange={handleReferralReceivedStatus} />
+          <ReferralBookingReceivedCard
+            proId={pro.id}
+            onStatusChange={handleReferralReceivedStatus}
+            highlightBookingId={highlightBookingId}
+          />
 
           {referralReceivedLoaded && referralTotalReceivedCount === 0 && (
             <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>
