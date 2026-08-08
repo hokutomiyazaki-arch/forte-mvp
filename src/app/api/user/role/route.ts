@@ -31,6 +31,9 @@ export async function GET() {
       role: 'professional',
       isPro: true,
       isClient: !!client,
+      // §17-13(2026-08-06): 呼び出し側(useProStatus)がプロのidを必要とするようになったため追加。
+      // 既存フィールドは一切変えない(追加のみ)。自分のidなので開示上の問題は無い。
+      proId: pro.id,
     })
   } else if (client) {
     return NextResponse.json({

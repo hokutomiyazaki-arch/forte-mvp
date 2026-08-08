@@ -29,10 +29,13 @@ import BusinessInfoTab from '@/components/dashboard/BusinessInfoTab'
 import MediaSection from '@/components/dashboard/MediaSection'
 import ReferralTab from '@/components/dashboard/ReferralTab'
 import AcceptingStatusWidget from '@/components/dashboard/AcceptingStatusWidget'
+import SettingsSection from '@/components/dashboard/SettingsSection'
+import ConsultationsTab from '@/components/dashboard/ConsultationsTab'
 import ReferralBookingReceivedCard from '@/components/dashboard/ReferralBookingReceivedCard'
 import ReferralActionBanner from '@/components/dashboard/ReferralActionBanner'
 import { createClient as createSupabaseClient } from '@/lib/supabase'
 import { resolveCharacterImageUrl } from '@/lib/character-image'
+import NewBadge from '@/components/dashboard/NewBadge'
 
 // バッジ階層: FNTはBDCの上位資格。同レベルのFNTを持っていたらBDCは非表示
 const BADGE_ORDER: Record<string, number> = {
@@ -95,6 +98,26 @@ interface CustomProof {
 const CATEGORY_LABELS = TAB_DISPLAY_NAMES
 const CATEGORY_KEYS = TAB_ORDER
 
+// 見出し動的化（CEOスクショ指摘・2026-08-06）: dashboardTabごとの見出し文字列。
+// 'profile' はホーム扱いのため別途「ダッシュボード」を表示する（このマップには含めない）。
+// 各値は元々そのタブ内にあった見出しと同じ文字列にしてあるため、タブ側の見出しは重複削除している。
+const DASHBOARD_TAB_HEADING: Record<string, string> = {
+  voices: 'Voices',
+  card: 'プルーフカード',
+  proofs: '強み設定',
+  badges: '獲得バッジ',
+  rewards: 'リワード設定',
+  org: '団体管理',
+  guide: 'はじめかたガイド',
+  'business-info': 'サービス・案内',
+  photos: '顔写真の公開設定',
+  myorgs: '所属団体',
+  referral: '紹介',
+  // §17-2(CEO判断 2026-08-06): 予約は「受け取る仕事」、紹介は「送り出す仕事」。
+  // 別の仕事なのでメニューを分ける。受信箱は1つのまま（直接予約＋紹介予約）。
+  bookings: '予約',
+}
+
 export default function DashboardPage() {
   const { signOut } = useClerk()
   const [user, setUser] = useState<any>(null)
@@ -140,6 +163,9 @@ export default function DashboardPage() {
     name: '', last_name: '', first_name: '', store_name: '',
     title: '', prefecture: '', area_description: '',
     bio: '', booking_url: '', photo_url: '', contact_email: '',
+    // §17-1(CEO決定 2026-08-06): 予約の受け方。'rp'=REALPROOFで受ける / 'external'=自分のサイト。
+    // 空文字=未選択（booking_urlがあれば自分のサイト、無ければREALPROOFとして扱われる）。
+    booking_mode: '',
     // Phase A2: アクセス情報
     address: '',
     nearest_station: '',
@@ -197,8 +223,18 @@ export default function DashboardPage() {
   const [selectedProofIds, setSelectedProofIds] = useState<Set<string>>(new Set())
   const [customProofs, setCustomProofs] = useState<CustomProof[]>([])
   const [activeTab, setActiveTab] = useState('healing')
-  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'card' | 'org' | 'myorgs' | 'guide' | 'business-info' | 'badges' | 'referral'>('profile')
+  const [dashboardTab, setDashboardTab] = useState<'profile' | 'proofs' | 'rewards' | 'voices' | 'card' | 'org' | 'myorgs' | 'certs' | 'consultations' | 'photos' | 'guide' | 'business-info' | 'badges' | 'referral' | 'bookings'>('profile')
   const [openSections, setOpenSections] = useState<Set<string>>(new Set())
+  // CEO指示(2026-08-06): プロフィール編集も項目ごとに畳めるようにする。
+  // 既定は「基本情報」だけ開く(姓名・都道府県が必須のため、初見で入力欄が見えている状態を保つ)。
+  const [openProfileSections, setOpenProfileSections] = useState<Record<string, boolean>>({ basic: true })
+  // §16-19 相談フォーム: タブに出す未返信件数（ConsultationsTab から報告される）
+  const [unreadConsultations, setUnreadConsultations] = useState(0)
+  const toggleProfileSection = (id: string) =>
+    setOpenProfileSections(prev => ({ ...prev, [id]: !prev[id] }))
+  /** 保存エラー時に、該当ブロックが畳まれていてもエラー箇所が見えるように開く。 */
+  const openProfileSection = (id: string) =>
+    setOpenProfileSections(prev => (prev[id] ? prev : { ...prev, [id]: true }))
   // 獲得バッジビュー: HTMLコピーのトースト
   const [badgeToast, setBadgeToast] = useState<string | null>(null)
   // userRole removed: /api/dashboard の role レスポンスで判定
@@ -218,6 +254,10 @@ export default function DashboardPage() {
   // /api/dashboard/voices からダッシュボード専用整形済みデータを受け取る。
   // 公開ページとは異なり display_mode は無視、auth_method ベースで client 表示を判定。
   const [voiceComments, setVoiceComments] = useState<DashboardVoice[]>([])
+  // CEO指摘(2026-08-06): Voices が増えると下の設定が埋もれる。20件ずつ出す。
+  // 追加クエリは不要（全件は既に取得済みなので表示件数を切るだけ）。
+  const VOICES_PAGE_SIZE = 20
+  const [voicesShown, setVoicesShown] = useState(VOICES_PAGE_SIZE)
   // 公開中の顔写真 (display_mode IN ('photo','pro_link'))。コメント有無に依らず取得。
   // /api/dashboard/photos から取得。個人情報 (メアド/電話/userId) は含まない。
   // type='client': クライアント顔写真 / type='pro': プロからの認定 (pro_link、proCardHref あり)。
@@ -412,10 +452,21 @@ export default function DashboardPage() {
   // メニュー未設定プロの予約穴の閉塞(2026-08-05・CEO指示): 予約可能な有料メニューが1件でもあるか
   // (受付中バナーの表示ゲート用)
   const [hasBookableReferralMenu, setHasBookableReferralMenu] = useState(false)
+  // 移動(2026-08-06・CEO指示): 「紹介からの予約は受け付けない」チェックボックスをダッシュボード
+  // 最上部(AcceptingStatusWidget)から紹介タブ「紹介を受ける」サブタブの先頭へ移動。
+  // 保存中/保存失敗の表示はここで持ち、pro.accepting_status自体は既存のsetPro(prev)パターンで更新する。
+  const [referralPauseSaving, setReferralPauseSaving] = useState(false)
+  const [referralPauseError, setReferralPauseError] = useState(false)
+  // §16-8+§16-14: 代理案内の設定UI(founder/instructor限定)。自分がfounder/instructorを
+  // 務める団体の一覧(0件なら設定UI自体を出さない)。
+  const [delegateEligibleOrgs, setDelegateEligibleOrgs] = useState<
+    Array<{ organizationId: string; organizationName: string; organizationType: string | null; role: 'founder' | 'instructor' }>
+  >([])
 
   // CEO指示(2026-08-04・IA再変更): 紹介タブのサブタブを「受ける/する/紹介した案件」の3つに。
   // requestedが1件以上あれば「受ける」、なければlocalStorageの前回選択、初回は「する」がデフォルト。
-  const [referralSubtab, setReferralSubtab] = useState<'receive' | 'send' | 'cases'>('send')
+  // §17-15(CEO指示 2026-08-06): 報酬まわりを独立サブタブ('payout')にした。
+  const [referralSubtab, setReferralSubtab] = useState<'receive' | 'send' | 'cases' | 'payout'>('send')
   const [referralSentActiveCount, setReferralSentActiveCount] = useState(0)
   const [referralSentTotalCount, setReferralSentTotalCount] = useState(0)
   const [referralSentLoaded, setReferralSentLoaded] = useState(false)
@@ -443,23 +494,17 @@ export default function DashboardPage() {
     setReferralReceivedLoaded(true)
     if (referralSubtabInitRef.current) return
     referralSubtabInitRef.current = true
-    // レビュー指摘(重大1・案①): requestedだけで判定すると、requested=0でもconfirmed等が
-    // ある場合や、そもそも非allowlistプロ(「する」タブが先行公開中の案内のみ)の場合に
-    // 'send'着地してしまい、確定済み予約カードが1タップ隠れてしまう。
-    // referralEnabledがfalse(するタブに実質コンテンツが無い)、またはtotalCount(requested+
-    // confirmed+支払い期限切れキャンセル)が1件以上あるときは常に「受ける」を初期表示にする。
-    if (!referralEnabled || info.totalCount >= 1) {
-      setReferralSubtab('receive')
-      return
-    }
+    // §17-2(2026-08-06): 受信箱は「予約」タブへ独立したので、紹介タブで 'receive' に
+    // 着地させる意味がなくなった（旧: 予約が1件でもあれば受信箱を初期表示にしていた）。
+    // 紹介タブは常に「紹介する」から始める。前回 'receive' を保存している人も 'send' に倒す。
     let stored: string | null = null
     try {
       stored = window.localStorage.getItem('rp_referral_subtab')
     } catch {}
-    setReferralSubtab(stored === 'receive' || stored === 'send' || stored === 'cases' ? stored : 'send')
+    setReferralSubtab(stored === 'cases' ? 'cases' : stored === 'payout' ? 'payout' : 'send')
   }
 
-  function handleReferralSubtabClick(tab: 'receive' | 'send' | 'cases') {
+  function handleReferralSubtabClick(tab: 'receive' | 'send' | 'cases' | 'payout') {
     // レビュー指摘(中2): fetch完了前にユーザーが手動でサブタブを選んだ場合、後から届く
     // 自動判定(handleReferralReceivedStatus)がその選択を引き戻さないよう、ここで初期化済み
     // フラグを立てる。
@@ -491,6 +536,36 @@ export default function DashboardPage() {
     setReferralSentLoaded(true)
   }
 
+  // 移動(2026-08-06・CEO指示): 旧AcceptingStatusWidget内にあった「紹介からの予約は受け付けない」
+  // (accepting_status 'open'⇔'conditional')。closed中はPATCHしない(呼び出し元でdisabledにする)。
+  /** §16-29（CEO決定 2026-08-06）: 紹介予約の受付スイッチ。
+   *  直接予約は booking_enabled が別軸で持つようになったので、
+   *  ここは accepting_status を open/closed で切り替えるだけでよくなった
+   *  （旧: 'conditional' で「紹介のみ停止」を表していたが、2軸化により役目を終えた）。 */
+  async function handleToggleReferralAccepting(accepting: boolean) {
+    if (!pro || referralPauseSaving) return
+    setReferralPauseSaving(true)
+    setReferralPauseError(false)
+    const next: 'open' | 'closed' = accepting ? 'open' : 'closed'
+    try {
+      const res = await fetch('/api/referral/accepting', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ accepting_status: next, accepting_note: pro.accepting_note ?? null }),
+      })
+      if (res.ok) {
+        setPro(prev => prev ? { ...prev, accepting_status: next } : prev)
+      } else {
+        setReferralPauseError(true)
+      }
+    } catch {
+      setReferralPauseError(true)
+    } finally {
+      setReferralPauseSaving(false)
+    }
+  }
+
   // メンバー用: 所属団体のリソース state
   const [memberOrgs, setMemberOrgs] = useState<{id: string; name: string; description: string | null; logo_url: string | null}[]>([])
   const [selectedMemberOrgId, setSelectedMemberOrgId] = useState<string | null>(null)
@@ -512,9 +587,11 @@ export default function DashboardPage() {
 
   // URLパラメータによるタブ切替
   const tabParam = searchParams.get('tab')
+  // §17-6: 相談タブで最初に開くスレッド（予約カードの「メッセージを送る」から渡ってくる）
+  const consultationOpenParam = searchParams.get('open')
   useEffect(() => {
     if (!tabParam || loading) return
-    const validTabs = ['profile', 'proofs', 'rewards', 'voices', 'card', 'myorgs', 'org', 'guide', 'business-info', 'badges', 'referral']
+    const validTabs = ['profile', 'proofs', 'rewards', 'voices', 'card', 'myorgs', 'certs', 'consultations', 'photos', 'org', 'guide', 'business-info', 'badges', 'referral', 'bookings']
     if (validTabs.includes(tabParam)) {
       setDashboardTab(tabParam as any)
       if (tabParam === 'myorgs' && selectedMemberOrgId) {
@@ -527,7 +604,15 @@ export default function DashboardPage() {
   // 初期サブタブを固定する(localStorage・requested件数による自動判定より優先)。依存はプリミティブのみ。
   const referralSubParam = searchParams.get('sub')
   useEffect(() => {
-    if (referralSubParam === 'send' || referralSubParam === 'receive' || referralSubParam === 'cases') {
+    // §17-2: 'receive'(受信箱)は「予約」タブへ独立した。
+    // 既に送信済みの通知メールが ?tab=referral&sub=receive を含んでいるため、
+    // それを開いた人が「予約が無い画面」に着地しないよう、予約タブへ送る。
+    if (referralSubParam === 'receive') {
+      referralSubtabInitRef.current = true
+      setDashboardTab('bookings')
+      return
+    }
+    if (referralSubParam === 'send' || referralSubParam === 'cases') {
       referralSubtabInitRef.current = true
       setReferralSubtab(referralSubParam)
     }
@@ -536,7 +621,7 @@ export default function DashboardPage() {
   // ハッシュスクロール（バッジクリックからの遷移用）
   useEffect(() => {
     const hash = window.location.hash.slice(1)
-    if (hash && dashboardTab === 'myorgs') {
+    if (hash && (dashboardTab === 'myorgs' || dashboardTab === 'certs')) {
       setTimeout(() => {
         const el = document.getElementById(hash)
         if (el) {
@@ -563,6 +648,20 @@ export default function DashboardPage() {
     url.searchParams.delete('edit')
     window.history.replaceState(null, '', url.toString())
   }, [editParam, loading, proIdForEditOpen])
+
+  /**
+   * CEO報告(2026-08-06)「一度タップした後に、消えないし、なにも出来ない。反応しない。」の修正。
+   * 真因: バナーのCTAが同じページの `?tab=profile&edit=true` へのリンクで、受け側の
+   * useEffect が「マウント後1回だけ」開く作り（editAutoOpenedRef）だったこと。さらに開いた直後に
+   * window.history.replaceState で edit を消しており、これは Next の router に伝わらないため
+   * useSearchParams が更新されない。結果、2回目以降のタップは何も起きなかった。
+   * 同一ページ内の操作はURLを経由させず、この関数で直接開く。
+   */
+  function openProfileEdit() {
+    setDashboardTab('profile')
+    setEditing(true)
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   // Navbar「認定申請」メニューからの導線: /dashboard?action=certification で
   // 複数カテゴリ一括申請モーダルを自動オープン（対象は描画時に算出）
@@ -695,6 +794,8 @@ export default function DashboardPage() {
         setAcceptingEditable(!!data.acceptingEditable)
         // メニュー未設定プロの予約穴の閉塞: 予約可能な有料メニューが1件でもあるか
         setHasBookableReferralMenu(!!data.hasBookableReferralMenu)
+        // §16-8+§16-14: 代理案内の設定UI(founder/instructor限定)
+        setDelegateEligibleOrgs(Array.isArray(data.delegateEligibleOrgs) ? data.delegateEligibleOrgs : [])
 
         setForm({
           name: proData.name || '',
@@ -705,6 +806,8 @@ export default function DashboardPage() {
           prefecture: proData.prefecture || '',
           area_description: proData.area_description || '',
           bio: proData.bio || '', booking_url: proData.booking_url || '',
+          // §17-1: migration 056 未実行の環境では undefined（select('*')は既存カラムのみ返す）
+          booking_mode: proData.booking_mode || '',
           photo_url: proData.photo_url || '',
           contact_email: proData.contact_email || '',
           // Phase A2: アクセス情報
@@ -855,6 +958,18 @@ export default function DashboardPage() {
         if (data.credentialBadges) setCredentialBadges(data.credentialBadges)
         if (data.ownedOrg) setOwnedOrg(data.ownedOrg)
 
+        // §16-19 相談フォーム: タブの未返信バッジ用に件数だけ先に取る（本文は引かない）。
+        // 失敗しても他の表示に影響させない。
+        try {
+          const consultRes = await fetch('/api/pro/consultations?countOnly=1', { cache: 'no-store' })
+          if (consultRes.ok) {
+            const consultData = await consultRes.json()
+            setUnreadConsultations(Number(consultData?.unread) || 0)
+          }
+        } catch {
+          /* バッジが出ないだけなので握りつぶす */
+        }
+
         // メンバー用: 所属団体一覧を取得
         try {
           const orgsRes = await fetch('/api/my/organizations')
@@ -864,7 +979,7 @@ export default function DashboardPage() {
               setMemberOrgs(orgsData)
               setHasOrgMembership(true)
               setSelectedMemberOrgId(orgsData[0].id)
-              if (tabParam === 'myorgs') loadMemberResources(orgsData[0].id)
+              if (tabParam === 'myorgs' || tabParam === 'certs') loadMemberResources(orgsData[0].id)
 
               // 団体IGシェア オプトアウト状態を取得（行あり=紹介拒否=トグルOFF）
               try {
@@ -1083,6 +1198,16 @@ export default function DashboardPage() {
     return groups
   }
 
+  /** 認定・資格タブ: バッジを押したら、その認定専用の配付資料グループを開いて位置まで運ぶ。
+   *  CEO指示(2026-08-06)「ダッシュボードのバッジは団体資料にアクセスできるボタン」。
+   *  資料はバッジ(credential_level_id)ごとにグループ化されており、グループのkey＝バッジidで一致する。 */
+  function openBadgeResources(badgeId: string) {
+    setMemberAccordionOpen(prev => ({ ...prev, [badgeId]: true }))
+    setTimeout(() => {
+      document.getElementById(badgeId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 50)
+  }
+
   function handleMyOrgsTab() {
     setDashboardTab('myorgs')
     if (selectedMemberOrgId) {
@@ -1180,6 +1305,7 @@ export default function DashboardPage() {
     const bookingValidation = validateBookingUrl(form.booking_url || '')
     if (!bookingValidation.valid) {
       setBookingUrlError(bookingValidation.error)
+      openProfileSection('contact')
       setSaving(false)
       return
     }
@@ -1187,26 +1313,39 @@ export default function DashboardPage() {
     const urlPattern = /https?:\/\/|www\./i
     if (!form.last_name.trim() || !form.first_name.trim()) {
       setFormError('姓と名を入力してください')
+      openProfileSection('basic')
       setSaving(false)
       return
     }
     if (form.last_name.trim().length > 20 || form.first_name.trim().length > 20) {
       setFormError('姓名は各20文字以内で入力してください')
+      openProfileSection('basic')
       setSaving(false)
       return
     }
     if (urlPattern.test(form.last_name) || urlPattern.test(form.first_name)) {
       setFormError('名前にURLを含めることはできません')
+      openProfileSection('basic')
       setSaving(false)
       return
     }
     if (form.store_name.trim().length > 50) {
       setFormError('店舗名は50文字以内で入力してください')
+      openProfileSection('basic')
+      setSaving(false)
+      return
+    }
+    // 都道府県は必須(input側のrequired)。ブロックを畳んだまま保存すると
+    // ブラウザの必須チェックが働かないため、JS側でも同じ条件を見る。
+    if (!form.prefecture) {
+      setFormError('都道府県を選択してください')
+      openProfileSection('basic')
       setSaving(false)
       return
     }
     if (urlPattern.test(form.contact_email)) {
       setFormError('正しいメールアドレスを入力してください')
+      openProfileSection('contact')
       setSaving(false)
       return
     }
@@ -1226,6 +1365,8 @@ export default function DashboardPage() {
       prefecture: form.prefecture || null,
       area_description: form.area_description || null,
       bio: form.bio || null, booking_url: form.booking_url || null,
+      // §17-1: 未選択はnullのまま保存する（DEFAULTを付けない方針・解釈はbooking-mode.tsが持つ）
+      booking_mode: form.booking_mode || null,
       contact_email: form.contact_email || null,
       photo_url: form.photo_url || null,
       custom_result_fortes: validResultFortes,
@@ -1288,6 +1429,7 @@ export default function DashboardPage() {
       gallery_image_urls: '写真',
       intro_video_url: '紹介動画',
       character_gender: 'キャラクターの表示',
+      booking_mode: '予約の受け方',
     }
     if (saveError && upsertRecord && typeof upsertRecord === 'object') {
       const isSchemaErr = (saveError as any).code === '42703' || (saveError as any).code === 'PGRST204'
@@ -1871,10 +2013,37 @@ export default function DashboardPage() {
   if (editing) {
     return (
       <div className="max-w-lg mx-auto">
-        <h1 className="text-2xl font-bold text-[#1A1A2E] mb-6">
+        {/* CEO指示(2026-08-06): 設定画面は「1行目=タイトル / 2行目=左に← ホームに戻る / 3行目=設定本体」。
+            プロフィール"作成"(初回セットアップ)はまだ戻る先が無いので、pro がいる編集時のみ出す。 */}
+        <h1 className="text-lg font-bold text-[#1A1A2E]">
           {pro ? 'プロフィール編集' : 'プロフィール作成'}
         </h1>
+        {pro && (
+          <div className="mt-2 mb-4">
+            <button
+              type="button"
+              onClick={() => {
+                setEditing(false)
+                setDashboardTab('profile')
+                window.history.replaceState(null, '', '/dashboard')
+              }}
+              style={{ fontSize: 13, color: '#C4A35A', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+            >
+              ← ホームに戻る
+            </button>
+          </div>
+        )}
+        {!pro && <div className="mb-4" />}
         <form onSubmit={handleSave} className="space-y-4">
+
+        {/* ── 基本情報 ── */}
+        <SettingsSection
+          title="基本情報"
+          description="名前・店舗・肩書き・エリアなど、カードの一番上に出る情報です。"
+          open={!!openProfileSections.basic}
+          onToggle={() => toggleProfileSection('basic')}
+        >
+        <div className="space-y-4">
           {/* プロフ写真 */}
           <div className="flex flex-col items-center">
             <div className="relative">
@@ -1965,6 +2134,17 @@ export default function DashboardPage() {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#C4A35A] outline-none"
               placeholder="渋谷・恵比寿エリア / 出張対応：関東全域 など" />
           </div>
+        </div>
+        </SettingsSection>
+
+        {/* ── 自己紹介・写真・動画 ── */}
+        <SettingsSection
+          title="自己紹介・写真・動画"
+          description="カードの自己紹介ブロックに出る内容です。"
+          open={!!openProfileSections.about}
+          onToggle={() => toggleProfileSection('about')}
+        >
+        <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">自己紹介</label>
             <textarea value={form.bio} onChange={e => setForm({...form, bio: e.target.value})} rows={4}
@@ -2003,7 +2183,17 @@ export default function DashboardPage() {
             userId={user?.id}
             saveNote={businessHoursSaveNote}
           />
+        </div>
+        </SettingsSection>
 
+        {/* ── 連絡先 ── */}
+        <SettingsSection
+          title="連絡先"
+          description="お客さんがあなたに連絡する手段。URL・メール・電話のいずれか1つでOKです。"
+          open={!!openProfileSections.contact}
+          onToggle={() => toggleProfileSection('contact')}
+        >
+        <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               予約・連絡先URL
@@ -2013,6 +2203,12 @@ export default function DashboardPage() {
               応援してくれたお客さんが、次にあなたへ連絡する手段です。
               <br />
               公式LINE・予約サイト・お問い合わせフォームなど、なんでもOK。
+              <br />
+              {/* §17-1(CEO指示 2026-08-06): 予約の受け方はサービス設定へ移動。
+                  ここに置きっぱなしにすると、設定が2か所にあるように見える。 */}
+              <span className="text-gray-400">
+                予約をどこで受けるかは「サービス設定 ＞ 予約の受け方」で選べます。
+              </span>
             </p>
             <input
               type="url"
@@ -2043,12 +2239,18 @@ export default function DashboardPage() {
             <p className="text-xs text-gray-400 mt-1">URL・メール・電話番号のいずれか1つがあれば連絡先の設定は完了です</p>
           </div>
           {/* パスワードはClerkで管理 */}
+        </div>
+        </SettingsSection>
 
           {/* ── 通知設定 ── */}
           {pro && (
-            <div className="border-t border-gray-200 pt-4 mt-4">
-              <h3 className="text-sm font-bold text-gray-700 mb-3">通知設定</h3>
-
+            <SettingsSection
+              title="通知設定"
+              description="週次レポートの受け取り方（LINE / メール）。"
+              open={!!openProfileSections.notifications}
+              onToggle={() => toggleProfileSection('notifications')}
+            >
+            <div>
               {/* LINE通知設定 */}
               <div className="bg-gray-50 rounded-lg p-4 mb-3">
                 <div className="flex items-center justify-between mb-1">
@@ -2230,6 +2432,7 @@ export default function DashboardPage() {
                 </div>
               </div>
             </div>
+            </SettingsSection>
           )}
 
           {formError && <p className="text-red-500 text-sm">{formError}</p>}
@@ -2303,7 +2506,12 @@ export default function DashboardPage() {
 
   const daysSinceRegistration = getDaysSinceRegistration()
 
-  const isSettingsTab = ['proofs', 'rewards', 'card', 'myorgs', 'org', 'guide', 'business-info', 'badges', 'referral'].includes(dashboardTab)
+  const isSettingsTab = ['proofs', 'rewards', 'card', 'myorgs', 'org', 'guide', 'business-info', 'badges', 'referral', 'bookings', 'photos'].includes(dashboardTab)
+
+  // 認定・資格タブ(2026-08-06・CEO決定): 所属団体も獲得バッジも無い人には出さない。
+  // 中身が空のタブを並べても押す理由が無く、ごちゃつきを増やすだけのため。
+  const hasCertsContent =
+    activeOrgs.length > 0 || credentialBadges.length > 0 || filterAndSortBadges(pro?.badges || []).length > 0
 
   function toggleSection(id: string) {
     setOpenSections(prev => {
@@ -2321,7 +2529,7 @@ export default function DashboardPage() {
       {/* CEO指示(2026-08-04): やりとりカードの全文をトップに常駐させない。件数付きの
           1行リンクのみ表示し、操作は紹介タブ内(ReferralBookingReceivedCard)で行う。
           紹介タブ表示中はリンク先に既にいるため出さない(CEO指摘) */}
-      {pro && dashboardTab !== 'referral' && <ReferralActionBanner />}
+      {pro && dashboardTab !== 'referral' && dashboardTab !== 'bookings' && <ReferralActionBanner />}
 
       {/* LINE 週次レポートバナー */}
       {!isSettingsTab && lineBannerState === 'show_banner' && process.env.NEXT_PUBLIC_LINE_FRIEND_URL && (
@@ -2566,47 +2774,68 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* §2-2改訂: 受け入れステータスをダッシュボード見出しの直上に常時表示（先行テスト第3弾・背景なしの3段スライダー） */}
-      {/* 🔴1(再レビュー): allowlist内に加え、共有リストに掲載中の本人にも表示する(唯一のオプトアウト手段のため) */}
-      {pro && acceptingEditable && (
-        <AcceptingStatusWidget
-          initialAcceptingStatus={pro.accepting_status ?? null}
-          initialAcceptingNote={pro.accepting_note ?? null}
-          initialDelegateListId={pro.delegate_list_id ?? null}
-          canManageLists={referralEnabled}
-          hasBookableMenu={hasBookableReferralMenu}
-          onUpdated={(status, note, delegateListId) =>
-            setPro(prev => prev ? { ...prev, accepting_status: status, accepting_note: note, delegate_list_id: delegateListId } : prev)
-          }
-        />
-      )}
+      {/* 移動(2026-08-06・CEO指示): 代理案内の設定UI(旧DelegateCriteriaSettings直置き)は
+          紹介タブ「紹介する」サブタブの先頭へ移動した(ReferralTab内でrenderする)。 */}
 
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <h1 className="text-2xl font-bold text-[#1A1A2E]">ダッシュボード</h1>
-            {(pro as any)?.founding_member_status === 'achieved' && (
-              <a
-                href="https://line.me/R/ti/g/2C5JXJyc68"
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Founding Memberグループに参加"
-              >
-                <img
-                  src="/images/founding-member-badge.png"
-                  alt="Founding Member"
-                  style={{ width: 40, height: 40, objectFit: 'contain' }}
-                />
-              </a>
+      {/* CEO指示(2026-08-06): 主要タブの見出し・メールアドレス・ファウンダーバッジを全て撤去。
+          - 見出し … どのタブにいるかはタブバー自体が示しているので情報量がない
+          - メール … ログイン中の顔がヘッダー右上に出ているので重複
+          - バッジ … ヘッダーのロゴ横へ移動した（Navbar.tsx）。ページを移動しても常に見える
+          残るのは受付中トグルだけ。設定画面は「1行目=タイトル / 2行目=← ホームに戻る」を維持。 */}
+      {!isSettingsTab ? (
+        pro && acceptingEditable ? (
+          <div className="flex items-center justify-end mb-4">
+            <AcceptingStatusWidget
+              initialAcceptingStatus={pro.accepting_status ?? null}
+              initialAcceptingNote={pro.accepting_note ?? null}
+              initialDelegateListId={pro.delegate_list_id ?? null}
+              initialBookingEnabled={(pro as any).booking_enabled ?? null}
+              canManageLists={referralEnabled}
+              hasBookableMenu={hasBookableReferralMenu}
+              onUpdated={(status, note, delegateListId) =>
+                setPro(prev => prev ? { ...prev, accepting_status: status, accepting_note: note, delegate_list_id: delegateListId } : prev)
+              }
+            />
+          </div>
+        ) : null
+      ) : (
+        <div className="mb-4">
+          {/* 1行目: タイトル */}
+          <h1 className="text-lg font-bold text-[#1A1A2E]">{DASHBOARD_TAB_HEADING[dashboardTab] || ''}</h1>
+          {/* 2行目: 左に「ホームに戻る」／右はサービス設定のときだけ受付トグル */}
+          <div
+            className="mt-2"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' as const }}
+          >
+            <button
+              onClick={() => {
+                if (!pro) {
+                  window.location.href = '/'
+                } else {
+                  setDashboardTab('profile')
+                  window.history.replaceState(null, '', '/dashboard')
+                }
+              }}
+              style={{ fontSize: 13, color: '#C4A35A', background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0 }}
+            >
+              ← ホームに戻る
+            </button>
+            {pro && acceptingEditable && (dashboardTab === 'business-info' || dashboardTab === 'bookings') && (
+              <AcceptingStatusWidget
+                initialAcceptingStatus={pro.accepting_status ?? null}
+                initialAcceptingNote={pro.accepting_note ?? null}
+                initialDelegateListId={pro.delegate_list_id ?? null}
+              initialBookingEnabled={(pro as any).booking_enabled ?? null}
+                canManageLists={referralEnabled}
+                hasBookableMenu={hasBookableReferralMenu}
+                onUpdated={(status, note, delegateListId) =>
+                  setPro(prev => prev ? { ...prev, accepting_status: status, accepting_note: note, delegate_list_id: delegateListId } : prev)
+                }
+              />
             )}
           </div>
-          {user?.email && (
-            <p className="text-sm text-gray-400 mt-1 truncate max-w-[260px]">
-              {user.email.startsWith('line_') && user.email.endsWith('@line.realproof.jp') ? 'LINE連携済み' : user.email}
-            </p>
-          )}
         </div>
-      </div>
+      )}
 
       {/* 姓名未設定バナー */}
       {pro && !pro.first_name?.trim() && (
@@ -2635,13 +2864,14 @@ export default function DashboardPage() {
           <BookingUrlBanner
             proName={`${pro.last_name || ''}${pro.first_name || ''}`.trim()}
             voteCount={voteCount}
+            onOpenProfileEdit={openProfileEdit}
           />
         )}
 
       {/* 2026-08-05: タイプ分析キャラクター性別出し分けの告知バナー(CEO指示)。
           character_gender が未選択(null)のプロにのみ表示。保存すれば(neutral含む)自動的に消える */}
       {pro && !(pro as any).character_gender && (
-        <CharacterGenderBanner />
+        <CharacterGenderBanner onOpenProfileEdit={openProfileEdit} />
       )}
 
       {/* QRコード（タブの上に配置） */}
@@ -2673,16 +2903,29 @@ export default function DashboardPage() {
               {qrUrl ? (
                 <>
                   <img src={qrUrl} alt="QR Code" className="mx-auto mb-4" />
-                  <button
-                    onClick={async () => {
-                      await generateQR()
-                      setQrRefreshed(true)
-                      setTimeout(() => setQrRefreshed(false), 2000)
-                    }}
-                    className="text-sm text-[#9CA3AF] hover:text-[#C4A35A] transition-colors"
-                  >
-                    {qrRefreshed ? '更新しました ✓' : 'QRコードを更新する'}
-                  </button>
+                  {/* QRまわりの小操作。CEO指摘(2026-08-06)で「投票画面を確認する」をここへ移設。
+                      プロが「クライアントに見せる画面」を確認したい、が目的なので文言もそう書く。
+                      下の「オンラインの方はこちら」はクライアント向けの別ルートなので、
+                      区切り線の上下で種類を分けている（混ざらない）。 */}
+                  <div className="flex items-center justify-center gap-3 flex-wrap">
+                    <button
+                      onClick={async () => {
+                        await generateQR()
+                        setQrRefreshed(true)
+                        setTimeout(() => setQrRefreshed(false), 2000)
+                      }}
+                      className="text-sm text-[#9CA3AF] hover:text-[#C4A35A] transition-colors"
+                    >
+                      {qrRefreshed ? '更新しました ✓' : 'QRコードを更新する'}
+                    </button>
+                    <span className="text-[#E5E7EB]">|</span>
+                    <button
+                      onClick={() => window.open(`/vote/${pro.id}?preview=true`, '_blank')}
+                      className="text-sm text-[#C4A35A] hover:underline transition-colors"
+                    >
+                      お客さんに見える画面
+                    </button>
+                  </div>
                 </>
               ) : (
                 <button onClick={generateQR} className="px-6 py-3 bg-[#C4A35A] text-white rounded-lg hover:bg-[#b3944f] transition">
@@ -2766,33 +3009,32 @@ export default function DashboardPage() {
       )}
 
 
-      {/* ← ホームに戻る（設定モード時） */}
-      {isSettingsTab && (
-        <button
-          onClick={() => {
-            if (!pro) {
-              window.location.href = '/'
-            } else {
-              setDashboardTab('profile')
-              window.history.replaceState(null, '', '/dashboard')
-            }
-          }}
-          className="flex items-center gap-2 text-sm text-[#C4A35A] hover:text-[#b3923f] mb-4 transition-colors"
-        >
-          ← ホームに戻る
-        </button>
-      )}
+      {/* §CEO指摘対応(2026-08-06): 「← ホームに戻る」は見出し行(上部)へ統合したためここでは表示しない */}
 
       {/* ダッシュボードタブ */}
       {!isSettingsTab && (
       <div style={{ display: 'flex', overflowX: 'auto', gap: 0, marginBottom: 24, borderBottom: '1px solid #E5E7EB', scrollbarWidth: 'none' as any }}>
         {([
           { key: 'profile' as const, label: 'ホーム' },
+          // CEO決定(2026-08-06): 公開カードと同様に認定・資格を独立タブへ。
+          // ホームに重複して置いていた「所属・認定」「取得バッジ」をここへ集約し、
+          // バッジから団体の配付資料へ辿れるようにする（ダッシュボード固有の導線）。
+          // 所属も獲得バッジも無い人にはタブ自体を出さない（空タブを作らない）。
+          ...(hasCertsContent ? [{ key: 'certs' as const, label: '認定・資格' }] : []),
           { key: 'voices' as const, label: 'Voices' },
+          // §16-19 相談フォーム: 届いた相談の受信箱。空でもタブは出す
+          // （届く前に「そういう窓口がある」と分からないと、カード側の導線も理解されないため）。
+          { key: 'consultations' as const, label: '相談' },
         ]).map(tab => (
           <button
             key={tab.key}
-            onClick={() => setDashboardTab(tab.key)}
+            onClick={() => {
+              setDashboardTab(tab.key)
+              // 認定・資格タブに入った時点で団体の配付資料を読む（未取得なら）
+              if (tab.key === 'certs' && selectedMemberOrgId && memberResources.length === 0) {
+                loadMemberResources(selectedMemberOrgId)
+              }
+            }}
             style={{
               flex: '0 0 auto',
               padding: '10px 14px',
@@ -2810,6 +3052,13 @@ export default function DashboardPage() {
             }}
           >
             {tab.label}
+            {tab.key === 'consultations' && unreadConsultations > 0 && (
+              <span style={{
+                marginLeft: 6, fontSize: 10, fontWeight: 700,
+                background: '#C4A35A', color: '#1A1A2E',
+                padding: '1px 6px', borderRadius: 10,
+              }}>{unreadConsultations}</span>
+            )}
           </button>
         ))}
       </div>
@@ -2909,80 +3158,8 @@ export default function DashboardPage() {
         )
       })()}
 
-      {/* 所属・認定（org_membersベース） */}
-      {activeOrgs.length > 0 && (
-        <div className="bg-white rounded-xl p-5 shadow-sm mb-6">
-          <h3 className="text-sm font-bold text-[#1A1A2E] mb-3">所属・認定</h3>
-          <div className="space-y-3">
-            {activeOrgs.map(o => {
-              const typeIcon = o.org_type === 'store' ? '🏪' : o.org_type === 'credential' ? '🎓' : '📚'
-              const typeTag = o.org_type === 'store' ? '所属' : o.org_type === 'education' ? '修了' : '認定'
-              const tagBg = o.org_type === 'store' ? '#E8F4FD' : '#FFF8E7'
-              const tagColor = o.org_type === 'store' ? '#2B6CB0' : '#C4A35A'
-              return (
-                <div key={o.id} className="flex items-center py-2">
-                  <a
-                    href={`/org/${o.id}`}
-                    className="flex items-center gap-3 hover:opacity-70 transition"
-                  >
-                    {o.logo_url ? (
-                      <img src={o.logo_url} alt={o.org_name} loading="lazy" className="w-6 h-6 rounded-full object-cover" />
-                    ) : (
-                      <span className="text-lg">{typeIcon}</span>
-                    )}
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-[#1A1A2E]">{o.org_name}</span>
-                        <span style={{ fontSize: '11px', padding: '1px 6px', borderRadius: '4px', backgroundColor: tagBg, color: tagColor, fontWeight: 600 }}>
-                          {typeTag}
-                        </span>
-                      </div>
-                      {o.accepted_at && (
-                        <div className="text-xs text-gray-400">
-                          {new Date(o.accepted_at).toLocaleDateString('ja-JP')} {o.org_type === 'credential' ? 'から認定' : o.org_type === 'education' ? 'から修了' : 'から所属'}
-                        </div>
-                      )}
-                    </div>
-                  </a>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Badges */}
-      {(() => {
-        const displayBadges = filterAndSortBadges(pro?.badges || [])
-        const hasBadges = displayBadges.length > 0 || credentialBadges.length > 0
-        return hasBadges ? (
-          <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
-            <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">取得バッジ</h2>
-            <div className="flex flex-wrap justify-center gap-6">
-              {/* credential_levels経由のバッジ（新方式） */}
-              {credentialBadges.map((badge) => (
-                <a key={badge.id} href={`/dashboard?tab=myorgs#${badge.id}`} className="flex flex-col items-center hover:opacity-70 transition">
-                  {badge.image_url ? (
-                    <img src={badge.image_url} alt={badge.name} loading="lazy" className="w-16 h-16 rounded-xl object-cover" />
-                  ) : (
-                    <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-[#C4A35A] to-[#E8D5A0] flex items-center justify-center text-white text-lg font-bold">
-                      {badge.name.charAt(0)}
-                    </div>
-                  )}
-                  <span className="text-[10px] text-gray-400 mt-1">{badge.name}</span>
-                </a>
-              ))}
-              {/* pro.badges経由のバッジ（旧方式） */}
-              {displayBadges.map((badge, i) => (
-                <div key={i} className="flex flex-col items-center">
-                  <img src={badge.image_url} alt={badge.label} loading="lazy" className="w-16 h-16" />
-                  <span className="text-[10px] text-gray-400 mt-1">{badge.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null
-      })()}
+      {/* 所属・認定 / 取得バッジ は「認定・資格」タブへ移設(2026-08-06・CEO決定)。
+          ホームに置いたままだと専用タブと同じ情報が2箇所に出て、ごちゃつきの原因になっていた。 */}
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3 mb-3">
@@ -3252,7 +3429,7 @@ export default function DashboardPage() {
       {/* ═══ Tab: カード管理 ═══ */}
       {dashboardTab === 'card' && (<>
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
-        <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">プルーフカード</h2>
+        {/* §CEO指摘対応(2026-08-06): 見出し「プルーフカード」は上部の動的見出しと重複するため削除 */}
         <p className="text-sm text-[#9CA3AF] mb-4">
           カード裏面のIDを入力すると、お客さんがカードにスマホをかざすだけで投票ページに飛べるようになります。
         </p>
@@ -3380,7 +3557,7 @@ export default function DashboardPage() {
 
       {/* 強み設定 */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
-        <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">強み設定</h2>
+        {/* §CEO指摘対応(2026-08-06): 見出し「強み設定」は上部の動的見出しと重複するため削除 */}
         <p className="text-sm text-[#9CA3AF] mb-4">
           お客さんがあなたに投票する時に表示される項目です。9つ選んでください。
         </p>
@@ -3619,9 +3796,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* 獲得バッジ */}
+      {/* 獲得バッジ（§CEO指摘対応(2026-08-06): 見出しは上部の動的見出しと重複するため削除） */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
-        <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">獲得バッジ</h2>
         <p className="text-sm text-[#9CA3AF] mb-4">
           SPECIALIST 以上の認定バッジを画像でダウンロードしたり、サイトに埋め込むHTMLをコピーできます。
         </p>
@@ -3769,9 +3945,8 @@ export default function DashboardPage() {
       {/* ═══ Tab: リワード設定 ═══ */}
       {dashboardTab === 'rewards' && (<>
 
-      {/* リワード設定 */}
+      {/* リワード設定（§CEO指摘対応(2026-08-06): 見出しは上部の動的見出しと重複するため削除） */}
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
-        <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">リワード設定</h2>
         <p className="text-sm text-[#9CA3AF] mb-4">
           投票してくれたお客さんに見せる「お礼」です。任意ですが、設定すると投票率が上がります。
         </p>
@@ -4035,6 +4210,26 @@ export default function DashboardPage() {
         お客さんが投票時に書いてくれたコメントです。タップしてSNSでシェアできます。
       </p>
 
+      {/* CEO指摘(2026-08-06): 顔写真の公開設定が Voices の下に埋もれて見つけられない。
+          設定なので別画面へ出し、ここには**一番上に**1行リンクだけ置く。
+          件数を出すのは、開かなくても何人分公開しているか分かるようにするため。 */}
+      <button
+        type="button"
+        onClick={() => { setDashboardTab('photos'); window.history.replaceState(null, '', '/dashboard?tab=photos') }}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          gap: 12, padding: '12px 16px', marginBottom: 16,
+          background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12,
+          cursor: 'pointer', textAlign: 'left',
+        }}
+      >
+        <span style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E' }}>
+          公開中の顔写真
+          <span style={{ color: '#9CA3AF', fontWeight: 400, marginLeft: 6 }}>{publishedPhotos.length}件</span>
+        </span>
+        <span style={{ color: '#C4A35A', fontSize: 14, flexShrink: 0 }}>›</span>
+      </button>
+
       {/* シェア説明バナー */}
       <div className="mb-6 flex items-start gap-3 rounded-lg border-l-4 border-[#C4A35A] bg-[#1A1A2E] px-4 py-3">
         <svg className="mt-0.5 h-4 w-4 shrink-0 text-[#C4A35A]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -4059,7 +4254,7 @@ export default function DashboardPage() {
         </h2>
         {voiceComments.length > 0 ? (
           <div className="space-y-3">
-            {voiceComments.map(c => {
+            {voiceComments.slice(0, voicesShown).map(c => {
               const isExpanded = expandedVoice === c.id
               const isSelectingPhrase = phraseSelecting === c.id
               const selectedPhraseId = selectedPhrases[c.id]
@@ -4159,9 +4354,28 @@ export default function DashboardPage() {
             <p className="text-gray-400 text-xs mt-1">クライアントからコメント付き投票が届くとここに表示されます。</p>
           </div>
         )}
+        {/* CEO指摘(2026-08-06): 全件を一気に描画していたので20件ずつに。
+            番号ページではなく「もっと見る」にしたのは、Voices は新しい順に眺めて
+            シェアする使い方が主で、ページを行き来する動機が薄いため。 */}
+        {voiceComments.length > voicesShown && (
+          <button
+            type="button"
+            onClick={() => setVoicesShown(v => v + VOICES_PAGE_SIZE)}
+            style={{
+              width: '100%', marginTop: 16, padding: '12px 16px', borderRadius: 10,
+              border: '1px solid #E5E7EB', background: '#fff', color: '#1A1A2E',
+              fontSize: 14, fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            もっと見る（残り{voiceComments.length - voicesShown}件）
+          </button>
+        )}
       </div>
 
-      {/* 公開中の顔写真 — display_mode='photo' の票をコメント有無に依らず一覧表示 */}
+      </>)}
+
+      {/* ═══ Tab: 顔写真の公開設定（§CEO指示 2026-08-06） ═══ */}
+      {dashboardTab === 'photos' && (<>
       <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
         <h2 className="text-lg font-bold text-[#1A1A2E] mb-2">
           <span style={{ fontSize: 10, fontWeight: 700, color: '#A0A0A0', letterSpacing: 2, textTransform: 'uppercase' as const, fontFamily: "'Inter', sans-serif", display: 'block', marginBottom: 4 }}>
@@ -4218,7 +4432,10 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+      </>)}
 
+      {/* Voice のモーダル2種はタブに属さない（自前の state で開閉するため）。
+          顔写真タブを分けた際にこの中へ入ってしまうとVoicesから開けなくなるので、外に出す。 */}
       {/* Phase 3: Voice 返信モーダル */}
       {replyModalVote && (
         <VoiceReplyModal
@@ -4271,8 +4488,6 @@ export default function DashboardPage() {
           }}
         />
       )}
-
-      </>)}
 
       {/* ═══ Tab: 団体管理 ═══ */}
       {dashboardTab === 'org' && ownedOrg && (<>
@@ -4389,7 +4604,7 @@ export default function DashboardPage() {
       {/* ═══ Tab: はじめかたガイド ═══ */}
       {dashboardTab === 'guide' && (
       <div style={{ paddingBottom: 40 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 500, color: '#1A1A2E', marginBottom: 24 }}>はじめかたガイド</h2>
+        {/* §CEO指摘対応(2026-08-06): 見出し「はじめかたガイド」は上部の動的見出しと重複するため削除 */}
 
         {/* ────── STEP 1 ────── */}
         <div style={{ marginBottom: 8 }}>
@@ -4813,16 +5028,132 @@ export default function DashboardPage() {
             facebook_url: form.facebook_url,
             youtube_url: form.youtube_url,
             phone_number: form.phone_number,
+            // §17-1(CEO指示 2026-08-06): 予約の受け方はサービス設定へ移動した
+            booking_mode: form.booking_mode,
+            booking_url: form.booking_url,
           }}
           onAccessLinksChange={(next) => setForm(prev => ({ ...prev, ...next }))}
           onSaveAccessLinks={() => doSaveLogic()}
           savingAccessLinks={saving}
           accessLinksSaveNote={businessHoursSaveNote}
+          initialAcceptingStatus={pro.accepting_status ?? null}
+          initialAcceptingNote={pro.accepting_note ?? null}
+          onAcceptingNoteUpdated={(nextNote) => setPro(prev => prev ? { ...prev, accepting_note: nextNote } : prev)}
         />
       )}
 
-      {/* ═══ Tab: 団体（メンバー用リソース閲覧） ═══ */}
-      {dashboardTab === 'myorgs' && hasOrgMembership && (<>
+      {/* ═══ Tab: 相談（§16-19） ═══
+          カードの「相談する」から届いた問い合わせの受信箱。ここに返信を書くと
+          クライアントにメールが届く（クライアントはメール、プロはダッシュボード）。 */}
+      {/* §17-6: 予約カードの「メッセージを送る」から ?open=<id> で飛んでくる。
+          どのスレッドを開くか名指しで渡さないと、飛ばされた側は書けない。 */}
+      {dashboardTab === 'consultations' && pro && (
+        <ConsultationsTab onUnreadChange={setUnreadConsultations} initialOpenId={consultationOpenParam} />
+      )}
+
+      {/* ═══ Tab: 認定・資格 ═══
+          CEO決定(2026-08-06): 公開カードと同じく認定・資格を独立タブに。ホームにあった
+          「所属・認定」「取得バッジ」をここへ移設し、直下の団体リソースブロックと合わせて
+          「バッジ → その団体の配付資料」が1画面で繋がるようにする。 */}
+      {dashboardTab === 'certs' && (<>
+      {/* 所属・認定（org_membersベース） */}
+      {activeOrgs.length > 0 && (
+        <div className="bg-white rounded-xl p-5 shadow-sm mb-6">
+          <h3 className="text-sm font-bold text-[#1A1A2E] mb-3">所属・認定</h3>
+          <div className="space-y-3">
+            {activeOrgs.map(o => {
+              const typeIcon = o.org_type === 'store' ? '🏪' : o.org_type === 'credential' ? '🎓' : '📚'
+              const typeTag = o.org_type === 'store' ? '所属' : o.org_type === 'education' ? '修了' : '認定'
+              const tagBg = o.org_type === 'store' ? '#E8F4FD' : '#FFF8E7'
+              const tagColor = o.org_type === 'store' ? '#2B6CB0' : '#C4A35A'
+              return (
+                <div key={o.id} className="flex items-center py-2">
+                  <a
+                    href={`/org/${o.id}`}
+                    className="flex items-center gap-3 hover:opacity-70 transition"
+                  >
+                    {o.logo_url ? (
+                      <img src={o.logo_url} alt={o.org_name} loading="lazy" className="w-6 h-6 rounded-full object-cover" />
+                    ) : (
+                      <span className="text-lg">{typeIcon}</span>
+                    )}
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-[#1A1A2E]">{o.org_name}</span>
+                        <span style={{ fontSize: '11px', padding: '1px 6px', borderRadius: '4px', backgroundColor: tagBg, color: tagColor, fontWeight: 600 }}>
+                          {typeTag}
+                        </span>
+                      </div>
+                      {o.accepted_at && (
+                        <div className="text-xs text-gray-400">
+                          {new Date(o.accepted_at).toLocaleDateString('ja-JP')} {o.org_type === 'credential' ? 'から認定' : o.org_type === 'education' ? 'から修了' : 'から所属'}
+                        </div>
+                      )}
+                    </div>
+                  </a>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Badges */}
+      {(() => {
+        const displayBadges = filterAndSortBadges(pro?.badges || [])
+        const hasBadges = displayBadges.length > 0 || credentialBadges.length > 0
+        return hasBadges ? (
+          <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
+            <h2 className="text-lg font-bold text-[#1A1A2E] mb-1">取得バッジ</h2>
+            <p className="text-xs text-gray-500 mb-4">
+              バッジを押すと、その認定を持つ人だけが見られる団体の配付資料が開きます。
+            </p>
+            <div className="flex flex-wrap justify-center gap-6">
+              {/* credential_levels経由のバッジ（新方式） */}
+              {credentialBadges.map((badge) => (
+                <button
+                  key={badge.id}
+                  type="button"
+                  onClick={() => openBadgeResources(badge.id)}
+                  className="flex flex-col items-center hover:opacity-70 transition"
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                >
+                  {badge.image_url ? (
+                    <img src={badge.image_url} alt={badge.name} loading="lazy" className="w-16 h-16 rounded-xl object-cover" />
+                  ) : (
+                    <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-[#C4A35A] to-[#E8D5A0] flex items-center justify-center text-white text-lg font-bold">
+                      {badge.name.charAt(0)}
+                    </div>
+                  )}
+                  <span className="text-[10px] text-gray-400 mt-1">{badge.name}</span>
+                  {/* CEO指示: バッジが「団体の配付資料へのボタン」だと明示する。
+                      押せると分からないと誰も辿り着かないため、件数と矢印を必ず出す。 */}
+                  {(() => {
+                    const n = memberResources.filter(r => r.credential_level_id === badge.id).length
+                    return n > 0
+                      ? <span className="text-[10px] mt-1" style={{ color: '#C4A35A', fontWeight: 700 }}>配付資料 {n}件 →</span>
+                      : <span className="text-[10px] mt-1" style={{ color: '#9CA3AF' }}>配付資料なし</span>
+                  })()}
+                </button>
+              ))}
+              {/* pro.badges経由のバッジ（旧方式） */}
+              {displayBadges.map((badge, i) => (
+                <div key={i} className="flex flex-col items-center">
+                  <img src={badge.image_url} alt={badge.label} loading="lazy" className="w-16 h-16" />
+                  <span className="text-[10px] text-gray-400 mt-1">{badge.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null
+      })()}
+
+      </>)}
+
+      {/* ═══ Tab: 団体（メンバー用リソース閲覧） ═══
+          CEO決定(2026-08-06): 認定・資格タブからも同じ資料ブロックを見せる。
+          ?tab=myorgs の既存URLはそのまま生かす（クライアント(プロ未登録)もこのタブを開けるため）。 */}
+      {(dashboardTab === 'myorgs' || dashboardTab === 'certs') && hasOrgMembership && (<>
         {/* 複数団体の場合: セレクター */}
         {memberOrgs.length > 1 && (
           <div style={{ marginBottom: 16 }}>
@@ -4903,7 +5234,15 @@ export default function DashboardPage() {
           )
         })()}
 
-        {/* 共有資料セクション（バッジ別アコーディオン） */}
+        {/* 共有資料セクション（バッジ別アコーディオン）
+            CEO指示(2026-08-06): 何が見られるのかを明示する。バッジ画像だけでは
+            「押せる」「資料がある」と伝わらないため、見出しと説明文を必ず出す。 */}
+        <div style={{ marginBottom: 12 }}>
+          <h2 className="text-lg font-bold text-[#1A1A2E] mb-1">団体の配付資料</h2>
+          <p className="text-xs text-gray-500 leading-relaxed">
+            所属している団体から配られている資料です。あなたが持っている認定に応じて見られるものが変わります。
+          </p>
+        </div>
         {memberResourcesLoading ? (
           <div style={{ textAlign: 'center', padding: '40px 0' }}>
             <div className="animate-spin" style={{
@@ -4978,79 +5317,137 @@ export default function DashboardPage() {
         )}
       </>)}
 
+      {/* ═══ Tab: 予約（受信箱）═══
+          §17-2(CEO判断 2026-08-06): 直接予約が入った時点で「紹介タブの中に通常予約がある」のが
+          おかしくなった。予約は毎日の受け取り仕事、紹介はときどきの送り出しの仕事で、別の仕事。
+          分けても受け口は1つのまま（直接予約＋紹介予約が同じ受信箱に届く）。
+          紹介元がある予約はカードに「紹介元: ◯◯さん」が出るので、紹介の存在感は消えない。 */}
+      {dashboardTab === 'bookings' && pro && (
+        <div style={{ marginBottom: 16 }}>
+          <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.8, marginBottom: 12 }}>
+            公開カードの「予約する」や、他のプロの紹介リストから届いた予約です。
+            希望日時から1つ選ぶと確定し、お客さんへ自動でお知らせが届きます。
+          </p>
+          <a
+            href="/dashboard?tab=business-info"
+            style={{
+              display: 'inline-block', marginBottom: 16,
+              fontSize: 12, color: '#C4A35A', fontWeight: 700, textDecoration: 'none',
+            }}
+          >
+            予約の受け方・メニューを設定する →
+          </a>
+
+          {/* §17-5(CEO判断 2026-08-06): 予約の受付はここに集約する。
+              上のヘッダー行に「直接予約の受付」トグル、ここに「紹介からの予約の受付」。
+              1画面で両方止められるようにするため（今までは画面をまたいで散らばっていた）。 */}
+          {pro && acceptingEditable && (
+            <div style={{
+              marginBottom: 16, padding: '14px 16px', background: '#fff',
+              borderRadius: 12, border: '1px solid #E5E7EB',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+            }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E' }}>
+                  {pro.accepting_status === 'closed' ? '紹介予約を停止しています' : '紹介予約を受け付けています'}
+                </div>
+                <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4, lineHeight: 1.6 }}>
+                  {pro.accepting_status === 'closed'
+                    ? '他のプロの紹介リストからの予約が止まります。直接の予約・ご相談は別のスイッチです。'
+                    : '他のプロの紹介リストに載り、そこからの予約を受け取れます。'}
+                </div>
+                {referralPauseError && (
+                  <div style={{ fontSize: 12, color: '#B00020', marginTop: 4 }}>更新に失敗しました</div>
+                )}
+              </div>
+              <div
+                role="switch"
+                aria-checked={pro.accepting_status !== 'closed'}
+                aria-label="紹介予約の受付"
+                onClick={() => handleToggleReferralAccepting(pro.accepting_status === 'closed')}
+                style={{
+                  width: 48, height: 28, borderRadius: 14, flexShrink: 0,
+                  background: pro.accepting_status !== 'closed' ? '#06C755' : '#D1D5DB',
+                  position: 'relative', transition: 'background 0.2s',
+                  cursor: referralPauseSaving ? 'default' : 'pointer',
+                  opacity: referralPauseSaving ? 0.6 : 1,
+                }}
+              >
+                <div style={{
+                  width: 22, height: 22, borderRadius: '50%', background: '#fff',
+                  position: 'absolute', top: 3, left: pro.accepting_status !== 'closed' ? 23 : 3,
+                  transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                }} />
+              </div>
+            </div>
+          )}
+
+
+          <ReferralBookingReceivedCard proId={pro.id} onStatusChange={handleReferralReceivedStatus} />
+
+          {referralReceivedLoaded && referralTotalReceivedCount === 0 && (
+            <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>
+              <div>まだ予約リクエストはありません</div>
+              <div style={{ fontSize: 13, marginTop: 4 }}>
+                公開カードの「予約する」や、他のプロの紹介リストから届いた予約リクエストがここに表示されます
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ═══ Tab: 紹介（§0 アローリスト方式・リスト管理はreferralEnabledでゲート） ═══ */}
-      {/* CEO指示(2026-08-04・IA再変更): 役割別サブタブを「紹介を受ける／紹介する／紹介した案件」の
-          3つに変更(前回の2タブ判断を撤回)。受け手機能はallowlist外プロにも必要(受け手は
-          非ゲートが仕様)なため、ReferralBookingReceivedCardはreferralEnabledでゲートしない
-          (既存仕様のまま)。 */}
+      {/* CEO指示(2026-08-04・IA再変更): 役割別サブタブを3つに変更。
+          §17-2(2026-08-06): そのうち「予約を受ける」は予約タブへ独立させ、ここは
+          **紹介する側の仕事だけ**にした（紹介リストを作る・送る・紹介した案件を追う）。
+          CEOの懸念「紹介が目立たなくなる」への答えでもある: 受信箱を先頭に置いていた今までの方が
+          紹介の本丸が2番目に隠れていた。 */}
       {dashboardTab === 'referral' && pro && (
         <div style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 2, marginBottom: 16, borderBottom: '1px solid #E5E7EB' }}>
-            <button
-              onClick={() => handleReferralSubtabClick('receive')}
-              style={{
-                padding: '10px 10px', border: 'none', background: 'none', cursor: 'pointer',
-                fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' as const,
-                color: referralSubtab === 'receive' ? '#1A1A2E' : '#9CA3AF',
-                borderBottom: referralSubtab === 'receive' ? '2px solid #C4A35A' : '2px solid transparent',
-              }}
-            >
-              紹介を受ける{referralRequestedCount > 0 ? ` (${referralRequestedCount})` : ''}
-            </button>
-            <button
-              onClick={() => handleReferralSubtabClick('send')}
-              style={{
-                padding: '10px 10px', border: 'none', background: 'none', cursor: 'pointer',
-                fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' as const,
-                color: referralSubtab === 'send' ? '#1A1A2E' : '#9CA3AF',
-                borderBottom: referralSubtab === 'send' ? '2px solid #C4A35A' : '2px solid transparent',
-              }}
-            >
-              紹介する
-            </button>
-            <button
-              onClick={() => handleReferralSubtabClick('cases')}
-              style={{
-                padding: '10px 10px', border: 'none', background: 'none', cursor: 'pointer',
-                fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' as const,
-                color: referralSubtab === 'cases' ? '#1A1A2E' : '#9CA3AF',
-                borderBottom: referralSubtab === 'cases' ? '2px solid #C4A35A' : '2px solid transparent',
-              }}
-            >
-              紹介した案件{referralSentActiveCount > 0 ? ` (${referralSentActiveCount})` : ''}
-            </button>
-          </div>
+          {/* CEO報告(2026-08-06): 既に送信済みの通知メールは紹介タブを指している。
+              そこから来た人が「予約が無い」と迷わないよう、行き先を先頭に出す。 */}
+          <a
+            href="/dashboard?tab=bookings"
+            style={{
+              display: 'block', marginBottom: 12, padding: '10px 14px', borderRadius: 10,
+              background: '#F0F7FF', border: '1px solid #B8D4F0',
+              fontSize: 13, fontWeight: 700, color: '#1A1A2E', textDecoration: 'none',
+            }}
+          >
+            届いた予約は「予約」タブにあります →
+          </a>
 
-          {/* 紹介を受ける: 新しいリクエスト・確定している紹介予約・支払い期限切れキャンセルカード
-              (常時マウント・非表示時はCSSで隠す=サブタブ切替での再フェッチを避ける) */}
-          <div style={{ display: referralSubtab === 'receive' ? 'block' : 'none' }}>
-            <ReferralBookingReceivedCard proId={pro.id} onStatusChange={handleReferralReceivedStatus} />
-            {/* 「完了した紹介」はreferralEnabled時のみ(単一マウントのReferralTab内部で表示・件数管理)。
-                レビュー指摘(軽微7): received/completedの到着順によるフラッシュ防止のため、
-                referralEnabled時はcompleted側もloadedになってから空状態を判定する。 */}
-            {referralReceivedLoaded &&
-              referralTotalReceivedCount === 0 &&
-              (!referralEnabled || (referralCompletedLoaded && referralCompletedCount === 0)) && (
-                <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>
-                  <div>まだ紹介リクエストはありません</div>
-                  <div style={{ fontSize: 13, marginTop: 4 }}>
-                    あなたが紹介リストに掲載されると、クライアントからの予約リクエストがここに届きます
-                  </div>
-                </div>
-            )}
-          </div>
+          {/* §17-5(CEO判断 2026-08-06): 紹介予約の受付スイッチは「予約」タブへ移動した。
+              受け取るかどうかの設定であって、紹介する仕事ではないため（§17-2と同じ理屈）。
+              受付スイッチが画面をまたいで散らばると「今日は止めたい」人が探し回ることになる。
+              ここには行き先だけ1行残す（今まで触っていた人が迷子にならないように）。 */}
+          <p style={{ fontSize: 12, color: '#9CA3AF', lineHeight: 1.7, marginBottom: 16 }}>
+            紹介からの予約を受けるかどうかは{' '}
+            <a href="/dashboard?tab=bookings" style={{ color: '#C4A35A', fontWeight: 700, textDecoration: 'none' }}>
+              予約タブ
+            </a>
+            {' '}で設定できます。
+          </p>
 
           {/* 紹介する(紹介リスト管理)・紹介した案件(送り手側の成立予約)。いずれも単一マウントの
               ReferralTab(referralEnabled時のみ)。表示はsubtabに応じて内部でCSS切替。 */}
           {referralEnabled && pro && (
             <ReferralTab
               proId={pro.id}
-              subtab={referralSubtab}
+              subtab={referralSubtab === 'cases' ? 'cases' : referralSubtab === 'payout' ? 'payout' : 'send'}
+              onSubtabChange={handleReferralSubtabClick}
               onCompletedCountChange={handleReferralCompletedStatus}
               onSentStatusChange={handleReferralSentStatus}
+              acceptingStatus={pro.accepting_status ?? null}
+              acceptingNote={pro.accepting_note ?? null}
+              delegateCriteria={pro.delegate_criteria ?? null}
+              delegateEligibleOrgs={delegateEligibleOrgs.map(o => ({ organizationId: o.organizationId, organizationName: o.organizationName, role: o.role }))}
+              onDelegateCriteriaUpdated={(criteria) =>
+                setPro(prev => prev ? { ...prev, delegate_criteria: criteria } : prev)
+              }
             />
           )}
-          {!referralEnabled && (referralSubtab === 'send' || referralSubtab === 'cases') && (
+          {!referralEnabled && (
             <div style={{ textAlign: 'center', padding: '40px 20px', color: '#9CA3AF', fontSize: 13 }}>
               リスト作成などの紹介機能は現在先行公開中です
             </div>
@@ -5072,14 +5469,9 @@ export default function DashboardPage() {
             </a>
           )}
         </div>
-        {pro && (
-          <button
-            onClick={() => window.open(`/vote/${pro.id}?preview=true`, '_blank')}
-            className="flex items-center justify-center gap-2 px-4 py-2 border border-[#C4A35A] text-[#C4A35A] rounded-lg hover:bg-[#C4A35A] hover:text-white transition-colors"
-          >
-            👁️ 投票画面を確認する
-          </button>
-        )}
+        {/* CEO指摘(2026-08-06): 「投票画面を確認する」はここではなくQRコードの下へ移した。
+            投票画面は「QRを読んだ先の画面」なので、QRの隣が本来の居場所。
+            下部にフルサイズのボタンを2つ並べると重く、文脈からも切れていた。 */}
       </div>
       </>
       )}

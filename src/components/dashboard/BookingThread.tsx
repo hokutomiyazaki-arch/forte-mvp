@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import LinkedText from '@/components/LinkedText'
 
 interface HandoverNote {
   theme: string
@@ -211,7 +212,10 @@ export default function BookingThread({
                       borderRadius: 8, padding: '6px 10px', maxWidth: '85%',
                     }}
                   >
-                    <div style={{ fontSize: 12, color: '#1A1A2E', whiteSpace: 'pre-wrap' as const }}>{m.body}</div>
+                    {/* §17-14: URLはリンクにする（どちらの吹き出しも淡色地なので variant は既定） */}
+                    <div style={{ fontSize: 12, color: '#1A1A2E', whiteSpace: 'pre-wrap' as const, wordBreak: 'break-word' as const }}>
+                      <LinkedText text={m.body} />
+                    </div>
                   </div>
                 ))}
               </div>

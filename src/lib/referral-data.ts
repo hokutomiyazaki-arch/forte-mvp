@@ -43,7 +43,7 @@ export interface ReferralCandidate {
   acceptingNote: string | null
   /** 受付停止中（!isAcceptingOpen: fail-open現仕様につき status==='closed' の時のみtrue。NULL/想定外の値は受付中扱い） */
   isPaused: boolean
-  /** 一段だけの代理候補（ピンが受付停止中 かつ delegate_list_id 設定時のみ） */
+  /** §16-16で撤去済み。常にnull（旧: 一段だけの代理候補）。型は互換のため残す */
   delegate: ReferralCandidate[] | null
   /** 人数上位の強み2〜3件（人数はDISTINCT集計・vote_summary準拠） */
   strengths: { label: string; count: number }[]
@@ -231,10 +231,11 @@ async function buildCandidate(
     getHasBookableMenu(supabase, proId),
   ])
 
-  let delegate: ReferralCandidate[] | null = null
-  if (options.isPinned && isPaused && options.allowDelegateExpansion && pro.delegate_list_id) {
-    delegate = await buildDelegateCandidates(supabase, pro.delegate_list_id, itemLabelMap)
-  }
+  // §16-16(CEO決定・2026-08-06): 紹介リスト内での代理候補の一段展開を撤去。代理案内は
+  // 停止中プロの公開カード(/card/[id])単体の経路(referral-delegate-criteria.ts)に限定し、
+  // 紹介リストは「送り手が名指しで保証した」候補だけを表示する(criteriaの候補と視覚的に
+  // 混ざらないようにする)。buildDelegateCandidates()自体は削除せず残す(下記参照・到達不能)。
+  const delegate: ReferralCandidate[] | null = null
 
   return {
     pro: {
@@ -259,7 +260,11 @@ async function buildCandidate(
   }
 }
 
-/** 代理リストを一段だけ展開する（§2-2: 再帰しない）。 */
+/**
+ * 代理リストを一段だけ展開する（§2-2: 再帰しない）。
+ * §16-16で撤去。公開カード側は referral-delegate-criteria.ts が担当（この関数は
+ * buildCandidate() から呼ばれなくなり到達不能。過去実装の記録として本体は残す）。
+ */
 async function buildDelegateCandidates(
   supabase: SupabaseAdmin,
   delegateListId: string,
@@ -305,7 +310,11 @@ export interface Criteria {
  * 表示側(findCriteriaMatchesの並び順)・検証側(verifyReceiverAllowedInList)の
  * 両方から呼び、二重実装しない。
  */
-async function getDistinctSupporterCounts(
+/**
+ * export化(§16-14): src/lib/referral-delegate-criteria.ts の停止中プロ公開カード向け
+ * 代理案内(min_support_records判定)からも共有する。二重実装を避けるため元の実装は変更しない。
+ */
+export async function getDistinctSupporterCounts(
   supabase: SupabaseAdmin,
   proIds: string[]
 ): Promise<Record<string, number>> {
@@ -350,6 +359,7 @@ async function getDistinctSupporterCounts(
  *     指定時のみ votes をページネーション走査して算出する（軽量パス維持のため未指定時はこのクエリ自体を実行しない）
  * §2-2改訂(先行テスト第3弾・fail-open): accepting_status='closed' のプロのみ常に静かに除外する
  * (NULLはopenとして含める。accepting_onlyの値に関わらず)。
+ * §16-18追記: 'conditional'(紹介のみ停止)も同様に除外する(isAcceptingOpenと同じ判定に揃える)。
  */
 async function findCriteriaMatches(
   supabase: SupabaseAdmin,
@@ -359,11 +369,12 @@ async function findCriteriaMatches(
 ): Promise<string[]> {
   // §2-2改訂: 2値化により「常に除外」と「accepting_onlyのみ絞る」が同一条件になったため、
   // ベースクエリで一度だけ「closedでない」を条件にする(accepting_onlyの値に関わらず結果は変わらない)。
+  // §16-18: 'conditional'(紹介のみ停止)もここで除外する(isAcceptingOpenと同じ判定基準)。
   let query = supabase
     .from('professionals')
     .select('id')
     .is('deactivated_at', null)
-    .or('accepting_status.is.null,accepting_status.neq.closed')
+    .or('accepting_status.is.null,and(accepting_status.neq.closed,accepting_status.neq.conditional)')
 
   if (criteria.area?.prefecture) {
     query = query.eq('prefecture', criteria.area.prefecture)
@@ -405,6 +416,8 @@ async function findCriteriaMatches(
 /**
  * §2-1: 代理リスト展開(delegate)を含めた最終提示数が合計 MAX_TOTAL_CANDIDATES を
  * 超えないようキャップする(トップレベルの件数だけでなく delegate 展開後のフラット件数)。
+ * §16-16でc.delegateは常にnullになったため、delegate分岐は現在到達不能(トップレベルの
+ * 件数キャップとしてのみ機能する。削除はせず残す)。
  */
 function capCandidatesTotal(candidates: ReferralCandidate[], max: number): ReferralCandidate[] {
   let remaining = max
@@ -511,7 +524,10 @@ export const getReferralPageData = cache(async function getReferralPageData(
  * 「このリストからこの受け手を予約してよいか」だけを確認する専用の軽量クエリ群に分離する。
  *   ① referral_list_items に approved で存在するか(自リストのピン)
  *   ② 無ければ criteria 判定(accepting/prefecture/min_support、いずれも軽量クエリ)
- *   ③ 停止中ピンの代理リスト(delegate_list_id)の approved item か
+ *
+ * §16-16(CEO決定・2026-08-06)で③停止中ピンの代理リスト(delegate_list_id)経由の検証は撤去した。
+ * 表示側(buildCandidate)の代理展開も同時に撤去済みのため、ここを残すと「リストに載っていない
+ * 受け手が紹介経由で予約できてしまう」穴になる(表示と検証は必ず対で撤去する)。
  */
 export async function verifyReceiverAllowedInList(
   supabase: SupabaseAdmin,
@@ -527,39 +543,6 @@ export async function verifyReceiverAllowedInList(
     .eq('consent_status', 'approved')
     .maybeSingle()
   if (pinnedItem) return true
-
-  // ③ 停止中ピンの代理リストの approved item か
-  const { data: pinnedRows } = await supabase
-    .from('referral_list_items')
-    .select('pro_id')
-    .eq('list_id', list.id)
-    .eq('consent_status', 'approved')
-  const pinnedProIds = ((pinnedRows || []) as Array<{ pro_id: string }>).map((p) => p.pro_id)
-
-  if (pinnedProIds.length > 0) {
-    // §2-2改訂(先行テスト第3弾・fail-open): 「停止中」= accepting_status='closed' のみ
-    // (NULLはopen扱いのため、代理展開の対象から除く。isAcceptingOpen()と厳密に等価)
-    const { data: pausedPros } = await supabase
-      .from('professionals')
-      .select('delegate_list_id')
-      .in('id', pinnedProIds)
-      .eq('accepting_status', 'closed')
-      .not('delegate_list_id', 'is', null)
-    const delegateListIds = ((pausedPros || []) as Array<{ delegate_list_id: string | null }>)
-      .map((p) => p.delegate_list_id)
-      .filter((id): id is string => !!id)
-
-    if (delegateListIds.length > 0) {
-      const { data: delegateItem } = await supabase
-        .from('referral_list_items')
-        .select('id')
-        .in('list_id', delegateListIds)
-        .eq('pro_id', receiverProId)
-        .eq('consent_status', 'approved')
-        .maybeSingle()
-      if (delegateItem) return true
-    }
-  }
 
   // ② criteria判定(軽量)
   const criteria = (list.criteria && typeof list.criteria === 'object' ? list.criteria : null) as Criteria | null

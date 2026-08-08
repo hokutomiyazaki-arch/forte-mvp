@@ -53,7 +53,12 @@ function getReferralStripe(): Stripe {
   return new Stripe(process.env.REFERRAL_STRIPE_SECRET_KEY!)
 }
 
-function extractPaymentIntentId(pi: Stripe.Checkout.Session['payment_intent']): string | null {
+/**
+ * CEO最優先指示(2026-08-06・返金時の送金自動停止)対応で、webhookルート
+ * (charge.refunded/charge.dispute.created)からも呼べるようexportする
+ * (Checkout.Session/Charge/Disputeのpayment_intentは同じ union 型のため共通化できる)。
+ */
+export function extractPaymentIntentId(pi: string | Stripe.PaymentIntent | null | undefined): string | null {
   if (!pi) return null
   return typeof pi === 'string' ? pi : pi.id
 }
@@ -898,6 +903,109 @@ export async function applyReferralCheckoutSession(
  * 口座未登録/審査未完了(payouts_enabled!==true)は no_account を返し、pendingのまま残す
  * (cronの再試行ブロックが毎回拾い直す。エラーではない)。
  */
+/**
+ * CEO最優先指示(2026-08-06): 返金が発生したら紹介報酬の送金を自動で止める。
+ *
+ * 主軸: executeReferralPayoutTransferの送金直前チェック(下記)からこの関数でStripe側の
+ * 実際の返金/争議状態を1回問い合わせる。副軸: webhook(charge.refunded/charge.dispute.created)
+ * からも同じ判定に使う(将来REFERRAL_STRIPE_WEBHOOK_SECRETが設定されたら効く)。
+ * latest_chargeをexpandし、Charge.refunded/amount_refunded/disputedを見る
+ * (PaymentIntent自体にはrefunded/disputedのフィールドが無いため)。
+ * Stripe API呼び出し自体が失敗した場合は状態不明のため'error'を返す
+ * (呼び出し元は送金しない側に倒す=お金の安全側。次回cronで再試行される)。
+ */
+async function checkPaymentIntentRefundStatus(
+  paymentIntentId: string
+): Promise<{ outcome: 'ok'; refunded: boolean; disputed: boolean } | { outcome: 'error' }> {
+  try {
+    const stripe = getReferralStripe()
+    const pi = await stripe.paymentIntents.retrieve(paymentIntentId, { expand: ['latest_charge'] })
+    const charge =
+      pi.latest_charge && typeof pi.latest_charge === 'object' ? (pi.latest_charge as Stripe.Charge) : null
+    const refunded = !!charge && (charge.refunded === true || (charge.amount_refunded || 0) > 0)
+    const disputed = !!charge && charge.disputed === true
+    return { outcome: 'ok', refunded, disputed }
+  } catch (err) {
+    console.error(
+      `[referral-payment] checkPaymentIntentRefundStatus error (payment_intent ${paymentIntentId}):`,
+      err instanceof Error ? err.message : err
+    )
+    return { outcome: 'error' }
+  }
+}
+
+/**
+ * 返金/争議検知時のDB反映(冪等・共通処理)。呼び出し元は2箇所
+ * (executeReferralPayoutTransferの送金直前チェック / webhookの副軸チェック)。
+ * - payout.status==='pending'(未送金): 'cancelled'へ更新し、送金を止める。
+ * - payout.status==='paid'(送金済み): Stripe Transferの逆回収はできないため状態は変えず、
+ *   noteに検知マーカーを追記してログをCRITICALで残すのみ(運用が気づけるように)。
+ * - 冪等性: noteに同じreasonTagのマーカーが既に含まれていれば何もしない
+ *   (webhookの重複配信・主軸/副軸の二重検知の両方に対応)。
+ */
+async function markPayoutRefundDetected(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  payout: { id: string; status: string; note: string | null },
+  reasonTag: 'REFUND_DETECTED' | 'DISPUTE_DETECTED'
+): Promise<void> {
+  const marker = `[${reasonTag}]`
+  if (payout.note && payout.note.includes(marker)) return
+
+  const nextNote = payout.note ? `${payout.note} / ${marker}` : marker
+
+  if (payout.status === 'pending') {
+    await supabase
+      .from('referral_payouts')
+      .update({ status: 'cancelled', note: nextNote })
+      .eq('id', payout.id)
+      .eq('status', 'pending')
+    console.error(`[referral-payment] ${reasonTag} - 送金前に検知・payout cancelled (payout ${payout.id})`)
+  } else if (payout.status === 'paid') {
+    await supabase.from('referral_payouts').update({ note: nextNote }).eq('id', payout.id)
+    console.error(
+      `[referral-payment] ${reasonTag} AFTER TRANSFER - 送金済み後の返金/争議検知・回収手段なし・手動reversal要検討 (payout ${payout.id})`
+    )
+  }
+}
+
+/**
+ * webhook(charge.refunded/charge.dispute.created)からの副軸チェック(§副軸)。
+ * paymentIntentIdからreferral_bookingsを逆引きする(Checkout Session作成時のmetadataは
+ * PaymentIntent/Chargeへ自動継承されないため、stripe_payment_intent_id列で紐付ける。
+ * 参照元: applyReferralCheckoutSessionが支払い完了時に同カラムへ保存している)。
+ * 冪等: 対象bookingが無い(このPaymentIntentは紹介決済ではない)場合は何もしない。
+ */
+export async function handleReferralRefundOrDisputeEvent(
+  paymentIntentId: string,
+  disputed: boolean
+): Promise<void> {
+  const supabase = getSupabaseAdmin()
+
+  const { data: booking } = await supabase
+    .from('referral_bookings')
+    .select('id, payment_status')
+    .eq('stripe_payment_intent_id', paymentIntentId)
+    .maybeSingle()
+  if (!booking) return
+
+  if (!disputed && booking.payment_status === 'paid') {
+    await supabase
+      .from('referral_bookings')
+      .update({ payment_status: 'refunded' })
+      .eq('id', booking.id)
+      .eq('payment_status', 'paid')
+  }
+
+  const { data: payout } = await supabase
+    .from('referral_payouts')
+    .select('id, status, note')
+    .eq('booking_id', booking.id)
+    .maybeSingle()
+  if (!payout) return
+
+  await markPayoutRefundDetected(supabase, payout, disputed ? 'DISPUTE_DETECTED' : 'REFUND_DETECTED')
+}
+
 export async function executeReferralPayoutTransfer(
   payoutId: string
 ): Promise<
@@ -928,7 +1036,7 @@ export async function executeReferralPayoutTransfer(
   // レビュー指摘(重大3): 送金直前にbookingの実状態を再確認する(手動返金の打ち忘れ穴の閉塞)。
   const { data: bookingCheck, error: bookingCheckError } = await supabase
     .from('referral_bookings')
-    .select('status, payment_status')
+    .select('status, payment_status, stripe_payment_intent_id')
     .eq('id', payout.booking_id)
     .maybeSingle()
 
@@ -942,6 +1050,40 @@ export async function executeReferralPayoutTransfer(
   }
   if (!bookingCheck || bookingCheck.status !== 'completed' || bookingCheck.payment_status !== 'paid') {
     return { outcome: 'skipped' }
+  }
+
+  // CEO最優先指示(2026-08-06): 送金直前にStripe側の実際の返金/争議状態を1回問い合わせる。
+  // 既存のbooking再SELECT(DB側のpayment_status)だけでは、Stripeダッシュボードで返金した直後の
+  // 打ち忘れ(payment_statusをrefundedへ更新し忘れた)穴を塞げないため、Stripe側を正とする。
+  const paymentIntentIdForRefundCheck: string | null = (bookingCheck as any).stripe_payment_intent_id || null
+  if (!paymentIntentIdForRefundCheck) {
+    // paid化済みのbookingには通常stripe_payment_intent_idが必ず伴う(applyReferralCheckoutSessionが
+    // payment_status='paid'更新と同時に保存する)。無い場合は想定外のためログのみ残し、
+    // 既存の多層防御(booking再SELECT等)に委ねて送金は続行する(既存挙動を弱めない)。
+    console.error(
+      `[referral-payment] executeReferralPayoutTransfer missing stripe_payment_intent_id for paid booking (payout ${payoutId}, booking ${payout.booking_id})`
+    )
+  } else {
+    const refundCheck = await checkPaymentIntentRefundStatus(paymentIntentIdForRefundCheck)
+    if (refundCheck.outcome === 'error') {
+      // Stripe側の状態を確認できない間は送金しない(お金の安全側。次回cronで再試行される)
+      return { outcome: 'error' }
+    }
+    if (refundCheck.refunded || refundCheck.disputed) {
+      await markPayoutRefundDetected(
+        supabase,
+        payout,
+        refundCheck.refunded ? 'REFUND_DETECTED' : 'DISPUTE_DETECTED'
+      )
+      if (refundCheck.refunded) {
+        await supabase
+          .from('referral_bookings')
+          .update({ payment_status: 'refunded' })
+          .eq('id', payout.booking_id)
+          .eq('payment_status', 'paid')
+      }
+      return { outcome: 'skipped' }
+    }
   }
 
   // レビュー指摘(重大1): idempotencyKeyは24hで失効するため、これが実質的な多重送金防止の本体。

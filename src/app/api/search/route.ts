@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { isSearchPrivate } from '@/lib/feature-flags'
+import { isSearchPrivate, isReferralFullyLaunched } from '@/lib/feature-flags'
 import { getViewerIsPro, getViewerIsProStrict } from '@/lib/viewer-role'
-import { computeReferralSignal } from '@/lib/referral-accepting'
+import { computeReferralSignal, isReferralReachable } from '@/lib/referral-accepting'
 import { getValidDelegateListIds } from '@/lib/referral-delegate'
+import { selectInChunks } from '@/lib/supabase-batch'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,6 +29,10 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
+// CEO指示(2026-08-06・Pick up既定表示): 直近7日の確定済みproof投票が何件から
+// 「急上昇」に載せるかの下限(内部運用値・UIには出さない)
+const RISING_MIN_VOTES_7D = 3
+
 // カテゴリタブ → DBのtab値のマッピング
 const CATEGORY_TAB_MAP: Record<string, string[]> = {
   healing: ['healing'],
@@ -42,39 +47,33 @@ const CATEGORY_TAB_MAP: Record<string, string[]> = {
 }
 
 // votes テーブルの全件ページネーション取得ヘルパー
-// 真因対応: Supabase max-rows=1000 でキャップされる問題を回避するため
-// .range() で 1000 件ずつ取得し、空ページに当たるまで継続する。
-// 決定的順序が必須なので .order('id') を強制する。
-// 注意: 呼び出し側が created_at 順を要求する場合は、戻り値を JS 側でソートし直すこと。
+// 真因対応(2026-08): 本ヘルパーは引数 proIds を受け取っていたのに一度もクエリに使っていなかった
+// (`.in('professional_id', proIds)` が無い)ため、confirmed の votes を毎回全件スキャンしていた。
+// proIds を実際にフィルタへ反映しつつ、①IN句を100件ずつチャンク分割 ②各チャンクを
+// .range()+.order('id') でページネーション、の二重対策を共通ヘルパー(selectInChunks)に委譲する。
+// 注意: 呼び出し側が created_at 順を要求する場合は、戻り値を JS 側でソートし直すこと(既存通り)。
 async function fetchAllVotesPaginated(
   supabase: any,
   proIds: string[],
   selectCols: string,
   voteType: string | string[] | null
 ) {
-  const all: any[] = []
-  let from = 0
-  const pageSize = 1000
-  while (true) {
+  if (!proIds || proIds.length === 0) return []
+  return selectInChunks<any>(proIds, (chunkIds, from, to) => {
     let q = supabase
       .from('votes')
       .select(selectCols)
       .eq('status', 'confirmed')
+      .in('professional_id', chunkIds)
       .order('id', { ascending: true })
-      .range(from, from + pageSize - 1)
+      .range(from, to)
     if (Array.isArray(voteType)) {
       q = q.in('vote_type', voteType)
     } else if (voteType) {
       q = q.eq('vote_type', voteType)
     }
-    const { data, error } = await q
-    if (error) { console.error('votes pagination error:', error); break }
-    if (!data || data.length === 0) break
-    all.push(...data)
-    if (data.length < pageSize) break
-    from += pageSize
-  }
-  return all
+    return q
+  })
 }
 
 export async function GET(request: Request) {
@@ -106,25 +105,50 @@ export async function GET(request: Request) {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
 
     // 全アクティブプロを取得（プルーフ0除外はあとでフィルタ）
-    let proQuery = supabase
-      .from('professionals')
-      .select(`
-        id, name, title, prefecture, area_description, bio,
-        photo_url, selected_proofs,
-        badge_rising, badge_specialist, badge_multi, badge_top,
-        featured_vote_id, featured_proof_id, created_at,
-        accepting_status, accepting_note, delegate_list_id
-      `)
-      .is('deactivated_at', null)
-      .not('selected_proofs', 'is', null)
+    // 真因対応(2026-08): .range() が無く、Supabase max-rows=1000 でプロ数が1000名を超えた
+    // 時点で無音truncateする問題があった。ここではまず全件取得できるようページネーションする。
+    // ただしプロ数が数万規模になれば全件メモリロード自体がボトルネックになる(Postgres側集計への
+    // リファクタが将来必要)。無音破綻を避けるため、上限件数でキャップしログで検知できるようにする。
+    const PROFESSIONALS_FETCH_CAP = 5000
+    const professionals: any[] = []
+    {
+      let from = 0
+      const pageSize = 1000
+      while (true) {
+        let proQuery = supabase
+          .from('professionals')
+          .select(`
+            id, name, title, prefecture, area_description, bio,
+            photo_url, selected_proofs,
+            badge_rising, badge_specialist, badge_multi, badge_top,
+            featured_vote_id, featured_proof_id, created_at,
+            accepting_status, accepting_note, delegate_list_id
+          `)
+          .is('deactivated_at', null)
+          .not('selected_proofs', 'is', null)
+          .order('id', { ascending: true })
+          .range(from, from + pageSize - 1)
 
-    if (prefecture) {
-      proQuery = proQuery.eq('prefecture', prefecture)
+        if (prefecture) {
+          proQuery = proQuery.eq('prefecture', prefecture)
+        }
+
+        const { data, error: prosError } = await proQuery
+        if (prosError) throw prosError
+        if (!data || data.length === 0) break
+        professionals.push(...data)
+        if (data.length < pageSize) break
+        from += pageSize
+        if (professionals.length >= PROFESSIONALS_FETCH_CAP) {
+          console.error(
+            `[api/search] professionals fetch cap (${PROFESSIONALS_FETCH_CAP}) reached - truncating results. ` +
+            `Postgres側集計(RPC/VIEW)へのリファクタが必要な規模に到達した可能性あり。`
+          )
+          break
+        }
+      }
     }
 
-    const { data: professionals, error: prosError } = await proQuery
-
-    if (prosError) throw prosError
     if (!professionals || professionals.length === 0) {
       return NextResponse.json({ professionals: [] }, {
         headers: { 'Cache-Control': 'no-store' }
@@ -607,6 +631,22 @@ export async function GET(request: Request) {
               !!pro.delegate_list_id && validDelegateListIds.has(pro.delegate_list_id)
             )
           : null,
+        // CEO指摘対応(2026-08-06・§3検索カードの受付状態表示): クライアント向け検索カードは
+        // 色記号(🟢🟡🔴)を出さず、停止中のときだけ1行テキストで知らせる方針。referralSignalは
+        // プロ向け専用(非プロにはnull)のため別途boolean1個だけ常に付与する(色/内部用語は漏らさない)。
+        // isReferralFullyLaunched()でゲート(現在'all'以外の間は常にfalse)。
+        // Pick up（category='multi'）で「今週の急上昇」に該当した人かどうか。
+        // 見出し「今週の急上昇」が、後ろに繋げたフォールバック（おすすめ）にまで
+        // かかって見えるのを防ぐためにフロントへ渡す。multi以外では常にfalse。
+        isRising: false,
+        referralClosedNotice: isReferralFullyLaunched()
+          ? !isReferralReachable(
+              computeReferralSignal(
+                pro.accepting_status,
+                !!pro.delegate_list_id && validDelegateListIds.has(pro.delegate_list_id)
+              )
+            )
+          : false,
       }
     }).filter((p): p is NonNullable<typeof p> => p !== null)
 
@@ -642,14 +682,49 @@ export async function GET(request: Request) {
 
     // ソート（クエリなしの場合のみ適用）
     else if (category === 'multi') {
-      // 質フロア: 5proof以上 & 直近90日にproof活動があるプロのみ
+      // CEO指示(2026-08-06): Pick up既定表示は「今週の急上昇」= 直近7日間の確定済み
+      // プルーフ記録の件数が多い順。下限3件未達はランキングに載せない。
+      // proofVotesは既に取得済み(status='confirmed'・対象proIds絞り)のため、
+      // 追加クエリなしでJS集計する(votes全件スキャンの追加禁止・既存取得分を流用)。
+      //
+      // 修正(2026-08-06・CEO報告「Pickupの表示が正しくない」):
+      //   ここだけ vote_type==='proof' に絞っており、**リピーターの記録(continuation)が
+      //   丸ごと落ちていた**。同じ週に同じ人数の記録が集まっても、常連さん中心のプロは
+      //   急上昇に載らないという歪みが出る。
+      //   「施術を受けた記録」= proof + continuation は同日にadminの日別集計でも直した定義で、
+      //   このファイル内の totalProofs / recentProofs / lastProofAt も既にその定義。
+      //   ここだけ違っていたので揃える（CLAUDE.md「vote_typeは4種」参照）。
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+      const rising7dCounts = new Map<string, number>()
+      for (const vote of proofVotes || []) {
+        // proofVotes は ['proof','continuation'] で取得済み。他のvote_typeは混ざらないが、
+        // 取得条件が変わっても壊れないよう明示的に絞る。
+        if (vote.vote_type !== 'proof' && vote.vote_type !== 'continuation') continue
+        if (new Date(vote.created_at) < sevenDaysAgo) continue
+        rising7dCounts.set(vote.professional_id, (rising7dCounts.get(vote.professional_id) || 0) + 1)
+      }
+
+      const risingList = result
+        .filter(p => (rising7dCounts.get(p.id) || 0) >= RISING_MIN_VOTES_7D)
+        .sort((a, b) => (rising7dCounts.get(b.id) || 0) - (rising7dCounts.get(a.id) || 0))
+      const risingIdSet = new Set(risingList.map(p => p.id))
+      // 見出し「今週の急上昇」がフォールバック分にまでかかって見えないよう、
+      // 該当者だけに印を付けてフロントに渡す（該当0名なら見出し自体を出さない）。
+      for (const p of risingList) p.isRising = true
+
+      // フォールバック: 下限を満たすプロが少ない場合にランキングが空/薄くならないよう、
+      // 既存の「おすすめ」ロジック(質フロア: 5proof以上・直近90日活動・シャッフル)を
+      // 急上昇と重複しない分だけ後ろに繋げる。
       const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
-      result = result.filter(p =>
-        p.totalProofs >= 5 &&
-        p.lastProofAt && new Date(p.lastProofAt) >= ninetyDaysAgo
+      const fallback = shuffle(
+        result.filter(p =>
+          !risingIdSet.has(p.id) &&
+          p.totalProofs >= 5 &&
+          p.lastProofAt && new Date(p.lastProofAt) >= ninetyDaysAgo
+        )
       )
-      // リロードごとにランダムシャッフル（毎リクエストで並びが変わる）
-      result = shuffle(result)
+
+      result = [...risingList, ...fallback]
     }
     else if (category === 'none') {
       // 従来の複合スコア降順を維持（現状のロジックをそのまま残す）

@@ -27,6 +27,7 @@ interface SharedData {
   eligibleCertificationTier: CertifiableTier | null
   /** FEATURE_REFERRAL_LISTS のアローリスト判定。Navbar「処方箋リスト」メニュー表示用 */
   referralEnabled: boolean
+  isFoundingMember: boolean
   navContextLoaded: boolean
 }
 
@@ -39,6 +40,7 @@ const SharedDataContext = createContext<SharedData>({
   hasOrgMembership: false,
   eligibleCertificationTier: null,
   referralEnabled: false,
+  isFoundingMember: false,
   navContextLoaded: false,
 })
 
@@ -54,6 +56,8 @@ export function SharedDataProvider({ children }: { children: ReactNode }) {
   const [hasOrgMembership, setHasOrgMembership] = useState(false)
   const [eligibleCertificationTier, setEligibleCertificationTier] = useState<CertifiableTier | null>(null)
   const [referralEnabled, setReferralEnabled] = useState(false)
+  // ファウンダーバッジをヘッダー（ロゴ横）に出すため（CEO指示 2026-08-06）
+  const [isFoundingMember, setIsFoundingMember] = useState(false)
   const [navContextLoaded, setNavContextLoaded] = useState(false)
 
   // announcements: 1回だけfetch
@@ -85,6 +89,7 @@ export function SharedDataProvider({ children }: { children: ReactNode }) {
           setEligibleCertificationTier(data.eligibleCertificationTier)
         }
         if (data.referralEnabled) setReferralEnabled(true)
+        if (data.isFoundingMember) setIsFoundingMember(true)
         setNavContextLoaded(true)
       })
       .catch(() => setNavContextLoaded(true))
@@ -100,6 +105,7 @@ export function SharedDataProvider({ children }: { children: ReactNode }) {
       hasOrgMembership,
       eligibleCertificationTier,
       referralEnabled,
+      isFoundingMember,
       navContextLoaded,
     }}>
       {children}

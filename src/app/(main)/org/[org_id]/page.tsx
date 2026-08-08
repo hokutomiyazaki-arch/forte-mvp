@@ -35,6 +35,8 @@ export default function OrgPublicPage() {
   const [proofTopMembers, setProofTopMembers] = useState<any[]>([])
   const [topStrengthItems, setTopStrengthItems] = useState<{ label: string; count: number }[]>([])
   const [recentComments, setRecentComments] = useState<any[]>([])
+  // §2-5育成プルーフ: organizations.owner_id === professionals.user_id の代表（自動判定・fail-soft）
+  const [founders, setFounders] = useState<{ id: string; name: string; photo_url: string | null }[]>([])
   const [error, setError] = useState('')
   const [shareCopied, setShareCopied] = useState(false)
 
@@ -71,6 +73,7 @@ export default function OrgPublicPage() {
       setProofTopMembers(data.proofTopMembers || [])
       setTopStrengthItems(data.topStrengthItems || [])
       setRecentComments(data.recentComments || [])
+      setFounders(data.founders || [])
     } catch (err: any) {
       setError(err.message || 'データの取得に失敗しました')
     }
@@ -108,6 +111,31 @@ export default function OrgPublicPage() {
         )}
         <h1 className="text-2xl font-bold text-[#1A1A2E]">{org.name}</h1>
         <p className="text-sm text-gray-400 mt-1">{L.typeName}</p>
+
+        {/* §2-5育成プルーフ: 代表（organizations.owner_id自動判定）へのリンク行。founders空なら何も出さない */}
+        {founders.length > 0 && (
+          <div className="flex flex-col items-center gap-1 mt-2">
+            {founders.map(f => (
+              <a
+                key={f.id}
+                href={`/card/${f.id}`}
+                className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-[#C4A35A] transition"
+              >
+                <span>代表：</span>
+                {f.photo_url ? (
+                  <img src={f.photo_url} alt="" className="w-6 h-6 rounded-full object-cover" />
+                ) : (
+                  <span className="w-6 h-6 rounded-full bg-[#E5E5E0] flex items-center justify-center text-[10px] text-gray-500">
+                    {f.name?.charAt(0) || '?'}
+                  </span>
+                )}
+                <span className="font-medium">{f.name}</span>
+                <span>→</span>
+              </a>
+            ))}
+          </div>
+        )}
+
         {org.location && (
           <p className="text-sm text-gray-500 mt-1">📍 {org.location}</p>
         )}

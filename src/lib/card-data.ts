@@ -13,6 +13,10 @@
 
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { getValidDelegateListIds } from '@/lib/referral-delegate'
+import { isOrgCardEnabled } from '@/lib/feature-flags'
+import { getFounderInstructorOrgs } from '@/lib/org-role'
+import { getDelegateCandidates, type DelegateCandidatesResult } from '@/lib/referral-delegate-criteria'
+import { isAcceptingOpen } from '@/lib/referral-accepting'
 
 // ─── 内部型 ───
 interface VoteWithVoterPro {
@@ -81,6 +85,12 @@ export interface ProMenu {
   category_tags: string[]
   description: string | null
   display_order: number
+  /**
+   * §17-1(CEO決定 2026-08-06): このメニューで予約を受けるか。
+   * true のときだけ公開カードに「このメニューで予約する」を出す。
+   * 紹介予約の可否と同じフラグを使う（プロから見て「予約を受けるメニュー」は1つの概念のため）。
+   */
+  is_referral_bookable?: boolean | null
 }
 
 export interface CardData {
@@ -117,9 +127,73 @@ export interface CardData {
   uniqueVoters?: number
   /** 常連(新定義): 同一プロへconfirmed票3票以上 かつ 初回投票から最新投票まで90日以上（既存getVoterLevelとは別計算） */
   regular90Count?: number
-  /** §2-2改訂: pro.delegate_list_id が「有効な代理リスト」(承諾済み+受付中のメンバーが1名以上)かどうか。
+  /** §2-2改訂: pro.delegate_list_id が「有効な代理リスト」(承諾済み+受付中のメンバーが1名以上)か、
+   * または§16-14の delegate_criteria.enabled が true かどうか(いずれかでtrue・OR判定)。
    * 未設定(null)の場合は常にfalse。公開カードの3分岐(computeReferralSignal)に渡す。 */
   delegateHasActiveMember?: boolean
+  /** §2-5 育成プルーフ: このプロが主宰(founder)/講師(instructor)を務める団体の役割情報。
+   * FEATURE_ORG_CARDが無効、対象外(通常メンバー)、またはVIEW/カラム未作成(fail-soft)の場合は null。
+   * CEO方針転換(2026-08-05): 新規セクションは作らず、既存の所属団体ピルを役割で出し分ける
+   * ための最小情報(団体名/役割/認定者数のみ)。実績件数・直近30日・強みTOP5は個人ページに出さない。 */
+  growthCards: GrowthCardOrg[] | null
+  /** §16-8+§16-14: 停止中プロの公開カードのみに出す代理案内候補(最大4名)。受付中の場合・
+   * 候補0名の場合・delegate_criteria未設定/未作成環境ではnull(fail-soft)。 */
+  delegateCandidates: DelegateCandidatesResult | null
+}
+
+/** §2-5 育成プルーフ: 個人ページの役割行に表示する団体1件分の情報 */
+export interface GrowthCardOrg {
+  organizationId: string
+  organizationName: string
+  organizationType: string | null
+  role: 'founder' | 'instructor'
+  memberCount: number
+}
+
+/**
+ * §2-5 育成プルーフ: 主宰/講師本人ページのみ表示する団体の役割情報を取得する。
+ * CEO指示(2026-08-05): 代表(founder)判定は手動 growth_role='founder' 依存をやめ、
+ * organizations.owner_id === professionals.user_id の自動判定に変更(団体を作れば
+ * 自動的に代表として表示される)。growth_role は「指導者(instructor)」指定専用に縮小。
+ * founder と instructor が同一団体に該当する場合は founder を優先し重複表示しない。
+ * fail-soft必須: migration 045(growth_role等カラム・org_growth_summary VIEW)が
+ * 未実行の本番でも、42703(カラム無し)/42P01(VIEW無し)等でカードページ全体を落とさずnullを返す。
+ */
+async function getGrowthCards(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  proId: string,
+  proUserId: string | null
+): Promise<GrowthCardOrg[] | null> {
+  if (!isOrgCardEnabled()) return null
+  try {
+    // founder/instructor判定は共通ヘルパーに切り出し済み(§16-8の代理設定UIとも共有・二重実装しない)
+    const orgRoles = await getFounderInstructorOrgs(supabase, proId, proUserId)
+    if (orgRoles.length === 0) return null
+
+    const cards: GrowthCardOrg[] = []
+    for (const { organizationId, organizationName, organizationType, role } of orgRoles) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: summary } = await (supabase as any)
+        .from('org_growth_summary')
+        .select('member_count')
+        .eq('organization_id', organizationId)
+        .maybeSingle()
+      if (!summary) continue
+
+      cards.push({
+        organizationId,
+        organizationName,
+        organizationType,
+        role,
+        memberCount: summary.member_count || 0,
+      })
+    }
+    return cards.length > 0 ? cards : null
+  } catch (e) {
+    // fail-soft: VIEW/カラム未作成でもカードページ全体を落とさない
+    console.error('getGrowthCards error (fail-soft, returning null):', e)
+    return null
+  }
 }
 
 export async function getCardData(
@@ -193,7 +267,8 @@ export async function getCardData(
     Promise.resolve({ data: null, error: null }),
     // 14. サービス・案内 (is_active = true のみ)
     supabase.from('pro_menus')
-      .select('id, name, price_text, category_tags, description, display_order')
+      // is_referral_bookable は migration 032 で作成済み（§17-1のメニュー予約導線で使う）
+      .select('id, name, price_text, category_tags, description, display_order, is_referral_bookable')
       .eq('professional_id', proId)
       .eq('is_active', true)
       .order('display_order', { ascending: true })
@@ -204,10 +279,56 @@ export async function getCardData(
   // 承諾済み+受付中のメンバーが1名以上いなければ無効（既存 Promise.all のarityは崩さず後段の
   // 個別クエリとして追加する）。
   let delegateHasActiveMember = false
-  const delegateListId = (proResult.data as { delegate_list_id?: string | null } | null)?.delegate_list_id
+  const proRow = proResult.data as
+    | {
+        id: string
+        delegate_list_id?: string | null
+        accepting_status?: string | null
+        // §16-29: 直接予約の受付。代理案内はこちらの軸で出す
+        booking_enabled?: boolean | null
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        delegate_criteria?: any
+      }
+    | null
+  const delegateListId = proRow?.delegate_list_id
   if (delegateListId) {
     const validSet = await getValidDelegateListIds(supabase, [delegateListId])
     delegateHasActiveMember = validSet.has(delegateListId)
+  }
+  // §16-8+§16-14: delegate_criteria.enabledもOR判定に加える(選ぶものではなく自動点灯・§16-7)。
+  // 「criteriaで1名以上ヒットするか」まで計算するとコストが高いため、判定コストの軽い
+  // enabledフラグ自体を🟡点灯の代用にする(判断はCC実装報告に明記)。
+  const delegateCriteriaRaw = proRow?.delegate_criteria
+  const delegateCriteriaEnabled = !!(delegateCriteriaRaw && delegateCriteriaRaw.enabled === true)
+  if (delegateCriteriaEnabled) delegateHasActiveMember = true
+
+  // §16-34（CEO決定 2026-08-06・重要な方針転換）:
+  // 公開カードに候補一覧を出せるのは **団体オーナーだけ**に限定する。
+  // 理由: 誰でもフロントに一覧を出せると、クライアントはそこから勝手に選んでしまい
+  // **紹介が「誰の紹介でもない」ものになる**（紹介の実体も記録も残らず、紹介機能が死ぬ）。
+  // オーナー以外が人を回したい場合は、相談チャットから自分の紹介リストを送る（§16-35）。
+  // そちらは「◯◯さんが紹介した」という実体が残る。
+  const { data: ownedOrgRow } = await supabase
+    .from('organizations')
+    .select('id')
+    .eq('owner_id', (proResult.data as any)?.user_id || '')
+    .limit(1)
+    .maybeSingle()
+  const isOrgOwner = !!ownedOrgRow
+
+  // §16-29（CEO決定 2026-08-06・判定軸の変更）: 代理案内は **予約が止まっているか**で出す。
+  // 訪問者にとっての行き止まりは「予約できないこと」であり、プロ同士の紹介ネットワークの
+  // 状態(accepting_status)ではないため。
+  // 旧: !isAcceptingOpen(accepting_status) だけを見ていたので、
+  //     「予約OFF・紹介ON」のときに候補が一切計算されず案内が出なかった（CEO報告のバグ）。
+  // 紹介が止まっている場合も従来どおり出す（どちらかが止まっていれば行き止まりになりうる）。
+  const bookingClosed = proRow?.booking_enabled === false
+  let delegateCandidates: DelegateCandidatesResult | null = null
+  if (proRow && isOrgOwner && (bookingClosed || !isAcceptingOpen(proRow.accepting_status)) && delegateCriteriaEnabled) {
+    delegateCandidates = await getDelegateCandidates(supabase, {
+      id: proRow.id,
+      delegate_criteria: delegateCriteriaRaw,
+    })
   }
 
   // ♡状態（CEO決定: A案+♡プロ専用化。単一情報源はbookmarksからprivate(気になるプロ)リストへ移行。
@@ -402,6 +523,10 @@ export async function getCardData(
     if (item?.id && item?.label) itemLabelMap[item.id] = item.label
   }
 
+  // === §2-5 育成プルーフ: 主宰/講師本人ページのみの団体役割情報（fail-soft・flag off時は未クエリ） ===
+  const proUserId = (proResult.data as { user_id?: string | null } | null)?.user_id ?? null
+  const growthCards = await getGrowthCards(supabase, proId, proUserId)
+
   // === enrichedComments: 機密フィールドを除外し voter_pro / reply を付与 ===
   const enrichedComments: EnrichedComment[] = commentsRaw.map(c => {
     const info = c.normalized_email ? voterInfoMap[c.normalized_email] : undefined
@@ -512,5 +637,7 @@ export async function getCardData(
     uniqueVoters: uniqueProofVoterEmails.size,
     regular90Count,
     delegateHasActiveMember,
+    growthCards,
+    delegateCandidates,
   }
 }

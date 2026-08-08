@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import ProfessionTypeModal, { type ProfessionType } from './ProfessionTypeModal'
 import AccessLinksSection, { type AccessLinksFormPart } from './AccessLinksSection'
+import SettingsSection from './SettingsSection'
 
 const MENU_LIMIT = 20
 const NAME_MAX = 100
@@ -83,6 +84,12 @@ interface Props {
   savingAccessLinks: boolean
   /** 軽微5(レビュー指摘): fail-soft再試行(business_hours列未作成)発火時の非ブロッキング注記。 */
   accessLinksSaveNote?: string
+  /** 移動(2026-08-06・CEO指摘): ダッシュボード上部にあった「条件を追記する」メモをこのタブへ移動。
+   * PATCH /api/referral/accepting は accepting_status が必須のため、保存時にこの値をそのまま
+   * 一緒に送る(受付ステータス自体は変更しない・巻き込まない)。 */
+  initialAcceptingStatus?: 'open' | 'closed' | 'conditional' | null
+  initialAcceptingNote?: string | null
+  onAcceptingNoteUpdated?: (note: string | null) => void
 }
 
 interface FormState {
@@ -114,12 +121,70 @@ export default function BusinessInfoTab({
   onSaveAccessLinks,
   savingAccessLinks,
   accessLinksSaveNote,
+  initialAcceptingStatus,
+  initialAcceptingNote,
+  onAcceptingNoteUpdated,
 }: Props) {
   const [professionType, setProfessionType] = useState<ProfessionType | null>(initialProfessionType)
   const [editModalOpen, setEditModalOpen] = useState(false)
+
+  // CEO指示(2026-08-06): 設定の各項目を畳めるようにする。既定は全て閉（縦長の解消が目的）。
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
+  const toggleSection = (id: string) =>
+    setOpenSections(prev => ({ ...prev, [id]: !prev[id] }))
+
   const [menus, setMenus] = useState<Menu[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
+
+  // 移動(2026-08-06・CEO指摘): 受付条件メモの編集state。ダッシュボード上部にあった
+  // AcceptingStatusWidget内の「条件を追記する」をこちらへ移した。
+  const [acceptingNoteDraft, setAcceptingNoteDraft] = useState(initialAcceptingNote || '')
+  const [savedAcceptingNote, setSavedAcceptingNote] = useState(initialAcceptingNote || '')
+  const [savingAcceptingNote, setSavingAcceptingNote] = useState(false)
+  const [acceptingNoteError, setAcceptingNoteError] = useState('')
+  const [acceptingNoteSaved, setAcceptingNoteSaved] = useState(false)
+
+  // 外部(ダッシュボード上部のトグル等)からaccepting_noteが変わった場合に追従する(依存はプリミティブのみ)
+  useEffect(() => {
+    setAcceptingNoteDraft(initialAcceptingNote || '')
+    setSavedAcceptingNote(initialAcceptingNote || '')
+  }, [initialAcceptingNote])
+
+  async function saveAcceptingNote() {
+    const trimmed = acceptingNoteDraft.trim().slice(0, 200)
+    if (trimmed === savedAcceptingNote) return
+    setSavingAcceptingNote(true)
+    setAcceptingNoteError('')
+    try {
+      // 受付ステータス自体は変更しない: 現在の値(initialAcceptingStatus)をそのまま送る
+      // (このAPIはaccepting_statusが必須のため、渡さないと更新できない・巻き込み変更を避けるため
+      // 常に現在値をそのまま渡す)。
+      const res = await fetch('/api/referral/accepting', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({
+          accepting_status: initialAcceptingStatus ?? 'open',
+          accepting_note: trimmed,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setAcceptingNoteError(json.error === 'note_too_long' ? '200文字以内で入力してください' : '保存に失敗しました')
+        return
+      }
+      setSavedAcceptingNote(trimmed)
+      setAcceptingNoteDraft(trimmed)
+      if (onAcceptingNoteUpdated) onAcceptingNoteUpdated(trimmed || null)
+      setAcceptingNoteSaved(true)
+      setTimeout(() => setAcceptingNoteSaved(false), 2500)
+    } catch {
+      setAcceptingNoteError('保存に失敗しました')
+    } finally {
+      setSavingAcceptingNote(false)
+    }
+  }
 
   const [editing, setEditing] = useState<FormState | null>(null)
   const [saving, setSaving] = useState(false)
@@ -311,56 +376,118 @@ export default function BusinessInfoTab({
 
   return (
     <div style={{ paddingBottom: 40 }}>
-      <h2 style={{ fontSize: 18, fontWeight: 500, color: '#1A1A2E', marginBottom: 8 }}>サービス・案内</h2>
-      <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, marginBottom: 24 }}>
-        提供メニューの料金・サービス内容を登録できます。
-        登録するとあなたのカードページに「メニュー」タブが追加され、お客さんが見られるようになります。
-      </p>
+      {/* §CEO指摘対応(2026-08-06): 見出し「サービス・案内」は上部の動的見出しと重複するため削除 */}
+      {/* CEO指示(2026-08-06): 項目ごとに畳めるアコーディオンへ。既定は全て閉。 */}
 
-      {/* 業種表示 */}
-      <div
-        style={{
-          background: '#F9FAFB',
-          padding: '12px 16px',
-          borderRadius: 8,
-          border: '1px solid #E5E7EB',
-          marginBottom: 24,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 8,
-        }}
+      {/* 業種 */}
+      <SettingsSection
+        title="業種"
+        description="メニュー入力欄の例文がこの業種に合わせて変わります。"
+        open={!!openSections.profession}
+        onToggle={() => toggleSection('profession')}
+        meta={professionType ? PROFESSION_LABEL[professionType] : '未設定'}
       >
-        <div>
-          <div style={{ fontSize: 11, color: '#9CA3AF', letterSpacing: 1, marginBottom: 2 }}>業種</div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>
-            {professionType ? PROFESSION_LABEL[professionType] : '未設定'}
+        <div
+          style={{
+            background: 'white',
+            padding: '12px 16px',
+            borderRadius: 8,
+            border: '1px solid #E5E7EB',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 11, color: '#9CA3AF', letterSpacing: 1, marginBottom: 2 }}>現在の業種</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>
+              {professionType ? PROFESSION_LABEL[professionType] : '未設定'}
+            </div>
+          </div>
+          {professionType && (
+            <button
+              type="button"
+              onClick={() => setEditModalOpen(true)}
+              style={{
+                fontSize: 12,
+                padding: '6px 12px',
+                background: 'white',
+                color: '#C4A35A',
+                border: '1px solid #C4A35A',
+                borderRadius: 6,
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
+            >
+              変更
+            </button>
+          )}
+        </div>
+      </SettingsSection>
+
+      {/* 移動(2026-08-06・CEO指摘): 受付条件メモ。ダッシュボード上部の受付スイッチ横にあった
+          「条件を追記する」テキストエリアをここへ移動。保存経路(PATCH /api/referral/accepting)は
+          既存のまま・accepting_statusは巻き込まず現在値を維持したまま送る。 */}
+      <SettingsSection
+        title="受付条件のメモ（任意）"
+        description="紹介リストや公開カードで、受付中の横に表示されます。"
+        open={!!openSections.acceptingNote}
+        onToggle={() => toggleSection('acceptingNote')}
+        meta={savedAcceptingNote ? '設定済み' : '未設定'}
+      >
+        <textarea
+          value={acceptingNoteDraft}
+          onChange={e => setAcceptingNoteDraft(e.target.value.slice(0, 200))}
+          placeholder="例: めまい・ふらつきのケースのみ／土曜のみ対応可"
+          rows={2}
+          style={{
+            width: '100%',
+            padding: '10px 12px',
+            fontSize: 14,
+            border: '1px solid #E5E7EB',
+            borderRadius: 6,
+            boxSizing: 'border-box' as const,
+            resize: 'vertical' as const,
+            fontFamily: 'inherit',
+          }}
+        />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
+          <div style={{ fontSize: 11, color: '#9CA3AF' }}>{acceptingNoteDraft.length} / 200</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {acceptingNoteSaved && <span style={{ fontSize: 12, color: '#2E7D32' }}>保存しました</span>}
+            <button
+              type="button"
+              onClick={saveAcceptingNote}
+              disabled={savingAcceptingNote || acceptingNoteDraft.trim() === savedAcceptingNote}
+              style={{
+                fontSize: 12,
+                padding: '6px 14px',
+                borderRadius: 6,
+                border: 'none',
+                background: '#1A1A2E',
+                color: '#fff',
+                cursor: savingAcceptingNote ? 'default' : 'pointer',
+                opacity: savingAcceptingNote || acceptingNoteDraft.trim() === savedAcceptingNote ? 0.5 : 1,
+              }}
+            >
+              {savingAcceptingNote ? '保存中...' : '保存する'}
+            </button>
           </div>
         </div>
-        {professionType && (
-          <button
-            onClick={() => setEditModalOpen(true)}
-            style={{
-              fontSize: 12,
-              padding: '6px 12px',
-              background: 'white',
-              color: '#C4A35A',
-              border: '1px solid #C4A35A',
-              borderRadius: 6,
-              cursor: 'pointer',
-              fontWeight: 600,
-            }}
-          >
-            変更
-          </button>
+        {acceptingNoteError && (
+          <div style={{ fontSize: 11, color: '#E24B4A', marginTop: 4 }}>{acceptingNoteError}</div>
         )}
-      </div>
+      </SettingsSection>
 
-      {/* 一覧ヘッダー */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E' }}>メニュー一覧</h3>
-        <span style={{ fontSize: 12, color: '#6B7280' }}>{activeCount} / {MENU_LIMIT}件</span>
-      </div>
+      {/* メニュー */}
+      <SettingsSection
+        title="メニュー"
+        description="登録するとカードページに「メニュー」タブが追加され、お客さんが見られるようになります。"
+        open={!!openSections.menus}
+        onToggle={() => toggleSection('menus')}
+        meta={`${activeCount} / ${MENU_LIMIT}件`}
+      >
 
       {loading && <p style={{ fontSize: 13, color: '#6B7280' }}>読み込み中…</p>}
 
@@ -675,7 +802,9 @@ export default function BusinessInfoTab({
         </div>
       )}
 
-      {/* 削除確認 */}
+      </SettingsSection>
+
+      {/* 削除確認（画面全体を覆うモーダルのため、アコーディオンの外に置く） */}
       {confirmDeleteId && (
         <div
           style={{
@@ -746,7 +875,8 @@ export default function BusinessInfoTab({
         </div>
       )}
 
-      {/* ── Phase A2: アクセス情報・外部リンク ── */}
+      {/* ── Phase A2: アクセス情報・外部リンク ──
+          （中で「アクセス情報」「外部リンク」の2アコーディオンに分かれている） */}
       <AccessLinksSection
         accessLinks={accessLinks}
         onAccessLinksChange={onAccessLinksChange}

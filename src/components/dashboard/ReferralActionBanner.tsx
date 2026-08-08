@@ -42,27 +42,31 @@ export default function ReferralActionBanner() {
 
   // レビュー方針: 受け手側の文言が既にある場合はそれを優先し、送り手側は「・」で併記する
   // (2行に分けない・既存文言はsentActiveCount===0の場合は変更しない)。
+  // CEO指摘(2026-08-06): §17-1でREALPROOFの直接予約もこの受信箱に届くようになったため、
+  // 「紹介予約」と言い切れなくなった。受け手側の文言は「予約」に統一する
+  // （送り手側＝自分が紹介した案件は今まで通り「紹介した案件」と呼ぶ。こちらは紹介のままで正しい）。
   let label: string
   if (sentActiveCount === 0) {
     label =
       requestedCount > 0
-        ? `新しい紹介予約リクエストが${requestedCount}件あります`
-        : `対応中の紹介予約が${confirmedCount}件あります`
+        ? `新しい予約リクエストが${requestedCount}件あります`
+        : `対応中の予約が${confirmedCount}件あります`
   } else if (requestedCount === 0 && confirmedCount === 0) {
     label = `あなたが紹介した案件が${sentActiveCount}件進行中です`
   } else {
     const receivedPart =
       requestedCount > 0
         ? `新しいリクエストが${requestedCount}件`
-        : `対応中の紹介予約が${confirmedCount}件`
+        : `対応中の予約が${confirmedCount}件`
     label = `${receivedPart}・紹介した案件が${sentActiveCount}件進行中です`
   }
 
   // CEO指示(2026-08-04・IA再変更): 送り手のみの文言なら新設の「紹介した案件」サブタブへ、
   // 受け手側を含む場合は「受ける」サブタブへ直接着地させる(?sub=receive|casesは
   // dashboard/page.tsx側でlocalStorage/自動判定より優先される)。
+  // §17-2(2026-08-06): 受け取り側は独立した「予約」タブへ、送り手側は従来どおり紹介タブへ。
   const hasReceivedPart = requestedCount > 0 || confirmedCount > 0
-  const href = hasReceivedPart ? '/dashboard?tab=referral&sub=receive' : '/dashboard?tab=referral&sub=cases'
+  const href = hasReceivedPart ? '/dashboard?tab=bookings' : '/dashboard?tab=referral&sub=cases'
 
   return (
     <a

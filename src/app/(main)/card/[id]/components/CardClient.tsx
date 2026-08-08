@@ -26,6 +26,8 @@ import { VoiceCommentCard } from '@/components/card/VoiceCommentCard'
 import { PersonalityPodium } from '@/components/card/PersonalityPodium'
 import type { VoiceComment, Supporter } from '@/components/card/types'
 import { computeReferralSignal, REFERRAL_SIGNAL_COLOR } from '@/lib/referral-accepting'
+import { resolveBookingTarget, buildMenuBookingHref } from '@/lib/booking-mode'
+import { DelegateCandidatesBlock } from '@/components/card/DelegateCandidatesBlock'
 import { GalleryCarousel } from '@/components/card/GalleryCarousel'
 import { YouTubeEmbed } from '@/components/card/YouTubeEmbed'
 import { resolveCharacterImageUrl } from '@/lib/character-image'
@@ -236,6 +238,13 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
   const [loading] = useState(false)
   const menus = cardData.menus || []
   const hasMenus = menus.length > 0
+  // §2-5 育成プルーフ: 主宰(founder)/指導者(instructor)本人ページのみ非nullで渡ってくる(fail-soft・card-data.ts参照)
+  const growthCards = cardData.growthCards || null
+  // §16-8+§16-14: 停止中プロの公開カードのみ非nullで渡ってくる(fail-soft・card-data.ts参照)
+  const delegateCandidates = cardData.delegateCandidates || null
+  // その団体だけは既存ピルでなく役割行(団体名＋役割バッジ＋認定者数＋団体ページを見る→)で表示するため、
+  // 下のピル一覧からは除外する(役割は排他ではないため他団体のピルは維持)。
+  const growthOrgIds = new Set((growthCards || []).map(g => g.organizationId))
   // Phase A2: アクセス情報・外部リンクの表示条件
   // service_formats=['online'] のみのプロは「●オンライン対応」バッジで足り、ACCESS セクションは冗長になるため
   // 物理アクセス(店舗/訪問/住所等)が無い限り非表示にする
@@ -279,6 +288,8 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
   // CEO決定(A案+♡プロ専用化): カード♡はプロ閲覧時のみ表示。クライアント/未ログインはnull。
   const [viewerProId] = useState<string | null>(cardData.viewerProId)
   const [orgs] = useState<{ id: string; name: string; type: string }[]>(initialOrgs)
+  // §2-5育成プルーフ: 代表/指導者を務める団体は上の役割行に出すため、ピル一覧からは除外する
+  const pillOrgs = orgs.filter(o => !growthOrgIds.has(o.id))
   const [credentialBadges] = useState<
     {
       id: string
@@ -493,8 +504,19 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
   const top3 = sortedVotes.slice(0, 3)
   const rest = sortedVotes.slice(3)
 
-  // §15-4: sticky予約バーの表示条件(booking_urlまたはcontact_emailを持つプロのみ)
-  const hasStickyCta = !!(pro.booking_url || pro.contact_email)
+  // §17-1(CEO決定 2026-08-06): 予約の受け口は必ず1本。REALPROOFで受けるか、
+  // 本人のサイトで受けるかを resolveBookingTarget が決める（判定の単一情報源）。
+  const bookingTarget = resolveBookingTarget({
+    id,
+    booking_url: pro.booking_url,
+    booking_enabled: (pro as any).booking_enabled,
+    booking_mode: (pro as any).booking_mode,
+  })
+  const showBookingCta = bookingTarget.enabled
+
+  // §15-4: sticky予約バーの表示条件。§17-1でRPネイティブ予約ができるようになったため、
+  // booking_url を持たないプロにも予約導線が出る（＝バー自体も出す）。
+  const hasStickyCta = showBookingCta || !!pro.contact_email
 
   return (
     <div style={{ background: T.bg, minHeight: '100vh', maxWidth: 420, margin: '0 auto', padding: 16, fontFamily: T.font }}>
@@ -517,8 +539,23 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
             {pro.name}
           </div>
           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-            {pro.booking_url && (
-              <a href={pro.booking_url} target="_blank" rel="noopener"
+            {/* §16-32: 予約OFF のときは予約ボタンの代わりに「オススメのプロ」を出す。
+                候補が1名以上いるときだけ（押した先が空だと行き止まりになるため）。 */}
+            {(pro as any).booking_enabled === false && delegateCandidates && delegateCandidates.candidates.length > 0 && (
+              <a href={`/recommended/${id}`}
+                style={{
+                  display: 'inline-block', padding: '8px 12px', borderRadius: 8,
+                  background: T.dark, color: T.gold, fontWeight: 700, fontSize: 12,
+                  textDecoration: 'none', whiteSpace: 'nowrap',
+                }}>
+                オススメのプロ
+              </a>
+            )}
+            {/* §16-29 / §17-1: 予約の受付は booking_enabled が持つ（カラム未作成なら受付中）。
+                遷移先は resolveBookingTarget（RPネイティブ or 本人のサイト）。 */}
+            {showBookingCta && (
+              <a href={bookingTarget.href}
+                {...(bookingTarget.external ? { target: '_blank', rel: 'noopener' } : {})}
                 onClick={() => trackEvent(id, 'booking_click', shareSrc || undefined)}
                 style={{
                   display: 'inline-block', padding: '8px 12px', borderRadius: 8,
@@ -528,8 +565,10 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
                 予約する
               </a>
             )}
-            {pro.contact_email && (
-              <a href={(() => { const subject = encodeURIComponent(`REAL PROOFを見て相談：${pro.name}さん`); const body = encodeURIComponent(`${pro.name}さん\n\nREAL PROOFであなたのプロフィールを拝見し、ご相談したくご連絡しました。\n\n`); return `mailto:${pro.contact_email}?subject=${subject}&body=${body}` })()}
+            {/* §16-19: 相談はRP内フォーム。contact_email の有無で出し分けない（CEO指示 2026-08-06）。
+                §16-25: プロが相談を止めている場合だけ出さない（カラム未作成＝null は出す）。 */}
+            {(pro as any).consultation_enabled !== false && (
+            <a href={`/consult/${id}`}
                 onClick={() => trackEvent(id, 'consultation_click', shareSrc || undefined)}
                 style={{
                   display: 'inline-block', padding: '8px 12px', borderRadius: 8,
@@ -617,33 +656,18 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
               {/* Phase A2: service_formats を優先しつつ、setup ウィザード経由の新規プロ(is_online_available のみ)も後方互換でカバー */}
               {(pro.service_formats?.includes('online') || pro.is_online_available) && <span style={{ marginLeft: 6, color: T.gold }}>● オンライン対応</span>}
             </div>
-            {/* §2-2改訂: 公開カードの3分岐（🟢受付中＋条件メモ／🟡代理案内あり／🔴は何も表示しない）。
-                先行テスト第3弾: NULL=openのfail-open化により、全体公開(all)前は本人未操作でも
-                🟢🟡が出てしまうため、referralFullyLaunchedでゲートする(🔴は元々何も出さない) */}
-            {referralFullyLaunched && (() => {
-              const signal = computeReferralSignal(pro.accepting_status, !!cardData.delegateHasActiveMember)
-              if (signal === 'open') {
-                return (
-                  <div style={{ fontSize: 11, color: REFERRAL_SIGNAL_COLOR.open, marginTop: 4, lineHeight: 1.6 }}>
-                    新規のご紹介を受付中
-                    {pro.accepting_note && (
-                      <span style={{ color: T.textMuted }}>（{pro.accepting_note}）</span>
-                    )}
-                  </div>
-                )
-              }
-              if (signal === 'delegate') {
-                return (
-                  <div style={{ fontSize: 11, color: REFERRAL_SIGNAL_COLOR.delegate, marginTop: 4, lineHeight: 1.6 }}>
-                    現在は新規のご紹介を受け付けていませんが、信頼できる先生をご案内できます
-                  </div>
-                )
-              }
-              return null
-            })()}
-            {orgs.length > 0 && (
+            {/* §16-32（CEO決定 2026-08-06）: 予約が止まっているときだけ1行出す。
+                候補リストは**カードに載せない**。ヘッダーの狭い枠に押し込んだ結果、
+                縦書きに潰れて完全に壊れていた（CEO報告）。一覧は専用ページへ出す。
+                文言も1行に短縮（「同じ◯◯の先生をご案内します」は長すぎるとのCEO指摘）。 */}
+            {(pro as any).booking_enabled === false && (
+              <div style={{ fontSize: 11, color: REFERRAL_SIGNAL_COLOR.delegate, marginTop: 4, lineHeight: 1.6 }}>
+                {pro.name}さんは今ご予約を受け付けていません
+              </div>
+            )}
+            {pillOrgs.length > 0 && (
               <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {orgs.map(o => (
+                {pillOrgs.map(o => (
                   <a
                     key={o.id}
                     href={`/org/${o.id}`}
@@ -675,6 +699,31 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
           {showUniqueCount && (
             <div style={{ marginTop: 8, fontSize: 11, color: T.textSub, fontWeight: 600 }}>
               ユニーク {uniqueVoters}人 ／ 累計 {totalVotes}件 ／ 常連 {regular90Count}人
+            </div>
+          )}
+          {/* §2-5育成プルーフ(CEO最終指示2026-08-05): 役割行はproofs数の直下に置く。
+              訪問者が個人のproofs数を見た文脈を隣で補うのが育成プルーフの役割のため、数字に最も近い位置に出す。
+              1行厳守: 行全体をタップ可能にして末尾に › のみ(文字リンクは置かない)。数字は認定者数1つだけ。 */}
+          {growthCards && growthCards.length > 0 && (
+            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {growthCards.map(g => (
+                <a
+                  key={g.organizationId}
+                  href={`/org/${g.organizationId}`}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    fontSize: 13, color: T.textSub, textDecoration: 'none',
+                    whiteSpace: 'nowrap', overflow: 'hidden',
+                  }}
+                >
+                  <span style={{ fontWeight: 700, color: T.dark, overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.organizationName}</span>
+                  <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: '#fff', background: T.gold, borderRadius: 6, padding: '1px 7px' }}>
+                    {g.role === 'founder' ? '代表' : '指導者'}
+                  </span>
+                  <span style={{ flexShrink: 0 }}>・ 認定者{g.memberCount}名</span>
+                  <span style={{ flexShrink: 0, color: T.textMuted }}>›</span>
+                </a>
+              ))}
             </div>
           )}
           {/* 称号アイコン一覧（旧 specialist/proven/♡ 統計を置き換え。SPECIALIST以上のみ・上位順・称号ゼロは非表示） */}
@@ -1309,6 +1358,25 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
                     {m.description && (
                       <p style={{ fontSize: 12, color: T.textSub, lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap' }}>{m.description}</p>
                     )}
+                    {/* §17-1(CEO決定 2026-08-06): メニューからも予約できるようにする。
+                        メニュー予約は**必ずREALPROOFで受ける**（外部サイトに「このメニューで」を
+                        渡す手段が無く、飛ばすと選んだメニューが消えるため）。
+                        出すのはプロが「このメニューで予約を受ける」をONにしたメニューだけ＝
+                        自分のサイトで受けたいプロは、このスイッチを切れば導線ごと出ない。 */}
+                    {m.is_referral_bookable && showBookingCta && (
+                      <a
+                        href={buildMenuBookingHref(id, m.id)}
+                        onClick={() => trackEvent(id, 'booking_click', shareSrc || undefined)}
+                        style={{
+                          display: 'block', textAlign: 'center', marginTop: 12,
+                          padding: '10px 16px', borderRadius: 10,
+                          background: T.dark, color: T.gold,
+                          fontSize: 13, fontWeight: 700, textDecoration: 'none',
+                        }}
+                      >
+                        このメニューで予約する
+                      </a>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1438,8 +1506,21 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
 
       {/* ═══ CTA ═══ */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-        {pro.booking_url && (
-          <a href={pro.booking_url} target="_blank" rel="noopener"
+        {/* §16-32: 同上（予約OFF時の代替導線） */}
+        {(pro as any).booking_enabled === false && delegateCandidates && delegateCandidates.candidates.length > 0 && (
+          <a href={`/recommended/${id}`}
+            style={{
+              display: 'block', textAlign: 'center', padding: 15, borderRadius: 14,
+              background: T.dark, color: T.gold, fontWeight: 700, fontSize: 14,
+              textDecoration: 'none', fontFamily: T.font,
+            }}>
+            オススメのプロを見る
+          </a>
+        )}
+        {/* §16-29 / §17-1: 同上 */}
+        {showBookingCta && (
+          <a href={bookingTarget.href}
+            {...(bookingTarget.external ? { target: '_blank', rel: 'noopener' } : {})}
             onClick={() => trackEvent(id, 'booking_click', shareSrc || undefined)}
             style={{
               display: 'block', textAlign: 'center', padding: 15, borderRadius: 14,
@@ -1449,8 +1530,9 @@ export default function CardClient({ cardData, showUniqueCount = false, referral
             予約する
           </a>
         )}
-        {pro.contact_email && (
-          <a href={(() => { const subject = encodeURIComponent(`REAL PROOFを見て相談：${pro.name}さん`); const body = encodeURIComponent(`${pro.name}さん\n\nREAL PROOFであなたのプロフィールを拝見し、ご相談したくご連絡しました。\n\n`); return `mailto:${pro.contact_email}?subject=${subject}&body=${body}` })()}
+        {/* §16-19 / §16-25: 同上 */}
+        {(pro as any).consultation_enabled !== false && (
+        <a href={`/consult/${id}`}
             onClick={() => trackEvent(id, 'consultation_click', shareSrc || undefined)}
             style={{
               display: 'block', textAlign: 'center', padding: 14, borderRadius: 14,

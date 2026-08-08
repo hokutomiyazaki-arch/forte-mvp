@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { getOwnPro } from '@/lib/referral-auth'
+// §17-16: import ゼロの純関数モジュール（チャンクグラフに何も足さない・CLAUDE.md §G）
+import { resolveEmailFixOwner } from '@/lib/booking-email-fix'
 import {
   notifyBookingConfirmedToSender,
   notifyBookingCompletedToSender,
@@ -16,6 +18,8 @@ import {
   notifyLocationToClient,
   notifyBookingCancelledByReceiverToClient,
   notifyBookingCancelledByReceiverToSender,
+  // §17-10: メールアドレスを直したときの受付メール再送に使う
+  notifyBookingReceivedToClient,
 } from '@/lib/referral-notify'
 import {
   formatSlot,
@@ -33,7 +37,6 @@ import {
   issueFeePaymentLinkAndNotify,
   refundReferralBookingFee,
   expireReferralCheckoutSession,
-  executeReferralPayoutTransfer,
 } from '@/lib/referral-payment'
 // ステージ4(送り手分配・2026-08-04・CEO決定): Stripeに触らない独立ファイル(referral-payment.tsとは
 // チャンクグラフを分ける)。完了確定時に送り手分配行(referral_payouts)を1回だけ作成する。
@@ -84,6 +87,20 @@ interface PreferredSlots {
    * (confirmed_slot_isoは他ラウンドでも残るため、単独では2周目以降の判別に使えない)。
    */
   reschedule_kept_current_at?: string | null
+  /**
+   * §17-4(CEO指示 2026-08-06): 電話で口頭で決めた予約をプロが確定した時刻。
+   * 「お客さんの同意をシステムが確認できていない確定」であることの記録
+   * （メールアドレスの打ち間違いでお客さんに何も届かない場合の逃げ道）。
+   */
+  confirmed_by_phone_at?: string | null
+  /** §17-3④/§17-7: 受付メールがクライアントに届かなかった印（送信失敗 or バウンス） */
+  receipt_email_failed?: boolean | null
+  /** §17-16: 印が立った時刻。誰が直すか(送り手→受け手のフォールバック)の判定に使う。 */
+  receipt_email_failed_at?: string | null
+  /** §17-19: SMSで本人に届いた印。立っている間はプロ側の対応ブロックを出さない。 */
+  contact_recovered_by_sms_at?: string | null
+  /** §17-9: メールが届かないため、プロが片付けた（クライアントへは通知していない） */
+  discarded_undeliverable_at?: string | null
 }
 
 /**
@@ -109,6 +126,8 @@ interface BookingRow {
   stripe_checkout_session_id: string | null
   /** タスク②(2026-08-04・CEO指示): プロ都合キャンセル時の返金照合に使う(migration 032で作成済み)。 */
   stripe_payment_intent_id: string | null
+  /** §17-1: 'direct'=REALPROOFの直接予約(紹介元なし・予約金なし)。null=従来の紹介予約。 */
+  source?: string | null
   expires_at: string | null
   confirmed_at: string | null
   completed_at: string | null
@@ -128,7 +147,30 @@ interface BookingRow {
  * 開示しない(status条件で既に弾かれる)。
  * ★ この関数がPIIの唯一のゲートになる。開示条件を変更する場合は必ずレビューを通すこと。
  */
-function canDiscloseContact(booking: { status: string; payment_status?: string | null }): boolean {
+function canDiscloseContact(booking: {
+  status: string
+  payment_status?: string | null
+  /**
+   * §17-9(CEO指摘 2026-08-06): 受付メールが届いていない予約は例外。
+   * 「プロが確定しないと電話番号が出ない」ままだと、確定の連絡も取れないのに確定を迫られる。
+   * メールが死んでいる＝連絡手段が電話しかないので、確定前(requested)でも開示する。
+   * 開示するのは**お名前と電話番号だけ**（メールアドレスは §17-6 で一切返さない）。
+   *
+   * §17-16(CEO報告 2026-08-06・不具合修正): 「電話番号が表示されてない」。
+   * 例外を requested にだけ効かせていたため、**confirmed かつ予約金が未払い(awaiting)**の
+   * 予約は下の payment_status 判定で落ちて番号が出ず、
+   * 「お電話でご連絡をお願いします」と書いてあるのに電話できない画面になっていた。
+   * メールが死んでいる時点で連絡手段は電話しか無いので、進行中(requested/confirmed)なら
+   * 支払い状態によらず開示する。※逃げ道を塞ぐ非表示は、塞いだ先に道があるかを必ず確認する。
+   */
+  receiptEmailFailed?: boolean
+}): boolean {
+  if (
+    booking.receiptEmailFailed &&
+    (booking.status === 'requested' || booking.status === 'confirmed')
+  ) {
+    return true
+  }
   if (booking.status !== 'confirmed' && booking.status !== 'completed') return false
   const ps = booking.payment_status
   return ps === 'paid' || ps === 'not_required' || ps === null || ps === undefined
@@ -289,9 +331,34 @@ export async function GET() {
       console.error('[api/referral/bookings/received] handover_note fetch error (fail-soft):', handoverErr)
     }
 
+    // §17-1(2026-08-06): 直接予約かどうか。migration 056 未実行の環境でも一覧が壊れないよう、
+    // 本体のselectには足さず別クエリで取る（未作成カラムをselectに書くとPostgRESTが42703で落ち、
+    // 予約が1件も返らなくなる。handover_note と同じ作法）。
+    const sourceMap: Record<string, string | null> = {}
+    try {
+      const bookingIdsForSource = [...((bookings || []) as any[]), ...completedBookings].map((b) => b.id)
+      if (bookingIdsForSource.length > 0) {
+        const { data: sourceRows, error: sourceError } = await supabase
+          .from('referral_bookings')
+          .select('id, source')
+          .in('id', bookingIdsForSource)
+        if (sourceError) {
+          console.error('[api/referral/bookings/received] source fetch error (fail-soft):', sourceError)
+        } else {
+          for (const row of (sourceRows || []) as Array<{ id: string; source: string | null }>) {
+            sourceMap[row.id] = row.source
+          }
+        }
+      }
+    } catch (sourceErr) {
+      console.error('[api/referral/bookings/received] source fetch error (fail-soft):', sourceErr)
+    }
+
     const result = ((bookings || []) as any[]).map((b) => ({
       id: b.id,
       list_id: b.list_id,
+      // §17-1: 'direct' なら受け手UIの文言を「紹介予約」から「予約」に切り替える
+      source: sourceMap[b.id] || null,
       menu_id: b.menu_id,
       menu_name: b.pro_menus?.name || null,
       theme_tags: b.theme_tags,
@@ -309,14 +376,30 @@ export async function GET() {
       client_nickname: b.clients?.nickname || 'クライアント',
       sender_pro: b.sender_pro_id ? sendersMap[b.sender_pro_id] || null : null,
       // §2-4ステージ3(CEO決定): 決済確認後(canDiscloseContact参照)のみ連絡先を開示する。
-      client_contact: canDiscloseContact({ status: b.status, payment_status: paymentEnabled ? b.payment_status : undefined })
-        ? { name: b.client_name || null, phone: b.client_phone || null, email: b.client_email || null }
+      // §17-6: メールアドレスは返さない（画面に出さないだけでなくレスポンスからも外す）。
+      client_contact: canDiscloseContact({
+        status: b.status,
+        payment_status: paymentEnabled ? b.payment_status : undefined,
+        receiptEmailFailed: !!b.preferred_slots?.receipt_email_failed,
+      })
+        ? { name: b.client_name || null, phone: b.client_phone || null }
         : null,
+      // §17-16(CEO指示 2026-08-06): メールを直す仕事の持ち主。'sender' の間、受け手の画面には
+      // 「紹介元が確認中です」しか出さない（受け手に他人の客へ電話させない）。
+      email_fix_owner: resolveEmailFixOwner({
+        hasSender: !!b.sender_pro_id,
+        receiptEmailFailed: !!b.preferred_slots?.receipt_email_failed,
+        status: b.status,
+        failedAt: b.preferred_slots?.receipt_email_failed_at || null,
+        createdAt: b.created_at,
+        contactRecoveredBySms: !!b.preferred_slots?.contact_recovered_by_sms_at,
+      }),
     }))
 
     const completedResult = completedBookings.map((b: any) => ({
       id: b.id,
       list_id: b.list_id,
+      source: sourceMap[b.id] || null,
       menu_id: b.menu_id,
       menu_name: b.pro_menus?.name || null,
       theme_tags: b.theme_tags,
@@ -331,7 +414,7 @@ export async function GET() {
       // タスク①: completed一覧も同条件で開示する(completedはpaid/not_requiredのはずだが、
       // 念のためcanDiscloseContactを必ず通す)。
       client_contact: canDiscloseContact({ status: b.status, payment_status: paymentEnabled ? b.payment_status : undefined })
-        ? { name: b.client_name || null, phone: b.client_phone || null, email: b.client_email || null }
+        ? { name: b.client_name || null, phone: b.client_phone || null }
         : null,
     }))
 
@@ -395,6 +478,9 @@ export async function PATCH(request: NextRequest) {
     if (
       !bookingId ||
       (action !== 'confirm' &&
+        action !== 'confirm_offline' &&
+        action !== 'discard' &&
+        action !== 'fix_client_email' &&
         action !== 'decline' &&
         action !== 'complete' &&
         action !== 'counter' &&
@@ -412,7 +498,8 @@ export async function PATCH(request: NextRequest) {
     // price_jpy/payment_status/fee_total_bps/メニュー名も取得する。
     // payment_status/fee_total_bpsはmigration 036依存のためフラグゲート付きで選択する。
     const baseConfirmSelect =
-      'id, list_id, sender_pro_id, receiver_pro_id, client_id, client_email, status, price_jpy, expires_at, preferred_slots, clients(id, user_id, nickname), referral_lists(id, slug, comment), pro_menus(name)'
+      // §17-16: created_at はメール修正の持ち主判定(送り手→受け手のフォールバック)に使う。
+      'id, list_id, sender_pro_id, receiver_pro_id, client_id, client_email, status, price_jpy, expires_at, created_at, preferred_slots, clients(id, user_id, nickname), referral_lists(id, slug, comment), pro_menus(name)'
     // タスク②(2026-08-04・CEO指示): cancel_by_receiver用にstripe_checkout_session_id/
     // stripe_payment_intent_idも取得する(いずれもmigration 036依存カラムと同じpaymentEnabledゲート内)。
     const confirmSelect = paymentEnabled
@@ -427,6 +514,21 @@ export async function PATCH(request: NextRequest) {
     const booking = bookingData as unknown as BookingRow | null
     if (!booking || booking.receiver_pro_id !== ownPro.id) {
       return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    }
+
+    // §17-1(2026-08-06): 直接予約かどうか。クライアント宛メールの言い方を変えるためだけに使う
+    // （紹介元がいないのに「紹介予約が確定しました」と書くと意味が通らない）。
+    // 未作成カラムを上のselectに足すと42703で予約操作ごと落ちるため、別クエリ＋fail-softで取る。
+    let isDirectBooking = false
+    try {
+      const { data: sourceRow } = await supabase
+        .from('referral_bookings')
+        .select('source')
+        .eq('id', bookingId)
+        .maybeSingle()
+      isDirectBooking = (sourceRow as { source?: string | null } | null)?.source === 'direct'
+    } catch (sourceErr) {
+      console.error('[api/referral/bookings/received] source fetch error (fail-soft):', sourceErr)
     }
 
     if (action === 'complete') {
@@ -456,27 +558,20 @@ export async function PATCH(request: NextRequest) {
       }
 
       // ステージ4(送り手分配・CEO決定): 完了確定の直後に分配行を作成する(fail-soft・失敗しても完了処理自体は成功扱い)。
-      let payoutIdForTransfer: string | null = null
       // CEO指示(2026-08-05): 完了通知に報酬額を載せるため保持する(分配対象外はnullのまま)。
       let payoutAmountJpyForNotify: number | null = null
       try {
         const payoutResult = await createReferralPayoutIfEligible(bookingId)
-        payoutIdForTransfer = payoutResult.payoutId
         payoutAmountJpyForNotify = payoutResult.amountJpy
       } catch (payoutErr) {
         console.error('[api/referral/bookings/received] complete payout create error:', payoutErr)
       }
 
-      // ステージ4「自動送金」(CEO承認済み・2026-08-05): 分配行の作成/既存確認の直後に送金を試みる
-      // (fail-soft・完了処理を絶対に壊さない。口座未登録はexecuteReferralPayoutTransfer内でno_accountと
-      // してスキップされpendingのまま残る=cronの再試行ブロックが拾い直す)。
-      if (payoutIdForTransfer) {
-        try {
-          await executeReferralPayoutTransfer(payoutIdForTransfer)
-        } catch (transferErr) {
-          console.error('[api/referral/bookings/received] complete payout transfer error:', transferErr)
-        }
-      }
+      // E-2(CEO決定・2026-08-06): 「完了→即送金」から「完了→保留7日(PAYOUT_HOLD_DAYS)→送金」に変更。
+      // 完了後のクレーム・返金要求に対する回収手段がないための保留期間。分配行(referral_payouts)は
+      // 上記の通りpending状態で作成するのみで、この場でexecuteReferralPayoutTransferは呼ばない。
+      // 実際の送金は cron/expire-referral-bookings の pending 再試行ブロックが、
+      // referral_payouts.created_atから7日以上経過した行のみを拾って実行する。
 
       // ライフサイクル改善(タスクD): 完了時、送り手プロへ通知する(失敗しても完了処理自体は成功扱い)。
       try {
@@ -854,6 +949,271 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: true, status: 'cancelled' })
     }
 
+    // §17-10(CEO指示 2026-08-06): メールアドレスを直して送り直す。
+    //   「紹介予約の場合は、正しいメールアドレスを確認して入力させないと、
+    //     クライアントに予約金の支払いメールを送れない。プロには電話でメールを確認させて。
+    //     そんでメールアドレス修正のボックスをだす。」
+    //
+    // 開けている条件を厳しくしている理由: これは**他人の連絡先を書き換える操作**で、
+    //   悪用すれば予約を別人のアドレスに付け替えられる。そこで
+    //   ①受け手プロ本人 ②メールが届いていないと分かっている予約 ③進行中(requested/confirmed)
+    //   の3つが揃ったときだけ通す。旧アドレスは行内に記録して、後から追えるようにする。
+    if (action === 'fix_client_email') {
+      if (!booking.preferred_slots?.receipt_email_failed) {
+        return NextResponse.json({ error: 'not_allowed' }, { status: 409 })
+      }
+      if (booking.status !== 'requested' && booking.status !== 'confirmed') {
+        return NextResponse.json({ error: 'not_pending' }, { status: 409 })
+      }
+      // §17-16(CEO指示 2026-08-06): 紹介予約は、まず**紹介元**が直す。預けている間は
+      // 受け手からは直せない（両側から同時に別のアドレスを入れられる状態を作らない）。
+      // 24時間で受け手に落ちてくる（送り手が動かないまま予約が死ぬのを防ぐ）。
+      if (
+        resolveEmailFixOwner({
+          hasSender: !!booking.sender_pro_id,
+          receiptEmailFailed: true,
+          status: booking.status,
+          failedAt: booking.preferred_slots?.receipt_email_failed_at || null,
+          createdAt: booking.created_at,
+          contactRecoveredBySms: !!booking.preferred_slots?.contact_recovered_by_sms_at,
+        }) === 'sender'
+      ) {
+        return NextResponse.json({ error: 'sender_is_fixing' }, { status: 409 })
+      }
+
+      const nextEmail =
+        typeof body.client_email === 'string' ? body.client_email.trim().slice(0, 254).toLowerCase() : ''
+      if (!nextEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
+        return NextResponse.json({ error: 'email_invalid' }, { status: 400 })
+      }
+      if (nextEmail === (booking.client_email || '').toLowerCase()) {
+        return NextResponse.json({ error: 'email_unchanged' }, { status: 400 })
+      }
+
+      const { data: fixedRows, error: fixError } = await supabase
+        .from('referral_bookings')
+        .update({
+          client_email: nextEmail,
+          preferred_slots: {
+            ...(booking.preferred_slots || {}),
+            // 直したので未達フラグは下ろす。届かなければ webhook がまた立てる。
+            receipt_email_failed: false,
+            client_email_fixed_at: new Date().toISOString(),
+            client_email_before_fix: booking.client_email || null,
+          },
+        })
+        .eq('id', bookingId)
+        .in('status', ['requested', 'confirmed'])
+        .select('id')
+
+      if (fixError) {
+        console.error('[api/referral/bookings/received] PATCH fix_client_email error:', fixError)
+        return NextResponse.json({ error: 'failed_to_update' }, { status: 500 })
+      }
+      if (!fixedRows || fixedRows.length === 0) {
+        return NextResponse.json({ error: 'not_pending' }, { status: 409 })
+      }
+
+      // 直したアドレスへ、いま必要なメールを送り直す。
+      const slugForFix = booking.referral_lists?.slug || ''
+      const listUrlForFix = slugForFix ? `${APP_URL}/r/${slugForFix}` : APP_URL
+      const clientUserIdForFix = booking.clients?.user_id || ''
+      const feeTotalBpsForFix = booking.fee_total_bps ?? REFERRAL_FEE_TOTAL_BPS
+      const feeAmountJpyForFix =
+        booking.price_jpy > 0 ? Math.floor((booking.price_jpy * feeTotalBpsForFix) / 10000) : 0
+      const needsFeePayment =
+        paymentEnabled &&
+        booking.status === 'confirmed' &&
+        (booking.payment_status === 'awaiting' || booking.payment_status === 'unpaid') &&
+        booking.price_jpy > 0 &&
+        feeAmountJpyForFix >= REFERRAL_MIN_FEE_JPY
+
+      let resent = false
+      try {
+        if (needsFeePayment) {
+          // 予約金の支払い案内を出し直す（これが送れないと予約が成立しないため最優先）
+          const confirmedSlotTextForFix = formatSlotWithWeekday(resolveConfirmedSlotIso(booking.preferred_slots))
+          const result = await issueFeePaymentLinkAndNotify({
+            bookingId: booking.id,
+            priceJpy: booking.price_jpy,
+            feeAmountJpy: feeAmountJpyForFix,
+            menuName: booking.pro_menus?.name || null,
+            clientEmail: nextEmail,
+            clientUserId: clientUserIdForFix || null,
+            receiverProName: ownPro.name,
+            confirmedSlotText: confirmedSlotTextForFix,
+            successUrl: `${listUrlForFix}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+            cancelUrl: `${APP_URL}/booking/${booking.id}?payment=canceled`,
+            listUrl: listUrlForFix,
+          })
+          resent = result.success
+        } else {
+          // 確定前なら受付メールを、確定済み（予約金なし）なら確定のお知らせを送り直す。
+          if (booking.status === 'requested') {
+            const receipt = await notifyBookingReceivedToClient(
+              { userId: clientUserIdForFix, email: nextEmail },
+              ownPro.name,
+              listUrlForFix,
+              { paymentFlowActive: paymentEnabled && booking.payment_status === 'unpaid' },
+            )
+            resent = receipt.sent
+          } else {
+            const slotText = formatSlotWithWeekday(resolveConfirmedSlotIso(booking.preferred_slots))
+            const result = await notifyClientByEmail(
+              { userId: clientUserIdForFix, email: nextEmail },
+              `${ownPro.name}さんとのご予約が確定しました`,
+              emailShell(
+                'ご予約確定のお知らせ',
+                `${slotText ? `${escapeHtml(slotText)} に確定しています。` : 'ご予約の日時が確定しています。'}<br>` +
+                  `担当: ${escapeHtml(ownPro.name)}さん`,
+              ),
+            )
+            resent = result.sent
+          }
+        }
+      } catch (resendErr) {
+        console.error('[api/referral/bookings/received] fix_client_email resend error:', resendErr)
+      }
+
+      return NextResponse.json({ success: true, resent })
+    }
+
+    // §17-9(CEO指示 2026-08-06): メールが届いていない予約は、プロ側で片付けられるようにする。
+    // 「その場合に限り、予約の削除、確定日付の変更などプロ側で出来るようにすべき」。
+    // 通常のキャンセル(cancel_by_receiver)と分けている理由:
+    //   ①クライアントへ通知しない（届かないので送っても意味がなく、bounceを増やすだけ）
+    //   ②返金・キャンセル都合の判定を通さない（予約金が動いていない前提でのみ許可する）
+    // 行は消さずキャンセル扱いにする。予約は金額・完了・自動完了cronが絡むため、
+    // 相談スレッド(§17-8)のような行ごとの削除はしない。
+    if (action === 'discard') {
+      if (!booking.preferred_slots?.receipt_email_failed) {
+        return NextResponse.json({ error: 'not_allowed' }, { status: 409 })
+      }
+      if (booking.status !== 'requested' && booking.status !== 'confirmed') {
+        return NextResponse.json({ error: 'not_pending' }, { status: 409 })
+      }
+      // 予約金が動いている予約はこの経路を通さない（返金の判断が要るため通常のキャンセルへ）
+      if (paymentEnabled && (booking.payment_status === 'paid' || booking.payment_status === 'awaiting')) {
+        return NextResponse.json({ error: 'payment_pending' }, { status: 409 })
+      }
+
+      const { data: discardRows, error: discardError } = await supabase
+        .from('referral_bookings')
+        .update({
+          status: 'cancelled',
+          receiver_dismissed_at: new Date().toISOString(),
+          preferred_slots: {
+            ...(booking.preferred_slots || {}),
+            cancelled_by_receiver_at: new Date().toISOString(),
+            discarded_undeliverable_at: new Date().toISOString(),
+          },
+        })
+        .eq('id', bookingId)
+        .in('status', ['requested', 'confirmed'])
+        .select('id')
+
+      if (discardError) {
+        console.error('[api/referral/bookings/received] PATCH discard error:', discardError)
+        return NextResponse.json({ error: 'failed_to_update' }, { status: 500 })
+      }
+      if (!discardRows || discardRows.length === 0) {
+        return NextResponse.json({ error: 'not_pending' }, { status: 409 })
+      }
+      // クライアントへは通知しない（メールが届かないことが分かっているため）
+      return NextResponse.json({ success: true, status: 'cancelled' })
+    }
+
+    // §17-4(CEO指示 2026-08-06): 電話で口頭で決まった予約を、プロ側から確定する。
+    // 「メールアドレスの打ち間違いでお客さんに何も届かない」場合の逃げ道（§17-3の④）。
+    // 通常の confirm と違い、お客さんが出した3つの希望日時に縛られない
+    // （電話で話した結果、別の日時になることのほうが多い）。
+    //
+    // ⚠️ これは「お客さんの同意をシステムが確認できない確定」なので、
+    //    ① UI側で必ず警告を出してから呼ぶこと
+    //    ② 誰がいつ電話で確定したかを preferred_slots.confirmed_by_phone_at に残す
+    //    ③ 予約金の決済が必要な紹介予約では使わせない（支払いを飛ばして成立させないため）
+    if (action === 'confirm_offline') {
+      // §17-9(CEO指摘 2026-08-06): メールが届いていない予約は、確定後の日時変更も
+      // 通常の「提案 → クライアントが承諾」が成立しない（提案が届かない）。
+      // この場合に限り、確定済みでも**その場で日時を差し替える**ことを許す。
+      const receiptFailedForOffline = !!booking.preferred_slots?.receipt_email_failed
+      const isSlotFix = booking.status === 'confirmed' && receiptFailedForOffline
+      if (booking.status !== 'requested' && !isSlotFix) {
+        return NextResponse.json({ error: 'not_pending' }, { status: 409 })
+      }
+      const rawSlot = typeof body.confirmed_slot === 'string' ? body.confirmed_slot : null
+      const confirmedSlotIso = parseSlot(snapToHalfHourUp(rawSlot))
+      if (!confirmedSlotIso) {
+        return NextResponse.json({ error: 'invalid_slots' }, { status: 400 })
+      }
+      if (new Date(confirmedSlotIso).getTime() <= Date.now()) {
+        return NextResponse.json({ error: 'invalid_slots' }, { status: 400 })
+      }
+
+      // 予約金が必要な予約（紹介予約でオンライン決済が有効なもの）はこの経路を通さない。
+      const feeTotalBpsForOffline = booking.fee_total_bps ?? REFERRAL_FEE_TOTAL_BPS
+      const feeAmountJpyForOffline =
+        booking.price_jpy > 0 ? Math.floor((booking.price_jpy * feeTotalBpsForOffline) / 10000) : 0
+      if (
+        paymentEnabled &&
+        booking.payment_status === 'unpaid' &&
+        booking.price_jpy > 0 &&
+        feeAmountJpyForOffline >= REFERRAL_MIN_FEE_JPY
+      ) {
+        return NextResponse.json({ error: 'payment_required' }, { status: 409 })
+      }
+
+      const updatedSlotsForOffline: PreferredSlots = {
+        ...(booking.preferred_slots || {}),
+        // resolveConfirmedSlotIso が最優先で見るキー。以後の日時変更・カレンダー・
+        // キャンセル判定はすべてこの値を使う。
+        confirmed_slot_iso: confirmedSlotIso,
+        confirmed_by_phone_at: new Date().toISOString(),
+      }
+
+      const { data: offlineRows, error: offlineError } = await supabase
+        .from('referral_bookings')
+        .update({ status: 'confirmed', confirmed_at: new Date().toISOString(), preferred_slots: updatedSlotsForOffline })
+        .eq('id', bookingId)
+        .eq('status', isSlotFix ? 'confirmed' : 'requested')
+        .select('id')
+
+      if (offlineError) {
+        console.error('[api/referral/bookings/received] PATCH confirm_offline error:', offlineError)
+        return NextResponse.json({ error: 'failed_to_update' }, { status: 500 })
+      }
+      if (!offlineRows || offlineRows.length === 0) {
+        return NextResponse.json({ error: 'not_pending' }, { status: 409 })
+      }
+
+      // お客さんへも一応送る（届かない前提の経路だが、届くなら送っておく方がよい）。
+      // 失敗しても確定自体は成立させる。
+      let delivered = false
+      try {
+        // このブロックは requested ゲートより前に置いてあるため、下で定義される
+        // clientUserId をここでは使えない。必要な値だけその場で解決する。
+        const clientUserIdForOffline = booking.clients?.user_id || ''
+        if (clientUserIdForOffline || booking.client_email) {
+          const slotText = formatSlotWithWeekday(confirmedSlotIso)
+          const result = await notifyClientByEmail(
+            { userId: clientUserIdForOffline, email: booking.client_email },
+            `${ownPro.name}さんとのご予約が確定しました`,
+            emailShell(
+              'ご予約確定のお知らせ',
+              `${slotText ? `${escapeHtml(slotText)} に確定しました。` : 'ご予約の日時が確定しました。'}<br>` +
+                `担当: ${escapeHtml(ownPro.name)}さん<br><br>` +
+                'お電話でお伺いした内容で確定しています。相違がある場合は、お手数ですが担当までご連絡ください。'
+            )
+          )
+          delivered = result.sent
+        }
+      } catch (notifyErr) {
+        console.error('[api/referral/bookings/received] confirm_offline notify error:', notifyErr)
+      }
+
+      return NextResponse.json({ success: true, status: 'confirmed', delivered })
+    }
+
     if (booking.status !== 'requested') {
       return NextResponse.json({ error: 'not_pending' }, { status: 409 })
     }
@@ -886,9 +1246,11 @@ export async function PATCH(request: NextRequest) {
             '今回はご希望に添えませんでした',
             emailShell(
               'ご相談について',
-              `${escapeHtml(ownPro.name)}さんへのご相談は、今回はご希望に添えませんでした。<br>他の先生もご紹介できますので、よろしければご覧ください。`,
-              '他の先生への相談はこちら',
-              listUrl
+              isDirectBooking
+                ? `${escapeHtml(ownPro.name)}さんへのご予約は、今回はご希望に添えませんでした。<br>日時を変えてのお申し込みはいつでも承っています。`
+                : `${escapeHtml(ownPro.name)}さんへのご相談は、今回はご希望に添えませんでした。<br>他の先生もご紹介できますので、よろしければご覧ください。`,
+              isDirectBooking ? 'プロフィールを見る' : '他の先生への相談はこちら',
+              isDirectBooking ? `${APP_URL}/card/${ownPro.id}` : listUrl
             )
           )
         }
@@ -1089,7 +1451,9 @@ export async function PATCH(request: NextRequest) {
             const calendarUrl = slotIsoForCalendar
               ? buildGoogleCalendarUrl({
                   startIso: slotIsoForCalendar,
-                  title: `${ownPro.name}さんとの紹介予約(REAL PROOF)`,
+                  title: isDirectBooking
+                    ? `${ownPro.name}さんとのご予約(REAL PROOF)`
+                    : `${ownPro.name}さんとの紹介予約(REAL PROOF)`,
                   location: receiverAccessInfo?.address || undefined,
                 })
               : null
@@ -1105,9 +1469,12 @@ export async function PATCH(request: NextRequest) {
           }
           await notifyClientByEmail(
             { userId: clientUserId, email: booking.client_email },
-            `${ownPro.name}さんとのご紹介予約が確定しました`,
+            // §17-1: 直接予約は紹介元がいないので「ご紹介予約」と書かない
+            isDirectBooking
+              ? `${ownPro.name}さんとのご予約が確定しました`
+              : `${ownPro.name}さんとのご紹介予約が確定しました`,
             emailShell(
-              'ご相談確定のお知らせ',
+              isDirectBooking ? 'ご予約確定のお知らせ' : 'ご相談確定のお知らせ',
               `${confirmedSlotText ? `${confirmedSlotText} に確定しました。` : 'ご相談の日時が確定しました。'}<br>担当: ${safeOwnProName}さん${senderQuote}${accessHtml}${calendarHtml}${changeNoteHtml}${referralListFooterHtml(listUrl)}`
             )
           )

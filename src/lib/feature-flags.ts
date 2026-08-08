@@ -56,6 +56,16 @@ export function isAiSanitizeEnabled(): boolean {
 }
 
 /**
+ * 育成プルーフ（団体リレーション・§2-5）の個人ページ表示フラグ。'true' の時のみ、
+ * migration 045(org_members.growth_role等 + org_growth_summary/org_growth_proof_top VIEW)
+ * を参照する。未設定/'true'以外は常にfalse＝DDL未実行の本番でも安全にデプロイできる
+ * (card-data.ts側もこのフラグがfalseの間は一切クエリしない)。
+ */
+export function isOrgCardEnabled(): boolean {
+  return process.env.FEATURE_ORG_CARD === 'true'
+}
+
+/**
  * §2-4ステージ2: 相談リクエスト時のStripeオーソリ（与信確保）。
  * REFERRAL_STRIPE_SECRET_KEY 未設定の間は、決済フロー（Checkout Session作成）も
  * referral_bookings の新カラム（payment_status等・migration 036）参照も一切行わない
@@ -122,3 +132,10 @@ export const REFERRAL_MAX_AUTO_TRANSFER_JPY = 100000
  * 再輸出する(新規呼び出しはreferral-format.tsから直接importすること)。
  */
 export { CLIENT_CANCEL_REFUND_DEADLINE_DAYS } from '@/lib/referral-format'
+
+/**
+ * E-2(CEO決定・2026-08-06): 紹介報酬の自動送金の保留期間(日)。本体は`src/lib/referral-format.ts`
+ * (env非依存・CLIENT_CANCEL_REFUND_DEADLINE_DAYSと同じパターン)に置く。このファイルは
+ * cron(expire-referral-bookings)からの既存import流儀に合わせて再輸出する。
+ */
+export { PAYOUT_HOLD_DAYS } from '@/lib/referral-format'

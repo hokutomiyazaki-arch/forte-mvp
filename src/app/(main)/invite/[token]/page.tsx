@@ -64,12 +64,21 @@ export default async function InvitePage({
           padding: '24px 20px',
         }}
       >
+        {/* §17-12(CEO指示 2026-08-06): QR/シェアで飛んできた先に、送り主のメッセージと
+            新規登録ボタンを出す。文面はプロが共有時に見ているテキストと同じにする
+            （渡した本人と受け取った側で言っていることが違う、を作らない）。 */}
+        <div style={{ fontSize: 12, color: T.textSub, marginBottom: 8 }}>
+          {invite.inviter.name}先生からのご招待
+        </div>
         <p style={{ fontSize: 14, color: T.text, lineHeight: 1.9, marginBottom: 16 }}>
-          <strong>{invite.inviter.name}先生</strong>が、あなたを
-          <strong>「信頼できる連携先」</strong>としてリストに登録しようとしています。
+          {invite.inviteeName ? `${invite.inviteeName}先生` : 'あなた'}をぜひ私の「紹介リスト」に載せたく、ご連絡しました。
+          <br />
+          REALPROOFという、クライアントからの評価が実績として記録に残るサービスです。
         </p>
         <p style={{ fontSize: 13, color: T.textSub, lineHeight: 1.8, marginBottom: 4 }}>
-          プロフィールを作成すると、紹介を受けられるようになります。
+          下のボタンからプロフィールを作成すると、
+          <strong>自動で{invite.inviter.name}先生の紹介リストに載ります</strong>。
+          紹介を受け取れるようになります。
         </p>
 
         <InviteAcceptPanel token={token} alreadyRegistered={invite.alreadyRegistered} />

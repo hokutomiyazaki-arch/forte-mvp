@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import BookingThread from '@/components/dashboard/BookingThread'
 import ReferralCompletedList from '@/components/dashboard/ReferralCompletedList'
+import DelegateCriteriaSettings from '@/components/dashboard/DelegateCriteriaSettings'
+import ProInviteQrCard from '@/components/referral/ProInviteQrCard'
 import { computeReferralSignal, REFERRAL_SIGNAL_DOT } from '@/lib/referral-accepting'
-import { estimateReferralPayoutReflectionText } from '@/lib/referral-format'
+import { estimateReferralPayoutReflectionText, estimateReferralPayoutHoldExpiryText } from '@/lib/referral-format'
 
 interface PinPro {
   id: string
@@ -66,6 +68,12 @@ interface SentBooking {
   created_at: string
   client_nickname: string
   receiver_pro: { id: string; name: string } | null
+  /** §17-16(CEO指示 2026-08-06): クライアントにメールが届かなかった案件。 */
+  receipt_email_failed?: boolean | null
+  /** 'sender'=いま直すのは自分（紹介元）。24時間で 'receiver' に移る。 */
+  email_fix_owner?: 'sender' | 'receiver' | null
+  /** メールが死んでいて、かつ自分が直す担当のときだけAPIから入る（お名前・電話番号のみ）。 */
+  client_contact?: { name: string | null; phone: string | null } | null
 }
 
 /** ステージ4(送り手分配・CEO決定): /api/referral/payouts が返す分配行(PIIなし・client_nicknameのみ)。 */
@@ -108,21 +116,54 @@ const SHARE_ORIGIN = 'https://realproof.jp'
 // §3-0-2(第3弾): 「追加」操作の中で新しいリストを作る選択を表す番兵値(実在するlist idと衝突しない固定文字列)
 const NEW_LIST_SENTINEL = '__new_list__'
 
+/** §16-20: delegate_criteriaの型(referral-delegate-criteria.tsのDelegateCriteriaと同じ形)。
+ * ReferralTab側は保存操作(mode='list'固定)のみ行うため、ここでは独自に最小限の型を持つ。 */
+interface DelegateCriteria {
+  enabled: boolean
+  mode?: 'org' | 'list'
+  org_id?: string | null
+  list_id?: string | null
+  min_support_records: number | null
+}
+
 interface Props {
   proId: string
   /** CEO指示(2026-08-04・IA再変更): サブタブ「受ける/する/紹介した案件」の3つのうちどれを
    * 表示するか。lists/sentBookingsのfetchは1回だけ(既存のまま)行い、表示はCSSで切り替える
-   * (subtab切替時の再フェッチ・二重マウントを避ける)。 */
-  subtab: 'receive' | 'send' | 'cases'
+   * (subtab切替時の再フェッチ・二重マウントを避ける)。
+   * §17-15(CEO指示 2026-08-06): 'payout'（報酬）を追加。 */
+  subtab: 'receive' | 'send' | 'cases' | 'payout'
+  /** §17-11(CEO指示 2026-08-06): サブタブ行をこのコンポーネント内へ移した（報酬を上に出すため） */
+  onSubtabChange?: (t: 'send' | 'cases' | 'payout') => void
   /** 「紹介を受ける」タブの空状態判定用に、完了した紹介(受け手側)の件数と読み込み完了フラグを
    * 親へ通知する(レビュー指摘・軽微7: loadedを渡し到着順による空状態フラッシュを防ぐ)。 */
   onCompletedCountChange?: (count: number, loaded: boolean) => void
   /** CEO指示(2026-08-04・IA再変更): 「紹介した案件」タブの件数バッジ(進行中=requested/confirmed)・
    * 空状態判定用に、送り手側の集計を親へ通知する。 */
   onSentStatusChange?: (info: { activeCount: number; totalCount: number; loaded: boolean }) => void
+  /** §16-20: 各リストカードの「代理案内に使う」チェックボックスの保存に使う。PATCH
+   * /api/referral/accepting は accepting_status が常に必須のため現在値を同送する。 */
+  acceptingStatus?: 'open' | 'closed' | 'conditional' | null
+  acceptingNote?: string | null
+  delegateCriteria?: DelegateCriteria | null
+  onDelegateCriteriaUpdated?: (criteria: DelegateCriteria) => void
+  /** 移動(2026-08-06・CEO指示): 代理案内ボックス(DelegateCriteriaSettings)をダッシュボード最上部
+   * から「紹介する」サブタブ先頭へ移動したため、そこで使う団体一覧をここで受け取る。 */
+  delegateEligibleOrgs?: Array<{ organizationId: string; organizationName: string; role: 'founder' | 'instructor' }>
 }
 
-export default function ReferralTab({ proId, subtab, onCompletedCountChange, onSentStatusChange }: Props) {
+export default function ReferralTab({
+  proId,
+  subtab,
+  onSubtabChange,
+  onCompletedCountChange,
+  onSentStatusChange,
+  acceptingStatus,
+  acceptingNote,
+  delegateCriteria,
+  onDelegateCriteriaUpdated,
+  delegateEligibleOrgs,
+}: Props) {
   // リスト一覧
   const [lists, setLists] = useState<ReferralList[]>([])
   const [listsLoading, setListsLoading] = useState(true)
@@ -200,6 +241,45 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null)
   // CEO指摘(先行テスト・UI修正②): クライアントに共有するURLをQRコード表示するモーダル(listId単位)
   const [qrModalListId, setQrModalListId] = useState<string | null>(null)
+  // §17-12(CEO指示 2026-08-06): 招待は「QR発行かシェア」で渡す。テキストのコピーが主役ではない。
+  const [inviteQrUrl, setInviteQrUrl] = useState<string | null>(null)
+
+  // §16-20: 各リストカードの「代理案内に使う」チェックボックス。delegate_criteria.list_idは
+  // 単数のため、ONにすると自然に他のリストのチェックはOFFになる(排他はサーバー側の値そのもの)。
+  const [delegateListSaving, setDelegateListSaving] = useState(false)
+  const [delegateListError, setDelegateListError] = useState<string | null>(null)
+
+  async function toggleDelegateList(listId: string, checked: boolean) {
+    setDelegateListSaving(true)
+    setDelegateListError(null)
+    try {
+      const criteria = {
+        enabled: checked,
+        mode: 'list' as const,
+        list_id: checked ? listId : null,
+        min_support_records: null,
+      }
+      const res = await fetch('/api/referral/accepting', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({
+          accepting_status: acceptingStatus ?? 'open',
+          accepting_note: acceptingNote ?? null,
+          delegate_criteria: criteria,
+        }),
+      })
+      if (res.ok) {
+        onDelegateCriteriaUpdated?.(criteria)
+      } else {
+        setDelegateListError('保存に失敗しました')
+      }
+    } catch {
+      setDelegateListError('保存に失敗しました')
+    } finally {
+      setDelegateListSaving(false)
+    }
+  }
 
   // §2-9: RP外のプロを招待するフォーム（リストごとに名前入力・発行済みURLを保持）
   const [inviteName, setInviteName] = useState<Record<string, string>>({})
@@ -249,15 +329,65 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
       .finally(() => setListsLoading(false))
   }, [])
 
-  useEffect(() => {
-    fetch('/api/referral/bookings/sent', { cache: 'no-store' })
+  // §17-16: メールアドレスを直したあとに一覧を取り直せるよう、fetchを関数に出す。
+  // 依存は持たせない（useEffectの依存配列はプリミティブのみ・CLAUDE.md）。
+  function loadSentBookings() {
+    return fetch('/api/referral/bookings/sent', { cache: 'no-store' })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.bookings) setSentBookings(data.bookings)
       })
       .catch(() => {})
       .finally(() => setSentLoading(false))
+  }
+
+  useEffect(() => {
+    loadSentBookings()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // §17-16(CEO指示 2026-08-06): 紹介したお客さまにメールが届かなかったとき、
+  // 電話して正しいアドレスを聞き、ここで直すのは紹介元（自分）の仕事。
+  const [emailFixOpenId, setEmailFixOpenId] = useState<string | null>(null)
+  const [emailFixInputs, setEmailFixInputs] = useState<Record<string, string>>({})
+  const [emailFixSaving, setEmailFixSaving] = useState<string | null>(null)
+  const [emailFixError, setEmailFixError] = useState<Record<string, string>>({})
+
+  async function fixSentClientEmail(bookingId: string) {
+    const nextEmail = (emailFixInputs[bookingId] || '').trim()
+    if (!nextEmail) return
+    setEmailFixSaving(bookingId)
+    setEmailFixError((prev) => ({ ...prev, [bookingId]: '' }))
+    try {
+      const res = await fetch('/api/referral/bookings/sent', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ booking_id: bookingId, action: 'fix_client_email', client_email: nextEmail }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        const message =
+          data?.error === 'email_invalid'
+            ? 'メールアドレスの形式が正しくありません'
+            : data?.error === 'email_unchanged'
+              ? '同じアドレスです。お客さまにもう一度ご確認ください'
+              : data?.error === 'receiver_is_fixing'
+                ? '担当の先生の対応に切り替わりました。この画面からは直せません'
+                : '保存できませんでした。時間をおいてお試しください'
+        setEmailFixError((prev) => ({ ...prev, [bookingId]: message }))
+        return
+      }
+      setEmailFixOpenId(null)
+      setEmailFixInputs((prev) => ({ ...prev, [bookingId]: '' }))
+      await loadSentBookings()
+      if (data?.resent === false) {
+        window.alert('保存しましたが、ご案内メールの送信に失敗しました。時間をおいてもう一度ご確認ください。')
+      }
+    } finally {
+      setEmailFixSaving(null)
+    }
+  }
 
   // ステージ4(送り手分配・CEO決定): 分配台帳(referral_payouts)は別APIで取得する(fail-soft・
   // migration 039未実行の環境では空配列/0円が返るだけで、このタブの他表示を壊さない)。
@@ -290,7 +420,9 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
   // cases になった時だけ1回fetchするようrefで制御する(依存はsubtab文字列のみ)。
   const connectStatusFetchedRef = useRef(false)
   useEffect(() => {
-    if (subtab !== 'cases' || connectStatusFetchedRef.current) return
+    // CEO指示(2026-08-06): 報酬ボックスをサブタブの上に常時表示するようにしたため、
+    // 「紹介した案件を開いた時だけ取得する」ゲートを外す（開く前から表示に使うため）。
+    if (connectStatusFetchedRef.current) return
     connectStatusFetchedRef.current = true
     fetch('/api/referral/connect/status', { cache: 'no-store' })
       .then((res) => {
@@ -491,7 +623,18 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
       if (res.ok) {
         setLists((prev) => prev.filter((l) => l.id !== listId))
       } else {
-        window.alert('リストの削除に失敗しました')
+        // CEO報告(2026-08-06)「リスト削除できない。なぜ？」: 理由が分からないまま
+        // 「失敗しました」だけ出していたため原因に辿り着けなかった。何が起きたかを出す。
+        const data = await res.json().catch(() => ({}))
+        window.alert(
+          data.error === 'still_referenced'
+            ? 'このリストはまだ他のデータから参照されているため削除できません。サポートへご連絡ください。'
+            : data.error === 'forbidden'
+              ? '紹介機能が有効になっていないため削除できません。'
+              : data.error === 'not_found'
+                ? 'このリストは見つかりませんでした（既に削除された可能性があります）。'
+                : `リストの削除に失敗しました${data.code ? `（${data.code}）` : ''}`,
+        )
       }
     } catch {
       window.alert('リストの削除に失敗しました')
@@ -888,9 +1031,17 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
   async function shareInviteText(listId: string) {
     const text = inviteShareText[listId] || issuedInviteUrl[listId]
     if (!text) return
-    try {
-      await (navigator as { share: (data: { text: string }) => Promise<void> }).share({ text })
-    } catch {}
+    // §17-12: ボタンは常に出す。ネイティブ共有が使えない端末（PCブラウザ・一部の
+    // アプリ内ブラウザ）ではコピーに倒す。押しても何も起きない状態を作らない。
+    if (canNativeShare) {
+      try {
+        await (navigator as { share: (data: { text: string }) => Promise<void> }).share({ text })
+        return
+      } catch {
+        return
+      }
+    }
+    copyInviteShareText(listId)
   }
 
   function copyInviteShareText(listId: string) {
@@ -1085,6 +1236,29 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
             削除
           </button>
         </div>
+
+        {/* §16-20: 「代理案内に使う」。共有リスト(private以外)のみ・選べるのは1リストのみ
+            (delegate_criteria.list_idが単数のため、ONにすると他のリストは自然にOFFになる)。 */}
+        {!isPrivate && (
+          <div style={{ marginBottom: 10 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#1A1A2E', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={delegateCriteria?.enabled === true && delegateCriteria?.mode === 'list' && delegateCriteria?.list_id === list.id}
+                disabled={delegateListSaving}
+                onChange={(e) => toggleDelegateList(list.id, e.target.checked)}
+                style={{ width: 14, height: 14 }}
+              />
+              代理案内に使う
+            </label>
+            <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2, lineHeight: 1.6 }}>
+              あなたが停止中の間、公開カードに来た訪問者をこのリストの受付中の先生へご案内します
+            </div>
+            {delegateListError && (
+              <div style={{ fontSize: 11, color: '#B00020', marginTop: 2 }}>{delegateListError}</div>
+            )}
+          </div>
+        )}
 
         {/* ピン一覧 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
@@ -1468,23 +1642,33 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
                           boxSizing: 'border-box' as const, resize: 'vertical' as const, lineHeight: 1.6,
                         }}
                       />
+                      {/* §17-12(CEO指示 2026-08-06): 「QR発行か、シェアにして」。
+                          目の前にいる先生にはQRを見せる、離れている先生にはシェアで送る。
+                          テキストのコピーは残すが主役から外す（貼り先を自分で探す手間が要るため）。 */}
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
-                        {canNativeShare && (
-                          <button
-                            onClick={() => shareInviteText(list.id)}
-                            style={{
-                              padding: '8px 14px', borderRadius: 8, border: 'none',
-                              background: '#1A1A2E', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                            }}
-                          >
-                            共有する（LINE・メール等）
-                          </button>
-                        )}
+                        <button
+                          onClick={() => setInviteQrUrl(issuedInviteUrl[list.id] || null)}
+                          style={{
+                            padding: '8px 14px', borderRadius: 8, border: 'none',
+                            background: '#1A1A2E', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                          }}
+                        >
+                          QRコードを見せる
+                        </button>
+                        <button
+                          onClick={() => shareInviteText(list.id)}
+                          style={{
+                            padding: '8px 14px', borderRadius: 8, border: '1px solid #1A1A2E',
+                            background: '#fff', color: '#1A1A2E', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                          }}
+                        >
+                          シェアする
+                        </button>
                         <button
                           onClick={() => copyInviteShareText(list.id)}
                           style={{
                             padding: '8px 14px', borderRadius: 8, border: '1px solid #E5E7EB',
-                            background: '#fff', color: '#1A1A2E', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                            background: '#fff', color: '#6B7280', fontSize: 12, fontWeight: 600, cursor: 'pointer',
                           }}
                         >
                           {copiedSlug === `invite:${list.id}` ? 'コピーしました' : 'テキストをコピー'}
@@ -1509,6 +1693,20 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
             <div style={{ fontSize: 13, color: '#9CA3AF', marginBottom: 6 }}>
               クライアントに共有（紹介ページが開きます）
             </div>
+            {/* §17-13(CEO指示 2026-08-06): 「クライアントにリストシェアするQRボタンは目立つように
+                して。トップのqrと勘違いしないように。」
+                同じ画面に3種類のQR（プルーフ用・プロを誘う・このリスト）が並ぶので、
+                ①誰に見せるQRかをボタンの文字に必ず入れる ②これだけ塗りにして他と見分ける。 */}
+            <button
+              onClick={() => setQrModalListId(list.id)}
+              style={{
+                width: '100%', padding: '12px', borderRadius: 10, border: 'none',
+                background: '#1A1A2E', color: '#fff', fontSize: 14, fontWeight: 700,
+                cursor: 'pointer', marginBottom: 8,
+              }}
+            >
+              クライアントに見せるQR（このリスト）
+            </button>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
               {/* CEO指示(先行テスト第3弾): 送り手がクライアントと同じ見え方を確認できるプレビュー */}
               <a
@@ -1523,15 +1721,6 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
               >
                 プレビュー
               </a>
-              <button
-                onClick={() => setQrModalListId(list.id)}
-                style={{
-                  padding: '8px 12px', borderRadius: 8, border: '1px solid #E5E7EB',
-                  background: '#fff', color: '#1A1A2E', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                }}
-              >
-                QRコードを表示
-              </button>
               {canNativeShare && (
                 <button
                   onClick={() => shareListUrl(list.slug)}
@@ -1782,6 +1971,248 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
 
   return (
     <div>
+      {/* §17-15(CEO指示 2026-08-06): 「プロを誘うQRはタブの上に移動」。
+          誘う相手は紹介リストにも気になるプロにも入りうるので、これは「紹介する」だけの
+          仕事ではない。サブタブより上＝この画面全体の操作、という置き方に揃える。 */}
+      <ProInviteQrCard proId={proId} />
+
+      {/* §17-15(CEO指示 2026-08-06): 報酬ボックスは「報酬」サブタブへ移動した。
+          ただし §17-11 で上に出した理由（いちばん見たい数字が隠れる）は今も生きているので、
+          **受け取り待ちの金額があるときだけ**1行だけ残す。0円のときは何も出さない
+          （常時出すと、ほとんどの日はただの飾りになる）。 */}
+      {sentPayoutsLoaded && sentPayoutsPendingTotalJpy > 0 && subtab !== 'payout' && (
+        <button
+          onClick={() => onSubtabChange?.('payout')}
+          style={{
+            display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between',
+            gap: 8, marginBottom: 12, padding: '10px 14px', borderRadius: 10,
+            background: '#FAF7EF', border: '1.5px solid #EAD9A6', cursor: 'pointer',
+            textAlign: 'left' as const, boxSizing: 'border-box' as const,
+          }}
+        >
+          <span style={{ fontSize: 13, color: '#6B7280' }}>確定済みの報酬</span>
+          <span style={{ fontSize: 16, fontWeight: 800, color: '#1A1A2E' }}>
+            ¥{sentPayoutsPendingTotalJpy.toLocaleString()} <span style={{ fontSize: 12, color: '#C4A35A', fontWeight: 700 }}>›</span>
+          </span>
+        </button>
+      )}
+
+
+      {/* サブタブ行（元は dashboard/page.tsx 側にあった）。
+          §17-15: 3つ目に「報酬」を追加し、報酬ボックスの中身をそこへ移した。 */}
+      <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 2, marginBottom: 16, borderBottom: '1px solid #E5E7EB' }}>
+        <button
+          onClick={() => onSubtabChange?.('send')}
+          style={{
+            padding: '10px 10px', border: 'none', background: 'none', cursor: 'pointer',
+            fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' as const,
+            color: subtab !== 'cases' && subtab !== 'payout' ? '#1A1A2E' : '#9CA3AF',
+            borderBottom: subtab !== 'cases' && subtab !== 'payout' ? '2px solid #C4A35A' : '2px solid transparent',
+          }}
+        >
+          紹介する
+        </button>
+        <button
+          onClick={() => onSubtabChange?.('cases')}
+          style={{
+            padding: '10px 10px', border: 'none', background: 'none', cursor: 'pointer',
+            fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' as const,
+            color: subtab === 'cases' ? '#1A1A2E' : '#9CA3AF',
+            borderBottom: subtab === 'cases' ? '2px solid #C4A35A' : '2px solid transparent',
+          }}
+        >
+          紹介した案件{sentActiveCount > 0 ? ` (${sentActiveCount})` : ''}
+        </button>
+        {/* §17-15(CEO指示 2026-08-06): 報酬まわり（残高・受け取り口座・お支払い履歴）を1つの
+            サブタブに集約する。CEOの仮称は「支払い」だったが、プロから見ると**受け取る**お金なので
+            「支払い」だと自分が払うように読める。ここでは「報酬」にしている（変えるなら1行）。 */}
+        <button
+          onClick={() => onSubtabChange?.('payout')}
+          style={{
+            padding: '10px 10px', border: 'none', background: 'none', cursor: 'pointer',
+            fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' as const,
+            color: subtab === 'payout' ? '#1A1A2E' : '#9CA3AF',
+            borderBottom: subtab === 'payout' ? '2px solid #C4A35A' : '2px solid transparent',
+          }}
+        >
+          報酬
+        </button>
+      </div>
+
+      {/* ステージ4(送り手分配・CEO決定): 報酬サマリーカード。0件時は説明のみ表示する。 */}
+      <div style={{ display: subtab === 'payout' ? 'block' : 'none' }}>
+      {sentPayoutsLoaded && (
+        <div style={{ background: '#FAF7EF', borderRadius: 14, padding: '14px 16px', border: '1.5px solid #EAD9A6' }}>
+          {sentPayoutsPendingTotalJpy === 0 && sentPayoutsPaidTotalJpy === 0 ? (
+            <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6 }}>
+              紹介報酬はセッション完了時に確定します(セッション価格の30%・予約金のお支払いが完了した案件が対象)。
+            </div>
+          ) : (
+            // 報酬表示の再設計(CEO指示・2026-08-05): 報酬サマリーを主役化する。「確定済みの報酬」
+            // (未払い)を大きく(13pxラベル+22px/800の金額)、「支払い済み累計」はその下に少し
+            // 小さめ(16px/700)で表示する。
+            <div style={{ color: '#1A1A2E' }}>
+              <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.4 }}>確定済みの報酬</div>
+              <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.3, marginTop: 2 }}>
+                ¥{sentPayoutsPendingTotalJpy.toLocaleString()}
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#6B7280', marginTop: 8 }}>
+                支払い済み累計 ¥{sentPayoutsPaidTotalJpy.toLocaleString()}
+              </div>
+            </div>
+          )}
+          {/* ステージ4「Stripe Connect 口座登録導線」(CEO承認済み・2026-08-04) */}
+          {/* レビュー指摘(軽微8): connectStatusがnull(未確定・403等でロード完了したが値が
+              無い場合)は何も表示せず、空の区切り線だけが出る状態を防ぐ */}
+          {connectStatusLoaded && connectStatus !== null && (
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #EAD9A6' }}>
+              {connectStatus === 'enabled' ? (
+                <div>
+                  <div style={{ fontSize: 13, color: '#2F7A4D', fontWeight: 600 }}>受け取り口座: 登録済み</div>
+                  {/* 口座管理導線(2026-08-05・CEO指示): 控えめなリンク。Stripe Expressのホスト型
+                      ダッシュボードで口座変更・送金履歴の確認ができる。 */}
+                  <button
+                    onClick={handleConnectManage}
+                    disabled={connectManaging}
+                    style={{
+                      background: 'none', border: 'none', padding: 0, marginTop: 6,
+                      color: '#6B7280', fontSize: 13, textDecoration: 'underline',
+                      cursor: connectManaging ? 'default' : 'pointer',
+                    }}
+                  >
+                    {connectManaging ? '開いています...' : '口座情報を管理する'}
+                  </button>
+                  <div style={{ fontSize: 13, color: '#9CA3AF', marginTop: 2, lineHeight: 1.6 }}>
+                    Stripeの管理画面で口座の変更や送金履歴の確認ができます
+                  </div>
+                </div>
+              ) : connectStatus === 'not_ready' ? (
+                <div style={{ fontSize: 12, color: '#9CA3AF' }}>口座登録機能は準備中です</div>
+              ) : connectStatus === 'reviewing' ? (
+                // レビュー指摘(軽微7): 本人確認は提出済みだがStripe側の審査中。再開ボタンは
+                // 出さない(送り手が押しても状態が変わらないため)。
+                <div>
+                  <div style={{ fontSize: 12, color: '#B45309' }}>口座情報を審査中です(1〜2営業日)</div>
+                  {/* 口座管理導線(2026-08-05・CEO指示): 審査中でも既存アカウントの管理画面は開ける。 */}
+                  <button
+                    onClick={handleConnectManage}
+                    disabled={connectManaging}
+                    style={{
+                      background: 'none', border: 'none', padding: 0, marginTop: 6,
+                      color: '#6B7280', fontSize: 13, textDecoration: 'underline',
+                      cursor: connectManaging ? 'default' : 'pointer',
+                    }}
+                  >
+                    {connectManaging ? '開いています...' : '口座情報を管理する'}
+                  </button>
+                  <div style={{ fontSize: 13, color: '#9CA3AF', marginTop: 2, lineHeight: 1.6 }}>
+                    Stripeの管理画面で口座の変更や送金履歴の確認ができます
+                  </div>
+                </div>
+              ) : connectStatus === 'pending' ? (
+                <div>
+                  <button
+                    onClick={handleConnectOnboard}
+                    disabled={connectOnboarding}
+                    style={{
+                      padding: '8px 14px', borderRadius: 8, border: 'none',
+                      background: '#1A1A2E', color: '#fff', fontSize: 12, fontWeight: 600,
+                      cursor: connectOnboarding ? 'default' : 'pointer', opacity: connectOnboarding ? 0.6 : 1,
+                    }}
+                  >
+                    口座登録を再開する
+                  </button>
+                  <div style={{ fontSize: 12, color: '#B45309', marginTop: 4 }}>登録が完了していません</div>
+                </div>
+              ) : connectStatus === 'none' ? (
+                <div>
+                  <button
+                    onClick={handleConnectOnboard}
+                    disabled={connectOnboarding}
+                    style={{
+                      padding: '8px 14px', borderRadius: 8, border: 'none',
+                      background: '#1A1A2E', color: '#fff', fontSize: 12, fontWeight: 600,
+                      cursor: connectOnboarding ? 'default' : 'pointer', opacity: connectOnboarding ? 0.6 : 1,
+                    }}
+                  >
+                    報酬のお受け取り口座を登録する
+                  </button>
+                  <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4, lineHeight: 1.6 }}>
+                    Stripeの安全な画面で本人確認と口座登録を行います(REAL PROOFはカード・口座情報を保持しません)
+                  </div>
+                </div>
+              ) : null}
+              {connectError && (
+                <div style={{ fontSize: 12, color: '#DC2626', marginTop: 4 }}>{connectError}</div>
+              )}
+            </div>
+          )}
+
+          <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 6, lineHeight: 1.6 }}>
+            {connectStatus === 'enabled'
+              ? '報酬はセッション完了後、自動でお受け取り口座へ送金されます(反映まで数日)。'
+              : 'お支払いは月次でのお振込です。口座の自動受け取り(Stripe)は準備中です。'}
+          </div>
+
+          {/* CEO指示(2026-08-05): 「お支払い履歴」は独立した白カードではなく、この報酬サマリーカード
+              (金色系ボーダー)の中に区切り線で続ける形に統合する(金色カード=お金関連・白カード=案件、
+              という視覚分離のため)。中身(支払日・◯◯さんの紹介・金額・反映予定・10件+もっと見る・
+              0件時文言)は既存のまま変更しない。 */}
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #EAD9A6' }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', marginBottom: 8 }}>お支払い履歴</div>
+            {paidPayoutsSorted.length === 0 ? (
+              <div style={{ fontSize: 13, color: '#9CA3AF' }}>まだお支払いはありません</div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {visiblePaidPayouts.map((p) => {
+                    const reflectionText = estimateReferralPayoutReflectionText(p.paid_at)
+                    return (
+                      <div
+                        key={p.id}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'flex-start',
+                          fontSize: 13,
+                          borderBottom: '1px solid #F3F4F6',
+                          paddingBottom: 8,
+                        }}
+                      >
+                        <div style={{ color: '#1A1A2E', lineHeight: 1.6 }}>
+                          <div>{formatPayoutDate(p.paid_at)}</div>
+                          <div style={{ color: '#6B7280' }}>{p.client_nickname || 'クライアント'}さんの紹介</div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontWeight: 700, color: '#1A1A2E' }}>¥{p.amount_jpy.toLocaleString()}</div>
+                          {reflectionText && (
+                            <div style={{ fontSize: 13, color: '#9CA3AF', marginTop: 2 }}>
+                              口座への反映予定: {reflectionText}頃(目安)
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                {paidPayoutsSorted.length > PAYOUT_HISTORY_PREVIEW_COUNT && (
+                  <button
+                    onClick={() => setPayoutHistoryExpanded((v) => !v)}
+                    style={{
+                      marginTop: 10, fontSize: 13, color: '#6B7280', background: 'none', border: 'none',
+                      textDecoration: 'underline', cursor: 'pointer', padding: 0,
+                    }}
+                  >
+                    {payoutHistoryExpanded ? '閉じる' : 'もっと見る'}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      </div>
+
       {/* UI再構成(2026-08-04・CEO承認済み): 「紹介を受ける」サブタブ側 = 完了した紹介(受け手側)。
           単一マウントのまま表示のみCSSで切り替える(subtab切替での再フェッチを避ける)。 */}
       <div style={{ display: subtab === 'receive' ? 'block' : 'none' }}>
@@ -1791,178 +2222,6 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
       {/* CEO指示(2026-08-04・IA再変更): 「紹介した案件」サブタブ = 成立した紹介(送り手側の
           予約一覧・担当プロとのやりとりスレッド)。旧「紹介する」タブから独立した3番目のタブ。 */}
       <div style={{ display: subtab === 'cases' ? 'flex' : 'none', flexDirection: 'column', gap: 12 }}>
-        {/* ステージ4(送り手分配・CEO決定): 報酬サマリーカード。0件時は説明のみ表示する。 */}
-        {sentPayoutsLoaded && (
-          <div style={{ background: '#FAF7EF', borderRadius: 14, padding: '14px 16px', border: '1.5px solid #EAD9A6' }}>
-            {sentPayoutsPendingTotalJpy === 0 && sentPayoutsPaidTotalJpy === 0 ? (
-              <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6 }}>
-                紹介報酬はセッション完了時に確定します(セッション価格の30%・予約金のお支払いが完了した案件が対象)。
-              </div>
-            ) : (
-              // 報酬表示の再設計(CEO指示・2026-08-05): 報酬サマリーを主役化する。「確定済みの報酬」
-              // (未払い)を大きく(13pxラベル+22px/800の金額)、「支払い済み累計」はその下に少し
-              // 小さめ(16px/700)で表示する。
-              <div style={{ color: '#1A1A2E' }}>
-                <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.4 }}>確定済みの報酬</div>
-                <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.3, marginTop: 2 }}>
-                  ¥{sentPayoutsPendingTotalJpy.toLocaleString()}
-                </div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: '#6B7280', marginTop: 8 }}>
-                  支払い済み累計 ¥{sentPayoutsPaidTotalJpy.toLocaleString()}
-                </div>
-              </div>
-            )}
-            {/* ステージ4「Stripe Connect 口座登録導線」(CEO承認済み・2026-08-04) */}
-            {/* レビュー指摘(軽微8): connectStatusがnull(未確定・403等でロード完了したが値が
-                無い場合)は何も表示せず、空の区切り線だけが出る状態を防ぐ */}
-            {connectStatusLoaded && connectStatus !== null && (
-              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #EAD9A6' }}>
-                {connectStatus === 'enabled' ? (
-                  <div>
-                    <div style={{ fontSize: 13, color: '#2F7A4D', fontWeight: 600 }}>受け取り口座: 登録済み</div>
-                    {/* 口座管理導線(2026-08-05・CEO指示): 控えめなリンク。Stripe Expressのホスト型
-                        ダッシュボードで口座変更・送金履歴の確認ができる。 */}
-                    <button
-                      onClick={handleConnectManage}
-                      disabled={connectManaging}
-                      style={{
-                        background: 'none', border: 'none', padding: 0, marginTop: 6,
-                        color: '#6B7280', fontSize: 13, textDecoration: 'underline',
-                        cursor: connectManaging ? 'default' : 'pointer',
-                      }}
-                    >
-                      {connectManaging ? '開いています...' : '口座情報を管理する'}
-                    </button>
-                    <div style={{ fontSize: 13, color: '#9CA3AF', marginTop: 2, lineHeight: 1.6 }}>
-                      Stripeの管理画面で口座の変更や送金履歴の確認ができます
-                    </div>
-                  </div>
-                ) : connectStatus === 'not_ready' ? (
-                  <div style={{ fontSize: 12, color: '#9CA3AF' }}>口座登録機能は準備中です</div>
-                ) : connectStatus === 'reviewing' ? (
-                  // レビュー指摘(軽微7): 本人確認は提出済みだがStripe側の審査中。再開ボタンは
-                  // 出さない(送り手が押しても状態が変わらないため)。
-                  <div>
-                    <div style={{ fontSize: 12, color: '#B45309' }}>口座情報を審査中です(1〜2営業日)</div>
-                    {/* 口座管理導線(2026-08-05・CEO指示): 審査中でも既存アカウントの管理画面は開ける。 */}
-                    <button
-                      onClick={handleConnectManage}
-                      disabled={connectManaging}
-                      style={{
-                        background: 'none', border: 'none', padding: 0, marginTop: 6,
-                        color: '#6B7280', fontSize: 13, textDecoration: 'underline',
-                        cursor: connectManaging ? 'default' : 'pointer',
-                      }}
-                    >
-                      {connectManaging ? '開いています...' : '口座情報を管理する'}
-                    </button>
-                    <div style={{ fontSize: 13, color: '#9CA3AF', marginTop: 2, lineHeight: 1.6 }}>
-                      Stripeの管理画面で口座の変更や送金履歴の確認ができます
-                    </div>
-                  </div>
-                ) : connectStatus === 'pending' ? (
-                  <div>
-                    <button
-                      onClick={handleConnectOnboard}
-                      disabled={connectOnboarding}
-                      style={{
-                        padding: '8px 14px', borderRadius: 8, border: 'none',
-                        background: '#1A1A2E', color: '#fff', fontSize: 12, fontWeight: 600,
-                        cursor: connectOnboarding ? 'default' : 'pointer', opacity: connectOnboarding ? 0.6 : 1,
-                      }}
-                    >
-                      口座登録を再開する
-                    </button>
-                    <div style={{ fontSize: 12, color: '#B45309', marginTop: 4 }}>登録が完了していません</div>
-                  </div>
-                ) : connectStatus === 'none' ? (
-                  <div>
-                    <button
-                      onClick={handleConnectOnboard}
-                      disabled={connectOnboarding}
-                      style={{
-                        padding: '8px 14px', borderRadius: 8, border: 'none',
-                        background: '#1A1A2E', color: '#fff', fontSize: 12, fontWeight: 600,
-                        cursor: connectOnboarding ? 'default' : 'pointer', opacity: connectOnboarding ? 0.6 : 1,
-                      }}
-                    >
-                      報酬のお受け取り口座を登録する
-                    </button>
-                    <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4, lineHeight: 1.6 }}>
-                      Stripeの安全な画面で本人確認と口座登録を行います(REAL PROOFはカード・口座情報を保持しません)
-                    </div>
-                  </div>
-                ) : null}
-                {connectError && (
-                  <div style={{ fontSize: 12, color: '#DC2626', marginTop: 4 }}>{connectError}</div>
-                )}
-              </div>
-            )}
-
-            <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 6, lineHeight: 1.6 }}>
-              {connectStatus === 'enabled'
-                ? '報酬はセッション完了後、自動でお受け取り口座へ送金されます(反映まで数日)。'
-                : 'お支払いは月次でのお振込です。口座の自動受け取り(Stripe)は準備中です。'}
-            </div>
-
-            {/* CEO指示(2026-08-05): 「お支払い履歴」は独立した白カードではなく、この報酬サマリーカード
-                (金色系ボーダー)の中に区切り線で続ける形に統合する(金色カード=お金関連・白カード=案件、
-                という視覚分離のため)。中身(支払日・◯◯さんの紹介・金額・反映予定・10件+もっと見る・
-                0件時文言)は既存のまま変更しない。 */}
-            <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #EAD9A6' }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', marginBottom: 8 }}>お支払い履歴</div>
-              {paidPayoutsSorted.length === 0 ? (
-                <div style={{ fontSize: 13, color: '#9CA3AF' }}>まだお支払いはありません</div>
-              ) : (
-                <>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {visiblePaidPayouts.map((p) => {
-                      const reflectionText = estimateReferralPayoutReflectionText(p.paid_at)
-                      return (
-                        <div
-                          key={p.id}
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'flex-start',
-                            fontSize: 13,
-                            borderBottom: '1px solid #F3F4F6',
-                            paddingBottom: 8,
-                          }}
-                        >
-                          <div style={{ color: '#1A1A2E', lineHeight: 1.6 }}>
-                            <div>{formatPayoutDate(p.paid_at)}</div>
-                            <div style={{ color: '#6B7280' }}>{p.client_nickname || 'クライアント'}さんの紹介</div>
-                          </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontWeight: 700, color: '#1A1A2E' }}>¥{p.amount_jpy.toLocaleString()}</div>
-                            {reflectionText && (
-                              <div style={{ fontSize: 13, color: '#9CA3AF', marginTop: 2 }}>
-                                口座への反映予定: {reflectionText}頃(目安)
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                  {paidPayoutsSorted.length > PAYOUT_HISTORY_PREVIEW_COUNT && (
-                    <button
-                      onClick={() => setPayoutHistoryExpanded((v) => !v)}
-                      style={{
-                        marginTop: 10, fontSize: 13, color: '#6B7280', background: 'none', border: 'none',
-                        textDecoration: 'underline', cursor: 'pointer', padding: 0,
-                      }}
-                    >
-                      {payoutHistoryExpanded ? '閉じる' : 'もっと見る'}
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
         {sentLoading ? (
           <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>読み込み中...</div>
         ) : sentBookings.length === 0 ? (
@@ -1980,9 +2239,116 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
                 <span style={{ marginLeft: 8, fontSize: 13, color: '#9CA3AF' }}>{SENT_STATUS_LABEL[b.status]}</span>
               </div>
               {b.menu_name && <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>メニュー: {b.menu_name}</div>}
+
+              {/* §17-16(CEO指示 2026-08-06): 「クライアントに電話してメールアドレスを修整して
+                  入力してもらってください。というメールとクライアント電話番号が、受けてではなく、
+                  送り元のプロに行くようにしたら？」
+                  紹介元は自分が紹介した相手なので、電話するのに無理がない。ここで完結させる。 */}
+              {b.receipt_email_failed && b.email_fix_owner === 'sender' && (
+                <div style={{
+                  background: '#FFF3F3', border: '1px solid #F0BDBD', borderRadius: 8,
+                  padding: '10px 12px', marginTop: 8,
+                }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#B00020', marginBottom: 2 }}>
+                    お客さまにメールが届いていません
+                  </div>
+                  <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.7 }}>
+                    お電話で正しいメールアドレスを聞いて、下で直してください。
+                  </div>
+                  {b.client_contact?.name && (
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1A2E', marginTop: 10 }}>
+                      {b.client_contact.name}さん
+                    </div>
+                  )}
+                  {b.client_contact?.phone && (
+                    <a
+                      href={`tel:${encodeURIComponent(b.client_contact.phone)}`}
+                      style={{
+                        display: 'block', textAlign: 'center', marginTop: 6,
+                        padding: '12px 16px', borderRadius: 10,
+                        background: '#B00020', color: '#fff', fontSize: 15, fontWeight: 700,
+                        textDecoration: 'none',
+                      }}
+                    >
+                      電話をかける {b.client_contact.phone}
+                    </a>
+                  )}
+                  {emailFixOpenId === b.id ? (
+                    <div style={{ marginTop: 10, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, padding: '10px 12px' }}>
+                      <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.7, marginBottom: 8 }}>
+                        お電話で確認した正しいメールアドレスを入力してください。
+                        保存すると、このアドレスへご案内を送り直します。
+                      </div>
+                      <input
+                        type="email"
+                        inputMode="email"
+                        value={emailFixInputs[b.id] || ''}
+                        onChange={(e) => setEmailFixInputs((prev) => ({ ...prev, [b.id]: e.target.value }))}
+                        placeholder="example@mail.com"
+                        style={{
+                          width: '100%', padding: '10px 12px', fontSize: 14,
+                          border: '1px solid #E5E7EB', borderRadius: 8, boxSizing: 'border-box' as const,
+                        }}
+                      />
+                      {emailFixError[b.id] && (
+                        <div style={{ fontSize: 12, color: '#B00020', marginTop: 6 }}>{emailFixError[b.id]}</div>
+                      )}
+                      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                        <button
+                          type="button"
+                          onClick={() => fixSentClientEmail(b.id)}
+                          disabled={emailFixSaving === b.id || !(emailFixInputs[b.id] || '').trim()}
+                          style={{
+                            flex: 1, padding: '10px 12px', borderRadius: 8, border: 'none',
+                            background: (emailFixInputs[b.id] || '').trim() ? '#1A1A2E' : '#E5E7EB',
+                            color: (emailFixInputs[b.id] || '').trim() ? '#fff' : '#9CA3AF',
+                            fontSize: 13, fontWeight: 700,
+                            cursor: emailFixSaving === b.id ? 'default' : 'pointer',
+                          }}
+                        >
+                          {emailFixSaving === b.id ? '送っています…' : '保存して送り直す'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEmailFixOpenId(null)}
+                          style={{
+                            padding: '10px 12px', borderRadius: 8, border: '1px solid #E5E7EB',
+                            background: '#fff', color: '#6B7280', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                          }}
+                        >
+                          やめる
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setEmailFixOpenId(b.id)}
+                      style={{
+                        width: '100%', marginTop: 8, padding: '10px 14px', borderRadius: 8,
+                        border: '1px solid #B00020', background: '#fff', color: '#B00020',
+                        fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                      }}
+                    >
+                      メールアドレスを直す
+                    </button>
+                  )}
+                </div>
+              )}
+
               {payout && (
                 <div style={{ fontSize: 12, color: '#8A6D1F', marginTop: 4, fontWeight: 600 }}>
                   紹介報酬 ¥{payout.amount_jpy.toLocaleString()} {payout.status === 'paid' ? '支払い済み' : '確定'}
+                  {/* E-2(CEO決定・2026-08-06): 完了→保留7日→送金に変更。送金待ち(pending)の間は
+                      予定日を明示する(created_at=分配行の作成時刻=完了確定時)。 */}
+                  {payout.status === 'pending' && (() => {
+                    const holdExpiryText = estimateReferralPayoutHoldExpiryText(payout.created_at)
+                    return holdExpiryText ? (
+                      <span style={{ color: '#9CA3AF', fontWeight: 400, marginLeft: 6 }}>
+                        ({holdExpiryText} 送金予定)
+                      </span>
+                    ) : null
+                  })()}
                 </div>
               )}
               <BookingThread
@@ -2003,6 +2369,16 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
           CEO指示(2026-08-04・IA再変更): 成立した紹介は「紹介した案件」タブへ移動・
           気になるプロの移設案内は削除(恒久表示の撤回)。 */}
       <div style={{ display: subtab === 'send' ? 'flex' : 'none', flexDirection: 'column', gap: 24 }}>
+      {/* 移動(2026-08-06・CEO指示): 代理案内ボックス(旧ダッシュボード最上部)をこのサブタブの
+          先頭(リスト一覧より上)へ移動。停止中の間、公開カード訪問者を他の先生へ案内する送り手側の設定。 */}
+      <DelegateCriteriaSettings
+        orgs={delegateEligibleOrgs || []}
+        initialCriteria={delegateCriteria ?? null}
+        currentAcceptingStatus={acceptingStatus ?? null}
+        currentAcceptingNote={acceptingNote ?? null}
+        onUpdated={(criteria) => onDelegateCriteriaUpdated?.(criteria)}
+      />
+
       {/* ① 新規作成 */}
       {createListCard}
 
@@ -2016,6 +2392,48 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {publicLists.map((list) => renderListCard(list, false))}
+        </div>
+      )}
+
+      {/* §17-12(CEO指示 2026-08-06): 招待URLのQR。目の前の先生に見せて読んでもらう。
+          読んだ先で「新規登録」すると、自動でこのリストに載る（既存の招待フローのまま）。 */}
+      {inviteQrUrl && (
+        <div
+          onClick={() => setInviteQrUrl(null)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 16,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#fff', borderRadius: 16, padding: 24, maxWidth: 320, width: '100%',
+              textAlign: 'center' as const, boxSizing: 'border-box' as const,
+            }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>
+              先生に読み取ってもらってください
+            </div>
+            <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 12, lineHeight: 1.6 }}>
+              登録が完了すると、自動でこのリストに載ります
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+              <QRCodeSVG value={inviteQrUrl} size={200} />
+            </div>
+            <div style={{ fontSize: 12, color: '#9CA3AF', wordBreak: 'break-all' as const, marginBottom: 16 }}>
+              {inviteQrUrl}
+            </div>
+            <button
+              onClick={() => setInviteQrUrl(null)}
+              style={{
+                width: '100%', padding: '10px', borderRadius: 8, border: 'none',
+                background: '#1A1A2E', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              閉じる
+            </button>
+          </div>
         </div>
       )}
 
@@ -2039,7 +2457,13 @@ export default function ReferralTab({ proId, subtab, onCompletedCountChange, onS
                 textAlign: 'center' as const, boxSizing: 'border-box' as const,
               }}
             >
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1A2E', marginBottom: 12 }}>{qrList.title}</div>
+              {/* §17-13: 3種類のQRが並ぶので、開いた画面でも「誰に見せるQRか」を先に書く。 */}
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>
+                クライアントに見せてください
+              </div>
+              <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 12 }}>
+                {qrList.title}の紹介ページが開きます
+              </div>
               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
                 <QRCodeSVG value={qrUrl} size={200} />
               </div>

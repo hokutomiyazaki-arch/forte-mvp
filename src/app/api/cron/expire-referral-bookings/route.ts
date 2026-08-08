@@ -13,6 +13,7 @@ import {
   REFERRAL_MIN_FEE_JPY,
   REFERRAL_FEE_TOTAL_BPS,
   CONFIRM_PAYMENT_DEADLINE_HOURS,
+  PAYOUT_HOLD_DAYS,
 } from '@/lib/feature-flags'
 // 中1レビュー指摘: 「決済リンク発行+メール送付」はconfirm時(received PATCH)とこのcronの
 // 再試行ブロックの両方から同じ関数を呼ぶ(同じ処理を2箇所に書かない)。
@@ -407,26 +408,19 @@ export async function GET(req: NextRequest) {
             autoCompletedCount++
 
             // ステージ4(送り手分配・CEO決定): 自動完了確定の直後に分配行を作成する(fail-soft)。
-            let autoCompletePayoutId: string | null = null
             // CEO指示(2026-08-05): 完了通知に報酬額を載せるため保持する(分配対象外はnullのまま)。
             let autoCompletePayoutAmountJpy: number | null = null
             try {
               const payoutResult = await createReferralPayoutIfEligible(row.id)
-              autoCompletePayoutId = payoutResult.payoutId
               autoCompletePayoutAmountJpy = payoutResult.amountJpy
             } catch (payoutErr) {
               console.error(`[cron/expire-referral-bookings] auto-complete payout create error for ${row.id}:`, payoutErr)
             }
 
-            // ステージ4「自動送金」(CEO承認済み・2026-08-05): 分配行の作成/既存確認の直後に送金を試みる
-            // (fail-soft・自動完了処理を絶対に壊さない)。
-            if (autoCompletePayoutId) {
-              try {
-                await executeReferralPayoutTransfer(autoCompletePayoutId)
-              } catch (transferErr) {
-                console.error(`[cron/expire-referral-bookings] auto-complete payout transfer error for ${row.id}:`, transferErr)
-              }
-            }
+            // E-2(CEO決定・2026-08-06): 「完了→即送金」から「完了→保留7日(PAYOUT_HOLD_DAYS)→送金」に
+            // 変更。完了後のクレーム・返金要求に対する回収手段がないための保留期間。分配行はpendingの
+            // まま作成し、この場でexecuteReferralPayoutTransferは呼ばない(下記のpending再試行ブロックが
+            // referral_payouts.created_atから7日以上経過した行のみを拾って実行する)。
 
             const receiverName = row.receiver_pro_id ? proMap4[row.receiver_pro_id]?.name || 'プロ' : 'プロ'
             const clientNickname = row.clients?.nickname || 'クライアント'
@@ -482,11 +476,17 @@ export async function GET(req: NextRequest) {
     } else {
       const enabledSenderIds = ((enabledSenders || []) as Array<{ id: string }>).map((s) => s.id)
       if (enabledSenderIds.length > 0) {
+        // E-2(CEO決定・2026-08-06): 「完了→即送金」から「完了→保留7日(PAYOUT_HOLD_DAYS)→送金」に変更。
+        // 完了後のクレーム・返金要求に対する回収手段がないための保留期間。DBマイグレーション不要のため
+        // referral_payouts.created_at(=完了確定時に作成される)からの経過日数のみで判定する
+        // (新カラムは追加しない)。7日未満のpending行はこのクエリの対象から外れ、次回以降のcronで拾われる。
+        const payoutHoldDeadlineIso = new Date(Date.now() - PAYOUT_HOLD_DAYS * 24 * 60 * 60 * 1000).toISOString()
         const { data: pendingPayouts, error: pendingPayoutsError } = await supabase
           .from('referral_payouts')
           .select('id')
           .eq('status', 'pending')
           .in('sender_pro_id', enabledSenderIds)
+          .lt('created_at', payoutHoldDeadlineIso)
           .order('created_at', { ascending: true })
           .limit(PAYOUT_TRANSFER_RETRY_LIMIT)
 

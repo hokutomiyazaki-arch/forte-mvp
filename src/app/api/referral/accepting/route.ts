@@ -1,21 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { auth } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { getOwnPro, isPinnedOnSharedList } from '@/lib/referral-auth'
 import { isReferralEnabled } from '@/lib/feature-flags'
+import { getFounderInstructorOrgs } from '@/lib/org-role'
 
 export const dynamic = 'force-dynamic'
 
-// §2-2改訂: ステータスはopen/closedの2値のみ（'conditional'は選ばせない。DBのCHECK制約自体は
-// 実データ0件のため変更しない）
-const ALLOWED_STATUS = ['open', 'closed']
+// §2-2改訂: メインのスライダーはopen/closedの2値のみ。
+// §16-18（CEO決定・2026-08-06）: 'conditional'はスライダーの選択肢ではなく、その下の副オプション
+// 「紹介からの予約は受け付けない」がONの間に保存される値(直接は継続・紹介のみ停止)。
+// 新規カラムを追加せず、DB CHECK制約に既存の未使用値を割り当てる(DDL不要)。
+const ALLOWED_STATUS = ['open', 'closed', 'conditional']
 
 /**
  * PATCH /api/referral/accepting
- * body: { accepting_status, accepting_note?, delegate_list_id? }
- *   - accepting_status: 'open' | 'closed'（必須）
+ * body: { accepting_status, accepting_note?, delegate_list_id?, delegate_criteria?, booking_enabled? }
+ *   - booking_enabled: §16-29（CEO決定 2026-08-06）。**直接予約**の受付。紹介予約(accepting_status)
+ *     とは独立した軸。bodyに含まれる場合のみ更新する（巻き込み防止）。
+ *   - accepting_status: 'open' | 'closed' | 'conditional'（必須）。'conditional'は§16-18の
+ *     副オプション「紹介からの予約は受け付けない」ON時の値(直接は継続・紹介のみ停止。
+ *     新規カラムは追加せずDB CHECK制約の既存未使用値を割り当てる)
  *   - accepting_note: 常時保存可（表示はopen時のみ。フロント側の責務）
  *   - delegate_list_id: bodyに含まれる場合のみ更新。null で解除、文字列なら
  *     「自分がownerで、visibilityがprivateでない（共有URLを持つ）リスト」であることを検証してから設定
+ *   - delegate_criteria: §16-8+§16-14+§16-20。bodyに含まれる場合のみ更新。null で解除、オブジェクトなら
+ *     { enabled: boolean, mode: 'org'|'list', org_id?: string, list_id?: string, min_support_records?: number }
+ *     を検証してから設定。mode='org'はorg_idが自分がfounder/instructorである団体のみ許可(§16-8)。
+ *     mode='list'はlist_idが自分が所有する共有(private以外)リストのみ許可(§16-20)。
+ *     mode未指定は既存データの後方互換として'org'として扱う。強みは自動算出のため保存しない。
  * §2-2 受け入れステータス。紹介リストタブ内に置くため、他の紹介APIと同様に
  * isReferralEnabled でゲートする（仮決定: タブ自体がフラグ配下のため整合を取った）。
  *
@@ -77,6 +90,83 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
+    // delegate_criteria(§16-8+§16-14+§16-20): bodyに明示的に含まれている時のみ扱う(未指定なら現状維持)。
+    // fail-soft: professionals.delegate_criteria カラムが未作成(移行前)の環境では、bodyにこの
+    // キーを含まない限りこの分岐に入らないため、既存のPATCH呼び出しは無改修で動く(後方互換)。
+    // §16-20: mode='org'(団体・founder/instructor限定・最大4名) / mode='list'(自作リスト・
+    // 全プロ利用可・最大3名=リスト自体の上限)。mode未指定は既存データの後方互換として'org'扱い。
+    if ('delegate_criteria' in body) {
+      const raw = body.delegate_criteria
+      if (raw === null) {
+        update.delegate_criteria = null
+      } else if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+        const enabled = raw.enabled === true
+        const mode = raw.mode === 'list' ? 'list' : 'org'
+        const orgId = typeof raw.org_id === 'string' ? raw.org_id : ''
+        const listId = typeof raw.list_id === 'string' ? raw.list_id : ''
+        const minSupportRaw = raw.min_support_records
+        const minSupport =
+          typeof minSupportRaw === 'number' && Number.isFinite(minSupportRaw) && minSupportRaw >= 0
+            ? Math.floor(minSupportRaw)
+            : null
+
+        if (enabled && mode === 'org') {
+          if (!orgId) {
+            return NextResponse.json({ error: 'org_id_required' }, { status: 400 })
+          }
+          // founder(団体オーナー)/instructor(growth_role='instructor')限定(§16-8)
+          const { userId } = await auth()
+          const eligibleOrgs = await getFounderInstructorOrgs(supabase, ownPro.id, userId || null)
+          if (!eligibleOrgs.some((o) => o.organizationId === orgId)) {
+            return NextResponse.json({ error: 'org_not_eligible' }, { status: 400 })
+          }
+        }
+
+        if (enabled && mode === 'list') {
+          if (!listId) {
+            return NextResponse.json({ error: 'list_id_required' }, { status: 400 })
+          }
+          // §16-20: 自分が所有する共有リスト(private以外)であることを検証する
+          const { data: targetList } = await supabase
+            .from('referral_lists')
+            .select('id, owner_id, visibility')
+            .eq('id', listId)
+            .maybeSingle()
+          if (!targetList || targetList.owner_id !== ownPro.id) {
+            return NextResponse.json({ error: 'delegate_source_list_not_found' }, { status: 400 })
+          }
+          if (targetList.visibility === 'private') {
+            return NextResponse.json({ error: 'delegate_source_list_must_be_shareable' }, { status: 400 })
+          }
+        }
+
+        update.delegate_criteria = {
+          enabled,
+          mode,
+          org_id: mode === 'org' ? orgId || null : null,
+          list_id: mode === 'list' ? listId || null : null,
+          // §16-20: min_support_recordsはmode='list'では適用しない(本人が名指しで選んでいるため)。
+          // 保存はmode='org'のときだけ意味を持つ値として残す。
+          min_support_records: mode === 'org' ? minSupport : null,
+        }
+      } else {
+        return NextResponse.json({ error: 'invalid_delegate_criteria' }, { status: 400 })
+      }
+    }
+
+    // §16-29（CEO決定 2026-08-06）: 直接予約の受付。紹介予約(accepting_status)とは独立した軸。
+    // bodyに含まれる場合のみ更新する（他の操作で巻き込まない）。
+    if ('booking_enabled' in body) {
+      if (typeof body.booking_enabled !== 'boolean') {
+        return NextResponse.json({ error: 'invalid_booking_enabled' }, { status: 400 })
+      }
+      update.booking_enabled = body.booking_enabled
+    }
+
+    // 教訓(デプロイ順序 DB先→コード後): .select() に delegate_criteria を明示指定すると、
+    // 移行(047)未実行の本番で既存のaccepting_status切替(delegate_criteriaをbodyに含まない
+    // 全呼び出し)まで42703で落ちてしまう。呼び出し元は既にローカルstateから楽観更新しており
+    // レスポンスのdelegate_criteria値に依存しないため、select列には追加しない(fail-soft)。
     const { data, error } = await supabase
       .from('professionals')
       .update(update)

@@ -1,0 +1,193 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getSupabaseAdmin } from '@/lib/supabase'
+import { getOwnPro } from '@/lib/referral-auth'
+
+export const dynamic = 'force-dynamic'
+
+/** 一覧に載せるスレッド数の上限（ページネーションは必要になってから）。 */
+const THREAD_LIMIT = 100
+
+/**
+ * GET /api/pro/consultations — 自分宛の相談一覧（§16-19）
+ *
+ * PII について:
+ *   client_email は **どこにも返さない**（CEO決定 2026-08-06「完全に消して。リードはこっちで握る」）。
+ *   返信はダッシュボードに書けばメールが飛ぶので、プロ側がアドレスを持つ必要がない。
+ *   UIから消すだけでなくレスポンスからも外す（開発者ツールで見えては意味がないため）。
+ *   クライアントのメールアドレスは REAL PROOF 側の資産として DB にのみ保持する。
+ *
+ * access_token も返さない。プロ側の操作は consultation の id で足りるし、
+ * token はクライアントの鍵なのでプロ側に配る理由が無い。
+ */
+export async function GET(request: Request) {
+  try {
+    const ownPro = await getOwnPro()
+    if (!ownPro) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+
+    const supabase = getSupabaseAdmin()
+    // CEO指示(2026-08-06): アーカイブしたスレッドは既定で一覧に出さない。
+    // ?archived=1 で「アーカイブ済みだけ」を見返せる。
+    const archivedOnly = new URL(request.url).searchParams.get('archived') === '1'
+
+    // ?countOnly=1: タブの未返信バッジ用。本文まで引かずに件数だけ返す
+    // （バッジは相談タブを開く前に出したいので、一覧とは別に軽く叩けるようにする）。
+    if (new URL(request.url).searchParams.get('countOnly') === '1') {
+      const { count } = await supabase
+        .from('consultations')
+        .select('id', { count: 'exact', head: true })
+        .eq('pro_id', ownPro.id)
+        .eq('status', 'new')
+      return NextResponse.json({ unread: count || 0 })
+    }
+
+    let threadQuery = supabase
+      .from('consultations')
+      .select('id, client_name, status, created_at, updated_at')
+      .eq('pro_id', ownPro.id)
+    threadQuery = archivedOnly
+      ? threadQuery.eq('status', 'archived')
+      : threadQuery.neq('status', 'archived')
+    const { data: threads } = await threadQuery
+      .order('updated_at', { ascending: false })
+      .limit(THREAD_LIMIT)
+
+    // §17-8: メールがバウンスしたスレッド（クライアントが戻る手段を失っている）。
+    // migration 058 依存カラムのため、本体のselectには足さず別クエリ＋fail-softで読む
+    // （未作成カラムを明示selectするとPostgRESTが42703で落ち、相談が1件も返らなくなる）。
+    const emailFailedIds = new Set<string>()
+    try {
+      const ids = (threads || []).map((t: any) => t.id)
+      if (ids.length > 0) {
+        const { data: failedRows, error: failedError } = await supabase
+          .from('consultations')
+          .select('id, email_failed_at')
+          .in('id', ids)
+        if (failedError) {
+          console.error('[api/pro/consultations] email_failed_at fetch error (fail-soft):', failedError.message)
+        } else {
+          for (const row of (failedRows || []) as Array<{ id: string; email_failed_at: string | null }>) {
+            if (row.email_failed_at) emailFailedIds.add(row.id)
+          }
+        }
+      }
+    } catch (failedErr) {
+      console.error('[api/pro/consultations] email_failed_at fetch error (fail-soft):', failedErr)
+    }
+
+    // 相談の受付スイッチの現在値（§16-25）。カラム未作成なら null が返るので
+    // その場合は「受け付ける」として扱う（fail-soft）。
+    const { data: settings } = await supabase
+      .from('professionals')
+      .select('consultation_enabled')
+      .eq('id', ownPro.id)
+      .maybeSingle()
+    const accepting = (settings as any)?.consultation_enabled !== false
+
+    // §16-27-3: 提案できるメニュー。「予約可能なメニュー」の既存定義に揃える
+    // （is_active × price_jpy > 0 × is_referral_bookable）。ここがズレると
+    // 提案できるのに予約できない、が起きる。
+    const { data: menus } = await supabase
+      .from('pro_menus')
+      .select('id, name, price_text, price_jpy, is_referral_bookable, is_active')
+      .eq('professional_id', ownPro.id)
+      .eq('is_active', true)
+      .order('display_order', { ascending: true })
+    const bookableMenus = (menus || [])
+      .filter((m: any) => m.is_referral_bookable === true && Number(m.price_jpy) > 0)
+      .map((m: any) => ({ id: m.id, name: m.name, price_text: m.price_text }))
+
+    // §16-35: 相談チャットから送れる紹介リスト。共有可能(private以外・slugあり)なものだけ。
+    const { data: ownLists } = await supabase
+      .from('referral_lists')
+      .select('id, title, visibility, slug')
+      .eq('owner_id', ownPro.id)
+      .neq('visibility', 'private')
+      .order('updated_at', { ascending: false })
+    const shareableLists = (ownLists || [])
+      .filter((l: any) => !!l.slug)
+      .map((l: any) => ({ id: l.id, title: l.title }))
+
+    const list = threads || []
+    if (list.length === 0) {
+      return NextResponse.json({ consultations: [], accepting, menus: bookableMenus, lists: shareableLists })
+    }
+
+    // 本文は1クエリでまとめて取り、JS側でスレッドに割り当てる（N+1を作らない）
+    const ids = list.map(t => t.id)
+    const { data: messages } = await supabase
+      .from('consultation_messages')
+      // 教訓(2026-08-06・本番事故): 未作成カラムを .select() に明示すると PostgREST が
+      // 42703 で落ち、メッセージが1件も返らなくなる。任意カラム（withdrawn_at 等）は
+      // * で取って後段で読む。migration の実行順に依存させない。
+      .select('*')
+      .in('consultation_id', ids)
+      .order('created_at', { ascending: true })
+
+    const byThread = new Map<string, any[]>()
+    for (const m of messages || []) {
+      // §16-36: 取り消されたメッセージは**どちらの画面にも出さない**（CEO決定 2026-08-06）。
+      // 行は残すが表示はしない。migration 055 未実行なら undefined なので素通りする。
+      if (m.withdrawn_at) continue
+      if (!byThread.has(m.consultation_id)) byThread.set(m.consultation_id, [])
+      byThread.get(m.consultation_id)!.push({
+        id: m.id,
+        consultation_id: m.consultation_id,
+        sender: m.sender,
+        body: m.body,
+        created_at: m.created_at,
+      })
+    }
+
+    return NextResponse.json({
+      accepting,
+      menus: bookableMenus,
+      lists: shareableLists,
+      consultations: list.map(t => ({
+        ...t,
+        // §17-8: メールが届かないスレッド。クライアントは戻る手段を失っている。
+        email_failed: emailFailedIds.has(t.id),
+        messages: byThread.get(t.id) || [],
+      })),
+    })
+  } catch (err) {
+    console.error('[api/pro/consultations GET] error:', err)
+    return NextResponse.json({ error: 'internal' }, { status: 500 })
+  }
+}
+
+/**
+ * PATCH /api/pro/consultations — 相談の受付スイッチ（§16-25）
+ * body: { accepting: boolean }
+ *
+ * 既存の accepting_status とは別軸。「予約は受けたいが相談はしたくない」を表せるようにする。
+ * 巻き込み防止のため accepting_status には一切触らない。
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    const ownPro = await getOwnPro()
+    if (!ownPro) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+
+    const payload = await request.json().catch(() => null)
+    if (!payload || typeof payload.accepting !== 'boolean') {
+      return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+    }
+
+    const supabase = getSupabaseAdmin()
+    const { error } = await supabase
+      .from('professionals')
+      .update({ consultation_enabled: payload.accepting })
+      .eq('id', ownPro.id)
+
+    if (error) {
+      // migration 051 未実行だとここに来る（カラムが無い）。
+      // 黙って成功にするとスイッチが戻って見えるので、必ず失敗として返す。
+      console.error('[api/pro/consultations PATCH] error:', error.message)
+      return NextResponse.json({ error: 'update_failed' }, { status: 500 })
+    }
+
+    return NextResponse.json({ ok: true, accepting: payload.accepting })
+  } catch (err) {
+    console.error('[api/pro/consultations PATCH] error:', err)
+    return NextResponse.json({ error: 'internal' }, { status: 500 })
+  }
+}

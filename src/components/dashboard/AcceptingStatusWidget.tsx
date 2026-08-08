@@ -1,29 +1,37 @@
 'use client'
 
 /**
- * §2-2改訂（先行テスト第3弾・CEO最終確認）: 受け入れステータスは
- * ダッシュボード見出しの直上に、背景なしの「3段スライダー」として置く。
- * 🔴停止中 ⇔ 🟡代理リストで案内 ⇔ 🟢受付中 の3ポジションから直接選べるが、
- * DBは open/closed の2値のまま変えない：
+ * §16-7改訂（2026-08-05・CEO決定）: 🟡代理リストは紹介リスト内の入れ子としては一旦撤回し、
+ * §16-8で「停止中プロの公開カード」側にcriteriaベースで再設計する（置き場所を変えて復活）。
+ * これに伴い、この受け入れステータスウィジェットは **操作は2値、表示は3色** に整理する。
+ *
+ * - スライダーは 🔴停止中 ⇔ 🟢受付中 の2値トグルのみ（🟡は選択肢から外す。
+ *   §16-8のcriteriaベース設定はここでは行わず、別UIで実装する）
  *   - 🟢選択 → PATCH accepting_status='open'
- *   - 🔴選択 → PATCH accepting_status='closed' + delegate_list_id=null
- *     （代理が有効だとシグナルが🟡になってしまうため、🔴を直接選ぶ場合は
- *     delegate_list_idを明示的にnullへ落として確実に🔴にする）
- *   - 🟡選択 → 複合操作。既に「有効な代理リスト」(is_valid_delegate)が選択済みなら
- *     accepting_status='closed'のみPATCH（delegate_list_id維持）。
- *     有効な代理リストが無い/未選択の場合は🟡を確定させず、代理リスト選択UIを開いて誘導する
- *     （空約束の防止・CEO決定）
+ *   - 🔴選択 → PATCH accepting_status='closed'
+ *     （旧実装はここでdelegate_list_idを明示的にnullへ落としていたが、スライダーと代理設定は
+ *     分離する方針のため廃止した。誤操作で🟡状態のdelegate_list_idが消える事故を防ぐ。
+ *     delegate_list_idの解除は§16-8の専用設定UIで行う想定）
+ * - 🟡は「代理設定がONの間、自動で点灯する表示インジケータ」（選ぶものではない）。
+ *   現在の点灯条件（closedかつ有効な代理リストあり）は§16-8まで現状維持し、表示ロジックは
+ *   壊さない（isValidDelegate判定・computeReferralSignal・getValidDelegateListIdsは不変）。
+ *   既に🟡状態のプロがこのトグルを見た時に「🔴側を押すと案内が消える」という誤解を避けるため、
+ *   トグル直下に「停止中（認定者を案内中）」の補足を表示する。
  *
  * NULL（未設定）はノブ🟢位置として表示するが、PATCHは送らない
  * （fail-open。ユーザーが操作して初めて明示値を送る）。
  *
+ * 代理リスト選択UI(yellowSetupMode等)はコードとしては削除せず残す（§16-8で
+ * criteriaベースの別UIに作り替えるため。selectSegmentは今後'delegate'を渡されないため
+ * 実質不活性）。
+ *
  * 3色インジケータの導出は src/lib/referral-accepting.ts の computeReferralSignal に集約。
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   computeReferralSignal,
-  REFERRAL_SIGNAL_DOT,
+  REFERRAL_SIGNAL_LABEL,
   type ReferralSignal,
 } from '@/lib/referral-accepting'
 
@@ -37,10 +45,14 @@ interface OwnList {
 }
 
 interface Props {
-  initialAcceptingStatus: 'open' | 'closed' | null
+  /** §16-29（CEO決定 2026-08-06）: 直接予約の受付。このトグルが制御する本体。
+   *  未指定/null は「受け付ける」(fail-open・カラム未作成の環境を含む)。 */
+  initialBookingEnabled?: boolean | null
+  // §16-18(CEO決定・2026-08-06): 'conditional'は副オプション「紹介からの予約は受け付けない」ON時の値
+  initialAcceptingStatus: 'open' | 'closed' | 'conditional' | null
   initialAcceptingNote: string | null
   initialDelegateListId: string | null
-  onUpdated: (status: 'open' | 'closed', note: string | null, delegateListId: string | null) => void
+  onUpdated: (status: 'open' | 'closed' | 'conditional', note: string | null, delegateListId: string | null) => void
   /** 軽微指摘: allowlist外プロ(referralEnabled=false)では代理リスト機能(🟡)がまだ実行不能なため、
    * 🟡セグメントをdisabledにし誘導文を差し替える。既存呼び出しを壊さないようオプショナル+デフォルトtrue。 */
   canManageLists?: boolean
@@ -49,53 +61,65 @@ interface Props {
   hasBookableMenu?: boolean
 }
 
-const SEGMENTS: ReferralSignal[] = ['closed', 'delegate', 'open']
-const SEGMENT_INDEX: Record<ReferralSignal, number> = { closed: 0, delegate: 1, open: 2 }
-const SEGMENT_LABEL: Record<ReferralSignal, string> = {
-  closed: '停止中',
-  delegate: '代理案内',
-  open: '受付中',
+// §CEO指摘対応(2026-08-06): ダッシュボード見出し行への移動に伴い、2段セグメント表示を廃止し
+// 現在の状態のみを示す単一ピル(タップで反転)に変更する。値の意味・遷移先(open/closed)は不変。
+const SEGMENT_LABEL: Record<'closed' | 'open', string> = {
+  // §16-29（CEO決定 2026-08-06）: このトグルは **予約の受付**（直接予約）。
+  // 紹介予約の受付は紹介タブの別スイッチ（accepting_status）が持つ。
+  // CEO指摘(2026-08-06): ラベルは「予約 受付中/停止中」でよい。
+  // 「RP」は何の略か伝わらないうえ、RP上の予約だけが止まることは
+  // 停止時の確認ダイアログで明記しているので、そちらで足りる。
+  closed: '予約 停止中',
+  open: '予約 受付中',
 }
 
 export default function AcceptingStatusWidget({
   initialAcceptingStatus,
   initialAcceptingNote,
   initialDelegateListId,
+  initialBookingEnabled,
   onUpdated,
   canManageLists = true,
   hasBookableMenu = true,
 }: Props) {
   // 先行テスト第3弾: DB上のNULLはそのまま保持するが、表示・分岐は effectiveStatus (下記) で
   // 'open' に丸める(PATCH送信時のみ明示値を送るため、stateそのものはnull保持で問題ない)。
-  const [status, setStatus] = useState<'open' | 'closed' | null>(initialAcceptingStatus)
-  const [note, setNote] = useState(initialAcceptingNote || '')
-  // 🟡6レビュー指摘: 最後に保存された値を保持し、onBlurで未変更ならPATCHを送らない
-  // (NULLユーザーがtextareaにフォーカスしただけで accepting_status='open' が明示値として書かれる事故防止)
+  // §16-18: 'conditional'(紹介のみ停止)もスライダー上は'open'側として丸める(メインの2値トグル自体は
+  // 変更しない・下の副オプションで区別する)。
+  const [status, setStatus] = useState<'open' | 'closed' | 'conditional' | null>(initialAcceptingStatus)
+  // 移動(2026-08-06・CEO指示): 条件メモの編集はサービス・案内タブへ移した。ここでは保存済みの
+  // 値(savedNote)のみ保持し、accepting_status切替時にPATCHへ載せて既存メモを消さないようにする。
   const [savedNote, setSavedNote] = useState(initialAcceptingNote || '')
   const [delegateListId, setDelegateListId] = useState<string | null>(initialDelegateListId || null)
   const [toggling, setToggling] = useState(false)
-  const [savingNote, setSavingNote] = useState(false)
   const [lists, setLists] = useState<OwnList[]>([])
   const [listsLoaded, setListsLoaded] = useState(false)
   // レビュー指摘: 保存失敗時に一言のエラーメッセージを表示する(既存のインライン表示流儀に合わせる)
   const [toggleError, setToggleError] = useState(false)
-  const [noteError, setNoteError] = useState(false)
   // 🟡を選ぼうとしたが有効な代理リストが未選択/存在しない場合、確定させず選択UIを開く
   const [yellowSetupMode, setYellowSetupMode] = useState(false)
-  // §2-2: 条件メモは表示モード⇔編集モード。既定は表示モード。
-  const [noteEditing, setNoteEditing] = useState(false)
-  const [justSaved, setJustSaved] = useState(false)
-  const justSavedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // 「保存しました」フィードバックのタイマーをアンマウント時にクリーンアップ
+  // 移動(2026-08-06・CEO指示): 「紹介からの予約は受け付けない」の操作先が紹介タブ側へ移った
+  // ことで、accepting_status がこのウィジェットの外(親のsetPro経由)から変わりうる。
+  // このコンポーネントはマウント時のみinitialAcceptingStatusをuseStateの初期値に使うため、
+  // 外部からの変化を追従させるための同期(依存はプリミティブのみ)。
   useEffect(() => {
-    return () => {
-      if (justSavedTimeoutRef.current) clearTimeout(justSavedTimeoutRef.current)
-    }
-  }, [])
+    setStatus(initialAcceptingStatus)
+  }, [initialAcceptingStatus])
+
+  // 移動(2026-08-06・CEO指示): 条件メモの編集はサービス・案内タブ(BusinessInfoTab)へ移した。
+  // このウィジェットはメモを保存済み値の読み取り専用表示のみ行うため、親(dashboard/page.tsx)側で
+  // BusinessInfoTab経由の保存後にsetProが更新されたら追従させる(依存はプリミティブのみ)。
+  useEffect(() => {
+    setSavedNote(initialAcceptingNote || '')
+  }, [initialAcceptingNote])
 
   // 先行テスト第3弾: NULL(未設定)は'open'として扱う(fail-open)。UI分岐は全てこの値を使う。
-  const effectiveStatus: 'open' | 'closed' = status ?? 'open'
+  // §16-18: 'conditional'もスライダーの見た目は'open'側(メインの2値トグルは不変)。
+  const effectiveStatus: 'open' | 'closed' = status === 'closed' ? 'closed' : 'open'
+  // §16-29: このトグルが制御するのは **直接予約の受付**。null/undefined は受付中（fail-open）。
+  const [bookingEnabled, setBookingEnabled] = useState<boolean>(initialBookingEnabled !== false)
+  const bookingOpen = bookingEnabled
 
   // 自分の共有可能なリスト(private以外)を一覧取得しておく。🟡選択時の有効判定に必要なため
   // 現在のステータスに関わらず一度だけ読み込む。
@@ -130,7 +154,7 @@ export default function AcceptingStatusWidget({
   const signal = computeReferralSignal(status, hasValidDelegate)
 
   // 明示的なPATCH。delegateListId を渡した時のみ delegate_list_id を更新する(未指定なら現状維持)。
-  async function commitStatus(next: 'open' | 'closed', delegateOpt?: string | null) {
+  async function commitStatus(next: 'open' | 'closed' | 'conditional', delegateOpt?: string | null) {
     if (toggling) return
     setToggling(true)
     setToggleError(false)
@@ -161,26 +185,26 @@ export default function AcceptingStatusWidget({
     }
   }
 
-  // 3段スライダーの選択ハンドラ
+  // §16-7改訂: 2値スライダーの選択ハンドラ。UIからは'closed'|'open'のみ渡される
+  // (型はReferralSignalのまま維持し、§16-8まで'delegate'分岐のコードを残す)。
   async function selectSegment(target: ReferralSignal) {
     if (toggling) return
-    // R6レビュー指摘: スライダー操作時は条件メモの未保存下書きを破棄する(編集途中の文言が
-    // 後続操作で意図せず確定・公開されるのを防ぐ)
-    setNote(savedNote)
-    setNoteEditing(false)
     if (target === 'open') {
       setYellowSetupMode(false)
       await commitStatus('open')
       return
     }
     if (target === 'closed') {
-      // 🔴を直接選ぶ場合、代理が有効だと🟡表示になってしまうため delegate_list_id を明示的に外す
+      // §16-7改訂: スライダーと代理設定を分離するため、ここではdelegate_list_idに触れない
+      // (旧実装はnullで明示的にクリアしていたが、既に🟡状態のプロが誤って🔴を押すと
+      // delegate_list_idが消える事故になるため廃止。解除は§16-8の専用設定UIで行う)
       setYellowSetupMode(false)
-      await commitStatus('closed', null)
+      await commitStatus('closed')
       return
     }
-    // target === 'delegate'（🟡）
-    // 軽微指摘: allowlist外(canManageLists=false)では代理リスト機能はまだ実行不能なため確定させない
+    // target === 'delegate'（🟡）: §16-7改訂によりUIから選択肢自体を外したため、
+    // このUIからは到達しない（selectSegmentへは'closed'|'open'のみが渡される）。
+    // §16-8でcriteriaベースの別設定UIに作り替えるまでコードは残す。
     if (!canManageLists) return
     if (delegateListId && validLists.some((l) => l.id === delegateListId)) {
       // 既に有効な代理リストが選択済み → そのままclosedにする
@@ -191,90 +215,115 @@ export default function AcceptingStatusWidget({
     }
   }
 
-  // §2-2: 保存ボタン押下時のみPATCHを送る(onBlur自動保存は廃止)。
-  // NULL(未設定)ユーザーが触っただけで accepting_status が確定する事故を防ぐため、
-  // 未変更なら通信せず編集モードを閉じるだけにする(dirtyチェックは維持)。
-  async function saveNote() {
-    if (note === savedNote) {
-      setNoteEditing(false)
-      return
+  // §CEO指摘対応(2026-08-06): ピル1個をタップで反転させる。受付停止(open→closed)は
+  // 他院・紹介ネットワークからの見え方が変わる操作のため確認を挟む。再開(closed→open)は即時。
+  async function handleCompactToggle() {
+    if (toggling) return
+    const target: 'open' | 'closed' = bookingOpen ? 'closed' : 'open'
+    if (target === 'closed') {
+      // CEO指摘(2026-08-06): 何が止まって何が止まらないかを明記する。
+      // 「受付停止」と言いながら予約ボタンが出たままなのは、書いておかないと必ず誤解される。
+      // CEO指摘(2026-08-06):「予約が停止」と「REAL PROOF での予約を停止」は違う。
+      // プロは電話や既存の予約サイトでは受け続けているので、止まるのはRP上の導線だけ。
+      // ここを曖昧にすると「予約を止めた」と誤解して機会損失になる。
+      const ok = window.confirm(
+        'REAL PROOF での予約受付を停止しますか？\n\n'
+        + '・あなたのカードから予約ボタンが消えます\n'
+        + '・電話や既存の予約サイトなど、REAL PROOF の外での予約は止まりません\n'
+        + '・案内先の先生を設定していれば、代わりにその先生をご案内します\n'
+        + '・紹介からの予約の受付（予約タブ）とご相談の受付（相談タブ）は別のスイッチです'
+      )
+      if (!ok) return
     }
-    setSavingNote(true)
-    setNoteError(false)
+    await commitBooking(target === 'open')
+  }
+
+  /** §16-29: 直接予約の受付だけを更新する。accepting_status には触れない（巻き込み防止）。 */
+  async function commitBooking(next: boolean) {
+    if (toggling) return
+    setToggling(true)
+    setToggleError(false)
     try {
       const res = await fetch('/api/referral/accepting', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
-        body: JSON.stringify({ accepting_status: effectiveStatus, accepting_note: note }),
+        // accepting_status はAPIの必須項目なので現在値をそのまま送る（変更しない）
+        body: JSON.stringify({ accepting_status: status ?? 'open', accepting_note: savedNote, booking_enabled: next }),
       })
       if (res.ok) {
-        setSavedNote(note)
-        onUpdated(effectiveStatus, note || null, delegateListId)
-        setNoteEditing(false)
-        setJustSaved(true)
-        if (justSavedTimeoutRef.current) clearTimeout(justSavedTimeoutRef.current)
-        justSavedTimeoutRef.current = setTimeout(() => setJustSaved(false), 2500)
+        setBookingEnabled(next)
       } else {
-        setNoteError(true)
+        // migration 053 未実行だとここに来る。黙って動かすとスイッチだけ動いて見える。
+        setToggleError(true)
       }
     } catch {
-      setNoteError(true)
+      setToggleError(true)
     } finally {
-      setSavingNote(false)
+      setToggling(false)
     }
   }
 
-  function cancelNoteEdit() {
-    setNote(savedNote)
-    setNoteError(false)
-    setNoteEditing(false)
-  }
-
   return (
-    <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {/* 3段スライダー本体（セグメント型トグル。ノブ位置=現在のシグナル） */}
-      <div
-        style={{
-          position: 'relative', display: 'flex', background: '#F3F4F6', borderRadius: 999,
-          padding: 3,
-        }}
-      >
-        <div
-          aria-hidden
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, maxWidth: 240 }}>
+      {/* §CEO指摘対応(2026-08-06): 従来の角丸ピル(🟢受付中)は「バッジ」に見えて押せると分からない
+          という指摘のため、iOS風のトグルスイッチ(丸いつまみが左右にスライド)へ変更。
+          ON(緑・右)=受付中、OFF(グレー/赤・左)=停止中。ラベルは横に添える。停止中で有効な代理案内が
+          ある間は「停止中（案内中）」と表示し、4色目のインジケータは作らない(OFF表現のまま)。
+          タップ挙動(停止のみ確認・再開は即時)はhandleCompactToggleのまま変更しない。 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button
+          onClick={handleCompactToggle}
+          disabled={toggling}
+          role="switch"
+          aria-checked={bookingOpen}
+          aria-label="予約の受付状態"
           style={{
-            position: 'absolute', top: 3, bottom: 3, left: `calc(${SEGMENT_INDEX[signal] * (100 / 3)}% + 2px)`,
-            width: 'calc(33.333% - 4px)', background: '#fff', borderRadius: 999,
-            boxShadow: '0 1px 3px rgba(0,0,0,0.15)', transition: 'left 0.2s ease', zIndex: 0,
+            position: 'relative', width: 40, height: 22, borderRadius: 999,
+            border: 'none', padding: 0, flexShrink: 0,
+            background: bookingOpen ? '#06C755' : (signal === 'delegate' ? '#D9A400' : '#D1D5DB'),
+            cursor: toggling ? 'default' : 'pointer',
+            opacity: toggling ? 0.6 : 1,
+            transition: 'background-color 0.15s ease',
           }}
-        />
-        {SEGMENTS.map((seg) => (
-          <button
-            key={seg}
-            onClick={() => selectSegment(seg)}
-            disabled={toggling || (seg === 'delegate' && !canManageLists)}
+        >
+          <span
             style={{
-              position: 'relative', zIndex: 1, flex: 1, padding: '8px 4px', border: 'none',
-              background: 'transparent', fontSize: 12, fontWeight: signal === seg ? 700 : 500,
-              color: signal === seg ? '#1A1A2E' : '#9CA3AF',
-              cursor: (toggling || (seg === 'delegate' && !canManageLists)) ? 'default' : 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-              opacity: (toggling || (seg === 'delegate' && !canManageLists)) ? 0.6 : 1,
+              position: 'absolute', top: 2, left: bookingOpen ? 20 : 2,
+              width: 18, height: 18, borderRadius: '50%', background: '#fff',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.35)',
+              transition: 'left 0.15s ease',
             }}
-          >
-            <span style={{ fontSize: 13 }}>{REFERRAL_SIGNAL_DOT[seg]}</span>
-            <span>{SEGMENT_LABEL[seg]}</span>
-          </button>
-        ))}
+          />
+        </button>
+        <span
+          style={{
+            fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' as const,
+            color: bookingOpen ? '#1B5E20' : '#B00020',
+          }}
+        >
+          {bookingOpen ? SEGMENT_LABEL.open : (signal === 'delegate' ? '予約 停止中（案内中）' : SEGMENT_LABEL.closed)}
+        </span>
       </div>
       {toggleError && <div style={{ fontSize: 11, color: '#B00020' }}>更新に失敗しました</div>}
 
-      {/* 軽微指摘: allowlist外プロは🟡(代理リスト)が実行不能なため、誘導文の代わりにこちらを表示 */}
-      {!canManageLists && signal !== 'delegate' && (
-        <div style={{ fontSize: 11, color: '#9CA3AF' }}>代理リスト機能は順次開放中です</div>
+      {/* 移動(2026-08-06・CEO指示): 「紹介からの予約は受け付けない」チェックボックス(旧§16-18)は
+          ダッシュボード最上部から紹介タブ「紹介を受ける」サブタブの先頭へ移動した(dashboard/page.tsx)。
+          ここには残さない(ダッシュボード最上部はメイントグル+条件メモの2要素のみに戻す)。 */}
+
+      {/* §16-7改訂: 現在🟡(closed+有効な代理あり)状態のとき、🔴側を押すと案内(delegate_list_id)が
+          消えると誤解されないよう補足する。commitStatusはdelegate_list_idに触れない実装のため、
+          実際には🔴を押しても案内は消えない(誤操作事故は起きない)が、状態を正しく伝える。 */}
+      {signal === 'delegate' && (
+        <div style={{ fontSize: 11, color: '#8A6D00', lineHeight: 1.6, textAlign: 'right' as const }}>
+          {REFERRAL_SIGNAL_LABEL.delegate}
+          {selectedDelegateList ? `（案内先: ${selectedDelegateList.title}）` : ''}
+        </div>
       )}
 
-      {/* §2-2改訂: 🟡を選ぼうとしたが有効な代理リストが無い/未選択の場合の誘導UI */}
+      {/* §2-2改訂: 🟡を選ぼうとしたが有効な代理リストが無い/未選択の場合の誘導UI
+          §16-7改訂: selectSegmentへ'delegate'が渡らなくなったためyellowSetupModeは常にfalseで
+          到達しない。§16-8のcriteriaベース再設計まではコードのみ残す(削除しない)。 */}
       {canManageLists && yellowSetupMode && (
         <div style={{ fontSize: 11, color: '#6B7280', lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: 6 }}>
           {!listsLoaded ? (
@@ -311,31 +360,14 @@ export default function AcceptingStatusWidget({
       )}
 
       {/* §2-2改訂: delegateListIdは設定済みだが有効な代理メンバーがいないため🔴になっている場合、
-          本人が原因を理解できるよう説明を1行添える(空約束の防止・CEO決定) */}
+          本人が原因を理解できるよう説明を1行添える(空約束の防止・CEO決定)。
+          §16-7改訂: UI表示から内部用語「代理リスト」を除去した文言に更新。
+          §16-7改訂: 現在の代理リストの変更UI(select)はスライダーから分離する方針のため削除。
+          delegate_list_idの変更は§16-8の専用設定UIで行う想定(このcaptionと上部の案内先表示で
+          読み取り専用の状態確認のみ提供する)。 */}
       {!yellowSetupMode && signal === 'closed' && listsLoaded && delegateListId && !hasValidDelegate && (
         <div style={{ fontSize: 11, color: '#9CA3AF', lineHeight: 1.6 }}>
-          代理リストが現在有効でないため、停止中と表示されます（承諾済みで受付中のメンバーがいない、またはリストが共有可能な状態ではありません）
-        </div>
-      )}
-
-      {/* 🟡確定済み: 現在の代理リストの変更UI */}
-      {!yellowSetupMode && signal === 'delegate' && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const }}>
-          <span style={{ fontSize: 11, color: '#9CA3AF' }}>案内先: {selectedDelegateList?.title}</span>
-          {validLists.length > 1 && (
-            <select
-              value={delegateListId || ''}
-              onChange={(e) => {
-                if (e.target.value) commitStatus('closed', e.target.value)
-              }}
-              disabled={toggling}
-              style={{ padding: '6px 8px', borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 12, color: '#1A1A2E' }}
-            >
-              {validLists.map((l) => (
-                <option key={l.id} value={l.id}>{l.title}</option>
-              ))}
-            </select>
-          )}
+          認定者への案内が現在無効なため、停止中と表示されます（承諾済みで受付中のメンバーがいない、またはリストが共有可能な状態ではありません）
         </div>
       )}
 
@@ -362,74 +394,20 @@ export default function AcceptingStatusWidget({
         </div>
       )}
 
-      {/* 受付中のときのみ条件メモを表示・編集できる。§2-2: 既定は表示モード、
-          タップで編集モードに入り保存ボタンで確定して表示モードへ戻る。 */}
-      {!yellowSetupMode && signal === 'open' && (
-        <div>
-          {noteEditing ? (
-            <div>
-              <textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value.slice(0, 200))}
-                placeholder="条件メモ（例: めまい・ふらつきのケースのみ／土曜のみ対応可）"
-                autoFocus
-                style={{
-                  width: '100%', minHeight: 50, padding: '8px 10px', borderRadius: 8,
-                  border: '1px solid #E5E7EB', fontSize: 12, boxSizing: 'border-box' as const,
-                  resize: 'vertical' as const,
-                }}
-              />
-              <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                <button
-                  onClick={saveNote}
-                  disabled={savingNote}
-                  style={{
-                    fontSize: 12, padding: '6px 14px', borderRadius: 8, border: 'none',
-                    background: '#1A1A2E', color: '#fff', cursor: savingNote ? 'default' : 'pointer',
-                    opacity: savingNote ? 0.6 : 1,
-                  }}
-                >
-                  {savingNote ? '保存中...' : '保存する'}
-                </button>
-                <button
-                  onClick={cancelNoteEdit}
-                  disabled={savingNote}
-                  style={{
-                    fontSize: 12, padding: '6px 14px', borderRadius: 8, border: '1px solid #E5E7EB',
-                    background: '#fff', color: '#6B7280', cursor: savingNote ? 'default' : 'pointer',
-                  }}
-                >
-                  キャンセル
-                </button>
-              </div>
-              {noteError && <div style={{ fontSize: 11, color: '#B00020', marginTop: 4 }}>保存に失敗しました</div>}
-            </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const }}>
-              {savedNote ? (
-                <button
-                  onClick={() => setNoteEditing(true)}
-                  style={{
-                    fontSize: 12, color: '#1A1A2E', background: 'none', border: 'none', padding: 0,
-                    cursor: 'pointer', textAlign: 'left' as const,
-                  }}
-                >
-                  {savedNote}
-                </button>
-              ) : (
-                <button
-                  onClick={() => setNoteEditing(true)}
-                  style={{
-                    fontSize: 12, color: '#6B7280', background: 'none', border: 'none', padding: 0,
-                    cursor: 'pointer', textDecoration: 'underline',
-                  }}
-                >
-                  条件を追記する
-                </button>
-              )}
-              {justSaved && <span style={{ fontSize: 11, color: '#2E7D32' }}>保存しました</span>}
-            </div>
-          )}
+      {/* §CEO指摘対応(2026-08-06): 条件メモの編集UI(テキストエリア＋「条件を追記する」リンク)は
+          ダッシュボード上部から撤去し、サービス・案内タブ(BusinessInfoTab)へ移動した。
+          ここには編集導線を置かず、保存済みのメモがある場合のみ1行の読み取り専用表示だけ残す
+          (受付中/紹介のみ停止のときに表示。1行を超えないようellipsisで省略)。 */}
+      {savedNote && (signal === 'open' || status === 'conditional') && (
+        <div
+          style={{
+            fontSize: 12, color: '#6B7280', textAlign: 'right' as const,
+            maxWidth: 240, width: '100%',
+            whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis',
+          }}
+          title={savedNote}
+        >
+          {savedNote}
         </div>
       )}
     </div>

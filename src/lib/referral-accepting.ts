@@ -20,19 +20,32 @@
 export type ReferralSignal = 'open' | 'delegate' | 'closed'
 
 /**
- * fail-open判定: 'closed' のときだけ false。NULL/undefined/想定外の値は全て true(受付中)。
+ * §16-18（CEO決定・2026-08-06）: 「紹介からの予約は受け付けない」副オプション。
+ * 新規カラムを追加せず、DB CHECK制約に既にある未使用の 'conditional' 値を
+ * 「直接のみ受付＝紹介は停止」の意味として割り当てる（DDL不要）。
+ * このファイルの isAcceptingOpen / computeReferralSignal は「紹介として reachableか」の
+ * 判定に一元的に使われる（ピン追加・紹介予約・検索の🟢フィルタ・代理案内の点灯判定 等）ため、
+ * 'conditional' は 'closed' と同じ扱いにする。直接予約は未実装のため、直接予約向けの
+ * 判定はここでは分岐を用意しない（実装時にこの関数とは別の判定を追加する）。
+ */
+
+/**
+ * fail-open判定: 'closed' または 'conditional'(紹介のみ停止)のときだけ false。
+ * NULL/undefined/想定外の値は全て true(受付中)。
  */
 export function isAcceptingOpen(status: string | null | undefined): boolean {
-  return status !== 'closed'
+  return status !== 'closed' && status !== 'conditional'
 }
 
 /**
- * レビュー指摘: 「紹介につながる人か」の判定(open/delegateはtrue・closedのみfalse)を
- * SearchPageClient のクライアント側フィルタ・pro-search・searchの各所で直書きしていたのを
- * ここに集約する共通述語。
+ * §16-7改訂（2026-08-05・CEO決定）: 「紹介につながる人か」＝ピン追加・フィルタ対象は🟢のみ。
+ * 🟡(delegate)は「本人のカード単体の行き止まりを救う」表示専用の指標であり、紹介リストの
+ * 候補になる（=ピンできる/フィルタで拾える）ことは意味しない。🟡本人は受け入れられないため
+ * リストに載せてもクライアントが詰まる。SearchPageClient のクライアント側フィルタ・
+ * pro-search・items(ピン追加)の各所で使う共通述語。
  */
 export function isReferralReachable(signal: ReferralSignal | null | undefined): boolean {
-  return signal === 'open' || signal === 'delegate'
+  return signal === 'open'
 }
 
 /**
@@ -46,12 +59,16 @@ export function isReferralReachable(signal: ReferralSignal | null | undefined): 
  *
  * 先行テスト第3弾: ⚪️未設定を廃止したため、status が null/undefined の場合も 'open' を返す
  * (isAcceptingOpen と同じfail-open判定に統一)。
+ *
+ * §16-18: 'conditional'(紹介のみ停止・直接は継続)は紹介ネットワークの観点では 'closed' と
+ * 区別しない(他のプロ・訪問者から見て「紹介できるか」は同じNo)。有効な代理案内があれば🟡、
+ * 無ければ🔴。4色目は増やさない(CEO指示)。
  */
 export function computeReferralSignal(
   status: string | null | undefined,
   hasValidDelegate: boolean
 ): ReferralSignal {
-  if (status === 'closed') return hasValidDelegate ? 'delegate' : 'closed'
+  if (status === 'closed' || status === 'conditional') return hasValidDelegate ? 'delegate' : 'closed'
   return 'open'
 }
 
@@ -67,8 +84,9 @@ export const REFERRAL_SIGNAL_DOT: Record<ReferralSignal, string> = {
   closed: '🔴',
 }
 
+// §16-7改訂: 内部用語「代理リスト」をUI表示から除去し、3色定義の文言に統一する。
 export const REFERRAL_SIGNAL_LABEL: Record<ReferralSignal, string> = {
   open: '受付中',
-  delegate: '停止中（代理リストで案内中）',
-  closed: '停止中',
+  delegate: '停止中（認定者を案内中）',
+  closed: '停止中（案内なし）',
 }

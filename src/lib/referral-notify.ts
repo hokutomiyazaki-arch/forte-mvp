@@ -234,18 +234,26 @@ export async function notifyReferralPinAdded(
 /**
  * §2-4: 予約リクエストが届いたことを受け手プロへ通知する。
  */
+// §17-2(2026-08-06): 受け手プロ宛の予約通知のリンク先は「予約」タブ(?tab=bookings)。
+// 受信箱が紹介タブから独立したため、?tab=referral のままだと予約が無い画面に着地する。
 export async function notifyBookingRequested(
   target: ProNotifyTarget,
   clientNickname: string,
+  /**
+   * §17-1(CEO決定 2026-08-06): REALPROOFの直接予約は紹介元がいない。
+   * 「紹介予約」と書くと本人が心当たりのない通知になるため、直接予約では言い方を変える。
+   */
+  opts?: { direct?: boolean },
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const dashboardUrl = `${APP_URL}/dashboard?tab=bookings`
   const safeClientNickname = escapeHtml(clientNickname)
+  const kind = opts?.direct ? '予約' : '紹介予約'
   return sendProNotification(target, {
-    lineText: `紹介予約のリクエストが届いています(${clientNickname}さん)。48時間以内にダッシュボードからご確認ください。\n${dashboardUrl}`,
-    emailSubject: '紹介予約のリクエストが届いています',
+    lineText: `${kind}のリクエストが届いています(${clientNickname}さん)。48時間以内にダッシュボードからご確認ください。\n${dashboardUrl}`,
+    emailSubject: `${kind}のリクエストが届いています`,
     emailBodyHtml: emailShell(
-      '紹介予約リクエストのお知らせ',
-      `${safeClientNickname}さんから紹介予約のリクエストが届いています。<br><strong>48時間以内</strong>にダッシュボードからご確認ください。`,
+      `${kind}リクエストのお知らせ`,
+      `${safeClientNickname}さんから${kind}のリクエストが届いています。<br><strong>48時間以内</strong>にダッシュボードからご確認ください。`,
       'ダッシュボードを開く',
       dashboardUrl,
     ),
@@ -296,7 +304,7 @@ export async function notifyBookingPaymentCompletedToReceiver(
     feeAmountJpy?: number | null
   },
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const dashboardUrl = `${APP_URL}/dashboard?tab=bookings`
   const safeClientNickname = escapeHtml(clientNickname)
   const reminder = opts?.remindMissingLocationInfo
     ? 'プロフィールに場所情報が未設定のため、クライアントへ当日の場所をお伝えください。'
@@ -578,7 +586,7 @@ export async function notifyCounterAcceptedToReceiver(
   confirmedSlotText: string | null,
   opts?: { awaitingPayment?: boolean },
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const dashboardUrl = `${APP_URL}/dashboard?tab=bookings`
   const safeClientNickname = escapeHtml(clientNickname)
   const slotPart = confirmedSlotText ? `${confirmedSlotText} で確定` : '日時を選択'
   const paymentNote = opts?.awaitingPayment
@@ -786,7 +794,7 @@ export async function notifyRescheduleConfirmedToReceiver(
   clientNickname: string,
   newSlotText: string | null,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const dashboardUrl = `${APP_URL}/dashboard?tab=bookings`
   const safeClientNickname = escapeHtml(clientNickname)
   const slotPart = newSlotText ? `${newSlotText} に変更` : '新しい日時に変更'
   return sendProNotification(target, {
@@ -811,7 +819,7 @@ export async function notifyRescheduleKeptCurrentToReceiver(
   clientNickname: string,
   currentSlotText: string | null = null,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const dashboardUrl = `${APP_URL}/dashboard?tab=bookings`
   const safeClientNickname = escapeHtml(clientNickname)
   const slotPart = currentSlotText ? `(${currentSlotText})` : ''
   const safeSlotPart = currentSlotText ? `(${escapeHtml(currentSlotText)})` : ''
@@ -919,6 +927,69 @@ export async function notifyInviteRegistered(
     emailBodyHtml: emailShell(
       '招待登録完了のお知らせ',
       `${safeRegisteredProName}さんが、あなたの招待からREAL PROOFへの登録を完了しました。`,
+    ),
+  })
+}
+
+/**
+ * §17-13(CEO指示 2026-08-06): プロ招待QR（トップに常設・1枚を何人にでも見せられる）から
+ * 登録が完了したことを、QRの持ち主へ通知する。
+ *
+ * このQRからの登録は**紹介リストには入れない**（誰が読むか分からないQRで公開リストが
+ * 勝手に増えるのを防ぐ）。入るのは非公開の「気になるプロ」だけなので、
+ * 「紹介リストに入れましょう」という**次の一手**をここで必ず言う。
+ * 言わないと、登録された側は「気になるプロに黙って溜まるだけ」で誰にも気づかれない。
+ */
+export async function notifyProInviteRegistered(
+  target: ProNotifyTarget,
+  registeredProName: string,
+): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const safeRegisteredProName = escapeHtml(registeredProName)
+  return sendProNotification(target, {
+    lineText: `${registeredProName}さんがあなたのQRからREAL PROOFに登録しました。\n「気になるプロ」に入っています。紹介リストに入れましょう。\n${dashboardUrl}`,
+    emailSubject: `${registeredProName}さんが登録しました`,
+    emailBodyHtml: emailShell(
+      'QRからの登録のお知らせ',
+      `${safeRegisteredProName}さんが、あなたのQRコードからREAL PROOFに登録しました。<br>いまは非公開の「気になるプロ」に入っています。紹介リストに入れましょう。`,
+      '紹介リストを開く',
+      dashboardUrl,
+    ),
+  })
+}
+
+/**
+ * §17-16(CEO指示 2026-08-06): クライアントのメールが届かなかったことを、**紹介元（送り手）**へ通知する。
+ *
+ * CEO:「クライアントに電話してメールアドレスを修整して入力してもらってください。という
+ *       メールとクライアント電話番号が、受けてではなく、送り元のプロに行くようにしたら？」
+ *
+ * 電話番号は通知本文には**入れない**。番号はダッシュボードのカードに出す（開示ゲートは
+ * /api/referral/bookings/sent の canDiscloseToSender が唯一の入口）。
+ * メール・LINEは転送・スクショで簡単に外へ出るため、PIIは画面の内側に置く。
+ */
+export async function notifyBookingEmailFailedToSender(
+  target: ProNotifyTarget,
+  clientNickname: string,
+  receiverProName: string | null,
+): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const safeClient = escapeHtml(clientNickname)
+  const receiverText = receiverProName ? `${receiverProName}さんへの` : ''
+  const safeReceiverText = receiverProName ? `${escapeHtml(receiverProName)}さんへの` : ''
+  return sendProNotification(target, {
+    lineText:
+      `${clientNickname}さんの${receiverText}ご予約で、メールが届いていません。\n` +
+      `お電話で正しいメールアドレスを確認して、「紹介した案件」から直してください。\n` +
+      `お客さまの電話番号はその画面に出ています。\n${dashboardUrl}`,
+    emailSubject: `【要対応】${clientNickname}さんにメールが届いていません`,
+    emailBodyHtml: emailShell(
+      'ご紹介したお客さまにメールが届いていません',
+      `${safeClient}さんの${safeReceiverText}ご予約で、ご案内のメールが届きませんでした。<br>` +
+        `お手数ですが、<strong>お電話で正しいメールアドレスをご確認のうえ、「紹介した案件」から直してください。</strong><br>` +
+        `お客さまの電話番号はその画面に表示されています。`,
+      '紹介した案件を開く',
+      dashboardUrl,
     ),
   })
 }

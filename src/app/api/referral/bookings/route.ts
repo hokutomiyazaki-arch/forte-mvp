@@ -7,6 +7,8 @@ import { notifyBookingRequested, notifyBookingReceivedToClient } from '@/lib/ref
 import { isAcceptingOpen } from '@/lib/referral-accepting'
 import { isReferralPaymentEnabled, REFERRAL_MIN_FEE_JPY } from '@/lib/feature-flags'
 import { parseSlot, snapToHalfHourUp } from '@/lib/referral-format'
+// §17-25: import ゼロの純関数モジュール（チャンクグラフに何も足さない・CLAUDE.md §G）
+import { isKnownUndeliverableEmail } from '@/lib/booking-email-fix'
 
 const APP_URL = 'https://realproof.jp'
 
@@ -237,6 +239,11 @@ export async function POST(request: NextRequest) {
     // 即時に48h後の失効期限を設定する(旧draft方式の分岐を撤去)。
     const expiresAt = new Date(Date.now() + BOOKING_EXPIRES_HOURS * 60 * 60 * 1000).toISOString()
 
+    // §17-25: 過去に同じアドレスで未達だったなら、作成時点で未達として扱う。
+    // Resend は一度ハードバウンスしたアドレスを抑制し、次からは送信もバウンス通知もしないため、
+    // webhook を待っていても印が永久に立たない（同じ打ち間違いの2回目以降が丸ごと抜ける）。
+    const knownBadEmail = await isKnownUndeliverableEmail(supabase, clientEmail)
+
     const { data: booking, error } = await supabase
       .from('referral_bookings')
       .insert({
@@ -246,7 +253,14 @@ export async function POST(request: NextRequest) {
         client_id: ownClient.id,
         menu_id: menuId,
         theme_tags: theme ? [theme] : null,
-        preferred_slots: { slots: [slot1, slot2, slot3], note: note || null },
+        preferred_slots: {
+          slots: [slot1, slot2, slot3],
+          note: note || null,
+          // §17-25: 既知の不達アドレス（Resendの抑制で2回目以降はバウンス通知が来ない）。
+          ...(knownBadEmail
+            ? { receipt_email_failed: true, receipt_email_failed_at: new Date().toISOString() }
+            : {}),
+        },
         status: 'requested',
         price_jpy: priceJpy,
         // レビュー指摘(中2): Phase 1の料率(送り手30%+決済実費3.6%・リアプル利益0)は
@@ -297,10 +311,15 @@ export async function POST(request: NextRequest) {
     }
 
     // タスクC: 送信直後の受付メール(クライアント向け)。失敗しても予約リクエスト自体は成功扱い。
+    // §17-3④/§17-9(CEO報告 2026-08-06「紹介予約でのメール間違いが反映されてない」):
+    //   直接予約(/api/bookings)にだけ入れていた「受付メールが送れなかった印」を、
+    //   紹介予約にも入れる。紹介予約では決済リンクのメールも届かなくなるため、
+    //   気づけないと予約が支払い待ちのまま自動キャンセルされて終わる。
+    let receiptSent = false
     try {
       const listUrl = list.slug ? `${APP_URL}/r/${list.slug}` : APP_URL
       if (userId || clientEmail) {
-        await notifyBookingReceivedToClient(
+        const receipt = await notifyBookingReceivedToClient(
           { userId, email: clientEmail },
           receiverPro.name,
           listUrl,
@@ -316,12 +335,32 @@ export async function POST(request: NextRequest) {
             note,
           }
         )
+        receiptSent = receipt.sent
       }
     } catch (notifyErr) {
       console.error('[api/referral/bookings] receipt notify error:', notifyErr)
     }
 
-    return NextResponse.json({ booking })
+    if (!receiptSent) {
+      // 受け手プロのカードに「お客さんに受付メールが届いていません」を出すための印。
+      // 新カラムは作らず preferred_slots に持つ（既存のマーカーと同じ作法）。
+      try {
+        await supabase
+          .from('referral_bookings')
+          .update({
+            preferred_slots: {
+              slots: [slot1, slot2, slot3],
+              note: note || null,
+              receipt_email_failed: true,
+            },
+          })
+          .eq('id', booking.id)
+      } catch (markErr) {
+        console.error('[api/referral/bookings] receipt failure mark error:', markErr)
+      }
+    }
+
+    return NextResponse.json({ booking, receipt_sent: receiptSent })
   } catch (err: any) {
     console.error('[api/referral/bookings] POST error:', err)
     return NextResponse.json({ error: err.message || 'internal_error' }, { status: 500 })
