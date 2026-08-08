@@ -474,6 +474,9 @@ function VoteForm() {
   const [error, setError] = useState('')
   const [alreadyVoted, setAlreadyVoted] = useState(false)
   const [tokenExpired, setTokenExpired] = useState(false)
+  // 予約経由の記録依頼トークン（qr_tokens.booking_id あり）: 認証ステップを丸ごとスキップする
+  const [isBookingToken, setIsBookingToken] = useState(false)
+  const [bookingVoteSubmitting, setBookingVoteSubmitting] = useState(false)
   // オンライン投票PIN（token無し直リンク経由のみ必須）
   const [pinInput, setPinInput] = useState('')
   const [pinError, setPinError] = useState('')
@@ -549,6 +552,7 @@ function VoteForm() {
   )
 
   const loadedRef = useRef(false)
+  const bookingVoteInFlightRef = useRef(false)
 
   // ── ステップ管理 ──
   const [voteStep, setVoteStep] = useState<VoteStep>(() => {
@@ -687,6 +691,22 @@ function VoteForm() {
       // 取得しているため、data が null なら「無効（期限切れ or 使用済み or 不存在）」。
       if (!isPreview && tokenForValidation) {
         if (!tokenResult.data) { setTokenExpired(true); setLoading(false); return }
+      }
+      // §16-44(CEO決定 2026-08-08): 予約経由の記録依頼トークンはメール入力/コード認証を丸ごとスキップ。
+      // レビュー指摘(重大4): 保護対象の入口SELECT（上のtokenResult取得）にbooking_idを足すと、
+      // migration 061未適用の本番で42703になり投票フロー全体が落ちる。判定は完全に独立した
+      // 別クエリに分離し、エラー・null時はisBookingToken=falseのまま通常フローへ素通りする(fail-soft)。
+      if (!isPreview && tokenForValidation) {
+        try {
+          const { data: bookingTokenCheck } = await (supabase as any)
+            .from('qr_tokens')
+            .select('booking_id')
+            .eq('token', tokenForValidation)
+            .maybeSingle()
+          if (bookingTokenCheck?.booking_id) setIsBookingToken(true)
+        } catch (bookingCheckErr) {
+          console.error('[vote] booking_id check failed (fail-soft, migration 061?):', bookingCheckErr)
+        }
       }
 
       // プロ情報チェック
@@ -1861,6 +1881,104 @@ function VoteForm() {
     setIsSubmitting(false)
   }
 
+  // ── 予約経由の記録依頼トークン投票ハンドラー（§16-44・CEO決定 2026-08-08） ──
+  //   予約時に取得済みの連絡先（client_email/client_phone）で自動認証するため、
+  //   メール入力・6桁コード認証を完全にスキップする。成功時は「auth」ステップへ遷移しない。
+  //   失敗時はエラー表示のため「auth」ステップへ遷移する（error/errorReasonの表示先が
+  //   authステップにしか無いため。レビュー指摘・重大1）。
+  async function handleBookingVote(opts?: { rewardIdOverride?: string }) {
+    if (isPreview) return
+    if (isSubmitting) return
+    if (bookingVoteInFlightRef.current) return
+    bookingVoteInFlightRef.current = true
+
+    // 🔒 SNAPSHOT: 送信前にstateを固定（stale state対策）
+    const voteDataSnapshot = buildVoteData()
+    if (!voteDataSnapshot.vote_type) {
+      console.error('[handleBookingVote] voteData snapshot is empty')
+      setError('投票データの取得に失敗しました。もう一度お試しください。')
+      bookingVoteInFlightRef.current = false
+      return
+    }
+    // レビュー指摘(重大3): 「スキップ」は setSelectedRewardId('') の直後に同期呼び出しされるため
+    // buildVoteData() が stale な selectedRewardId を読む。呼び出し側から明示的に上書きさせる。
+    if (opts && opts.rewardIdOverride !== undefined) {
+      voteDataSnapshot.selected_reward_id = opts.rewardIdOverride || null
+    }
+
+    setIsSubmitting(true)
+    setBookingVoteSubmitting(true)
+    setError('')
+
+    try {
+      const res = await fetch('/api/vote-auth/booking-confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({
+          professional_id: proId,
+          qr_token: getQrToken() || '',
+          vote_data: voteDataSnapshot,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+
+      if (res.ok && data.success) {
+        sessionStorage.removeItem('pending_vote')
+        const rid = data.client_reward_id || ''
+        window.location.href = `/vote-confirmed?proId=${proId}&vote_id=${data.vote_id}${rid ? `&rid=${rid}` : ''}`
+        return
+      }
+
+      // no_contact / not_booking_token: エラー表示せず通常の認証ステップへフォールバック。
+      // レビュー指摘(軽微2): isBookingTokenをfalseに戻し、戻る→次へで同じ失敗POSTを繰り返さない。
+      if (data.error === 'no_contact' || data.error === 'not_booking_token') {
+        bookingVoteInFlightRef.current = false
+        setIsSubmitting(false)
+        setBookingVoteSubmitting(false)
+        setIsBookingToken(false)
+        goToWithHistory('auth')
+        return
+      }
+
+      // レビュー指摘(重大1): error/errorReason は auth ステップ内でしか表示されないため、
+      // 他ハンドラと同じ流儀で goToWithHistory('auth') とセットで設定する。
+      goToWithHistory('auth')
+      if (data.error === 'self_vote') {
+        setErrorReason('self_vote')
+        setError(getVoteErrorMessage('self_vote'))
+      } else if (data.error === 'token_invalid') {
+        setErrorReason('invalid_token')
+        setError(getVoteErrorMessage('invalid_token'))
+      } else if (data.error === 'already_voted') {
+        setErrorReason('already_voted')
+        setError(getVoteErrorMessage('already_voted', {
+          recentVoteCreatedAt: data.recentVoteCreatedAt,
+        }))
+      } else if (data.error === 'cooldown') {
+        setErrorReason('cooldown')
+        setError(getVoteErrorMessage('cooldown', {
+          cooldownRemainingMinutes: data.cooldownRemainingMinutes,
+        }))
+      } else if (data.error === 'PRO_COOLDOWN') {
+        setErrorReason('pro_cooldown')
+        setError(data.message || getVoteErrorMessage('pro_cooldown', {
+          cooldownRemainingMinutes: data.remainingMin,
+        }))
+      } else {
+        setErrorReason('auth_invalid')
+        setError(getVoteErrorMessage('auth_invalid'))
+      }
+    } catch {
+      goToWithHistory('auth')
+      setErrorReason('auth_invalid')
+      setError('エラーが発生しました。もう一度お試しください。')
+    }
+    bookingVoteInFlightRef.current = false
+    setIsSubmitting(false)
+    setBookingVoteSubmitting(false)
+  }
+
   // ── ログイン済み（Clerkセッション有り）投票ハンドラ ──
   //   「このアカウントで回答する」ボタン経由。
   //   旧 handleSubmit の session 分岐を分離し、Clerk strategy に応じた
@@ -2146,9 +2264,12 @@ function VoteForm() {
   const hasRewards = proRewards.length > 0
   // §2-8 継続記録: 「2回目以降」フローは visit_check → continuation → (reward) → auth のみ
   //   （強み/人柄/コメントの3ステップを飛ばすため、通常フローよりステップ数が少ない）
+  // §16-44: 予約経由の記録依頼トークン（isBookingToken）は auth ステップに遷移しない
+  //   （comment/continuation/reward から直接 handleBookingVote() で確定するため）。
+  //   ステップ数・番号表示を実際の遷移と一致させるため auth を数えない。
   const totalSteps = visitClaim === 'repeat'
-    ? (hasRewards ? 4 : 3)
-    : (hasRewards ? 6 : 5)
+    ? (hasRewards ? (isBookingToken ? 3 : 4) : (isBookingToken ? 2 : 3))
+    : (hasRewards ? (isBookingToken ? 5 : 6) : (isBookingToken ? 4 : 5))
 
   // 強みプルーフの表示項目（プロが設定した項目）
   const allProofDisplayItems = [
@@ -2159,10 +2280,16 @@ function VoteForm() {
   // ステップ番号計算（intro/confirm/hopeful_doneはundefined）
   const stepNum = (s: VoteStep): number | undefined => {
     const order = visitClaim === 'repeat'
-      ? (hasRewards ? ['visit_check', 'continuation', 'reward', 'auth'] : ['visit_check', 'continuation', 'auth'])
+      ? (hasRewards
+        ? (isBookingToken ? ['visit_check', 'continuation', 'reward'] : ['visit_check', 'continuation', 'reward', 'auth'])
+        : (isBookingToken ? ['visit_check', 'continuation'] : ['visit_check', 'continuation', 'auth']))
       : (hasRewards
-        ? ['visit_check', 'proofs', 'personality', 'comment', 'reward', 'auth']
-        : ['visit_check', 'proofs', 'personality', 'comment', 'auth'])
+        ? (isBookingToken
+          ? ['visit_check', 'proofs', 'personality', 'comment', 'reward']
+          : ['visit_check', 'proofs', 'personality', 'comment', 'reward', 'auth'])
+        : (isBookingToken
+          ? ['visit_check', 'proofs', 'personality', 'comment']
+          : ['visit_check', 'proofs', 'personality', 'comment', 'auth']))
     const idx = order.indexOf(s)
     return idx >= 0 ? idx + 1 : undefined
   }
@@ -2447,7 +2574,11 @@ function VoteForm() {
             />
 
             <button
-              onClick={() => goToWithHistory(hasRewards ? "reward" : "auth")}
+              onClick={() => {
+                if (hasRewards) { goToWithHistory("reward") }
+                else if (isBookingToken) { handleBookingVote() }
+                else { goToWithHistory("auth") }
+              }}
               disabled={!stampConfirmed}
               style={{ ...S.primaryBtn, opacity: stampConfirmed ? 1 : 0.4 }}
             >
@@ -2639,13 +2770,21 @@ function VoteForm() {
             </div>
 
             <button
-              onClick={() => goToWithHistory(hasRewards ? "reward" : "auth")}
+              onClick={() => {
+                if (hasRewards) { goToWithHistory("reward") }
+                else if (isBookingToken) { handleBookingVote() }
+                else { goToWithHistory("auth") }
+              }}
               style={S.primaryBtn}
             >
               次へ →
             </button>
             <button
-              onClick={() => goToWithHistory(hasRewards ? "reward" : "auth")}
+              onClick={() => {
+                if (hasRewards) { goToWithHistory("reward") }
+                else if (isBookingToken) { handleBookingVote() }
+                else { goToWithHistory("auth") }
+              }}
               style={{ ...S.skipBtn, display: "block", margin: "0 auto" }}
             >
               スキップ
@@ -2711,17 +2850,22 @@ function VoteForm() {
             </div>
 
             <button
-              onClick={() => goToWithHistory("auth")}
+              onClick={() => {
+                if (isBookingToken) { handleBookingVote() } else { goToWithHistory("auth") }
+              }}
               style={S.primaryBtn}
+              disabled={bookingVoteSubmitting}
             >
-              次へ →
+              {bookingVoteSubmitting ? '送信中…' : '次へ →'}
             </button>
             <button
               onClick={() => {
                 setSelectedRewardId('')
-                goToWithHistory("auth")
+                // レビュー指摘(重大3): buildVoteData()がstaleなselectedRewardIdを読まないよう明示的に上書き
+                if (isBookingToken) { handleBookingVote({ rewardIdOverride: '' }) } else { goToWithHistory("auth") }
               }}
               style={{ ...S.skipBtn, display: "block", margin: "0 auto" }}
+              disabled={bookingVoteSubmitting}
             >
               スキップ
             </button>

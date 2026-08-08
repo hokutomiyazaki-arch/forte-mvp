@@ -173,6 +173,10 @@ export default function ProofRequestPanel({ bookingId, sentAt, count, recorded, 
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
           <QRCodeSVG value={qrUrl} size={200} />
         </div>
+        {/* CEO追加指示(2026-08-08): ホーム画面の通常QRとの取り違え防止・入力不要である旨の注記(1行のみ)。 */}
+        <div style={{ fontSize: 13, color: '#B45309', marginBottom: 10, lineHeight: 1.6 }}>
+          ※ホーム画面のQRではなく、こちらを見せてください（入力なしで記録できます）
+        </div>
         <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 20, lineHeight: 1.6 }}>
           お客さまのスマホで読み取ってもらってください
         </div>
@@ -268,6 +272,10 @@ export default function ProofRequestPanel({ bookingId, sentAt, count, recorded, 
         </div>
         {qrButton}
         {qrModal}
+        {/* CEO追加指示(2026-08-08): §16-44の認証スキップをプロに簡潔に伝える(1行のみ・sentAt分岐にも適用)。 */}
+        <div style={{ fontSize: 13, color: '#6B7280', marginTop: 6 }}>
+          この予約のお客さま専用です。どちらも面倒な入力なしでそのまま記録できます。
+        </div>
         <div style={{ fontSize: 13, color: '#6B7280', marginTop: 10 }}>
           記録のお願いを送信済み（
           {new Date(sentAt).toLocaleString('ja-JP', {
@@ -315,6 +323,10 @@ export default function ProofRequestPanel({ bookingId, sentAt, count, recorded, 
             メールでお願いする
           </button>
         )}
+      </div>
+      {/* CEO追加指示(2026-08-08): §16-44の認証スキップをプロに簡潔に伝える(1行のみ)。 */}
+      <div style={{ fontSize: 13, color: '#6B7280', marginTop: 6 }}>
+        この予約のお客さま専用です。どちらも面倒な入力なしでそのまま記録できます。
       </div>
       {qrModal}
       {form}
