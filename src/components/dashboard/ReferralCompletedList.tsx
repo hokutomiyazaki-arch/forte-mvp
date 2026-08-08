@@ -29,9 +29,12 @@ interface Props {
    * 既存fetch結果の件数を渡すだけ)。レビュー指摘(軽微7): loadedを渡し、
    * received/completedの到着順による空状態フラッシュを防ぐ。 */
   onCountChange?: (count: number, loaded: boolean) => void
+  /** CEO指示(2026-08-08): 予約タブの「完了済み」サブタブとして使う表示モード。
+   * 'accordion'(既定・従来どおり折りたたみ箱・0件なら非表示) / 'list'(常時展開・0件でも空状態を表示)。 */
+  variant?: 'accordion' | 'list'
 }
 
-export default function ReferralCompletedList({ proId, onCountChange }: Props) {
+export default function ReferralCompletedList({ proId, onCountChange, variant = 'accordion' }: Props) {
   const [completedItems, setCompletedItems] = useState<CompletedBookingItem[]>([])
   const [completedOpen, setCompletedOpen] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -52,38 +55,53 @@ export default function ReferralCompletedList({ proId, onCountChange }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [completedCount, loading])
 
-  if (completedItems.length === 0) return null
+  // CEO指示(2026-08-08): 'list'は予約タブの「完了済み」サブタブ用（常時展開・0件でも空状態を出す）
+  if (variant === 'list' && !loading && completedItems.length === 0) {
+    return (
+      <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>
+        <div>完了した予約はまだありません</div>
+        <div style={{ marginTop: 4 }}>セッションが完了した予約がここに表示されます</div>
+      </div>
+    )
+  }
+  if (variant === 'accordion' && completedItems.length === 0) return null
 
   return (
     <div
-      style={{
-        background: '#FAFAFA',
-        border: '1px solid #E5E7EB',
-        borderRadius: 12,
-        padding: '10px 16px',
-      }}
+      style={
+        variant === 'list'
+          ? undefined
+          : {
+              background: '#FAFAFA',
+              border: '1px solid #E5E7EB',
+              borderRadius: 12,
+              padding: '10px 16px',
+            }
+      }
     >
-      <button
-        onClick={() => setCompletedOpen((prev) => !prev)}
-        style={{
-          background: 'none',
-          border: 'none',
-          padding: 0,
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          cursor: 'pointer',
-          fontSize: 13,
-          fontWeight: 700,
-          color: '#1A1A2E',
-        }}
-      >
-        <span>完了した紹介({completedItems.length}件)</span>
-        <span style={{ fontSize: 12, color: '#9CA3AF' }}>{completedOpen ? '▲' : '▼'}</span>
-      </button>
+      {variant === 'accordion' && (
+        <button
+          onClick={() => setCompletedOpen((prev) => !prev)}
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: 0,
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            cursor: 'pointer',
+            fontSize: 13,
+            fontWeight: 700,
+            color: '#1A1A2E',
+          }}
+        >
+          <span>完了した紹介({completedItems.length}件)</span>
+          <span style={{ fontSize: 12, color: '#9CA3AF' }}>{completedOpen ? '▲' : '▼'}</span>
+        </button>
+      )}
 
-      {completedOpen && (
+      {(variant === 'list' || completedOpen) && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
           {completedItems.map((item) => (
             <div
@@ -100,11 +118,10 @@ export default function ReferralCompletedList({ proId, onCountChange }: Props) {
               <div style={{ fontSize: 17, fontWeight: 800, color: '#1A1A2E', lineHeight: 1.4 }}>
                 {item.client_nickname}さん
               </div>
-              {item.sender_pro?.name && (
-                <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>
-                  紹介元: {item.sender_pro.name}さん
-                </div>
-              )}
+              {/* CEO指示(2026-08-08): 予約カードと同じ「紹介元orRP直」の1行表記に統一 */}
+              <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>
+                {item.sender_pro?.name ? `紹介元: ${item.sender_pro.name}さん` : 'REALPROOFからのご予約'}
+              </div>
               {item.completed_at && (
                 <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>
                   完了日: {new Date(item.completed_at).toLocaleDateString('ja-JP')}

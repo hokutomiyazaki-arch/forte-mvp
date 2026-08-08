@@ -33,6 +33,7 @@ import AcceptingStatusWidget from '@/components/dashboard/AcceptingStatusWidget'
 import SettingsSection from '@/components/dashboard/SettingsSection'
 import ConsultationsTab from '@/components/dashboard/ConsultationsTab'
 import ReferralBookingReceivedCard from '@/components/dashboard/ReferralBookingReceivedCard'
+import ReferralCompletedList from '@/components/dashboard/ReferralCompletedList'
 import ReferralActionBanner from '@/components/dashboard/ReferralActionBanner'
 import { createClient as createSupabaseClient } from '@/lib/supabase'
 import { resolveCharacterImageUrl } from '@/lib/character-image'
@@ -656,6 +657,9 @@ export default function DashboardPage() {
     const featureId = tabFeatureIds[dashboardTab]
     if (featureId) markFeatureSeen(featureId)
   }, [dashboardTab])
+
+  // CEO指示(2026-08-08): 予約タブのサブタブ（受付中 / 完了済み）
+  const [bookingsSubtab, setBookingsSubtab] = useState<'active' | 'completed'>('active')
 
   // §17-31(CEO指示 2026-08-08): 予約通知メールの ?tab=bookings&booking=<id> で着地したとき、
   // 該当予約カードへ自動スクロール＋一時ハイライトする。読み取り後は edit=true と同じ流儀で
@@ -5380,6 +5384,32 @@ export default function DashboardPage() {
             予約の受け方・メニューを設定する →
           </a>
 
+          {/* CEO指示(2026-08-08): 「完了済み」サブタブ。完了した予約を一覧で見返せるようにする
+              （旧: 紹介タブの到達不能なreceiveサブタブに残っていた完了リストの復活先）。 */}
+          <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #E5E7EB', marginBottom: 16 }}>
+            {([['active', '受付中'], ['completed', '完了済み']] as const).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setBookingsSubtab(key)}
+                style={{
+                  padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: 13, fontWeight: 700,
+                  color: bookingsSubtab === key ? '#1A1A2E' : '#9CA3AF',
+                  borderBottom: bookingsSubtab === key ? '2px solid #C4A35A' : '2px solid transparent',
+                  marginBottom: -1,
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {bookingsSubtab === 'completed' && (
+            <ReferralCompletedList proId={pro.id} variant="list" />
+          )}
+
+          <div style={{ display: bookingsSubtab === 'active' ? 'block' : 'none' }}>
           {/* §17-5(CEO判断 2026-08-06): 予約の受付はここに集約する。
               上のヘッダー行に「直接予約の受付」トグル、ここに「紹介からの予約の受付」。
               1画面で両方止められるようにするため（今までは画面をまたいで散らばっていた）。 */}
@@ -5439,6 +5469,9 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
+          {/* CEO指示(2026-08-08): 受付中サブタブの表示範囲ここまで（カードは単一マウントのまま
+              CSSで隠す = ReferralTabのサブタブと同じ流儀・件数/ハイライト処理を生かす） */}
+          </div>
         </div>
       )}
 
