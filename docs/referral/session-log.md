@@ -862,3 +862,19 @@
   20秒cooldown・1〜200字・DB書き込みなし（ドラフトのみ）・Anthropicへ個人情報は送らない。
   フラグ FEATURE_REFERRAL_AI_LIST（3値: 未設定=off / all / カンマ区切りプロID）。
   **リリース時: CEOがVercelに FEATURE_REFERRAL_AI_LIST=<ほくとのprofessionals.id> を追加**（まず自分で試す）。
+
+## 2026-08-08 AEO現状調査（§16-37の3・D調査項目）
+- JSON-LD現状: /card/[id]はLocalBusiness（name/説明/写真/都道府県/aggregateRating/review=§2-6変換済み）。
+  **状態語テーマ×実績数に相当する情報はゼロ**（knowsAbout等なし）。/r/と/voice/はJSON-LD無し（/r/はnoindex中）。
+- llms.txt: 存在しない。robots.ts/sitemap.tsは動的生成済みで公開カードはsitemap掲載済み（クロール土台はある）。
+- **最重要発見: proof_itemsの語彙に「状態語」が0件**。現行90項目は「診断力」「姿勢改善力」等の
+  効果・スキル語で、人が検索窓に打つ「めまい」「腰痛」「不眠」型の単語が無い。
+  状態近似語（痛み改善・自律神経改善等）が6〜8件のみ。**語彙側を足さない限り
+  「状態語テーマ×実績数」の構造化データは作れない**（AEOの前提が現状未成立）。
+- 診断名は項目名に含まれず（§2-6禁止語と突き合わせ済み・安全）。
+- 実装規模: JSON-LD追加=小〜中（card layout 1本+search RPC再利用。RPCは本番稼働確認済み）。
+  llms.txt=静的なら小。
+- 発見した不整合（要CEO判断・別タスク）: ①CLAUDE.mdの9カテゴリ「発見・気づき」vs constants.tsの
+  「relax=リラックス」の食い違い ②JSON-LDのaggregateRatingがratingValue固定5・vote_type不問
+  （hopeful/personality_only混入）— AI・Googleに「全票=5つ星レビュー」と読ませており要再考。
+- proof_itemsのDB実値フルリストはコードから復元不可（migrationとconstantsが食い違う）→SQL提示待ち。
