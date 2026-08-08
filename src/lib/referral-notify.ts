@@ -243,6 +243,34 @@ export async function notifyReferralPinAdded(
 }
 
 /**
+ * CEO指示(2026-08-08): 紹介リスト経由の予約リクエストが入った時点で送り手（紹介元）にも知らせる。
+ * ※ 2026-08-05の「送り手宛はクリティカルのみ」決定で成立前の通知は削っていたが、
+ *    CEOの最新指示で「リクエスト時点の通知」を復活（自分のリストが働いたことが分かる価値を優先）。
+ */
+export async function notifyBookingRequestedToSender(
+  target: ProNotifyTarget,
+  clientName: string,
+  receiverProName: string,
+  listTitle: string | null,
+): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  const casesUrl = `${APP_URL}/dashboard?tab=referral&sub=cases`
+  const safeClientName = escapeHtml(clientName)
+  const safeReceiverProName = escapeHtml(receiverProName)
+  const listPart = listTitle ? `紹介リスト「${listTitle}」` : '紹介リスト'
+  const safeListPart = listTitle ? `紹介リスト「${escapeHtml(listTitle)}」` : '紹介リスト'
+  return sendProNotification(target, {
+    lineText: `${listPart}から、${clientName}さんが${receiverProName}先生に予約リクエストを送りました。成立したら改めてお知らせします。\n${casesUrl}`,
+    emailSubject: '紹介リストから予約リクエストが入りました',
+    emailBodyHtml: emailShell(
+      '紹介リクエストのお知らせ',
+      `${safeListPart}から、${safeClientName}さんが${safeReceiverProName}先生に予約リクエストを送りました。<br>成立したら改めてお知らせします。`,
+      '紹介した案件を開く',
+      casesUrl,
+    ),
+  })
+}
+
+/**
  * §2-4: 予約リクエストが届いたことを受け手プロへ通知する。
  */
 // §17-2(2026-08-06): 受け手プロ宛の予約通知のリンク先は「予約」タブ(?tab=bookings)。

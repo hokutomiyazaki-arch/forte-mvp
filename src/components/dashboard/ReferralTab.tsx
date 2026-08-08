@@ -67,6 +67,8 @@ interface SentBooking {
   completed_at: string | null
   created_at: string
   client_nickname: string
+  /** CEO指摘(2026-08-08): 本人入力のお名前（nicknameが「ご相談者」固定のため）。 */
+  client_name?: string | null
   receiver_pro: { id: string; name: string } | null
   /** §17-16(CEO指示 2026-08-06): クライアントにメールが届かなかった案件。 */
   receipt_email_failed?: boolean | null
@@ -2303,7 +2305,8 @@ export default function ReferralTab({
               >
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6 }}>
-                    <strong>{b.client_nickname}さん</strong>
+                    {/* CEO指摘(2026-08-08): 「ご相談者」ではなく本人入力のお名前を出す */}
+                    <strong>{b.client_name || b.client_nickname}さん</strong>
                     {b.receiver_pro?.name && <span style={{ color: '#6B7280' }}> → {b.receiver_pro.name}さん</span>}
                     <span style={{ marginLeft: 8, fontSize: 13, color: '#9CA3AF' }}>{SENT_STATUS_LABEL[b.status]}</span>
                     {b.receipt_email_failed && b.email_fix_owner === 'sender' && (
@@ -2313,6 +2316,14 @@ export default function ReferralTab({
                         whiteSpace: 'nowrap' as const,
                       }}>メール届かず</span>
                     )}
+                  </div>
+                  {/* CEO指摘(2026-08-08): 日付が入っていない。状態に応じた日付を1行出す(畳んでいても見える) */}
+                  <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>
+                    {b.status === 'completed' && b.completed_at
+                      ? `完了日: ${new Date(b.completed_at).toLocaleDateString('ja-JP')}`
+                      : b.status === 'confirmed' && b.confirmed_at
+                        ? `確定日: ${new Date(b.confirmed_at).toLocaleDateString('ja-JP')}`
+                        : `申込日: ${new Date(b.created_at).toLocaleDateString('ja-JP')}`}
                   </div>
                 </div>
                 <span style={{ fontSize: 12, color: '#9CA3AF', flexShrink: 0 }}>{isCaseExpanded ? '▲' : '▼'}</span>
