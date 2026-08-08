@@ -26,6 +26,17 @@ import { formatSlotWithWeekday } from '@/lib/referral-format'
 const APP_URL = 'https://realproof.jp'
 
 /**
+ * CEO指示(2026-08-08): 受け手プロ宛メール/LINEのダッシュボードリンクに booking_id を付け、
+ * 着地時に該当予約カードへ自動スクロール＋ハイライトできるようにする(§17-31)。
+ * bookingId 未指定の既存呼び出しは従来どおり ?tab=bookings のみ(後方互換)。
+ */
+function buildBookingsDashboardUrl(bookingId?: string | null): string {
+  return bookingId
+    ? `${APP_URL}/dashboard?tab=bookings&booking=${encodeURIComponent(bookingId)}`
+    : `${APP_URL}/dashboard?tab=bookings`
+}
+
+/**
  * メールHTML本文に埋め込むユーザー由来文字列(プロ名・クライアントニックネーム・
  * リストのcomment等)は必ずこれを通す(中3レビュー指摘: HTMLインジェクション対策)。
  * LINEテキストはHTML解釈されないため対象外。
@@ -243,9 +254,9 @@ export async function notifyBookingRequested(
    * §17-1(CEO決定 2026-08-06): REALPROOFの直接予約は紹介元がいない。
    * 「紹介予約」と書くと本人が心当たりのない通知になるため、直接予約では言い方を変える。
    */
-  opts?: { direct?: boolean },
+  opts?: { direct?: boolean; bookingId?: string | null },
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=bookings`
+  const dashboardUrl = buildBookingsDashboardUrl(opts?.bookingId)
   const safeClientNickname = escapeHtml(clientNickname)
   const kind = opts?.direct ? '予約' : '紹介予約'
   return sendProNotification(target, {
@@ -302,9 +313,10 @@ export async function notifyBookingPaymentCompletedToReceiver(
      */
     priceJpy?: number | null
     feeAmountJpy?: number | null
+    bookingId?: string | null
   },
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=bookings`
+  const dashboardUrl = buildBookingsDashboardUrl(opts?.bookingId)
   const safeClientNickname = escapeHtml(clientNickname)
   const reminder = opts?.remindMissingLocationInfo
     ? 'プロフィールに場所情報が未設定のため、クライアントへ当日の場所をお伝えください。'
@@ -540,17 +552,23 @@ export async function notifyBookingCancelledByReceiverToClient(
     refundPending: boolean
     noRefundByPolicy?: boolean
     confirmedSlotText?: string | null
+    /** レビュー指摘(2026-08-08・中2): 直予約(source='direct')に「紹介予約」と書かない。
+     * trueのときは件名・本文を「ご予約」にし、フッターはプロフィールへの導線にする
+     * (このとき呼び出し元は listUrl にプロのカードURLを渡す。decline と同じ流儀)。 */
+    isDirect?: boolean
   },
 ): Promise<{ sent: boolean }> {
   const safeReceiverProName = escapeHtml(receiverProName)
   const reason = opts.reason || 'pro'
+  const isDirect = !!opts.isDirect
+  const kind = isDirect ? 'ご予約' : '紹介予約'
   const safeConfirmedSlotText = opts.confirmedSlotText ? escapeHtml(opts.confirmedSlotText) : null
   const leadHtml =
     reason === 'client'
       ? safeConfirmedSlotText
         ? `${safeReceiverProName}さんとのご予約(${safeConfirmedSlotText})について、ご希望によるキャンセルを承りました。`
         : `${safeReceiverProName}さんとのご予約について、ご希望によるキャンセルを承りました。`
-      : `${safeReceiverProName}さんの都合により、紹介予約はキャンセルされました。`
+      : `${safeReceiverProName}さんの都合により、${kind}はキャンセルされました。`
 
   let refundPart = ''
   if (opts.refundPending) {
@@ -566,10 +584,11 @@ export async function notifyBookingCancelledByReceiverToClient(
 
   return notifyClientByEmail(
     target,
-    reason === 'client' ? 'ご希望によるキャンセルを承りました' : `${receiverProName}さんの都合により紹介予約がキャンセルされました`,
+    reason === 'client' ? 'ご希望によるキャンセルを承りました' : `${receiverProName}さんの都合により${kind}がキャンセルされました`,
     emailShell(
-      '紹介予約キャンセルのお知らせ',
-      `${leadHtml}${refundPart}` + referralListFooterHtml(listUrl, '他の先生もご紹介できます'),
+      `${isDirect ? 'ご予約' : '紹介予約'}キャンセルのお知らせ`,
+      `${leadHtml}${refundPart}` +
+        referralListFooterHtml(listUrl, isDirect ? 'プロフィールを見る' : '他の先生もご紹介できます'),
     ),
   )
 }
@@ -584,9 +603,9 @@ export async function notifyCounterAcceptedToReceiver(
   target: ProNotifyTarget,
   clientNickname: string,
   confirmedSlotText: string | null,
-  opts?: { awaitingPayment?: boolean },
+  opts?: { awaitingPayment?: boolean; bookingId?: string | null },
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=bookings`
+  const dashboardUrl = buildBookingsDashboardUrl(opts?.bookingId)
   const safeClientNickname = escapeHtml(clientNickname)
   const slotPart = confirmedSlotText ? `${confirmedSlotText} で確定` : '日時を選択'
   const paymentNote = opts?.awaitingPayment
@@ -793,8 +812,9 @@ export async function notifyRescheduleConfirmedToReceiver(
   target: ProNotifyTarget,
   clientNickname: string,
   newSlotText: string | null,
+  bookingId: string | null = null,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=bookings`
+  const dashboardUrl = buildBookingsDashboardUrl(bookingId)
   const safeClientNickname = escapeHtml(clientNickname)
   const slotPart = newSlotText ? `${newSlotText} に変更` : '新しい日時に変更'
   return sendProNotification(target, {
@@ -812,23 +832,28 @@ export async function notifyRescheduleConfirmedToReceiver(
 /**
  * タスクB(2026-08-04・CEO指示・意味合い変更): クライアントが「候補では難しいため現在の日時を
  * 希望する」を選んだ際、受け手プロへ通知する。どうしても都合がつかない場合の代替導線として、
- * ダッシュボードからのキャンセル(予約金は全額返金)を案内する。
+ * ダッシュボードからのキャンセル(紹介予約のみ「予約金は全額返金」)を案内する。
+ * CEO報告(2026-08-08): 直予約(source='direct')には予約金が存在しないため、isDirect=true の
+ * ときは返金の括弧書きを出さない。
  */
 export async function notifyRescheduleKeptCurrentToReceiver(
   target: ProNotifyTarget,
   clientNickname: string,
   currentSlotText: string | null = null,
+  isDirect: boolean = false,
+  bookingId: string | null = null,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=bookings`
+  const dashboardUrl = buildBookingsDashboardUrl(bookingId)
   const safeClientNickname = escapeHtml(clientNickname)
   const slotPart = currentSlotText ? `(${currentSlotText})` : ''
   const safeSlotPart = currentSlotText ? `(${escapeHtml(currentSlotText)})` : ''
+  const cancelPart = isDirect ? 'キャンセル' : 'キャンセル(予約金は全額返金されます)'
   return sendProNotification(target, {
-    lineText: `${clientNickname}さんは現在の日時${slotPart}を希望しています。どうしてもご都合がつかない場合は、ダッシュボードからキャンセル(予約金は全額返金されます)をご検討ください。\n${dashboardUrl}`,
+    lineText: `${clientNickname}さんは現在の日時${slotPart}を希望しています。どうしてもご都合がつかない場合は、ダッシュボードから${cancelPart}をご検討ください。\n${dashboardUrl}`,
     emailSubject: 'クライアントは現在の日時を希望しています',
     emailBodyHtml: emailShell(
       '日時変更のお知らせ',
-      `${safeClientNickname}さんは現在の日時${safeSlotPart}を希望しています。<br>どうしてもご都合がつかない場合は、ダッシュボードからキャンセル(予約金は全額返金されます)をご検討ください。`,
+      `${safeClientNickname}さんは現在の日時${safeSlotPart}を希望しています。<br>どうしてもご都合がつかない場合は、ダッシュボードから${cancelPart}をご検討ください。`,
       'ダッシュボードを開く',
       dashboardUrl,
     ),

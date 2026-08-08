@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useUser, useClerk } from '@clerk/nextjs'
 import { useSearchParams } from 'next/navigation'
 import { db, uploadFile } from '@/lib/db'
+import { markFeatureSeen } from '@/lib/new-feature-seen'
 import { calcQrTokenExpiry } from '@/lib/qr-token'
 import { Professional, VoteSummary, CustomForte, getResultForteLabel, REWARD_TYPES, getRewardType, FNT_NEURO_APPS } from '@/lib/types'
 import { resolveProofLabels, resolvePersonalityLabels } from '@/lib/proof-labels'
@@ -588,7 +589,20 @@ export default function DashboardPage() {
   // URLパラメータによるタブ切替
   const tabParam = searchParams.get('tab')
   // §17-6: 相談タブで最初に開くスレッド（予約カードの「メッセージを送る」から渡ってくる）
+  // CEO報告(2026-08-08): booking= と同じ流儀で state に写してからURLから即除去する
+  // （リロードでの再オープン・再スクロール防止。遷移元は window.location.href=フルリロードのため
+  // 2回目のタップも毎回効く）。
   const consultationOpenParam = searchParams.get('open')
+  const [consultationInitialOpenId, setConsultationInitialOpenId] = useState<string | null>(null)
+  const consultationOpenConsumedRef = useRef(false)
+  useEffect(() => {
+    if (!consultationOpenParam || consultationOpenConsumedRef.current) return
+    consultationOpenConsumedRef.current = true
+    setConsultationInitialOpenId(consultationOpenParam)
+    const url = new URL(window.location.href)
+    url.searchParams.delete('open')
+    window.history.replaceState(null, '', url.toString())
+  }, [consultationOpenParam])
   useEffect(() => {
     if (!tabParam || loading) return
     const validTabs = ['profile', 'proofs', 'rewards', 'voices', 'card', 'myorgs', 'certs', 'consultations', 'photos', 'org', 'guide', 'business-info', 'badges', 'referral', 'bookings']
@@ -630,6 +644,34 @@ export default function DashboardPage() {
       }, 300)
     }
   }, [dashboardTab, memberResources])
+
+  // CEO恒久ルール(2026-08-08): メニューの New マークは「一度そのページを確認したら消える」。
+  // ダッシュボードのタブ型機能は、タブを開いた時点で既読にする（Navbar の NewBadge id と対応）。
+  useEffect(() => {
+    const tabFeatureIds: Record<string, string> = {
+      bookings: 'tab-bookings',
+      referral: 'tab-referral',
+      'business-info': 'tab-business-info',
+    }
+    const featureId = tabFeatureIds[dashboardTab]
+    if (featureId) markFeatureSeen(featureId)
+  }, [dashboardTab])
+
+  // §17-31(CEO指示 2026-08-08): 予約通知メールの ?tab=bookings&booking=<id> で着地したとき、
+  // 該当予約カードへ自動スクロール＋一時ハイライトする。読み取り後は edit=true と同じ流儀で
+  // URLから即除去する(リロードで再スクロールさせない)。実際のスクロール処理はカード一覧の
+  // データ取得完了を知っている ReferralBookingReceivedCard 側が行う。
+  const bookingHighlightParam = searchParams.get('booking')
+  const [highlightBookingId, setHighlightBookingId] = useState<string | null>(null)
+  const bookingHighlightConsumedRef = useRef(false)
+  useEffect(() => {
+    if (!bookingHighlightParam || bookingHighlightConsumedRef.current) return
+    bookingHighlightConsumedRef.current = true
+    setHighlightBookingId(bookingHighlightParam)
+    const url = new URL(window.location.href)
+    url.searchParams.delete('booking')
+    window.history.replaceState(null, '', url.toString())
+  }, [bookingHighlightParam])
 
   // プロフィール編集直接オープン（マウント後1回のみ）
   // deps にオブジェクト pro を入れると、保存時の setPro(savedData) で参照が変わり
@@ -5048,7 +5090,7 @@ export default function DashboardPage() {
       {/* §17-6: 予約カードの「メッセージを送る」から ?open=<id> で飛んでくる。
           どのスレッドを開くか名指しで渡さないと、飛ばされた側は書けない。 */}
       {dashboardTab === 'consultations' && pro && (
-        <ConsultationsTab onUnreadChange={setUnreadConsultations} initialOpenId={consultationOpenParam} />
+        <ConsultationsTab onUnreadChange={setUnreadConsultations} initialOpenId={consultationInitialOpenId} />
       )}
 
       {/* ═══ Tab: 認定・資格 ═══
@@ -5383,7 +5425,11 @@ export default function DashboardPage() {
           )}
 
 
-          <ReferralBookingReceivedCard proId={pro.id} onStatusChange={handleReferralReceivedStatus} />
+          <ReferralBookingReceivedCard
+            proId={pro.id}
+            onStatusChange={handleReferralReceivedStatus}
+            highlightBookingId={highlightBookingId}
+          />
 
           {referralReceivedLoaded && referralTotalReceivedCount === 0 && (
             <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>

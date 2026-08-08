@@ -78,12 +78,12 @@ export default function Navbar() {
           {/* §17-2(CEO判断 2026-08-06): 予約（受け取る仕事）と紹介（送り出す仕事）を分ける。
               予約は referralEnabled でゲートしない（受け手は先行公開の対象外でも予約を受けられる）。 */}
           {isPro && (
-            <a href="/dashboard?tab=bookings" onClick={closeMenu} style={menuLinkStyle}>予約<NewBadge /></a>
+            <a href="/dashboard?tab=bookings" onClick={closeMenu} style={menuLinkStyle}>予約<NewBadge id="tab-bookings" /></a>
           )}
           {/* CEO指示(2026-08-03): 紹介はコアメニューのためトップレベルへ昇格(設定グループから移動)
               §17-2(2026-08-06): 予約と紹介を分けたので、紹介側にも New を付ける（CEO指示「両方にNewを」）。 */}
           {isPro && referralEnabled && (
-            <a href="/dashboard?tab=referral" onClick={closeMenu} style={menuLinkStyle}>紹介<NewBadge /></a>
+            <a href="/dashboard?tab=referral" onClick={closeMenu} style={menuLinkStyle}>紹介<NewBadge id="tab-referral" /></a>
           )}
           {/* CEO指示(2026-08-03): 「獲得バッジ」→「証明書発行」に改名し、認定申請も中に入れるグループに */}
           {isPro && (
@@ -118,7 +118,7 @@ export default function Navbar() {
               <div style={{ maxHeight: openMenuGroups.settings ? '500px' : '0px', overflow: 'hidden', transition: 'max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1)' }}>
                 <a href="/dashboard?tab=profile&edit=true" onClick={closeMenu} style={menuLinkStyle}>プロフィール編集</a>
                 {/* §17-1: 「予約の受け方」をここへ移動した */}
-                <a href="/dashboard?tab=business-info" onClick={closeMenu} style={menuLinkStyle}>サービス設定<NewBadge /></a>
+                <a href="/dashboard?tab=business-info" onClick={closeMenu} style={menuLinkStyle}>サービス設定<NewBadge id="tab-business-info" /></a>
                 <a href="/dashboard?tab=proofs" onClick={closeMenu} style={menuLinkStyle}>強み設定</a>
                 <a href="/dashboard?tab=rewards" onClick={closeMenu} style={menuLinkStyle}>リワード設定</a>
                 <a href="/dashboard?tab=card" onClick={closeMenu} style={menuLinkStyle}>NFCカード設定</a>
@@ -153,6 +153,9 @@ export default function Navbar() {
           )}
           {isPro && (
             <a href="/support/badge-guide" onClick={closeMenu} style={menuLinkStyle}>認定バッジの使い方</a>
+          )}
+          {isPro && (
+            <a href="/support/booking-consultation-guide" onClick={closeMenu} style={menuLinkStyle}>予約と相談のしくみガイド<NewBadge id="booking-consultation-guide" /></a>
           )}
           {isPro && (
             <a href="/support/referral-guide" onClick={closeMenu} style={menuLinkStyle}>紹介のしくみガイド</a>

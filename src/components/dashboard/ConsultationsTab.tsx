@@ -42,7 +42,7 @@ function formatDate(iso: string): string {
  * 相談タブ（§16-19・プロ側）
  *
  * 「プロはダッシュボードで返信を書き込むだけ。クライアントにはメールが届く」がこの機能の肝。
- * 未返信（status='new'）を上に出し、1件ずつ開いて返信する。
+ * 未対応(new)→対応中(open)→対応済み(closed)の順に並べ、1件ずつ開いて返信する（CEO指示 2026-08-08）。
  */
 export default function ConsultationsTab({
   onUnreadChange,
@@ -58,6 +58,8 @@ export default function ConsultationsTab({
   const [list, setList] = useState<Consultation[]>([])
   const [loading, setLoading] = useState(true)
   const [openId, setOpenId] = useState<string | null>(null)
+  // CEO報告(2026-08-08): ?open= で名指しされたスレッドの一時ハイライト（金色リング・数秒で消える）
+  const [flashId, setFlashId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [sendingId, setSendingId] = useState<string | null>(null)
   const [error, setError] = useState('')
@@ -91,9 +93,16 @@ export default function ConsultationsTab({
       const items: Consultation[] = Array.isArray(json.consultations) ? json.consultations : []
       setList(items)
       // §17-6: 名指しで開くよう言われたスレッドがあれば開く（一覧に居るときだけ・1回だけ）。
+      // CEO報告(2026-08-08): 開くだけでなく、該当カードへ自動スクロール＋数秒ハイライトする
+      // （予約カードの ?booking= と同じ見せ方。描画反映を待って300ms後にDOMを探す）。
       if (initialOpenId && !openedInitialRef.current && items.some(c => c.id === initialOpenId)) {
         openedInitialRef.current = true
         setOpenId(initialOpenId)
+        setFlashId(initialOpenId)
+        setTimeout(() => {
+          document.getElementById(`consultation-card-${initialOpenId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }, 300)
+        setTimeout(() => setFlashId(null), 3800)
       }
       if (typeof json.accepting === 'boolean') setAccepting(json.accepting)
       if (Array.isArray(json.menus)) setMenus(json.menus)
@@ -415,10 +424,12 @@ export default function ConsultationsTab({
     )
   }
 
-  // 未返信を上に。同じ状態なら新しい順。
+  // CEO指示(2026-08-08): 未対応(new)→対応中(open)→対応済み(closed)の順に上から並べる。
+  // 同じ状態なら新しい順。archivedはアーカイブ表示側にしか出ないため実質同率(最後尾)。
+  const STATUS_SORT_RANK: Record<string, number> = { new: 0, open: 1, closed: 2 }
   const sorted = [...list].sort((a, b) => {
-    const an = a.status === 'new' ? 0 : 1
-    const bn = b.status === 'new' ? 0 : 1
+    const an = STATUS_SORT_RANK[a.status] ?? 3
+    const bn = STATUS_SORT_RANK[b.status] ?? 3
     return an - bn || b.updated_at.localeCompare(a.updated_at)
   })
 
@@ -440,8 +451,10 @@ export default function ConsultationsTab({
           const isNew = c.status === 'new'
           const last = c.messages[c.messages.length - 1]
           return (
-            <div key={c.id} style={{
-              background: '#fff', border: `1px solid ${isNew ? '#C4A35A' : '#E5E7EB'}`,
+            <div key={c.id} id={`consultation-card-${c.id}`} style={{
+              background: '#fff', border: `1px solid ${flashId === c.id ? '#C4A35A' : isNew ? '#C4A35A' : '#E5E7EB'}`,
+              boxShadow: flashId === c.id ? '0 0 0 4px rgba(196,163,90,0.35)' : 'none',
+              transition: 'box-shadow 0.5s, border-color 0.5s',
               borderRadius: 12, overflow: 'hidden',
             }}>
               <button
@@ -455,15 +468,25 @@ export default function ConsultationsTab({
               >
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E' }}>{c.client_name}</span>
-                    {isNew && (
+                    {/* レビュー指摘(2026-08-08): バッジ拡大に伴い長い氏名は省略記号で切る(バッジのはみ出し防止) */}
+                    <span style={{
+                      fontSize: 14, fontWeight: 700, color: '#1A1A2E',
+                      minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>{c.client_name}</span>
+                    {/* CEO指示(2026-08-08): 未対応/対応中/対応済みのラベルを常に表示(§0-6: 13px以上・絵文字なし)。
+                        旧「未返信」(new)・グレー文字「対応済み」(closed)を3状態の統一バッジに置き換え。 */}
+                    {(c.status === 'new' || c.status === 'open' || c.status === 'closed') && (
                       <span style={{
-                        fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
-                        background: '#C4A35A', color: '#1A1A2E',
-                      }}>未返信</span>
-                    )}
-                    {c.status === 'closed' && (
-                      <span style={{ fontSize: 10, color: '#9CA3AF' }}>対応済み</span>
+                        fontSize: 13, fontWeight: 700, padding: '2px 10px', borderRadius: 999,
+                        flexShrink: 0,
+                        ...(c.status === 'new'
+                          ? { background: '#C4A35A', color: '#1A1A2E' }
+                          : c.status === 'open'
+                            ? { background: '#DBEAFE', color: '#1D4ED8' }
+                            : { background: '#F1F5F9', color: '#64748B' }),
+                      }}>
+                        {c.status === 'new' ? '未対応' : c.status === 'open' ? '対応中' : '対応済み'}
+                      </span>
                     )}
                     {/* §17-8: 開かなくても分かるようにする（返信を書く前に気づけること） */}
                     {c.email_failed && (

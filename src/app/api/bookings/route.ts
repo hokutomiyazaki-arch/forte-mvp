@@ -239,7 +239,7 @@ export async function POST(request: NextRequest) {
           line_messaging_user_id: (pro as any).line_messaging_user_id,
         },
         clientName || ownClient.nickname || 'クライアント',
-        { direct: true },
+        { direct: true, bookingId: booking.id },
       )
     } catch (notifyErr) {
       console.error('[api/bookings] pro notify error:', notifyErr)

@@ -118,6 +118,26 @@ export async function POST(request: NextRequest, { params }: { params: { booking
       .maybeSingle()
     const receiverProName = receiverPro?.name || 'プロ'
 
+    // CEO報告(2026-08-08): 直予約に「予約金は全額返金」「紹介予約」の文言を出さないため source を判定する。
+    // received/route.ts と同じ作法: 本体SELECTに source を足すと migration 056 未実行環境で
+    // 42703 になり操作全体が落ちるため、別クエリ + fail-soft(失敗時は紹介予約扱い)で取得する。
+    // レビュー指摘(2026-08-08・中3): 失敗は握りつぶさず必ずログに残す(42703はthrowせずerrorで返るため
+    // dataだけ見ると痕跡ゼロになる)。keep_current のメール文言と select のカレンダータイトルで共用。
+    let isDirectBooking = false
+    try {
+      const { data: sourceRow, error: sourceError } = await supabase
+        .from('referral_bookings')
+        .select('source')
+        .eq('id', bookingId)
+        .maybeSingle()
+      if (sourceError) {
+        console.error('[api/referral/bookings/[booking_id]/reschedule-respond] source fetch error (fail-soft):', sourceError)
+      }
+      isDirectBooking = (sourceRow as { source?: string | null } | null)?.source === 'direct'
+    } catch (sourceErr) {
+      console.error('[api/referral/bookings/[booking_id]/reschedule-respond] source fetch error (fail-soft):', sourceErr)
+    }
+
     if (mode === 'keep_current') {
       // §2-2改訂(CEO決定): 「現在の日時のまま」の場合は受け手のみ通知(送り手は成立時のみ通知)。
       // CEO指摘(2026-08-04): 通知文にどの日時を希望しているかを含めるため、更新前のpreferred_slots
@@ -134,7 +154,9 @@ export async function POST(request: NextRequest, { params }: { params: { booking
               line_messaging_user_id: receiverPro.line_messaging_user_id,
             },
             clientNickname,
-            currentSlotTextForKeep
+            currentSlotTextForKeep,
+            isDirectBooking,
+            bookingId
           )
         }
       } catch (notifyErr) {
@@ -158,7 +180,8 @@ export async function POST(request: NextRequest, { params }: { params: { booking
             line_messaging_user_id: receiverPro.line_messaging_user_id,
           },
           clientNickname,
-          newSlotText
+          newSlotText,
+          bookingId
         )
       }
     } catch (notifyErr) {
@@ -173,7 +196,10 @@ export async function POST(request: NextRequest, { params }: { params: { booking
         const calendarUrl = selectedIso
           ? buildGoogleCalendarUrl({
               startIso: selectedIso,
-              title: `${receiverProName}さんとの紹介予約(REAL PROOF)`,
+              // レビュー指摘(2026-08-08・軽微): 直予約に「紹介予約」とタイトルを付けない。
+              title: isDirectBooking
+                ? `${receiverProName}さんとのご予約(REAL PROOF)`
+                : `${receiverProName}さんとの紹介予約(REAL PROOF)`,
               location: receiverPro?.address || undefined,
             })
           : null
