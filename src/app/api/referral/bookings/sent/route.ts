@@ -103,6 +103,8 @@ export async function GET() {
         // CEO指示(2026-08-08): 紹介したカードに「お支払い待ち/予約金支払い済み」等の状態ラベルを
         // 出すため。金額は返さない(状態のみ)。
         payment_status: b.payment_status || null,
+        // CEO指示(2026-08-08): 送り手がアドレスを直した後は、クライアントとの相談チャット導線を出す。
+        client_email_fixed_by_sender: b.preferred_slots?.client_email_fixed_by === 'sender',
         receiver_pro: b.receiver_pro_id ? receiversMap[b.receiver_pro_id] || null : null,
         // §17-16: メールが届いていない案件だけ、送り手にやることを出す。
         receipt_email_failed: receiptEmailFailed,

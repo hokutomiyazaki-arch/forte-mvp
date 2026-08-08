@@ -36,14 +36,23 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
 
     const { data: booking } = await supabase
       .from('referral_bookings')
-      .select('id, receiver_pro_id, status, client_name, client_email')
+      .select('id, receiver_pro_id, sender_pro_id, status, client_name, client_email')
       .eq('id', id)
       .maybeSingle()
 
-    if (!booking || booking.receiver_pro_id !== ownPro.id) {
+    // CEO指示(2026-08-08): 送り手（紹介元）もクライアントとの相談スレッドを開けるようにする
+    // （メールアドレスを直した後の連絡用。スレッドは各プロ自身とクライアントの間に作られる）。
+    const isReceiver = !!booking && booking.receiver_pro_id === ownPro.id
+    const isSender = !!booking && booking.sender_pro_id === ownPro.id
+    if (!booking || (!isReceiver && !isSender)) {
       return NextResponse.json({ error: 'not_found' }, { status: 404 })
     }
-    if (booking.status !== 'confirmed' && booking.status !== 'completed') {
+    // 受け手は従来どおり confirmed/completed のみ（requested段階では連絡先を開示しない既存ルール）。
+    // 送り手は自分が紹介したクライアント（元々知っている相手）のため requested 段階でも可。
+    if (isReceiver && booking.status !== 'confirmed' && booking.status !== 'completed') {
+      return NextResponse.json({ error: 'not_confirmed' }, { status: 409 })
+    }
+    if (isSender && booking.status !== 'requested' && booking.status !== 'confirmed' && booking.status !== 'completed') {
       return NextResponse.json({ error: 'not_confirmed' }, { status: 409 })
     }
     if (!booking.client_email) {
