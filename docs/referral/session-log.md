@@ -862,3 +862,51 @@
   20秒cooldown・1〜200字・DB書き込みなし（ドラフトのみ）・Anthropicへ個人情報は送らない。
   フラグ FEATURE_REFERRAL_AI_LIST（3値: 未設定=off / all / カンマ区切りプロID）。
   **リリース時: CEOがVercelに FEATURE_REFERRAL_AI_LIST=<ほくとのprofessionals.id> を追加**（まず自分で試す）。
+
+## 2026-08-08 AEO現状調査（§16-37の3・D調査項目）
+- JSON-LD現状: /card/[id]はLocalBusiness（name/説明/写真/都道府県/aggregateRating/review=§2-6変換済み）。
+  **状態語テーマ×実績数に相当する情報はゼロ**（knowsAbout等なし）。/r/と/voice/はJSON-LD無し（/r/はnoindex中）。
+- llms.txt: 存在しない。robots.ts/sitemap.tsは動的生成済みで公開カードはsitemap掲載済み（クロール土台はある）。
+- **最重要発見: proof_itemsの語彙に「状態語」が0件**。現行90項目は「診断力」「姿勢改善力」等の
+  効果・スキル語で、人が検索窓に打つ「めまい」「腰痛」「不眠」型の単語が無い。
+  状態近似語（痛み改善・自律神経改善等）が6〜8件のみ。**語彙側を足さない限り
+  「状態語テーマ×実績数」の構造化データは作れない**（AEOの前提が現状未成立）。
+- 診断名は項目名に含まれず（§2-6禁止語と突き合わせ済み・安全）。
+- 実装規模: JSON-LD追加=小〜中（card layout 1本+search RPC再利用。RPCは本番稼働確認済み）。
+  llms.txt=静的なら小。
+- 発見した不整合（要CEO判断・別タスク）: ①CLAUDE.mdの9カテゴリ「発見・気づき」vs constants.tsの
+  「relax=リラックス」の食い違い ②JSON-LDのaggregateRatingがratingValue固定5・vote_type不問
+  （hopeful/personality_only混入）— AI・Googleに「全票=5つ星レビュー」と読ませており要再考。
+- proof_itemsのDB実値フルリストはコードから復元不可（migrationとconstantsが食い違う）→SQL提示待ち。
+
+## 2026-08-08 D-2調査（§16-38外部予約ボタン・完了時プルーフ依頼・トップ改修規模）
+- 【最重要】**完了時のクライアント宛プルーフ依頼は存在しない**（直接・紹介とも）。完了経路は
+  手動complete（received/route.ts）と自動完了cron（expire-referral-bookings）の2つで、どちらも
+  送り手プロ宛通知のみ。クライアント宛は通知パス自体が未実装。「使うほど実績が貯まる」の
+  ヒーローUSPはこの実装が入るまで成立しない（公開前提条件）。
+  実装最小案: 完了2経路から共通関数notifyClientProofRequest()を呼び、オンライン投票PIN流用で
+  /vote/{proId}?pin=形式のURLをメールに同梱（QRフローは非接触）。
+- §16-38（外部予約ボタン）の土台は想定よりできている:
+  ①直リンク=/book/[proId]が既に独立URLで存在（実質規模0）②貼り付けコード生成=バッジ埋め込みHTML
+  コピーUIの前例流用で小 ③QR版=QRCodeSVG既存部品で小 ④OGP=静的流用なら小・プロ固有動的OG画像なら中
+  （/api/og/card/[id]の前例あり）。
+- トップ改修（§16-40）: 現行page.tsx(約1370行)の構成はメッセージ階層とほぼ対応が取れる
+  （差し替え中心+情緒/未来/宣言文の新設少量）。§16-11違反の価格アンカー（取り消し線+MVP無料）が
+  現存しており改修時に削除確定。ヒーロー画像は実在メンバー写真の許諾・素材待ち（CEO側タスク）。
+  公開はフラグ or 下書きで準備し一括告知と同時（§16-40記録済み）。実装着手はCEO指示待ち。
+
+## 2026-08-08 プルーフ依頼送信機能（§16-41実装・PR #57予定）
+- 完了済み/確定済み(日時過去)の予約カードから「クライアントに記録をお願いする」。
+  プロの一言(300字・プレフィル)+QRと同じトークン式リンク(/vote/{proId}?token=・72h TTL・
+  channel=booking)をメール送信。メール未達客はSMS。PIN入力なし=二回入力なし(CEO指示)。
+- 制限: 1予約2回まで・24hクールダウン。CAS予約(preferred_slots->>proof_request_countの
+  compare-and-set)→送信→失敗時ロールバック方式で連打・fail openを封じた(レビュー指摘)。
+- レビュー修正: ①proof_request_tokenのレスポンス漏れ除去(重大) ②NFC経路のqr_tokens全削除に
+  booking_id=nullフィルタ(重大・依頼リンク即死バグ) ③not_completable/sms_unavailableの
+  エラー3点セット ④SMS名乗り統一 ⑤依頼パネルをProofRequestPanelに共通化 ⑥リリースバナー更新。
+- migration 061(qr_tokens.booking_id): CEOに提示済み。**DB先→コード後のため、CEO実行確認後にマージ**。
+  未実行でもフェイルソフトで動くが、QR再発行で依頼リンクが消える抜けが残る。
+- レビューが別件として記録した既存の穴: **/api/db は認証もテーブルallowlistも無い汎用プロキシ**
+  (今回の差分の責任ではないが votes 全行削除が可能な状態)。allowlist+認証の追加を別タスクで強く推奨。
+- CAS の .filter('preferred_slots->>...', 'eq', ...) はリポジトリ内に'is'の前例のみ('eq'は初)。
+  本番で1回、送信→count進行と連打429を実機確認すること。

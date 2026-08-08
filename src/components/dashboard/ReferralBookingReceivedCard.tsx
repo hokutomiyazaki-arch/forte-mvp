@@ -12,6 +12,9 @@ import {
   REFERRAL_FEE_TOTAL_BPS,
 } from '@/lib/referral-format'
 import BookingThread from '@/components/dashboard/BookingThread'
+// §16-41修正6(レビュー指摘・中8): クライアントへの記録依頼パネルの共通コンポーネント
+// (ReferralBookingReceivedCard/ReferralCompletedListの丸コピーを解消)。
+import ProofRequestPanel from '@/components/dashboard/ProofRequestPanel'
 // カード化(2026-08-05・CEO指示): クライアント向けフォームと同じSlotCardGroup(第1〜第3希望の
 // 独立カード+段階的追加)を共有する(datetime-local廃止・Android実機でのstep無視崩壊対策)。
 import SlotCardGroup from '@/components/referral/SlotCardGroup'
@@ -109,6 +112,12 @@ interface BookingItem {
     /** §17-4: 電話で口頭で決めた日時をプロが確定した時刻（お客さん側の同意記録が無い確定） */
     confirmed_by_phone_at?: string | null
   } | null
+  /** §16-41: クライアントへの記録依頼(受け手が任意送信)を最後に送った時刻。未送信はnull。 */
+  proof_request_sent_at?: string | null
+  /** §16-41: 送信済み回数(最大2)。 */
+  proof_request_count?: number
+  /** §16-41: 依頼したトークンで記録(投票)が完了しているか。 */
+  proof_recorded?: boolean
   status: 'requested' | 'confirmed'
   price_jpy: number
   /** タスクA(2026-08-05・CEO指示): 「当日クライアントから受け取る金額」計算用(migration 032由来)。 */
@@ -624,6 +633,25 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange, hig
     } finally {
       setProcessingId(null)
     }
+  }
+
+  /**
+   * §16-41(CEO決定 2026-08-08)修正6: クライアントへの記録依頼パネル(ProofRequestPanel)の
+   * 送信成功後に呼ぶ。API側で既にpreferred_slotsが更新済みのため、ここではローカル一覧の
+   * 表示用フィールドだけ楽観的に更新する(サーバー往復の再取得は不要)。
+   */
+  function markProofRequestSent(bookingId: string) {
+    setItems((prev) =>
+      prev.map((i) =>
+        i.id === bookingId
+          ? {
+              ...i,
+              proof_request_sent_at: new Date().toISOString(),
+              proof_request_count: (i.proof_request_count || 0) + 1,
+            }
+          : i,
+      ),
+    )
   }
 
   /** タスクA(2026-08-04・CEO指示): 当日の場所をクライアントへ送信する。 */
@@ -1753,6 +1781,24 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange, hig
               <p style={{ marginTop: 4, fontSize: 13, color: '#B26A00' }}>
                 クライアントのお支払い完了後に完了できます
               </p>
+            )}
+
+            {/* §16-41(CEO決定 2026-08-08): クライアントへの記録依頼。完了時の自動送信はCEOが却下
+                しているため、セッション実施済み(確定日時が過去)のカードにこのボタンを出す。
+                完了(completed)後は同じ機能をReferralCompletedList側に持つ。
+                修正6(レビュー指摘・中8): パネル本体はProofRequestPanelに集約。このラッパーdiv
+                (枠線の向き・margin/padding)と表示条件だけをここに残す(2箇所で異なるため)。 */}
+            {confirmedSlotIso && new Date(confirmedSlotIso).getTime() < Date.now() && (
+              <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px dashed #E5E7EB' }}>
+                <ProofRequestPanel
+                  bookingId={item.id}
+                  sentAt={item.proof_request_sent_at || null}
+                  count={item.proof_request_count || 0}
+                  recorded={!!item.proof_recorded}
+                  onSent={() => markProofRequestSent(item.id)}
+                  background="#fff"
+                />
+              </div>
             )}
 
             {/* 案件スレッド・引き継ぎメモ(開閉は既存のまま)

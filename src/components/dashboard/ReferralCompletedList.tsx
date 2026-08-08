@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import BookingThread from '@/components/dashboard/BookingThread'
+// §16-41修正6(レビュー指摘・中8): クライアントへの記録依頼パネルの共通コンポーネント
+// (ReferralBookingReceivedCard/ReferralCompletedListの丸コピーを解消)。
+import ProofRequestPanel from '@/components/dashboard/ProofRequestPanel'
 
 /** タスク⑥改(CEO指摘): 完了した紹介(受け手側)。
  * CEO指示(2026-08-08): 予約タブ「完了済み」サブタブに常設するため、カードをコンパクトな
@@ -21,6 +24,12 @@ interface CompletedBookingItem {
   sender_pro: { id: string; name: string } | null
   /** §2-4ステージ3(決済確認後の連絡先開示・CEO決定): 開示条件を満たす場合のみAPIから入る。 */
   client_contact: { name: string | null; phone: string | null; email: string | null } | null
+  /** §16-41(CEO決定 2026-08-08): クライアントへの記録依頼(受け手が任意送信)を最後に送った時刻。 */
+  proof_request_sent_at?: string | null
+  /** §16-41: 送信済み回数(最大2)。 */
+  proof_request_count?: number
+  /** §16-41: 依頼したトークンで記録(投票)が完了しているか。 */
+  proof_recorded?: boolean
 }
 
 interface Props {
@@ -58,6 +67,25 @@ export default function ReferralCompletedList({ proId, onCountChange, variant = 
     onCountChange?.(completedCount, !loading)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [completedCount, loading])
+
+  /**
+   * §16-41(CEO決定 2026-08-08)修正6: クライアントへの記録依頼パネル(ProofRequestPanel)の
+   * 送信成功後に呼ぶ。API側で既にpreferred_slotsが更新済みのため、ここではローカル一覧の
+   * 表示用フィールドだけ楽観的に更新する(サーバー往復の再取得は不要)。
+   */
+  function markProofRequestSent(bookingId: string) {
+    setCompletedItems((prev) =>
+      prev.map((i) =>
+        i.id === bookingId
+          ? {
+              ...i,
+              proof_request_sent_at: new Date().toISOString(),
+              proof_request_count: (i.proof_request_count || 0) + 1,
+            }
+          : i,
+      ),
+    )
+  }
 
   // 名前・メニュー・紹介元でのクライアントサイド絞り込み(APIは completed_at desc・limit 200)
   // CEO指示(2026-08-08): 名字と名前の間のスペース(半角・全角)を無視して一致させる
@@ -159,6 +187,22 @@ export default function ReferralCompletedList({ proId, onCountChange, variant = 
                 </div>
               </div>
             )}
+
+            {/* §16-41(CEO決定 2026-08-08): クライアントへの記録依頼。完了時の自動送信はCEOが
+                却下しているため、このボタンを押したときだけ送信が発生する。
+                修正6(レビュー指摘・中8): パネル本体はProofRequestPanelに集約。このラッパーdiv
+                (枠線の向き・margin/padding)だけをここに残す(ReferralBookingReceivedCardと異なるため)。 */}
+            <div style={{ marginBottom: 10, paddingBottom: 10, borderBottom: '1px dashed #E5E7EB' }}>
+              <ProofRequestPanel
+                bookingId={item.id}
+                sentAt={item.proof_request_sent_at || null}
+                count={item.proof_request_count || 0}
+                recorded={!!item.proof_recorded}
+                onSent={() => markProofRequestSent(item.id)}
+                background="#FAFAFA"
+              />
+            </div>
+
             <BookingThread
               bookingId={item.id}
               ownProId={proId}

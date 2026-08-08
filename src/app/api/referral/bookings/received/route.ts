@@ -32,6 +32,13 @@ import {
   isWithinClientRefundDeadline,
 } from '@/lib/referral-format'
 import { isReferralPaymentEnabled, REFERRAL_MIN_FEE_JPY, REFERRAL_FEE_TOTAL_BPS } from '@/lib/feature-flags'
+// §16-41(CEO決定 2026-08-08): クライアントへの記録依頼。メールが届かないと分かっている予約
+// (receipt_email_failed)向けのフォールバック送信に使う。import 0本の純関数モジュール
+// (チャンクグラフに何も足さない・CLAUDE.md §G。sms.tsはfetch直叩きのみで外部importが無い)。
+import { sendSms } from '@/lib/sms'
+// §16-41修正5: 記録依頼リンクのTTL定数(qr-token.tsに単一情報源化)。他のAPI route
+// (vote-auth/line/callback等)でも既にこのモジュールをimportしており、chunk graph上の前例がある。
+import { PROOF_REQUEST_TTL_MS } from '@/lib/qr-token'
 // 中1レビュー指摘から継続: Stripe importはこのAPI routeに持たせない(Webpackチャンクグラフ対策)。
 // Checkout Session作成+メール送付(共通処理)はsrc/lib/referral-payment.tsの関数呼び出しに委譲する。
 import {
@@ -102,6 +109,15 @@ interface PreferredSlots {
   contact_recovered_by_sms_at?: string | null
   /** §17-9: メールが届かないため、プロが片付けた（クライアントへは通知していない） */
   discarded_undeliverable_at?: string | null
+  /**
+   * §16-41(CEO決定 2026-08-08): プロが任意タイミングでクライアントへ「記録をお願いする」を
+   * 送信した時刻。24時間クールダウン・回数上限(2回)の判定に使う。
+   */
+  proof_request_sent_at?: string | null
+  /** §16-41: 送信済み回数(最大2)。 */
+  proof_request_count?: number | null
+  /** §16-41: 送信した記録依頼トークン(qr_tokens.token)。記録済みかの判定に使う。 */
+  proof_request_token?: string | null
 }
 
 /**
@@ -116,6 +132,8 @@ interface BookingRow {
   receiver_pro_id: string
   client_id: string
   client_email: string | null
+  /** §16-41: 記録依頼メールが届かないと分かっている予約(receipt_email_failed)のSMSフォールバックに使う。 */
+  client_phone?: string | null
   menu_id: string | null
   theme_tags: string[] | null
   preferred_slots: PreferredSlots | null
@@ -242,8 +260,9 @@ export async function GET() {
     // タスク⑥: 完了済み(completed)は別クエリで取得(fail-soft)。requested/confirmedの取得を壊さない。
     let completedBookings: any[] = []
     try {
+      // §16-41: preferred_slots は proof_request_sent_at/count/token(記録依頼の状態)を読むために追加。
       const completedBaseSelect =
-        'id, list_id, sender_pro_id, receiver_pro_id, client_id, client_name, client_phone, client_email, menu_id, theme_tags, status, price_jpy, handover_note, confirmed_at, completed_at, created_at, clients(id, nickname), pro_menus(name)'
+        'id, list_id, sender_pro_id, receiver_pro_id, client_id, client_name, client_phone, client_email, menu_id, theme_tags, status, price_jpy, handover_note, preferred_slots, confirmed_at, completed_at, created_at, clients(id, nickname), pro_menus(name)'
       const completedSelect = paymentEnabled ? `${completedBaseSelect}, payment_status` : completedBaseSelect
       const { data: completedRows, error: completedError } = await supabase
         .from('referral_bookings')
@@ -355,6 +374,51 @@ export async function GET() {
       console.error('[api/referral/bookings/received] source fetch error (fail-soft):', sourceErr)
     }
 
+    // §16-41(CEO決定 2026-08-08): クライアントへの記録依頼が「記録された」かどうか。
+    // preferred_slots.proof_request_token を発行済みの行だけ、qr_tokens.used_at を1回のクエリで
+    // まとめて確認する(1ページ分の件数のためチャンク不要・N+1回避)。
+    const proofRecordedMap: Record<string, boolean> = {}
+    try {
+      const proofTokens = Array.from(
+        new Set(
+          [...((bookings || []) as any[]), ...completedBookings]
+            .map((b: any) => b.preferred_slots?.proof_request_token)
+            .filter((t: unknown): t is string => typeof t === 'string' && !!t)
+        )
+      )
+      if (proofTokens.length > 0) {
+        const { data: proofTokenRows, error: proofTokenError } = await supabase
+          .from('qr_tokens')
+          .select('token, used_at')
+          .in('token', proofTokens)
+        if (proofTokenError) {
+          console.error('[api/referral/bookings/received] proof token fetch error (fail-soft):', proofTokenError)
+        } else {
+          for (const row of (proofTokenRows || []) as Array<{ token: string; used_at: string | null }>) {
+            proofRecordedMap[row.token] = !!row.used_at
+          }
+        }
+      }
+    } catch (proofTokenErr) {
+      console.error('[api/referral/bookings/received] proof token fetch error (fail-soft):', proofTokenErr)
+    }
+    const resolveProofRecorded = (slots: PreferredSlots | null | undefined): boolean => {
+      const t = slots?.proof_request_token
+      return !!t && proofRecordedMap[t] === true
+    }
+
+    /**
+     * §16-41修正1(レビュー指摘・重大): preferred_slots.proof_request_token はqr_tokensの検証キー
+     * そのもの(記録用ワンタイムリンク)。レスポンスへ生パススルーすると、この値を読んだ第三者が
+     * 本人になりすまして記録(投票)を完了させられる。preferred_slotsを返す全箇所は必ずこの
+     * 関数を通し、tokenだけを除いたコピーを返す(nullはnullのまま・元の挙動を維持)。
+     */
+    const omitProofRequestToken = (slots: PreferredSlots | null | undefined): Record<string, unknown> | null => {
+      if (!slots) return null
+      const { proof_request_token: _omit, ...slotsForClient } = slots as unknown as Record<string, unknown>
+      return slotsForClient
+    }
+
     const result = ((bookings || []) as any[]).map((b) => ({
       id: b.id,
       list_id: b.list_id,
@@ -363,7 +427,7 @@ export async function GET() {
       menu_id: b.menu_id,
       menu_name: b.pro_menus?.name || null,
       theme_tags: b.theme_tags,
-      preferred_slots: b.preferred_slots,
+      preferred_slots: omitProofRequestToken(b.preferred_slots),
       status: b.status,
       price_jpy: b.price_jpy,
       // タスクA(2026-08-05・CEO指示): 「当日クライアントから受け取る金額」表示用。
@@ -395,6 +459,10 @@ export async function GET() {
         createdAt: b.created_at,
         contactRecoveredBySms: !!b.preferred_slots?.contact_recovered_by_sms_at,
       }),
+      // §16-41: クライアントへの記録依頼(受け手が任意送信)の状態。
+      proof_request_sent_at: b.preferred_slots?.proof_request_sent_at || null,
+      proof_request_count: b.preferred_slots?.proof_request_count || 0,
+      proof_recorded: resolveProofRecorded(b.preferred_slots),
     }))
 
     const completedResult = completedBookings.map((b: any) => ({
@@ -417,13 +485,17 @@ export async function GET() {
       client_contact: canDiscloseContact({ status: b.status, payment_status: paymentEnabled ? b.payment_status : undefined })
         ? { name: b.client_name || null, phone: b.client_phone || null }
         : null,
+      // §16-41: クライアントへの記録依頼(受け手が任意送信)の状態。
+      proof_request_sent_at: b.preferred_slots?.proof_request_sent_at || null,
+      proof_request_count: b.preferred_slots?.proof_request_count || 0,
+      proof_recorded: resolveProofRecorded(b.preferred_slots),
     }))
 
     // タスク①: 連絡先(client_contact)は含めない(キャンセル済みは開示条件外・PII厳守)。
     const cancelledUnpaidResult = cancelledUnpaidRows.map((b: any) => ({
       id: b.id,
       menu_name: b.pro_menus?.name || null,
-      preferred_slots: b.preferred_slots,
+      preferred_slots: omitProofRequestToken(b.preferred_slots),
       confirmed_at: b.confirmed_at,
       client_nickname: b.clients?.nickname || 'クライアント',
     }))
@@ -488,7 +560,8 @@ export async function PATCH(request: NextRequest) {
         action !== 'dismiss_cancelled' &&
         action !== 'send_location' &&
         action !== 'reschedule' &&
-        action !== 'cancel_by_receiver')
+        action !== 'cancel_by_receiver' &&
+        action !== 'request_proof')
     ) {
       return NextResponse.json({ error: 'invalid_params' }, { status: 400 })
     }
@@ -500,7 +573,8 @@ export async function PATCH(request: NextRequest) {
     // payment_status/fee_total_bpsはmigration 036依存のためフラグゲート付きで選択する。
     const baseConfirmSelect =
       // §17-16: created_at はメール修正の持ち主判定(送り手→受け手のフォールバック)に使う。
-      'id, list_id, sender_pro_id, receiver_pro_id, client_id, client_email, status, price_jpy, expires_at, created_at, preferred_slots, clients(id, user_id, nickname), referral_lists(id, slug, comment), pro_menus(name)'
+      // §16-41: client_phone は記録依頼のSMSフォールバック(receipt_email_failed時)に使う。
+      'id, list_id, sender_pro_id, receiver_pro_id, client_id, client_email, client_phone, status, price_jpy, expires_at, created_at, preferred_slots, clients(id, user_id, nickname), referral_lists(id, slug, comment), pro_menus(name)'
     // タスク②(2026-08-04・CEO指示): cancel_by_receiver用にstripe_checkout_session_id/
     // stripe_payment_intent_idも取得する(いずれもmigration 036依存カラムと同じpaymentEnabledゲート内)。
     const confirmSelect = paymentEnabled
@@ -1215,6 +1289,171 @@ export async function PATCH(request: NextRequest) {
       }
 
       return NextResponse.json({ success: true, status: 'confirmed', delivered })
+    }
+
+    // §16-41(CEO決定 2026-08-08): プロが任意タイミングでクライアントへ「記録をお願いする」を送る。
+    // CEOが完了時の自動送信を明確に却下した機能のため、送信はこのアクションを叩いたときだけ発生する。
+    // 対象は「セッションを実施済み」の予約: status='completed'、または status='confirmed' かつ
+    // 確定日時が過去(自動完了cronが回るまでの間・手動完了前でも送れるようにする)。
+    if (action === 'request_proof') {
+      const confirmedSlotIsoForProof = resolveConfirmedSlotIso(booking.preferred_slots)
+      const isConfirmedPast =
+        booking.status === 'confirmed' &&
+        !!confirmedSlotIsoForProof &&
+        new Date(confirmedSlotIsoForProof).getTime() < Date.now()
+      if (booking.status !== 'completed' && !isConfirmedPast) {
+        return NextResponse.json({ error: 'not_completable' }, { status: 400 })
+      }
+
+      const trimmedProofMessage = typeof body.message === 'string' ? body.message.trim() : ''
+      if (trimmedProofMessage.length > 300) {
+        return NextResponse.json({ error: 'message_too_long' }, { status: 400 })
+      }
+
+      const existingProofCount = booking.preferred_slots?.proof_request_count || 0
+      if (existingProofCount >= 2) {
+        return NextResponse.json({ error: 'limit_reached' }, { status: 429 })
+      }
+      const lastProofSentAt = booking.preferred_slots?.proof_request_sent_at
+      if (lastProofSentAt && Date.now() - new Date(lastProofSentAt).getTime() < 24 * 60 * 60 * 1000) {
+        return NextResponse.json({ error: 'too_soon' }, { status: 429 })
+      }
+
+      // QRと同じトークン式(vote/[id]ページ・Set 1のused_at/expires_at検証は一切変更しない)。
+      // TTLはQR_TOKEN_TTL_MS(24h)より長いPROOF_REQUEST_TTL_MS(72h)にする
+      // (メールは開封が遅れるため・CEO指示のPIN方式不使用も含む)。
+      const proofToken = crypto.randomUUID()
+      const proofTokenExpiresAt = new Date(Date.now() + PROOF_REQUEST_TTL_MS).toISOString()
+      const reservedProofSlots: PreferredSlots = {
+        ...(booking.preferred_slots || {}),
+        proof_request_sent_at: new Date().toISOString(),
+        proof_request_count: existingProofCount + 1,
+        proof_request_token: proofToken,
+      }
+
+      // レビュー指摘(中4+5+6・reserve→send→rollback方式): 送信前にCAS(compare-and-set)で
+      // 回数・トークンの枠を先に確保する。旧実装は「送信成功後にpreferred_slotsをupdateしていて、
+      // そのupdateだけが失敗すると送信済みなのに回数/クールダウンが記録されない(fail open)」ことが
+      // 問題だった。先に枠を取ってしまうことで、連打・並列リクエストの二重送信をDB側で確実に塞ぐ
+      // (枠を取れなければ送信自体を行わない)。旧countが0(キー不存在)ならJSONキー無し=SQL NULLに
+      // 一致する行のみ、1以上なら旧count文字列に一致する行のみを対象にする(既存の
+      // reschedule-respond/cancel_by_receiver除外フィルタと同じ ->> JSON path filter方式)。
+      const proofCasColumn = 'preferred_slots->>proof_request_count'
+      const reserveProofQueryBase = supabase
+        .from('referral_bookings')
+        .update({ preferred_slots: reservedProofSlots })
+        .eq('id', bookingId)
+      const { data: reservedProofRows, error: reserveProofError } = await (
+        existingProofCount > 0
+          ? reserveProofQueryBase.filter(proofCasColumn, 'eq', String(existingProofCount))
+          : reserveProofQueryBase.filter(proofCasColumn, 'is', null)
+      ).select('id')
+
+      if (reserveProofError) {
+        console.error('[api/referral/bookings/received] request_proof reserve error:', reserveProofError)
+        return NextResponse.json({ error: 'failed_to_send' }, { status: 500 })
+      }
+      if (!reservedProofRows || reservedProofRows.length === 0) {
+        // 直前のGET/PATCH取得時点から状態が変わっている(連打・別タブでの並列送信等)。
+        // 枠を取れていないので送信は行わない。
+        return NextResponse.json({ error: 'too_soon' }, { status: 429 })
+      }
+
+      // ここから下で失敗したら、確保した枠(reservedProofSlots)を元の値へ戻す(fail-closed)。
+      // 戻せなくても「送信していないのに送信済みとして残る」よりは安全なため、失敗はログのみ残す。
+      const rollbackProofReservation = async () => {
+        const { error: rollbackError } = await supabase
+          .from('referral_bookings')
+          .update({ preferred_slots: booking.preferred_slots || {} })
+          .eq('id', bookingId)
+          .filter(proofCasColumn, 'eq', String(existingProofCount + 1))
+        if (rollbackError) {
+          console.error(
+            '[api/referral/bookings/received] request_proof rollback error (fail-closed, logged only):',
+            rollbackError
+          )
+        }
+      }
+
+      try {
+        const { error: tokenInsertError } = await supabase
+          .from('qr_tokens')
+          .insert({ professional_id: ownPro.id, token: proofToken, expires_at: proofTokenExpiresAt, booking_id: bookingId })
+        if (tokenInsertError) {
+          // フェイルソフト: migration 061(booking_id列)未実行の環境ではこのINSERTが失敗するため、
+          // booking_id無しで再INSERTする(ダッシュボードQR再発行の全削除フォールバックと対になる)。
+          console.warn(
+            '[api/referral/bookings/received] request_proof qr_tokens insert with booking_id failed, retrying without it (migration 061 not applied?):',
+            tokenInsertError.message
+          )
+          const { error: fallbackInsertError } = await supabase
+            .from('qr_tokens')
+            .insert({ professional_id: ownPro.id, token: proofToken, expires_at: proofTokenExpiresAt })
+          if (fallbackInsertError) {
+            console.error('[api/referral/bookings/received] request_proof qr_tokens insert error:', fallbackInsertError)
+            await rollbackProofReservation()
+            return NextResponse.json({ error: 'failed_to_send' }, { status: 500 })
+          }
+        }
+      } catch (tokenErr) {
+        console.error('[api/referral/bookings/received] request_proof qr_tokens insert exception:', tokenErr)
+        await rollbackProofReservation()
+        return NextResponse.json({ error: 'failed_to_send' }, { status: 500 })
+      }
+
+      const voteUrlForProof = `${APP_URL}/vote/${ownPro.id}?token=${proofToken}&channel=booking`
+      const clientUserIdForProof = booking.clients?.user_id || ''
+      const safeProNameForProof = escapeHtml(ownPro.name)
+      const messageBlockHtml = trimmedProofMessage
+        ? `<span style="display:block;margin-bottom:12px;color:#1A1A2E;">${escapeHtml(trimmedProofMessage).replace(/\n/g, '<br>')}</span>`
+        : ''
+
+      // §17-9/§17-19と同じ考え方: メールが届かないと分かっている予約はSMSへ逃がす
+      // (via=smsは予約状況リンク専用の言い回しのため、ここでは付けずURLをそのまま送る)。
+      let proofSent = false
+      let proofSmsUnavailable = false
+      if (booking.preferred_slots?.receipt_email_failed) {
+        const smsResult = await sendSms(
+          booking.client_phone,
+          // レビュー指摘(中9・軽微): 既存4箇所(bookings/route.ts等)と同じ「【REAL PROOF】+名乗り」の流儀に合わせる。
+          `【REAL PROOF】${ownPro.name}さんから、セッションの記録のお願いが届いています。\n${voteUrlForProof}`
+        )
+        proofSent = smsResult.sent
+        // レビュー指摘(中7): メールが届かないと分かっている予約でSMSも送れなかった場合は、
+        // failed_to_send(=一時的な送信失敗)ではなく sms_unavailable(=この予約はいま送る手段が無い)
+        // を返し、フロントで案内文言を分ける。
+        proofSmsUnavailable = !proofSent
+      } else {
+        const emailResult = await notifyClientByEmail(
+          { userId: clientUserIdForProof, email: booking.client_email },
+          `${ownPro.name}さんから、セッションの記録のお願いが届いています`,
+          emailShell(
+            'セッションの記録のお願い',
+            `${messageBlockHtml}セッションの感想と、実感した変化を記録していただくお願いです。いただいた記録は${safeProNameForProof}さんの公式な実績として残ります。`,
+            '記録する',
+            voteUrlForProof,
+            '<span style="color:#999;font-size:12px;">このリンクの有効期限は72時間です。</span>'
+          )
+        )
+        proofSent = emailResult.sent
+      }
+
+      if (!proofSent) {
+        // 送信に失敗したので、発行したトークンを無効化し、確保した枠(回数・sent_at)も元に戻す
+        // (旧実装は送信成功後にupdateしていたため、update失敗時だけ制限が消えるfail openだった。
+        // reserve→send→rollback化により、送信失敗は必ず「送っていない」状態に戻す)。
+        const { error: tokenDeleteError } = await supabase.from('qr_tokens').delete().eq('token', proofToken)
+        if (tokenDeleteError) {
+          console.error('[api/referral/bookings/received] request_proof token cleanup error:', tokenDeleteError)
+        }
+        await rollbackProofReservation()
+        return NextResponse.json(
+          { error: proofSmsUnavailable ? 'sms_unavailable' : 'failed_to_send' },
+          { status: 502 }
+        )
+      }
+
+      return NextResponse.json({ ok: true })
     }
 
     if (booking.status !== 'requested') {

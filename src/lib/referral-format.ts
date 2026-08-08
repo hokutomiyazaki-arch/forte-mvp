@@ -167,6 +167,14 @@ export function isWithinClientRefundDeadline(slotIso: string | null | undefined,
 export const REFERRAL_FEE_TOTAL_BPS = 3360
 
 /**
+ * §16-41(CEO決定 2026-08-08): クライアントへの記録依頼のプレフィル文(受け手が編集可能)。
+ * 「受付中」カード(ReferralBookingReceivedCard)と「完了済み」カード(ReferralCompletedList)の
+ * 両方で同じ文言を使うため、この単一情報源に置く(env非依存でクライアント側からも安全にimport可能)。
+ */
+export const PROOF_REQUEST_DEFAULT_MESSAGE =
+  '先日はご来店ありがとうございました。もしよろしければ、今回のセッションの感想と実感された変化を記録していただけると嬉しいです。'
+
+/**
  * ステージ4「自動送金」振込予定日の目安(CEO追加指示・2026-08-05): Stripe Transferはプラットフォーム
  * 残高から送り手のConnect口座へ即時に入るが、実際の銀行振込はStripe側の入金スケジュール
  * (日本のExpressは通常、数営業日周期)で行われるため正確な日付は取得できない。土日スキップのみの

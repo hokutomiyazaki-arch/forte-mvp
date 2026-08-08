@@ -24,6 +24,13 @@ export function calcQrTokenExpiry(): string {
 }
 
 /**
+ * §16-41(CEO決定 2026-08-08): クライアントへの記録依頼(request_proof)リンクのTTL(ミリ秒)。
+ * QR_TOKEN_TTL_MS(24h・対面QRのその場スキャン前提)より長い72hにする理由: メールは開封が
+ * 遅れることがあるため。既存の calcQrTokenExpiry / QR_TOKEN_TTL_MS は無改変。
+ */
+export const PROOF_REQUEST_TTL_MS = 72 * 60 * 60 * 1000
+
+/**
  * QRトークンを使用済みにマークする
  * 投票INSERT成功後に呼ぶ。失敗してもsilent（投票自体は成立しているため）
  *

@@ -159,10 +159,21 @@ export async function GET(
     }
 
     // 4. 既存トークンを削除してから新規作成（既存QR生成と同じパターン）
-    await supabase
+    // §16-41(CEO決定 2026-08-08): クライアントへの記録依頼で発行した未使用トークン(booking_id付き)
+    // まで消してしまわないよう、削除対象を booking_id が null の行だけに絞る。
+    // migration 061(booking_id列)未実行の環境ではisフィルタが42703で失敗するため、
+    // その場合だけ従来どおり全削除にフォールバックする(dashboard/page.tsx generateQRと同じ作法)。
+    const { error: deleteTokensError } = await supabase
       .from('qr_tokens')
       .delete()
       .eq('professional_id', card.professional_id)
+      .is('booking_id', null)
+    if (deleteTokensError) {
+      await supabase
+        .from('qr_tokens')
+        .delete()
+        .eq('professional_id', card.professional_id)
+    }
 
     // 5. ワンタイムトークンを生成（TTLは src/lib/qr-token.ts で管理 / 現状24h）
     const token = randomBytes(16).toString('hex')
