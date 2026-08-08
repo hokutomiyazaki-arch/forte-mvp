@@ -220,6 +220,37 @@ async function sendProNotification(
 }
 
 /**
+ * CEO指示(2026-08-08): メール未達のクライアントがSMSのご案内リンクから予約ページを開いたら、
+ * 送り手・受け手の両プロへ知らせる(これをもって赤い対応ブロックも消える)。
+ * role で着地リンクを出し分ける(sender=紹介した案件の該当カード / receiver=予約の該当カード)。
+ */
+export async function notifySmsLinkOpenedToPro(
+  target: ProNotifyTarget,
+  clientNickname: string,
+  role: 'sender' | 'receiver',
+  bookingId: string,
+): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  const url =
+    role === 'sender'
+      ? `${APP_URL}/dashboard?tab=referral&sub=cases&case=${encodeURIComponent(bookingId)}`
+      : `${APP_URL}/dashboard?tab=bookings&booking=${encodeURIComponent(bookingId)}`
+  const safeClient = escapeHtml(clientNickname)
+  return sendProNotification(target, {
+    lineText:
+      `${clientNickname}さんがSMSのご案内から予約ページを開きました。ご予約は生きています。\n` +
+      `メールは引き続き届かないため、ご連絡はお電話でお願いします。\n${url}`,
+    emailSubject: `${clientNickname}さんがSMSから予約を確認しました`,
+    emailBodyHtml: emailShell(
+      'クライアントと連絡がつきました',
+      `${safeClient}さんがSMSのご案内から予約ページを開きました。ご予約は生きています。<br>` +
+        `メールは引き続き届かないため、ご連絡はお電話でお願いします。`,
+      role === 'sender' ? '紹介した案件を開く' : '予約を開く',
+      url,
+    ),
+  })
+}
+
+/**
  * §3-0改訂(先行テスト第3弾・CEO決定): 承諾ゲート撤廃により、これは「即時掲載済み」の
  * 事後通知になる（承諾・拒否の依頼ではない）。辞退したい場合はホーム画面の受付トグルをオフに
  * する旨を明示する。
@@ -495,19 +526,31 @@ export async function notifyClientByEmail(
 /**
  * §2-10: 案件スレッドに新しいコメントが届いたことを相手側プロへ通知する。
  * PII/傷病名保護のため本文(body)はLINE/メールに一切含めない。
+ * CEO指示(2026-08-08): リンクを付け、該当カードへ直行→自動スクロール・ハイライト→
+ * スレッドまで自動で開く(&thread=1)。旧決定(2026-08-04「リンクは付けない」)はこの指示で撤回。
  */
 export async function notifyBookingMessage(
   target: ProNotifyTarget,
   senderProName: string,
+  recipientRole: 'sender' | 'receiver' = 'sender',
+  bookingId: string | null = null,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  // CEO決定(2026-08-04): リンクは付けない(ダッシュボードの紹介タブに行くだけのため文言で案内)
+  const url = bookingId
+    ? recipientRole === 'sender'
+      ? `${APP_URL}/dashboard?tab=referral&sub=cases&case=${encodeURIComponent(bookingId)}&thread=1`
+      : `${APP_URL}/dashboard?tab=bookings&booking=${encodeURIComponent(bookingId)}&thread=1`
+    : recipientRole === 'sender'
+      ? `${APP_URL}/dashboard?tab=referral&sub=cases`
+      : `${APP_URL}/dashboard?tab=bookings`
   const safeSenderProName = escapeHtml(senderProName)
   return sendProNotification(target, {
-    lineText: `${senderProName}さんから案件スレッドに新しいコメントがあります。ダッシュボードの紹介タブからご確認ください。`,
+    lineText: `${senderProName}さんから案件スレッドに新しいコメントがあります。\n${url}`,
     emailSubject: '案件スレッドに新しいコメントがあります',
     emailBodyHtml: emailShell(
       '案件スレッドのお知らせ',
-      `${safeSenderProName}さんから案件スレッドに新しいコメントが届いています。<br>ダッシュボードの紹介タブからご確認ください。`,
+      `${safeSenderProName}さんから案件スレッドに新しいコメントが届いています。`,
+      'スレッドを開く',
+      url,
     ),
   })
 }

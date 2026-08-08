@@ -10,6 +10,7 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { getBookingCapabilityData } from '@/lib/referral-data'
+import { markBookingSmsLinkOpened } from '@/lib/booking-sms-recovery'
 import { buildGoogleCalendarUrl } from '@/lib/referral-format'
 import BookingAcceptForm from '@/components/referral/BookingAcceptForm'
 import PaymentLinkButton from '@/components/referral/PaymentLinkButton'
@@ -41,10 +42,15 @@ export default async function BookingCapabilityPage({
   searchParams,
 }: {
   params: Promise<{ booking_id: string }>
-  searchParams: Promise<{ payment?: string }>
+  searchParams: Promise<{ payment?: string; via?: string }>
 }) {
   const { booking_id: bookingId } = await params
-  const { payment: paymentParam } = await searchParams
+  const { payment: paymentParam, via: viaParam } = await searchParams
+  // CEO指示(2026-08-08): メール未達のクライアントがSMSのリンク(?via=sms)から開いたら、
+  // 「連絡がついた」印を立てて両プロへ通知し、赤い対応ブロックを消す(fail-soft・冪等)。
+  if (viaParam === 'sms') {
+    await markBookingSmsLinkOpened(bookingId)
+  }
   const data = await getBookingCapabilityData(bookingId)
 
   if (!data) {

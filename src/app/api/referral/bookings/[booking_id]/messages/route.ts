@@ -142,6 +142,8 @@ export async function POST(
           .maybeSingle()
 
         if (otherPro) {
+          // CEO指示(2026-08-08): 受け取る側の立場でリンク先を出し分ける
+          // (送り手→紹介した案件の該当カード / 受け手→予約の該当カード。スレッド自動オープン)
           await notifyBookingMessage(
             {
               name: otherPro.name,
@@ -149,6 +151,8 @@ export async function POST(
               line_messaging_user_id: otherPro.line_messaging_user_id,
             },
             ownPro.name,
+            otherProId === booking.sender_pro_id ? 'sender' : 'receiver',
+            params.booking_id,
           )
         }
       }

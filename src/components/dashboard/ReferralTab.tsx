@@ -180,6 +180,8 @@ interface Props {
   /** CEO指示(2026-08-08): 通知の ?case=<id> から渡ってくる。紹介した案件の該当カードを
    * 自動展開・該当ページへ移動・スクロール＋数秒ハイライトする。 */
   highlightCaseId?: string | null
+  /** CEO指示(2026-08-08): &thread=1 なら該当カードの案件スレッドまで自動で開く。 */
+  highlightThreadOpen?: boolean
 }
 
 export default function ReferralTab({
@@ -194,6 +196,7 @@ export default function ReferralTab({
   onDelegateCriteriaUpdated,
   delegateEligibleOrgs,
   highlightCaseId,
+  highlightThreadOpen,
 }: Props) {
   // リスト一覧
   const [lists, setLists] = useState<ReferralList[]>([])
@@ -2527,6 +2530,7 @@ export default function ReferralTab({
                 initialHandoverNote={b.handover_note}
                 partnerRoleLabel={b.receiver_pro ? '担当プロ' : undefined}
                 partnerName={b.receiver_pro?.name}
+                initialOpen={!!highlightThreadOpen && highlightCaseId === b.id}
               />
               </div>
               )}

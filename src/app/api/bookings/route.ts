@@ -7,6 +7,7 @@ import { parseSlot, snapToHalfHourUp } from '@/lib/referral-format'
 import { normalizeBookingMode } from '@/lib/booking-mode'
 // §17-25: import ゼロの純関数モジュール（チャンクグラフに何も足さない・CLAUDE.md §G）
 import { isKnownUndeliverableEmail } from '@/lib/booking-email-fix'
+import { sendSms } from '@/lib/sms'
 
 const APP_URL = 'https://realproof.jp'
 
@@ -228,6 +229,22 @@ export async function POST(request: NextRequest) {
     if (!booking) {
       console.error('[api/bookings] insert succeeded but no row returned')
       return NextResponse.json({ error: 'failed_to_create' }, { status: 500 })
+    }
+
+    // CEO指示(2026-08-08・SMSクリック検知方式): 既知の不達アドレスなら、クライアントへSMSで
+    // リンクを送る(紹介予約POST・bounce webhookと同じ役割分担)。リンクが開かれた時点で
+    // プロへ通知が飛ぶ(/booking/[id]?via=sms)。SMSが送れない場合は従来どおりカードの
+    // 人力フロー(直予約は受け手が電話)に任せる(失敗しても予約自体は成功扱い)。
+    if (knownBadEmail) {
+      try {
+        await sendSms(
+          clientPhone,
+          `【REAL PROOF】ご登録のメールアドレスにご案内が届きませんでした。` +
+            `お手数ですが、こちらからご予約の状況をご確認ください。\nhttps://realproof.jp/booking/${booking.id}?via=sms`,
+        )
+      } catch (smsErr) {
+        console.error('[api/bookings] recovery sms error (fail-soft):', smsErr)
+      }
     }
 
     // プロへ通知（失敗しても予約リクエスト自体は成功扱い）

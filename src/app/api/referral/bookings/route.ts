@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { ensureOwnClient, createGuestClient } from '@/lib/referral-auth'
 import { verifyReceiverAllowedInList } from '@/lib/referral-data'
 import { notifyBookingRequested, notifyBookingRequestedToSender, notifyBookingEmailFailedToSender, notifyBookingReceivedToClient } from '@/lib/referral-notify'
+import { sendSms } from '@/lib/sms'
 import { isAcceptingOpen } from '@/lib/referral-accepting'
 import { isReferralPaymentEnabled, REFERRAL_MIN_FEE_JPY } from '@/lib/feature-flags'
 import { parseSlot, snapToHalfHourUp } from '@/lib/referral-format'
@@ -331,16 +332,24 @@ export async function POST(request: NextRequest) {
           (list as { title?: string | null }).title || null,
           booking.id,
         )
-        // CEO指示(2026-08-08)「メール間違いはもっとちゃんと通知すべき」:
-        // 既知の不達アドレスを作成時点で検知した場合(§17-25)、webhookは二度と来ないため
-        // ここで即、送り手へ要対応通知を送る(LINE・メール両方)。
+        // CEO指示(2026-08-08・SMSクリック検知方式): 既知の不達アドレスを作成時点で検知したら
+        // (§17-25・webhookは二度と来ない)、まずクライアントへSMSでリンクを送る(webhook経路§17-19と
+        // 同じ役割分担)。リンクが開かれた時点で両プロへ通知が飛ぶ(/booking/[id]?via=sms)。
+        // SMSが送れなかった場合(未設定・失敗)のみ、従来どおり送り手へ人力フローの要対応通知。
         if (knownBadEmail) {
-          await notifyBookingEmailFailedToSender(
-            senderTarget,
-            clientName || ownClient.nickname || 'クライアント',
-            receiverPro.name || null,
-            booking.id,
+          const sms = await sendSms(
+            clientPhone,
+            `【REAL PROOF】ご登録のメールアドレスにご案内が届きませんでした。` +
+              `お手数ですが、こちらからご予約の状況をご確認ください。\nhttps://realproof.jp/booking/${booking.id}?via=sms`,
           )
+          if (!sms.sent) {
+            await notifyBookingEmailFailedToSender(
+              senderTarget,
+              clientName || ownClient.nickname || 'クライアント',
+              receiverPro.name || null,
+              booking.id,
+            )
+          }
         }
       }
     } catch (senderNotifyErr) {

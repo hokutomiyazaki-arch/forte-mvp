@@ -199,12 +199,14 @@ export async function POST(request: NextRequest) {
       if (!alreadyFailed) newlyFailed.push(row)
     }
 
-    // §17-19(CEO指示 2026-08-06): 「これを登録したら、既存のプロに電話させる流れも削除したい」
+    // §17-19(CEO指示 2026-08-06): メールが死んでも電話番号は必須項目なので必ず残っている。
+    // まずSMSで本人に直接リンクを送る。SMSが送れたら §17-16 の人力フロー通知はスキップする。
+    // 人が電話するのは「SMSも届かなかった＝電話番号まで間違っている」ときだけ。
     //
-    // メールが死んでも、電話番号は予約フォームの必須項目なので必ず残っている。
-    // まずSMSで本人に直接リンクを送る。**送れたらそこで終わり**で、
-    // §17-16 の人力フロー（送り手が電話してアドレスを聞く）は一切出さない。
-    // 人が電話するのは「SMSも届かなかった＝電話番号まで間違っている」ときだけになる。
+    // CEO指示(2026-08-08・運用変更): 従来は「SMSを送れた時点」で contact_recovered_by_sms_at を
+    // 立てて警告を消していたが、**実際にリンクが開かれるまで警告は残す**方式に変更。
+    // 印はクライアントが /booking/[id]?via=sms を開いた瞬間に立つ(booking-sms-recovery.ts)。
+    // ここでは送信記録(recovery_sms_sent_at)だけ残す。
     //
     // TWILIO_* が未設定の間は sendSms が必ず false を返すので、従来どおり人力フローに落ちる。
     const smsRecovered = new Set<string>()
@@ -213,7 +215,7 @@ export async function POST(request: NextRequest) {
       const result = await sendSms(
         row.client_phone,
         `【REAL PROOF】ご登録のメールアドレスにご案内が届きませんでした。` +
-          `お手数ですが、こちらからご予約の状況をご確認ください。\n${APP_URL}/booking/${row.id}`,
+          `お手数ですが、こちらからご予約の状況をご確認ください。\n${APP_URL}/booking/${row.id}?via=sms`,
       )
       if (!result.sent) continue
       smsRecovered.add(row.id)
@@ -226,15 +228,13 @@ export async function POST(request: NextRequest) {
             // 直前のループで書いた値を落とさない（row.preferred_slots は更新前のスナップショット）
             receipt_email_failed_at:
               (row.preferred_slots?.receipt_email_failed_at as string | undefined) || markedAt,
-            // これが立っている間、プロ側にはメール未達の対応ブロックを出さない（§17-19）。
-            contact_recovered_by_sms_at: markedAt,
+            recovery_sms_sent_at: markedAt,
           },
         })
         .eq('id', row.id)
       if (error) {
-        // 印が書けなかった場合はプロ側の人力フローを残す（黙って誰も気づかない状態を作らない）
+        // 記録が書けなくても致命ではない(fail-soft)。人力フロー通知はSMS送信済みなのでスキップのまま。
         console.error('[api/webhooks/resend] sms mark error:', row.id, error.message)
-        smsRecovered.delete(row.id)
       }
     }
 

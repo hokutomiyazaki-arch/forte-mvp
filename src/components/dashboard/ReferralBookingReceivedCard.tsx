@@ -165,6 +165,8 @@ interface Props {
   /** §17-31(CEO指示 2026-08-08): 通知メールの ?booking=<id> から渡ってくる。一覧の読み込み完了後、
    * 該当カードへ自動スクロールし数秒ハイライトする(見つからなければ何もしない)。 */
   highlightBookingId?: string | null
+  /** CEO指示(2026-08-08): &thread=1 なら該当カードの案件スレッドまで自動で開く。 */
+  highlightThreadOpen?: boolean
 }
 
 /**
@@ -213,7 +215,7 @@ function StatusPill({ label, bg, color }: { label: string; bg: string; color: st
  * ★ isReferralEnabled ではゲートしない(受け手は先行アクセス外でもリクエストを受けられる必要がある)。
  * ダッシュボード上部に、タブに依存せず常時表示する。
  */
-export default function ReferralBookingReceivedCard({ proId, onStatusChange, highlightBookingId }: Props) {
+export default function ReferralBookingReceivedCard({ proId, onStatusChange, highlightBookingId, highlightThreadOpen }: Props) {
   const [items, setItems] = useState<BookingItem[]>([])
   const [cancelledUnpaidItems, setCancelledUnpaidItems] = useState<CancelledUnpaidItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -1764,6 +1766,7 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange, hig
                 initialHandoverNote={item.handover_note}
                 partnerRoleLabel={item.sender_pro ? '紹介元' : undefined}
                 partnerName={item.sender_pro?.name}
+                initialOpen={!!highlightThreadOpen && highlightBookingId === item.id}
               />
             )}
 
