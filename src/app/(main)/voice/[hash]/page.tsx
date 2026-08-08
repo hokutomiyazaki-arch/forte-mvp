@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { sanitizeVoiceForDisplay } from '@/lib/voice-sanitize'
 import { COLORS, FONTS } from '@/lib/design-tokens'
+import ViewCountPing from './ViewCountPing'
 
 // §2-6広域適用(2026-08-08 CEO GO): このページは外部に共有されるVoiceの単独表示ページのため、
 // サーバー側で取得→AI変換した本文だけをレンダリングする(クライアント側で原文が一度でも
@@ -71,14 +72,12 @@ export default async function VoiceHashPage({
     return <NotFoundView message="このVoiceは表示できません" />
   }
 
-  // 閲覧数インクリメント(サーバー側・fire and forget的に1回だけ)
-  await supabase
-    .from('voice_shares')
-    .update({ view_count: (share.view_count || 0) + 1 })
-    .eq('id', share.id)
+  // 閲覧数インクリメントはクライアント側(ViewCountPing)で行う。サーバー側で加算すると
+  // OGPクローラのGETでもカウントが増え、共有指標の意味が変わるため(レビュー指摘)。
 
   return (
     <div style={{ background: T.bg, minHeight: '100vh', fontFamily: T.font }}>
+      <ViewCountPing shareId={share.id} viewCount={share.view_count || 0} />
       <div style={{ maxWidth: 420, margin: '0 auto', padding: '32px 16px' }}>
 
         {/* ① Voice表示（クリーム背景） */}

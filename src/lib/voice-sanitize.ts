@@ -13,9 +13,15 @@
 
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { isAiSanitizeEnabled } from '@/lib/feature-flags'
+import { selectInChunks } from '@/lib/supabase-batch'
 
 // §2-6広域適用(2026-08-08 CEO GO): 「治った」等の断定体験談トリガー語を追加したためバージョンを上げる。
-// version不一致のキャッシュ行は再変換対象になる(本番0件確認済みのため再変換コストなし)。
+// version不一致のキャッシュ行は再変換対象になる(再変換コストなし。根拠: ANTHROPIC_API_KEYが
+// 2026-08-08まで未設定=変換は一度も成功しておらず、CEOも「AI自動Voice修正は0件」と確認済み)。
+//
+// 【運用変更の履歴】旧§2-6(/r/のみ適用)は全Voiceを無条件にLLMへ通していた。広域適用に伴い
+// 「禁止語プリゲート検知時のみLLM変換」へ縮小(コスト対策・2026-08-08)。リテラル語/〜症・病・障害
+// パターンに当たらない表現はどの面でも原文のまま出る。検知漏れは語リストへの追記で対応する。
 const SANITIZE_VERSION = 2
 
 const SYSTEM_PROMPT = `あなたは、施術者(トレーナー・治療家・コーチ等)に対するクライアントの感想文を、
@@ -135,6 +141,10 @@ async function callAnthropic(originalText: string): Promise<string | null> {
  * 「変換はしないが、検知したら非表示にする」という安全側の判定にのみ使う。
  */
 export function hasForbiddenTerm(text: string): boolean {
+  // flag offの間は「検知なし」扱い=表示に一切影響させない(既存挙動維持)。
+  // フラグ判定を呼び出し側任せにすると、検索route等でガード漏れ時に
+  // デプロイ即日でvoiceSnippet/matchedVoiceが消える退行になるため、ここで持つ。
+  if (!isAiSanitizeEnabled()) return false
   return !!findForbiddenTerm(text)
 }
 
@@ -252,11 +262,20 @@ export async function sanitizeVoicesForDisplay(
   const supabase = getSupabaseAdmin()
   const targetIds = targets.map((t) => t.voteId)
 
-  const { data: cachedRows } = await supabase
-    .from('vote_comment_sanitized')
-    .select('vote_id, sanitized_text')
-    .in('vote_id', targetIds)
-    .eq('sanitize_version', SANITIZE_VERSION)
+  // targetIdsは最大1000件級(orgコメント全件・カード全票)になり得るため、
+  // 素の.in()はURL長とPostgRESTのmax-rows=1000の両方に当たる。既存のselectInChunksで
+  // IN句チャンク+order+rangeページネーションにする(CLAUDE.md C項)。
+  const cachedRows = await selectInChunks<{ vote_id: string; sanitized_text: string | null }>(
+    targetIds,
+    (ids, from, to) =>
+      supabase
+        .from('vote_comment_sanitized')
+        .select('vote_id, sanitized_text')
+        .in('vote_id', ids)
+        .eq('sanitize_version', SANITIZE_VERSION)
+        .order('vote_id')
+        .range(from, to)
+  )
 
   const cacheMap = new Map<string, string>()
   for (const row of (cachedRows || []) as Array<{ vote_id: string; sanitized_text: string | null }>) {
@@ -308,14 +327,16 @@ export async function sanitizeVoicesForDisplay(
       const forbidden = findForbiddenTerm(converted)
       if (forbidden) {
         console.log('[voice-sanitize] skipped (forbidden term detected):', { voteId: item.voteId, term: forbidden })
-      } else {
-        upsertRows.push({
-          vote_id: item.voteId,
-          sanitized_text: converted,
-          sanitize_version: SANITIZE_VERSION,
-          sanitized_at: new Date().toISOString(),
-        })
       }
+      // 禁止語が残っていてもキャッシュには書く(単体版と同じ)。書かないとそのvoteは
+      // 永久にキャッシュミスのまま表示のたびLLMを叩き続ける。安全側の担保は
+      // 読み出し時の再チェック(上のcacheMap分岐)が持つので、表示にはnullを返せば足りる。
+      upsertRows.push({
+        vote_id: item.voteId,
+        sanitized_text: converted,
+        sanitize_version: SANITIZE_VERSION,
+        sanitized_at: new Date().toISOString(),
+      })
       result.set(item.voteId, forbidden ? null : converted)
     })
   )

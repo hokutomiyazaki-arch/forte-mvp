@@ -167,6 +167,9 @@ export default async function CardLayout({
 
   // §2-6広域適用(2026-08-08 CEO GO): Schema.org(Google検索結果に出るJSON-LD)も
   // 紹介URLと同じAI変換を通す。変換不能(非表示)の票はreview配列から除外する。
+  // 既知事象(レビュー中4): 本文側(getCardData)と独立に変換を呼ぶため、キャッシュ未生成の
+  // 「初回リクエスト1回だけ」JSON-LDと画面本文の文言が異なり得る(LLMは非決定的)。
+  // 変換結果は禁止語残存でも必ずキャッシュされる設計にしたため2回目以降は常に一致する。
   const sanitizedMap = await sanitizeVoicesForDisplay(
     rawComments.map((c) => ({ voteId: c.id, text: c.comment as string }))
   )

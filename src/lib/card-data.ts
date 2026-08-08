@@ -535,7 +535,10 @@ export async function getCardData(
   )
 
   // === enrichedComments: 機密フィールドを除外し voter_pro / reply を付与 ===
-  const enrichedComments: EnrichedComment[] = commentsRaw.map(c => {
+  // §2-6広域適用レビュー修正(2026-08-08): 非表示判定(null)の票は空文字で残さず配列から除外する。
+  // 空文字で残すと引用符だけの空Voiceカードが並び、CardClientのvoiceCount(=comments.length)と
+  // JSON-LDのreviewCount(除外済み)が同一ページ内で食い違う。orgルートと同じ除外方式に揃える。
+  const enrichedComments: EnrichedComment[] = commentsRaw.filter(c => !!sanitizedCommentMap.get(c.id)).map(c => {
     const info = c.normalized_email ? voterInfoMap[c.normalized_email] : undefined
     const isFirstVote = info && info.firstVoteId === c.id
     let voterVoteCount = 1
@@ -560,8 +563,9 @@ export async function getCardData(
       if (proofTags.length >= 3) break
     }
 
-    // §2-6広域適用(2026-08-08 CEO GO): null(非表示判定)はその票のcommentだけを空にする
-    // (票自体・プルーフ数は消さない。表示側は「コメントなし」相当の空文字が安全)。
+    // §2-6広域適用(2026-08-08 CEO GO): 非表示判定の票は上のfilterで除外済み。
+    // ここに来る票は必ず表示可能テキストを持つ(flag off時は原文がそのまま入っている)。
+    // ?? '' は型のためだけの到達不能フォールバック(原文c.commentに倒すのは危険側なので禁止)。
     const sanitizedComment = sanitizedCommentMap.get(c.id)
 
     return {
