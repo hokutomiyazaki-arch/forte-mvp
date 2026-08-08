@@ -664,6 +664,15 @@ export default function DashboardPage() {
   // CEO指示(2026-08-08): 予約タブのサブタブ（受付中 / 完了済み）
   const [bookingsSubtab, setBookingsSubtab] = useState<'active' | 'completed'>('active')
 
+  // §16-41修正A(CEOフィードバック 2026-08-08): 受付中サブタブで「完了する」を押した直後、
+  // 完了済みサブタブへ自動で切り替え、該当予約を自動展開＋スクロール＋ハイライトする。
+  // ?booking=(通知メール由来)とは別の状態にする(用途が違う・混ぜると消費フラグの扱いがずれる)。
+  const [highlightCompletedBookingId, setHighlightCompletedBookingId] = useState<string | null>(null)
+  function handleBookingCompleted(bookingId: string) {
+    setBookingsSubtab('completed')
+    setHighlightCompletedBookingId(bookingId)
+  }
+
   // §17-31(CEO指示 2026-08-08): 予約通知メールの ?tab=bookings&booking=<id> で着地したとき、
   // 該当予約カードへ自動スクロール＋一時ハイライトする。読み取り後は edit=true と同じ流儀で
   // URLから即除去する(リロードで再スクロールさせない)。実際のスクロール処理はカード一覧の
@@ -5443,7 +5452,7 @@ export default function DashboardPage() {
           {/* レビュー指摘(軽微): 受付中側とそろえて display 切替(単一マウント)にし、
               サブタブを行き来するたびに再フェッチが走らないようにする */}
           <div style={{ display: bookingsSubtab === 'completed' ? 'block' : 'none' }}>
-            <ReferralCompletedList proId={pro.id} variant="list" />
+            <ReferralCompletedList proId={pro.id} variant="list" highlightBookingId={highlightCompletedBookingId} />
           </div>
 
           <div style={{ display: bookingsSubtab === 'active' ? 'block' : 'none' }}>
@@ -5497,6 +5506,7 @@ export default function DashboardPage() {
             onStatusChange={handleReferralReceivedStatus}
             highlightBookingId={highlightBookingId}
             highlightThreadOpen={highlightThreadOpen}
+            onCompleted={handleBookingCompleted}
           />
 
           {referralReceivedLoaded && referralTotalReceivedCount === 0 && (

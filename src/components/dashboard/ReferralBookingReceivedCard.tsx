@@ -176,6 +176,9 @@ interface Props {
   highlightBookingId?: string | null
   /** CEO指示(2026-08-08): &thread=1 なら該当カードの案件スレッドまで自動で開く。 */
   highlightThreadOpen?: boolean
+  /** §16-41修正A(CEOフィードバック 2026-08-08): 「完了する」成功後に呼ぶ。親が完了済みサブタブへ
+   * 切り替え、当該予約を完了済み一覧側で自動展開＋ハイライトするために使う。 */
+  onCompleted?: (bookingId: string) => void
 }
 
 /**
@@ -224,7 +227,7 @@ function StatusPill({ label, bg, color }: { label: string; bg: string; color: st
  * ★ isReferralEnabled ではゲートしない(受け手は先行アクセス外でもリクエストを受けられる必要がある)。
  * ダッシュボード上部に、タブに依存せず常時表示する。
  */
-export default function ReferralBookingReceivedCard({ proId, onStatusChange, highlightBookingId, highlightThreadOpen }: Props) {
+export default function ReferralBookingReceivedCard({ proId, onStatusChange, highlightBookingId, highlightThreadOpen, onCompleted }: Props) {
   const [items, setItems] = useState<BookingItem[]>([])
   const [cancelledUnpaidItems, setCancelledUnpaidItems] = useState<CancelledUnpaidItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -620,6 +623,9 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange, hig
       if (res.ok) {
         // タスク⑥改: 完了一覧は紹介タブ内のReferralCompletedListが表示する(タブを開いた時に取得)
         setItems((prev) => prev.filter((i) => i.id !== bookingId))
+        // §16-41修正A(CEOフィードバック 2026-08-08): 完了成功を親へ通知(完了済みサブタブへの
+        // 自動遷移＋該当行のハイライトは親側/ReferralCompletedList側が担当する)。
+        onCompleted?.(bookingId)
       } else {
         // レビュー指摘(重大2): ボタンをdisabledにしていても、支払い完了直前などの
         // 競合でここに来ることがあるため専用文言を出す。
