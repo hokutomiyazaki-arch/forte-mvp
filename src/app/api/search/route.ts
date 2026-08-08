@@ -4,7 +4,7 @@ import { isSearchPrivate, isReferralFullyLaunched } from '@/lib/feature-flags'
 import { getViewerIsPro, getViewerIsProStrict } from '@/lib/viewer-role'
 import { computeReferralSignal, isReferralReachable } from '@/lib/referral-accepting'
 import { getValidDelegateListIds } from '@/lib/referral-delegate'
-import { selectInChunks } from '@/lib/supabase-batch'
+import { selectInChunks, fetchSearchAggregates, fetchVoiceMatches } from '@/lib/supabase-batch'
 
 export const dynamic = 'force-dynamic'
 
@@ -103,6 +103,8 @@ export async function GET(request: Request) {
 
   try {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    // X-Day対応(2026-08-08): 「今週の急上昇」用。JS集計パスでは集計ループ内で使う
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
     // 全アクティブプロを取得（プルーフ0除外はあとでフィルタ）
     // 真因対応(2026-08): .range() が無く、Supabase max-rows=1000 でプロ数が1000名を超えた
@@ -157,6 +159,21 @@ export async function GET(request: Request) {
 
     const proIds = professionals.map(p => p.id)
 
+    // ============================================================
+    // X-Day対応(2026-08-08・CEO GO): votes 全行を JS に運ぶのをやめ、プロ単位の集計だけを
+    // RPC(migration 059)から受け取る。スコアリング・並び替えは従来どおり JS 側。
+    // fail-soft: RPC 未作成・エラー時は null が返り、従来の votes 全件取得+JS集計へ
+    // フォールバックする(検索は公開機能のため絶対に落とさない)。
+    // q がある時はコメント検索RPCも必要で、どちらか一方でも失敗したら全面フォールバック
+    // (半端な混在をしない)。
+    // ============================================================
+    const rpcAggregates = await fetchSearchAggregates(supabase, proIds)
+    const rpcVoiceMatches = rpcAggregates && query ? await fetchVoiceMatches(supabase, proIds, query) : null
+    const useRpc = !!rpcAggregates && (!query || !!rpcVoiceMatches)
+    // レビュー指摘(中・観測性): fail-softは成功時に無音のため、どちらのパスで動いたかを
+    // 必ず1行ログに残す(PIIなし)。SQL 059実行後の検証はVercelログでこの行を見る。
+    console.log('[api/search] aggregation=%s (pros=%d)', useRpc ? 'rpc' : 'js', proIds.length)
+
     // 投票データを一括取得（プルーフ投票: スコア計算用）
     // 真因対応(2026-05-28): .limit(10000) は Supabase max-rows=1000 でキャップされる。
     // ヘルパーで全件ページネーション取得する。
@@ -165,24 +182,29 @@ export async function GET(request: Request) {
     // （「初めて」選択なのに過去票がある場合の再分類。§2-8「選択項目は行に保存、集計不算入」）。
     // そのため null 前提の除外はできず、下流の各集計ループ側で vote_type==='continuation' を
     // 明示的にスキップする必要がある（totalProofs/recentProofs/lastProofAt等の件数系は算入したまま）。
-    const proofVotes = await fetchAllVotesPaginated(
-      supabase,
-      proIds,
-      'id, professional_id, created_at, vote_type, comment, normalized_email, selected_proof_ids, selected_personality_ids',
-      ['proof', 'continuation']
-    )
+    // X-Day対応: RPC集計が取れた場合は votes 全件を取得しない(空配列で下流ループは全て素通り)。
+    const proofVotes = useRpc
+      ? []
+      : await fetchAllVotesPaginated(
+          supabase,
+          proIds,
+          'id, professional_id, created_at, vote_type, comment, normalized_email, selected_proof_ids, selected_personality_ids',
+          ['proof', 'continuation']
+        )
 
     // リピーター率用: 全投票のnormalized_email+session_countを取得（session_countフォールバック対応）
     // 真因対応(2026-05-28): .limit(10000) は Supabase max-rows=1000 でキャップされる。
     // ヘルパーで全件取得（ID順）→ 集計前に JS 側で created_at ASC ソートし直す。
     // ※ ソート必須: 下のリピーター集計ループは「最初に遭遇した票」を firstVoteId/
     //   firstSessionCount として保存するため、created_at の昇順=最古優先が前提。
-    const allVotesForRepeater = await fetchAllVotesPaginated(
-      supabase,
-      proIds,
-      'id, professional_id, normalized_email, session_count, created_at',
-      null
-    )
+    const allVotesForRepeater = useRpc
+      ? []
+      : await fetchAllVotesPaginated(
+          supabase,
+          proIds,
+          'id, professional_id, normalized_email, session_count, created_at',
+          null
+        )
     allVotesForRepeater.sort(
       (a: any, b: any) =>
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
@@ -246,28 +268,60 @@ export async function GET(request: Request) {
         counts[perId] = (counts[perId] || 0) + 1
       }
     }
+    // X-Day対応: RPC集計パスでは personality_counts(jsonb) をそのまま使う(定義は上のJSループと同一)
+    if (useRpc && rpcAggregates) {
+      rpcAggregates.forEach((agg, pid) => {
+        if (agg.personality_counts && Object.keys(agg.personality_counts).length > 0) {
+          proPersonalityCounts.set(pid, agg.personality_counts)
+        }
+      })
+    }
 
     // 検索マッチング（voice + proof）
     const commentMatchProIds = new Set<string>()
     const voiceMatchMap: Record<string, string> = {} // proId -> matched comment snippet
     const proofMatchMap: Record<string, string> = {} // proId -> matched strength_label
     const voiceMatchCountMap: Record<string, number> = {} // proId -> マッチしたコメント件数
-    if (query) {
+    // 前後20字の抜粋を作る共通処理(JS集計パス・RPCパスで同一の見た目にする)
+    const buildVoiceExcerpt = (comment: string): string | null => {
+      const idx = comment.indexOf(query)
+      if (idx === -1) return null
+      const start = Math.max(0, idx - 20)
+      const end = Math.min(comment.length, idx + query.length + 20)
+      const excerpt = comment.slice(start, end)
+      const prefix = start > 0 ? '...' : ''
+      const suffix = end < comment.length ? '...' : ''
+      return prefix + excerpt + suffix
+    }
+    if (query && useRpc && rpcVoiceMatches && rpcAggregates) {
+      // X-Day対応: コメント全文マッチはRPC(search_voice_matches・リテラル部分一致)の集計結果を使う
+      rpcVoiceMatches.forEach((m, pid) => {
+        commentMatchProIds.add(pid)
+        voiceMatchCountMap[pid] = m.match_count
+        if (m.first_comment) {
+          const excerpt = buildVoiceExcerpt(m.first_comment)
+          if (excerpt) voiceMatchMap[pid] = excerpt
+        }
+      })
+      // proof マッチ: 「その項目に1票以上あるプロ」= item_voter_counts にキーが存在するプロ(JS版と等価)
+      for (const item of proofItems || []) {
+        if (item.strength_label && item.strength_label.includes(query)) {
+          rpcAggregates.forEach((agg, pid) => {
+            if (!proofMatchMap[pid] && agg.item_voter_counts && agg.item_voter_counts[item.id]) {
+              proofMatchMap[pid] = item.strength_label
+            }
+          })
+        }
+      }
+    } else if (query) {
       // voice マッチ（前後20字の抜粋 + マッチ数集計）
       for (const v of proofVotes || []) {
         if (v.comment && v.comment.includes(query)) {
           commentMatchProIds.add(v.professional_id)
           voiceMatchCountMap[v.professional_id] = (voiceMatchCountMap[v.professional_id] || 0) + 1
           if (!voiceMatchMap[v.professional_id]) {
-            const idx = v.comment.indexOf(query)
-            if (idx !== -1) {
-              const start = Math.max(0, idx - 20)
-              const end = Math.min(v.comment.length, idx + query.length + 20)
-              const excerpt = v.comment.slice(start, end)
-              const prefix = start > 0 ? '...' : ''
-              const suffix = end < v.comment.length ? '...' : ''
-              voiceMatchMap[v.professional_id] = prefix + excerpt + suffix
-            }
+            const excerpt = buildVoiceExcerpt(v.comment)
+            if (excerpt) voiceMatchMap[v.professional_id] = excerpt
           }
         }
       }
@@ -305,10 +359,16 @@ export async function GET(request: Request) {
     }
 
     // プロごとの集計
+    // X-Day対応(2026-08-08): proofItemCounts は Set ではなく人数(数値)を持つ形に変更
+    // (RPC集計パスと共通の形にするため。JS集計パスでは下のループで Set を作ってから size を書き込む)。
+    // voterAgg は RPC パスで DB 側集計済みの値が入る(JS パスでは null のまま voterInfoMap から計算)。
+    // ⚠️ totalVotes / voterInfoMap は RPC パスでは常に 0/空のまま(JS集計パス専用)。
+    //    ここを読む新コードを足すときは voterAgg 側と両対応にすること。
     const proStats = new Map<string, {
       totalVotes: number
       totalProofs: number
       recentProofs: number
+      rising7d: number
       lastProofAt: Date | null
       categoryCount: Record<string, number>
       recentCategoryCount: Record<string, number>
@@ -316,7 +376,8 @@ export async function GET(request: Request) {
       latestVoteComment: string
       // §2-8: 票数ではなく人数（DISTINCT normalized_email）でカウントする。
       // email が無い投票は id をフォールバックキーにして個別カウントする（重複判定不能なため）。
-      proofItemCounts: Record<string, Set<string>>
+      proofItemCounts: Record<string, number>
+      voterAgg: { uniqueVoters: number; firstCount: number; repeaterCount: number; regularCount: number } | null
     }>()
 
     const ensureStat = (pid: string) => {
@@ -325,12 +386,14 @@ export async function GET(request: Request) {
           totalVotes: 0,
           totalProofs: 0,
           recentProofs: 0,
+          rising7d: 0,
           lastProofAt: null,
           categoryCount: {},
           recentCategoryCount: {},
           voterInfoMap: {},
           latestVoteComment: '',
           proofItemCounts: {},
+          voterAgg: null,
         })
       }
       return proStats.get(pid)!
@@ -354,7 +417,8 @@ export async function GET(request: Request) {
       }
     }
 
-    // 2) プルーフ投票からスコア・カテゴリ集計
+    // 2) プルーフ投票からスコア・カテゴリ集計（JS集計パスのみ。RPCパスでは proofVotes は空配列）
+    const proofItemVoterSets = new Map<string, Record<string, Set<string>>>()
     for (const vote of proofVotes || []) {
       const stat = ensureStat(vote.professional_id)
       stat.totalProofs++
@@ -370,6 +434,10 @@ export async function GET(request: Request) {
       if (isRecent) {
         stat.recentProofs++
       }
+      // 「今週の急上昇」用(proof+continuation・下のPick upソートで使用)
+      if (_d >= sevenDaysAgo) {
+        stat.rising7d++
+      }
 
       // §2-8: continuation行は selected_proof_ids を保持したまま保存されるが、
       // 強み項目別集計（カテゴリ・proofItemCounts）には不算入とする。
@@ -377,6 +445,8 @@ export async function GET(request: Request) {
       if (vote.vote_type !== 'continuation') {
         // §2-8: proofItemCounts は票数ではなく人数（DISTINCT normalized_email）でカウント
         const voterKey = vote.normalized_email || vote.id
+        if (!proofItemVoterSets.has(vote.professional_id)) proofItemVoterSets.set(vote.professional_id, {})
+        const voterSets = proofItemVoterSets.get(vote.professional_id)!
         for (const itemId of vote.selected_proof_ids || []) {
           const tab = itemTabMap[itemId]
           if (tab) {
@@ -385,10 +455,47 @@ export async function GET(request: Request) {
               stat.recentCategoryCount[tab] = (stat.recentCategoryCount[tab] || 0) + 1
             }
           }
-          if (!stat.proofItemCounts[itemId]) stat.proofItemCounts[itemId] = new Set<string>()
-          stat.proofItemCounts[itemId].add(voterKey)
+          if (!voterSets[itemId]) voterSets[itemId] = new Set<string>()
+          voterSets[itemId].add(voterKey)
         }
       }
+    }
+    // JS集計パス: Set の人数を数値へ確定(下流は数値のみを見る)
+    proofItemVoterSets.forEach((voterSets, pid) => {
+      const stat = ensureStat(pid)
+      for (const itemId of Object.keys(voterSets)) {
+        stat.proofItemCounts[itemId] = voterSets[itemId].size
+      }
+    })
+
+    // X-Day対応: RPC集計パスでは proStats を RPC の集計行から直接構築する
+    // (定義は上のJSループと同一。categoryCount/recentCategoryCount は item別票数×itemTabMapで復元)。
+    if (useRpc && rpcAggregates) {
+      rpcAggregates.forEach((agg, pid) => {
+        const stat = ensureStat(pid)
+        stat.totalProofs = agg.total_proofs
+        stat.recentProofs = agg.recent_proofs_30d
+        stat.rising7d = agg.rising_7d
+        stat.lastProofAt = agg.last_proof_at ? new Date(agg.last_proof_at) : null
+        stat.latestVoteComment = agg.latest_comment || ''
+        stat.proofItemCounts = agg.item_voter_counts || {}
+        const itemVoteCounts: Record<string, number> = agg.item_vote_counts || {}
+        for (const itemId of Object.keys(itemVoteCounts)) {
+          const tab = itemTabMap[itemId]
+          if (tab) stat.categoryCount[tab] = (stat.categoryCount[tab] || 0) + itemVoteCounts[itemId]
+        }
+        const itemVoteCounts30d: Record<string, number> = agg.item_vote_counts_30d || {}
+        for (const itemId of Object.keys(itemVoteCounts30d)) {
+          const tab = itemTabMap[itemId]
+          if (tab) stat.recentCategoryCount[tab] = (stat.recentCategoryCount[tab] || 0) + itemVoteCounts30d[itemId]
+        }
+        stat.voterAgg = {
+          uniqueVoters: agg.unique_voters,
+          firstCount: agg.first_count,
+          repeaterCount: agg.repeater_count,
+          regularCount: agg.regular_count,
+        }
+      })
     }
 
     // §2-2改訂: 🟡点灯条件の厳格化のため、delegate_list_id群の「有効性」(承諾済み+受付中の
@@ -404,29 +511,38 @@ export async function GET(request: Request) {
         totalVotes: 0,
         totalProofs: 0,
         recentProofs: 0,
+        rising7d: 0,
         lastProofAt: null,
         categoryCount: {},
         recentCategoryCount: {},
         voterInfoMap: {},
         latestVoteComment: '',
         proofItemCounts: {},
+        voterAgg: null,
       }
 
       // プルーフ0は除外
       if (stat.totalProofs === 0) return null
 
       // リピーター率・CLIENT COMPOSITION: session_countフォールバック対応
-      const uniqueVoters = Object.keys(stat.voterInfoMap).length
-      const voterInfos = Object.values(stat.voterInfoMap)
-
+      // X-Day対応: RPC集計パスでは DB 側で同じ level 規則で集計済み(stat.voterAgg)。
+      let uniqueVoters = 0
       let firstCount = 0
       let repeaterCount = 0
       let regularCount = 0
-      for (const info of voterInfos) {
-        const level = getVoterLevel(info)
-        if (level >= 3) regularCount++
-        else if (level === 2) repeaterCount++
-        else firstCount++
+      if (stat.voterAgg) {
+        uniqueVoters = stat.voterAgg.uniqueVoters
+        firstCount = stat.voterAgg.firstCount
+        repeaterCount = stat.voterAgg.repeaterCount
+        regularCount = stat.voterAgg.regularCount
+      } else {
+        uniqueVoters = Object.keys(stat.voterInfoMap).length
+        for (const info of Object.values(stat.voterInfoMap)) {
+          const level = getVoterLevel(info)
+          if (level >= 3) regularCount++
+          else if (level === 2) repeaterCount++
+          else firstCount++
+        }
       }
       const repeaterRate = uniqueVoters >= 3
         ? Math.round(wilsonScore(regularCount, uniqueVoters) * 100)
@@ -474,13 +590,13 @@ export async function GET(request: Request) {
       // Featured proof: featured_proof_id があればそれ、なければ最得票のproof_item
       let featuredProof: { strengthLabel: string; label: string; votes: number } | null = null
       const fpId = pro.featured_proof_id
-      if (fpId && stat.proofItemCounts[fpId] && stat.proofItemCounts[fpId].size > 0) {
+      if (fpId && (stat.proofItemCounts[fpId] || 0) > 0) {
         const item = (proofItems || []).find(i => i.id === fpId)
         if (item) {
           featuredProof = {
             strengthLabel: item.strength_label || '',
             label: item.tab || '',
-            votes: stat.proofItemCounts[fpId].size,
+            votes: stat.proofItemCounts[fpId],
           }
         }
       }
@@ -488,8 +604,7 @@ export async function GET(request: Request) {
         // 最多人数のproof_item（1人以上）
         let bestId = ''
         let bestCount = 0
-        for (const [itemId, voterSet] of Object.entries(stat.proofItemCounts)) {
-          const count = voterSet.size
+        for (const [itemId, count] of Object.entries(stat.proofItemCounts)) {
           if (count > bestCount) {
             bestCount = count
             bestId = itemId
@@ -518,8 +633,7 @@ export async function GET(request: Request) {
         )
         let bestId = ''
         let bestCount = 0
-        for (const [itemId, voterSet] of Object.entries(stat.proofItemCounts)) {
-          const count = voterSet.size
+        for (const [itemId, count] of Object.entries(stat.proofItemCounts)) {
           if (categoryItemIds.has(itemId) && count > bestCount) {
             bestCount = count
             bestId = itemId
@@ -694,15 +808,12 @@ export async function GET(request: Request) {
       //   「施術を受けた記録」= proof + continuation は同日にadminの日別集計でも直した定義で、
       //   このファイル内の totalProofs / recentProofs / lastProofAt も既にその定義。
       //   ここだけ違っていたので揃える（CLAUDE.md「vote_typeは4種」参照）。
-      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+      // X-Day対応(2026-08-08): votes の再スキャンをやめ、集計済みの stat.rising7d を使う
+      // (JS集計パスでは上のループ内で・RPCパスでは DB 側で、同じ proof+continuation 定義で集計済み)。
       const rising7dCounts = new Map<string, number>()
-      for (const vote of proofVotes || []) {
-        // proofVotes は ['proof','continuation'] で取得済み。他のvote_typeは混ざらないが、
-        // 取得条件が変わっても壊れないよう明示的に絞る。
-        if (vote.vote_type !== 'proof' && vote.vote_type !== 'continuation') continue
-        if (new Date(vote.created_at) < sevenDaysAgo) continue
-        rising7dCounts.set(vote.professional_id, (rising7dCounts.get(vote.professional_id) || 0) + 1)
-      }
+      proStats.forEach((stat, pid) => {
+        if (stat.rising7d > 0) rising7dCounts.set(pid, stat.rising7d)
+      })
 
       const risingList = result
         .filter(p => (rising7dCounts.get(p.id) || 0) >= RISING_MIN_VOTES_7D)

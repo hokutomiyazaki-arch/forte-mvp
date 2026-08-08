@@ -739,3 +739,31 @@
 - フォームは新規に作らず `ReferralRequestForm` に `variant='direct'` を足した（日時ピッカー・進行順・警告が完全に同じで、コピーすると片方だけ直る）。
 - 受信箱も分けない。サブタブ名を「紹介を受ける」→「**予約を受ける**」に変更し、カード内の1行（`REALPROOFからのご予約` / `紹介元: ◯◯さん`）で出どころを示す。
 - 先行サービス調査（CLAUDE.mdの恒久ルール）: ホットペッパー（リクエストを確定と誤解／二重受け口）、EPARK（同）、ストアカ・Calendly（プロが通知に気づかず放置）、予約金なし全般（no-show）。対策は §17-1 の表に記録。**no-show対策だけは今回保留**（予約金なしはCEO決定）。
+
+## 2026-08-08 CEO指示バッチ（PR #43マージ済み・本番反映）
+- **相談ラベル（§17-30）**: 未対応(金)/対応中(青)/対応済み(グレー)の統一バッジ＋3階層ソート。DDL不要（既存status new/open/closedを使用）。
+- **メール→該当カード直行（§17-31）**: 受け手宛メール/LINE5種に`&booking=<id>`付与→着地時に自動スクロール＋金色ハイライト3.8秒。相談の「メッセージを送る」(?open=)にも同挙動を追加（CEO報告対応）。パラメータは消費後URL除去（edit=true流儀）。
+- **直予約の予約金/紹介文言の総点検（§17-29）**: 真因=reschedule-respondのkeep_currentがsource未参照で「予約金は全額返金」入りメールを無条件送信。ほかにプロ都合キャンセルメール（レビュー発見）・72h返金説明パネル・Googleカレンダータイトルの計4箇所を`source='direct'`分岐で修正。BookingAcceptForm等は`fee_total_bps=0`により金額文言が出ない設計を確認済み（安全）。
+- **予約カード折りたたみ既定＋整理**: 折りたたみ時=ステータス・名前・紹介元orRP直・日付のみ。メール未達は赤チップで畳んでいても可視。?booking=着地時は自動展開。重複表記（紹介元行・確定日時大型表示）を本文から削除。
+- **予約と相談のしくみガイド新設**: /support/booking-consultation-guide（メリット先出しの告知調・§17-24の未公開機能用語なし）。線画はインラインSVG4点（**このセッションは画像生成キー無し**のため紺×金の同ビジュアル言語で手描き。差し替えたければMacセッションでgenerate-images.mjs）。
+- **【恒久ルール】Newマーク**: 新機能追加のたびに付け、一度ページを見たら消える（NewBadge id + MarkFeatureSeen + localStorage）。CLAUDE.md追記済み。
+- **告知文面**: docs/announcements/2026-08-08-booking-consultation-guide.md（LINE=短文+「リンク内で詳しく解説」・メール=解説つき）。**配信はCEO/Macセッションから**（webセッションはrealproof.jp到達不可・キー無しを確認済み。admin/broadcastは同期送信でキュー無し=DB経由の代行も不可）。
+- レビュー1周（重大0・中3件→修正済み）。npm ci→tsc→next build→PR #43→CCマージまで完了。
+- **【実機確認】** CEOがA（相談2通連投）・B（バウンス済み再予約の即時赤ブロック）を確認OK（2026-08-08）。
+
+## 2026-08-08 完了済みタブ（続きバッチ・作業中）
+- 予約タブに受付中/完了済みサブタブ。完了リストは§17-2以降、紹介タブの到達不能なreceiveサブタブに残っていた（切替ボタン無し=事実上非表示）のを variant='list' で復活。
+- 次: /api/search の Postgres側集計リファクタ（CEO GO・調査中）。
+
+## 2026-08-08 /api/search Postgres側集計リファクタ（X-Day対応・CEO GO）
+- migration 059: search_pro_vote_aggregates / search_voice_matches（新規のみ・既存VIEW非接触）。
+  コードはRPC失敗時に従来JS集計へ全面フォールバック（fail-soft・SQL未実行でもデプロイ安全）。
+- レビュー1周: **重大1**（SECURITY DEFINER+REVOKE無し=公開anonキーでRPC直叩き可・コメント検索オラクル化）→
+  SECURITY DEFINER撤回＋REVOKE/GRANT追加で修正。**中3**（unnestのNULL要素で関数ごと落ちて静かに永久
+  フォールバック→NULLガード／観測性ゼロ→aggregation=rpc|jsログ追加／votes実型未検証→::timestamptzキャスト
+  ＋実行手順を059ヘッダーに明記）も修正済み。
+- 【正確な到達点】解消したのはvotes転送のボトルネック。**professionals全件ロード(5000キャップ)と
+  votes(professional_id,status,created_at)の索引確認は残タスク**（X-Day完了ではない）。
+- 【既知の表示差分】featured_vote_id未設定プロのvoiceSnippet出所がSQL実行後に変わり得る（最新コメント基準に）。
+- 【別タスク化】ReferralTab内の到達不能なReferralCompletedListマウント撤去（二重fetch・3点証拠確認の上で）。
+- SQLは未実行。CEO承認後にSupabase MCPで実行→検証SELECT→Vercelログで aggregation=rpc 確認の手順。
