@@ -1886,7 +1886,9 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange }: P
                     </label>
                   </div>
 
-                  {selectedCancelReason === 'client' && (
+                  {/* CEO報告(2026-08-08): 直予約には予約金が無く72時間返金ルール自体が存在しないため、
+                      連絡日時入力・返金説明のブロックごと表示しない(誤解防止)。 */}
+                  {selectedCancelReason === 'client' && !isDirectBooking(item.id) && (
                     <>
                       {/* レビュー指摘(重大3): クライアントから連絡を受けた日時(任意)。72時間前ルールの
                           基準時刻として、現在時刻より前ならこちらを優先する(サーバー側もMath.minで同じ)。 */}
