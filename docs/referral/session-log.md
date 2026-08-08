@@ -809,3 +809,11 @@
 - スレッドコメント通知(notifyBookingMessage)にリンク復活（2026-08-04「リンク無し」決定を撤回）＋
   &thread=1 で着地時に案件スレッドまで自動オープン（BookingThread initialOpen）。
 - 実機確認済み: §17-25作成時検知の赤ブロック（email_bounces手動INSERT後）・色分けピル・折りたたみ。
+
+## 2026-08-08 夜バッチ3（PR #53）
+- 送り手がアドレス修正後は「クライアントにメッセージを送る」を紹介した案件カードに表示
+  （client_email_fixed_by='sender'かつ未達フラグなし。/api/pro/bookings/[id]/thread を送り手にも開放・
+  送り手は requested 段階でも可）。
+- 対応中バナー既読制御（CEO提案）: 確認する→タップ時点の案件id+status署名をlocalStorageに記憶して非表示、
+  中身が変わったら自動再表示。赤警告は消せない。
+- スレッドコメント通知のリンク復活＋&thread=1でスレッド自動オープンはPR #52参照。
