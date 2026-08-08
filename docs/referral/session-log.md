@@ -827,3 +827,20 @@
 - 先行リリースの形（提示済み・CEO判断待ち）: ゆりかさんをFEATURE_REFERRAL_LISTSのアローリストに
   追加し「プロを探すで記録を見て選んで載せる」使い方で渡す。受け手側はアローリスト不要（§17-2）。
 - 告知（予約と相談ガイド）はCEOが一斉送信完了（2026-08-08）。
+
+## 2026-08-08 深夜バッチ（PR #55 + Voice変換拡大）
+- PR #55: セッション前日リマインド cron（/api/cron/booking-session-reminders・毎時30分）。
+  確定済み予約の開始24時間前window [now+24h, now+25h) に1回だけ。通常はメール
+  （notifyClientByEmail/emailShell）、メール未達(receipt_email_failed)客はSMS（?via=sms=クリック検知接続）。
+  冪等: preferred_slots.session_reminder_sent_at。支払い待ち(awaiting)は対象外。
+  背景: ガイドに「リマインドが届く」と書いてしまい実装が無かったため、書いた通りに実装して整合させた。
+- Voice AI変換（§2-6）を外部に見える全Voice表示へ拡大（CEO GO・コミット e53ef9d）:
+  対象=検索API（voiceSnippet/matchedVoice/latestVoteComment）・カードページ・Schema.org JSON-LD
+  （reviewBody変換+非表示分はreviewCountからも除外）・org公開ページ/コメントAPI・voice/[hash]
+  （サーバーコンポーネント化）・delegate-search。トリガー語プリゲート（診断名+治った/治る/治り/治し/治療/完治）
+  で該当textのみLLM変換（claude-haiku-4-5）。変換失敗=非表示（生NG語は出さない）。原文は不変更。
+  キャッシュ=vote_comment_sanitized（SANITIZE_VERSION=2・version一致読み）。
+- CEOがVercelに ANTHROPIC_API_KEY（Sensitive/Production）と FEATURE_AI_TEXT_SANITIZE=true を追加済み。
+  次のマージデプロイから有効（これまでAI変換0件だった真因=キー未設定）。
+- 発見: プロ検索で「治る/治った」がヒットする件はCEO自身が確認（法的リスクは要専門家確認・
+  プロダクト側の緩和がこのsanitize拡大）。
