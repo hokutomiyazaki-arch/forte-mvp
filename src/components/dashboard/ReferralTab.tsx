@@ -2632,6 +2632,16 @@ export default function ReferralTab({
         onUpdated={(criteria) => onDelegateCriteriaUpdated?.(criteria)}
       />
 
+      {/* CEO指示(2026-08-08): この仕組みの独自価値は「つながりの無い先生を、プルーフの記録を
+          根拠に信頼して紹介できる」こと。知り合いに限る使い方に誘導しない文言を常設する。 */}
+      <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.8, margin: '-8px 0' }}>
+        リストに載せるのは、知り合いの先生だけではありません。プルーフの記録が信頼の根拠になるので、
+        会ったことのない先生も記録を見て選べます。
+        <a href="/search" style={{ color: '#C4A35A', fontWeight: 700, textDecoration: 'none', marginLeft: 4 }}>
+          プロを探す →
+        </a>
+      </div>
+
       {/* ① 新規作成 */}
       {createListCard}
 
