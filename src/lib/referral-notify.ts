@@ -271,6 +271,31 @@ export async function notifyBookingRequestedToSender(
 }
 
 /**
+ * CEO指示(2026-08-08): 受け手プロが辞退した場合も送り手（紹介元）に知らせる。
+ * ※ 2026-08-05の「送り手宛はクリティカルのみ（辞退は廃止）」決定をCEO最新指示で復活
+ *   （紹介者が案件の行方を追えて安心できることを優先）。
+ */
+export async function notifyBookingDeclinedToSender(
+  target: ProNotifyTarget,
+  clientName: string,
+  receiverProName: string,
+): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
+  const casesUrl = `${APP_URL}/dashboard?tab=referral&sub=cases`
+  const safeClientName = escapeHtml(clientName)
+  const safeReceiverProName = escapeHtml(receiverProName)
+  return sendProNotification(target, {
+    lineText: `${receiverProName}先生は、${clientName}さんの紹介予約を今回は辞退しました。クライアントには別のご案内が届いています。\n${casesUrl}`,
+    emailSubject: '紹介予約が辞退されました',
+    emailBodyHtml: emailShell(
+      '紹介予約辞退のお知らせ',
+      `${safeReceiverProName}先生は、${safeClientName}さんの紹介予約を今回は辞退しました。<br>クライアントには別のご案内が届いています。`,
+      '紹介した案件を開く',
+      casesUrl,
+    ),
+  })
+}
+
+/**
  * §2-4: 予約リクエストが届いたことを受け手プロへ通知する。
  */
 // §17-2(2026-08-06): 受け手プロ宛の予約通知のリンク先は「予約」タブ(?tab=bookings)。
