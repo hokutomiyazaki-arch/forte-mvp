@@ -177,6 +177,9 @@ interface Props {
   /** 移動(2026-08-06・CEO指示): 代理案内ボックス(DelegateCriteriaSettings)をダッシュボード最上部
    * から「紹介する」サブタブ先頭へ移動したため、そこで使う団体一覧をここで受け取る。 */
   delegateEligibleOrgs?: Array<{ organizationId: string; organizationName: string; role: 'founder' | 'instructor' }>
+  /** CEO指示(2026-08-08): 通知の ?case=<id> から渡ってくる。紹介した案件の該当カードを
+   * 自動展開・該当ページへ移動・スクロール＋数秒ハイライトする。 */
+  highlightCaseId?: string | null
 }
 
 export default function ReferralTab({
@@ -190,6 +193,7 @@ export default function ReferralTab({
   delegateCriteria,
   onDelegateCriteriaUpdated,
   delegateEligibleOrgs,
+  highlightCaseId,
 }: Props) {
   // リスト一覧
   const [lists, setLists] = useState<ReferralList[]>([])
@@ -274,6 +278,10 @@ export default function ReferralTab({
   // CEO指示(2026-08-08): 紹介した案件にも名前/メニュー/担当プロ検索＋20件ページ送り
   const [caseSearchQuery, setCaseSearchQuery] = useState('')
   const [casePage, setCasePage] = useState(0)
+  // CEO指示(2026-08-08): 通知リンク(?case=)からの着地時、該当カードを自動展開・スクロール・
+  // 金色リングでハイライト(予約カードの ?booking= と同じ流儀)。effect本体は sentBookings/
+  // sentLoading の宣言後(下)に置いてある。
+  const [flashCaseId, setFlashCaseId] = useState<string | null>(null)
   function toggleSetId(setter: React.Dispatch<React.SetStateAction<Set<string>>>, id: string) {
     setter((prev) => {
       const next = new Set(prev)
@@ -340,6 +348,32 @@ export default function ReferralTab({
   // §2-10: 送り手側の成立予約一覧（案件スレッド・引き継ぎメモの入口）
   const [sentBookings, setSentBookings] = useState<SentBooking[]>([])
   const [sentLoading, setSentLoading] = useState(true)
+
+  // CEO指示(2026-08-08): ?case=<id> の着地処理(上の flashCaseId 参照)。
+  // 依存はプリミティブのみ。sentBookings は sentLoading=false 時点で確定しているため依存に含めない。
+  useEffect(() => {
+    if (!highlightCaseId || sentLoading) return
+    const idx = sentBookings.findIndex((b) => b.id === highlightCaseId)
+    if (idx === -1) return
+    // 対象がいるページへ移動し(検索は初期状態=全件想定)、展開してからDOMを探す
+    setCaseSearchQuery('')
+    setCasePage(Math.floor(idx / 20))
+    setExpandedCaseIds((prev) => {
+      const next = new Set(prev)
+      next.add(highlightCaseId)
+      return next
+    })
+    const scrollTimer = setTimeout(() => {
+      document.getElementById(`case-card-${highlightCaseId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      setFlashCaseId(highlightCaseId)
+    }, 300)
+    const clearTimer = setTimeout(() => setFlashCaseId(null), 3800)
+    return () => {
+      clearTimeout(scrollTimer)
+      clearTimeout(clearTimer)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightCaseId, sentLoading])
 
   // ステージ4(送り手分配・CEO決定): 「紹介した案件」タブの報酬サマリー・案件ごとの確定表示用
   const [sentPayouts, setSentPayouts] = useState<SentPayout[]>([])
@@ -2320,7 +2354,16 @@ export default function ReferralTab({
             // 気づけるよう赤チップをヘッダーに出す。
             const isCaseExpanded = expandedCaseIds.has(b.id)
             return (
-            <div key={b.id} style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', border: '1.5px solid #E5E7EB', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+            <div
+              key={b.id}
+              id={`case-card-${b.id}`}
+              style={{
+                background: '#fff', borderRadius: 14, padding: '14px 16px',
+                border: flashCaseId === b.id ? '1.5px solid #C4A35A' : '1.5px solid #E5E7EB',
+                boxShadow: flashCaseId === b.id ? '0 0 0 4px rgba(196,163,90,0.35)' : '0 1px 4px rgba(0,0,0,0.08)',
+                transition: 'border-color 0.5s, box-shadow 0.5s',
+              }}
+            >
               <button
                 type="button"
                 onClick={() => toggleSetId(setExpandedCaseIds, b.id)}

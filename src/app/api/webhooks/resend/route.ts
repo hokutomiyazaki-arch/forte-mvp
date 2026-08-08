@@ -265,6 +265,7 @@ export async function POST(request: NextRequest) {
           },
           row.clients?.nickname || 'クライアント',
           (receiverPro as any)?.name || null,
+          row.id,
         )
       } catch (notifyErr) {
         // 通知の失敗で webhook を落とさない（落とすと Resend が再送し続ける）

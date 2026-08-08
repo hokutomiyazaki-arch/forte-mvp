@@ -252,8 +252,11 @@ export async function notifyBookingRequestedToSender(
   clientName: string,
   receiverProName: string,
   listTitle: string | null,
+  bookingId: string | null = null,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const casesUrl = `${APP_URL}/dashboard?tab=referral&sub=cases`
+  const casesUrl = bookingId
+    ? `${APP_URL}/dashboard?tab=referral&sub=cases&case=${encodeURIComponent(bookingId)}`
+    : `${APP_URL}/dashboard?tab=referral&sub=cases`
   const safeClientName = escapeHtml(clientName)
   const safeReceiverProName = escapeHtml(receiverProName)
   const listPart = listTitle ? `紹介リスト「${listTitle}」` : '紹介リスト'
@@ -279,8 +282,11 @@ export async function notifyBookingDeclinedToSender(
   target: ProNotifyTarget,
   clientName: string,
   receiverProName: string,
+  bookingId: string | null = null,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const casesUrl = `${APP_URL}/dashboard?tab=referral&sub=cases`
+  const casesUrl = bookingId
+    ? `${APP_URL}/dashboard?tab=referral&sub=cases&case=${encodeURIComponent(bookingId)}`
+    : `${APP_URL}/dashboard?tab=referral&sub=cases`
   const safeClientName = escapeHtml(clientName)
   const safeReceiverProName = escapeHtml(receiverProName)
   return sendProNotification(target, {
@@ -1050,11 +1056,17 @@ export async function notifyBookingEmailFailedToSender(
   target: ProNotifyTarget,
   clientNickname: string,
   receiverProName: string | null,
+  /** CEO指示(2026-08-08): 該当カードへ直行(自動スクロール＋ハイライト)するためのbooking id。 */
+  bookingId: string | null = null,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  const dashboardUrl = `${APP_URL}/dashboard?tab=referral`
+  const dashboardUrl = bookingId
+    ? `${APP_URL}/dashboard?tab=referral&sub=cases&case=${encodeURIComponent(bookingId)}`
+    : `${APP_URL}/dashboard?tab=referral&sub=cases`
   const safeClient = escapeHtml(clientNickname)
   const receiverText = receiverProName ? `${receiverProName}さんへの` : ''
   const safeReceiverText = receiverProName ? `${escapeHtml(receiverProName)}さんへの` : ''
+  // CEO決定(2026-08-08): 送信チャネルは従来どおりLINE優先→メール代替のまま
+  // (クライアント側はSMSフォールバック(§17-19)があるため両方送りは不要と判断)。
   return sendProNotification(target, {
     lineText:
       `${clientNickname}さんの${receiverText}ご予約で、メールが届いていません。\n` +
