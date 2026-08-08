@@ -244,6 +244,9 @@ export default function ReferralTab({
   // CEO指示(2026-08-08): 紹介リスト・紹介した案件も予約カードと同じ折りたたみ既定にする
   const [expandedListIds, setExpandedListIds] = useState<Set<string>>(new Set())
   const [expandedCaseIds, setExpandedCaseIds] = useState<Set<string>>(new Set())
+  // CEO指示(2026-08-08): 紹介した案件にも名前/メニュー/担当プロ検索＋20件ページ送り
+  const [caseSearchQuery, setCaseSearchQuery] = useState('')
+  const [casePage, setCasePage] = useState(0)
   function toggleSetId(setter: React.Dispatch<React.SetStateAction<Set<string>>>, id: string) {
     setter((prev) => {
       const next = new Set(prev)
@@ -2254,8 +2257,36 @@ export default function ReferralTab({
           <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>
             まだ紹介した案件はありません
           </div>
-        ) : (
-          sentBookings.map((b) => {
+        ) : (() => {
+          // CEO指示(2026-08-08): 検索(名前・メニュー・担当プロ)＋20件ページ送り(完了済み予約と同じ流儀)
+          const trimmedCaseQuery = caseSearchQuery.trim()
+          const filteredCases = trimmedCaseQuery
+            ? sentBookings.filter((b) => {
+                const haystack = `${b.client_nickname || ''} ${b.menu_name || ''} ${b.receiver_pro?.name || ''}`
+                return haystack.includes(trimmedCaseQuery)
+              })
+            : sentBookings
+          const casePageCount = Math.max(1, Math.ceil(filteredCases.length / 20))
+          const safeCasePage = Math.min(casePage, casePageCount - 1)
+          const casePageItems = filteredCases.slice(safeCasePage * 20, (safeCasePage + 1) * 20)
+          return (
+          <>
+          <input
+            type="text"
+            value={caseSearchQuery}
+            onChange={(e) => { setCaseSearchQuery(e.target.value); setCasePage(0) }}
+            placeholder="お名前・メニュー・担当プロで検索"
+            style={{
+              width: '100%', padding: '9px 12px', fontSize: 14, boxSizing: 'border-box',
+              border: '1px solid #E5E7EB', borderRadius: 8, background: '#fff',
+            }}
+          />
+          {trimmedCaseQuery && filteredCases.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '20px 0', color: '#9CA3AF', fontSize: 13 }}>
+              「{trimmedCaseQuery}」に一致する案件はありません
+            </div>
+          )}
+          {casePageItems.map((b) => {
             const payout = payoutByBookingId[b.id]
             // CEO指示(2026-08-08): 折りたたみ既定(予約カードと同じ)。メール未達は畳んでいても
             // 気づけるよう赤チップをヘッダーに出す。
@@ -2413,8 +2444,41 @@ export default function ReferralTab({
               )}
             </div>
             )
-          })
-        )}
+          })}
+          {casePageCount > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
+              <button
+                type="button"
+                onClick={() => setCasePage(Math.max(0, safeCasePage - 1))}
+                disabled={safeCasePage === 0}
+                style={{
+                  padding: '7px 14px', borderRadius: 8, border: '1px solid #D1D5DB',
+                  background: '#fff', fontSize: 13, fontWeight: 600,
+                  color: safeCasePage === 0 ? '#D1D5DB' : '#1A1A2E',
+                  cursor: safeCasePage === 0 ? 'default' : 'pointer',
+                }}
+              >
+                ← 前へ
+              </button>
+              <span style={{ fontSize: 13, color: '#6B7280' }}>{safeCasePage + 1} / {casePageCount}</span>
+              <button
+                type="button"
+                onClick={() => setCasePage(Math.min(casePageCount - 1, safeCasePage + 1))}
+                disabled={safeCasePage >= casePageCount - 1}
+                style={{
+                  padding: '7px 14px', borderRadius: 8, border: '1px solid #D1D5DB',
+                  background: '#fff', fontSize: 13, fontWeight: 600,
+                  color: safeCasePage >= casePageCount - 1 ? '#D1D5DB' : '#1A1A2E',
+                  cursor: safeCasePage >= casePageCount - 1 ? 'default' : 'pointer',
+                }}
+              >
+                次へ →
+              </button>
+            </div>
+          )}
+          </>
+          )
+        })()}
       </div>
 
       {/* 「紹介する」サブタブ側 = ①新規作成(CEO指摘: 埋もれ解消のため最上部に)②紹介リスト群
