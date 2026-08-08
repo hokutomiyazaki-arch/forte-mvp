@@ -457,7 +457,11 @@ export default function ConsultationsTab({
               >
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E' }}>{c.client_name}</span>
+                    {/* レビュー指摘(2026-08-08): バッジ拡大に伴い長い氏名は省略記号で切る(バッジのはみ出し防止) */}
+                    <span style={{
+                      fontSize: 14, fontWeight: 700, color: '#1A1A2E',
+                      minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>{c.client_name}</span>
                     {/* CEO指示(2026-08-08): 未対応/対応中/対応済みのラベルを常に表示(§0-6: 13px以上・絵文字なし)。
                         旧「未返信」(new)・グレー文字「対応済み」(closed)を3状態の統一バッジに置き換え。 */}
                     {(c.status === 'new' || c.status === 'open' || c.status === 'closed') && (
