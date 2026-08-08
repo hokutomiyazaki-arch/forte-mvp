@@ -29,6 +29,27 @@ export function isReferralEnabled(proId: string): boolean {
 }
 
 /**
+ * AIリスト作成機能（FEATURE_REFERRAL_AI_LIST）の3値判定。isReferralEnabledと同じ3値パターン。
+ * - 未設定 / 'off'  → 全員false
+ * - 'all'           → 全員true
+ * - それ以外        → カンマ区切りのプロID列挙。該当プロIDのみtrue
+ *
+ * 呼び出し側は isReferralEnabled(proId) と併用してAND判定する
+ * (紹介機能自体のallowlist外にAIリスト作成だけを先出しすることは無い設計)。
+ */
+export function isReferralAiListEnabled(proId: string): boolean {
+  const raw = process.env.FEATURE_REFERRAL_AI_LIST
+  if (!raw || raw === 'off') return false
+  if (raw === 'all') return true
+  if (!proId) return false
+  const allowList = raw
+    .split(',')
+    .map((id) => id.trim())
+    .filter((id) => id.length > 0)
+  return allowList.includes(proId)
+}
+
+/**
  * リフェラル全体公開の判定（§2-2 先行テスト第3弾）。FEATURE_REFERRAL_LISTSが'all'の時のみtrue。
  *
  * 公開カードの🟢バッジ/🟡案内文は、この関数がtrueになるまで非表示にする。理由:

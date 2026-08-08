@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { isAcceptingOpen } from '@/lib/referral-accepting'
+import { sanitizeVoicesForDisplay } from '@/lib/voice-sanitize'
 
 export const dynamic = 'force-dynamic'
 
@@ -138,6 +139,10 @@ export async function GET(request: NextRequest) {
     //    抜粋(前後20字)を作るのに本文が要るため。件数は団体メンバーに絞られている。
     const voiceMatchByMember = new Map<string, string>()
     const voiceCountByMember = new Map<string, number>()
+    // §2-6広域適用(2026-08-08 CEO GO): 後段でAI変換するため、抜粋の元になった全文とvote_idを
+    // 別途保持する(voiceMatchByMemberは既存どおり「抜粋済み文字列」のまま)。
+    const voiceFullTextByMember = new Map<string, string>()
+    const voiceVoteIdByMember = new Map<string, string>()
     {
       const PAGE_C = 1000
       let from = 0
@@ -154,7 +159,7 @@ export async function GET(request: NextRequest) {
           .order('id', { ascending: true })
           .range(from, from + PAGE_C - 1)
         if (error) break
-        const rows = (data || []) as Array<{ professional_id: string; comment: string }>
+        const rows = (data || []) as Array<{ id: string; professional_id: string; comment: string }>
         for (const row of rows) {
           if (!row.comment || !row.comment.includes(q)) continue
           voiceCountByMember.set(row.professional_id, (voiceCountByMember.get(row.professional_id) || 0) + 1)
@@ -166,12 +171,48 @@ export async function GET(request: NextRequest) {
               row.professional_id,
               `${start > 0 ? '…' : ''}${row.comment.slice(start, end)}${end < row.comment.length ? '…' : ''}`,
             )
+            voiceFullTextByMember.set(row.professional_id, row.comment)
+            voiceVoteIdByMember.set(row.professional_id, row.id)
           }
         }
         if (rows.length < PAGE_C) break
         from += PAGE_C
       }
     }
+
+    // §2-6広域適用(2026-08-08 CEO GO): voiceマッチの抜粋も紹介URLと同じAI変換を通す。
+    // マッチ判定自体(上のループ)は原文で行い、ここでは表示文字列だけを差し替える/非表示にする。
+    {
+      const sanitizeTargets = Array.from(voiceVoteIdByMember.entries())
+        .map(([proId, voteId]) => {
+          const text = voiceFullTextByMember.get(proId)
+          return text ? { voteId, text } : null
+        })
+        .filter((t): t is { voteId: string; text: string } => !!t)
+      const sanitizedMap = sanitizeTargets.length > 0
+        ? await sanitizeVoicesForDisplay(sanitizeTargets)
+        : new Map<string, string | null>()
+
+      voiceVoteIdByMember.forEach((voteId, proId) => {
+        const sanitized = sanitizedMap.get(voteId)
+        if (!sanitized) {
+          voiceMatchByMember.delete(proId)
+          return
+        }
+        const idx = sanitized.indexOf(q)
+        if (idx !== -1) {
+          const start = Math.max(0, idx - 20)
+          const end = Math.min(sanitized.length, idx + q.length + 20)
+          voiceMatchByMember.set(
+            proId,
+            `${start > 0 ? '…' : ''}${sanitized.slice(start, end)}${end < sanitized.length ? '…' : ''}`,
+          )
+        } else {
+          voiceMatchByMember.set(proId, sanitized.length > 40 ? sanitized.slice(0, 40) + '...' : sanitized)
+        }
+      })
+    }
+
     const voiceMatchedIds = Array.from(voiceMatchByMember.keys())
 
     const matchedIds = Array.from(new Set([...nameMatchedIds, ...proofMatchedIds, ...voiceMatchedIds]))

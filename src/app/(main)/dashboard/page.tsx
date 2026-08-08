@@ -449,6 +449,8 @@ export default function DashboardPage() {
 
   // リフェラル §0: FEATURE_REFERRAL_LISTS のアローリスト判定（/api/dashboard から受け取る）
   const [referralEnabled, setReferralEnabled] = useState(false)
+  // AIリスト作成(§CEO GO 2026-08-08): FEATURE_REFERRAL_AI_LIST のアローリスト判定
+  const [aiListEnabled, setAiListEnabled] = useState(false)
   // 🔴1(再レビュー): 受付ステータスウィジェットの表示可否。allowlist内 or 共有リストに掲載中の本人
   const [acceptingEditable, setAcceptingEditable] = useState(false)
   // メニュー未設定プロの予約穴の閉塞(2026-08-05・CEO指示): 予約可能な有料メニューが1件でもあるか
@@ -860,6 +862,8 @@ export default function DashboardPage() {
         setWeeklyEmailEnabled(!proData.weekly_report_unsubscribed)
         // リフェラル §0: アローリスト判定（先行アクセス外は false のまま = 既存UI無変更）
         setReferralEnabled(!!data.referralEnabled)
+        // AIリスト作成: 同上のアローリスト判定
+        setAiListEnabled(!!data.aiListEnabled)
         // 🔴1(再レビュー): 受付ステータスの操作可否（allowlist内 or 共有リストに掲載中の本人）
         setAcceptingEditable(!!data.acceptingEditable)
         // メニュー未設定プロの予約穴の閉塞: 予約可能な有料メニューが1件でもあるか
@@ -5553,6 +5557,7 @@ export default function DashboardPage() {
               }
               highlightCaseId={highlightCaseId}
               highlightThreadOpen={highlightThreadOpen}
+              aiListEnabled={aiListEnabled}
             />
           )}
           {!referralEnabled && (

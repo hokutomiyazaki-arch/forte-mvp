@@ -184,6 +184,10 @@ interface Props {
   highlightCaseId?: string | null
   /** CEO指示(2026-08-08): &thread=1 なら該当カードの案件スレッドまで自動で開く。 */
   highlightThreadOpen?: boolean
+  /** AIリスト作成(§CEO GO 2026-08-08): FEATURE_REFERRAL_AI_LIST のアローリスト判定
+   * （/api/dashboard→dashboard/page.tsxが既存のreferralEnabledと同じ流儀で伝える）。
+   * falseの間は「AIで候補を探す」導線自体を出さない(API 403に頼らずUIから隠す)。 */
+  aiListEnabled?: boolean
 }
 
 export default function ReferralTab({
@@ -199,6 +203,7 @@ export default function ReferralTab({
   delegateEligibleOrgs,
   highlightCaseId,
   highlightThreadOpen,
+  aiListEnabled,
 }: Props) {
   // リスト一覧
   const [lists, setLists] = useState<ReferralList[]>([])
@@ -215,9 +220,32 @@ export default function ReferralTab({
   const [createListError, setCreateListError] = useState<string | null>(null)
   // §3-0-2(第3弾): リスト作成フォームは主導線から降格し、一覧の下に折りたたみデフォルトで置く
   // CEO追加指示(2026-08-04・タスク4): 入口を「プロを追加して作る」「タイトルから作る」の2択に
-  // メニュー化。'closed'=トリガーのみ / 'menu'=2択 / 'title_form'=既存フォーム(旧showCreateForm) /
-  // 'pick_pro'=最初のプロを選ぶとリストを自動作成するUI。
-  const [createEntryMode, setCreateEntryMode] = useState<'closed' | 'menu' | 'title_form' | 'pick_pro'>('closed')
+  // メニュー化。'closed'=トリガーのみ / 'menu'=3択 / 'title_form'=既存フォーム(旧showCreateForm) /
+  // 'pick_pro'=最初のプロを選ぶとリストを自動作成するUI /
+  // 'ai_form'=AIリスト作成(§CEO GO 2026-08-08。自由文→AIドラフト→編集して確定)。
+  const [createEntryMode, setCreateEntryMode] = useState<'closed' | 'menu' | 'title_form' | 'pick_pro' | 'ai_form'>('closed')
+  // AIリスト作成(§CEO GO 2026-08-08)用state
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
+  interface AiDraftCandidate {
+    pro_id: string
+    name: string
+    title: string | null
+    prefecture: string | null
+    total_proofs: number
+    reason: string
+  }
+  const [aiDraft, setAiDraft] = useState<{
+    title: string
+    comment: string
+    candidates: AiDraftCandidate[]
+    foundCount: number
+  } | null>(null)
+  const [aiDraftTitle, setAiDraftTitle] = useState('')
+  const [aiDraftComment, setAiDraftComment] = useState('')
+  const [aiSelectedIds, setAiSelectedIds] = useState<Set<string>>(new Set())
+  const [aiCreating, setAiCreating] = useState(false)
   // 「プロを追加して作る」中の検索state用の番兵キー(pinQuery/pinResults等は既存の
   // Record<listId,...>をそのまま再利用する。実在するlist idと衝突しない固定文字列)。
   const NEW_LIST_PICK_KEY = '__new_list_pick__'
@@ -718,6 +746,138 @@ export default function ReferralTab({
       if (justCreatedHintTimerRef.current) clearTimeout(justCreatedHintTimerRef.current)
       justCreatedHintTimerRef.current = setTimeout(() => setJustCreatedListId(null), 8000)
     }
+  }
+
+  // AIリスト作成(§CEO GO 2026-08-08): エラーコード→人間向け文言
+  function aiDraftErrorMessage(status: number, errorCode?: string): string {
+    if (errorCode === 'cooldown') return '少し時間をおいてお試しください'
+    if (errorCode === 'invalid_prompt') return '1〜200文字で入力してください'
+    if (errorCode === 'ai_unavailable') return 'AI機能は現在準備中です'
+    if (errorCode === 'aggregates_unavailable') return '一時的に利用できません。時間をおいてお試しください'
+    if (status === 401 || status === 403) return 'まだこの機能の対象アカウントではありません'
+    return 'エラーが発生しました'
+  }
+
+  async function requestAiDraft() {
+    const prompt = aiPrompt.trim()
+    if (!prompt || prompt.length > 200) {
+      setAiError('1〜200文字で入力してください')
+      return
+    }
+    setAiLoading(true)
+    setAiError(null)
+    try {
+      const res = await fetch('/api/referral/ai-list-draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ prompt }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        console.error('[ReferralTab] POST /api/referral/ai-list-draft failed', res.status, data)
+        setAiError(aiDraftErrorMessage(res.status, data?.error))
+        return
+      }
+      const draft = data?.draft || { title: '', comment: '', candidates: [], foundCount: 0 }
+      setAiDraft(draft)
+      setAiDraftTitle(draft.title || '')
+      setAiDraftComment(draft.comment || DEFAULT_CLIENT_MESSAGE)
+      // 既定は全員選択オン
+      setAiSelectedIds(new Set((draft.candidates || []).map((c: AiDraftCandidate) => c.pro_id)))
+    } catch (err) {
+      console.error('[ReferralTab] POST /api/referral/ai-list-draft network error', err)
+      setAiError('エラーが発生しました')
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  function resetAiForm() {
+    setAiPrompt('')
+    setAiError(null)
+    setAiDraft(null)
+    setAiDraftTitle('')
+    setAiDraftComment('')
+    setAiSelectedIds(new Set())
+  }
+
+  function toggleAiSelected(proIdToToggle: string) {
+    setAiSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(proIdToToggle)) next.delete(proIdToToggle)
+      else next.add(proIdToToggle)
+      return next
+    })
+  }
+
+  // AIドラフトを確定してリストを作成する。既存のcreateListFromProと同じ流儀
+  // (作成1回→アイテム追加を選択分だけ順次1回ずつ。pending→後更新パターンにしない)。
+  async function createListFromAiDraft() {
+    if (aiCreating) return
+    const title = aiDraftTitle.trim()
+    if (!title || !aiDraft) return
+    setAiCreating(true)
+    const comment = aiDraftComment.trim() || DEFAULT_CLIENT_MESSAGE
+    const created = await postCreateList(title, comment)
+    if (!created.ok || !created.list) {
+      window.alert(createListErrorMessage(created.status, created.errorCode))
+      setAiCreating(false)
+      return
+    }
+    const newList = created.list
+    setLists((prev) => [newList, ...prev])
+
+    const selected = aiDraft.candidates.filter((c) => aiSelectedIds.has(c.pro_id))
+    let addedCount = 0
+    for (const c of selected) {
+      try {
+        const res = await fetch(`/api/referral/lists/${newList.id}/items`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          cache: 'no-store',
+          body: JSON.stringify({ pro_id: c.pro_id, note: (c.reason || '').slice(0, 200) }),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setLists((prev) =>
+            prev.map((l) =>
+              l.id === newList.id
+                ? {
+                    ...l,
+                    items: [
+                      ...l.items,
+                      {
+                        ...data.item,
+                        professionals: {
+                          id: c.pro_id,
+                          name: c.name,
+                          title: c.title,
+                          photo_url: null,
+                          accepting_status: 'open' as const,
+                        },
+                      },
+                    ],
+                  }
+                : l
+            )
+          )
+          addedCount += 1
+        }
+      } catch (err) {
+        console.error('[ReferralTab] createListFromAiDraft item add error', err)
+      }
+    }
+
+    setAiCreating(false)
+    setCreateEntryMode('closed')
+    resetAiForm()
+    setJustCreatedListId(newList.id)
+    setJustCreatedHintMessage(
+      addedCount > 0 ? `${addedCount}人を追加しました。リスト名を変更できます` : 'リストを作成しました。リスト名を変更できます'
+    )
+    if (justCreatedHintTimerRef.current) clearTimeout(justCreatedHintTimerRef.current)
+    justCreatedHintTimerRef.current = setTimeout(() => setJustCreatedListId(null), 8000)
   }
 
   async function deleteList(listId: string) {
@@ -1937,6 +2097,18 @@ export default function ReferralTab({
             >
               タイトルから作る
             </button>
+            {/* AIリスト作成(§CEO GO 2026-08-08): FEATURE_REFERRAL_AI_LIST のアローリスト対象のみ表示 */}
+            {aiListEnabled && (
+              <button
+                onClick={() => { resetAiForm(); setCreateEntryMode('ai_form') }}
+                style={{
+                  padding: '10px 14px', borderRadius: 8, border: '1px solid #E5E7EB', textAlign: 'left' as const,
+                  background: '#fff', color: '#1A1A2E', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                }}
+              >
+                AIで候補を探す
+              </button>
+            )}
           </div>
         </>
       )}
@@ -2007,6 +2179,150 @@ export default function ReferralTab({
                 </div>
               ))}
             </div>
+          )}
+        </div>
+      )}
+
+      {/* AIリスト作成(§CEO GO 2026-08-08): 自由文→AIドラフト→編集して確定。3人見つからない
+          時は正直にfoundCount分だけ表示する(水増し禁止)。 */}
+      {createEntryMode === 'ai_form' && (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, gap: 8 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', margin: 0 }}>
+              AIで候補を探す
+            </h3>
+            <button
+              onClick={() => { resetAiForm(); setCreateEntryMode('menu') }}
+              style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 13, cursor: 'pointer', flexShrink: 0 }}
+            >
+              閉じる
+            </button>
+          </div>
+
+          {!aiDraft && (
+            <>
+              <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 8, lineHeight: 1.6 }}>
+                どんな先生を探しているか、自由に書いてください（例: 渋谷周辺で腰痛に強い先生3人）
+              </div>
+              <textarea
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value.slice(0, 200))}
+                placeholder="例: 渋谷周辺で腰痛に強い先生3人"
+                disabled={aiLoading}
+                style={{
+                  width: '100%', minHeight: 70, padding: '10px 12px', borderRadius: 8, border: '1px solid #E5E7EB',
+                  fontSize: 13, boxSizing: 'border-box' as const, marginBottom: 8, resize: 'vertical' as const,
+                }}
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <button
+                  onClick={requestAiDraft}
+                  disabled={aiLoading || !aiPrompt.trim()}
+                  style={{
+                    padding: '8px 20px', borderRadius: 8, border: 'none',
+                    background: '#C4A35A', color: '#fff', fontSize: 13, fontWeight: 600,
+                    cursor: aiLoading || !aiPrompt.trim() ? 'default' : 'pointer',
+                    opacity: aiLoading || !aiPrompt.trim() ? 0.6 : 1,
+                  }}
+                >
+                  {aiLoading ? '候補を探しています...' : '候補を探す'}
+                </button>
+                <span style={{ fontSize: 13, color: '#9CA3AF' }}>{aiPrompt.length}/200</span>
+              </div>
+              {aiError && (
+                <div style={{ fontSize: 13, color: '#B00020', marginTop: 8, lineHeight: 1.6 }}>{aiError}</div>
+              )}
+            </>
+          )}
+
+          {aiDraft && (
+            <>
+              <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 10, lineHeight: 1.6 }}>
+                {aiDraft.foundCount === 0
+                  ? '条件に合う先生が見つかりませんでした。条件を変えて試してください'
+                  : aiDraft.foundCount < 3
+                    ? `見つかったのは${aiDraft.foundCount}人でした（正直に少ない人数を返しています）`
+                    : `${aiDraft.foundCount}人の候補が見つかりました`}
+              </div>
+
+              {aiDraft.candidates.length > 0 && (
+                <>
+                  <div style={{ fontSize: 13, color: '#9CA3AF', marginBottom: 4 }}>
+                    内部用リスト名（管理用。クライアントには表示されません）
+                  </div>
+                  <input
+                    value={aiDraftTitle}
+                    onChange={(e) => setAiDraftTitle(e.target.value.slice(0, 60))}
+                    style={{
+                      width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #E5E7EB',
+                      fontSize: 13, boxSizing: 'border-box' as const, marginBottom: 8,
+                    }}
+                  />
+                  <div style={{ fontSize: 13, color: '#9CA3AF', marginBottom: 4 }}>
+                    クライアントへのメッセージ（紹介ページに表示。後から変更できます）
+                  </div>
+                  <textarea
+                    value={aiDraftComment}
+                    onChange={(e) => setAiDraftComment(e.target.value.slice(0, 500))}
+                    style={{
+                      width: '100%', minHeight: 60, padding: '10px 12px', borderRadius: 8, border: '1px solid #E5E7EB',
+                      fontSize: 13, boxSizing: 'border-box' as const, marginBottom: 10, resize: 'vertical' as const,
+                    }}
+                  />
+
+                  <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8, marginBottom: 10 }}>
+                    {aiDraft.candidates.map((c) => (
+                      <label
+                        key={c.pro_id}
+                        style={{
+                          display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px',
+                          borderRadius: 8, border: '1px solid #E5E7EB', cursor: 'pointer',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={aiSelectedIds.has(c.pro_id)}
+                          onChange={() => toggleAiSelected(c.pro_id)}
+                          style={{ marginTop: 2 }}
+                        />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1A2E' }}>
+                            {c.name}
+                            {c.title && <span style={{ fontWeight: 400, color: '#6B7280' }}> ／ {c.title}</span>}
+                            {c.prefecture && <span style={{ fontWeight: 400, color: '#9CA3AF' }}> ・ {c.prefecture}</span>}
+                          </div>
+                          {c.reason && (
+                            <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4, lineHeight: 1.6 }}>{c.reason}</div>
+                          )}
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={createListFromAiDraft}
+                    disabled={aiCreating || !aiDraftTitle.trim() || aiSelectedIds.size === 0}
+                    style={{
+                      padding: '8px 20px', borderRadius: 8, border: 'none',
+                      background: '#C4A35A', color: '#fff', fontSize: 13, fontWeight: 600,
+                      cursor: aiCreating || !aiDraftTitle.trim() || aiSelectedIds.size === 0 ? 'default' : 'pointer',
+                      opacity: aiCreating || !aiDraftTitle.trim() || aiSelectedIds.size === 0 ? 0.6 : 1,
+                    }}
+                  >
+                    {aiCreating ? '作成中...' : 'この内容でリストを作成'}
+                  </button>
+                </>
+              )}
+
+              <div style={{ marginTop: 10 }}>
+                <button
+                  onClick={resetAiForm}
+                  style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 13, cursor: 'pointer', padding: 0 }}
+                >
+                  ← 別の条件で探しなおす
+                </button>
+              </div>
+            </>
           )}
         </div>
       )}

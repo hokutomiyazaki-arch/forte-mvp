@@ -5,6 +5,7 @@ import { getViewerIsPro, getViewerIsProStrict } from '@/lib/viewer-role'
 import { computeReferralSignal, isReferralReachable } from '@/lib/referral-accepting'
 import { getValidDelegateListIds } from '@/lib/referral-delegate'
 import { selectInChunks, fetchSearchAggregates, fetchVoiceMatches } from '@/lib/supabase-batch'
+import { sanitizeVoicesForDisplay, hasForbiddenTerm } from '@/lib/voice-sanitize'
 
 export const dynamic = 'force-dynamic'
 
@@ -282,6 +283,11 @@ export async function GET(request: Request) {
     const voiceMatchMap: Record<string, string> = {} // proId -> matched comment snippet
     const proofMatchMap: Record<string, string> = {} // proId -> matched strength_label
     const voiceMatchCountMap: Record<string, number> = {} // proId -> マッチしたコメント件数
+    // §2-6広域適用(2026-08-08 CEO GO): 後段でAI変換するため、抜粋の元になった全文とvote_idを
+    // 別途保持する(voiceMatchMapは既存どおり「抜粋済み文字列」のまま)。RPC集計パスはvote_idを
+    // 保持しないため voiceMatchVoteIdMap には入らない(その場合は非表示ゲートのみ適用)。
+    const voiceMatchFullTextMap: Record<string, string> = {} // proId -> マッチしたコメント全文
+    const voiceMatchVoteIdMap: Record<string, string> = {} // proId -> マッチしたvote_id(JS集計パスのみ)
     // 前後20字の抜粋を作る共通処理(JS集計パス・RPCパスで同一の見た目にする)
     const buildVoiceExcerpt = (comment: string): string | null => {
       const idx = comment.indexOf(query)
@@ -299,6 +305,7 @@ export async function GET(request: Request) {
         commentMatchProIds.add(pid)
         voiceMatchCountMap[pid] = m.match_count
         if (m.first_comment) {
+          voiceMatchFullTextMap[pid] = m.first_comment
           const excerpt = buildVoiceExcerpt(m.first_comment)
           if (excerpt) voiceMatchMap[pid] = excerpt
         }
@@ -321,7 +328,11 @@ export async function GET(request: Request) {
           voiceMatchCountMap[v.professional_id] = (voiceMatchCountMap[v.professional_id] || 0) + 1
           if (!voiceMatchMap[v.professional_id]) {
             const excerpt = buildVoiceExcerpt(v.comment)
-            if (excerpt) voiceMatchMap[v.professional_id] = excerpt
+            if (excerpt) {
+              voiceMatchMap[v.professional_id] = excerpt
+              voiceMatchFullTextMap[v.professional_id] = v.comment
+              voiceMatchVoteIdMap[v.professional_id] = v.id
+            }
           }
         }
       }
@@ -505,6 +516,10 @@ export async function GET(request: Request) {
       ? await getValidDelegateListIds(supabase, professionals.map(p => p.delegate_list_id))
       : new Set<string>()
 
+    // §2-6広域適用(2026-08-08 CEO GO): voiceSnippetの元になった全文とvote_idを退避しておく
+    // (featured由来のみvote_idを持つ。latestVoteComment由来はvote_idが無いためLLM変換対象外)。
+    const voiceSnippetSourceMap: Record<string, { voteId: string | null; text: string } | null> = {}
+
     // プロデータの組み立て
     let result = professionals.map(pro => {
       const stat = proStats.get(pro.id) || {
@@ -560,6 +575,15 @@ export async function GET(request: Request) {
         : stat.latestVoteComment
       const voiceSnippet = rawVoice
         ? rawVoice.length > 40 ? rawVoice.slice(0, 40) + '...' : rawVoice
+        : null
+
+      // §2-6広域適用(2026-08-08 CEO GO): 後段で一括AI変換するため、元になった全文と
+      // vote_id(featured由来のみ)を退避する
+      voiceSnippetSourceMap[pro.id] = rawVoice
+        ? {
+            voteId: pro.featured_vote_id && featuredVoteMap[pro.featured_vote_id] ? pro.featured_vote_id : null,
+            text: rawVoice,
+          }
         : null
 
       // カテゴリスコア計算
@@ -907,6 +931,65 @@ export async function GET(request: Request) {
     // レビュー指摘: referral_onlyは呼び出し元ゼロのデッドパラメータだったため削除。
     // 「紹介につながる人のみ表示」フィルタはクライアント側(SearchPageClient)の最終段の絞りに一本化。
     // referralSignalの付与自体はここに残す(クライアント側フィルタ・3色ドット表示に必要)。
+
+    // §2-6広域適用(2026-08-08 CEO GO): voiceSnippet/matchedVoiceを紹介URLと同じAI変換に通す。
+    // フィルタ・ソートは変換前の原文判定を使用済み(検索ハイライト/マッチ順は不変)。
+    // ここでの変換はレスポンスに載る表示文字列だけを差し替える。
+    const sanitizeTargets: Array<{ voteId: string; text: string }> = []
+    const seenSanitizeVoteIds = new Set<string>()
+    for (const p of result) {
+      const snippetSource = voiceSnippetSourceMap[p.id]
+      if (snippetSource?.voteId && !seenSanitizeVoteIds.has(snippetSource.voteId)) {
+        sanitizeTargets.push({ voteId: snippetSource.voteId, text: snippetSource.text })
+        seenSanitizeVoteIds.add(snippetSource.voteId)
+      }
+      const matchVoteId = voiceMatchVoteIdMap[p.id]
+      const matchFullText = voiceMatchFullTextMap[p.id]
+      if (matchVoteId && matchFullText && !seenSanitizeVoteIds.has(matchVoteId)) {
+        sanitizeTargets.push({ voteId: matchVoteId, text: matchFullText })
+        seenSanitizeVoteIds.add(matchVoteId)
+      }
+    }
+    const sanitizedVoiceMap = sanitizeTargets.length > 0
+      ? await sanitizeVoicesForDisplay(sanitizeTargets)
+      : new Map<string, string | null>()
+
+    result = result.map(p => {
+      let voiceSnippet = p.voiceSnippet
+      const snippetSource = voiceSnippetSourceMap[p.id]
+      if (snippetSource) {
+        if (snippetSource.voteId) {
+          const sanitized = sanitizedVoiceMap.get(snippetSource.voteId)
+          voiceSnippet = sanitized
+            ? (sanitized.length > 40 ? sanitized.slice(0, 40) + '...' : sanitized)
+            : null
+        } else if (hasForbiddenTerm(snippetSource.text)) {
+          // latestVoteComment由来はvote_idが無くキャッシュキーが作れないため、二重課金を避け
+          // LLM変換はしない。検知語があれば非表示のみ行う(§2-6広域適用のスコープ)。
+          voiceSnippet = null
+        }
+      }
+
+      let matchedVoice = p.matchedVoice
+      const matchVoteId = voiceMatchVoteIdMap[p.id]
+      const matchFullText = voiceMatchFullTextMap[p.id]
+      if (matchedVoice && matchFullText) {
+        if (matchVoteId) {
+          const sanitized = sanitizedVoiceMap.get(matchVoteId)
+          if (!sanitized) {
+            matchedVoice = null
+          } else {
+            const reExcerpt = buildVoiceExcerpt(sanitized)
+            matchedVoice = reExcerpt || (sanitized.length > 40 ? sanitized.slice(0, 40) + '...' : sanitized)
+          }
+        } else if (hasForbiddenTerm(matchFullText)) {
+          // RPC集計パス由来はvote_idを保持しないため同様にLLM変換はしない(非表示のみ)。
+          matchedVoice = null
+        }
+      }
+
+      return { ...p, voiceSnippet, matchedVoice }
+    })
 
     return NextResponse.json({
       professionals: result,

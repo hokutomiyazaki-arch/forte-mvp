@@ -827,3 +827,38 @@
 - 先行リリースの形（提示済み・CEO判断待ち）: ゆりかさんをFEATURE_REFERRAL_LISTSのアローリストに
   追加し「プロを探すで記録を見て選んで載せる」使い方で渡す。受け手側はアローリスト不要（§17-2）。
 - 告知（予約と相談ガイド）はCEOが一斉送信完了（2026-08-08）。
+
+## 2026-08-08 深夜バッチ（PR #55 + Voice変換拡大）
+- PR #55: セッション前日リマインド cron（/api/cron/booking-session-reminders・毎時30分）。
+  確定済み予約の開始24時間前window [now+24h, now+25h) に1回だけ。通常はメール
+  （notifyClientByEmail/emailShell）、メール未達(receipt_email_failed)客はSMS（?via=sms=クリック検知接続）。
+  冪等: preferred_slots.session_reminder_sent_at。支払い待ち(awaiting)は対象外。
+  背景: ガイドに「リマインドが届く」と書いてしまい実装が無かったため、書いた通りに実装して整合させた。
+- Voice AI変換（§2-6）を外部に見える全Voice表示へ拡大（CEO GO・コミット e53ef9d）:
+  対象=検索API（voiceSnippet/matchedVoice/latestVoteComment）・カードページ・Schema.org JSON-LD
+  （reviewBody変換+非表示分はreviewCountからも除外）・org公開ページ/コメントAPI・voice/[hash]
+  （サーバーコンポーネント化）・delegate-search。トリガー語プリゲート（診断名+治った/治る/治り/治し/治療/完治）
+  で該当textのみLLM変換（claude-haiku-4-5）。変換失敗=非表示（生NG語は出さない）。原文は不変更。
+  キャッシュ=vote_comment_sanitized（SANITIZE_VERSION=2・version一致読み）。
+- CEOがVercelに ANTHROPIC_API_KEY（Sensitive/Production）と FEATURE_AI_TEXT_SANITIZE=true を追加済み。
+  次のマージデプロイから有効（これまでAI変換0件だった真因=キー未設定）。
+- 発見: プロ検索で「治る/治った」がヒットする件はCEO自身が確認（法的リスクは要専門家確認・
+  プロダクト側の緩和がこのsanitize拡大）。
+
+## 2026-08-08 深夜バッチ2（Voice変換レビュー修正 + AIリスト作成）
+- e53ef9d のレビュー指摘を修正:
+  【重大】①hasForbiddenTermがフラグ未設定でも検索のvoiceSnippet/matchedVoiceを消す退行→関数先頭にフラグガード
+  ②公開カードで非表示判定の票が空Voiceカードとして並ぶ→配列から除外（voiceCountとJSON-LD reviewCountも一致）
+  ③変換後も禁止語が残る票がキャッシュされず毎表示LLM課金→必ずキャッシュし表示のみnull。
+  【中】④キャッシュ取得.in()をselectInChunksに置換（1000件キャップ/URL長対策）
+  ⑤voice/[hash]のview_count加算をクライアント側(ViewCountPing)へ戻す（OGPクローラ水増し防止）
+  ⑥JSON-LDと本文の初回1回だけの文言ズレ・プリゲート化による/r/適用縮小はコード内に履歴コメントで記録。
+  【既知・未対応で記録】org-analytics（オーナー向け内部画面）は原文のまま＝「外部に見える面のみ変換」の線引き。
+  検索で語を含む票を持つプロ自体は結果に残る（delegate-searchはヒットごと落とす非対称あり）。
+  ?highlight=NG語 でカードに飛ぶと変換済みのためハイライト空振り（仕様・保護コードは無改変）。
+  禁止語11件以上のカードは初回数回のアクセスでVoice件数が増えていく（同時LLM10件キャップの自己修復）。
+- AIリスト作成（CEO GO）: 自由文→Haikuで意図解釈→DB内候補（受付中🟢×プルーフ1件以上×都道府県）
+  上位20人→Haikuが最大3人+推薦理由をドラフト化→編集して既存のリスト作成APIで確定。
+  20秒cooldown・1〜200字・DB書き込みなし（ドラフトのみ）・Anthropicへ個人情報は送らない。
+  フラグ FEATURE_REFERRAL_AI_LIST（3値: 未設定=off / all / カンマ区切りプロID）。
+  **リリース時: CEOがVercelに FEATURE_REFERRAL_AI_LIST=<ほくとのprofessionals.id> を追加**（まず自分で試す）。

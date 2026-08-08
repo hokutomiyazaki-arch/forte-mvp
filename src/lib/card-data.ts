@@ -17,6 +17,7 @@ import { isOrgCardEnabled } from '@/lib/feature-flags'
 import { getFounderInstructorOrgs } from '@/lib/org-role'
 import { getDelegateCandidates, type DelegateCandidatesResult } from '@/lib/referral-delegate-criteria'
 import { isAcceptingOpen } from '@/lib/referral-accepting'
+import { sanitizeVoicesForDisplay } from '@/lib/voice-sanitize'
 
 // ─── 内部型 ───
 interface VoteWithVoterPro {
@@ -527,8 +528,17 @@ export async function getCardData(
   const proUserId = (proResult.data as { user_id?: string | null } | null)?.user_id ?? null
   const growthCards = await getGrowthCards(supabase, proId, proUserId)
 
+  // §2-6広域適用(2026-08-08 CEO GO): 公開カードのVoiceコメントも紹介URLと同じAI変換を通す。
+  // flag off / 禁止語未検知の大半はsanitizeVoicesForDisplay内でLLM/キャッシュに触れず原文を返す。
+  const sanitizedCommentMap = await sanitizeVoicesForDisplay(
+    commentsRaw.map(c => ({ voteId: c.id, text: c.comment }))
+  )
+
   // === enrichedComments: 機密フィールドを除外し voter_pro / reply を付与 ===
-  const enrichedComments: EnrichedComment[] = commentsRaw.map(c => {
+  // §2-6広域適用レビュー修正(2026-08-08): 非表示判定(null)の票は空文字で残さず配列から除外する。
+  // 空文字で残すと引用符だけの空Voiceカードが並び、CardClientのvoiceCount(=comments.length)と
+  // JSON-LDのreviewCount(除外済み)が同一ページ内で食い違う。orgルートと同じ除外方式に揃える。
+  const enrichedComments: EnrichedComment[] = commentsRaw.filter(c => !!sanitizedCommentMap.get(c.id)).map(c => {
     const info = c.normalized_email ? voterInfoMap[c.normalized_email] : undefined
     const isFirstVote = info && info.firstVoteId === c.id
     let voterVoteCount = 1
@@ -553,9 +563,14 @@ export async function getCardData(
       if (proofTags.length >= 3) break
     }
 
+    // §2-6広域適用(2026-08-08 CEO GO): 非表示判定の票は上のfilterで除外済み。
+    // ここに来る票は必ず表示可能テキストを持つ(flag off時は原文がそのまま入っている)。
+    // ?? '' は型のためだけの到達不能フォールバック(原文c.commentに倒すのは危険側なので禁止)。
+    const sanitizedComment = sanitizedCommentMap.get(c.id)
+
     return {
       id: c.id,
-      comment: c.comment,
+      comment: sanitizedComment ?? '',
       created_at: c.created_at,
       display_mode: c.display_mode,
       client_photo_url: c.client_photo_url,

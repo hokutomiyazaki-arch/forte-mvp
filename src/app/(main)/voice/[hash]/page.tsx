@@ -1,86 +1,83 @@
-'use client'
-
-import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
+import { getSupabaseAdmin } from '@/lib/supabase'
+import { sanitizeVoiceForDisplay } from '@/lib/voice-sanitize'
 import { COLORS, FONTS } from '@/lib/design-tokens'
+import ViewCountPing from './ViewCountPing'
+
+// §2-6広域適用(2026-08-08 CEO GO): このページは外部に共有されるVoiceの単独表示ページのため、
+// サーバー側で取得→AI変換した本文だけをレンダリングする(クライアント側で原文が一度でも
+// DOMに載ると外部露出になるため)。あわせて他のSSRページ(/r/[slug]・/card/[id])と同じ
+// force-dynamic/getSupabaseAdmin直読みパターンに揃える。
+export const dynamic = 'force-dynamic'
 
 const T = { ...COLORS, font: FONTS.main, fontMono: FONTS.mono, fontSerif: FONTS.serif }
 
-interface VoiceShareData {
+interface VoiceShareRow {
   id: string
   hash: string
   include_profile: boolean
-  view_count: number
-  votes: { comment: string; created_at: string }
+  view_count: number | null
+  votes: { id: string; comment: string; created_at: string } | null
   professionals: {
-    id: string; name: string; title: string; prefecture: string | null;
+    id: string; name: string; title: string; prefecture: string | null
     area_description: string | null; photo_url: string | null
-  }
-  gratitude_phrases: { text: string }
+  } | null
+  gratitude_phrases: { text: string } | null
 }
 
-export default function VoiceHashPage() {
-  const params = useParams()
-  const hash = params.hash as string
-  const supabase = createClient()
-  const [share, setShare] = useState<VoiceShareData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [notFound, setNotFound] = useState(false)
+function NotFoundView({ message }: { message: string }) {
+  return (
+    <div style={{ background: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
+      <div style={{ color: T.textMuted, fontSize: 14 }}>{message}</div>
+      <a href="/" style={{ color: T.gold, fontSize: 13, textDecoration: 'none' }}>トップページへ</a>
+    </div>
+  )
+}
 
-  useEffect(() => {
-    async function load() {
-      const { data } = await (supabase as any)
-        .from('voice_shares')
-        .select(`
-          id, hash, include_profile, view_count,
-          votes!inner(comment, created_at),
-          professionals!inner(id, name, title, prefecture, area_description, photo_url),
-          gratitude_phrases!inner(text)
-        `)
-        .eq('hash', hash)
-        .maybeSingle()
+export default async function VoiceHashPage({
+  params,
+}: {
+  params: Promise<{ hash: string }>
+}) {
+  const { hash } = await params
+  const supabase = getSupabaseAdmin()
 
-      if (!data) {
-        setNotFound(true)
-        setLoading(false)
-        return
-      }
+  const { data } = await supabase
+    .from('voice_shares')
+    .select(`
+      id, hash, include_profile, view_count,
+      votes!inner(id, comment, created_at),
+      professionals!inner(id, name, title, prefecture, area_description, photo_url),
+      gratitude_phrases!inner(text)
+    `)
+    .eq('hash', hash)
+    .maybeSingle()
 
-      setShare(data)
-
-      // 閲覧数インクリメント
-      await (supabase as any)
-        .from('voice_shares')
-        .update({ view_count: (data.view_count || 0) + 1 })
-        .eq('id', data.id)
-
-      setLoading(false)
-    }
-    load()
-  }, [hash])
-
-  if (loading) {
-    return (
-      <div style={{ background: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ color: T.textMuted, fontSize: 14 }}>読み込み中...</div>
-      </div>
-    )
+  if (!data) {
+    return <NotFoundView message="この声は見つかりませんでした" />
   }
 
-  if (notFound || !share) {
-    return (
-      <div style={{ background: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
-        <div style={{ color: T.textMuted, fontSize: 14 }}>この声は見つかりませんでした</div>
-        <a href="/" style={{ color: T.gold, fontSize: 13, textDecoration: 'none' }}>トップページへ</a>
-      </div>
-    )
+  const share = data as unknown as VoiceShareRow
+  const vote = share.votes
+  const pro = share.professionals
+  const phrase = share.gratitude_phrases
+
+  if (!vote || !pro || !phrase) {
+    return <NotFoundView message="この声は見つかりませんでした" />
   }
 
-  const { votes: vote, professionals: pro, gratitude_phrases: phrase } = share
+  // §2-6広域適用(2026-08-08 CEO GO): 共有Voiceページの本文もAI変換を通す。
+  // 変換不能(非表示判定)ならページ自体を「表示できません」で返す(原文は絶対に出さない)。
+  const sanitizedComment = await sanitizeVoiceForDisplay(vote.id, vote.comment)
+  if (!sanitizedComment) {
+    return <NotFoundView message="このVoiceは表示できません" />
+  }
+
+  // 閲覧数インクリメントはクライアント側(ViewCountPing)で行う。サーバー側で加算すると
+  // OGPクローラのGETでもカウントが増え、共有指標の意味が変わるため(レビュー指摘)。
 
   return (
     <div style={{ background: T.bg, minHeight: '100vh', fontFamily: T.font }}>
+      <ViewCountPing shareId={share.id} viewCount={share.view_count || 0} />
       <div style={{ maxWidth: 420, margin: '0 auto', padding: '32px 16px' }}>
 
         {/* ① Voice表示（クリーム背景） */}
@@ -97,7 +94,7 @@ export default function VoiceHashPage() {
             color: '#1A1A2E', fontSize: 20, fontFamily: T.fontSerif,
             fontWeight: 700, lineHeight: 2.0, margin: '8px 0 20px',
           }}>
-            {vote.comment}
+            {sanitizedComment}
           </div>
 
           {/* 区切り + 感謝フレーズ */}
