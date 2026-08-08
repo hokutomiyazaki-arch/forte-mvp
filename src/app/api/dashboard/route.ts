@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { isReferralEnabled } from '@/lib/feature-flags'
+import { isReferralEnabled, isReferralAiListEnabled } from '@/lib/feature-flags'
 import { isPinnedOnSharedList } from '@/lib/referral-auth'
 import { getFounderInstructorOrgs } from '@/lib/org-role'
 
@@ -468,6 +468,8 @@ export async function GET() {
       repeaterCount,
       regularCount,
       referralEnabled: isReferralEnabled(proId),
+      // AIリスト作成(§CEO GO 2026-08-08): 紹介機能のallowlistとは別に段階公開する
+      aiListEnabled: isReferralAiListEnabled(proId),
       // 🔴1(再レビュー): 受付ステータス操作は allowlist外でも共有リストに掲載中の本人には開放する
       acceptingEditable: isReferralEnabled(proId) || pinnedOnSharedList,
       // メニュー未設定プロの予約穴の閉塞(2026-08-05・CEO指示): 受付中バナーの表示ゲート用
