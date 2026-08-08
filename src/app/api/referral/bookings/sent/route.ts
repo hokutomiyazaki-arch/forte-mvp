@@ -51,7 +51,7 @@ export async function GET() {
     const { data: bookings, error } = await supabase
       .from('referral_bookings')
       .select(
-        'id, list_id, receiver_pro_id, client_id, client_name, client_phone, menu_id, theme_tags, status, price_jpy, preferred_slots, handover_note, confirmed_at, completed_at, created_at, clients(id, nickname), pro_menus(name)'
+        'id, list_id, receiver_pro_id, client_id, client_name, client_phone, menu_id, theme_tags, status, payment_status, price_jpy, preferred_slots, handover_note, confirmed_at, completed_at, created_at, clients(id, nickname), pro_menus(name)'
       )
       .eq('sender_pro_id', ownPro.id)
       .order('created_at', { ascending: false })
@@ -100,6 +100,9 @@ export async function GET() {
         // 「ご相談者」固定のため、本人が入力したお名前を送り手に出す（送り手は紹介元＝
         // §17-16 で既にメール未達時の氏名開示を認めている相手。電話・メールはここでは出さない）。
         client_name: b.client_name || null,
+        // CEO指示(2026-08-08): 紹介したカードに「お支払い待ち/予約金支払い済み」等の状態ラベルを
+        // 出すため。金額は返さない(状態のみ)。
+        payment_status: b.payment_status || null,
         receiver_pro: b.receiver_pro_id ? receiversMap[b.receiver_pro_id] || null : null,
         // §17-16: メールが届いていない案件だけ、送り手にやることを出す。
         receipt_email_failed: receiptEmailFailed,

@@ -17,6 +17,7 @@ import {
   notifyRescheduleProposedToClient,
   notifyLocationToClient,
   notifyBookingCancelledByReceiverToClient,
+  notifyBookingDeclinedToSender,
   notifyBookingCancelledByReceiverToSender,
   // §17-10: メールアドレスを直したときの受付メール再送に使う
   notifyBookingReceivedToClient,
@@ -1260,7 +1261,30 @@ export async function PATCH(request: NextRequest) {
         console.error('[api/referral/bookings/received] decline notify error:', notifyErr)
       }
 
-      // CEO指示(2026-08-05): 送り手プロ宛の辞退通知は削減(クリティカルな結果のみに絞る)。
+      // CEO指示(2026-08-08): 送り手プロ宛の辞退通知を復活（2026-08-05の削減決定を上書き。
+      // 紹介者が案件の行方を追えて安心できることを優先）。直接予約(sender無し)には送らない。
+      try {
+        if (booking.sender_pro_id) {
+          const { data: senderPro } = await supabase
+            .from('professionals')
+            .select('name, contact_email, line_messaging_user_id')
+            .eq('id', booking.sender_pro_id)
+            .maybeSingle()
+          if (senderPro) {
+            await notifyBookingDeclinedToSender(
+              {
+                name: senderPro.name,
+                contact_email: senderPro.contact_email,
+                line_messaging_user_id: senderPro.line_messaging_user_id,
+              },
+              booking.clients?.nickname || 'クライアント',
+              ownPro.name || 'プロ',
+            )
+          }
+        }
+      } catch (senderNotifyErr) {
+        console.error('[api/referral/bookings/received] decline sender notify error:', senderNotifyErr)
+      }
 
       return NextResponse.json({ success: true, status: 'cancelled' })
     }

@@ -69,6 +69,8 @@ interface SentBooking {
   client_nickname: string
   /** CEO指摘(2026-08-08): 本人入力のお名前（nicknameが「ご相談者」固定のため）。 */
   client_name?: string | null
+  /** CEO指示(2026-08-08): 色分け状態ラベル用（お支払い待ち/予約金支払い済みの区別）。 */
+  payment_status?: string | null
   receiver_pro: { id: string; name: string } | null
   /** §17-16(CEO指示 2026-08-06): クライアントにメールが届かなかった案件。 */
   receipt_email_failed?: boolean | null
@@ -96,6 +98,29 @@ const SENT_STATUS_LABEL: Record<SentBooking['status'], string> = {
   completed: '完了',
   cancelled: '辞退・キャンセル',
   expired: '失効',
+}
+
+/**
+ * CEO指示(2026-08-08): 紹介したカードに「今どうなっているか」の色分けラベルを付ける
+ * （紹介者が案件の行方を追えて安心できるように）。色は受け手側 StatusPill と同系統。
+ */
+function getSentCasePill(b: { status: SentBooking['status']; payment_status?: string | null }): {
+  label: string; bg: string; color: string
+} {
+  if (b.status === 'requested') return { label: 'リクエスト中', bg: '#FFE4DE', color: '#C2410C' }
+  if (b.status === 'confirmed') {
+    if (b.payment_status === 'awaiting') return { label: '日時確定・お支払い待ち', bg: '#FFF3E0', color: '#B26A00' }
+    if (b.payment_status === 'paid') return { label: '予約金支払い済み', bg: '#DCFCE7', color: '#166534' }
+    return { label: '日時確定', bg: '#DCFCE7', color: '#166534' }
+  }
+  if (b.status === 'completed') return { label: '完了', bg: '#E0F2FE', color: '#075985' }
+  if (b.status === 'expired') return { label: '失効', bg: '#F1F5F9', color: '#64748B' }
+  return { label: '辞退・キャンセル', bg: '#F1F5F9', color: '#64748B' }
+}
+
+/** CEO指示(2026-08-08): 検索は名字と名前の間のスペース（半角・全角）を無視して一致させる。 */
+function stripSpaces(s: string): string {
+  return s.replace(/[\s　]/g, '')
 }
 
 /** 報酬表示の再設計(CEO指示・2026-08-05): お支払い履歴の日付表示「YYYY/M/D」(Asia/Tokyo)。無効値は空文字。 */
@@ -2261,10 +2286,11 @@ export default function ReferralTab({
           </div>
         ) : (() => {
           // CEO指示(2026-08-08): 検索(名前・メニュー・担当プロ)＋20件ページ送り(完了済み予約と同じ流儀)
-          const trimmedCaseQuery = caseSearchQuery.trim()
+          const trimmedCaseQuery = stripSpaces(caseSearchQuery)
           const filteredCases = trimmedCaseQuery
             ? sentBookings.filter((b) => {
-                const haystack = `${b.client_nickname || ''} ${b.menu_name || ''} ${b.receiver_pro?.name || ''}`
+                // CEO指示(2026-08-08): 名字と名前の間のスペースを無視して一致させる
+                const haystack = stripSpaces(`${b.client_name || ''}${b.client_nickname || ''}${b.menu_name || ''}${b.receiver_pro?.name || ''}`)
                 return haystack.includes(trimmedCaseQuery)
               })
             : sentBookings
@@ -2308,7 +2334,15 @@ export default function ReferralTab({
                     {/* CEO指摘(2026-08-08): 「ご相談者」ではなく本人入力のお名前を出す */}
                     <strong>{b.client_name || b.client_nickname}さん</strong>
                     {b.receiver_pro?.name && <span style={{ color: '#6B7280' }}> → {b.receiver_pro.name}さん</span>}
-                    <span style={{ marginLeft: 8, fontSize: 13, color: '#9CA3AF' }}>{SENT_STATUS_LABEL[b.status]}</span>
+                    {(() => {
+                      const pill = getSentCasePill(b)
+                      return (
+                        <span style={{
+                          marginLeft: 8, fontSize: 13, fontWeight: 700, padding: '1px 8px', borderRadius: 999,
+                          background: pill.bg, color: pill.color, whiteSpace: 'nowrap' as const,
+                        }}>{pill.label}</span>
+                      )
+                    })()}
                     {b.receipt_email_failed && b.email_fix_owner === 'sender' && (
                       <span style={{
                         marginLeft: 8, fontSize: 13, fontWeight: 700, padding: '1px 8px', borderRadius: 999,

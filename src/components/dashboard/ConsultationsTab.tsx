@@ -439,8 +439,10 @@ export default function ConsultationsTab({
   })
 
   // CEO指示(2026-08-08): 名前検索＋20件ページ送り(完了済み予約リストと同じ流儀。アーカイブ表示にも効く)
-  const trimmedQuery = searchQuery.trim()
-  const filtered = trimmedQuery ? sorted.filter(c => (c.client_name || '').includes(trimmedQuery)) : sorted
+  // 名字と名前の間のスペース(半角・全角)は無視して一致させる
+  const stripSpaces = (s: string) => s.replace(/[\s　]/g, '')
+  const trimmedQuery = stripSpaces(searchQuery)
+  const filtered = trimmedQuery ? sorted.filter(c => stripSpaces(c.client_name || '').includes(trimmedQuery)) : sorted
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage = Math.min(page, pageCount - 1)
   const pageItems = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE)

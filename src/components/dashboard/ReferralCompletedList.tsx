@@ -60,10 +60,14 @@ export default function ReferralCompletedList({ proId, onCountChange, variant = 
   }, [completedCount, loading])
 
   // 名前・メニュー・紹介元でのクライアントサイド絞り込み(APIは completed_at desc・limit 200)
-  const trimmedQuery = searchQuery.trim()
+  // CEO指示(2026-08-08): 名字と名前の間のスペース(半角・全角)を無視して一致させる
+  const stripSpaces = (s: string) => s.replace(/[\s　]/g, '')
+  const trimmedQuery = stripSpaces(searchQuery)
   const filteredItems = trimmedQuery
     ? completedItems.filter((item) => {
-        const haystack = `${item.client_nickname || ''} ${item.client_contact?.name || ''} ${item.menu_name || ''} ${item.sender_pro?.name || ''}`
+        const haystack = stripSpaces(
+          `${item.client_nickname || ''}${item.client_contact?.name || ''}${item.menu_name || ''}${item.sender_pro?.name || ''}`
+        )
         return haystack.includes(trimmedQuery)
       })
     : completedItems
