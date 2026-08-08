@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import BookingThread from '@/components/dashboard/BookingThread'
 // §16-41修正6(レビュー指摘・中8): クライアントへの記録依頼パネルの共通コンポーネント
 // (ReferralBookingReceivedCard/ReferralCompletedListの丸コピーを解消)。
@@ -39,11 +39,15 @@ interface Props {
   /** 'accordion'(旧・紹介タブ内の折りたたみ箱・0件なら非表示) / 'list'(予約タブの完了済みサブタブ・
    * 0件でも空状態表示・検索とページ送りつき)。 */
   variant?: 'accordion' | 'list'
+  /** §16-41修正A(CEOフィードバック 2026-08-08): 受付中サブタブの「完了する」成功直後に渡ってくる
+   * 予約id。一覧の読み込み完了後、該当行を自動展開＋スクロール＋一時ハイライトする
+   * (ReferralBookingReceivedCardの?booking=着地時と同じ流儀)。 */
+  highlightBookingId?: string | null
 }
 
 const PAGE_SIZE = 20
 
-export default function ReferralCompletedList({ proId, onCountChange, variant = 'accordion' }: Props) {
+export default function ReferralCompletedList({ proId, onCountChange, variant = 'accordion', highlightBookingId }: Props) {
   const [completedItems, setCompletedItems] = useState<CompletedBookingItem[]>([])
   const [completedOpen, setCompletedOpen] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -67,6 +71,48 @@ export default function ReferralCompletedList({ proId, onCountChange, variant = 
     onCountChange?.(completedCount, !loading)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [completedCount, loading])
+
+  // §16-41修正A(CEOフィードバック 2026-08-08): 完了直後の自動遷移先。読み込み完了後、検索/ページを
+  // リセットして該当行が見える状態にし、自動展開＋スクロール＋一時ハイライトする
+  // (ReferralBookingReceivedCardの?booking=着地時と同じ流儀・依存はプリミティブのみ)。
+  // 注意: このコンポーネントは受付中サブタブと同時に単一マウントされ、初回fetchは
+  // 「完了する」より前に走っているため、直後に渡ってくるhighlightBookingIdはまだ
+  // completedItemsに含まれていないことがある。1回だけ再取得して反映を試みる
+  // (retriedForIdRefで同じidの無限再取得を防ぐ)。
+  const [flashBookingId, setFlashBookingId] = useState<string | null>(null)
+  const retriedForIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!highlightBookingId || loading) return
+    const index = completedItems.findIndex((i) => i.id === highlightBookingId)
+    if (index === -1) {
+      if (retriedForIdRef.current === highlightBookingId) return
+      retriedForIdRef.current = highlightBookingId
+      fetch('/api/referral/bookings/received', { cache: 'no-store' })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.completed) setCompletedItems(data.completed)
+        })
+        .catch(() => {})
+      return
+    }
+    setSearchQuery('')
+    setPage(Math.floor(index / PAGE_SIZE))
+    setOpenId(highlightBookingId)
+    const scrollTimer = setTimeout(() => {
+      const el = document.getElementById(`completed-card-${highlightBookingId}`)
+      if (!el) return
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      setFlashBookingId(highlightBookingId)
+    }, 300)
+    const clearTimer = setTimeout(() => setFlashBookingId(null), 3800)
+    return () => {
+      clearTimeout(scrollTimer)
+      clearTimeout(clearTimer)
+    }
+    // completedItems.lengthのみ依存に含める(配列そのものは入れない・プリミティブのみ規約)。
+    // 再取得でcompletedItemsが更新される(件数が変わる)と、この効果が再実行され見つけ直せる。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightBookingId, loading, completedItems.length])
 
   /**
    * §16-41(CEO決定 2026-08-08)修正6: クライアントへの記録依頼パネル(ProofRequestPanel)の
@@ -111,9 +157,12 @@ export default function ReferralCompletedList({ proId, onCountChange, variant = 
     return (
       <div
         key={item.id}
+        id={`completed-card-${item.id}`}
         style={{
           background: '#fff',
-          border: '1px solid #E5E7EB',
+          border: flashBookingId === item.id ? '1.5px solid #C4A35A' : '1px solid #E5E7EB',
+          boxShadow: flashBookingId === item.id ? '0 0 0 4px rgba(196,163,90,0.35)' : 'none',
+          transition: 'border-color 0.5s, box-shadow 0.5s',
           borderRadius: 10,
           overflow: 'hidden',
         }}

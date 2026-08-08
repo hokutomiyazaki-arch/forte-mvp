@@ -49,6 +49,9 @@ import {
 // ステージ4(送り手分配・2026-08-04・CEO決定): Stripeに触らない独立ファイル(referral-payment.tsとは
 // チャンクグラフを分ける)。完了確定時に送り手分配行(referral_payouts)を1回だけ作成する。
 import { createReferralPayoutIfEligible } from '@/lib/referral-payout'
+// §16-41修正F(CEOフィードバック 2026-08-08): 自分自身への記録依頼(自演)を弾くための正規化比較。
+// import 0本の純関数モジュール(既にbooking-email-fix.ts等で使われているのと同じ流儀)。
+import { normalizeEmail } from '@/lib/normalize-email'
 
 export const dynamic = 'force-dynamic'
 
@@ -402,7 +405,34 @@ export async function GET() {
     } catch (proofTokenErr) {
       console.error('[api/referral/bookings/received] proof token fetch error (fail-soft):', proofTokenErr)
     }
-    const resolveProofRecorded = (slots: PreferredSlots | null | undefined): boolean => {
+    // §16-41修正B(CEOフィードバック 2026-08-08): 「QRを見せる」導線(action='request_proof_qr')は
+    // preferred_slotsを更新しない(proof_request_tokenが立たない)ため、上のトークン単位の判定だけでは
+    // QR経由の記録が反映されない。booking_id単位でも同じ判定を行い、いずれかが真なら記録済みとする
+    // (migration 061のbooking_id列が無い環境向けにfail-softで42703を無視する)。
+    const proofRecordedByBookingId: Record<string, boolean> = {}
+    try {
+      const bookingIdsForProofQr = [...((bookings || []) as any[]), ...completedBookings].map((b: any) => b.id)
+      if (bookingIdsForProofQr.length > 0) {
+        const { data: proofQrRows, error: proofQrError } = await supabase
+          .from('qr_tokens')
+          .select('booking_id, used_at')
+          .in('booking_id', bookingIdsForProofQr)
+        if (proofQrError) {
+          console.error(
+            '[api/referral/bookings/received] proof booking_id fetch error (fail-soft, migration 061?):',
+            proofQrError
+          )
+        } else {
+          for (const row of (proofQrRows || []) as Array<{ booking_id: string | null; used_at: string | null }>) {
+            if (row.booking_id && row.used_at) proofRecordedByBookingId[row.booking_id] = true
+          }
+        }
+      }
+    } catch (proofQrErr) {
+      console.error('[api/referral/bookings/received] proof booking_id fetch error (fail-soft):', proofQrErr)
+    }
+    const resolveProofRecorded = (slots: PreferredSlots | null | undefined, bookingId: string): boolean => {
+      if (proofRecordedByBookingId[bookingId]) return true
       const t = slots?.proof_request_token
       return !!t && proofRecordedMap[t] === true
     }
@@ -462,7 +492,7 @@ export async function GET() {
       // §16-41: クライアントへの記録依頼(受け手が任意送信)の状態。
       proof_request_sent_at: b.preferred_slots?.proof_request_sent_at || null,
       proof_request_count: b.preferred_slots?.proof_request_count || 0,
-      proof_recorded: resolveProofRecorded(b.preferred_slots),
+      proof_recorded: resolveProofRecorded(b.preferred_slots, b.id),
     }))
 
     const completedResult = completedBookings.map((b: any) => ({
@@ -488,7 +518,7 @@ export async function GET() {
       // §16-41: クライアントへの記録依頼(受け手が任意送信)の状態。
       proof_request_sent_at: b.preferred_slots?.proof_request_sent_at || null,
       proof_request_count: b.preferred_slots?.proof_request_count || 0,
-      proof_recorded: resolveProofRecorded(b.preferred_slots),
+      proof_recorded: resolveProofRecorded(b.preferred_slots, b.id),
     }))
 
     // タスク①: 連絡先(client_contact)は含めない(キャンセル済みは開示条件外・PII厳守)。
@@ -561,7 +591,9 @@ export async function PATCH(request: NextRequest) {
         action !== 'send_location' &&
         action !== 'reschedule' &&
         action !== 'cancel_by_receiver' &&
-        action !== 'request_proof')
+        action !== 'request_proof' &&
+        // §16-41修正B(CEOフィードバック 2026-08-08): その場のクライアント向け「QRを見せる」導線。
+        action !== 'request_proof_qr')
     ) {
       return NextResponse.json({ error: 'invalid_params' }, { status: 400 })
     }
@@ -1304,6 +1336,15 @@ export async function PATCH(request: NextRequest) {
       if (booking.status !== 'completed' && !isConfirmedPast) {
         return NextResponse.json({ error: 'not_completable' }, { status: 400 })
       }
+      // §16-41修正F(CEOフィードバック 2026-08-08): 自分自身(受け手)のメールアドレス宛には送れない
+      // (自演記録の穴を狭める)。client_emailはレスポンス/ログに出さず、比較のみに使う。
+      if (
+        booking.client_email &&
+        ownPro.contact_email &&
+        normalizeEmail(booking.client_email) === normalizeEmail(ownPro.contact_email)
+      ) {
+        return NextResponse.json({ error: 'self_request' }, { status: 400 })
+      }
 
       const trimmedProofMessage = typeof body.message === 'string' ? body.message.trim() : ''
       if (trimmedProofMessage.length > 300) {
@@ -1404,9 +1445,47 @@ export async function PATCH(request: NextRequest) {
       const voteUrlForProof = `${APP_URL}/vote/${ownPro.id}?token=${proofToken}&channel=booking`
       const clientUserIdForProof = booking.clients?.user_id || ''
       const safeProNameForProof = escapeHtml(ownPro.name)
-      const messageBlockHtml = trimmedProofMessage
-        ? `<span style="display:block;margin-bottom:12px;color:#1A1A2E;">${escapeHtml(trimmedProofMessage).replace(/\n/g, '<br>')}</span>`
+
+      // §16-41修正D(CEOフィードバック 2026-08-08・開封率設計): 件名=プロのメッセージそのもの。
+      // 改行はスペースに変換し先頭40字まで(超過は「…」)。メッセージが空なら固定フォールバック件名。
+      const proofEmailSubject = trimmedProofMessage
+        ? (() => {
+            const oneLine = trimmedProofMessage.replace(/\s*\n\s*/g, ' ').trim()
+            return oneLine.length > 40 ? `${oneLine.slice(0, 40)}…` : oneLine
+          })()
+        : `${ownPro.name}さんからのお願いが届いています`
+
+      // 修正D: 本文をemailShellの<p>枠内で①メッセージ小見出し+引用風ブロック
+      // ②説明文(1本化) の2ブロックに分離する(プレーン連結で説明と混じって見える現状の解消)。
+      // <p>内に置くためdivではなくspan(display:block)を使う(既存messageBlockHtmlと同じ流儀)。
+      const proofMessageSectionHtml = trimmedProofMessage
+        ? `<span style="display:block;margin-bottom:14px;">` +
+          `<span style="display:block;font-size:12px;font-weight:bold;color:#9C8552;margin-bottom:6px;">${safeProNameForProof}さんからのメッセージ</span>` +
+          `<span style="display:block;background:#FAF8F4;border-left:3px solid #C4A35A;border-radius:4px;padding:10px 14px;color:#1A1A2E;">${escapeHtml(trimmedProofMessage).replace(/\n/g, '<br>')}</span>` +
+          `</span>`
         : ''
+      const proofDescriptionHtml =
+        `セッションの感想と、実感した変化をひとこと記録していただくお願いです。いただいた記録は${safeProNameForProof}さんの公式な実績として残ります。`
+
+      // 修正E(CEOフィードバック 2026-08-08): 有効なリワード(rewards.professional_id=1件以上。
+      // handleSaveRewards側で保存前に空contentの行を除外済みのため、行が存在すること自体が
+      // 「有効なリワードが設定済み」を意味する。is_active等のフラグ列は存在しない)。
+      // CTA直上にのみ案内する(パネル側UIには出さないというCEO指示)。fail-soft(取得失敗時は出さない)。
+      let proofRewardLineHtml = ''
+      try {
+        const { data: rewardRows, error: rewardCheckError } = await supabase
+          .from('rewards')
+          .select('id')
+          .eq('professional_id', ownPro.id)
+          .limit(1)
+        if (rewardCheckError) {
+          console.error('[api/referral/bookings/received] request_proof reward check error (fail-soft):', rewardCheckError)
+        } else if (rewardRows && rewardRows.length > 0) {
+          proofRewardLineHtml = `<span style="display:block;margin-top:14px;color:#1A6B3C;font-weight:bold;">記録いただいた方に、${safeProNameForProof}さんからのお礼をご用意しています</span>`
+        }
+      } catch (rewardCheckErr) {
+        console.error('[api/referral/bookings/received] request_proof reward check exception (fail-soft):', rewardCheckErr)
+      }
 
       // §17-9/§17-19と同じ考え方: メールが届かないと分かっている予約はSMSへ逃がす
       // (via=smsは予約状況リンク専用の言い回しのため、ここでは付けずURLをそのまま送る)。
@@ -1426,10 +1505,10 @@ export async function PATCH(request: NextRequest) {
       } else {
         const emailResult = await notifyClientByEmail(
           { userId: clientUserIdForProof, email: booking.client_email },
-          `${ownPro.name}さんから、セッションの記録のお願いが届いています`,
+          proofEmailSubject,
           emailShell(
             'セッションの記録のお願い',
-            `${messageBlockHtml}セッションの感想と、実感した変化を記録していただくお願いです。いただいた記録は${safeProNameForProof}さんの公式な実績として残ります。`,
+            `${proofMessageSectionHtml}${proofDescriptionHtml}${proofRewardLineHtml}`,
             '記録する',
             voteUrlForProof,
             '<span style="color:#999;font-size:12px;">このリンクの有効期限は72時間です。</span>'
@@ -1454,6 +1533,59 @@ export async function PATCH(request: NextRequest) {
       }
 
       return NextResponse.json({ ok: true })
+    }
+
+    /**
+     * §16-41修正B(CEOフィードバック 2026-08-08): その場にいるクライアント向けの「QRを見せる」導線。
+     * request_proofと対象条件は同じ(completed または confirmed かつ確定日時が過去)。メール送信なし・
+     * preferred_slots更新なし・回数制限なし(=ダッシュボードQRと同格の即時発行)。qr_tokensに
+     * booking_id付きトークンを発行し、受け手本人限定のレスポンスとしてvoteUrlのみ返す。
+     */
+    if (action === 'request_proof_qr') {
+      const confirmedSlotIsoForProofQr = resolveConfirmedSlotIso(booking.preferred_slots)
+      const isConfirmedPastForQr =
+        booking.status === 'confirmed' &&
+        !!confirmedSlotIsoForProofQr &&
+        new Date(confirmedSlotIsoForProofQr).getTime() < Date.now()
+      if (booking.status !== 'completed' && !isConfirmedPastForQr) {
+        return NextResponse.json({ error: 'not_completable' }, { status: 400 })
+      }
+      // §16-41修正F: request_proofと同じ自演防止チェック(QRを自分で読む穴も同様に狭める)。
+      if (
+        booking.client_email &&
+        ownPro.contact_email &&
+        normalizeEmail(booking.client_email) === normalizeEmail(ownPro.contact_email)
+      ) {
+        return NextResponse.json({ error: 'self_request' }, { status: 400 })
+      }
+
+      const proofQrToken = crypto.randomUUID()
+      const proofQrTokenExpiresAt = new Date(Date.now() + PROOF_REQUEST_TTL_MS).toISOString()
+      try {
+        const { error: qrTokenInsertError } = await supabase
+          .from('qr_tokens')
+          .insert({ professional_id: ownPro.id, token: proofQrToken, expires_at: proofQrTokenExpiresAt, booking_id: bookingId })
+        if (qrTokenInsertError) {
+          // フェイルソフト: migration 061(booking_id列)未実行の環境向けフォールバック(request_proofと同じ作法)。
+          console.warn(
+            '[api/referral/bookings/received] request_proof_qr qr_tokens insert with booking_id failed, retrying without it:',
+            qrTokenInsertError.message
+          )
+          const { error: qrFallbackInsertError } = await supabase
+            .from('qr_tokens')
+            .insert({ professional_id: ownPro.id, token: proofQrToken, expires_at: proofQrTokenExpiresAt })
+          if (qrFallbackInsertError) {
+            console.error('[api/referral/bookings/received] request_proof_qr qr_tokens insert error:', qrFallbackInsertError)
+            return NextResponse.json({ error: 'failed_to_send' }, { status: 500 })
+          }
+        }
+      } catch (qrTokenErr) {
+        console.error('[api/referral/bookings/received] request_proof_qr qr_tokens insert exception:', qrTokenErr)
+        return NextResponse.json({ error: 'failed_to_send' }, { status: 500 })
+      }
+
+      const voteUrlForProofQr = `${APP_URL}/vote/${ownPro.id}?token=${proofQrToken}&channel=booking`
+      return NextResponse.json({ voteUrl: voteUrlForProofQr })
     }
 
     if (booking.status !== 'requested') {
