@@ -241,6 +241,17 @@ export default function ReferralTab({
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null)
   // CEO指摘(先行テスト・UI修正②): クライアントに共有するURLをQRコード表示するモーダル(listId単位)
   const [qrModalListId, setQrModalListId] = useState<string | null>(null)
+  // CEO指示(2026-08-08): 紹介リスト・紹介した案件も予約カードと同じ折りたたみ既定にする
+  const [expandedListIds, setExpandedListIds] = useState<Set<string>>(new Set())
+  const [expandedCaseIds, setExpandedCaseIds] = useState<Set<string>>(new Set())
+  function toggleSetId(setter: React.Dispatch<React.SetStateAction<Set<string>>>, id: string) {
+    setter((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
   // §17-12(CEO指示 2026-08-06): 招待は「QR発行かシェア」で渡す。テキストのコピーが主役ではない。
   const [inviteQrUrl, setInviteQrUrl] = useState<string | null>(null)
 
@@ -1091,6 +1102,9 @@ export default function ReferralTab({
   const publicLists = lists.filter((l) => l.visibility !== 'private')
 
   function renderListCard(list: ReferralList, isPrivate: boolean) {
+    // CEO指示(2026-08-08): 折りたたみ既定(予約カードと同じ)。作成直後のリストは開いた状態にする
+    // (タイトル変更の案内が畳まれて見えなくなるのを防ぐ)。
+    const isListExpanded = expandedListIds.has(list.id) || justCreatedListId === list.id
     return (
       <div
         key={list.id}
@@ -1102,6 +1116,32 @@ export default function ReferralTab({
           boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
         }}
       >
+        <button
+          type="button"
+          onClick={() => toggleSetId(setExpandedListIds, list.id)}
+          style={{
+            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 8, padding: 0, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <span style={{
+              fontSize: 15, fontWeight: 800, color: '#1A1A2E', minWidth: 0,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>{list.title}</span>
+            <span
+              style={{
+                fontSize: 13, color: '#6B7280', background: '#F3F4F6', border: '1px solid #E5E7EB',
+                borderRadius: 999, padding: '2px 8px', flexShrink: 0, whiteSpace: 'nowrap' as const,
+              }}
+            >
+              {isPrivate ? '非公開' : 'リンク共有'}
+            </span>
+          </div>
+          <span style={{ fontSize: 12, color: '#9CA3AF', flexShrink: 0 }}>{isListExpanded ? '▲' : '▼'}</span>
+        </button>
+        {isListExpanded && (
+        <div style={{ marginTop: 10 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             {/* CEO指摘(先行テスト・UI修正①): タイトルが「クライアントに表示される名前」と
@@ -1744,6 +1784,8 @@ export default function ReferralTab({
             </div>
           </div>
         )}
+        </div>
+        )}
       </div>
     )
   }
@@ -2215,13 +2257,37 @@ export default function ReferralTab({
         ) : (
           sentBookings.map((b) => {
             const payout = payoutByBookingId[b.id]
+            // CEO指示(2026-08-08): 折りたたみ既定(予約カードと同じ)。メール未達は畳んでいても
+            // 気づけるよう赤チップをヘッダーに出す。
+            const isCaseExpanded = expandedCaseIds.has(b.id)
             return (
             <div key={b.id} style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', border: '1.5px solid #E5E7EB', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-              <div style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6 }}>
-                <strong>{b.client_nickname}さん</strong>
-                {b.receiver_pro?.name && <span style={{ color: '#6B7280' }}> → {b.receiver_pro.name}さん</span>}
-                <span style={{ marginLeft: 8, fontSize: 13, color: '#9CA3AF' }}>{SENT_STATUS_LABEL[b.status]}</span>
-              </div>
+              <button
+                type="button"
+                onClick={() => toggleSetId(setExpandedCaseIds, b.id)}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  gap: 8, padding: 0, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, color: '#1A1A2E', lineHeight: 1.6 }}>
+                    <strong>{b.client_nickname}さん</strong>
+                    {b.receiver_pro?.name && <span style={{ color: '#6B7280' }}> → {b.receiver_pro.name}さん</span>}
+                    <span style={{ marginLeft: 8, fontSize: 13, color: '#9CA3AF' }}>{SENT_STATUS_LABEL[b.status]}</span>
+                    {b.receipt_email_failed && b.email_fix_owner === 'sender' && (
+                      <span style={{
+                        marginLeft: 8, fontSize: 13, fontWeight: 700, padding: '1px 8px', borderRadius: 999,
+                        background: '#FFF3F3', color: '#B00020', border: '1px solid #F0BDBD',
+                        whiteSpace: 'nowrap' as const,
+                      }}>メール届かず</span>
+                    )}
+                  </div>
+                </div>
+                <span style={{ fontSize: 12, color: '#9CA3AF', flexShrink: 0 }}>{isCaseExpanded ? '▲' : '▼'}</span>
+              </button>
+              {isCaseExpanded && (
+              <div style={{ marginTop: 4 }}>
               {b.menu_name && <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>メニュー: {b.menu_name}</div>}
 
               {/* §17-16(CEO指示 2026-08-06): 「クライアントに電話してメールアドレスを修整して
@@ -2343,6 +2409,8 @@ export default function ReferralTab({
                 partnerRoleLabel={b.receiver_pro ? '担当プロ' : undefined}
                 partnerName={b.receiver_pro?.name}
               />
+              </div>
+              )}
             </div>
             )
           })
