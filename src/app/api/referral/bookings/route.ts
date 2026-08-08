@@ -3,7 +3,7 @@ import { auth } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { ensureOwnClient, createGuestClient } from '@/lib/referral-auth'
 import { verifyReceiverAllowedInList } from '@/lib/referral-data'
-import { notifyBookingRequested, notifyBookingReceivedToClient } from '@/lib/referral-notify'
+import { notifyBookingRequested, notifyBookingRequestedToSender, notifyBookingReceivedToClient } from '@/lib/referral-notify'
 import { isAcceptingOpen } from '@/lib/referral-accepting'
 import { isReferralPaymentEnabled, REFERRAL_MIN_FEE_JPY } from '@/lib/feature-flags'
 import { parseSlot, snapToHalfHourUp } from '@/lib/referral-format'
@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
 
     const { data: list } = await supabase
       .from('referral_lists')
-      .select('id, owner_id, slug, criteria')
+      .select('id, owner_id, slug, criteria, title')
       .eq('id', listId)
       .maybeSingle()
 
@@ -309,6 +309,29 @@ export async function POST(request: NextRequest) {
       )
     } catch (notifyErr) {
       console.error('[api/referral/bookings] notify error:', notifyErr)
+    }
+
+    // CEO指示(2026-08-08): 送り手（紹介元）にもリクエスト時点で知らせる（失敗しても予約は成功扱い）。
+    try {
+      const { data: senderPro } = await supabase
+        .from('professionals')
+        .select('name, contact_email, line_messaging_user_id')
+        .eq('id', list.owner_id)
+        .maybeSingle()
+      if (senderPro) {
+        await notifyBookingRequestedToSender(
+          {
+            name: senderPro.name,
+            contact_email: senderPro.contact_email,
+            line_messaging_user_id: senderPro.line_messaging_user_id,
+          },
+          clientName || ownClient.nickname || 'クライアント',
+          receiverPro.name || 'プロ',
+          (list as { title?: string | null }).title || null,
+        )
+      }
+    } catch (senderNotifyErr) {
+      console.error('[api/referral/bookings] sender notify error:', senderNotifyErr)
     }
 
     // タスクC: 送信直後の受付メール(クライアント向け)。失敗しても予約リクエスト自体は成功扱い。

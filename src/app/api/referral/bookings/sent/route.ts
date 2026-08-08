@@ -96,6 +96,10 @@ export async function GET() {
         completed_at: b.completed_at,
         created_at: b.created_at,
         client_nickname: b.clients?.nickname || 'クライアント',
+        // CEO指摘(2026-08-08)「相談者の名前が入ってない」: アカウントレス予約の nickname は
+        // 「ご相談者」固定のため、本人が入力したお名前を送り手に出す（送り手は紹介元＝
+        // §17-16 で既にメール未達時の氏名開示を認めている相手。電話・メールはここでは出さない）。
+        client_name: b.client_name || null,
         receiver_pro: b.receiver_pro_id ? receiversMap[b.receiver_pro_id] || null : null,
         // §17-16: メールが届いていない案件だけ、送り手にやることを出す。
         receipt_email_failed: receiptEmailFailed,
