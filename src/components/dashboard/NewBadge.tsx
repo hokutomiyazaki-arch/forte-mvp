@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { isFeatureSeen } from '@/lib/new-feature-seen'
+import { isFeatureSeen, NEW_SEEN_EVENT } from '@/lib/new-feature-seen'
 
 /**
  * 新機能の目印（CEO指示 2026-08-06）。
@@ -25,11 +25,19 @@ function isStillNew(): boolean {
 }
 
 export default function NewBadge({ label = 'New', id }: { label?: string; id?: string }) {
-  // 既読判定はマウント後に行う（SSRとのhydration不一致を避ける。このアプリの遷移は
-  // <a href> のフルリロードが基本なので、ページを見た後の次の画面では必ず再評価される）
+  // 既読判定はマウント後に行う（SSRとのhydration不一致を避ける）。
+  // CEO報告(2026-08-08)「開いてもnewが消えない」対応: 同一ページ滞在中に既読になった場合も
+  // 反映されるよう、markFeatureSeen が投げるイベントを購読して即時再評価する。
   const [seen, setSeen] = useState(false)
   useEffect(() => {
-    if (id) setSeen(isFeatureSeen(id))
+    if (!id) return
+    setSeen(isFeatureSeen(id))
+    const onSeen = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { id?: string } | undefined
+      if (!detail?.id || detail.id === id) setSeen(isFeatureSeen(id))
+    }
+    window.addEventListener(NEW_SEEN_EVENT, onSeen)
+    return () => window.removeEventListener(NEW_SEEN_EVENT, onSeen)
   }, [id])
   if (!isStillNew()) return null
   if (id && seen) return null

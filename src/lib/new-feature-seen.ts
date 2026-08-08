@@ -12,10 +12,16 @@
 
 const PREFIX = 'rp_new_seen:'
 
+/** markFeatureSeen が発火するイベント名。NewBadge が購読して即時に消える。 */
+export const NEW_SEEN_EVENT = 'rp-new-seen'
+
 export function markFeatureSeen(featureId: string): void {
   if (typeof window === 'undefined' || !featureId) return
   try {
     window.localStorage.setItem(`${PREFIX}${featureId}`, new Date().toISOString())
+    // CEO報告(2026-08-08)「開いてもnewが消えない」対応: バッジはマウント時にしか既読を
+    // 読まないため、同一ページ滞在中に既読になっても反映されなかった。イベントで即時通知する。
+    window.dispatchEvent(new CustomEvent(NEW_SEEN_EVENT, { detail: { id: featureId } }))
   } catch {
     // プライベートモード等で localStorage が使えない場合は何もしない（New が出続けるだけ）
   }
