@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react'
 import BookingThread from '@/components/dashboard/BookingThread'
 
-/** タスク⑥改(CEO指摘): 完了した紹介(受け手側)。ダッシュボード最上部に常駐させると
- * 邪魔になるため、紹介タブ内に移設した独立コンポーネント。デフォルト閉の折りたたみ。 */
+/** タスク⑥改(CEO指摘): 完了した紹介(受け手側)。
+ * CEO指示(2026-08-08): 予約タブ「完了済み」サブタブに常設するため、カードをコンパクトな
+ * 折りたたみ行にし、名前検索とページ送り(20件ずつ)を付けた。連絡先・案件スレッドは展開後のみ。 */
 interface CompletedBookingItem {
   id: string
   list_id: string
@@ -24,20 +25,23 @@ interface CompletedBookingItem {
 
 interface Props {
   proId: string
-  /** UI再構成(2026-08-04・CEO承認済み): 「紹介を受ける」サブタブの空状態判定用に、
-   * 完了件数と読み込み完了フラグを親へ通知する(データ取得ロジックは変更しない・
-   * 既存fetch結果の件数を渡すだけ)。レビュー指摘(軽微7): loadedを渡し、
-   * received/completedの到着順による空状態フラッシュを防ぐ。 */
+  /** UI再構成(2026-08-04・CEO承認済み): 空状態判定用に完了件数と読み込み完了フラグを親へ通知。 */
   onCountChange?: (count: number, loaded: boolean) => void
-  /** CEO指示(2026-08-08): 予約タブの「完了済み」サブタブとして使う表示モード。
-   * 'accordion'(既定・従来どおり折りたたみ箱・0件なら非表示) / 'list'(常時展開・0件でも空状態を表示)。 */
+  /** 'accordion'(旧・紹介タブ内の折りたたみ箱・0件なら非表示) / 'list'(予約タブの完了済みサブタブ・
+   * 0件でも空状態表示・検索とページ送りつき)。 */
   variant?: 'accordion' | 'list'
 }
+
+const PAGE_SIZE = 20
 
 export default function ReferralCompletedList({ proId, onCountChange, variant = 'accordion' }: Props) {
   const [completedItems, setCompletedItems] = useState<CompletedBookingItem[]>([])
   const [completedOpen, setCompletedOpen] = useState(false)
   const [loading, setLoading] = useState(true)
+  // CEO指示(2026-08-08): 行はコンパクトに畳み、開いた1件だけ連絡先・スレッドを見せる
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [page, setPage] = useState(0)
 
   useEffect(() => {
     fetch('/api/referral/bookings/received', { cache: 'no-store' })
@@ -55,129 +59,219 @@ export default function ReferralCompletedList({ proId, onCountChange, variant = 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [completedCount, loading])
 
-  // CEO指示(2026-08-08): 'list'は予約タブの「完了済み」サブタブ用（常時展開・0件でも空状態を出す）
-  if (variant === 'list' && !loading && completedItems.length === 0) {
+  // 名前・メニュー・紹介元でのクライアントサイド絞り込み(APIは completed_at desc・limit 200)
+  const trimmedQuery = searchQuery.trim()
+  const filteredItems = trimmedQuery
+    ? completedItems.filter((item) => {
+        const haystack = `${item.client_nickname || ''} ${item.client_contact?.name || ''} ${item.menu_name || ''} ${item.sender_pro?.name || ''}`
+        return haystack.includes(trimmedQuery)
+      })
+    : completedItems
+  const pageCount = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE))
+  const safePage = Math.min(page, pageCount - 1)
+  const pageItems = filteredItems.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE)
+
+  const formatDate = (iso: string | null) =>
+    iso ? new Date(iso).toLocaleDateString('ja-JP') : null
+
+  function renderCompactItem(item: CompletedBookingItem) {
+    const isOpen = openId === item.id
     return (
-      <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>
-        <div>完了した予約はまだありません</div>
-        <div style={{ marginTop: 4 }}>セッションが完了した予約がここに表示されます</div>
+      <div
+        key={item.id}
+        style={{
+          background: '#fff',
+          border: '1px solid #E5E7EB',
+          borderRadius: 10,
+          overflow: 'hidden',
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setOpenId(isOpen ? null : item.id)}
+          style={{
+            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 10, padding: '10px 14px', background: 'none', border: 'none',
+            cursor: 'pointer', textAlign: 'left',
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E', lineHeight: 1.4 }}>
+              {item.client_nickname}さん
+            </div>
+            <div style={{
+              fontSize: 12, color: '#9CA3AF', marginTop: 2,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {formatDate(item.completed_at) ? `完了: ${formatDate(item.completed_at)}` : '完了済み'}
+              {' ・ '}
+              {item.sender_pro?.name ? `紹介元: ${item.sender_pro.name}さん` : 'REALPROOF直'}
+              {item.menu_name ? ` ・ ${item.menu_name}` : ''}
+            </div>
+          </div>
+          <span style={{ fontSize: 12, color: '#9CA3AF', flexShrink: 0 }}>{isOpen ? '▲' : '▼'}</span>
+        </button>
+
+        {isOpen && (
+          <div style={{ padding: '0 14px 12px' }}>
+            {item.menu_name && (
+              <div style={{ fontSize: 12, color: '#555', marginBottom: 6 }}>メニュー: {item.menu_name}</div>
+            )}
+            {/* §2-4ステージ3(決済確認後の連絡先開示・CEO決定): 履歴としても確認できるよう表示する。 */}
+            {item.client_contact && (
+              <div
+                style={{
+                  padding: '10px 12px',
+                  background: '#FAFAFA',
+                  border: '1px solid #E5E7EB',
+                  borderRadius: 8,
+                  marginBottom: 8,
+                }}
+              >
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>
+                  クライアント連絡先
+                </div>
+                {item.client_contact.name && (
+                  <div style={{ fontSize: 12, color: '#1A1A2E' }}>{item.client_contact.name}さん</div>
+                )}
+                {item.client_contact.phone && (
+                  <div style={{ fontSize: 12, color: '#1A1A2E' }}>
+                    電話:{' '}
+                    <a href={`tel:${encodeURIComponent(item.client_contact.phone)}`} style={{ color: '#1A6B3C' }}>
+                      {item.client_contact.phone}
+                    </a>
+                  </div>
+                )}
+                {item.client_contact.email && (
+                  <div style={{ fontSize: 12, color: '#1A1A2E' }}>
+                    メール:{' '}
+                    <a href={`mailto:${encodeURIComponent(item.client_contact.email)}`} style={{ color: '#1A6B3C' }}>
+                      {item.client_contact.email}
+                    </a>
+                  </div>
+                )}
+                <div style={{ fontSize: 11, color: '#6B7280', marginTop: 4 }}>
+                  日程の調整・当日のご連絡はこちらへ直接どうぞ
+                </div>
+              </div>
+            )}
+            <BookingThread
+              bookingId={item.id}
+              ownProId={proId}
+              isSender={false}
+              initialHandoverNote={item.handover_note}
+              partnerRoleLabel={item.sender_pro ? '紹介元' : undefined}
+              partnerName={item.sender_pro?.name}
+            />
+          </div>
+        )}
       </div>
     )
   }
-  if (variant === 'accordion' && completedItems.length === 0) return null
+
+  // ---- 'list'(予約タブの完了済みサブタブ) ----
+  if (variant === 'list') {
+    if (!loading && completedItems.length === 0) {
+      return (
+        <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>
+          <div>完了した予約はまだありません</div>
+          <div style={{ marginTop: 4 }}>セッションが完了した予約がここに表示されます</div>
+        </div>
+      )
+    }
+    return (
+      <div>
+        {completedItems.length > 0 && (
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setPage(0); setOpenId(null) }}
+            placeholder="お名前・メニュー・紹介元で検索"
+            style={{
+              width: '100%', padding: '9px 12px', fontSize: 14, boxSizing: 'border-box',
+              border: '1px solid #E5E7EB', borderRadius: 8, marginBottom: 10, background: '#fff',
+            }}
+          />
+        )}
+        {trimmedQuery && filteredItems.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '20px 0', color: '#9CA3AF', fontSize: 13 }}>
+            「{trimmedQuery}」に一致する完了済みの予約はありません
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {pageItems.map(renderCompactItem)}
+          </div>
+        )}
+        {pageCount > 1 && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, marginTop: 14 }}>
+            <button
+              type="button"
+              onClick={() => { setPage(Math.max(0, safePage - 1)); setOpenId(null) }}
+              disabled={safePage === 0}
+              style={{
+                padding: '7px 14px', borderRadius: 8, border: '1px solid #D1D5DB',
+                background: '#fff', fontSize: 13, fontWeight: 600,
+                color: safePage === 0 ? '#D1D5DB' : '#1A1A2E',
+                cursor: safePage === 0 ? 'default' : 'pointer',
+              }}
+            >
+              ← 前へ
+            </button>
+            <span style={{ fontSize: 13, color: '#6B7280' }}>{safePage + 1} / {pageCount}</span>
+            <button
+              type="button"
+              onClick={() => { setPage(Math.min(pageCount - 1, safePage + 1)); setOpenId(null) }}
+              disabled={safePage >= pageCount - 1}
+              style={{
+                padding: '7px 14px', borderRadius: 8, border: '1px solid #D1D5DB',
+                background: '#fff', fontSize: 13, fontWeight: 600,
+                color: safePage >= pageCount - 1 ? '#D1D5DB' : '#1A1A2E',
+                cursor: safePage >= pageCount - 1 ? 'default' : 'pointer',
+              }}
+            >
+              次へ →
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ---- 'accordion'(旧・紹介タブ内。到達不能UIだが受け皿として既存挙動を維持) ----
+  if (completedItems.length === 0) return null
 
   return (
     <div
-      style={
-        variant === 'list'
-          ? undefined
-          : {
-              background: '#FAFAFA',
-              border: '1px solid #E5E7EB',
-              borderRadius: 12,
-              padding: '10px 16px',
-            }
-      }
+      style={{
+        background: '#FAFAFA',
+        border: '1px solid #E5E7EB',
+        borderRadius: 12,
+        padding: '10px 16px',
+      }}
     >
-      {variant === 'accordion' && (
-        <button
-          onClick={() => setCompletedOpen((prev) => !prev)}
-          style={{
-            background: 'none',
-            border: 'none',
-            padding: 0,
-            width: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            cursor: 'pointer',
-            fontSize: 13,
-            fontWeight: 700,
-            color: '#1A1A2E',
-          }}
-        >
-          <span>完了した紹介({completedItems.length}件)</span>
-          <span style={{ fontSize: 12, color: '#9CA3AF' }}>{completedOpen ? '▲' : '▼'}</span>
-        </button>
-      )}
+      <button
+        onClick={() => setCompletedOpen((prev) => !prev)}
+        style={{
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          cursor: 'pointer',
+          fontSize: 13,
+          fontWeight: 700,
+          color: '#1A1A2E',
+        }}
+      >
+        <span>完了した紹介({completedItems.length}件)</span>
+        <span style={{ fontSize: 12, color: '#9CA3AF' }}>{completedOpen ? '▲' : '▼'}</span>
+      </button>
 
-      {(variant === 'list' || completedOpen) && (
+      {completedOpen && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
-          {completedItems.map((item) => (
-            <div
-              key={item.id}
-              style={{
-                background: '#fff',
-                border: '1px solid #E5E7EB',
-                borderRadius: 10,
-                padding: '12px 14px',
-              }}
-            >
-              {/* CEO追加指示(2026-08-04): 「〜とのセッションは完了しています」は完了リスト自体が
-                  完了済みを示すため冗長。名前大きく太く＋紹介元1行の統一パターンに合わせる。 */}
-              <div style={{ fontSize: 17, fontWeight: 800, color: '#1A1A2E', lineHeight: 1.4 }}>
-                {item.client_nickname}さん
-              </div>
-              {/* CEO指示(2026-08-08): 予約カードと同じ「紹介元orRP直」の1行表記に統一 */}
-              <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>
-                {item.sender_pro?.name ? `紹介元: ${item.sender_pro.name}さん` : 'REALPROOFからのご予約'}
-              </div>
-              {item.completed_at && (
-                <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>
-                  完了日: {new Date(item.completed_at).toLocaleDateString('ja-JP')}
-                </div>
-              )}
-              {item.menu_name && (
-                <div style={{ fontSize: 12, color: '#555', marginTop: 4 }}>メニュー: {item.menu_name}</div>
-              )}
-              {/* §2-4ステージ3(決済確認後の連絡先開示・CEO決定): 履歴としても確認できるよう表示する。 */}
-              {item.client_contact && (
-                <div
-                  style={{
-                    marginTop: 8,
-                    padding: '10px 12px',
-                    background: '#FAFAFA',
-                    border: '1px solid #E5E7EB',
-                    borderRadius: 8,
-                  }}
-                >
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>
-                    クライアント連絡先
-                  </div>
-                  {item.client_contact.name && (
-                    <div style={{ fontSize: 12, color: '#1A1A2E' }}>{item.client_contact.name}さん</div>
-                  )}
-                  {item.client_contact.phone && (
-                    <div style={{ fontSize: 12, color: '#1A1A2E' }}>
-                      電話:{' '}
-                      <a href={`tel:${encodeURIComponent(item.client_contact.phone)}`} style={{ color: '#1A6B3C' }}>
-                        {item.client_contact.phone}
-                      </a>
-                    </div>
-                  )}
-                  {item.client_contact.email && (
-                    <div style={{ fontSize: 12, color: '#1A1A2E' }}>
-                      メール:{' '}
-                      <a href={`mailto:${encodeURIComponent(item.client_contact.email)}`} style={{ color: '#1A6B3C' }}>
-                        {item.client_contact.email}
-                      </a>
-                    </div>
-                  )}
-                  <div style={{ fontSize: 11, color: '#6B7280', marginTop: 4 }}>
-                    日程の調整・当日のご連絡はこちらへ直接どうぞ
-                  </div>
-                </div>
-              )}
-              <BookingThread
-                bookingId={item.id}
-                ownProId={proId}
-                isSender={false}
-                initialHandoverNote={item.handover_note}
-                partnerRoleLabel={item.sender_pro ? '紹介元' : undefined}
-                partnerName={item.sender_pro?.name}
-              />
-            </div>
-          ))}
+          {completedItems.map(renderCompactItem)}
         </div>
       )}
     </div>

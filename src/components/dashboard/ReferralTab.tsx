@@ -1976,26 +1976,10 @@ export default function ReferralTab({
           仕事ではない。サブタブより上＝この画面全体の操作、という置き方に揃える。 */}
       <ProInviteQrCard proId={proId} />
 
-      {/* §17-15(CEO指示 2026-08-06): 報酬ボックスは「報酬」サブタブへ移動した。
-          ただし §17-11 で上に出した理由（いちばん見たい数字が隠れる）は今も生きているので、
-          **受け取り待ちの金額があるときだけ**1行だけ残す。0円のときは何も出さない
-          （常時出すと、ほとんどの日はただの飾りになる）。 */}
-      {sentPayoutsLoaded && sentPayoutsPendingTotalJpy > 0 && subtab !== 'payout' && (
-        <button
-          onClick={() => onSubtabChange?.('payout')}
-          style={{
-            display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between',
-            gap: 8, marginBottom: 12, padding: '10px 14px', borderRadius: 10,
-            background: '#FAF7EF', border: '1.5px solid #EAD9A6', cursor: 'pointer',
-            textAlign: 'left' as const, boxSizing: 'border-box' as const,
-          }}
-        >
-          <span style={{ fontSize: 13, color: '#6B7280' }}>確定済みの報酬</span>
-          <span style={{ fontSize: 16, fontWeight: 800, color: '#1A1A2E' }}>
-            ¥{sentPayoutsPendingTotalJpy.toLocaleString()} <span style={{ fontSize: 12, color: '#C4A35A', fontWeight: 700 }}>›</span>
-          </span>
-        </button>
-      )}
+      {/* §17-15で報酬ボックスは「報酬」サブタブへ移動。金額があるときだけ1行残していたが、
+          CEO指示(2026-08-08)「確定済みの報酬カードをタブの上に出さないで」により完全撤去
+          （§17-11の「見たい数字が隠れる」懸念より、タブ上の情報量削減を優先する判断）。
+          金額は「報酬」サブタブ内で確認する。 */}
 
 
       {/* サブタブ行（元は dashboard/page.tsx 側にあった）。
