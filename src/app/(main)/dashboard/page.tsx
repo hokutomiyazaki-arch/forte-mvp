@@ -666,15 +666,22 @@ export default function DashboardPage() {
   // URLから即除去する(リロードで再スクロールさせない)。実際のスクロール処理はカード一覧の
   // データ取得完了を知っている ReferralBookingReceivedCard 側が行う。
   const bookingHighlightParam = searchParams.get('booking')
+  // CEO指示(2026-08-08): &thread=1 が付いていたら、該当カードの案件スレッドまで自動で開く
+  const threadOpenParam = searchParams.get('thread')
+  const [highlightThreadOpen, setHighlightThreadOpen] = useState(false)
   const [highlightBookingId, setHighlightBookingId] = useState<string | null>(null)
   const bookingHighlightConsumedRef = useRef(false)
   useEffect(() => {
     if (!bookingHighlightParam || bookingHighlightConsumedRef.current) return
     bookingHighlightConsumedRef.current = true
     setHighlightBookingId(bookingHighlightParam)
+    if (threadOpenParam === '1') setHighlightThreadOpen(true)
     const url = new URL(window.location.href)
     url.searchParams.delete('booking')
+    url.searchParams.delete('thread')
     window.history.replaceState(null, '', url.toString())
+    // threadOpenParam は booking と同時にしか意味を持たないため依存に含めない(プリミティブのみ維持)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookingHighlightParam])
 
   // CEO指示(2026-08-08): 送り手宛通知の ?tab=referral&sub=cases&case=<id> で着地したとき、
@@ -686,9 +693,12 @@ export default function DashboardPage() {
     if (!caseHighlightParam || caseHighlightConsumedRef.current) return
     caseHighlightConsumedRef.current = true
     setHighlightCaseId(caseHighlightParam)
+    if (threadOpenParam === '1') setHighlightThreadOpen(true)
     const url = new URL(window.location.href)
     url.searchParams.delete('case')
+    url.searchParams.delete('thread')
     window.history.replaceState(null, '', url.toString())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseHighlightParam])
 
   // プロフィール編集直接オープン（マウント後1回のみ）
@@ -5475,6 +5485,7 @@ export default function DashboardPage() {
             proId={pro.id}
             onStatusChange={handleReferralReceivedStatus}
             highlightBookingId={highlightBookingId}
+            highlightThreadOpen={highlightThreadOpen}
           />
 
           {referralReceivedLoaded && referralTotalReceivedCount === 0 && (
@@ -5541,6 +5552,7 @@ export default function DashboardPage() {
                 setPro(prev => prev ? { ...prev, delegate_criteria: criteria } : prev)
               }
               highlightCaseId={highlightCaseId}
+              highlightThreadOpen={highlightThreadOpen}
             />
           )}
           {!referralEnabled && (

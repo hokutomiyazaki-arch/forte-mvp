@@ -30,6 +30,8 @@ interface Props {
   partnerRoleLabel?: string
   /** 相手の名前(任意)。指定時は「{partnerRoleLabel}の{partnerName}さんとのやりとりです」と表示する。 */
   partnerName?: string
+  /** CEO指示(2026-08-08): 通知リンク(&thread=1)からの着地時、開いた状態でマウントする。 */
+  initialOpen?: boolean
 }
 
 const EMPTY_NOTE: HandoverNote = { theme: '', history: '', tried: '', notes: '' }
@@ -45,8 +47,9 @@ export default function BookingThread({
   initialHandoverNote,
   partnerRoleLabel,
   partnerName,
+  initialOpen,
 }: Props) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(!!initialOpen)
   const [messages, setMessages] = useState<Message[]>([])
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [newBody, setNewBody] = useState('')

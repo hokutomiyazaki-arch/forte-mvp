@@ -526,19 +526,31 @@ export async function notifyClientByEmail(
 /**
  * §2-10: 案件スレッドに新しいコメントが届いたことを相手側プロへ通知する。
  * PII/傷病名保護のため本文(body)はLINE/メールに一切含めない。
+ * CEO指示(2026-08-08): リンクを付け、該当カードへ直行→自動スクロール・ハイライト→
+ * スレッドまで自動で開く(&thread=1)。旧決定(2026-08-04「リンクは付けない」)はこの指示で撤回。
  */
 export async function notifyBookingMessage(
   target: ProNotifyTarget,
   senderProName: string,
+  recipientRole: 'sender' | 'receiver' = 'sender',
+  bookingId: string | null = null,
 ): Promise<{ sent: boolean; via: 'line' | 'email' | null }> {
-  // CEO決定(2026-08-04): リンクは付けない(ダッシュボードの紹介タブに行くだけのため文言で案内)
+  const url = bookingId
+    ? recipientRole === 'sender'
+      ? `${APP_URL}/dashboard?tab=referral&sub=cases&case=${encodeURIComponent(bookingId)}&thread=1`
+      : `${APP_URL}/dashboard?tab=bookings&booking=${encodeURIComponent(bookingId)}&thread=1`
+    : recipientRole === 'sender'
+      ? `${APP_URL}/dashboard?tab=referral&sub=cases`
+      : `${APP_URL}/dashboard?tab=bookings`
   const safeSenderProName = escapeHtml(senderProName)
   return sendProNotification(target, {
-    lineText: `${senderProName}さんから案件スレッドに新しいコメントがあります。ダッシュボードの紹介タブからご確認ください。`,
+    lineText: `${senderProName}さんから案件スレッドに新しいコメントがあります。\n${url}`,
     emailSubject: '案件スレッドに新しいコメントがあります',
     emailBodyHtml: emailShell(
       '案件スレッドのお知らせ',
-      `${safeSenderProName}さんから案件スレッドに新しいコメントが届いています。<br>ダッシュボードの紹介タブからご確認ください。`,
+      `${safeSenderProName}さんから案件スレッドに新しいコメントが届いています。`,
+      'スレッドを開く',
+      url,
     ),
   })
 }
