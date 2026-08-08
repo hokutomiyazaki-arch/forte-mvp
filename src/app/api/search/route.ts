@@ -170,6 +170,9 @@ export async function GET(request: Request) {
     const rpcAggregates = await fetchSearchAggregates(supabase, proIds)
     const rpcVoiceMatches = rpcAggregates && query ? await fetchVoiceMatches(supabase, proIds, query) : null
     const useRpc = !!rpcAggregates && (!query || !!rpcVoiceMatches)
+    // レビュー指摘(中・観測性): fail-softは成功時に無音のため、どちらのパスで動いたかを
+    // 必ず1行ログに残す(PIIなし)。SQL 059実行後の検証はVercelログでこの行を見る。
+    console.log('[api/search] aggregation=%s (pros=%d)', useRpc ? 'rpc' : 'js', proIds.length)
 
     // 投票データを一括取得（プルーフ投票: スコア計算用）
     // 真因対応(2026-05-28): .limit(10000) は Supabase max-rows=1000 でキャップされる。
@@ -359,6 +362,8 @@ export async function GET(request: Request) {
     // X-Day対応(2026-08-08): proofItemCounts は Set ではなく人数(数値)を持つ形に変更
     // (RPC集計パスと共通の形にするため。JS集計パスでは下のループで Set を作ってから size を書き込む)。
     // voterAgg は RPC パスで DB 側集計済みの値が入る(JS パスでは null のまま voterInfoMap から計算)。
+    // ⚠️ totalVotes / voterInfoMap は RPC パスでは常に 0/空のまま(JS集計パス専用)。
+    //    ここを読む新コードを足すときは voterAgg 側と両対応にすること。
     const proStats = new Map<string, {
       totalVotes: number
       totalProofs: number

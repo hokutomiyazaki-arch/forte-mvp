@@ -5405,9 +5405,11 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          {bookingsSubtab === 'completed' && (
+          {/* レビュー指摘(軽微): 受付中側とそろえて display 切替(単一マウント)にし、
+              サブタブを行き来するたびに再フェッチが走らないようにする */}
+          <div style={{ display: bookingsSubtab === 'completed' ? 'block' : 'none' }}>
             <ReferralCompletedList proId={pro.id} variant="list" />
-          )}
+          </div>
 
           <div style={{ display: bookingsSubtab === 'active' ? 'block' : 'none' }}>
           {/* §17-5(CEO判断 2026-08-06): 予約の受付はここに集約する。

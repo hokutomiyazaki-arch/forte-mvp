@@ -754,3 +754,16 @@
 ## 2026-08-08 完了済みタブ（続きバッチ・作業中）
 - 予約タブに受付中/完了済みサブタブ。完了リストは§17-2以降、紹介タブの到達不能なreceiveサブタブに残っていた（切替ボタン無し=事実上非表示）のを variant='list' で復活。
 - 次: /api/search の Postgres側集計リファクタ（CEO GO・調査中）。
+
+## 2026-08-08 /api/search Postgres側集計リファクタ（X-Day対応・CEO GO）
+- migration 059: search_pro_vote_aggregates / search_voice_matches（新規のみ・既存VIEW非接触）。
+  コードはRPC失敗時に従来JS集計へ全面フォールバック（fail-soft・SQL未実行でもデプロイ安全）。
+- レビュー1周: **重大1**（SECURITY DEFINER+REVOKE無し=公開anonキーでRPC直叩き可・コメント検索オラクル化）→
+  SECURITY DEFINER撤回＋REVOKE/GRANT追加で修正。**中3**（unnestのNULL要素で関数ごと落ちて静かに永久
+  フォールバック→NULLガード／観測性ゼロ→aggregation=rpc|jsログ追加／votes実型未検証→::timestamptzキャスト
+  ＋実行手順を059ヘッダーに明記）も修正済み。
+- 【正確な到達点】解消したのはvotes転送のボトルネック。**professionals全件ロード(5000キャップ)と
+  votes(professional_id,status,created_at)の索引確認は残タスク**（X-Day完了ではない）。
+- 【既知の表示差分】featured_vote_id未設定プロのvoiceSnippet出所がSQL実行後に変わり得る（最新コメント基準に）。
+- 【別タスク化】ReferralTab内の到達不能なReferralCompletedListマウント撤去（二重fetch・3点証拠確認の上で）。
+- SQLは未実行。CEO承認後にSupabase MCPで実行→検証SELECT→Vercelログで aggregation=rpc 確認の手順。

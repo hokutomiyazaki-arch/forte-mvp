@@ -19,7 +19,23 @@
 --   - リピーター集計 = confirmed 全 vote_type・normalized_email 単位。
 --     level = GREATEST(最古票の session_count('regular'=3/'repeat'=2), 追加記録数(2件以上=3/1件=2))
 --   - 既知の差分1点: latest_comment は「created_at が最新のコメント」（JS版は取得順の最後＝
---     実質不定だったため、こちらが本来の意図。voiceSnippet のフォールバックにのみ使用）
+--     実質不定だったため、こちらが本来の意図。voiceSnippet のフォールバックにのみ使用。
+--     featured_vote_id 未設定のプロは表示文が変わり得る）
+--   - 既知の差分2点: 同点タイブレーク（featuredProof/categoryTopProof の最多項目・voice抜粋の
+--     出所コメント）は JS版=取得順 / RPC版=jsonbキー順・created_at最古 で別項目が選ばれ得る
+--     （どちらも「同点なら不定」だった挙動の範囲内）
+--
+-- セキュリティ（レビュー指摘・重大）: 呼び出しは /api/search の service_role クライアント
+-- (getSupabaseAdmin) のみ。SECURITY DEFINER は付けず、PUBLIC/anon/authenticated から
+-- EXECUTE を REVOKE する（付けたままだと公開 anon キーで PostgREST /rpc/ から直叩きでき、
+-- §3-2 検索非公開ゲートの外側でコメント全文の検索オラクルになってしまう）。
+--
+-- ⚠️ 実行手順（CEO・SQL Editor）:
+--   1. このファイル全体を実行
+--   2. 末尾の検証SELECT 2本を実行し、行が返ること・型エラーが出ないことを目視
+--      （votes.created_at の実型が timestamp の場合でも ::timestamptz キャストで吸収済み）
+--   3. realproof.jp で検索を1回実行 → Vercel ログに '[api/search] aggregation=rpc' が
+--      出ていること・'[fetchSearchAggregates] rpc error' が出ていないことを確認
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION search_pro_vote_aggregates(p_pro_ids uuid[])
@@ -41,7 +57,6 @@ RETURNS TABLE (
 )
 LANGUAGE sql
 STABLE
-SECURITY DEFINER
 SET search_path = public
 AS $$
 WITH pv AS (
@@ -57,7 +72,7 @@ base AS (
          COUNT(*)::int AS total_proofs,
          COUNT(*) FILTER (WHERE pv.created_at >= now() - interval '30 days')::int AS recent_proofs_30d,
          COUNT(*) FILTER (WHERE pv.created_at >= now() - interval '7 days')::int AS rising_7d,
-         MAX(pv.created_at) AS last_proof_at
+         MAX(pv.created_at)::timestamptz AS last_proof_at
   FROM pv
   GROUP BY pv.professional_id
 ),
@@ -68,13 +83,18 @@ latest_comment AS (
   ORDER BY pv.professional_id, pv.created_at DESC, pv.id DESC
 ),
 item_rows AS (
-  SELECT pv.professional_id,
-         unnest(pv.selected_proof_ids) AS item_id,
-         pv.created_at,
-         COALESCE(NULLIF(pv.normalized_email, ''), pv.id::text) AS voter_key
-  FROM pv
-  WHERE pv.vote_type <> 'continuation'
-    AND pv.selected_proof_ids IS NOT NULL
+  -- レビュー指摘(中): 配列内の NULL 要素は unnest で NULL 行になり、jsonb_object_agg が
+  -- 'field name must not be null' で関数ごと落ちる(=静かに永久フォールバック)ため必ず除去する。
+  SELECT * FROM (
+    SELECT pv.professional_id,
+           unnest(pv.selected_proof_ids) AS item_id,
+           pv.created_at,
+           COALESCE(NULLIF(pv.normalized_email, ''), pv.id::text) AS voter_key
+    FROM pv
+    WHERE pv.vote_type <> 'continuation'
+      AND pv.selected_proof_ids IS NOT NULL
+  ) raw_items
+  WHERE raw_items.item_id IS NOT NULL
 ),
 item_agg AS (
   SELECT ir.professional_id, ir.item_id,
@@ -100,6 +120,7 @@ per_agg AS (
     WHERE pv.vote_type <> 'continuation'
       AND pv.selected_personality_ids IS NOT NULL
   ) pr
+  WHERE pr.per_id IS NOT NULL  -- レビュー指摘(中): NULL要素ガード(item_rowsと同じ理由)
   GROUP BY pr.professional_id, pr.per_id
 ),
 per_json AS (
@@ -167,7 +188,6 @@ RETURNS TABLE (
 )
 LANGUAGE sql
 STABLE
-SECURITY DEFINER
 SET search_path = public
 AS $$
   SELECT v.professional_id,
@@ -182,6 +202,16 @@ AS $$
     AND position(p_query IN v.comment) > 0
   GROUP BY v.professional_id;
 $$;
+
+-- レビュー指摘(重大): 公開 anon キーによる PostgREST /rpc/ 直叩きを塞ぐ。
+-- 呼び出しは service_role(getSupabaseAdmin) のみに限定する。
+REVOKE ALL ON FUNCTION search_pro_vote_aggregates(uuid[]) FROM PUBLIC;
+REVOKE ALL ON FUNCTION search_pro_vote_aggregates(uuid[]) FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION search_pro_vote_aggregates(uuid[]) TO service_role;
+
+REVOKE ALL ON FUNCTION search_voice_matches(uuid[], text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION search_voice_matches(uuid[], text) FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION search_voice_matches(uuid[], text) TO service_role;
 
 -- 実行後の検証（RETURNING相当）:
 --   SELECT * FROM search_pro_vote_aggregates(ARRAY(SELECT id FROM professionals WHERE deactivated_at IS NULL LIMIT 5));
