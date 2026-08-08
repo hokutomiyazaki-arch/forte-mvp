@@ -1279,6 +1279,7 @@ export async function PATCH(request: NextRequest) {
               },
               booking.clients?.nickname || 'クライアント',
               ownPro.name || 'プロ',
+              bookingId,
             )
           }
         }

@@ -677,6 +677,20 @@ export default function DashboardPage() {
     window.history.replaceState(null, '', url.toString())
   }, [bookingHighlightParam])
 
+  // CEO指示(2026-08-08): 送り手宛通知の ?tab=referral&sub=cases&case=<id> で着地したとき、
+  // 紹介した案件の該当カードへ自動スクロール＋ハイライトする(?booking= と同じ流儀・URLから即除去)。
+  const caseHighlightParam = searchParams.get('case')
+  const [highlightCaseId, setHighlightCaseId] = useState<string | null>(null)
+  const caseHighlightConsumedRef = useRef(false)
+  useEffect(() => {
+    if (!caseHighlightParam || caseHighlightConsumedRef.current) return
+    caseHighlightConsumedRef.current = true
+    setHighlightCaseId(caseHighlightParam)
+    const url = new URL(window.location.href)
+    url.searchParams.delete('case')
+    window.history.replaceState(null, '', url.toString())
+  }, [caseHighlightParam])
+
   // プロフィール編集直接オープン（マウント後1回のみ）
   // deps にオブジェクト pro を入れると、保存時の setPro(savedData) で参照が変わり
   // このエフェクトが再実行 → edit=true が URL に残っているため編集フォームが
@@ -5526,6 +5540,7 @@ export default function DashboardPage() {
               onDelegateCriteriaUpdated={(criteria) =>
                 setPro(prev => prev ? { ...prev, delegate_criteria: criteria } : prev)
               }
+              highlightCaseId={highlightCaseId}
             />
           )}
           {!referralEnabled && (

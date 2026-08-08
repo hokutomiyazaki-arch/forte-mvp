@@ -45,44 +45,48 @@ export default function ReferralActionBanner() {
   // CEO指摘(2026-08-06): §17-1でREALPROOFの直接予約もこの受信箱に届くようになったため、
   // 「紹介予約」と言い切れなくなった。受け手側の文言は「予約」に統一する
   // （送り手側＝自分が紹介した案件は今まで通り「紹介した案件」と呼ぶ。こちらは紹介のままで正しい）。
-  let label: string
-  if (sentActiveCount === 0) {
-    label =
-      requestedCount > 0
-        ? `新しい予約リクエストが${requestedCount}件あります`
-        : `対応中の予約が${confirmedCount}件あります`
-  } else if (requestedCount === 0 && confirmedCount === 0) {
-    label = `あなたが紹介した案件が${sentActiveCount}件進行中です`
-  } else {
-    const receivedPart =
-      requestedCount > 0
-        ? `新しいリクエストが${requestedCount}件`
-        : `対応中の予約が${confirmedCount}件`
-    label = `${receivedPart}・紹介した案件が${sentActiveCount}件進行中です`
+  // CEO指摘(2026-08-08)「紹介した案件の通知リンクが予約ページにとぶ」:
+  // 受け手側と送り手側を1本のリンクにまとめると、片方(紹介した案件)に飛べなかった。
+  // それぞれ自分の行き先を持つ行に分ける(受け手側→予約タブ・送り手側→紹介した案件サブタブ)。
+  const rows: Array<{ label: string; href: string; emphasized: boolean }> = []
+  if (requestedCount > 0 || confirmedCount > 0) {
+    rows.push({
+      label:
+        requestedCount > 0
+          ? `新しい予約リクエストが${requestedCount}件あります`
+          : `対応中の予約が${confirmedCount}件あります`,
+      href: '/dashboard?tab=bookings',
+      emphasized: requestedCount > 0,
+    })
+  }
+  if (sentActiveCount > 0) {
+    rows.push({
+      label: `あなたが紹介した案件が${sentActiveCount}件進行中です`,
+      href: '/dashboard?tab=referral&sub=cases',
+      emphasized: false,
+    })
   }
 
-  // CEO指示(2026-08-04・IA再変更): 送り手のみの文言なら新設の「紹介した案件」サブタブへ、
-  // 受け手側を含む場合は「受ける」サブタブへ直接着地させる(?sub=receive|casesは
-  // dashboard/page.tsx側でlocalStorage/自動判定より優先される)。
-  // §17-2(2026-08-06): 受け取り側は独立した「予約」タブへ、送り手側は従来どおり紹介タブへ。
-  const hasReceivedPart = requestedCount > 0 || confirmedCount > 0
-  const href = hasReceivedPart ? '/dashboard?tab=bookings' : '/dashboard?tab=referral&sub=cases'
-
   return (
-    <a
-      href={href}
-      style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '10px 14px', marginBottom: 16, borderRadius: 10,
-        background: requestedCount > 0 ? '#F0F7FF' : '#FAFAFA',
-        border: `1px solid ${requestedCount > 0 ? '#B8D4F0' : '#E5E7EB'}`,
-        textDecoration: 'none',
-      }}
-    >
-      <span style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E' }}>{label}</span>
-      <span style={{ fontSize: 12, color: '#C4A35A', fontWeight: 700, flexShrink: 0, marginLeft: 8 }}>
-        確認する →
-      </span>
-    </a>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+      {rows.map((row) => (
+        <a
+          key={row.href}
+          href={row.href}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '10px 14px', borderRadius: 10,
+            background: row.emphasized ? '#F0F7FF' : '#FAFAFA',
+            border: `1px solid ${row.emphasized ? '#B8D4F0' : '#E5E7EB'}`,
+            textDecoration: 'none',
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E' }}>{row.label}</span>
+          <span style={{ fontSize: 12, color: '#C4A35A', fontWeight: 700, flexShrink: 0, marginLeft: 8 }}>
+            確認する →
+          </span>
+        </a>
+      ))}
+    </div>
   )
 }

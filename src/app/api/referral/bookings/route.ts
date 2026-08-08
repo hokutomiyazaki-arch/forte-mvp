@@ -3,7 +3,7 @@ import { auth } from '@clerk/nextjs/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { ensureOwnClient, createGuestClient } from '@/lib/referral-auth'
 import { verifyReceiverAllowedInList } from '@/lib/referral-data'
-import { notifyBookingRequested, notifyBookingRequestedToSender, notifyBookingReceivedToClient } from '@/lib/referral-notify'
+import { notifyBookingRequested, notifyBookingRequestedToSender, notifyBookingEmailFailedToSender, notifyBookingReceivedToClient } from '@/lib/referral-notify'
 import { isAcceptingOpen } from '@/lib/referral-accepting'
 import { isReferralPaymentEnabled, REFERRAL_MIN_FEE_JPY } from '@/lib/feature-flags'
 import { parseSlot, snapToHalfHourUp } from '@/lib/referral-format'
@@ -319,16 +319,29 @@ export async function POST(request: NextRequest) {
         .eq('id', list.owner_id)
         .maybeSingle()
       if (senderPro) {
+        const senderTarget = {
+          name: senderPro.name,
+          contact_email: senderPro.contact_email,
+          line_messaging_user_id: senderPro.line_messaging_user_id,
+        }
         await notifyBookingRequestedToSender(
-          {
-            name: senderPro.name,
-            contact_email: senderPro.contact_email,
-            line_messaging_user_id: senderPro.line_messaging_user_id,
-          },
+          senderTarget,
           clientName || ownClient.nickname || 'クライアント',
           receiverPro.name || 'プロ',
           (list as { title?: string | null }).title || null,
+          booking.id,
         )
+        // CEO指示(2026-08-08)「メール間違いはもっとちゃんと通知すべき」:
+        // 既知の不達アドレスを作成時点で検知した場合(§17-25)、webhookは二度と来ないため
+        // ここで即、送り手へ要対応通知を送る(LINE・メール両方)。
+        if (knownBadEmail) {
+          await notifyBookingEmailFailedToSender(
+            senderTarget,
+            clientName || ownClient.nickname || 'クライアント',
+            receiverPro.name || null,
+            booking.id,
+          )
+        }
       }
     } catch (senderNotifyErr) {
       console.error('[api/referral/bookings] sender notify error:', senderNotifyErr)
