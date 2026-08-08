@@ -33,6 +33,10 @@
   - 配信は admin dashboard（お知らせ管理／一斉送信）から。**web セッションからは realproof.jp に
     到達できない**（ネットワークポリシーで403）ため、配信操作自体は CEO かMacセッションが行う。
   - 送信後は `broadcast_logs` で1バッチ・1人1件を検証する（過去に対象数のズレの前例あり）。
+  - **【恒久ルール・2026-08-08 CEO決定】メニューの New マークは新機能を追加するたびに毎回つける。**
+    一度でもそのページを確認したら消える方式（`NewBadge` に `id` を渡し、対象ページに
+    `<MarkFeatureSeen id>` を置く。localStorage `rp_new_seen:<id>`・`src/lib/new-feature-seen.ts`）。
+    日付上限 `NEW_UNTIL`（NewBadge.tsx）も新機能を出すたびに更新する。
 - **【恒久ルール・2026-08-06 CEO決定・運用変更】push 前に必ず「依存インストール → 型チェック → ビルド」を通す。**
   旧ルール（`npm run build` はしない・型チェックのみ）は**この失敗で撤回**した。
   - 事故: web セッションのコンテナは **node_modules が入っていない**。その状態で `npx tsc --noEmit` を

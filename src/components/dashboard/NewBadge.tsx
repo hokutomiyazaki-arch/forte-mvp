@@ -1,17 +1,22 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+import { isFeatureSeen } from '@/lib/new-feature-seen'
+
 /**
  * 新機能の目印（CEO指示 2026-08-06）。
  *
  * 「新機能が追加され続けていること自体が、いま一番ユーザーの興味をつなぎとめるポイント」
  * （CLAUDE.md の恒久ルール）。告知メールを読んでいない人にも、画面の中で気づいてもらう。
  *
- * 運用: **出しっぱなしにしない**。付けた日を NEW_UNTIL に書き、その日を過ぎたら
- * 自動で消える。ずっと New が付いていると、New という表示自体が意味を失うため。
+ * 運用（CEO恒久ルール 2026-08-08で更新）:
+ * - 新機能を追加したら毎回、そのメニュー項目に付ける
+ * - `id` を渡すと「一度そのページを確認したら消える」（対象ページに <MarkFeatureSeen id> を置く）
+ * - 保険として NEW_UNTIL の日付上限も併用（出しっぱなしにしない・意味の摩耗防止）
  */
 
 /** この日（JST）を過ぎたら New を出さない。新機能を出したら都度更新する。 */
-const NEW_UNTIL = '2026-09-06'
+const NEW_UNTIL = '2026-09-08'
 
 function isStillNew(): boolean {
   // JST基準の日付で比較する（UTCで切るとJSTの夜に1日早く消える）
@@ -19,8 +24,15 @@ function isStillNew(): boolean {
   return todayJst <= NEW_UNTIL
 }
 
-export default function NewBadge({ label = 'New' }: { label?: string }) {
+export default function NewBadge({ label = 'New', id }: { label?: string; id?: string }) {
+  // 既読判定はマウント後に行う（SSRとのhydration不一致を避ける。このアプリの遷移は
+  // <a href> のフルリロードが基本なので、ページを見た後の次の画面では必ず再評価される）
+  const [seen, setSeen] = useState(false)
+  useEffect(() => {
+    if (id) setSeen(isFeatureSeen(id))
+  }, [id])
   if (!isStillNew()) return null
+  if (id && seen) return null
   return (
     <span
       style={{
