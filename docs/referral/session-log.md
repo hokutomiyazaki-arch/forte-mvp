@@ -767,3 +767,13 @@
 - 【既知の表示差分】featured_vote_id未設定プロのvoiceSnippet出所がSQL実行後に変わり得る（最新コメント基準に）。
 - 【別タスク化】ReferralTab内の到達不能なReferralCompletedListマウント撤去（二重fetch・3点証拠確認の上で）。
 - SQLは未実行。CEO承認後にSupabase MCPで実行→検証SELECT→Vercelログで aggregation=rpc 確認の手順。
+
+## 2026-08-08 午後バッチ2（PR #45・#46）
+- 「確定済みの報酬」カードをサブタブ上から完全撤去（§17-15の1行残しを撤回・CEO指示）。
+- 完了済みカードをコンパクト折りたたみ行に＋名前/メニュー/紹介元検索＋20件ページ送り（CEO指示）。
+- 紹介リスト・紹介した案件も折りたたみ既定に（作成直後リストは開いた状態・メール未達チップはヘッダー常時）。
+- 【調査完了・コード変更なし】紹介予約でメール未達の印が出ない件: 直接予約と実装は完全共通（差分ゼロ）。
+  今朝の確認B=既知不達アドレス（§17-25事前チェックで即検知）、今回=新規の間違いアドレス（bounce webhook頼み）。
+  真因候補は webhook 設定（GET /api/webhooks/resend の secret_configured / Resend側の email.bounced 登録）
+  or 非同期バウンスの時間差。CEOに確認3点を依頼済み。webセッションからは realproof.jp / Supabase MCP とも
+  到達不可のため一次情報が取れない。

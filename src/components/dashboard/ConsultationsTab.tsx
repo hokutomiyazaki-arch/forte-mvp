@@ -8,6 +8,8 @@ import LinkedText from '@/components/LinkedText'
 import { fetchWithSessionRetry, SESSION_EXPIRED_MESSAGE } from '@/lib/fetch-with-session-retry'
 
 const BODY_MAX = 2000
+// CEO指示(2026-08-08): 一覧の1ページあたり件数(完了済み予約リストと同じ)
+const PAGE_SIZE = 20
 
 interface Message {
   id: string
@@ -66,6 +68,9 @@ export default function ConsultationsTab({
   const [notice, setNotice] = useState('')
   // CEO指示(2026-08-06): アーカイブしたスレッドは既定で出さない。切り替えて見返せる。
   const [showArchived, setShowArchived] = useState(false)
+  // CEO指示(2026-08-08): 名前検索＋20件ページ送り
+  const [searchQuery, setSearchQuery] = useState('')
+  const [page, setPage] = useState(0)
   // §16-25(CEO指示 2026-08-06): 相談を受け付けるかのスイッチ。既定は受け付ける。
   const [accepting, setAccepting] = useState(true)
   const [savingAccepting, setSavingAccepting] = useState(false)
@@ -395,7 +400,7 @@ export default function ConsultationsTab({
   const archiveToggle = (
     <button
       type="button"
-      onClick={() => { const next = !showArchived; setShowArchived(next); setOpenId(null); setLoading(true); load(next) }}
+      onClick={() => { const next = !showArchived; setShowArchived(next); setOpenId(null); setSearchQuery(''); setPage(0); setLoading(true); load(next) }}
       style={{
         background: 'none', border: 'none', padding: 0, cursor: 'pointer',
         fontSize: 12, color: '#C4A35A', fontWeight: 600,
@@ -433,6 +438,13 @@ export default function ConsultationsTab({
     return an - bn || b.updated_at.localeCompare(a.updated_at)
   })
 
+  // CEO指示(2026-08-08): 名前検索＋20件ページ送り(完了済み予約リストと同じ流儀。アーカイブ表示にも効く)
+  const trimmedQuery = searchQuery.trim()
+  const filtered = trimmedQuery ? sorted.filter(c => (c.client_name || '').includes(trimmedQuery)) : sorted
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safePage = Math.min(page, pageCount - 1)
+  const pageItems = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE)
+
   return (
     <div style={{ paddingBottom: 40 }}>
       {acceptingSwitch}
@@ -445,8 +457,23 @@ export default function ConsultationsTab({
         <div style={{ flexShrink: 0, paddingTop: 2 }}>{archiveToggle}</div>
       </div>
 
+      <input
+        type="text"
+        value={searchQuery}
+        onChange={(e) => { setSearchQuery(e.target.value); setPage(0); setOpenId(null) }}
+        placeholder="お名前で検索"
+        style={{
+          width: '100%', padding: '9px 12px', fontSize: 14, boxSizing: 'border-box',
+          border: '1px solid #E5E7EB', borderRadius: 8, marginBottom: 10, background: '#fff',
+        }}
+      />
+      {trimmedQuery && filtered.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '20px 0', color: '#9CA3AF', fontSize: 13 }}>
+          「{trimmedQuery}」に一致するご相談はありません
+        </div>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {sorted.map(c => {
+        {pageItems.map(c => {
           const isOpen = openId === c.id
           const isNew = c.status === 'new'
           const last = c.messages[c.messages.length - 1]
@@ -876,6 +903,37 @@ export default function ConsultationsTab({
           )
         })}
       </div>
+      {pageCount > 1 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, marginTop: 14 }}>
+          <button
+            type="button"
+            onClick={() => { setPage(Math.max(0, safePage - 1)); setOpenId(null) }}
+            disabled={safePage === 0}
+            style={{
+              padding: '7px 14px', borderRadius: 8, border: '1px solid #D1D5DB',
+              background: '#fff', fontSize: 13, fontWeight: 600,
+              color: safePage === 0 ? '#D1D5DB' : '#1A1A2E',
+              cursor: safePage === 0 ? 'default' : 'pointer',
+            }}
+          >
+            ← 前へ
+          </button>
+          <span style={{ fontSize: 13, color: '#6B7280' }}>{safePage + 1} / {pageCount}</span>
+          <button
+            type="button"
+            onClick={() => { setPage(Math.min(pageCount - 1, safePage + 1)); setOpenId(null) }}
+            disabled={safePage >= pageCount - 1}
+            style={{
+              padding: '7px 14px', borderRadius: 8, border: '1px solid #D1D5DB',
+              background: '#fff', fontSize: 13, fontWeight: 600,
+              color: safePage >= pageCount - 1 ? '#D1D5DB' : '#1A1A2E',
+              cursor: safePage >= pageCount - 1 ? 'default' : 'pointer',
+            }}
+          >
+            次へ →
+          </button>
+        </div>
+      )}
     </div>
   )
 }

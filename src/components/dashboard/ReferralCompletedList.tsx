@@ -169,6 +169,64 @@ export default function ReferralCompletedList({ proId, onCountChange, variant = 
     )
   }
 
+  // 検索＋ページ送り＋一覧の共通ブロック(CEO指示 2026-08-08: list/accordion両方に同じ操作を付ける)
+  const searchAndPagedBody = (
+    <>
+      {completedItems.length > 0 && (
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => { setSearchQuery(e.target.value); setPage(0); setOpenId(null) }}
+          placeholder="お名前・メニュー・紹介元で検索"
+          style={{
+            width: '100%', padding: '9px 12px', fontSize: 14, boxSizing: 'border-box',
+            border: '1px solid #E5E7EB', borderRadius: 8, marginBottom: 10, background: '#fff',
+          }}
+        />
+      )}
+      {trimmedQuery && filteredItems.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '20px 0', color: '#9CA3AF', fontSize: 13 }}>
+          「{trimmedQuery}」に一致する完了済みの予約はありません
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {pageItems.map(renderCompactItem)}
+        </div>
+      )}
+      {pageCount > 1 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, marginTop: 14 }}>
+          <button
+            type="button"
+            onClick={() => { setPage(Math.max(0, safePage - 1)); setOpenId(null) }}
+            disabled={safePage === 0}
+            style={{
+              padding: '7px 14px', borderRadius: 8, border: '1px solid #D1D5DB',
+              background: '#fff', fontSize: 13, fontWeight: 600,
+              color: safePage === 0 ? '#D1D5DB' : '#1A1A2E',
+              cursor: safePage === 0 ? 'default' : 'pointer',
+            }}
+          >
+            ← 前へ
+          </button>
+          <span style={{ fontSize: 13, color: '#6B7280' }}>{safePage + 1} / {pageCount}</span>
+          <button
+            type="button"
+            onClick={() => { setPage(Math.min(pageCount - 1, safePage + 1)); setOpenId(null) }}
+            disabled={safePage >= pageCount - 1}
+            style={{
+              padding: '7px 14px', borderRadius: 8, border: '1px solid #D1D5DB',
+              background: '#fff', fontSize: 13, fontWeight: 600,
+              color: safePage >= pageCount - 1 ? '#D1D5DB' : '#1A1A2E',
+              cursor: safePage >= pageCount - 1 ? 'default' : 'pointer',
+            }}
+          >
+            次へ →
+          </button>
+        </div>
+      )}
+    </>
+  )
+
   // ---- 'list'(予約タブの完了済みサブタブ) ----
   if (variant === 'list') {
     if (!loading && completedItems.length === 0) {
@@ -179,62 +237,7 @@ export default function ReferralCompletedList({ proId, onCountChange, variant = 
         </div>
       )
     }
-    return (
-      <div>
-        {completedItems.length > 0 && (
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); setPage(0); setOpenId(null) }}
-            placeholder="お名前・メニュー・紹介元で検索"
-            style={{
-              width: '100%', padding: '9px 12px', fontSize: 14, boxSizing: 'border-box',
-              border: '1px solid #E5E7EB', borderRadius: 8, marginBottom: 10, background: '#fff',
-            }}
-          />
-        )}
-        {trimmedQuery && filteredItems.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '20px 0', color: '#9CA3AF', fontSize: 13 }}>
-            「{trimmedQuery}」に一致する完了済みの予約はありません
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {pageItems.map(renderCompactItem)}
-          </div>
-        )}
-        {pageCount > 1 && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, marginTop: 14 }}>
-            <button
-              type="button"
-              onClick={() => { setPage(Math.max(0, safePage - 1)); setOpenId(null) }}
-              disabled={safePage === 0}
-              style={{
-                padding: '7px 14px', borderRadius: 8, border: '1px solid #D1D5DB',
-                background: '#fff', fontSize: 13, fontWeight: 600,
-                color: safePage === 0 ? '#D1D5DB' : '#1A1A2E',
-                cursor: safePage === 0 ? 'default' : 'pointer',
-              }}
-            >
-              ← 前へ
-            </button>
-            <span style={{ fontSize: 13, color: '#6B7280' }}>{safePage + 1} / {pageCount}</span>
-            <button
-              type="button"
-              onClick={() => { setPage(Math.min(pageCount - 1, safePage + 1)); setOpenId(null) }}
-              disabled={safePage >= pageCount - 1}
-              style={{
-                padding: '7px 14px', borderRadius: 8, border: '1px solid #D1D5DB',
-                background: '#fff', fontSize: 13, fontWeight: 600,
-                color: safePage >= pageCount - 1 ? '#D1D5DB' : '#1A1A2E',
-                cursor: safePage >= pageCount - 1 ? 'default' : 'pointer',
-              }}
-            >
-              次へ →
-            </button>
-          </div>
-        )}
-      </div>
-    )
+    return <div>{searchAndPagedBody}</div>
   }
 
   // ---- 'accordion'(旧・紹介タブ内。到達不能UIだが受け皿として既存挙動を維持) ----
@@ -270,8 +273,8 @@ export default function ReferralCompletedList({ proId, onCountChange, variant = 
       </button>
 
       {completedOpen && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
-          {completedItems.map(renderCompactItem)}
+        <div style={{ marginTop: 10 }}>
+          {searchAndPagedBody}
         </div>
       )}
     </div>

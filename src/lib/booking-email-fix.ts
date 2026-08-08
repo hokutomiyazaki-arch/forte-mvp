@@ -17,8 +17,11 @@
  *   - **直接予約(source='direct')には送り手がいない**。ここは従来どおり受け手が直す。
  *   - 送り手が動かない場合に予約が黙って死ぬ。一定時間で受け手に渡す。
  *
- * このファイルは import ゼロの純関数のみ（APIルートのチャンクグラフに何も足さない・CLAUDE.md §G）。
+ * このファイルは元は import ゼロの純関数のみ（APIルートのチャンクグラフに何も足さない・CLAUDE.md §G）。
+ * 2026-08-08: email_bounces 参照のため normalize-email(依存ゼロの葉ユーティリティ・全呼び出し元の
+ * ルートが既に直接importしている)のみ例外的に追加。これ以上は足さない。
  */
+import { normalizeEmail } from '@/lib/normalize-email'
 
 /** 送り手に預ける時間。これを過ぎたら受け手が自分で直せるようにする。 */
 export const EMAIL_FIX_SENDER_WINDOW_HOURS = 24
@@ -97,6 +100,25 @@ export async function isKnownUndeliverableEmail(
 ): Promise<boolean> {
   const target = (email || '').trim().toLowerCase()
   if (!target) return false
+
+  // CEO報告(2026-08-08)対策: まず email_bounces(migration 060・バウンスの永続記録)を見る。
+  // 予約/相談の行に付いた印はテストデータ削除で消える一方、Resendは同じアドレスへの再送を
+  // 抑制して以後webhookも来ないため、ここに記録が無いと二度と検知できない。
+  // fail-soft: テーブル未作成(42P01)等は無視して従来のチェックへ進む。
+  try {
+    const { data, error } = await supabase
+      .from('email_bounces')
+      .select('id')
+      .eq('normalized_email', normalizeEmail(target))
+      .limit(1)
+    if (!error && (data || []).length > 0) return true
+    if (error) {
+      console.error('[booking-email-fix] email_bounces check error (fail-soft):', error.message)
+    }
+  } catch (err) {
+    console.error('[booking-email-fix] email_bounces check threw (fail-soft):', err)
+  }
+
   try {
     const { data, error } = await supabase
       .from('referral_bookings')
