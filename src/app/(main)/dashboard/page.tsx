@@ -652,7 +652,8 @@ export default function DashboardPage() {
   // ダッシュボードのタブ型機能は、タブを開いた時点で既読にする（Navbar の NewBadge id と対応）。
   useEffect(() => {
     const tabFeatureIds: Record<string, string> = {
-      bookings: 'tab-bookings',
+      // §16-41(CEO決定 2026-08-08): Navbarのid変更(クライアントへの記録依頼を追加)と対応させる。
+      bookings: 'tab-bookings-proof-request',
       referral: 'tab-referral',
       'business-info': 'tab-business-info',
     }
@@ -1583,8 +1584,14 @@ export default function DashboardPage() {
 
   async function generateQR() {
     if (!pro) return
-    // 既存トークンを削除
-    await db.delete('qr_tokens', { professional_id: pro.id })
+    // §16-41(CEO決定 2026-08-08): クライアントへの記録依頼で発行した未使用トークン(booking_id付き)
+    // まで消してしまわないよう、削除対象を booking_id が null の行だけに絞る。
+    // migration 061(booking_id列)未実行の環境ではisフィルタが42703で失敗するため、
+    // その場合だけ従来どおり全削除にフォールバックする。
+    const delResult = await db.delete('qr_tokens', { professional_id: pro.id }, { is: { booking_id: null } })
+    if (delResult.error) {
+      await db.delete('qr_tokens', { professional_id: pro.id })
+    }
     const token = crypto.randomUUID()
     const expiresAt = calcQrTokenExpiry()
     await db.insert('qr_tokens', { professional_id: pro.id, token, expires_at: expiresAt })

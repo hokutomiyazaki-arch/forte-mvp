@@ -66,8 +66,8 @@ export const db = {
   upsert: (table: string, data: any, options?: Record<string, any>, opts?: { select?: string; maybeSingle?: boolean }): Promise<DbResult> =>
     dbFetch('upsert', table, { data, options, ...opts }),
 
-  delete: (table: string, eq: Record<string, any>): Promise<DbResult> =>
-    dbFetch('delete', table, { eq }),
+  delete: (table: string, eq: Record<string, any>, opts?: { is?: Record<string, any> }): Promise<DbResult> =>
+    dbFetch('delete', table, { eq, ...opts }),
 }
 
 /**

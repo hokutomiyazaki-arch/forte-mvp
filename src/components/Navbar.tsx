@@ -77,8 +77,10 @@ export default function Navbar() {
           )}
           {/* §17-2(CEO判断 2026-08-06): 予約（受け取る仕事）と紹介（送り出す仕事）を分ける。
               予約は referralEnabled でゲートしない（受け手は先行公開の対象外でも予約を受けられる）。 */}
+          {/* §16-41(CEO決定 2026-08-08): クライアントへの記録依頼を追加したため、既読済みの人にも
+              再度Newを見せるためidを変更する(恒久ルール: 新機能を追加するたびに毎回つける)。 */}
           {isPro && (
-            <a href="/dashboard?tab=bookings" onClick={closeMenu} style={menuLinkStyle}>予約<NewBadge id="tab-bookings" /></a>
+            <a href="/dashboard?tab=bookings" onClick={closeMenu} style={menuLinkStyle}>予約<NewBadge id="tab-bookings-proof-request" /></a>
           )}
           {/* CEO指示(2026-08-03): 紹介はコアメニューのためトップレベルへ昇格(設定グループから移動)
               §17-2(2026-08-06): 予約と紹介を分けたので、紹介側にも New を付ける（CEO指示「両方にNewを」）。 */}

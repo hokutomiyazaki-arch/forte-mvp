@@ -87,6 +87,9 @@ export async function POST(req: NextRequest) {
       case 'delete': {
         let q = supabase.from(table).delete()
         if (query.eq) for (const [k, v] of Object.entries(query.eq)) q = q.eq(k, v as any)
+        // §16-41(CEO決定 2026-08-08): ダッシュボードQR再発行が予約依頼トークン(booking_id付き)を
+        // 誤って消さないよう、削除対象を絞れるように is フィルタをselectと同じ作法で追加する。
+        if (query.is) for (const [k, v] of Object.entries(query.is)) q = q.is(k, v as any)
         result = await q
         break
       }
