@@ -908,13 +908,15 @@ export async function PATCH(request: NextRequest) {
           await notifyBookingCancelledByReceiverToClient(
             { userId: clientUserIdForCancel, email: booking.client_email },
             ownPro.name,
-            listUrlForCancel,
+            // レビュー指摘(2026-08-08・中2): 直予約に紹介リストは無いのでプロのカードへ誘導(declineと同じ)。
+            isDirectBooking ? `${APP_URL}/card/${ownPro.id}` : listUrlForCancel,
             {
               reason: cancelReason,
               refundedAmountJpy,
               refundPending,
               noRefundByPolicy,
               confirmedSlotText: confirmedSlotTextForCancel,
+              isDirect: isDirectBooking,
             }
           )
         }

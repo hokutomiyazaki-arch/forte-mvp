@@ -552,17 +552,23 @@ export async function notifyBookingCancelledByReceiverToClient(
     refundPending: boolean
     noRefundByPolicy?: boolean
     confirmedSlotText?: string | null
+    /** レビュー指摘(2026-08-08・中2): 直予約(source='direct')に「紹介予約」と書かない。
+     * trueのときは件名・本文を「ご予約」にし、フッターはプロフィールへの導線にする
+     * (このとき呼び出し元は listUrl にプロのカードURLを渡す。decline と同じ流儀)。 */
+    isDirect?: boolean
   },
 ): Promise<{ sent: boolean }> {
   const safeReceiverProName = escapeHtml(receiverProName)
   const reason = opts.reason || 'pro'
+  const isDirect = !!opts.isDirect
+  const kind = isDirect ? 'ご予約' : '紹介予約'
   const safeConfirmedSlotText = opts.confirmedSlotText ? escapeHtml(opts.confirmedSlotText) : null
   const leadHtml =
     reason === 'client'
       ? safeConfirmedSlotText
         ? `${safeReceiverProName}さんとのご予約(${safeConfirmedSlotText})について、ご希望によるキャンセルを承りました。`
         : `${safeReceiverProName}さんとのご予約について、ご希望によるキャンセルを承りました。`
-      : `${safeReceiverProName}さんの都合により、紹介予約はキャンセルされました。`
+      : `${safeReceiverProName}さんの都合により、${kind}はキャンセルされました。`
 
   let refundPart = ''
   if (opts.refundPending) {
@@ -578,10 +584,11 @@ export async function notifyBookingCancelledByReceiverToClient(
 
   return notifyClientByEmail(
     target,
-    reason === 'client' ? 'ご希望によるキャンセルを承りました' : `${receiverProName}さんの都合により紹介予約がキャンセルされました`,
+    reason === 'client' ? 'ご希望によるキャンセルを承りました' : `${receiverProName}さんの都合により${kind}がキャンセルされました`,
     emailShell(
-      '紹介予約キャンセルのお知らせ',
-      `${leadHtml}${refundPart}` + referralListFooterHtml(listUrl, '他の先生もご紹介できます'),
+      `${isDirect ? 'ご予約' : '紹介予約'}キャンセルのお知らせ`,
+      `${leadHtml}${refundPart}` +
+        referralListFooterHtml(listUrl, isDirect ? 'プロフィールを見る' : '他の先生もご紹介できます'),
     ),
   )
 }
