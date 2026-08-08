@@ -58,6 +58,8 @@ export default function ConsultationsTab({
   const [list, setList] = useState<Consultation[]>([])
   const [loading, setLoading] = useState(true)
   const [openId, setOpenId] = useState<string | null>(null)
+  // CEO報告(2026-08-08): ?open= で名指しされたスレッドの一時ハイライト（金色リング・数秒で消える）
+  const [flashId, setFlashId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [sendingId, setSendingId] = useState<string | null>(null)
   const [error, setError] = useState('')
@@ -91,9 +93,16 @@ export default function ConsultationsTab({
       const items: Consultation[] = Array.isArray(json.consultations) ? json.consultations : []
       setList(items)
       // §17-6: 名指しで開くよう言われたスレッドがあれば開く（一覧に居るときだけ・1回だけ）。
+      // CEO報告(2026-08-08): 開くだけでなく、該当カードへ自動スクロール＋数秒ハイライトする
+      // （予約カードの ?booking= と同じ見せ方。描画反映を待って300ms後にDOMを探す）。
       if (initialOpenId && !openedInitialRef.current && items.some(c => c.id === initialOpenId)) {
         openedInitialRef.current = true
         setOpenId(initialOpenId)
+        setFlashId(initialOpenId)
+        setTimeout(() => {
+          document.getElementById(`consultation-card-${initialOpenId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }, 300)
+        setTimeout(() => setFlashId(null), 3800)
       }
       if (typeof json.accepting === 'boolean') setAccepting(json.accepting)
       if (Array.isArray(json.menus)) setMenus(json.menus)
@@ -442,8 +451,10 @@ export default function ConsultationsTab({
           const isNew = c.status === 'new'
           const last = c.messages[c.messages.length - 1]
           return (
-            <div key={c.id} style={{
-              background: '#fff', border: `1px solid ${isNew ? '#C4A35A' : '#E5E7EB'}`,
+            <div key={c.id} id={`consultation-card-${c.id}`} style={{
+              background: '#fff', border: `1px solid ${flashId === c.id ? '#C4A35A' : isNew ? '#C4A35A' : '#E5E7EB'}`,
+              boxShadow: flashId === c.id ? '0 0 0 4px rgba(196,163,90,0.35)' : 'none',
+              transition: 'box-shadow 0.5s, border-color 0.5s',
               borderRadius: 12, overflow: 'hidden',
             }}>
               <button
