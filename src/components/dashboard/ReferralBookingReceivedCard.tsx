@@ -168,6 +168,23 @@ interface Props {
 }
 
 /**
+ * CEO指示(2026-08-08): 予約カードは折りたたみが既定。開閉インジケータ(絵文字なし・SVG)。
+ */
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 16 16"
+      style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', flexShrink: 0 }}
+      aria-hidden="true"
+    >
+      <path d="M4 6 l4 4 4 -4" stroke="#9CA3AF" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/**
  * CEO追加指示(2026-08-04): カード左上に現在ステータスを1つだけ色分けpillで表示する。
  * 文字は13px以上・絵文字なし(§0-6)。
  */
@@ -426,6 +443,18 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange, hig
       .finally(() => setLoading(false))
   }, [])
 
+  // CEO指示(2026-08-08): 予約カードは折りたたみが既定（名前・紹介元orRP直・日付だけ見せる）。
+  // 開いているカードのidを保持（複数同時に開ける）。
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+  function toggleExpanded(bookingId: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(bookingId)) next.delete(bookingId)
+      else next.add(bookingId)
+      return next
+    })
+  }
+
   // §17-31(CEO指示 2026-08-08): 通知メールからの着地時、該当カードへ自動スクロール＋一時ハイライト。
   // 一覧の読み込み完了(loading=false)を待ってから、描画反映のsetTimeout(300ms)後にDOMを探す
   // (card/[id]の #vote- ディープリンクと同じ流儀)。カードが無い(完了・削除済み等)場合は何もしない。
@@ -433,6 +462,12 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange, hig
   const [flashBookingId, setFlashBookingId] = useState<string | null>(null)
   useEffect(() => {
     if (!highlightBookingId || loading) return
+    // 名指しされたカードは折りたたみを解いてから探す（メールから来た人は中身に用がある）
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      next.add(highlightBookingId)
+      return next
+    })
     const scrollTimer = setTimeout(() => {
       const el = document.getElementById(`booking-card-${highlightBookingId}`)
       if (!el) return
@@ -771,6 +806,9 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange, hig
         const counterInput = counterInputs[item.id] || ['', '', '']
         // 軽微(レビュー指摘): 同じ算出を2回呼ばないようconstに固定する。
         const receiverTodayAmount = computeReceiverTodayAmount(item.price_jpy, item.fee_total_bps, item.payment_status)
+        // CEO指示(2026-08-08): 折りたたみ時は名前・紹介元orRP直・日付だけ。日付は第1希望を代表で出す。
+        const isExpanded = expandedIds.has(item.id)
+        const firstSlot = slots.find(Boolean) || null
         return (
           <div
             key={item.id}
@@ -786,23 +824,46 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange, hig
               padding: '14px 16px',
             }}
           >
-            <StatusPill label="要対応" bg="#FFE4DE" color="#C2410C" />
-            {/* CEO追加指示(2026-08-04): 「〜から紹介予約のリクエストが届いています」は左上「要対応」
-                ラベルと重複するため削除。名前を大きく太く・紹介元を1行で表記する統一パターン。 */}
-            <div style={{ fontSize: 17, fontWeight: 800, color: '#1A1A2E', lineHeight: 1.4, marginBottom: item.sender_pro?.name ? 0 : 8 }}>
-              {item.client_nickname}さん
-            </div>
-            {/* §17-1: どこから来た予約かを1行で（紹介元がいない直接予約と見分けがつくように） */}
-            {item.source === 'direct' && (
-              <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2, marginBottom: 8 }}>
-                REALPROOFからのご予約
+            {/* CEO指示(2026-08-08): 折りたたみヘッダー(常時表示・タップで開閉)。
+                名前・紹介元orRP直・日付だけ。メール未達は畳んでいても気づけるよう赤チップを出す。 */}
+            <button
+              type="button"
+              onClick={() => toggleExpanded(item.id)}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                padding: 0, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
+              }}
+            >
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <StatusPill label="要対応" bg="#FFE4DE" color="#C2410C" />
+                  {item.preferred_slots?.receipt_email_failed && (
+                    <span style={{
+                      fontSize: 13, fontWeight: 700, padding: '2px 10px', borderRadius: 999,
+                      background: '#FFF3F3', color: '#B00020', border: '1px solid #F0BDBD',
+                      marginBottom: 8,
+                    }}>メール届かず</span>
+                  )}
+                </div>
+                <div style={{ fontSize: 17, fontWeight: 800, color: '#1A1A2E', lineHeight: 1.4 }}>
+                  {item.client_nickname}さん
+                </div>
+                {/* §17-1: どこから来た予約かを1行で（紹介元がいない直接予約と見分けがつくように） */}
+                <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>
+                  {item.sender_pro?.name ? `紹介元: ${item.sender_pro.name}さん` : 'REALPROOFからのご予約'}
+                </div>
+                {counterProposed ? (
+                  <div style={{ fontSize: 13, color: '#B26A00', marginTop: 2 }}>別日時を提案中</div>
+                ) : firstSlot ? (
+                  <div style={{ fontSize: 13, color: '#1A1A2E', fontWeight: 600, marginTop: 2 }}>
+                    第1希望: {formatSlot(firstSlot)}
+                  </div>
+                ) : null}
               </div>
-            )}
-            {item.sender_pro?.name && (
-              <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2, marginBottom: 8 }}>
-                紹介元: {item.sender_pro.name}さん
-              </div>
-            )}
+              <Chevron open={isExpanded} />
+            </button>
+            {isExpanded && (
+            <div style={{ marginTop: 10 }}>
             {/* CEO指摘(2026-08-06): メールアドレスの打ち間違いだと、お客さんには何も届かないのに
                 予約だけが入る。届いていないことをプロに伝え、電話に切り替えてもらう
                 （電話番号は予約フォームの必須項目なので、連絡手段は必ず1つ残っている）。 */}
@@ -1185,6 +1246,8 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange, hig
                 )}
               </>
             )}
+            </div>
+            )}
           </div>
         )
       })}
@@ -1265,6 +1328,8 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange, hig
 
           const isMenuOpen = opsMenuOpenId === item.id
           const isFormOpen = isLocationOpen || isRescheduleOpen || cancelOpenId === item.id
+          // CEO指示(2026-08-08): 折りたたみ時は名前・紹介元orRP直・確定日時だけ。
+          const isExpanded = expandedIds.has(item.id)
           return (
           <div
             key={item.id}
@@ -1278,28 +1343,54 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange, hig
               padding: '14px 16px',
             }}
           >
-            {/* CEO追加指示(2026-08-04): 現在ステータスを1つだけ左上に表示(優先順位: 支払い待ち >
-                日時変更の返答待ち > 確定済み)。 */}
-            {item.payment_status === 'awaiting' ? (
-              <StatusPill label="お支払い待ち" bg="#FFF3E0" color="#B26A00" />
-            ) : rescheduleProposed ? (
-              <StatusPill label="日時変更の返答待ち" bg="#FEF9C3" color="#946800" />
-            ) : (
-              <StatusPill label="確定済み" bg="#DCFCE7" color="#166534" />
-            )}
-
-            {/* 1. クライアント名(+紹介元)。CEO追加指示(2026-08-04): 「〜との紹介予約が確定しています」は
-                左上ステータスpillと重複するため削除。名前を大きく太く・紹介元を1行で表記する。 */}
-            {/* CEO指摘(2026-08-06): 直接予約のニックネームは「ご相談者」固定のため、
-                本人が入力したお名前が画面に出ていなかった。開示条件を満たしていれば実名を出す。 */}
-            <div style={{ fontSize: 17, fontWeight: 800, color: '#1A1A2E', lineHeight: 1.4 }}>
-              {item.client_contact?.name || item.client_nickname}さん
-            </div>
-            {item.source === 'direct' && (
-              <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>
-                REALPROOFからのご予約
+            {/* CEO指示(2026-08-08): 折りたたみヘッダー(常時表示・タップで開閉)。
+                名前・紹介元orRP直・確定日時だけ。ステータスpillとメール未達チップは畳んでいても見せる。 */}
+            <button
+              type="button"
+              onClick={() => toggleExpanded(item.id)}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                padding: 0, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
+              }}
+            >
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  {/* CEO追加指示(2026-08-04): 現在ステータスを1つだけ表示(優先順位: 支払い待ち >
+                      日時変更の返答待ち > 確定済み)。 */}
+                  {item.payment_status === 'awaiting' ? (
+                    <StatusPill label="お支払い待ち" bg="#FFF3E0" color="#B26A00" />
+                  ) : rescheduleProposed ? (
+                    <StatusPill label="日時変更の返答待ち" bg="#FEF9C3" color="#946800" />
+                  ) : (
+                    <StatusPill label="確定済み" bg="#DCFCE7" color="#166534" />
+                  )}
+                  {item.preferred_slots?.receipt_email_failed && (
+                    <span style={{
+                      fontSize: 13, fontWeight: 700, padding: '2px 10px', borderRadius: 999,
+                      background: '#FFF3F3', color: '#B00020', border: '1px solid #F0BDBD',
+                      marginBottom: 8,
+                    }}>メール届かず</span>
+                  )}
+                </div>
+                {/* CEO指摘(2026-08-06): 直接予約のニックネームは「ご相談者」固定のため、
+                    本人が入力したお名前が画面に出ていなかった。開示条件を満たしていれば実名を出す。 */}
+                <div style={{ fontSize: 17, fontWeight: 800, color: '#1A1A2E', lineHeight: 1.4 }}>
+                  {item.client_contact?.name || item.client_nickname}さん
+                </div>
+                <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>
+                  {item.sender_pro?.name ? `紹介元: ${item.sender_pro.name}さん` : 'REALPROOFからのご予約'}
+                </div>
+                {/* 確定日時(折りたたみでも必ず見える。展開時の重複表示は削除済み・CEO指示の整理) */}
+                {confirmedSlotText && (
+                  <div style={{ fontSize: 15, fontWeight: 800, color: '#1A6B3C', marginTop: 2, lineHeight: 1.4 }}>
+                    {confirmedSlotText}
+                  </div>
+                )}
               </div>
-            )}
+              <Chevron open={isExpanded} />
+            </button>
+            {isExpanded && (
+            <div style={{ marginTop: 10 }}>
             {/* §17-4: 電話で確定した予約は、お客さん側に確定の記録が残っていない可能性がある。
                 当日の行き違いを防ぐため、プロの画面に必ず出す。 */}
             {item.preferred_slots?.confirmed_by_phone_at && (
@@ -1469,11 +1560,7 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange, hig
                 )}
               </div>
             )}
-            {item.sender_pro?.name && (
-              <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>
-                紹介元: {item.sender_pro.name}さん
-              </div>
-            )}
+            {/* CEO指示(2026-08-08・整理): 紹介元の行はヘッダーへ移動（重複のためここから削除） */}
 
             {/* CEO指摘(2026-08-06)「クライアントが入力した相談内容が表示されない」:
                 要対応カードには出していたが、確定済みカードに引き継いでいなかった。
@@ -1494,12 +1581,8 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange, hig
               </div>
             )}
 
-            {/* 2. 確定日時(CEO承認済みモック: 一番大きく・太字) */}
-            {confirmedSlotText && (
-              <div style={{ fontSize: 20, fontWeight: 800, color: '#1A6B3C', marginTop: 6, lineHeight: 1.4 }}>
-                {confirmedSlotText}
-              </div>
-            )}
+            {/* CEO指示(2026-08-08・整理): 確定日時はヘッダーで常時表示するため、本文側の
+                大型表示(旧: 20px太字)は重複として削除。 */}
             {/* タスクA(2026-08-05・CEO指示・再設計): 確定日時のすぐ下に当日の受取額を表示する。 */}
             {receiverTodayAmount && (
               <div style={{ marginTop: 6 }}>
@@ -2015,6 +2098,8 @@ export default function ReferralBookingReceivedCard({ proId, onStatusChange, hig
                   </div>
                 </div>
               )}
+            </div>
+            )}
             </div>
             )}
           </div>
