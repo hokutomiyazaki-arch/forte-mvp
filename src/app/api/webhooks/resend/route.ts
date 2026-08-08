@@ -138,6 +138,26 @@ export async function POST(request: NextRequest) {
 
     // そのアドレス宛の「進行中の予約」に印を立てる。過去の完了済みには触らない
     // （今から連絡が要るものだけを対象にする）。
+    // CEO報告(2026-08-08)対策: バウンスしたアドレスを専用テーブルへ永続記録する(migration 060)。
+    // Resendは一度バウンスしたアドレスを抑制し以後webhookも来ないため、予約/相談の行に付けた印が
+    // 行の削除で消えると二度と検知できなくなる。行と独立した記録を必ず残す。
+    // fail-soft: テーブル未作成(42P01)でも本処理は続行する。
+    try {
+      const rawTo = toList[0] || ''
+      if (rawTo) {
+        const { error: bounceInsertError } = await supabase.from('email_bounces').insert({
+          email: rawTo.toLowerCase(),
+          normalized_email: normalizeEmail(rawTo),
+          source: 'resend_webhook',
+        })
+        if (bounceInsertError) {
+          console.error('[api/webhooks/resend] email_bounces insert error (fail-soft):', bounceInsertError.message)
+        }
+      }
+    } catch (bounceErr) {
+      console.error('[api/webhooks/resend] email_bounces insert threw (fail-soft):', bounceErr)
+    }
+
     const { data: rows } = await supabase
       .from('referral_bookings')
       .select('id, sender_pro_id, receiver_pro_id, client_phone, preferred_slots, clients(nickname)')
