@@ -71,6 +71,8 @@ interface SentBooking {
   client_name?: string | null
   /** CEO指示(2026-08-08): 色分け状態ラベル用（お支払い待ち/予約金支払い済みの区別）。 */
   payment_status?: string | null
+  /** CEO指示(2026-08-08): 送り手がアドレスを直した後はクライアントとの相談チャット導線を出す。 */
+  client_email_fixed_by_sender?: boolean
   receiver_pro: { id: string; name: string } | null
   /** §17-16(CEO指示 2026-08-06): クライアントにメールが届かなかった案件。 */
   receipt_email_failed?: boolean | null
@@ -281,6 +283,30 @@ export default function ReferralTab({
   // CEO指示(2026-08-08): 紹介した案件にも名前/メニュー/担当プロ検索＋20件ページ送り
   const [caseSearchQuery, setCaseSearchQuery] = useState('')
   const [casePage, setCasePage] = useState(0)
+  // CEO指示(2026-08-08): 送り手がアドレスを直した後のクライアント相談チャット導線
+  const [threadOpeningId, setThreadOpeningId] = useState<string | null>(null)
+  async function openSentClientThread(bookingId: string) {
+    if (threadOpeningId) return
+    setThreadOpeningId(bookingId)
+    try {
+      const res = await fetch(`/api/pro/bookings/${bookingId}/thread`, { method: 'POST', cache: 'no-store' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        window.alert(
+          data.error === 'no_client_email'
+            ? 'このお客さまのメールアドレスが記録されていないため、メッセージを送れません。'
+            : 'メッセージ画面を開けませんでした',
+        )
+        return
+      }
+      const threadId = data?.consultation_id
+      window.location.href = threadId
+        ? `/dashboard?tab=consultations&open=${encodeURIComponent(threadId)}`
+        : '/dashboard?tab=consultations'
+    } finally {
+      setThreadOpeningId(null)
+    }
+  }
   // CEO指示(2026-08-08): 通知リンク(?case=)からの着地時、該当カードを自動展開・スクロール・
   // 金色リングでハイライト(予約カードの ?booking= と同じ流儀)。effect本体は sentBookings/
   // sentLoading の宣言後(下)に置いてある。
@@ -2508,6 +2534,25 @@ export default function ReferralTab({
                 </div>
               )}
 
+              {/* CEO指示(2026-08-08): 送り手が正しいアドレスに直した後は、クライアントとの
+                  相談チャット導線を出す(メールが再度バウンスしたら receipt_email_failed が
+                  立ち直すため自動で消える)。 */}
+              {b.client_email_fixed_by_sender && !b.receipt_email_failed && (
+                <button
+                  type="button"
+                  onClick={() => openSentClientThread(b.id)}
+                  disabled={threadOpeningId === b.id}
+                  style={{
+                    width: '100%', marginTop: 8, padding: '10px 14px', borderRadius: 8,
+                    border: '1px solid #C4A35A', background: '#fff', color: '#8A6D1F',
+                    fontSize: 13, fontWeight: 700,
+                    cursor: threadOpeningId === b.id ? 'default' : 'pointer',
+                    opacity: threadOpeningId === b.id ? 0.6 : 1,
+                  }}
+                >
+                  {threadOpeningId === b.id ? '開いています…' : 'クライアントにメッセージを送る'}
+                </button>
+              )}
               {payout && (
                 <div style={{ fontSize: 12, color: '#8A6D1F', marginTop: 4, fontWeight: 600 }}>
                   紹介報酬 ¥{payout.amount_jpy.toLocaleString()} {payout.status === 'paid' ? '支払い済み' : '確定'}
