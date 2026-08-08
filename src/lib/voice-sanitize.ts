@@ -1,17 +1,22 @@
 /**
- * §2-6 Voice の表示時AI変換（紹介URL経路のみ・Phase 1で繰り上げ実装）
+ * §2-6 Voice の表示時AI変換（外部に見える全てのVoice表示に広域適用・2026-08-08 CEO GO）
  *
  * - 原本 (`votes.comment`) は絶対に書き換えない。ハッシュチェーンは原本に対して打つ。
- * - 変換の適用は紹介URL(/r/[slug])のみ。アプリ内(プロ↔プロ)は常に原本表示。
+ * - 適用範囲は「外部に見える」全経路（紹介URL/検索/公開カード/JSON-LD/団体ページ/voice共有ページ等）。
+ *   プロ本人ダッシュボード・admin・ハッシュチェーン検証は原文のまま非接触。
  * - 生成は表示時に1回→ `vote_comment_sanitized` にキャッシュ。表示ごとのAPIコールはしない。
  * - FEATURE_AI_TEXT_SANITIZE が off の間は原文をそのまま返す（挙動変更なし）。
+ * - 禁止語を検知しないコメントは、LLM・キャッシュのどちらにも触れず原文をそのまま返す
+ *   （広域適用時のコスト対策の核。大半のコメントはここで抜ける）。
  * - 新規パッケージは追加しない（Anthropic APIはSDKでなくfetch直叩き。Resendの既存流儀と同じ）。
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { isAiSanitizeEnabled } from '@/lib/feature-flags'
 
-const SANITIZE_VERSION = 1
+// §2-6広域適用(2026-08-08 CEO GO): 「治った」等の断定体験談トリガー語を追加したためバージョンを上げる。
+// version不一致のキャッシュ行は再変換対象になる(本番0件確認済みのため再変換コストなし)。
+const SANITIZE_VERSION = 2
 
 const SYSTEM_PROMPT = `あなたは、施術者(トレーナー・治療家・コーチ等)に対するクライアントの感想文を、
 一般公開の紹介ページに掲載できる表現に言い換える校正者です。
@@ -40,6 +45,13 @@ const FORBIDDEN_LITERAL_TERMS = [
   '統合失調症',
   'パニック障害',
   '適応障害',
+  // §2-6広域適用(2026-08-08 CEO GO): 効果を断定する体験談は広告規制リスクが高いため追加
+  '治った',
+  '治る',
+  '治り',
+  '治し',
+  '治療',
+  '完治',
 ]
 
 // 「〜症」「〜病」等の一般的な診断名っぽい語尾。false positiveがあっても
@@ -117,17 +129,35 @@ async function callAnthropic(originalText: string): Promise<string | null> {
 }
 
 /**
- * 紹介URLページで表示するVoice本文をAI変換して返す（キャッシュ付き）。
- * - flag off: 原文をそのまま返す
- * - キャッシュあり: キャッシュを禁止語チェックしてから返す
- * - キャッシュなし: Anthropic APIで1回変換 → upsert → 禁止語チェック
- * - API失敗・禁止語残存: null（呼び出し側はこの抜粋の表示をスキップする）
+ * 禁止語検知のみを行う軽量ゲート（LLM・キャッシュに触れない）。
+ * vote_id が無く `vote_comment_sanitized` のキャッシュキーが作れない経路
+ * （例: 検索のRPC集計パス由来のvoiceマッチ、latestVoteComment由来のスニペット）で、
+ * 「変換はしないが、検知したら非表示にする」という安全側の判定にのみ使う。
  */
-export async function sanitizeVoiceForReferral(
+export function hasForbiddenTerm(text: string): boolean {
+  return !!findForbiddenTerm(text)
+}
+
+/**
+ * 外部に見える全てのVoice表示で使う中核関数（キャッシュ付き・事前ゲート化）。
+ * - flag off: 原文をそのまま返す（既存挙動維持）
+ * - 禁止語を検知しない: LLM・キャッシュのどちらにも触れず原文をそのまま返す
+ *   （広域適用のコスト対策の核。大半のコメントはここで抜ける）
+ * - 検知あり・キャッシュヒット(同バージョン)かつ変換後に禁止語なし: キャッシュを返す
+ * - 検知あり・キャッシュヒットだが変換後にも禁止語が残る: null（非表示）
+ * - 検知あり・キャッシュミス: Anthropic APIで1回変換 → upsert(version=SANITIZE_VERSION) → 禁止語チェック
+ * - API失敗・禁止語残存: null（呼び出し側はこの抜粋の表示をスキップする＝原文は絶対に出さない）
+ */
+export async function sanitizeVoiceForDisplay(
   voteId: string,
   originalText: string
 ): Promise<string | null> {
   if (!isAiSanitizeEnabled()) {
+    return originalText
+  }
+
+  // 事前ゲート: 検知が無ければLLM/キャッシュに触れず原文を返す(広域適用のコスト対策の核)
+  if (!findForbiddenTerm(originalText)) {
     return originalText
   }
 
@@ -137,6 +167,7 @@ export async function sanitizeVoiceForReferral(
     .from('vote_comment_sanitized')
     .select('sanitized_text')
     .eq('vote_id', voteId)
+    .eq('sanitize_version', SANITIZE_VERSION)
     .maybeSingle()
 
   if (cached?.sanitized_text) {
@@ -173,4 +204,130 @@ export async function sanitizeVoiceForReferral(
     return null
   }
   return converted
+}
+
+/**
+ * 互換ラッパー（既存呼び出し = referral-data.ts は無改修で動く）。
+ */
+export async function sanitizeVoiceForReferral(
+  voteId: string,
+  originalText: string
+): Promise<string | null> {
+  return sanitizeVoiceForDisplay(voteId, originalText)
+}
+
+/**
+ * バッチ版（検索・公開カード等・複数件を一括変換）。
+ * - flag off: 全件原文のMapを返す
+ * - 検知語ゲートで対象を絞る（非対象は原文でMapへ。ここがコスト対策の核）
+ * - 対象分のキャッシュを1回のクエリで一括取得（1件1クエリにしない）
+ * - キャッシュミス分のLLM変換はPromise.all・同時最大10件
+ *   （検索/カードの初回表示でAnthropicへ数百並列を送るのを防ぐため）。
+ *   10件を超えた分は今回null(非表示)とし、console.warnで件数を記録する
+ *   （次回表示時にはキャッシュが埋まっていくため、恒久的な非表示ではない）。
+ * - 戻り値 null = 非表示にすべき
+ */
+export async function sanitizeVoicesForDisplay(
+  items: Array<{ voteId: string; text: string }>
+): Promise<Map<string, string | null>> {
+  const result = new Map<string, string | null>()
+
+  if (!isAiSanitizeEnabled()) {
+    for (const item of items) result.set(item.voteId, item.text)
+    return result
+  }
+
+  const targets: Array<{ voteId: string; text: string }> = []
+  for (const item of items) {
+    if (findForbiddenTerm(item.text)) {
+      targets.push(item)
+    } else {
+      // 事前ゲート: 検知が無ければLLM/キャッシュに触れず原文を返す
+      result.set(item.voteId, item.text)
+    }
+  }
+
+  if (targets.length === 0) return result
+
+  const supabase = getSupabaseAdmin()
+  const targetIds = targets.map((t) => t.voteId)
+
+  const { data: cachedRows } = await supabase
+    .from('vote_comment_sanitized')
+    .select('vote_id, sanitized_text')
+    .in('vote_id', targetIds)
+    .eq('sanitize_version', SANITIZE_VERSION)
+
+  const cacheMap = new Map<string, string>()
+  for (const row of (cachedRows || []) as Array<{ vote_id: string; sanitized_text: string | null }>) {
+    if (row.sanitized_text) cacheMap.set(row.vote_id, row.sanitized_text)
+  }
+
+  const missing: Array<{ voteId: string; text: string }> = []
+  for (const item of targets) {
+    const cachedText = cacheMap.get(item.voteId)
+    if (cachedText) {
+      const forbidden = findForbiddenTerm(cachedText)
+      if (forbidden) {
+        console.log('[voice-sanitize] skipped (forbidden term detected):', { voteId: item.voteId, term: forbidden })
+      }
+      result.set(item.voteId, forbidden ? null : cachedText)
+    } else {
+      missing.push(item)
+    }
+  }
+
+  if (missing.length === 0) return result
+
+  // 検索/カードの初回表示でAnthropicへ数百並列を送るのを防ぐため、同時最大10件に絞る。
+  const MAX_CONCURRENT_LLM = 10
+  const toConvert = missing.slice(0, MAX_CONCURRENT_LLM)
+  const overflow = missing.slice(MAX_CONCURRENT_LLM)
+  if (overflow.length > 0) {
+    console.warn(
+      `[voice-sanitize] batch overflow: ${overflow.length} item(s) skipped this request ` +
+      `(LLM concurrency cap=${MAX_CONCURRENT_LLM}); will be converted & cached on a later display`
+    )
+    for (const item of overflow) result.set(item.voteId, null)
+  }
+
+  const upsertRows: Array<{
+    vote_id: string
+    sanitized_text: string
+    sanitize_version: number
+    sanitized_at: string
+  }> = []
+
+  await Promise.all(
+    toConvert.map(async (item) => {
+      const converted = await callAnthropic(item.text)
+      if (!converted) {
+        result.set(item.voteId, null)
+        return
+      }
+      const forbidden = findForbiddenTerm(converted)
+      if (forbidden) {
+        console.log('[voice-sanitize] skipped (forbidden term detected):', { voteId: item.voteId, term: forbidden })
+      } else {
+        upsertRows.push({
+          vote_id: item.voteId,
+          sanitized_text: converted,
+          sanitize_version: SANITIZE_VERSION,
+          sanitized_at: new Date().toISOString(),
+        })
+      }
+      result.set(item.voteId, forbidden ? null : converted)
+    })
+  )
+
+  if (upsertRows.length > 0) {
+    const { error } = await supabase
+      .from('vote_comment_sanitized')
+      .upsert(upsertRows, { onConflict: 'vote_id' })
+    if (error) {
+      console.error('[voice-sanitize] batch cache upsert error:', error)
+    }
+  }
+
+  return result
 }

@@ -17,6 +17,7 @@ import { isOrgCardEnabled } from '@/lib/feature-flags'
 import { getFounderInstructorOrgs } from '@/lib/org-role'
 import { getDelegateCandidates, type DelegateCandidatesResult } from '@/lib/referral-delegate-criteria'
 import { isAcceptingOpen } from '@/lib/referral-accepting'
+import { sanitizeVoicesForDisplay } from '@/lib/voice-sanitize'
 
 // ─── 内部型 ───
 interface VoteWithVoterPro {
@@ -527,6 +528,12 @@ export async function getCardData(
   const proUserId = (proResult.data as { user_id?: string | null } | null)?.user_id ?? null
   const growthCards = await getGrowthCards(supabase, proId, proUserId)
 
+  // §2-6広域適用(2026-08-08 CEO GO): 公開カードのVoiceコメントも紹介URLと同じAI変換を通す。
+  // flag off / 禁止語未検知の大半はsanitizeVoicesForDisplay内でLLM/キャッシュに触れず原文を返す。
+  const sanitizedCommentMap = await sanitizeVoicesForDisplay(
+    commentsRaw.map(c => ({ voteId: c.id, text: c.comment }))
+  )
+
   // === enrichedComments: 機密フィールドを除外し voter_pro / reply を付与 ===
   const enrichedComments: EnrichedComment[] = commentsRaw.map(c => {
     const info = c.normalized_email ? voterInfoMap[c.normalized_email] : undefined
@@ -553,9 +560,13 @@ export async function getCardData(
       if (proofTags.length >= 3) break
     }
 
+    // §2-6広域適用(2026-08-08 CEO GO): null(非表示判定)はその票のcommentだけを空にする
+    // (票自体・プルーフ数は消さない。表示側は「コメントなし」相当の空文字が安全)。
+    const sanitizedComment = sanitizedCommentMap.get(c.id)
+
     return {
       id: c.id,
-      comment: c.comment,
+      comment: sanitizedComment ?? '',
       created_at: c.created_at,
       display_mode: c.display_mode,
       client_photo_url: c.client_photo_url,

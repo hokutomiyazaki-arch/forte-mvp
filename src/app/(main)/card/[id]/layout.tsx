@@ -1,5 +1,6 @@
 import { Metadata } from 'next'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { sanitizeVoicesForDisplay } from '@/lib/voice-sanitize'
 
 /**
  * generateMetadata — Step 4a で拡張:
@@ -152,7 +153,7 @@ export default async function CardLayout({
   // 公開コメント（status=confirmed & comment 非空）を全件取得して Schema.org Review に反映
   const { data: commentRows } = await supabase
     .from('votes')
-    .select('comment, display_mode, created_at')
+    .select('id, comment, display_mode, created_at')
     .eq('professional_id', id)
     .eq('status', 'confirmed')
     .not('comment', 'is', null)
@@ -160,9 +161,24 @@ export default async function CardLayout({
     .neq('comment', '[deleted]')
     .order('created_at', { ascending: false })
 
-  const comments = (commentRows || []).filter(
+  const rawComments = (commentRows || []).filter(
     (c) => typeof c.comment === 'string' && c.comment.trim().length > 0
   )
+
+  // §2-6広域適用(2026-08-08 CEO GO): Schema.org(Google検索結果に出るJSON-LD)も
+  // 紹介URLと同じAI変換を通す。変換不能(非表示)の票はreview配列から除外する。
+  const sanitizedMap = await sanitizeVoicesForDisplay(
+    rawComments.map((c) => ({ voteId: c.id, text: c.comment as string }))
+  )
+  interface SanitizedCommentRow {
+    id: string
+    comment: string
+    display_mode: string | null
+    created_at: string
+  }
+  const comments: SanitizedCommentRow[] = rawComments
+    .map((c) => ({ ...c, comment: sanitizedMap.get(c.id) ?? null }))
+    .filter((c): c is SanitizedCommentRow => !!c.comment)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const personSchema: any = {
